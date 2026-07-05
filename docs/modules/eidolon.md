@@ -110,7 +110,7 @@ When enabled, `SelfInferenceEngine` populates four `SelfModel` fields from obser
 **3. `values`** — drives that have crossed threshold at least `speech_pattern_min_count` times AND at least one behavioral norm exists. Stored as `"drive:<drive_name>"` labels.
 
 **4. `capability_map`** — built by `CapabilityMapBuilder`:
-- `effectors`: sorted list of Praxis whitelist command names (injected at construction time).
+- `effectors`: sorted list of the Praxis effector whitelist (the operator-enabled effectors, `[praxis].enabled_effectors`). `kaine.boot._wire_eidolon_capabilities` injects it into the `SelfInferenceEngine` at boot (mirroring `_wire_lingua_self_model`), so once self-inference runs a maintenance cycle the entity's self-model reflects what it can execute. Empty only when no effectors are enabled.
 - `policy_outcomes`: per-action count and mean EFE from `nous.policy` events.
 
 All derivation is pure computation over counters and numeric arrays — no raw text, no raw audio.

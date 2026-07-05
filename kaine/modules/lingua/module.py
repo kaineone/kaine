@@ -48,9 +48,11 @@ class Lingua(BaseModule):
     internal-monologue channel that Mnemos consumes and Eidolon counts but
     Chatterbox NEVER reads.
 
-    The default publish behavior writes to the BaseModule-required
-    `lingua.out` stream too (an aggregate of both) so consumers that
-    want everything Lingua produced have one place to subscribe.
+    `_produce()` writes directly to the mode-specific stream via the bus
+    client, bypassing the default BaseModule `<module>.out` routing
+    (`self.publish` is never called) — there is no aggregate `lingua.out`
+    stream; consumers must subscribe to `lingua.external` and/or
+    `lingua.internal` explicitly.
     """
 
     name: ClassVar[str] = "lingua"

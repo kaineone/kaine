@@ -750,3 +750,40 @@ def test_make_lingua_api_key_from_config_wins_over_env(monkeypatch, tmp_path):
         {"api_key": "sk-cfg", "intent_log_path": str(tmp_path / "i.jsonl")},
     )
     assert lingua._chat_client._api_key == "sk-cfg"
+
+
+def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
+    """_wire_eidolon_capabilities feeds the Praxis effector whitelist into
+    Eidolon's self-inference engine, so the self-model's capability_map reflects
+    what the entity can execute (eidolon-self-inference spec)."""
+    from kaine.boot import _wire_eidolon_capabilities
+    from kaine.modules.registry import ModuleRegistry
+    from kaine.modules.eidolon.document import SelfModel
+
+    bus = _bus()
+    praxis = make_praxis(
+        bus,
+        {
+            "sandbox_path": str(tmp_path / "praxis"),
+            "audit_log_path": str(tmp_path / "audit.log"),
+            "enabled_effectors": ["file_write", "notify"],
+            "shell_whitelist": {},
+            "baseline_salience": 0.3,
+            "alert_salience": 0.7,
+        },
+    )
+    eidolon = make_eidolon(
+        bus,
+        {
+            "persistence_path": str(tmp_path / "self_model.json"),
+            "self_inference": {"enabled": True},
+        },
+    )
+    registry = ModuleRegistry()
+    registry.register(praxis)
+    registry.register(eidolon)
+
+    _wire_eidolon_capabilities(registry)
+
+    model = eidolon.self_inference.maintenance_cycle_end(SelfModel())
+    assert model.capability_map.get("effectors") == ["file_write", "notify"]

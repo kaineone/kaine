@@ -11,12 +11,13 @@ The public brand is **26.06.0a1**; pip normalizes this to `26.6.0a1` (expected).
 ## [26.06.0a1] — 2026-06-07
 
 **First public alpha.** The architecture is feature-complete and tested in-tree.
-The release is gated on Cognitive Architecture License (CAL) legal review before
-any public distribution; the alpha number increments until the license is approved
-and the release is ready. Pip-normalized form: `26.6.0a1`.
+Released publicly under the Cognitive Architecture License (CAL) v0.2; formal
+legal review is still pending and a v1.0 bump may follow, but publication does
+not wait on it. The alpha number increments as the release stabilizes.
+Pip-normalized form: `26.6.0a1`.
 
-**Status:** pre-release alpha; not yet public; all modules ship disabled; first
-boot is operator-supervised.
+**Status:** public alpha; all modules ship disabled; first boot is
+operator-supervised.
 
 ### Architecture
 

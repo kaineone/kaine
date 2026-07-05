@@ -85,6 +85,7 @@ On a successful switch, `kaine.perception_state.write_desired_locus(requested)` 
 | `min_dwell_s` | `min_dwell_s` | `30.0` | Minimum seconds between self-initiated switches |
 | `intent_stream` | — | `VOLITION_STREAM` | Bus stream carrying `intent.perception.switch` events |
 | `desired_path` | — | `None` → `state/perception/desired.json` | Override path for desired-state file (tests) |
+| `entity_clock` | — | `None` → a fresh `EntityClock()` | Shared subjective clock (injected at boot); the minimum-dwell timer runs in subjective time via this clock, so at `time_scale != 1.0` the dwell interval dilates with the mind |
 
 To permit entity self-switching, add to your local `config/kaine.toml`:
 

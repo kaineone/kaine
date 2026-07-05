@@ -138,6 +138,17 @@ class SelfInferenceEngine:
     def enabled(self) -> bool:
         return self._enabled
 
+    def set_whitelist_commands(self, commands: Optional[list[str]]) -> None:
+        """Inject the Praxis effector whitelist into the capability-map builder.
+
+        Wired once at boot (``boot._wire_eidolon_capabilities``), so the
+        self-model's ``capability_map["effectors"]`` reflects what the entity can
+        execute. Independent of ``enabled``: the whitelist is stored regardless,
+        and surfaces in ``capability_map`` only when self-inference runs on a
+        maintenance cycle.
+        """
+        self._cap_builder.set_whitelist(list(commands) if commands else [])
+
     # ------------------------------------------------------------------
     # Seed
 

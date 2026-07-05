@@ -8,8 +8,8 @@ KAINE's world-model and imagination organ: a DreamerV3-style RSSM that predicts,
 
 Implemented. Ships **disabled** — `[modules].phantasia = false` in `config/kaine.toml`.
 
-- Default backend is `"fake"` (no external dependencies; `FakeWorldModel` runs pure Python).
-- The real RSSM backend (`backend = "dreamerv3"`) requires the `[worldmodel]` optional extra: `jax[cpu]`.
+- Default backend is `"dreamerv3"` (the real RSSM world model), which requires the `[worldmodel]` optional extra: `jax[cpu]`.
+- `"fake"` (`FakeWorldModel`, pure Python, no external dependencies) is the dependency-free development fallback.
 - Training is disabled by default (`training_enabled = false`); even when enabled, all training is **in-memory only** — nothing is written to disk.
 - **Not an agent**: Phantasia has no actor, critic, reward head, or return head. Policy selection is Nous's responsibility.
 
@@ -57,7 +57,7 @@ All keys under `[phantasia]` and sub-tables. See also [`../configuration.md`](..
 
 | Key | Default | Description |
 |---|---|---|
-| `backend` | `"fake"` | `"fake"` (no deps) or `"dreamerv3"` (requires `[worldmodel]` extra) |
+| `backend` | `"dreamerv3"` | `"dreamerv3"` (real RSSM, requires `[worldmodel]` extra) or `"fake"` (no deps, dev-only fallback) |
 | `training_enabled` | `false` | Run in-memory training pass at maintenance start |
 | `training_device` | `"cpu"` | JAX device for training (in-memory only) |
 | `trajectory_buffer_size` | `512` | Ring buffer size (waking observations) |
@@ -169,13 +169,11 @@ On `mnemos.replay` (while window active):
 
 ## Enabling and use
 
-1. **Fake backend** (default, no extras needed): set `[modules].phantasia = true`. Done.
-2. **Real RSSM backend**:
-   - Install the worldmodel extra: `.venv/bin/pip install -e '.[worldmodel]'`
-   - Set `backend = "dreamerv3"` in `[phantasia]`.
+1. **Real RSSM backend** (default): set `[modules].phantasia = true`, install the worldmodel extra: `.venv/bin/pip install -e '.[worldmodel]'`.
    - Optionally enable training: `training_enabled = true`.
    - Optionally persist learned weights across restarts:
      `persist_weights = true` (see the persistence section below).
+2. **Fake backend** (dependency-free development fallback, no extras needed): set `backend = "fake"` in `[phantasia]`.
 3. No external services are required — Phantasia is entirely local.
 
 To force a scenario in tests without a full Hypnos cycle:

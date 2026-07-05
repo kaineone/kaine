@@ -12,6 +12,24 @@ in-code defenses (Redis auth-on-loopback, sandboxed Praxis, gitignored secrets)
 are designed so the same checkout remains safe when shipped to a hardened host
 later.
 
+## Reporting a Vulnerability
+
+If you find a security vulnerability in KAINE, please report it **privately** so
+it can be fixed before public disclosure. Do **not** open a public issue for a
+security report.
+
+- Preferred: GitHub private vulnerability reporting — the **Security → Report a
+  vulnerability** button on this repository
+  (`https://github.com/kaineone/kaine/security/advisories/new`).
+- Or email **kaine.one@tuta.com** with a description and, if possible, a
+  proof of concept.
+
+This is a solo-maintained research project, so responses are best-effort: expect
+acknowledgement within a few days, and we will coordinate a fix and a disclosure
+timeline with you. Please allow reasonable time to remediate before disclosing
+publicly. The remainder of this document is a security *audit* of the
+architecture; the process above is how to report issues it does not cover.
+
 ## Scope
 
 The audit covers six areas:
@@ -133,7 +151,7 @@ artifact and its protection posture under this change):
 | `state/praxis/audit.log`, `state/praxis/files/` | Praxis action audit + written files | OS-layer (operator responsibility) |
 | `state/lingua/intent_expression.jsonl` | Intent/expression pairs for voice alignment — **HIGH SENSITIVITY**: embeds the assembled LLM prompt (user/bystander utterances) and the entity's raw generated text including internal monologue | OS-layer (operator responsibility) |
 | `state/hypnos/adapters/` | Voice-alignment LoRA adapters | OS-layer (operator responsibility) |
-| `state/audio_out/` | Retained TTS output | OS-layer (operator responsibility); live A/V is perception, not recording |
+| `state/vox/` | Retained TTS output | OS-layer (operator responsibility); live A/V is perception, not recording |
 | `kaine-redis-data` volume | Bus AOF | OS-layer (operator responsibility); bus is loopback |
 
 **Crypto details.** AES-256-GCM (256-bit key, fresh 96-bit `os.urandom`
@@ -206,10 +224,10 @@ proxy with mutual TLS or HTTP basic auth if remote access is required.
 A repo-wide grep for `https://`, `urllib`, `requests.`, `huggingface`,
 `hf_hub_download`, `snapshot_download` finds no runtime calls to external
 networks (only documentation links in `kaine/modules/lingua/ABLITERATION.md`).
-The four HTTP clients in the runtime — `kaine/modules/lingua/client.py:50`
-(Unsloth Studio), `kaine/modules/audio_in/stt_client.py:46` (Speaches STT),
-`kaine/modules/audio_out/client.py:50` (Chatterbox TTS), and
-`kaine/modules/audio_out/module.py:37` — all default to loopback URLs
+The four HTTP clients in the runtime — `kaine/modules/lingua/client.py`
+(the served chat organ), `kaine/modules/audition/stt_client.py` (Speaches STT),
+`kaine/modules/vox/client.py` (Chatterbox TTS), and
+`kaine/modules/vox/module.py` — all default to loopback URLs
 (`http://127.0.0.1:11434`, `:8000`, `:8883`). The Redis bus URL likewise
 defaults to `127.0.0.1` (`kaine/bus/config.py:19`, `kaine/bus/config.py:96`).
 
@@ -345,8 +363,8 @@ above for future versions.
 
 ## 7. Live perception (microphone and camera)
 
-KAINE ships eyes and ears, off by default. When `[audio_in].capture_enabled`
-and/or `[topos].capture_enabled` are true, `kaine.modules.audio_in.live.
+KAINE ships eyes and ears, off by default. When `[audition].capture_enabled`
+and/or `[topos].capture_enabled` are true, `kaine.modules.audition.live.
 LiveMicrophone` opens `sounddevice.InputStream` and/or `kaine.modules.topos.
 live.LiveCamera` opens `cv2.VideoCapture(device)`. Both are transducers:
 raw PCM and raw frames live in process memory only, get wrapped (WAV via
@@ -358,7 +376,7 @@ The zero-persistence invariant is enforced in code and verified by
 
   - No `.wav`, `.pcm`, `.raw`, `.png`, `.jpg`, `.mp4`, `.webm` (etc.)
     files appear on disk while either stream is active.
-  - `git grep wave.open kaine/modules/audio_in/` matches only `io.BytesIO`
+  - `git grep wave.open kaine/modules/audition/` matches only `io.BytesIO`
     arguments.
   - `git grep -E "cv2\.(imwrite|VideoWriter)" kaine/` returns empty.
 

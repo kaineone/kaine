@@ -46,9 +46,9 @@ divergence-branching), **opt-in research submission** (numeric metrics only,
 operator-initiated), and a Nexus dashboard that surfaces it all. Runs on CUDA,
 ROCm, Intel XPU, Apple MPS, or CPU — compute device configurable per-module.
 
-The project remains **private pending Cognitive Architecture License (CAL) legal
-review** before any public release. The alpha number increments until the license
-is approved and the release is ready.
+This is a public alpha, released under the **Cognitive Architecture License
+(CAL)** — see [LICENSE.md](LICENSE.md) and [NOTICE](NOTICE). The alpha number
+increments as the release stabilizes.
 
 The cognitive cycle is **not** running and module state is **not** initialized.
 Every module ships **disabled**; enabling one is a local `config/kaine.toml` edit

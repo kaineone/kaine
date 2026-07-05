@@ -640,7 +640,7 @@ Offline consolidation: multi-phase replay, synaptic downscaling, and optional vo
 | `interval_seconds` | float | `3600.0` | Maximum interval between consolidation runs (seconds). Also the timer-based fallback when fatigue triggering is used. |
 | `max_deferral_seconds` | float | `600.0` | Maximum total deferral allowed when the system tries to delay consolidation (seconds). |
 | `per_defer_seconds` | float | `60.0` | Amount of time deferred per deferral request. |
-| `nous_step_burst` | integer | `200` | Number of pymdp belief-update steps to run in burst during the Nous offline phase. |
+| `nous_step_burst` | integer | `200` | Reserved / currently unused: stored on `Hypnos` (`self._nous_step_burst`) at construction but never read — there is no such Nous offline phase. The related `nous_process` constructor param (always `None` from boot) is likewise stored and never read. |
 | `baseline_salience` | float | `0.5` | Salience of consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Salience on consolidation errors or welfare-relevant conditions. |
 

@@ -38,9 +38,11 @@ The **perceptual locus** gate controls whether the real camera runs: `effective_
 |---|---|---|
 | `LiveCamera` task | `process_frame(image)` coroutine | Delivers one BGR→RGB PIL.Image per `capture_interval_s` |
 | `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends / resumes `LatentForwardModel` adaptation |
-| `kaine.perception_state` | `effective_video_capture()` poll (250 ms default) | Locus gate: camera runs only when locus is `physical` and video is desired |
+| `kaine.perception_state` | `effective_video_capture()` poll (250 ms, hardcoded `desired_state_poll_ms` default in `LiveCameraConfig`) | Locus gate: camera runs only when locus is `physical` and video is desired |
 
 Topos does **not** subscribe to the workspace broadcast; it has no `on_workspace()` path. Frames arrive on demand from the live-camera supervisor task.
+
+Unlike Audition's `desired_state_poll_ms` (an operator-configurable `[audition]` key), Topos's ~250 ms camera poll is **not** exposed as a config key: `make_topos` never forwards a poll-interval knob into `LiveCameraConfig`, so the interval stays at the hardcoded class default.
 
 ---
 
@@ -65,7 +67,7 @@ Section `[topos]` in `config/kaine.toml`. See also [../configuration.md](../conf
 | `encoder_model_id` | `"facebook/dinov2-small"` | HuggingFace model ID for DINOv2; weights downloaded once at first init |
 | `device` | `"cuda:1"` | Preferred device for the encoder; resolved via `resolve_device()` with fallback |
 | `change_alert_threshold` | `0.5` | `change_score` above which `alert_salience` is applied (absent forward model) |
-| `habituation_window` | `16` | Rolling-window size for `RollingMeanHabituator` (consumed at boot) |
+| `habituation_window` | `16` | Currently **non-effective**: `make_topos` validates the key but never forwards it — `Topos.__init__` constructs `RollingMeanHabituator()` with no window argument, so this setting has no effect on the running habituator |
 | `baseline_salience` | `0.2` | Salience for routine `topos.report` events |
 | `alert_salience` | `0.7` | Salience when scene change or visual surprise fires |
 | `capture_enabled` | `false` | Enable the live camera; requires `[vision]` extras |

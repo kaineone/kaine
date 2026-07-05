@@ -367,8 +367,9 @@ at setup time. At runtime:
 
 Every module is **disabled by default** in `config/kaine.toml`
 (`[modules]` section). Enabling a module is a deliberate local edit.
-A guard test (`tests/test_module_toggles.py`) asserts that the shipped
-config has all toggles off, so no module auto-starts on a fresh clone.
+A guard test (`tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`)
+asserts that the shipped config has all toggles off, so no module auto-starts on
+a fresh clone.
 
 The cycle refuses to start unattended. A run is **either** operator-supervised
 **or** research-safety-net-verified, never neither:

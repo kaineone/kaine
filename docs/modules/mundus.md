@@ -122,9 +122,12 @@ symbolic sink only when:
 1. The perception locus is `virtual` (checked via `locus_reader()`).
 2. The action family is exposed (descriptor default, overridable in config).
 
-Continuous setpoints are forwarded to the adapter's graded sink only when the locus
-is `virtual`, the channel is exposed (default **off**), and the value is clamped to
-the channel's declared range. A symbolic-only body rejects setpoints as unsupported.
+For a body that declares continuous channels, setpoints are forwarded to the
+adapter's graded sink only when the locus is `virtual`, the channel is exposed
+(default **off**), and the value is clamped to the channel's declared range. A
+symbolic-only body (no continuous channels) simply rejects the whole setpoint
+request as unsupported — that rejection happens before, and independent of,
+the locus check; it is not itself locus-gated.
 
 ---
 
