@@ -1446,6 +1446,7 @@ def build_registry(
         log.info("registered module hypnos")
     _wire_self_hearing_gate(registry)
     _wire_lingua_self_model(registry)
+    _wire_eidolon_capabilities(registry)
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
     return registry
@@ -1465,6 +1466,7 @@ def rewire_module(
     """
     _wire_self_hearing_gate(registry)
     _wire_lingua_self_model(registry)
+    _wire_eidolon_capabilities(registry)
     _wire_oscillators(registry, kaine_config)
 
 
@@ -1666,6 +1668,24 @@ def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
 
     lingua.set_self_model_provider(_provider)
     log.info("wired lingua persona to eidolon self-model")
+
+
+def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
+    """Inject the Praxis effector whitelist into Eidolon's self-inference engine
+    so the self-model's ``capability_map`` reflects what the entity can execute
+    (the ``eidolon-self-inference`` "Capability map from Praxis whitelist"
+    requirement). No-op unless both modules are present. Idempotent: the whitelist
+    is fixed for the boot, so re-running (e.g. after a Spot rebuild) is safe."""
+    if "praxis" not in registry or "eidolon" not in registry:
+        return
+    praxis = registry.get("praxis")
+    eidolon = registry.get("eidolon")
+    engine = getattr(eidolon, "self_inference", None)
+    if engine is None or not hasattr(engine, "set_whitelist_commands"):
+        return
+    effectors = sorted(getattr(praxis, "enabled_effectors", ()) or ())
+    engine.set_whitelist_commands(effectors)
+    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:

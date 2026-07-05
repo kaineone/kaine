@@ -36,6 +36,15 @@ class CapabilityMapBuilder:
         # Running sum of EFE per action label (for mean EFE).
         self._efe_sums: dict[str, float] = {}
 
+    def set_whitelist(self, whitelist_commands: Optional[list[str]]) -> None:
+        """Set the Praxis effector whitelist (once, at boot wiring).
+
+        Stored sorted for deterministic ``capability_map`` output. The whitelist
+        is fixed for the boot — Praxis effector enablement does not change at
+        runtime — so this is a set-once injection, not a live update path.
+        """
+        self._whitelist = sorted(whitelist_commands or [])
+
     # ------------------------------------------------------------------
     # Observation
 

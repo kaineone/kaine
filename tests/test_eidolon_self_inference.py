@@ -279,3 +279,21 @@ def test_values_empty_when_no_norms():
 
     model = engine.maintenance_cycle_end(model)
     assert model.values == []
+
+
+def test_set_whitelist_commands_surfaces_effectors():
+    """set_whitelist_commands injects the Praxis effector whitelist so a
+    maintenance cycle surfaces capability_map['effectors'], sorted
+    (eidolon-self-inference "Capability map from Praxis whitelist")."""
+    engine = SelfInferenceEngine(enabled=True)
+    engine.set_whitelist_commands(["notify", "file_write"])
+    model = engine.maintenance_cycle_end(SelfModel())
+    assert model.capability_map.get("effectors") == ["file_write", "notify"]
+
+
+def test_set_whitelist_commands_empty_leaves_effectors_absent():
+    """An empty whitelist produces no 'effectors' entry (not an empty list)."""
+    engine = SelfInferenceEngine(enabled=True)
+    engine.set_whitelist_commands([])
+    model = engine.maintenance_cycle_end(SelfModel())
+    assert "effectors" not in model.capability_map
