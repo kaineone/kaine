@@ -1,0 +1,203 @@
+{% extends "_base.html" %}
+{% block title %}{{ entity_name }} — Nexus console{% endblock %}
+
+{# The left rail carries the wordmark, the four-state status chip, and in-page
+   jump-nav to every section group. The console scrolls to its right. #}
+{% block rail %}
+<a class="rail__brand" href="/">KAINE</a>
+<div class="rail__status">
+  <span class="rail__label">Status</span>
+  {# Four-state chip: OFFLINE > FROZEN > SLEEPING > AWAKE, computed live from
+     the cycle_status + freeze flag (metrics push) and Hypnos sleep/wake events
+     by NexusVitals. The page-load DEFAULT is OFFLINE: before any live data
+     arrives we do NOT know a cycle is up, so the old "awake" default was
+     wrong (it read awake with nothing running). NexusVitals overwrites this
+     the instant the first snapshot lands. #}
+  <span class="badge offline" id="sleep-badge">offline</span>
+</div>
+{# Section toggles. A closed section leaves the screen entirely; its button
+   summons it back — it slides in from the button and expands (NexusSections).
+   Active (on-screen) sections show their button lit. #}
+<nav class="rail__nav" aria-label="Sections">
+  <button type="button" class="rail__seg" data-board="board-presence">Presence</button>
+  <button type="button" class="rail__seg" data-board="board-cycle">Cycle</button>
+  <button type="button" class="rail__seg" data-board="board-welfare">Welfare</button>
+  <button type="button" class="rail__seg" data-board="board-perception">Perception</button>
+  <button type="button" class="rail__seg" data-board="board-research">Research</button>
+  <button type="button" class="rail__seg rail__seg--alt" data-board="board-identity">Identity</button>
+  <button type="button" class="rail__seg rail__seg--alt" data-board="board-modules">Modules</button>
+  <button type="button" class="rail__seg rail__seg--alt" data-board="board-dynamics">Dynamics</button>
+</nav>
+{% endblock %}
+
+{% block header_extra %}
+  {% if dev_content_override %}
+    <div class="dev-banner">dev mode: content visible — disable dev_content_override in config for production</div>
+  {% endif %}
+{% endblock %}
+
+{# Health & services fills the right sidebar (glanceable, scroll-free). This must
+   be a TOP-LEVEL block — nesting it inside {% block content %} would render it
+   inline in the main area too (Jinja renders a nested block at its lexical spot
+   AND in the parent's placeholder). #}
+{% block sidebar_right %}{% include "_health_section.html" %}{% endblock %}
+
+{% block content %}
+{% include "_perception_banner.html" %}
+{# console_view flags the shared section partials so situational boards start
+   COLLAPSED here (the console is a glanceable, single-screen surface); the
+   standalone /diagnostics and /diagnostics/evaluation pages leave it unset, so
+   they render fully expanded. JS auto-expands + flashes a board when it becomes
+   relevant (see NexusConsole in the scripts block). #}
+{% set console_view = true %}
+<div class="page page--console">
+
+  {# --- Presence (the entity's affect, made visible) ---
+       Leads the console (top-left, first column): the ferrofluid visualizer
+       idles calm with no entity and tracks live affect when a cycle is up. #}
+  {% include "_presence_section.html" %}
+
+  {# --- Diagnostics (cycle, welfare, perception, research) --- #}
+  {% include "_diagnostics_sections.html" %}
+
+  {# --- Evaluation (identity, module activity, dynamics) ---
+       The evaluation partial reads its data from `metrics`; alias the
+       evaluation aggregate into that name for the duration of the include so
+       it does not collide with the diagnostics `metrics` (cycle snapshot). #}
+  {% if evaluation %}
+    {% with metrics = evaluation %}
+      {% include "_evaluation_sections.html" %}
+    {% endwith %}
+  {% else %}
+    <details class="board" id="board-identity" open>
+      <summary class="board__title board__title--haze"><span class="board__caret" aria-hidden="true">▸</span>Evaluation</summary>
+      <div class="board__cards">
+        <section class="panel">
+          <h2>evaluation surface</h2>
+          <p class="chart-empty">Evaluation instrumentation is disabled — enable
+            <code>[evaluation]</code> in <code>config/kaine.toml</code> to populate
+            the identity, module-activity, and dynamics panels.</p>
+        </section>
+      </div>
+    </details>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ asset('/static/vendor/uPlot.iife.min.js') }}"></script>
+<script src="{{ asset('/static/nexus.js') }}"></script>
+<script src="{{ asset('/static/nexus_console.js') }}"></script>
+<script>
+  // ONE multiplexed diagnostics SSE connection for the whole page (task 1.1) —
+  // every feature below subscribes through it instead of opening its own
+  // EventSource (this collapsed the console from 8 concurrent connections to
+  // 1). NexusConn renders its live/reconnecting/paused state (task 1.4).
+  NexusStream.init("/diagnostics/stream");
+  if (window.NexusConn) { NexusConn.attach(); }
+  // Diagnostics live metrics + charts + controls.
+  NexusSSE.subscribeMetrics();
+  if (window.NexusCharts) { NexusCharts.attachDiagnostics(); NexusCharts.attachFatigueChart(); }
+  if (window.NexusPerception) { NexusPerception.attach(); }
+  if (window.NexusControls) { NexusControls.attach(); }
+  if (window.NexusSpot) { NexusSpot.init(); }
+  if (window.NexusPreservation) { NexusPreservation.init(); }
+  if (window.NexusFreeze) { NexusFreeze.attach(); }
+  if (window.NexusMetrics) { NexusMetrics.attach(); }
+  // Live cycle vitals: refresh run-identity / pacing / banner / module activity
+  // / awake pill in place so they never sit dead after the cycle starts. Kept
+  // live afterward by the server-pushed nexus.snapshot event (task 2.2), not a
+  // poll loop.
+  if (window.NexusVitals) { NexusVitals.init(); }
+  // Perception PiP (entity view) + audio mute over the visualizer.
+  if (window.NexusPreview) { NexusPreview.init(); }
+  // Evaluation batch charts (summary.json 404s gracefully when disabled).
+  if (window.NexusCharts) { NexusCharts.attachEvaluation("/diagnostics/evaluation/summary.json"); }
+</script>
+<script type="module">
+  // Presence board: the ferrofluid visualizer (LevelMeter, GPL-3.0, vendored at
+  // /static/vendor/viz.js, which imports the 1.3MB three.module.js). Renders a
+  // calm idle/"waiting" state with NO entity running; shifts its mood-ring from
+  // live thymos affect when a cycle is up. We never synthesize affect — the
+  // idle look is the honest no-entity state.
+  //
+  // The import is LAZY (task 1.6): it is deferred to requestIdleCallback (with
+  // a setTimeout fallback) after `load`, so the 1.3MB fetch does not compete
+  // for the connection pool / main-thread parse time with the operational
+  // surface (the single diagnostics SSE, the charts, the health board) on
+  // first paint. This is a cosmetic visualizer — it can afford to arrive a beat
+  // later; the dashboard's live numbers should not wait on it.
+  function startPresence() {
+    import("{{ asset('/static/vendor/viz.js') }}").then(({ LevelMeter }) => {
+      const canvas = document.getElementById("presence-canvas");
+      const statusEl = document.getElementById("presence-status");
+      if (!canvas) return;
+      let meter = null;
+      try {
+        meter = new LevelMeter(canvas);
+        // No affect connected yet: show the cooler "waiting" idle mood until the
+        // first thymos.state arrives (honest — we are not yet receiving affect).
+        meter.setConnected(false);
+        meter.start();
+      } catch (e) {
+        console.warn("[presence] visualizer failed to start:", e);
+      }
+      if (!meter) return;
+
+      // The viz self-fits to the canvas box via an internal ResizeObserver, so a
+      // grid-cell-sized container and resize are handled. Nudge a reflow when the
+      // board is toggled open (closed => display:none => 0px box).
+      const board = document.getElementById("board-presence");
+      if (board) {
+        board.addEventListener("toggle", () => {
+          if (board.open) requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+        });
+      }
+
+      // ── Live affect feed (read-only) ───────────────────────────────────────
+      // thymos.out already rides the shared diagnostics SSE stream; its
+      // `thymos.state` events carry derived {valence, arousal} — privacy-safe
+      // metrics, NOT raw audio/content (those are never streamed). Feed them to
+      // setMood. With no entity running no events arrive and the viz stays
+      // calm/idle.
+      if (window.NexusStream) {
+        let lastAffectMs = 0;
+        const IDLE_TEXT = "Idle — waiting for the entity. The visualizer reflects affect when a cycle is running.";
+        setInterval(() => {
+          if (lastAffectMs && Date.now() - lastAffectMs > 8000 && statusEl) {
+            statusEl.dataset.state = "idle";
+            statusEl.textContent = IDLE_TEXT;
+            meter.setConnected(false);
+          }
+        }, 4000);
+        NexusStream.subscribe((msg) => {
+          if (!msg || msg.type !== "thymos.state") return;
+          const st = (msg.payload && msg.payload.state) || {};
+          const v = st.valence, a = st.arousal;
+          if (typeof v === "number" && typeof a === "number") {
+            meter.setConnected(true);
+            meter.setMood(v, a);
+            lastAffectMs = Date.now();
+            if (statusEl) {
+              statusEl.dataset.state = "live";
+              statusEl.textContent =
+                "Live — mood tracks the entity's affect (valence " +
+                v.toFixed(2) + ", arousal " + a.toFixed(2) + ").";
+            }
+          }
+        });
+      }
+      // NOTE: speech-level input (meter.pushAudio) is intentionally left
+      // unconnected — Nexus exposes no audio-level seam and we never stream raw
+      // audio (zero-raw-persistence). The fluid undulates calmly without it.
+    });
+  }
+
+  if (window.requestIdleCallback) {
+    window.addEventListener("load", () => requestIdleCallback(startPresence, { timeout: 2000 }));
+  } else {
+    window.addEventListener("load", () => setTimeout(startPresence, 300));
+  }
+</script>
+{% endblock %}

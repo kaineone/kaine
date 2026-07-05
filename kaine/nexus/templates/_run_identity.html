@@ -1,0 +1,60 @@
+{# Run identity + supervision-mode badge + live admissibility indicator.
+   All non-content run metadata, read from runtime.json (metrics) and the
+   HealthProber admissibility block. The research-mode badge is prominent. #}
+<section id="run-identity" class="panel span-2" data-readonly="true">
+  <h2>run identity &amp; supervision</h2>
+
+  {# Body is server-rendered for first paint AND live-refreshed in place by
+     NexusVitals (it rebuilds this container from /diagnostics/metrics.json +
+     /diagnostics/health.json), so the run identity never sits dead after the
+     cycle starts without a reload. #}
+  <div id="run-identity-body">
+  {# --- Supervision badge (distinct from the research-participation panel). --- #}
+  {% if metrics.supervision_mode == "research" %}
+    <div class="supervision-badge supervision-badge--research" role="status">
+      <strong>RESEARCH MODE</strong>
+      <span class="muted">unsupervised — gated by the autonomous safety net</span>
+      {% if metrics.gate_checks %}
+        <ul class="gate-checks">
+          {% for name, ok in metrics.gate_checks.items() %}
+            <li class="gate-check {{ 'ok' if ok else 'fail' }}">
+              {{ "✓" if ok else "✗" }} {{ name.replace("_", " ") }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% elif metrics.supervision_mode == "operator" %}
+    <div class="supervision-badge supervision-badge--operator" role="status">
+      <strong>operator-supervised</strong>
+    </div>
+  {% endif %}
+
+  {# --- Run identity (non-content RunContext metadata). --- #}
+  {% if metrics.run_id %}
+    <dl class="kv">
+      <dt>run id</dt><dd class="mono">{{ metrics.run_id }}</dd>
+      <dt>seed</dt><dd class="mono">{{ metrics.seed }}</dd>
+      <dt>git sha</dt><dd class="mono">{{ metrics.git_sha or "—" }}</dd>
+      <dt>version</dt><dd class="mono">{{ metrics.kaine_version or "—" }}</dd>
+    </dl>
+  {% else %}
+    <p class="muted">No run identity yet — the cycle has not minted a run context.</p>
+  {% endif %}
+
+  {# --- Live admissibility indicator (lightweight; full scan is a CLI op). --- #}
+  {% if admissibility %}
+    <p>
+      admissibility:
+      <span class="chip {{ admissibility.state }}">{{ admissibility.state.replace("-", " ") }}</span>
+      <span class="muted">
+        manifest {{ "present" if admissibility.manifest_present else "absent" }}
+        · last tick {{ admissibility.tick_index if admissibility.tick_index is not none else "—" }}
+      </span>
+    </p>
+    <p class="muted" style="font-size:0.8rem">
+      Full completeness scan: <code>python -m kaine.experiment.admissibility &lt;run_id&gt;</code>.
+    </p>
+  {% endif %}
+  </div>
+</section>

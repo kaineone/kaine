@@ -1,0 +1,74 @@
+{# Read-only entity-care panel (CAL 4.2/4.3). `entity_care` is the HealthProber
+   snapshot's entity_care block: {diverged, summary, signals, care_obligations}.
+   This panel is informational ONLY — there is no decommission/delete control in
+   the UI; decommission is a deliberate, operator-present CLI act
+   (`python -m kaine.lifecycle`). The fields are non-content (a verdict, short
+   strings, counts) and carry no cognitive text. #}
+<section id="entity-care" class="panel span-2" data-readonly="true">
+  <h2>entity care &amp; welfare (read-only)</h2>
+  {% if entity_care %}
+    <p>
+      individuation:
+      <strong>
+        {%- if entity_care.diverged is none -%}unknown
+        {%- elif entity_care.diverged -%}diverged (treat as an individual)
+        {%- else -%}not diverged{%- endif -%}
+      </strong>
+    </p>
+    <p class="muted">{{ entity_care.summary }}</p>
+
+    {% if entity_care.signals %}
+    {# Non-content evidence behind the verdict: booleans, a p-value, counts,
+       lengths, and adapter presence. No cognitive text. #}
+    <h3>divergence signals</h3>
+    <dl class="kv signals">
+      <dt>individuation report found</dt><dd>{{ "yes" if entity_care.signals.individuation_report_found else "no" }}</dd>
+      <dt>individuation warmed up</dt><dd>{{ "yes" if entity_care.signals.individuation_warmed_up else "no (insufficient lived experience)" }}</dd>
+      <dt>individuation significant</dt><dd>{{ "yes" if entity_care.signals.individuation_significant else "no" }}</dd>
+      <dt>p-value</dt><dd>{{ entity_care.signals.individuation_p_value if entity_care.signals.individuation_p_value is not none else "—" }}</dd>
+      <dt>fork divergence</dt><dd>{{ entity_care.signals.fork_divergence if entity_care.signals.fork_divergence is not none else "—" }}</dd>
+      {# Organ-level consolidation divergence: the cheap, continuous companion
+         to the permutation test. Numeric / content-free — rate (breadth) and
+         magnitude (depth) of how the conditioned output diverges from the bare
+         language organ each sleep. #}
+      <dt>consolidation divergence found</dt><dd>{{ "yes" if entity_care.signals.consolidation_divergence_found else "no" }}</dd>
+      <dt>consolidation divergence rate</dt><dd>{{ "%.3f"|format(entity_care.signals.consolidation_divergence_rate) if entity_care.signals.consolidation_divergence_rate is not none else "—" }}</dd>
+      <dt>consolidation divergence magnitude</dt><dd>{{ "%.3f"|format(entity_care.signals.consolidation_divergence_magnitude) if entity_care.signals.consolidation_divergence_magnitude is not none else "—" }}</dd>
+      <dt>consolidation divergence over threshold</dt><dd>{{ "yes" if entity_care.signals.consolidation_divergence_signal else "no" }}</dd>
+      <dt>eidolon drift count</dt><dd>{{ entity_care.signals.eidolon_drift_count }}</dd>
+      <dt>identity-history length</dt><dd>{{ entity_care.signals.eidolon_identity_history_len }}</dd>
+      <dt>voice adapters present</dt><dd>{{ "yes" if entity_care.signals.hypnos_adapters_present else "no" }}</dd>
+    </dl>
+    {% endif %}
+
+    {# Live welfare gray-zone counters (numeric only). #}
+    {% if welfare %}
+    <h3>welfare gray-zone counters</h3>
+    {% if welfare.source == "none" %}
+      <p class="muted">No welfare data yet.</p>
+    {% else %}
+      <dl class="kv welfare-counts">
+        <dt>unmaintained fatigue</dt><dd>{{ welfare.unmaintained_fatigue if welfare.unmaintained_fatigue is not none else "—" }}</dd>
+        <dt>sustained extreme VAD</dt><dd>{{ welfare.sustained_extreme_vad if welfare.sustained_extreme_vad is not none else "—" }}</dd>
+        <dt>replay overload</dt><dd>{{ welfare.replay_overload if welfare.replay_overload is not none else "—" }}</dd>
+        <dt>sustained interoceptive distress</dt><dd>{{ welfare.sustained_interoceptive_distress if welfare.sustained_interoceptive_distress is not none else "—" }}</dd>
+      </dl>
+    {% endif %}
+    {% endif %}
+
+    {% if entity_care.care_obligations %}
+    <h3>CAL care obligations</h3>
+    <ul class="care-obligations">
+      {% for ob in entity_care.care_obligations %}
+        <li>{{ ob }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <p class="muted" style="font-size:0.8rem">
+      Decommission is performed from the command line
+      (<code>python -m kaine.lifecycle</code>), not here.
+    </p>
+  {% else %}
+    <p class="chart-empty">Entity-care status not available.</p>
+  {% endif %}
+</section>

@@ -1,0 +1,66 @@
+{# GPU pre-flight headroom. `gpu_preflight` is the HealthProber snapshot block:
+   {state, devices, shortfall, resident_models, gpu_consumers, kaine_services_up,
+   message, since}. The operator's "is there headroom to train this sleep?"
+   signal — per-device free/total VRAM, any shortfall, what holds the GPU.
+   Non-content operational data only. Defensive: missing block → unknown. #}
+<section id="gpu-preflight" class="panel" data-readonly="true">
+  <h2>GPU pre-flight (headroom)</h2>
+  {% if gpu_preflight %}
+    {% set gp = gpu_preflight %}
+    {% set chip = "up" if gp.state == "ok" else ("degraded" if gp.state == "warning" else ("down" if gp.state == "critical" else "unknown")) %}
+    <p>
+      state: <span class="chip {{ chip }}">{{ gp.state }}</span>
+      {% if gp.since %}<span class="muted">checked {{ gp.since }}</span>{% endif %}
+    </p>
+    {% if gp.message %}<p class="muted">{{ gp.message }}</p>{% endif %}
+
+    {% if gp.devices %}
+    <h3>devices</h3>
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th>device</th><th>name</th><th>free</th><th>total</th></tr></thead>
+        <tbody>
+          {% for dev in gp.devices %}
+            {% set short = gp.shortfall and (dev.device in (gp.shortfall | map(attribute='device') | list)) %}
+            <tr{% if short %} class="gpu-short"{% endif %}>
+              <td>{{ dev.device }}</td>
+              <td>{{ dev.name or "—" }}</td>
+              <td>{{ dev.free_vram_gb if dev.free_vram_gb is not none else "—" }} GiB</td>
+              <td>{{ dev.total_vram_gb if dev.total_vram_gb is not none else "—" }} GiB</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="muted">No CUDA devices reported (CPU host or no pre-flight recorded).</p>
+    {% endif %}
+
+    {% if gp.resident_models %}
+    <h3>resident models</h3>
+    <ul class="health-list">
+      {% for m in gp.resident_models %}
+        <li class="health-row" data-dep="resident-model">
+          <span><span class="dep-name">{{ m }}</span></span>
+        </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if gp.gpu_consumers %}
+    <h3>GPU consumers</h3>
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th>pid</th><th>process</th><th>used</th></tr></thead>
+        <tbody>
+          {% for c in gp.gpu_consumers %}
+            <tr><td>{{ c.pid }}</td><td>{{ c.process_name }}</td><td>{{ c.used_mib }} MiB</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="chart-empty">GPU pre-flight status unavailable.</p>
+  {% endif %}
+</section>

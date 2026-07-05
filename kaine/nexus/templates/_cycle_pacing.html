@@ -1,0 +1,44 @@
+{# EntityClock / time_scale pacing surface. `cycle_pacing` is the
+   HealthProber snapshot block: {state, time_scale, target_rate_hz,
+   achieved_rate_hz, mean_tick_ms, mean_slip_ms, max_slip_ms, overrunning,
+   overrun_ticks, window_ticks}. The whole point of this panel is to make a
+   time_scale>1 overrun VISIBLE: when the host cannot hold the requested
+   speed, achieved drops below target and the chip flips to "throttling".
+   Non-content operational numbers only. Defensive: missing block → unknown. #}
+<section id="cycle-pacing" class="panel" data-readonly="true">
+  <h2>cycle pacing (time scale)</h2>
+  {# Body is live-refreshed in place by NexusVitals from health.cycle_pacing so a
+     time_scale / slip / throttling change shows without a reload. #}
+  <div id="cycle-pacing-body">
+  {% if cycle_pacing %}
+    {% set cp = cycle_pacing %}
+    {% set chip = "up" if cp.state == "holding" else ("degraded" if cp.state == "throttling" else "unknown") %}
+    <p>
+      state: <span class="chip {{ chip }}">{{ cp.state }}</span>
+      {% if cp.overrunning %}<span class="muted">overrunning — honest shortfall</span>{% endif %}
+    </p>
+    <dl class="kv">
+      {% set tscale = cp.get("time_scale") %}
+      {% set target = cp.get("target_rate_hz") %}
+      {% set achieved = cp.get("achieved_rate_hz") %}
+      {% set mean_tick = cp.get("mean_tick_ms") %}
+      {% set mean_slip = cp.get("mean_slip_ms") %}
+      {% set max_slip = cp.get("max_slip_ms") %}
+      {% set overrun_ticks = cp.get("overrun_ticks") %}
+      {% set window_ticks = cp.get("window_ticks") %}
+      <dt>time scale</dt><dd>{{ tscale if tscale is not none else "—" }}×</dd>
+      <dt>target rate</dt><dd>{{ "%.3f"|format(target) if target is not none else "—" }} Hz</dd>
+      <dt>achieved rate</dt><dd>{{ "%.3f"|format(achieved) if achieved is not none else "—" }} Hz</dd>
+      <dt>mean tick</dt><dd>{{ "%.1f"|format(mean_tick) if mean_tick is not none else "—" }} ms</dd>
+      <dt>mean slip</dt><dd>{{ "%.1f"|format(mean_slip) if mean_slip is not none else "—" }} ms</dd>
+      <dt>max slip</dt><dd>{{ "%.1f"|format(max_slip) if max_slip is not none else "—" }} ms</dd>
+      <dt>overrunning</dt><dd>{{ "yes" if cp.get("overrunning") else "no" }}</dd>
+      {% if overrun_ticks is not none %}
+        <dt>overrun ticks</dt><dd>{{ overrun_ticks }} / {{ window_ticks if window_ticks is not none else "—" }}</dd>
+      {% endif %}
+    </dl>
+  {% else %}
+    <p class="chart-empty">Cycle-pacing status unavailable.</p>
+  {% endif %}
+  </div>
+</section>

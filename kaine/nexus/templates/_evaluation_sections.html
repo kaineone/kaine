@@ -1,0 +1,317 @@
+{# Evaluation boards. Shared by /diagnostics/evaluation/ and the unified
+   console at `/`. Architecture-thesis instrumentation — NO message text shown.
+   `metrics` is the evaluation aggregate (see kaine.evaluation.nexus_tab); on
+   the console it is aliased from the `evaluation` context var. Panel/chart ids
+   are wired by nexus.js — do not rename. #}
+
+{# ===== Identity & divergence ========================================== #}
+<details class="board {% if console_view %}board--closed{% endif %}" id="board-identity" open>
+  <summary class="board__title board__title--haze"><span class="board__caret" aria-hidden="true">▸</span>Identity &amp; divergence</summary>
+  <div class="board__cards">
+    {% if report_view %}<p class="report-claim">Does the assembled architecture become an
+      <strong>individual</strong> — measurably distinct from the bare language model it is built
+      on? A/B divergence and memory-probe advantage compare the running system to a bare-LLM
+      control; the eidolon self-model tracks self-knowledge accuracy; and the individuation
+      boundary tests whether a fork's divergence exceeds a null distribution.</p>{% endif %}
+
+    <section class="panel">
+      <h2>A/B divergence (real vs bare LLM)</h2>
+      <dl class="kv">
+        <dt>samples</dt><dd>{{ metrics.ab_divergence.n }}</dd>
+        <dt>mean divergence</dt><dd>{{ "%.3f"|format(metrics.ab_divergence.mean_divergence) }}</dd>
+        <dt>max divergence</dt><dd>{{ "%.3f"|format(metrics.ab_divergence.max_divergence) }}</dd>
+      </dl>
+      <div id="chart-ab" class="chart" data-empty="no A/B divergence samples yet"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Memory probes</h2>
+      <dl class="kv">
+        <dt>n</dt><dd>{{ metrics.memory_probes.n }}</dd>
+        <dt>real accuracy (mean)</dt><dd>{{ "%.3f"|format(metrics.memory_probes.real_mean) }}</dd>
+        <dt>bare accuracy (mean)</dt><dd>{{ "%.3f"|format(metrics.memory_probes.bare_mean) }}</dd>
+        <dt>real advantage</dt><dd>{{ "%.3f"|format(metrics.memory_probes.advantage_mean) }}</dd>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <h2>Eidolon self-model accuracy (recent)</h2>
+      <div id="chart-eidolon" class="chart" data-empty="no eidolon accuracy samples yet"></div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>ts</th><th>aggregate</th></tr></thead>
+        <tbody>
+          {% for row in metrics.eidolon_accuracy[-20:] %}
+            <tr>
+              <td>{{ row.ts }}</td>
+              <td>{{ "%.3f"|format(row.aggregate) if row.aggregate is not none else "" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    {% if metrics.individuation %}
+    <section class="panel">
+      <h2>Individuation boundary (latest result)</h2>
+      {% set ind = metrics.individuation %}
+      <dl class="kv">
+        <dt>timestamp</dt><dd>{{ ind.ts or "—" }}</dd>
+        <dt>metric</dt><dd>{{ ind.metric or "—" }}</dd>
+        <dt>null samples</dt><dd>{{ ind.null_samples or "—" }}</dd>
+        <dt>fork divergence</dt>
+          <dd>{{ "%.4f"|format(ind.fork_divergence) if ind.fork_divergence is not none else "—" }}</dd>
+        <dt>null mean</dt>
+          <dd>{{ "%.4f"|format(ind.null_mean) if ind.null_mean is not none else "—" }}</dd>
+        <dt>null p95</dt>
+          <dd>{{ "%.4f"|format(ind.null_p95) if ind.null_p95 is not none else "—" }}</dd>
+        <dt>p-value</dt>
+          <dd>{{ "%.4f"|format(ind.p_value) if ind.p_value is not none else "—" }}</dd>
+        <dt>significant</dt>
+          <dd>{{ ind.significant if ind.significant is not none else "—" }}</dd>
+      </dl>
+    </section>
+    {% endif %}
+
+  </div>
+</details>
+
+{# ===== Module activity ================================================ #}
+<details class="board {% if console_view %}board--closed{% endif %}" id="board-modules" open>
+  <summary class="board__title board__title--haze"><span class="board__caret" aria-hidden="true">▸</span>Module activity</summary>
+  <div class="board__cards">
+    {% if report_view %}<p class="report-claim">What does each cognitive module
+      <strong>contribute</strong> to behaviour? Attribution counts which module drives each
+      action; the proactive-trigger distribution shows what initiates self-generated action;
+      Nous reports active-inference policy selection by expected free energy; and the
+      affect–output correlation matrix relates Thymos affect to behavioural output.</p>{% endif %}
+
+    <section class="panel">
+      <h2>Module attribution (running total)</h2>
+      <div id="chart-attribution-total"></div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>module</th><th>count</th></tr></thead>
+        <tbody>
+          {% for module, count in metrics.attribution_total.items() %}
+            <tr><td>{{ module }}</td><td>{{ count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <h3>this hour</h3>
+      <div id="chart-attribution-hour"></div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>module</th><th>count</th></tr></thead>
+        <tbody>
+          {% for module, count in metrics.attribution_hour.items() %}
+            <tr><td>{{ module }}</td><td>{{ count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Proactive trigger distribution</h2>
+      <div id="chart-proactive"></div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>module</th><th>count</th></tr></thead>
+        <tbody>
+          {% for module, count in metrics.proactive_triggers.items() %}
+            <tr><td>{{ module }}</td><td>{{ count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Nous policy (active inference)</h2>
+      {% set np = metrics.nous_policy %}
+      {% if np and np.source != "none" %}
+        <p class="muted">{{ np.n }} policy events in rollup · source: {{ np.source }}</p>
+        <dl class="kv">
+          <dt>latest selected policy</dt><dd>{{ np.latest_policy if np.latest_policy is not none else "—" }}</dd>
+          <dt>mean expected free energy</dt>
+          <dd>{{ "%.4f"|format(np.mean_efe) if np.mean_efe is not none else "—" }}</dd>
+        </dl>
+        <h3>recent EFE / policy series (last 10)</h3>
+        <div class="table-wrap">
+          <table class="mono">
+            <thead><tr><th>ts</th><th>EFE</th><th>horizon</th><th>policy</th></tr></thead>
+            <tbody>
+              {% for row in np.series[-10:] %}
+                <tr>
+                  <td>{{ row.ts }}</td>
+                  <td>{{ "%.4f"|format(row.expected_free_energy) if row.expected_free_energy is not none else "—" }}</td>
+                  <td>{{ row.horizon if row.horizon is not none else "—" }}</td>
+                  <td>{{ row.policy if row.policy is not none else "—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted" style="font-size:0.8rem">
+          Belief-divergence is not recorded in the nous_policy rollup (it logs EFE /
+          horizon / selected policy only). Fork/posterior divergence is on the
+          individuation and entity-care surfaces.
+        </p>
+      {% else %}
+        <p class="muted">No nous-policy data — Nous disabled or no policy events recorded.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel card--wide">
+      <h2>Affect-output correlation matrix</h2>
+      <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>thymos \ output</th>
+            {% for ck in (metrics.affect_correlation.values() | list | first | default({})).keys() %}
+              <th>{{ ck }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for tk, row in metrics.affect_correlation.items() %}
+            <tr>
+              <th>{{ tk }}</th>
+              {% for ck, val in row.items() %}
+                <td>{{ "%+.2f"|format(val) }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+  </div>
+</details>
+
+{# ===== Dynamics & welfare ============================================= #}
+<details class="board {% if console_view %}board--closed{% endif %}" id="board-dynamics" open>
+  <summary class="board__title board__title--haze"><span class="board__caret" aria-hidden="true">▸</span>Dynamics &amp; welfare</summary>
+  <div class="board__cards">
+    {% if report_view %}<p class="report-claim">The <strong>signatures of an ongoing mind</strong>:
+      voice-alignment and sleep-cycle before/after track consolidation across rest; the §5.5
+      gray-zone counters record welfare-relevant episodes; and prediction error and PLV coherence
+      report predictive accuracy and cross-module phase-coupling in the oscillatory layer.</p>{% endif %}
+
+    <section class="panel">
+      <h2>Voice alignment (last sleep cycles)</h2>
+      <div id="chart-voice" class="chart" data-empty="no voice-alignment samples yet"></div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>ts</th><th>before</th><th>after</th></tr></thead>
+        <tbody>
+          {% for row in metrics.voice_tracking[-10:] %}
+            <tr>
+              <td>{{ row.ts }}</td>
+              <td>{{ "%.3f"|format(row.before) if row.before is not none else "" }}</td>
+              <td>{{ "%.3f"|format(row.after) if row.after is not none else "" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Sleep cycle before/after (last 5)</h2>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>began</th><th>ended</th><th>before</th><th>after</th></tr></thead>
+        <tbody>
+          {% for row in metrics.sleep_snapshots[-5:] %}
+            <tr>
+              <td>{{ row.began_ts }}</td>
+              <td>{{ row.ended_ts }}</td>
+              <td>{{ row.before }}</td>
+              <td>{{ row.after }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Welfare (Gray-Zone) — §5.5 events</h2>
+      {% set w = metrics.welfare %}
+      {% if w and w.source != "none" %}
+        <p class="muted">Source: {{ w.source }}</p>
+        <dl class="kv">
+          <dt>unmaintained fatigue crossings</dt>
+          <dd>{{ w.unmaintained_fatigue if w.unmaintained_fatigue is not none else "—" }}</dd>
+          <dt>sustained extreme VAD episodes</dt>
+          <dd>{{ w.sustained_extreme_vad if w.sustained_extreme_vad is not none else "—" }}</dd>
+          <dt>replay overload events</dt>
+          <dd>{{ w.replay_overload if w.replay_overload is not none else "—" }}</dd>
+          <dt>sustained interoceptive distress</dt>
+          <dd>{{ w.sustained_interoceptive_distress if w.sustained_interoceptive_distress is not none else "—" }}</dd>
+        </dl>
+      {% else %}
+        <p class="muted">No welfare data — welfare observer not running or no gray-zone events recorded.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Prediction error (per-source sliding window)</h2>
+      {% set pe = metrics.prediction_error %}
+      {% if pe and pe.source != "none" %}
+        <p class="muted">Source: {{ pe.source }}</p>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>stream</th><th>n</th><th>mean</th><th>p95</th><th>p99</th><th>total events</th></tr></thead>
+          <tbody>
+            {% for stream, stats in (pe.per_source or {}).items() %}
+              <tr>
+                <td>{{ stream }}</td>
+                <td>{{ stats.n }}</td>
+                <td>{{ "%.4f"|format(stats.mean) if stats.mean is not none else "—" }}</td>
+                <td>{{ "%.4f"|format(stats.p95) if stats.p95 is not none else "—" }}</td>
+                <td>{{ "%.4f"|format(stats.p99) if stats.p99 is not none else "—" }}</td>
+                <td>{{ (pe.event_counts or {}).get(stream, "—") }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      {% else %}
+        <p class="muted">No prediction-error data — prediction-error observer not running or no samples yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Coherence (PLV — oscillatory layer)</h2>
+      {% set coh = metrics.coherence %}
+      {% if coh and coh.source != "none" %}
+        <p class="muted">{{ coh.n }} entries in rollup.</p>
+        {% if coh.latest %}
+          <h3>Latest PLV by pair</h3>
+          <dl class="kv">
+            {% for pair, val in coh.latest.items() %}
+              <dt>{{ pair }}</dt><dd>{{ "%.4f"|format(val) }}</dd>
+            {% endfor %}
+          </dl>
+        {% endif %}
+        {% if coh.mean_per_pair %}
+          <h3>Mean PLV by pair</h3>
+          <dl class="kv">
+            {% for pair, val in coh.mean_per_pair.items() %}
+              <dt>{{ pair }}</dt><dd>{{ "%.4f"|format(val) }}</dd>
+            {% endfor %}
+          </dl>
+        {% endif %}
+      {% else %}
+        <p class="muted">No coherence data — oscillatory layer disabled or no broadcasts recorded.</p>
+      {% endif %}
+    </section>
+
+  </div>
+</details>

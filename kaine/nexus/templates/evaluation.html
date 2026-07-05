@@ -1,0 +1,30 @@
+{% extends "_base.html" %}
+{% block title %}Nexus evaluation{% endblock %}
+{% block header_extra %}{% endblock %}
+{% block content %}
+{# report_view turns the shared evaluation partial into a readable research
+   report (section claims + framing); the console leaves it unset so its
+   collapsed eval boards stay terse. #}
+{% set report_view = true %}
+<div class="page page--report">
+  <header class="report-masthead">
+    <h1 class="report-title">Living research report</h1>
+    <p class="report-lede">
+      This report assembles KAINE's architecture-thesis instrumentation into one
+      continuously-updating view — evidence on whether the composite architecture
+      produces measurable structure <em>beyond its base language model</em>:
+      divergence and individuation, the contribution of each cognitive module, and
+      the welfare and dynamical signatures of an ongoing mind. Figures populate
+      live during a research run; no message content is shown.
+    </p>
+  </header>
+  {% include "_evaluation_sections.html" %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ asset('/static/vendor/uPlot.iife.min.js') }}"></script>
+<script src="{{ asset('/static/nexus.js') }}"></script>
+<script>
+  if (window.NexusCharts) { NexusCharts.attachEvaluation("/diagnostics/evaluation/summary.json"); }
+</script>
+{% endblock %}

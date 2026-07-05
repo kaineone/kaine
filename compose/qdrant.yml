@@ -1,0 +1,42 @@
+# KAINE-owned Qdrant vector store for Mnemos.
+#
+# Same safe-by-default posture as compose/redis.yml: mandatory API key,
+# loopback-only port mapping, persistent named volume.
+#
+# Usage:
+#   bash scripts/qdrant-bootstrap.sh            # one-command setup
+#
+# Or manually:
+#   export KAINE_QDRANT_API_KEY=$(openssl rand -hex 32)
+#   docker compose -f compose/qdrant.yml up -d
+
+name: kaine-qdrant
+
+services:
+  kaine-qdrant:
+    image: qdrant/qdrant:v1.18.0
+    container_name: kaine-qdrant
+    ports:
+      - "127.0.0.1:${KAINE_QDRANT_HOST_PORT:-6533}:6333"
+    environment:
+      QDRANT__SERVICE__API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - kaine-qdrant-data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          wget -q -O - --header "api-key: $$QDRANT__SERVICE__API_KEY"
+          http://127.0.0.1:6333/readyz | grep -q "all shards are ready"
+          || curl -fsS -H "api-key: $$QDRANT__SERVICE__API_KEY"
+              http://127.0.0.1:6333/readyz >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  kaine-qdrant-data:
+    name: kaine-qdrant-data

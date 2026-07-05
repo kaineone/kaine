@@ -1,0 +1,11 @@
+{# Health & services sidebar content. Lives in the console's right rail
+   (rail--right) and inline on the standalone /diagnostics page. The LCARS
+   section-bar header matches the console boards; the two health partials
+   degrade gracefully when their blocks are empty (no entity running). #}
+<div class="board" id="board-health">
+  <div class="board__title">Health &amp; services</div>
+  <div class="board__cards">
+    {% include "_health_board.html" %}
+    {% include "_gpu_preflight.html" %}
+  </div>
+</div>

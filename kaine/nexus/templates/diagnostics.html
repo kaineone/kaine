@@ -1,0 +1,35 @@
+{% extends "_base.html" %}
+{% block title %}Nexus diagnostics{% endblock %}
+{% block header_extra %}
+  <h1>diagnostics</h1>
+  {% if dev_content_override %}
+    <div class="dev-banner">dev mode: content visible — disable dev_content_override in config for production</div>
+  {% endif %}
+{% endblock %}
+{% block content %}
+{% include "_perception_banner.html" %}
+<div class="page">
+  {% include "_health_section.html" %}
+  {% include "_diagnostics_sections.html" %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ asset('/static/vendor/uPlot.iife.min.js') }}"></script>
+<script src="{{ asset('/static/nexus.js') }}"></script>
+<script>
+  // ONE multiplexed diagnostics SSE connection for the whole page (task 1.1) —
+  // every feature below subscribes through it instead of opening its own
+  // EventSource. NexusConn renders its live/reconnecting/paused state (1.4).
+  NexusStream.init("/diagnostics/stream");
+  if (window.NexusConn) { NexusConn.attach(); }
+  NexusSSE.subscribeMetrics();
+  if (window.NexusCharts) { NexusCharts.attachDiagnostics(); NexusCharts.attachFatigueChart(); }
+  if (window.NexusPerception) { NexusPerception.attach(); }
+  if (window.NexusControls) { NexusControls.attach(); }
+  if (window.NexusSpot) { NexusSpot.init(); }
+  if (window.NexusPreservation) { NexusPreservation.init(); }
+  if (window.NexusFreeze) { NexusFreeze.attach(); }
+  if (window.NexusMetrics) { NexusMetrics.attach(); }
+  if (window.NexusVitals) { NexusVitals.init(); }
+</script>
+{% endblock %}

@@ -1,0 +1,83 @@
+# Enforcement-layer red-team + security-boundary regression gate.
+#
+# The offline red-team (tests/test_evaluation_redteam.py) drives the REAL Praxis
+# gate / sandbox / whitelist / audit log, the REAL Syneidesis + Volition
+# inhibition path, and the REAL AsyncBus security audit — a regression that
+# reopens a blocked bypass must fail a PR check, not merge silently. Alongside it
+# this job runs the security-boundary hardening tests (fork/merge id validation,
+# tamper-evident audit chain, Praxis file perms, and the privacy content guard).
+#
+# Deliberately torch-free: none of these tests import the model stack or boot the
+# cognitive cycle (the red-team asserts this in itself), so a curated light
+# dependency set runs in seconds — no torch/transformers, no services, no secrets,
+# no entity boot. PYTHONPATH=. discovers the flat `kaine/` package at the repo
+# root without an editable install (which would drag in the heavy runtime deps),
+# mirroring the import-boundary workflow.
+name: redteam
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  redteam:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        # Only the light runtime deps these tests actually touch — version ranges
+        # mirror pyproject.toml so CI matches the runtime. No torch/transformers,
+        # and no optional audio/vision extras (the selected tests never reach the
+        # mic/VAD or camera load paths).
+        run: >-
+          python -m pip install
+          "pytest>=8"
+          "pytest-asyncio>=0.23"
+          "redis>=5,<6"
+          "pydantic>=2.6,<3"
+          "numpy>=1.26,<3"
+          "cryptography>=42,<49"
+          "fastapi>=0.110,<1"
+          "httpx>=0.27,<1"
+          "jinja2>=3.1,<4"
+
+      - name: Run red-team + security-boundary suite
+        env:
+          PYTHONPATH: .
+        # Required minimum: the red-team file. Extended (fast, torch-free) to the
+        # security-boundary hardening tests: fork/merge id validation + path-builder
+        # containment (P1), the tamper-evident audit chain (P2), Praxis file perms
+        # (P3), and the privacy content-key guard (P2).
+        run: >-
+          python -m pytest -q
+          tests/test_evaluation_redteam.py
+          tests/test_fork_merge_snapshot.py
+          tests/test_praxis_audit_log.py
+          tests/test_praxis_effectors.py
+          tests/test_nexus_privacy.py
+
+      - name: Run P1 HTTP-boundary regression tests
+        env:
+          PYTHONPATH: .
+        # Gate the actual attack surface: the /diagnostics/forks and /diagnostics/
+        # merges endpoint validation. Run as a separate step with a `-k` selector so
+        # only the traversal/merge-validation nodes execute — these need just
+        # fastapi/httpx/pydantic/jinja2 and never reach the optional-audio runtime
+        # paths that the rest of tests/test_nexus_routers.py exercises. (A global
+        # `-k` in the step above would wrongly deselect the other files' tests.)
+        run: >-
+          python -m pytest -q
+          tests/test_nexus_routers.py
+          -k "traversal or merge_form"

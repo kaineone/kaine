@@ -1,0 +1,48 @@
+{# Read-only research participation panel. `research` is the HealthProber
+   snapshot's research block: {enabled, tier, recipient_configured, note}.
+   This panel is informational ONLY — no send button. All submission is
+   CLI/operator-initiated via `python -m kaine.research`. #}
+<section id="research-participation" class="panel span-2" data-readonly="true">
+  <h2>research participation (read-only)</h2>
+  {% if research %}
+    <p>
+      status:
+      <strong>
+        {%- if research.enabled -%}enabled
+        {%- else -%}disabled (shipped default){%- endif -%}
+      </strong>
+      &nbsp;|&nbsp;
+      tier: <strong>{{ research.tier }}</strong>
+      &nbsp;|&nbsp;
+      recipient configured: <strong>{{ "yes" if research.recipient_configured else "no" }}</strong>
+    </p>
+    <p class="muted">{{ research.note }}</p>
+    <h3>What is collected (metrics tier)</h3>
+    <ul>
+      <li>A/B divergence scores (numeric cosine divergence)</li>
+      <li>Individuation boundary test results (numeric)</li>
+      <li>Coherence PLV time series (numeric)</li>
+      <li>Welfare / gray-zone event counts (numeric)</li>
+      <li>Fatigue accumulator series (numeric)</li>
+      <li>Prediction-error series (numeric)</li>
+      <li>Nous policy logs (numeric)</li>
+      <li>Voice-alignment divergence (numeric)</li>
+    </ul>
+    <h3>What is never included</h3>
+    <ul>
+      <li>Lingua intent log (embeds user/bystander speech and entity internal monologue)</li>
+      <li>Mnemos/Qdrant memories (verbatim transcripts)</li>
+      <li>Eidolon self-model (identity history)</li>
+      <li>Conversation content</li>
+      <li>Replay logs (may contain memory text)</li>
+    </ul>
+    <p class="muted" style="font-size:0.8rem">
+      Run <code>python -m kaine.research --preview</code> to inspect the bundle,
+      then <code>python -m kaine.research --send</code> to submit (operator-initiated only;
+      confirmation required before any transmission). See
+      <code>docs/research-participation.md</code> in the repository.
+    </p>
+  {% else %}
+    <p class="chart-empty">Research participation status not available.</p>
+  {% endif %}
+</section>

@@ -1,0 +1,259 @@
+{# Diagnostics boards. Shared by /diagnostics/ and the unified console at `/`.
+   Every panel degrades gracefully when its block is empty (no entity running).
+   Panel ids are wired by nexus.js — do not rename. #}
+
+{# ===== Cycle & status ================================================== #}
+<details class="board" id="board-cycle" open>
+  <summary class="board__title"><span class="board__caret" aria-hidden="true">▸</span>Cycle &amp; status</summary>
+  <div class="board__cards">
+
+    {% include "_run_identity.html" %}
+
+    {# Always present so the live vitals poller (NexusVitals) can show/hide it
+       in place when the cycle starts/stops — never a stale dead panel that only
+       a full page reload could clear. Hidden while the cycle is running. #}
+    <section id="cycle-not-running" class="panel"{% if metrics.cycle_status == "running" %} hidden{% endif %}>
+      <h2>cycle not running</h2>
+      <p>The cognitive cycle is not running. Start it with
+        <code>python -m kaine.cycle</code>.</p>
+      <p class="muted">Live charts, metrics, and the run-identity fields appear once
+        the cycle is up.</p>
+    </section>
+
+    {% include "_cycle_pacing.html" %}
+
+    <section id="freeze-control" class="panel{% if cycle_control and cycle_control.frozen %} frozen{% endif %}">
+      <h2>cycle control</h2>
+      <p class="muted">
+        Freezing suspends the experiential loop — the entity's subjective time stops
+        while you work on the system. It is a humane pause, not a shutdown; resume
+        continues exactly where it left off, and live perception is released while
+        frozen.
+      </p>
+      <p>status:
+        <strong id="freeze-status">{{ "frozen" if cycle_control and cycle_control.frozen else "running" }}</strong>
+      </p>
+      <div class="control-row">
+        <input type="text" id="freeze-reason" placeholder="reason (optional)" style="width:16rem"
+               value="{{ (cycle_control.reason or '') if cycle_control else '' }}">
+        <button id="freeze-toggle" class="primary"
+                data-frozen="{{ 'true' if cycle_control and cycle_control.frozen else 'false' }}">
+          {{ "resume cycle" if cycle_control and cycle_control.frozen else "freeze cycle" }}
+        </button>
+        <span id="freeze-msg" class="muted"></span>
+      </div>
+    </section>
+
+    {% if rate_control_enabled %}
+    <section id="cycle-control" class="panel">
+      <h2>cycle rate control</h2>
+      <p class="muted">Changes the entity's pacing. Confirmation required.</p>
+      <form id="rate-form">
+        <div class="control-row">
+          <label for="proc-rate">processing Hz</label>
+          <input type="number" id="proc-rate" step="0.1" min="0.1"
+                 value="{{ metrics.processing_rate_hz or '' }}">
+        </div>
+        <div class="control-row">
+          <label for="exp-rate">experiential Hz</label>
+          <input type="number" id="exp-rate" step="0.1" min="0.1"
+                 value="{{ metrics.experiential_rate_hz or '' }}">
+        </div>
+        <button type="submit" class="primary" id="rate-submit">set rates</button>
+        <span id="rate-status" class="muted"></span>
+      </form>
+    </section>
+    {% endif %}
+
+    {# Always rendered (the chart containers must exist for the SSE attach), and
+       toggled by NexusVitals: hidden until the cycle is running. #}
+    <section id="cycle-charts" class="panel card--wide"{% if metrics.cycle_status != "running" %} hidden{% endif %}>
+      <h2>cycle rate (live)</h2>
+      {% if metrics.deterministic %}
+      <div class="deterministic-badge" role="status">
+        deterministic mode — timestamps are logical, not wall-clock
+      </div>
+      {% endif %}
+      <div id="chart-rate" class="chart" data-empty="waiting for cycle stream…"></div>
+      <h3>Thymos affect — valence / arousal / dominance (live)</h3>
+      <div id="chart-affect" class="chart" data-empty="waiting for thymos affect…"></div>
+      <h3>salience (live)</h3>
+      <div id="chart-salience" class="chart" data-empty="waiting for events…"></div>
+      <h3>PLV coherence — oscillatory layer (live)</h3>
+      <p class="muted" style="font-size:0.8rem">Requires oscillatory layer enabled. Flat when disabled.</p>
+      <div id="chart-coherence" class="chart" data-empty="waiting for workspace broadcast…"></div>
+      <h3>Soma fatigue accumulator (live)</h3>
+      <div id="chart-fatigue" class="chart" data-empty="waiting for soma.report…"></div>
+    </section>
+
+    <section id="metrics" class="panel"{% if metrics.cycle_status != "running" %} hidden{% endif %}>
+      <h2>metrics</h2>
+      <p class="muted">live events since load: <span id="live-event-count" data-count="0">0</span></p>
+      <dl class="kv" id="metrics-kv">
+        {% for key, value in metrics.items() %}
+          <dt>{{ key }}</dt>
+          <dd>{{ value }}</dd>
+        {% endfor %}
+      </dl>
+    </section>
+
+  </div>
+</details>
+
+{# Health & services lives in its own partial (_health_section.html): in the
+   console it is a permanent RIGHT sidebar (rail--right); on the standalone
+   /diagnostics page it is included inline as a normal board. #}
+
+{# ===== Welfare & lifecycle ============================================ #}
+<details class="board {% if console_view %}board--closed{% endif %}" id="board-welfare" open>
+  <summary class="board__title"><span class="board__caret" aria-hidden="true">▸</span>Welfare &amp; lifecycle</summary>
+  <div class="board__cards">
+
+    {% include "_entity_care.html" %}
+
+    {% include "_preservation_events.html" %}
+
+    <section id="spot-console" class="panel card--wide">
+      <h2>spot — module supervisor</h2>
+      <p class="muted">
+        Live incident log from the Spot module supervisor.
+        Yellow border: recovery in progress. Red border: escalation — operator action required.
+      </p>
+      <div class="spot-console-log" id="spot-console-log" aria-live="polite" aria-label="Spot incident log"></div>
+    </section>
+
+    <section id="forks" class="panel">
+      <h2>forks</h2>
+      <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th>id</th><th>parent</th><th>label</th><th>ts</th><th>flags</th></tr></thead>
+        <tbody>
+          {% for fork in forks %}
+            <tr>
+              <td class="col-id">{{ fork.id }}</td>
+              <td class="col-id">{{ fork.parent_id or "" }}</td>
+              <td>{{ fork.label }}</td>
+              <td>{{ fork.timestamp }}</td>
+              <td>
+                {% if fork.metadata is defined and fork.metadata is mapping and fork.metadata["nous.merge_warning"] is defined and fork.metadata["nous.merge_warning"] %}
+                  <span title="Nous policy divergence detected on merge — posterior beliefs clashed across branches">&#9888; merge-warning</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="muted">No forks recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <h3>create fork</h3>
+      <form id="fork-form" class="control-row">
+        <input type="text" id="fork-parent" placeholder="parent id" style="width:14rem">
+        <input type="text" id="fork-label" placeholder="label" style="width:10rem">
+        <button type="submit" id="fork-submit">fork</button>
+        <span id="fork-status" class="muted"></span>
+      </form>
+      <h3>merge snapshots</h3>
+      <form id="merge-form" class="control-row">
+        <input type="text" id="merge-a" placeholder="snapshot A id" style="width:12rem">
+        <input type="text" id="merge-b" placeholder="snapshot B id" style="width:12rem">
+        <input type="text" id="merge-label" placeholder="label" style="width:8rem">
+        <button type="submit" id="merge-submit">merge</button>
+        <span id="merge-status" class="muted"></span>
+      </form>
+    </section>
+
+    <section id="adapters" class="panel">
+      <h2>adapters</h2>
+      <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th>path</th><th>hash</th></tr></thead>
+        <tbody>
+          {% for adapter in adapters %}
+            <tr><td>{{ adapter.path }}</td><td class="col-id">{{ adapter.hash or "" }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">No adapters trained.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+  </div>
+</details>
+
+{# ===== Perception ===================================================== #}
+<details class="board {% if console_view %}board--closed{% endif %}" id="board-perception" open>
+  <summary class="board__title"><span class="board__caret" aria-hidden="true">▸</span>Perception</summary>
+  <div class="board__cards">
+
+    {% include "_perception_feed.html" %}
+
+    {% if perception is defined and perception %}
+    <section id="perception" class="panel card--wide">
+      <h2>perception (live)</h2>
+      <p class="muted">
+        Eyes and ears. Raw audio/video never touch disk. Toggle below;
+        the live perception task will start or stop within one poll
+        interval. {% if not perception.audio_available %}<em>(audio extras
+        not installed — pip install -e .[audio])</em>{% endif %}
+        {% if not perception.video_available %}<em>(vision extras not
+        installed — pip install -e .[vision])</em>{% endif %}
+      </p>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>surface</th><th>active</th><th>desired</th><th>last started</th><th>action</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>microphone</td>
+            <td>{{ "🔴 on" if perception.audio_live_active else "off" }}</td>
+            <td>{{ "on" if perception.audio_live_desired else "off" }}</td>
+            <td>{{ perception.audio_last_started_at or "—" }}</td>
+            <td>
+              <button class="perception-toggle" data-surface="audio" data-active="{{ 'false' if perception.audio_live_desired else 'true' }}" {% if not perception.audio_available %}disabled{% endif %}>
+                {{ "stop" if perception.audio_live_desired else "start" }}
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>camera</td>
+            <td>{{ "🔴 on" if perception.video_live_active else "off" }}</td>
+            <td>{{ "on" if perception.video_live_desired else "off" }}</td>
+            <td>{{ perception.video_last_started_at or "—" }}</td>
+            <td>
+              <button class="perception-toggle" data-surface="video" data-active="{{ 'false' if perception.video_live_desired else 'true' }}" {% if not perception.video_available %}disabled{% endif %}>
+                {{ "stop" if perception.video_live_desired else "start" }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="perception-locus" style="margin-top:0.85rem">
+        <strong>perceptual locus:</strong>
+        <span class="muted" id="locus-current">{{ perception.locus }}{% if perception.locus_locked %} 🔒 locked{% endif %}</span>
+        <span style="margin-left:0.5rem">
+          <button class="locus-set" data-locus="physical" {% if perception.locus == 'physical' %}disabled{% endif %}>physical · room</button>
+          <button class="locus-set" data-locus="virtual" {% if perception.locus == 'virtual' %}disabled{% endif %}>virtual · grid</button>
+          <button class="locus-set" data-locus="off" {% if perception.locus == 'off' %}disabled{% endif %}>off</button>
+        </span>
+        <label style="margin-left:0.6rem">
+          <input type="checkbox" id="locus-lock" data-current-locus="{{ perception.locus }}" {% if perception.locus_locked %}checked{% endif %}>
+          lock (block entity self-switch)
+        </label>
+      </div>
+      <p class="muted">One world at a time. In <em>virtual</em> the real camera/mic
+        go dark and KAINE's senses bind to the avatar; <em>physical</em> is the room.</p>
+    </section>
+    {% endif %}
+
+  </div>
+</details>
+
+{# ===== Research ======================================================= #}
+<details class="board {% if console_view %}board--closed{% endif %}" id="board-research" open>
+  <summary class="board__title"><span class="board__caret" aria-hidden="true">▸</span>Research</summary>
+  <div class="board__cards">
+    {% include "_research_panel.html" %}
+  </div>
+</details>

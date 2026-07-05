@@ -1,0 +1,51 @@
+{# Reproducible perception-feed covariate. `perception_feed` is the
+   HealthProber snapshot block: {mode, reproducible, descriptor, note}.
+   This is the research-critical reproducibility signal — it lets a
+   researcher confirm from Nexus whether a run is on a deterministic
+   seeded/playlist A/V feed (regenerable/verifiable) or live input.
+   Non-content: seed + schedule (seeded) or manifest sha256 (playlist).
+   Defensive: a missing/empty block renders an explicit unavailable note. #}
+<section id="perception-feed" class="panel" data-readonly="true">
+  <h2>perception feed (reproducibility)</h2>
+  {% if perception_feed %}
+    {% set pf = perception_feed %}
+    <p>
+      mode:
+      <span class="chip {{ 'recording' if pf.reproducible else 'unknown' }}">{{ pf.mode or "off" }}</span>
+      <span class="muted">{{ "reproducible" if pf.reproducible else "not a reproducible feed" }}</span>
+    </p>
+    <p class="muted">{{ pf.note }}</p>
+    {% set d = pf.descriptor or {} %}
+    {% if pf.mode == "seeded" %}
+      <h3>seeded descriptor</h3>
+      <dl class="kv">
+        <dt>seed</dt><dd>{{ d.seed if d.seed is not none else "—" }}</dd>
+        {% if d.video %}
+          <dt>video schedule</dt>
+          <dd>{{ d.video.width }}×{{ d.video.height }}
+            · surprise every {{ d.video.surprise_interval }} ticks
+            · strength {{ d.video.surprise_strength }}</dd>
+        {% endif %}
+        {% if d.audio %}
+          <dt>audio schedule</dt>
+          <dd>{{ d.audio.sample_rate }} Hz · {{ d.audio.channels }} ch
+            · frames/block {{ d.audio.frames_per_block }}
+            · surprise every {{ d.audio.surprise_interval }} ticks</dd>
+        {% endif %}
+      </dl>
+    {% elif pf.mode == "playlist" %}
+      <h3>playlist descriptor</h3>
+      {% set pl = d.playlist or {} %}
+      {% if pl.manifest_unavailable %}
+        <p class="muted">manifest could not be read at probe time (verified at open()).</p>
+      {% else %}
+        <dl class="kv">
+          <dt>manifest sha256</dt><dd>{{ pl.manifest_sha256 or "—" }}</dd>
+          <dt>items</dt><dd>{{ pl.item_digests | length if pl.item_digests else 0 }}</dd>
+        </dl>
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <p class="chart-empty">Perception-feed status unavailable.</p>
+  {% endif %}
+</section>

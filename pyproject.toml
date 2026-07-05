@@ -1,0 +1,268 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaine"
+version = "26.06.0a1"
+description = "Kaine Autonomous Intelligent Networked Entity — composite cognitive architecture"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE.md" }  # SPDX identifier: LicenseRef-CAL-0.2 (custom entity-welfare copyleft, draft)
+authors = [{ name = "KAINE contributors" }]
+dependencies = [
+    "redis>=5,<6",
+    "pydantic>=2.6,<3",
+    "psutil>=5.9,<7",
+    "pynvml>=11.5,<13",
+    "numpy>=1.26,<3",
+    "torch>=2.5,<3",
+    "ncps>=1.0,<2",
+    "transformers>=4.40,<5",
+    "Pillow>=10,<12",
+    "qdrant-client>=1.7,<2",
+    "sentence-transformers>=2.7,<6",
+    "httpx>=0.27,<1",
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.29,<1",
+    "jinja2>=3.1,<4",
+    # AES-256-GCM encryption-at-rest for persisted cognitive state
+    # (kaine/security/crypto.py). Imported lazily, only when
+    # [security.state_encryption].enabled = true.
+    "cryptography>=42,<49",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "fakeredis>=2.21",
+    # Structural import-boundary contracts (kaine/evaluation sidecar boundary +
+    # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
+    # Enforced by `lint-imports` (pre-commit, a dedicated CI job, and
+    # tests/test_import_boundary_contracts.py). See docs/architecture-boundaries.md.
+    "import-linter>=2",
+]
+# Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
+# Required only if [audition].capture_enabled = true. Lazy-imported.
+audio = [
+    "sounddevice>=0.4,<1",
+    "webrtcvad>=2.0,<3",
+    # Vocal-emotion recognition (emotion2vec+ via funasr) for audition. funasr
+    # pulls torchaudio, which must MATCH the host torch wheel (CUDA vs CPU) —
+    # install it the same dynamic way as torch (see DEPENDENCIES.md / SETUP.md).
+    # The emotion2vec_plus_base weights resolve via the HuggingFace hub
+    # (audition.emotion pins hub="hf"; the default ModelScope hub 404s).
+    "funasr>=1.1,<2",
+    # In-memory prosody extraction for audition.prosody (ISC licence).
+    # Required only if [audition].prosody_enabled = true. Lazy-imported.
+    "librosa>=0.10,<1",
+    "av>=12,<15",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
+]
+# Live camera (LiveCamera in kaine/modules/topos/live.py).
+# Required only if [topos].capture_enabled = true. Lazy-imported.
+vision = [
+    "opencv-python-headless>=4.8,<5",
+]
+# Aggregate convenience extra: everything the reproducible perception feed needs
+# (the unified [perception_feed] — cv2 decodes playlist video, sounddevice/av
+# decode playlist audio, mic/camera for live mode). Self-referential extras are
+# valid; this one name provisions both sense surfaces for a research install.
+perception = ["kaine[audio]", "kaine[vision]"]
+# Active-inference reasoning engine for Nous (pymdp 1.0, JAX).
+# Required only when [modules].nous = true. Lazy-imported by the engine; the
+# build/test suite stays green without it (module tests use a FakeEngine). The
+# REAL package is `inferactively-pymdp` (import name `pymdp`); the bare `pymdp`
+# PyPI name is an unrelated stub. JAX is pinned CPU-only — KAINE runs no cloud
+# or CUDA at runtime; jax[cpu] logs a one-line GPU-fallback notice (expected).
+reasoning = [
+    "inferactively-pymdp>=1.0",
+    "jax[cpu]>=0.4",
+]
+# Voice-alignment DPO training stack (Hypnos sleep-cycle phase).
+# Required only when [hypnos.voice_alignment].enabled = true AND
+# KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1. Lazy-imported by the
+# trainer; sleep cycle still completes cleanly if missing.
+# Pulls ~3-4 GB of weights and CUDA libs.
+training = [
+    "unsloth>=2024.9,<2026",
+    "trl>=0.11,<1",
+    "peft>=0.13,<1",
+    "datasets>=2.20,<5",
+]
+# DreamerV3 RSSM world model for Phantasia (paper §3.3.2).
+# Required only when [phantasia].backend = "dreamerv3". Lazy-imported by the
+# world-model adapter; the build/test suite stays green without it (module
+# tests use FakeWorldModel). JAX is pinned CPU-only — KAINE runs no cloud or
+# CUDA at runtime; jax[cpu] logs a one-line GPU-fallback notice (expected).
+# The vendored RSSM core (external/dreamerv3, path b — see external/dreamerv3/
+# UPSTREAM) needs only jax; chex/einops are declared for upstream-toolchain
+# parity. Excludes any actor/critic/return heads — Phantasia is world-model only.
+worldmodel = [
+    "jax[cpu]>=0.4",
+    "chex>=0.1",
+    "einops>=0.7",
+]
+# Oscillatory-binding layer for Syneidesis (oscillatory-layer / paper §3.2).
+# Required only when [oscillator].enabled = true. Lazy-imported by the
+# oscillator; the build/test suite stays green without it (tests use
+# FakeOscillator). CPU-only. scipy supplies the Hilbert transform used by the
+# spike-rate → phase estimator.
+oscillator = [
+    "snntorch>=0.9,<1",
+    "scipy>=1.10",
+]
+
+[tool.setuptools]
+packages = ["kaine", "kaine.bus", "kaine.cycle", "kaine.evaluation", "kaine.faithful", "kaine.lifecycle", "kaine.modules", "kaine.modules.audition", "kaine.modules.vox", "kaine.modules.chronos", "kaine.modules.eidolon", "kaine.modules.hypnos", "kaine.modules.lingua", "kaine.modules.mnemos", "kaine.modules.nous", "kaine.modules.phantasia", "kaine.modules.praxis", "kaine.modules.soma", "kaine.modules.thymos", "kaine.modules.topos", "kaine.nexus", "kaine.nexus.health", "kaine.workspace"]
+
+[tool.setuptools.package-data]
+"kaine.nexus" = ["templates/*.html", "static/*.css", "static/*.js"]
+"kaine.modules.hypnos" = ["eval_probes/*.jsonl"]
+"kaine.modules.eidolon" = ["surnames.txt"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: hits a live authenticated Redis; skipped unless KAINE_REDIS_PASSWORD is set",
+    "systems: per-subsystem I/O contract test under tests/systems/",
+]
+testpaths = ["tests"]
+
+# ---------------------------------------------------------------------------
+# Structural import-boundary contracts (import-linter / `lint-imports`).
+#
+# These encode the architecture's load-bearing boundaries as structural
+# import contracts instead of relying solely on a string grep. They run in
+# seconds via pre-commit, a dedicated CI job, and
+# tests/test_import_boundary_contracts.py. See docs/architecture-boundaries.md
+# for the full rationale and layer map.
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["kaine"]
+
+# LOAD-BEARING: the sidecar boundary. kaine.evaluation is the observe-only
+# research subsystem; core runtime must run with it entirely absent. Nothing
+# under kaine/ may import kaine.evaluation EXCEPT the two composition-root
+# entrypoints that wire the sidecar in (the only seams).
+#
+# The source list is every top-level kaine package/module EXCEPT evaluation
+# itself (evaluation submodules legitimately import each other). The two seams
+# stay in the source list but their imports of kaine.evaluation are declared as
+# the only allowed exceptions via ignore_imports — so adding a forbidden import
+# anywhere else (e.g. kaine/nexus/health.py -> kaine.evaluation) breaks this
+# contract immediately. If a NEW top-level kaine package is added it must be
+# listed here (the dedicated CI job and the grep belt-and-suspenders catch a
+# stale list).
+[[tool.importlinter.contracts]]
+name = "Core must not import the evaluation sidecar (only the two __main__ seams)"
+type = "forbidden"
+source_modules = [
+    "kaine.boot",
+    "kaine.config",
+    "kaine.entity_clock",
+    "kaine.hardware",
+    "kaine.perception_state",
+    "kaine.privacy_filter",
+    "kaine.text_embedding",
+    "kaine.bus",
+    "kaine.cycle",
+    "kaine.experiment",
+    "kaine.faithful",
+    "kaine.lifecycle",
+    "kaine.modules",
+    "kaine.nexus",
+    "kaine.oscillator",
+    "kaine.persistence",
+    "kaine.remote",
+    "kaine.research",
+    "kaine.security",
+    "kaine.setup",
+    "kaine.transfer",
+    "kaine.workspace",
+]
+forbidden_modules = ["kaine.evaluation"]
+ignore_imports = [
+    "kaine.cycle.__main__ -> kaine.evaluation",
+    "kaine.cycle.__main__ -> kaine.evaluation.**",
+    "kaine.nexus.__main__ -> kaine.evaluation",
+    "kaine.nexus.__main__ -> kaine.evaluation.**",
+]
+unmatched_ignore_imports_alerting = "none"
+
+# Modules are domain organs; they may depend on the pure data/contract module
+# kaine.cycle.types (WorkspaceSnapshot) — directly or transitively through
+# neutral collaborators like kaine.faithful / kaine.workspace.volition — but
+# NOT on the cycle RUNTIME (the engine/loop, registry, preflight, boot,
+# __main__, spot, monitors, etc.). kaine.cycle.types is deliberately omitted
+# from forbidden_modules: it is the declared, contract-only exception. Adding a
+# new runtime submodule to kaine/cycle/ means adding it here too.
+[[tool.importlinter.contracts]]
+name = "Modules must not import the cycle runtime (only kaine.cycle.types)"
+type = "forbidden"
+source_modules = ["kaine.modules"]
+forbidden_modules = [
+    "kaine.cycle.control_state",
+    "kaine.cycle.engine",
+    "kaine.cycle.escalation_state",
+    "kaine.cycle.incident_log",
+    "kaine.cycle.__main__",
+    "kaine.cycle.preflight",
+    "kaine.cycle.preservation_monitor",
+    "kaine.cycle.protocols",
+    "kaine.cycle.research_gate",
+    "kaine.cycle.spot",
+]
+
+# The evaluation sidecar observes the bus; it must not reach into Nexus
+# internals (the operator UI). Keeping these decoupled means evaluation can run
+# headless and Nexus stays a pure presentation seam.
+[[tool.importlinter.contracts]]
+name = "Evaluation must not import Nexus internals"
+type = "forbidden"
+source_modules = ["kaine.evaluation"]
+forbidden_modules = ["kaine.nexus"]
+
+# Boundary-neutral shared homes hold cross-cutting primitives that BOTH the
+# core runtime and the evaluation sidecar need (the JSONL sink, privacy filter,
+# embedder, distress detector). They must depend on NEITHER side, so a core
+# component can reuse them without dragging in evaluation and vice versa.
+[[tool.importlinter.contracts]]
+name = "Boundary-neutral shared homes depend on neither core-runtime nor evaluation"
+type = "forbidden"
+source_modules = [
+    "kaine.persistence",
+    "kaine.experiment",
+    "kaine.privacy_filter",
+    "kaine.text_embedding",
+    "kaine.lifecycle.welfare_signal",
+    # Cross-cutting stdlib-only primitives shared by core, the modules, and the
+    # evaluation sidecar alike (atomic JSON state writer, local-service port
+    # registry/probe, the canonical Mnemos collection-kinds list). They must
+    # stay dependency-free so any side can reuse them without coupling.
+    "kaine.state_io",
+    "kaine.net",
+    "kaine.memory_kinds",
+]
+forbidden_modules = [
+    "kaine.cycle",
+    "kaine.modules",
+    "kaine.nexus",
+    "kaine.workspace",
+    "kaine.evaluation",
+]
+
+# The workspace (global-workspace selection + salience) must NOT reach into the
+# cognitive modules. The salience factors that need module-produced signals
+# (Thymos affect for the Thymos factor, drives for the goal factor) receive them
+# by dependency injection at cycle assembly — the cycle constructs the real
+# StateModulator / feeds an AffectStateProvider and injects them — so the
+# workspace layer stays free of `kaine.modules`. No ignore_imports: the DI seam
+# means workspace never legitimately needs to import a module, so any such import
+# (e.g. `from kaine.modules.thymos... import StateModulator` inside
+# kaine/workspace/) is a boundary violation and must break this contract.
+[[tool.importlinter.contracts]]
+name = "Workspace must not import the cognitive modules (dependency injection only)"
+type = "forbidden"
+source_modules = ["kaine.workspace"]
+forbidden_modules = ["kaine.modules"]

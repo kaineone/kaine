@@ -1,0 +1,59 @@
+# KAINE-owned Redis Streams substrate for the event bus.
+#
+# Usage:
+#   export KAINE_REDIS_PASSWORD=$(openssl rand -hex 32)        # or set in compose/.env
+#   docker compose -f compose/redis.yml up -d
+#   docker compose -f compose/redis.yml ps
+#   docker compose -f compose/redis.yml logs -f                # optional
+#
+# Stop:
+#   docker compose -f compose/redis.yml down                   # keep volume
+#   docker compose -f compose/redis.yml down -v                # also drop bus state
+#
+# The host port is 6479 to coexist with any pre-existing system Redis on
+# 6379. KAINE's `config/kaine.toml` already defaults to 6479; if you
+# override the host port here, mirror the change there.
+
+name: kaine-redis
+
+services:
+  kaine-redis:
+    image: redis:7.2-alpine
+    container_name: kaine-redis
+    ports:
+      - "127.0.0.1:${KAINE_REDIS_HOST_PORT:-6479}:6379"
+    command:
+      - redis-server
+      - --requirepass
+      - ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      - --bind
+      - "0.0.0.0"
+      - --protected-mode
+      - "yes"
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 1gb
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
+    volumes:
+      - kaine-redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'redis-cli -a "$$KAINE_REDIS_PASSWORD" ping | grep PONG'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    environment:
+      KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+
+volumes:
+  kaine-redis-data:
+    name: kaine-redis-data

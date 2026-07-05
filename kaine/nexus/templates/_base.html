@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Nexus{% endblock %}</title>
+  <link rel="stylesheet" href="{{ asset('/static/vendor/uPlot.min.css') }}">
+  <link rel="stylesheet" href="{{ asset('/static/style.css') }}">
+</head>
+<body data-nexus-layout="dashboard">
+  {# Fixed full-window alert border — JS drives data-state; CSS paints it. #}
+  <div id="spot-alert" class="spot-alert" data-state="ok" aria-hidden="true"></div>
+  {# Diagnostics-stream connection indicator (task 1.4): live / reconnecting /
+     paused, so a dropped link is visible rather than silently freezing the UI
+     on stale numbers. Starts hidden — NexusConn.attach() reveals it, and only
+     pages that open the diagnostics stream (console, diagnostics) call it;
+     the evaluation page (batch data only, no live stream) never shows it. #}
+  <div id="nexus-conn" class="conn-status" data-state="connecting" aria-live="polite"
+       title="Diagnostics stream status" hidden>
+    <span class="conn-status__dot" aria-hidden="true"></span>
+    <span class="conn-status__label">connecting…</span>
+  </div>
+  {% include "_freeze_banner.html" %}
+  {% include "_spot_banner.html" %}
+  {% set _path = request.url.path if request is defined and request else "" %}
+  <div class="shell">
+    {# LCARS-style left rail: stacked rounded-end segments. #}
+    <aside class="rail">
+      {% block rail %}
+      <a class="rail__brand" href="/">KAINE</a>
+      <nav class="rail__nav">
+        <a class="rail__seg{% if _path == "/" %} is-active{% endif %}" href="/">Console</a>
+        <a class="rail__seg{% if _path.startswith("/diagnostics/") and not _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/">Diagnostics</a>
+        <a class="rail__seg{% if _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/evaluation/">Evaluation</a>
+      </nav>
+      {% endblock %}
+    </aside>
+    <div class="shell__body">
+      <header>
+        {% block header_extra %}{% endblock %}
+      </header>
+      <main class="nexus-main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    {# Right sidebar: Health & services, opposite the left nav rail. Glanceable
+       and scroll-free — compact rows that reveal detail on hover. Empty on pages
+       that don't fill it (collapses so no bare strip shows). #}
+    <aside class="rail rail--right">
+      {% block sidebar_right %}{% endblock %}
+    </aside>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

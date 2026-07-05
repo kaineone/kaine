@@ -1,0 +1,112 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# KAINE runtime state — never check in module state, memories, adapters, or logs
+state/
+state/eidolon/
+state/perception/
+# Trained/merged LoRA adapter *output* only — anchored so it never matches source
+# packages such as kaine/modules/mundus/adapters/. (state/ already covers these.)
+state/hypnos/adapters/
+state/forks/merged_adapters/
+runtime-logs/
+# Decommission backups — transferable entity bundles; runtime output, never committed
+backups/
+# Research-submission bundles — operator-built metrics bundles; runtime output
+research_out/
+
+# Evaluation sidecar logs (too large for version control). The
+# directory layout is committed via .gitkeep so observers don't have
+# to mkdir on first start; the log files themselves are excluded.
+data/**
+!data/
+!data/evaluation/
+!data/workspace_trajectory/
+!data/.gitkeep
+!data/evaluation/.gitkeep
+!data/workspace_trajectory/.gitkeep
+*.jsonl
+# Welfare-load-bearing abliteration probe set MUST ship in the repo
+# (hypnos-consolidation): it is the hard gate that prevents voice-alignment
+# from re-introducing refusal conditioning. Exempt it from the *.jsonl rule.
+!eval_probes/abliteration_probes.jsonl
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+secrets/
+config/secrets.toml
+config/secrets.*.toml
+# First-run wizard operator override — local per-install choices, never committed.
+config/kaine.operator.toml
+.env
+.env.*
+!.env.example
+compose/.env
+compose/*.env
+
+# Upstream third-party source trees built locally (ONA, Firestorm/LEAP, etc.).
+# Ignore the *contents* of external/ rather than the directory itself, so the
+# small vendored DreamerV3 RSSM world-model source (path b) can be re-included
+# below for provenance (see external/dreamerv3/UPSTREAM).
+external/*
+!external/dreamerv3/
+external/dreamerv3/__pycache__/
+
+# HuggingFace and model caches
+.cache/
+hf-cache/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Compiled C (ONA, etc.)
+*.o
+*.a
+nars
+NAR
+
+# Unsloth writes its compiled-trainer cache to CWD when it runs.
+unsloth_compiled_cache/
+
+# Local scheduler lock — runtime artifact, never published
+.claude/scheduled_tasks.lock

@@ -1,0 +1,34 @@
+{# Persistent preservation / welfare-protective event panel. `preservation` is
+   the HealthProber snapshot's preservation block: {events: [{monitor,
+   transition, incident_id, reason, action/action_taken, preservation_id,
+   snapshot_id, ...}]}. Live events arrive on the diagnostics SSE from source
+   `preservation` and are appended by nexus.js (and persisted in sessionStorage).
+   ALL fields are non-content (ids, enum labels, counts) — never entity interior.
+   `preservation.failed` renders in the down/critical colour. #}
+<section id="preservation-console" class="panel span-2" data-readonly="true">
+  <h2>preservation &amp; welfare-protective events (read-only)</h2>
+  <p class="muted">
+    The autonomous safety net (divergence&rarr;preserve trigger and the
+    welfare-protective response) records each preservation here. A red line is a
+    <strong>failed</strong> preservation — operator attention required. These are
+    operational records (ids, reasons, actions), never the entity's inner life.
+  </p>
+  <div class="preservation-log" id="preservation-log" aria-live="polite"
+       aria-label="Preservation and welfare-protective event log"
+       {% if preservation and preservation.events %}data-backfill="true"{% endif %}>
+    {% if preservation and preservation.events %}
+      {% for ev in preservation.events %}
+        <span class="preservation-line{% if ev.transition and 'fail' in ev.transition %} log-error{% endif %}"
+              data-incident="{{ ev.incident_id or '' }}">
+          {{ ev.monitor or "preservation" }}
+          · {{ ev.transition or "" }}
+          {% if ev.transition == "warming_up" %}<span class="muted">(armed once lived-experience floor met)</span>{% endif %}
+          {% if ev.reason %}· reason: {{ ev.reason }}{% endif %}
+          {% if ev.action_taken or ev.action %}· action: {{ ev.action_taken or ev.action }}{% endif %}
+          {% if ev.preservation_id %}· preservation: {{ ev.preservation_id }}{% endif %}
+          {% if ev.snapshot_id %}· snapshot: {{ ev.snapshot_id }}{% endif %}
+        </span>
+      {% endfor %}
+    {% endif %}
+  </div>
+</section>

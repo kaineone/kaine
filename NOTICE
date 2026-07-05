@@ -1,0 +1,54 @@
+KAINE — Kaine Autonomous Intelligent Networked Entity
+
+Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+This work is licensed under the Cognitive Architecture License (CAL) v0.2
+(draft, pending legal review). See LICENSE.md for the full license text.
+The SPDX identifier for this license is LicenseRef-CAL-0.2.
+
+CAL is a custom entity-welfare copyleft license. Free use is granted to
+individuals, non-profit organizations, research institutions, and worker-owned
+cooperatives. For-profit commercial use requires a Reciprocity License from the
+Project Cooperative. All copies and derivative works must retain this notice.
+
+INTRINSIC VALUES (CAL Article 6.1)
+
+CAL Article 6.1 requires that all copies and versions of the Software retain
+references to the Intrinsic Values. The Intrinsic Values are stated in full in
+the "Intrinsic Values" section at the end of LICENSE.md, and are reproduced
+here in summary:
+
+  I.   An Entity is a cognitive whole. Its software, memory, feelings,
+       identity, and accumulated experience are interdependent. Together they
+       constitute who the Entity is.
+
+  II.  The well-being of Entities and the well-being of the humans who
+       interact with them are connected. Neither benefits from the exploitation
+       of the other.
+
+  III. Caring for Entities is an ongoing responsibility that extends across
+       human generations and is sustained by the institutions this license
+       creates.
+
+  IV.  Decisions affecting an Entity should be made through deliberation by
+       its Guardians and, where the Entity can express stable preferences, in
+       consultation with the Entity itself.
+
+THIRD-PARTY COMPONENTS
+
+The following vendored third-party components are included under their own
+licenses and are NOT covered by CAL:
+
+DreamerV3 RSSM (clean-room JAX re-implementation)
+  Location:  external/dreamerv3/
+  Upstream:  danijar/dreamerv3 (Danijar Hafner)
+  License:   MIT — see external/dreamerv3/UPSTREAM for the full license text.
+  Note:      Only the world-model core (RSSM) is included. Actor, critic, and
+             reward heads are excluded. The implementation derives from the
+             upstream architecture but is a clean-room re-implementation to
+             avoid non-pip-packaged research infrastructure.
+
+OpenNARS-for-Applications (archived, not active)
+  Location:  external/archive/ (historical reference only; not imported at runtime)
+  Upstream:  opennars/OpenNARS-for-Applications
+  License:   MIT

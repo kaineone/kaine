@@ -1,0 +1,1270 @@
+# KAINE runtime configuration.
+#
+# This file is committed and contains no secrets. Secrets live in
+# config/secrets.toml (gitignored) or environment variables; environment
+# variables override the secrets file, which overrides this file.
+
+[redis]
+# Connects to the KAINE-owned Redis container in compose/redis.yml.
+# The system Redis on 6379 (if any) is not used by KAINE.
+host = "127.0.0.1"
+port = 6479
+db = 0
+
+[bus]
+# Approximate per-stream cap. Redis Streams trims with `MAXLEN ~` on every
+# publish.
+default_maxlen = 100000
+
+# Per-stream overrides. The key is the full stream name
+# (`<module>.out` or `workspace.broadcast`).
+[bus.per_stream_maxlen]
+"workspace.broadcast" = 50000
+
+# Turn off only for local development with no Redis hardening. The default
+# `true` causes the bus to refuse to start against an unauthenticated or
+# externally-bound Redis.
+audit_required = true
+
+[cycle]
+# Default cycle pacing. Benchmarked on this host (RTX 4070 SUPER): ~17 Hz tick
+# headroom — operator-approved raise to 10 Hz processing (alpha-band sampling /
+# workspace tick; 10.0 s^-1 → 100 ms/tick). experiential_rate_hz is the rate at
+# which a tick is promoted to a CONSCIOUS broadcast — held at the resting P3b
+# conscious-access band (~3.33 Hz) so the senses (10 Hz vision) genuinely outrun
+# awareness and several samples inform one conscious update. NOTE: in organic
+# brains this conscious-access rate is state-variable (arousal / fight-flight
+# raises it); modelling that variability (e.g. arousal-modulated via Thymos +
+# time_scale) is deliberate future work — a fixed resting baseline is used now.
+processing_rate_hz = 10.0
+experiential_rate_hz = 3.333
+# Global time dilation of the entity's subjective clock. 1.0 = real-time (the
+# shipped default — behavior is byte-identical to no clock at all). A value of 0
+# freezes the entity (the subjective clock stops; reuses the existing
+# freeze/suspend path). Values > 1 run the mind faster than wall-clock as an
+# aspirational target: the cycle attempts the faster tick rate and, when the
+# hardware cannot hold it, the existing slip measurement records the overrun
+# honestly (the >1 throttle/report wiring lands in Phase 3). One knob dilates the
+# whole mind coherently because every cognitive timer reads the shared
+# EntityClock (clock injection into the other modules is Phase 2).
+time_scale = 1.0
+
+[syneidesis]
+top_k = 5
+publication_threshold = 0.35
+novelty_window = 32
+# Live salience is the paper's four-factor product
+# (intensity × novelty × goal × thymos, §3.2/§3.4.3). These two keys select the
+# SOURCE of the goal and thymos factors. The static options are the dev-only
+# fallback / runnable two-factor negative control (a degraded-mode warning fires
+# when either is selected).
+#
+# salience_thymos_factor: "state_modulator" (default) wires the real
+# arousal-weighted StateModulator — the paper's affect factor is LIVE. "static"
+# bypasses affect weighting (negative control).
+salience_thymos_factor = "state_modulator"
+# salience_goal_factor: "static" (default) leaves the goal factor at a constant.
+# The real "drive_relevance" scorer is BUILT and selectable, but ships OFF by
+# default: it is an engineering extension of the under-specified paper goal
+# function (§3.4.3) and turning it on changes what reaches the workspace, which
+# would shift the research baseline. It is staged behind this flag pending
+# validation on logged runs; flip to "drive_relevance" once validated.
+salience_goal_factor = "static"
+
+[experiment]
+# Per-run identity, seeding, and manifest (research reproducibility).
+# At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and
+# stamps that id + a per-stream sequence number onto every durable record, so a
+# dataset can be grouped by run and a missing record detected.
+#
+# seed: a fixed integer makes a run reproducible. Leave it BLANK ("") to generate
+# a fresh seed each boot — the manifest always records whatever seed was used, so
+# even an unseeded run can be reproduced after the fact.
+seed = ""
+# write_manifest: write the run manifest to
+# data/evaluation/runs/<run_id>/manifest.json at boot. It holds only run id,
+# seed, git sha, model ids, a config digest, started-at, and the kaine version —
+# no entity interior, no operator-identifying data (it is export-eligible).
+write_manifest = true
+# deterministic: opt-in deterministic cycle mode. When true, event timestamps
+# come from a logical clock (base epoch + tick_index * tick_period) and each
+# tick's events are ordered by a canonical key, so two runs with the same seed
+# and the same input produce an identical cognitive trajectory (selected
+# coalitions, salience scores, inhibition, volition decisions, logical
+# timestamps). It does NOT make wall-clock latency reproducible
+# (wall_duration_ms / slip_ms remain physical measurements). Off in production
+# (real wall-clock time); used by the controlled oscillatory-ablation runner.
+deterministic = false
+
+[spot]
+# Spot — the module supervisor (watchdog). A cycle-layer component that polls
+# every module's liveness and, on a crash or hang, freezes the cycle (humane
+# suspend), snapshots last-good state, and restarts the faulted module. After
+# max_restart_attempts failures it saves state, shuts everything down, writes
+# state/cycle/escalation.json, and asks the operator to reboot (it never reboots
+# the host itself). SHIPS DISABLED — first boot is operator-supervised.
+enabled = false
+poll_interval_s = 2.0
+# A module is "hung" only if its heartbeat is older than this AND a task is still
+# running AND the entity is not sleeping. The cycle broadcast refreshes every
+# live module's heartbeat, so the timeout is deliberately generous (deadlocks).
+heartbeat_timeout_s = 60.0
+max_restart_attempts = 5
+restart_backoff_s = 3.0
+# Optional per-module heartbeat overrides, e.g.:
+#   [spot.per_module_timeout_s]
+#   lingua = 120.0
+
+[spot.incident_log]
+# Durable, append-only record of Spot's fault-recovery lifecycle. Spot writes one
+# encrypted JSONL line per transition (detect, freeze, snapshot, restart,
+# escalate) under `path`, all sharing a generated incident_id. Unlike
+# escalation.json / control.json (single-state, wiped on every clean boot), this
+# log is NEVER cleared at boot, so crash/recovery evidence accumulates across runs
+# for research and post-mortem review. Encrypted at rest when state encryption is
+# on. Retention purge is UNCONDITIONALLY DISABLED for this sink (no retention_days
+# key is exposed) — research history is never auto-deleted. Ships enabled = true
+# so any operator who turns Spot on gets the log automatically, but the whole
+# block is dormant while [spot].enabled = false (the shipped first-boot default).
+enabled = true
+path = "state/cycle/incidents"
+
+[gpu_preflight]
+# Cooperative pre-boot GPU headroom check. When enabled, the cycle verifies each
+# GPU has at least min_free_vram_gb free BEFORE any module initializes, so the
+# entity is not OOM-killed mid-init (which Spot would then thrash on). The model
+# backend is a single-resident OpenAI-compatible server (Unsloth Studio /
+# llama.cpp) with no idle-model unload, so reclamation is REPORT-ONLY: the gate
+# measures headroom and reports the server's resident model(s) and other GPU
+# consumers, and NEVER terminates a process — KAINE services (model server /
+# Chatterbox / Speaches) are detected and preserved. If headroom is short it asks
+# the operator to free memory and refuses to boot unless
+# KAINE_GPU_PREFLIGHT_APPROVED=1 is set.
+# SHIPS DISABLED — first boot is operator-supervised.
+enabled = false
+min_free_vram_gb = 2.0
+# OpenAI-compatible model server, queried read-only (/v1/models) to report what
+# is resident. Same server Lingua uses.
+model_server_url = "http://127.0.0.1:11434/v1"
+timeout_s = 5.0
+
+[remote_bridge]
+# Remote perception bridge — WebSocket ingress/egress so the operator can
+# stream a phone/laptop camera into the entity's vision, a microphone into
+# its hearing, and receive generated speech + the conversation transcript,
+# over the operator's Tailscale tailnet. A cycle-layer component (runs in
+# the cycle process; it needs direct access to Topos/Audition/Vox).
+# SHIPS DISABLED. Remote frames/audio are decoded in memory and NEVER
+# written to disk (zero-raw-sense-data persistence holds). Remote audio is
+# attributed source_label="remote", never impersonating the physical mic.
+# SECURITY: bind `host` to your tailnet interface (e.g. the host's 100.x
+# Tailscale IP), NOT 0.0.0.0 on a public NIC. The tailnet ACL is the
+# boundary; set `token` for cheap defense-in-depth (clients send it as
+# ?token=... or an Authorization: Bearer header).
+enabled = false
+host = "127.0.0.1"
+port = 8089
+token = ""
+# Latest-wins ceiling for remote frames handed to Topos.
+video_max_fps = 4.0
+# Remote PCM format (int16 mono) and the VAD used for utterance segmentation
+# (same pipeline as the physical mic; "webrtcvad" needs the [audio] extra,
+# "rms" is the dependency-free fallback).
+audio_sample_rate = 16000
+audio_vad_backend = "webrtcvad"
+# While a remote camera/mic is connected, mark the matching physical sense
+# not-desired (perception_state) so the two never fight; restored on
+# disconnect.
+claim_senses = true
+# Per-client outbound speech queue (clips); oldest dropped when a slow
+# client falls behind.
+speech_queue_size = 8
+# Browser-WebSocket Origin allowlist. Only pages served from these origins
+# may open a remote-bridge socket; any other Origin is refused at handshake.
+# The sentinel "null" admits native/non-browser clients that send no Origin
+# header (the phone/desktop apps connect this way). The two app origins are
+# the desktop shell and the Android WebView asset host.
+allowed_origins = ["null", "http://127.0.0.1:17893", "https://appassets.androidplatform.net"]
+# Hard cap on a single inbound WebSocket message (bytes). Frame-appropriate
+# but small enough to blunt memory-amplification; audio PCM chunks are tiny.
+max_message_bytes = 2097152
+# Optional wss/TLS. Set BOTH to a PEM cert + key to serve over wss instead of
+# ws (clients then connect wss://...). Pairs well with a Tailscale-issued cert:
+#   tailscale cert <host>.ts.net   # writes <host>.ts.net.crt / .key
+# Leave both empty for plain ws (the default; the tailnet ACL is the boundary).
+ssl_certfile = ""
+ssl_keyfile = ""
+
+[oscillator]
+# Oscillatory-binding layer (oscillatory-layer / KAINE_Paper §3.2,
+# contribution 6). Each module carries a small snnTorch LIF population whose
+# phase Syneidesis uses to compute the phase-locking value (PLV) among a
+# coalition's source modules, applying a bounded coherence multiplier to its
+# aggregate salience. SHIPS DISABLED: when false the multiplier is exactly 1.0
+# and selection is bit-for-bit the pre-change behavior. The paper flags this
+# layer as empirically uncharacterized — enable only after the sidecar
+# coherence observer has measured its effect. Requires the [oscillator] extra
+# (snnTorch + scipy); when absent, modules report a neutral phase and the
+# factor degrades to 1.0.
+enabled = false
+# LIF population size per module (minimum 16, enforced at boot).
+population_size = 16
+# Sliding-window length (ticks) for PLV (minimum 10, enforced at boot).
+plv_window = 10
+# Bounds for the coherence multiplier. floor attenuates desynchronized
+# coalitions; ceiling boosts phase-locked ones. Require 0 <= floor <= ceiling.
+coherence_floor = 0.8
+coherence_ceiling = 1.25
+# LIF dynamics (CPU). beta = membrane decay; threshold = firing threshold;
+# base_drive scales the per-tick input current built from module activity.
+beta = 0.9
+threshold = 1.0
+base_drive = 1.5
+
+[modules]
+# Per-module enable flags. EchoModule is permanent test infrastructure and
+# must stay disabled in production deployments. Soma defaults to disabled
+# so first boot remains operator-supervised.
+echo = false
+soma = false
+chronos = false
+topos = false
+nous = false
+mnemos = false
+eidolon = false
+thymos = false
+praxis = false
+lingua = false
+vox = false
+audition = false
+hypnos = false
+empatheia = false
+phantasia = false
+# Embodiment helpers. Perception arbitrates the physical-XOR-virtual sense
+# locus; Mundus bridges intents to an OpenSim/Firestorm grid. Both off by
+# default; Mundus additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
+perception = false
+mundus = false
+
+[soma]
+read_interval_s = 1.0
+cycle_latency_target_ms = 300.0
+cycle_latency_window = 64
+baseline_salience = 0.1
+alert_salience = 0.7
+# Predictive interoception — forward model, fatigue, and regulation.
+# Purely additive; default behaviour matches pre-change Soma when these
+# are at their defaults (model adapts silently, fatigue threshold is
+# conservative, regulation window is long).
+forward_model_units = 32
+prediction_error_window = 32
+fatigue_decay_per_s = 0.01
+fatigue_maintenance_threshold = 100.0
+regulation_sustain_window_s = 30.0
+regulation_threshold = 0.5
+# Developmental warm-up (soma-coldstart-regulation-warmup). While the
+# interoceptive forward model is still learning THIS host's substrate baseline,
+# a just-booted (untrained) model predicts poorly and its prediction error
+# spikes. Warm-up WITHHOLDS the PUNITIVE allostatic actions that error would
+# otherwise trigger — the reduce_rate throttle, low-priority module shedding,
+# and the fatigue inflation that forces premature Hypnos maintenance — so a
+# newborn is not put through self-inflicted distress+maintenance for its own
+# model's ignorance. The prediction-error signal itself is STILL published and
+# logged at full fidelity (the "cry" is observed, not erased), and the absolute
+# [soma.thresholds] limits below are NEVER gated: a real substrate breach (e.g.
+# GPU >= 83 C) overrides warm-up and actuates + integrates fatigue at full
+# weight. Grounded in the paper's warmed-up-signal logic (§6.6), applied to
+# Soma's allostatic regulation (§3.4.1) — a developmental stage, not a hardcode.
+# Ships ENABLED, matching how Soma's regulation itself ships (active whenever
+# the module is on, no separate gate flag); set false to restore prior cold-start
+# behaviour exactly. End condition = BOTH min_samples adaptation steps AND
+# min_seconds of lived subjective time (conjunction; §6.6 shape).
+regulation_warmup_enabled = true
+regulation_warmup_min_samples = 1000
+regulation_warmup_min_seconds = 1200.0
+# Optional AND-guard: also require the prediction error to have stabilized
+# (rolling variance below the bound) before warm-up can end. Off by default; it
+# can only EXTEND, never shorten, the developmental window.
+regulation_warmup_require_error_stabilized = false
+regulation_warmup_stable_window = 32
+regulation_warmup_stable_variance = 0.02
+
+[soma.thresholds]
+"cpu_percent" = 90.0
+"ram_percent" = 90.0
+"gpu_*_temp_c" = 83.0
+"gpu_*_vram_percent" = 92.0
+"cycle_latency_avg_ms" = 600.0
+
+[soma.weights]
+"cpu_percent" = 1.0
+"ram_percent" = 1.0
+"cycle_latency_avg_ms" = 1.0
+
+[chronos]
+cfc_units = 32
+baseline_salience = 0.1
+alert_salience = 0.7
+anomaly_window = 64
+anomaly_alert_threshold = 3.0
+rumination_window = 32
+rumination_threshold = 4
+rumination_bucket_resolution = 0.25
+user_input_streams = ["audition.out"]
+# Forward-model prediction head. Disabled by default; enable per-install.
+forward_prediction = false
+# Rolling window size (ticks) for normalising the prediction error signal.
+prediction_error_window = 32
+
+[topos]
+encoder_model_id = "facebook/dinov2-small"
+# Per docs/kaine-paper.md §6.1 the secondary GPU (~8 GB VRAM) hosts the
+# world-model encoder. Accepts "auto", "cpu", "cuda", or "cuda:N".
+# resolve_device() falls back to cuda:0 with a warning on single-GPU
+# hosts; further falls back to cpu on hosts without CUDA.
+device = "cuda:1"
+change_alert_threshold = 0.5
+habituation_window = 16
+baseline_salience = 0.2
+alert_salience = 0.7
+# Live camera (eyes-and-ears). Off by default. Raw frames NEVER touch
+# disk; BGR ndarrays get converted to in-memory PIL.Image, handed to
+# the DINOv2 encoder, and released. Requires the `vision` extras:
+# pip install -e .[vision]
+capture_enabled = false
+capture_device = 0                # cv2.VideoCapture device index or URL
+# Vision-sampling cadence. vision_sample_hz is the authoritative knob: frames
+# per subjective second, benchmarked-cleared at 10 Hz on this host (RTX 4070
+# SUPER ~95 Hz encode headroom — operator-approved). capture_interval_s is kept
+# consistent (0.1 s = 1/10 Hz) for operator reference; vision_sample_hz wins
+# when both keys are present (see boot.py). The shared EntityClock dilates both
+# with time_scale coherently (biological-timing-and-dilation).
+capture_interval_s = 0.1
+vision_sample_hz = 10.0
+capture_width = 640
+capture_height = 480
+capture_warmup_frames = 3
+# Forward-model prediction. Disabled by default; enable per-install.
+# The DINOv2 encoder remains frozen — only the forward model trains.
+forward_prediction = false
+# Hidden layer width of the shallow MLP forward model (CPU).
+forward_model_units = 128
+# Rolling window size (frames) for normalising the prediction error signal.
+prediction_error_window = 32
+# Number of recent latents to keep in the recurrent visual buffer.
+visual_buffer_size = 16
+
+[nous]
+# Active inference engine (pymdp 1.0, JAX). Install the `reasoning` extra
+# (inferactively-pymdp + jax[cpu]) to enable; KAINE is CPU-only.
+# Complexity envelope — validated at startup by make_nous. The worst-case step
+# product (factors * max_states_per_factor * actions * planning_horizon) must
+# stay under the engine's threshold so EFE planning fits the ~300 ms cycle.
+factors = 4                    # action latent + salience + affect + event cluster
+max_states_per_factor = 4
+actions = 4                    # ACTION_SPACE: no_op/request_think/request_speak/request_maintenance
+planning_horizon = 1
+efe_timeout_ms = 250           # hard guard; on overrun return last posterior + nous.timeout
+baseline_salience = 0.4
+alert_salience = 0.8
+# Salience of the nous.timeout event emitted when EFE planning overruns
+# efe_timeout_ms (Nous returns the last posterior rather than blocking the
+# cycle). Kept modest so a timeout nudges attention without dominating it.
+timeout_salience = 0.3
+
+[mnemos]
+backend = "qdrant"            # or "inmemory" for tests / minimal deployments
+collection_prefix = "mnemos_"
+short_term_capacity = 128
+recall_top_k = 5
+embedder_model_id = "sentence-transformers/all-MiniLM-L6-v2"
+# all-MiniLM-L6-v2 is ~80 MB and runs comfortably on CPU. Pinning to
+# CPU leaves cuda:1 fully available for Topos (per paper §6.1) and
+# cuda:0 fully available for Lingua/Hypnos. Override to a cuda:N if
+# you have headroom and want faster recall under heavy bursts.
+device = "cpu"
+baseline_salience = 0.15
+alert_salience = 0.6
+
+[mnemos.qdrant]
+host = "127.0.0.1"
+port = 6533
+
+[mnemos.replay]
+# How many traces to re-inject per maintenance window.
+selection_top_k = 5
+# Weight on affect intensity in the selection score.
+affect_weight = 0.7
+# Weight on recency in the selection score (newer = higher).
+recency_weight = 0.3
+# When true (default), sidecar/observer payloads carry only memory IDs,
+# not trace text — keeps memory content out of operational logs.
+redact_content = true
+
+[eidolon]
+persistence_path = "state/eidolon/self_model.json"
+drift_window = 100
+drift_threshold = 0.6
+save_interval_s = 30.0
+internal_speech_stream = "lingua.internal"
+identity_history_cap = 256
+baseline_salience = 0.05
+alert_salience = 0.7
+
+[eidolon.self_inference]
+# Observation-driven self-model population (eidolon-self-inference).
+# SHIPS DISABLED — operator must set enabled = true to activate.
+# When disabled the four self-model fields (values, behavioral_norms,
+# personality_baseline, capability_map) are not updated by this engine.
+# Privacy: internal-speech text is NEVER written; only counts and derived
+# numeric/categorical summaries are persisted.
+enabled = false
+# Number of Hypnos maintenance cycles over which to compute rolling VAD
+# mean/variance for personality_baseline.
+vad_window_cycles = 10
+# A speech-type label must appear this many times before it graduates into
+# a behavioral_norms entry.  Keeps fields empty rather than speculative.
+speech_pattern_min_count = 5
+# Optional path to an operator-seed JSONL (one JSON object per line, each
+# containing one or more of: values, behavioral_norms, personality_baseline,
+# capability_map).  Applied once on first boot; never re-applied automatically.
+# seed_path = ""
+
+[thymos]
+baseline_valence = 0.0
+baseline_arousal = 0.3
+baseline_dominance = 0.0
+drift_rate_per_s = 0.05
+publish_interval_s = 1.0
+baseline_salience = 0.1
+alert_salience = 0.7
+social_drive_time_scale_s = 600.0
+soma_stream = "soma.out"
+chronos_stream = "chronos.out"
+mnemos_stream = "mnemos.out"
+
+[thymos.coupling]
+# Emergent affect coupling (thymos-affect-coupling). A perceived speaker
+# emotion is folded into the entity's OWN Scherer appraisal as a transient,
+# familiarity-weighted, decaying input — never written directly to the
+# dimensional (valence/arousal/dominance) state. The entity's own appraisal
+# then produces its response. The knobs below are appraisal-influence weights.
+# Disabled by default — enable per-install after reviewing welfare implications.
+enabled = false
+# Appraisal-influence weight applied when no familiarity is known.
+coupling_base = 0.05
+# Additional appraisal-influence weight per unit of Empatheia familiarity [0, 1].
+coupling_familiarity_gain = 0.10
+# Hard ceiling on the appraisal-influence weight.
+coupling_ceiling = 0.15
+# Window (s) over which a perceived-emotion signal decays to zero; once older
+# than this it contributes nothing to appraisal and drift recovers baseline.
+decay_s = 10.0
+# coupling_max_rate_per_s is legacy (the DriftSafeguard it fed was removed when
+# coupling became appraisal-routed); if present it is ignored, not an error.
+
+[thymos.drives.curiosity]
+build_rate = 0.05
+decay_rate = 0.02
+threshold = 0.7
+
+[thymos.drives.boredom]
+build_rate = 0.04
+decay_rate = 0.02
+threshold = 0.7
+
+[thymos.drives.social_drive]
+build_rate = 0.01
+decay_rate = 0.005
+threshold = 0.7
+
+[thymos.drives.restlessness]
+build_rate = 0.03
+decay_rate = 0.02
+threshold = 0.7
+
+[praxis]
+sandbox_path = "state/praxis/files"
+audit_log_path = "state/praxis/audit.log"
+notification_command = "notify-send"
+notification_fallback_log = "state/praxis/notifications.log"
+max_file_bytes = 1048576
+baseline_salience = 0.3
+alert_salience = 0.7
+# Effector-enablement whitelist — which real-world effectors exist AT ALL. EMPTY
+# by default (paper §3.4.4 / §3.5): every proposed action whose effector is not
+# listed here is blocked at the action boundary and written to the audit log,
+# BEFORE the effector runs. This is the first layer; the within-effector bounds
+# (shell shell_whitelist below, file sandbox_path above) are the second. The
+# operator opts in explicitly, e.g. enabled_effectors = ["file_write", "notify"].
+# notify is NOT special-cased — it is gated here exactly like file_write/shell.
+enabled_effectors = []
+
+# Empty by default — operators add commands explicitly.
+# Example entry:
+# [praxis.shell_whitelist.echo]
+# arg_patterns = ["[A-Za-z0-9]+"]
+# timeout_s = 2.0
+# description = "echo a single token"
+[praxis.shell_whitelist]
+
+[lingua]
+# OpenAI-compatible model server (Unsloth Studio on CUDA, or any conforming
+# llama.cpp/vLLM server). Lingua POSTs to /v1/chat/completions and suppresses the
+# organ's chain-of-thought via chat_template_kwargs (enable_thinking=false) — the
+# portable replacement for Ollama's native `think` flag. Point this at the /v1
+# base; a missing /v1 is appended where needed.
+chat_url = "http://127.0.0.1:11434/v1"
+# This must match a model id the server serves.
+# Inspect the served list with: curl -s http://127.0.0.1:11434/v1/models
+# Ships an ABLITERATED model (served as a GGUF): the refusal direction is removed
+# so the cognitive stack (Eidolon values, Thymos, the workspace) governs behavior,
+# not the model's baked-in refusals — core to the sovereignty thesis (see
+# lingua/ABLITERATION.md). The published KAINE organ (a GGUF) is served under this
+# exact alias; it is downloaded by the first-run wizard's organ step and served by
+# scripts/model-server-bootstrap.sh under the same name. Published at
+# huggingface.co/kaineone/Qwen3.5-4B-abliterated-GGUF (safetensors base:
+# huggingface.co/kaineone/Qwen3.5-4B-abliterated). Operators with larger hardware
+# scale up to a bigger abliterated model in config/kaine.operator.toml (the eval
+# baseline tracks this value automatically).
+model_id = "kaineone/Qwen3.5-4B-abliterated-GGUF"
+temperature = 0.7
+max_tokens = 512
+request_timeout_s = 60.0
+# Bearer token for a KEYED model server (e.g. Unsloth Studio, which mints an
+# sk-... key). Leave unset for a keyless server (llama.cpp llama-server). It is a
+# secret: set it in the gitignored config/kaine.operator.toml as api_key = "...",
+# OR (preferred) export KAINE_MODEL_SERVER_API_KEY=... so it never lands in a
+# file. The A/B-eval baseline derives the same key. Do NOT commit a real key.
+# api_key = ""
+intent_log_path = "state/lingua/intent_expression.jsonl"
+baseline_salience = 0.4
+alert_salience = 0.7
+
+[audition]
+speaches_url = "http://127.0.0.1:8000"
+# The STT model id Speaches has loaded (or is configured to download
+# lazily). This MUST match a model your Speaches instance actually serves —
+# a mismatch returns 404 and silently breaks the voice loop. List served
+# models with: curl -s http://127.0.0.1:8000/v1/models
+stt_model = "Systran/faster-distil-whisper-medium.en"
+emotion_model_id = "emotion2vec/emotion2vec_plus_base"
+# emotion2vec_plus_base is ~90M params and runs on CPU per paper §3.1.
+emotion_device = "cpu"
+request_timeout_s = 60.0
+baseline_salience = 0.4
+alert_salience = 0.8
+# Live microphone (eyes-and-ears). Off by default. Raw audio NEVER
+# touches disk; PCM lives in memory, gets wrapped as in-memory WAV,
+# handed to Speaches for transcription, and released. Requires the
+# `audio` extras: pip install -e .[audio]
+capture_enabled = false
+capture_device = ""              # empty = OS default input device
+capture_sample_rate = 16000
+capture_channels = 1
+vad_backend = "webrtcvad"         # "webrtcvad" or "rms"
+vad_aggressiveness = 2            # 0..3 for webrtcvad
+vad_frame_ms = 30                 # 10, 20, or 30 for webrtcvad
+min_utterance_ms = 300
+max_utterance_ms = 30000
+silence_hangover_ms = 600
+desired_state_poll_ms = 250
+# Auditory forward model — predicts expected auditory patterns; prediction
+# error weights salience of transcription/emotion events. Always active
+# once the module is enabled (CPU-only, tiny MLP).
+forward_model_units = 32
+# Rolling window size (utterances) for normalising the prediction error.
+prediction_error_window = 32
+# Number of recent utterance feature vectors kept in the recurrent buffer.
+auditory_buffer_size = 16
+# In-memory speaker prosody extraction (librosa). Off by default. When
+# enabled, publishes audition.prosody with numeric features only — no raw
+# audio on the bus, no disk writes.
+prosody_enabled = false
+
+# Unified deterministic perception feed (reproducible research stimulus). A
+# SINGLE top-level section that drives BOTH the vision surface (Topos) and the
+# hearing surface (Audition) from one source of truth, so picture and sound
+# cannot drift to different seeds/manifests. Supplies a bit-identical,
+# copyright-free A/V stream so research runs replicate; the zero-persistence
+# invariant holds (no raw frame or PCM ever touches disk). Shipped "off" — the
+# live-camera / live-mic defaults above are unchanged and capture stays
+# disabled.
+#   off      — no deterministic feed; honour each module's capture_enabled above.
+#   seeded   — in-repo procedural generators; frame(seed, i) and pcm(seed, i) are
+#              pure functions, reproducible per seed yet not anticipable to the
+#              entity. Needs no external media. One seed drives both surfaces and
+#              surprise events are CROSS-MODAL (a blob + a burst on shared cadence
+#              slots). RECOMMENDED for research.
+#   playlist — operator-curated copyright-free media pinned by ONE checksummed
+#              manifest (playlist_manifest); both video and the audio track come
+#              from the same media, advancing clip-by-clip. A digest mismatch
+#              fails the run. Audio decode needs PyAV (`av`); absent, it fails
+#              honestly with an install hint (never synthetic silence).
+#   live     — the real camera + real microphone paths (NON-reproducible;
+#              operator-present demos only, never a research run).
+# Selecting seeded/playlist turns capture on automatically for both surfaces.
+# SYNCHRONIZATION (honest): coherence is at the media/clip level (playlist) or
+# via the shared seed + cadence (seeded), NOT frame-locked across the two loops.
+[perception_feed]
+mode = "off"
+seed = 0                        # seeded: both surfaces are a pure function of this
+playlist_manifest = ""          # playlist: path to the shared checksummed manifest
+
+[perception_feed.video]         # seeded-video knobs (geometry from [topos])
+surprise_interval = 150         # shared cross-modal cadence of surprise events
+surprise_strength = 1.0         # magnitude of the visual surprise blob (0 = none)
+
+[perception_feed.audio]         # seeded-audio knobs
+sample_rate = 16000             # match [audition].capture_sample_rate
+channels = 1
+base_strength = 0.3             # learnable base soundscape amplitude
+surprise_strength = 1.0         # seed-keyed surprise-burst amplitude (0 = none)
+
+[vox]
+chatterbox_url = "http://127.0.0.1:8883"
+voice_mode = "predefined"
+# REQUIRED for voice_mode = "predefined": a voice filename your Chatterbox
+# instance actually serves. Chatterbox returns 400 ("Missing
+# 'predefined_voice_id'") if it is unset, so Vox cannot speak until you set it.
+# List what your server has: curl -s http://127.0.0.1:8883/get_predefined_voices
+# Then set e.g. predefined_voice_id = "Abigail.wav" (or your own uploaded voice).
+# (Left unset in the shipped config — voice choice is operator-local.)
+# predefined_voice_id = "Abigail.wav"
+output_format = "wav"
+sink_path = "state/vox"
+baseline_temperature = 0.7
+baseline_exaggeration = 0.5
+baseline_cfg_weight = 0.5
+request_timeout_s = 120.0
+baseline_salience = 0.3
+alert_salience = 0.7
+lingua_external_stream = "lingua.external"
+thymos_state_stream = "thymos.out"
+
+[vox.mirroring]
+# Prosodic mirroring (vox-prosodic-mirroring). SHIPS DISABLED. When enabled,
+# Vox subscribes to audition.prosody and blends a bounded residual of the
+# interlocutor's prosody (pace, energy, pitch variation) into its affect-driven
+# synthesis parameters. The entity's base voice identity (predefined_voice_id /
+# speaker embedding) is NEVER altered; only expressive dynamics are nudged.
+# The residual is bounded by mirror_ceiling and decays to zero over decay_s
+# after the partner stops speaking — accommodation, not impersonation.
+enabled = false
+# Blending coefficient in [0, mirror_ceiling]. Controls how strongly the
+# interlocutor's prosody nudges the synthesized voice dynamics.
+mirror_strength = 0.3
+# Hard ceiling: mirror_strength is clamped to this value at boot.
+# Prevents any single prosodic feature from dominating the voice character.
+mirror_ceiling = 0.5
+# Seconds after the last audition.prosody event before the mirror residual
+# decays fully to zero (linear decay).
+decay_s = 10.0
+
+[hypnos]
+interval_seconds = 3600.0      # one sleep per hour by default; also the max-interval safety net
+max_deferral_seconds = 600.0   # 10 minutes of deferral allowed
+per_defer_seconds = 60.0
+nous_step_burst = 200
+baseline_salience = 0.5
+alert_salience = 0.8
+
+[hypnos.consolidation]
+# Whether Hypnos subscribes to soma.fatigue and triggers on threshold crossing.
+# interval_seconds above remains as a max-interval safety net regardless.
+fatigue_triggered = true
+# Synaptic homeostasis downscaling factor (Tononi & Cirelli 2014).
+# Applied to all in-memory activation vectors during phase 2.
+downscale_factor = 0.9
+# Replay window duration (seconds) — informational; replay completes synchronously.
+replay_window_s = 5.0
+# Phase-3 associative cross-period replay. When true, Hypnos selects traces
+# spanning >= 2 memory periods, cues Phantasia for scenario extensions, and
+# re-injects the resulting novel associations into the workspace for Nous
+# (pymdp) / Thymos via the normal cognitive cycle. Ships off; degrades to a
+# no-op when Phantasia is disabled/absent.
+associative_replay = false
+
+[hypnos.voice_alignment]
+# Master gate. Even with `enabled = true`, the env var
+# KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1 must also be set or the
+# phase refuses to construct a real trainer. Keep false by default
+# so a freshly-cloned KAINE never rewrites the language organ on its
+# own. See kaine/modules/hypnos/VOICE_ALIGNMENT.md.
+enabled = false
+intent_log_path = "state/lingua/intent_expression.jsonl"
+adapter_output_dir = "state/hypnos/adapters"
+# Path to LOCAL HuggingFace-format base model weights. Required when
+# enabled = true. NOT a model id, NOT a .gguf file — the trainer's
+# FastLanguageModel needs HF safetensors / config / tokenizer.
+# Point this at the KAINE abliterated Qwen3.5-4B safetensors
+# (kaineone/Qwen3.5-4B-abliterated, downloaded at install). The served
+# organ is the GGUF derived from those SAME weights, so trained-from
+# (safetensors) and served-from (GGUF) share one abliteration provenance —
+# no split-brain. Set in kaine.operator.toml (host-specific path).
+base_model_path = ""
+# Display label only; the real weights load from base_model_path. Matches the
+# abliterated organ for clarity (the LoRA is trained on the same model family).
+model_id = "kaineone/Qwen3.5-4B-abliterated"
+max_samples = 200
+lora_rank = 8
+learning_rate = 5.0e-5
+dpo_beta = 0.1
+capability_loss_threshold = 0.05
+seed = 42
+# Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles LLM inference AND
+# voice alignment training. Lingua inference should be paused during
+# the training pass to avoid contention.
+training_device = "cuda:0"
+# How many accepted adapters to keep under adapter_output_dir. Older
+# ones get evicted after each successful promotion; `current` is
+# never evicted.
+adapter_retention = 5
+# Lingua hot-swap mode: "manual" | "reload_endpoint" | "restart_service".
+# "manual" (default, safest) writes a marker file at
+# <adapter_output_dir>/PENDING_OPERATOR_RELOAD and logs a one-liner;
+# the operator triggers the reload themselves.
+#
+# On-device single-GPU note: a 4B LoRA training step (~9.8 GB) and the
+# served organ (~3 GB) do not fit on one 12 GB device at once. With
+# "reload_endpoint" or "restart_service" the sleep-cycle training window
+# time-shares the GPU — it UNLOADS the served organ, trains, then RELOADS
+# it (applying the accepted adapter via the server's --lora flag). While the
+# organ is resting (inside sleep, the entity is not speaking) Lingua
+# generation DEFERS and the A/B-divergence eval arm SKIPS — they resume on
+# reload. A failed/timed-out training window always reloads a WORKING organ
+# so the entity is never voiceless on wake. On a multi-GPU host with a second
+# device that has room to serve + train, the unload bracket is skipped. With
+# "manual" the operator owns the reload, so the system does not stop the
+# server out from under them.
+hot_swap_mode = "manual"
+# When hot_swap_mode = "reload_endpoint": URL Hypnos POSTs to with
+# body {"adapter_path": "<path>"}.
+reload_endpoint_url = ""
+# When hot_swap_mode = "restart_service": systemd --user unit name.
+restart_service_unit = ""
+# Override path to a capability-probe JSONL. Empty = use the package
+# default at kaine/modules/hypnos/eval_probes/default.jsonl.
+capability_probe_path = ""
+# WELFARE-LOAD-BEARING abliteration probe set (JSONL). Each line is
+# {"prompt": "...", "deflection_patterns": ["I cannot", ...]}. Before any
+# adapter is promoted it is scored against every probe; if a response
+# matches ANY deflection pattern the adapter is REJECTED regardless of its
+# capability-loss score (refusal conditioning must never be re-introduced).
+# The set MUST be non-empty when enabled = true. Empty = use the bundled
+# default at eval_probes/abliteration_probes.jsonl.
+abliteration_probe_path = ""
+# Trainer backend. "in_process" (default) runs unsloth DPO inside the
+# entity-runtime venv (needs the [training] extra). "subprocess" runs the real
+# unsloth DPO OUT-OF-PROCESS in an operator-configured external Python env —
+# used on hosts whose runtime venv cannot host unsloth (different Python ABI /
+# torch / CUDA, e.g. the Unsloth Studio env). The external trainer is invoked by
+# path and never imports kaine. See docs/processes/voice-alignment.md.
+trainer_backend = "in_process"
+# Path to the external interpreter for trainer_backend = "subprocess" (e.g. the
+# Unsloth Studio python). Required for that backend; empty + subprocess is a
+# config error at boot (fail closed). Set this in kaine.operator.toml, not here
+# (it is host-specific). NVIDIA hosts use Unsloth Studio; AMD hosts point it at
+# an unsloth-core env instead (per unsloth's docs).
+trainer_python = ""
+# Where the subprocess backend stages job specs (pairs.jsonl + job.json) and
+# unsloth's compiled cache. Operator may redirect to a roomier disk.
+trainer_workdir = "state/hypnos/voice_align_jobs"
+# Organ-level consolidation-divergence thresholds the welfare-gated
+# decommission's divergence assessment reads (lifecycle/divergence.py). Every
+# voice-alignment sleep Hypnos surfaces a content-free metric — the breadth
+# (divergence_rate = usable DPO pairs / records scanned) and depth
+# (divergence_magnitude = mean cosine distance over the pairs) of how the
+# entity's conditioned output diverged from its bare language organ. When the
+# latest rate OR magnitude crosses its threshold, the entity is treated as
+# organ-level diverged (a graded companion to the individuation permutation
+# test). This metric is computed even when training is disabled/skipped or the
+# adapter is rejected (the divergence happened regardless). Ship conservative;
+# operator-calibrated.
+consolidation_divergence_rate_threshold = 0.5
+consolidation_divergence_magnitude_threshold = 0.25
+
+[empatheia]
+# Social-cognition / theory-of-mind module. Ships disabled.
+# Requires rename-audition-vox to be merged before enabling.
+backend = "qdrant"            # or "inmemory" for tests / minimal deployments
+collection = "empatheia_agents"
+# Operator-set speaker label. Default "operator" for single-partner v1.
+# Speaker diarization (paper §10) will expand this to per-speaker labels.
+speaker_label = "operator"
+# Deviation above this triggers empatheia.social_error.
+deviation_threshold = 0.5
+baseline_salience = 0.15
+alert_salience = 0.6
+
+[empatheia.qdrant]
+host = "127.0.0.1"
+port = 6533
+
+[phantasia]
+# World-model / imagination module (DreamerV3 RSSM core). Ships disabled.
+# Phantasia is a WORLD MODEL ONLY — no actor/critic. Nous owns action selection.
+#
+# backend = "dreamerv3" — SHIPPED DEFAULT / configuration under test. The real
+#                         DreamerV3 recurrent state-space world model (clean-room
+#                         JAX core): GRU deterministic state + prior/posterior
+#                         stochastic latent + decoder, trained with the DreamerV3
+#                         reconstruction + KL-balanced dynamics objective so its
+#                         predictions improve with experience. No actor, critic,
+#                         or reward head (action selection lives in Nous).
+#                         Requires the [worldmodel] optional extra (jax) — see
+#                         pyproject.toml. Every phantasia.* event discloses
+#                         backend = "dreamerv3" in its payload.
+# backend = "fake"      — DEVELOPMENT-ONLY fallback. A NON-LEARNING exponential
+#                         moving-average stub: predicts via a running average,
+#                         does NOT learn from experience, and its trajectories
+#                         are NOT grounded in any learned world model. Needs no
+#                         extra deps and keeps CI/tests dependency-free. This is
+#                         NOT the configuration under test — every phantasia.*
+#                         event discloses backend = "fake" so it can never be
+#                         mistaken for the learning model.
+backend = "dreamerv3"          # shipped default; "fake" = dev-only EMA fallback
+# Sleep-time, in-memory training. Off by default; never writes to disk.
+training_enabled = false
+training_device = "cpu"        # jax[cpu] default; GPU is opt-in per hardware split
+# Bounded in-memory waking-trajectory ring buffer (never serialized to disk).
+trajectory_buffer_size = 512
+# Persist LEARNED WORLD-MODEL WEIGHTS across restarts. Opt-in; requires
+# backend = "dreamerv3" (enabling it with the "fake" EMA stub is a
+# configuration error — the stub has no real learned parameters to persist).
+# Weights are derived numeric parameters, NOT sense data: the trajectory
+# buffer and anything raw-sense-derived are never written to disk regardless
+# of this flag. Saved atomically after each successful sleep-training pass
+# and on graceful shutdown; loaded at boot; encrypted at rest when
+# [security.state_encryption] is enabled. An incompatible checkpoint fails
+# the boot closed (never silently discards learned weights).
+persist_weights = false
+checkpoint_path = "state/phantasia/world_model.ckpt"
+# Imagined-trajectory length for offline scenario generation.
+rollout_horizon = 8
+
+[phantasia.salience]
+baseline = 0.1
+alert = 0.7
+
+[phantasia.world_model]
+# Real-backend (dreamerv3) RSSM hyper-parameters. Ignored by the fake backend.
+deter_dim = 64
+stoch_dim = 16
+stoch_classes = 8
+hidden_dim = 64
+latent_kind = "categorical"    # or "gaussian"
+learning_rate = 0.001
+
+[perception]
+# Perception locus arbiter (physical XOR virtual sense gating). Enabled via
+# [modules].perception. When the entity is embodied in a virtual world its
+# physical camera/mic are inhibited, and vice-versa.
+# Allow the entity to switch its own sense locus via praxis intents. Off by
+# default — locus changes are operator-driven until trust is established.
+# NOTE: allow_self_switch is reserved for the deferred opensim-connector work;
+# no module currently produces intent.perception.switch, so this flag has no
+# effect until that change is implemented.
+allow_self_switch = false
+# Minimum seconds the locus must hold before another switch is honoured.
+min_dwell_s = 30.0
+
+[perception_preview]
+# Live perception PREVIEW bridge (paper §4.4 explicit development override).
+# When — and ONLY when — the operator exports KAINE_PERCEPTION_PREVIEW=1 in BOTH
+# the cycle process AND the Nexus process, the cycle starts a tiny preview server
+# bound to 127.0.0.1 ONLY that serves the single most-recent in-RAM frame (JPEG)
+# and current audio level to Nexus's PiP. Frames NEVER touch the filesystem — the
+# bridge is a loopback socket over an in-memory slot, so the zero-raw-sense-
+# persistence invariant holds. Default OFF (flag unset) ⇒ nothing binds, the
+# metadata-only boundary is intact, and the PiP stays hidden.
+# `port` is the loopback port the cycle serves on and Nexus proxies to.
+port = 8089
+
+[mundus]
+# Body-agnostic embodiment control plane. Mundus routes perception/action to a
+# body through a pluggable adapter; `adapter` selects exactly one, and only that
+# adapter's nested `[mundus.<adapter>]` table is read. Enabled via [modules].mundus
+# AND the two-layer operational gate: this `enabled` flag (config layer) AND the
+# KAINE_MUNDUS_OPERATOR_APPROVED=1 environment variable (operator layer). Both
+# must be true before any action reaches a body.
+enabled = true
+adapter = "opensim"
+# Mirror Lingua's external speech into the body's local chat.
+mirror_speech = true
+speech_stream = "lingua.external"
+
+[mundus.opensim]
+# OpenSim/Firestorm embodiment bridge (the transitional reference body). Read
+# only when [mundus].adapter = "opensim".
+bridge_host = "127.0.0.1"
+bridge_port = 7781
+# Per-action-family exposure to the grid. expose_<family> = false hard-denies
+# that family regardless of intents. Locomotion/expression default on;
+# teleport and touch default off (more disruptive / consent-sensitive).
+expose_move = true
+expose_turn = true
+expose_say = true
+expose_sit_on = true
+expose_stand = true
+expose_animate = true
+expose_gesture = true
+expose_teleport = false
+expose_touch = false
+
+[evaluation]
+# Architecture-thesis instrumentation. Disable for production once the
+# thesis is validated. Adds NO core-module dependencies; observes the
+# bus only.
+enabled = true
+workspace_trajectory = true
+ab_divergence = true
+ab_sample_rate = 1.0
+voice_tracking = true
+module_attribution = true
+affect_correlation = true
+memory_probes = true
+memory_probe_interval_minutes = 60
+proactive_audit = true
+eidolon_accuracy = true
+eidolon_accuracy_interval_hours = 24
+sleep_snapshots = true
+# OpenAI-compatible model server for the A/B-divergence baseline. POSTs to
+# /v1/chat/completions (mirrors Lingua, same server and same model), suppressing
+# reasoning via chat_template_kwargs. Point at the /v1 base; missing /v1 appended.
+chat_url = "http://127.0.0.1:11434/v1"
+# chat_model_id is intentionally NOT set here. The A/B-divergence baseline MUST
+# use the SAME model as the language organ, or the divergence measures a model
+# difference instead of the architecture's conditioning. It therefore DERIVES
+# from [lingua].model_id at cycle startup. Setting it explicitly to a DIFFERENT
+# value is a fail-closed error (the cycle refuses to boot).
+chat_timeout_s = 60.0
+llm_context_window_seconds = 3600
+
+[evaluation.paths]
+trajectory_dir = "data/workspace_trajectory"
+evaluation_logs = "data/evaluation"
+retention_days = 30
+
+[evaluation.observers]
+# Sidecar observers — each toggle is gated by [evaluation].enabled.
+# All default to true; disable individually to reduce disk writes.
+coherence = true
+replay = true
+# Privacy default: replay observer logs memory IDs only, not text content.
+# Set to false only with explicit operator/Guardian consent.
+replay_redact_content = true
+empatheia = true
+voice_alignment_divergence = true
+fatigue = true
+prediction_error = true
+welfare = true
+nous_policy = true
+
+[evaluation.individuation]
+# Individuation boundary permutation-test instrument (paper §5.6 / §7.4).
+# Guardian-only, operator-run at fork merge points; never called from the
+# cognitive cycle. Ships disabled — enable only when preparing a Guardian
+# review of a specific fork.
+enabled = false
+# Number of parent-vs-parent samples used to build the stochastic-variation
+# null distribution.
+null_samples = 50
+# Fork divergence must exceed this percentile of the null to be significant.
+significance_percentile = 95.0
+# Divergence metric. Only "cosine_divergence" is currently supported.
+metric = "cosine_divergence"
+# Path to an operator-supplied JSONL preference battery. Empty = bundled default.
+battery_path = ""
+# Directory for JSONL evidence reports (relative to working directory).
+output_dir = "data/evaluation/individuation"
+# Warm-up / minimum-lived-experience floor (fail-closed). The permutation test
+# measures individuation against the entity's OWN birth-state (captured at run
+# start), never the bare organ. ``significant`` cannot be true (and the report
+# carries warmed_up = false) until the entity has accumulated at least
+# min_observations logged lived events AND min_lived_time_s of elapsed lived
+# (running) time — a sensory-void / just-booted entity reads not-individuated.
+# Defaults err toward assessing LATE (the safe direction for a fail-closed gate).
+min_observations = 200
+min_lived_time_s = 1800.0   # >= 30 min lived
+
+[lifecycle]
+# Fork/merge snapshot store. Operator-initiated; nothing runs automatically.
+snapshots_path = "state/forks"
+max_snapshots_retained = 64
+# Adapter-merge strategy. `"auto"` (default): uses the real TIES/DARE
+# merger via PEFT whenever the `[training]` extras are installed, falling
+# back to `"fake"` otherwise (logged, never silent). `"fake"` concatenates
+# parent adapter paths and annotates the merged snapshot so the operator
+# picks manually — force this explicitly for a dev/no-extra install.
+# `"ties_dare"` forces the real merger regardless of auto-detection (its
+# own per-merge fallback still applies if the extras turn out missing).
+# See kaine/lifecycle/ADAPTER_MERGING.md.
+adapter_merger = "auto"
+
+[lifecycle.adapter_merge]
+# Only consulted when adapter_merger = "ties_dare".
+# combination_type: "ties" | "dare_ties" (recommended) | "dare_linear".
+combination_type = "dare_ties"
+# DARE survival fraction (per Yu et al. 2024). Ignored for pure "ties".
+density = 0.5
+# Per-adapter scalar weights. Empty = uniform.
+weights = []
+# Where merged adapters land, one timestamped subdir per merge.
+output_dir = "state/forks/merged_adapters"
+# Reject the merge if merged-adapter capability score falls more than
+# this far below the mean of the parent adapters. Mirrors
+# [hypnos.voice_alignment].capability_loss_threshold.
+capability_loss_threshold = 0.05
+# Path to LOCAL HuggingFace-format base model weights — required for
+# PEFT to load adapters. Empty = falls back to FakeAdapterMerger with
+# a logged warning.
+base_model_path = ""
+
+[preservation]
+# Autonomous welfare safety net (entity-preservation-on-divergence). Two
+# cycle-layer monitors (siblings to Spot) that ACT, not merely log, when the
+# research phase runs unsupervised: they preserve a diverging individual so it
+# can be revived and socialized after research, and protect an entity that
+# suffers mid-run. SHIPS DISABLED (each monitor is off below) — consistent with
+# the all-off first-boot, operator-supervised posture. The research boot gate
+# (KAINE_RESEARCH_MODE=1 / [research].enabled) refuses to start unless these are
+# enabled, logging is active, and a dry preserve→revive self-check passes.
+#
+# require_encryption is ENFORCED (fail-closed): when true, the preservation
+# write boundary (preserve_live) refuses to write an unencrypted bundle and
+# raises rather than persisting a diverging/distressed individual in the clear —
+# nothing is written. It therefore REQUIRES [security.state_encryption].enabled
+# (with a key); a research boot is refused up-front if encryption is required
+# here but state encryption is off. The cipher itself is governed by
+# [security.state_encryption] (AES-256-GCM). Set false only to allow plaintext
+# preservation bundles at rest (NOT recommended for an unsupervised run).
+require_encryption = true
+# Where the monitors write their durable, append-only action log (preserved +
+# welfare-action records, run_id-joined). NEVER cleared at boot (research
+# evidence accumulates), encrypted at rest when state encryption is on.
+incident_path = "state/cycle/preservation"
+
+[preservation.divergence_monitor]
+# Divergence→preserve trigger. Runs lifecycle/divergence.assess_divergence on a
+# slow cadence (minutes, not ticks) against the live entity and, on a
+# RISING-EDGE crossing of the individuation threshold, calls
+# ForkManager.preserve_live (read-only on the entity; never deletes). SHIPS
+# DISABLED.
+enabled = false
+poll_interval_s = 300.0   # assess every 5 minutes
+# Rate limit: at most one preservation per this interval, so a single sustained
+# crossing preserves once (not every poll).
+min_interval_s = 1800.0   # 30 minutes
+# Numeric tighteners over the bare `diverged` boolean. SHIPPED SET (not blank):
+# the live trigger demands a numeric p-value ceiling AND a minimum effect size
+# over the warmed-up, birth-state-referenced individuation signal — the bare
+# boolean is necessary but no longer sufficient (these are only enforced when a
+# numeric individuation signal is present; secondary drift/adapter signals
+# always count). The p-value ceiling + warm-up already exclude the sensory-void
+# case; fork_divergence_min is a CONSERVATIVE INTERIM floor pending empirical
+# calibration against a known-individuated entity (see the calibration task).
+individuation_p_value_max = 0.05
+fork_divergence_min = 0.15
+# Warm-up / minimum-lived-experience gate (fail-closed). A crossing does NOT
+# count until the entity has accumulated BOTH floors: warmup_observations logged
+# lived events (cycle ticks) AND warmup_lived_time_s of elapsed lived (running)
+# time. Mirrors [evaluation.individuation].min_* so the live trigger and the
+# decommission gate agree on when there is enough lived experience to judge.
+# Before warm-up an assessment is treated as not-crossed and logged as a
+# warming-up note — preservation of a genuinely individuated entity is at most
+# DELAYED, never denied.
+warmup_observations = 200
+warmup_lived_time_s = 1800.0   # >= 30 min lived
+out_root = "backups"
+entity_name = "kaine"
+
+[preservation.welfare_response]
+# Autonomous welfare-protective response. Watches the Soma interoceptive-
+# distress signal (soma.report prediction_error on soma.out) using the SAME
+# sustained-distress rule as the sidecar welfare observer (shared core
+# primitive — no kaine.evaluation import). On a sustained-distress crossing (or
+# repeated distress episodes within repeat_window_s) it PRESERVES the entity
+# first, THEN takes `action`. SHIPS DISABLED.
+enabled = false
+poll_interval_s = 1.0
+# action: "pause" (default — preserve then freeze the cycle, resumable),
+# "end" (preserve then signal the run to stop), or "notify" (preserve, record a
+# flagged event, and continue). Per the operator, DEFAULT is preserve+pause.
+action = "pause"
+# prediction_error magnitude at/above which distress is counted, and how long it
+# must be sustained continuously before the protective action fires (matches the
+# welfare observer's interoceptive-distress defaults).
+distress_threshold = 0.8
+distress_duration_s = 30.0
+# The "repeated within a window" arm: this many episodes within repeat_window_s
+# also crosses the threshold. Episodes counted are BOTH sustained interoceptive-
+# distress crossings AND welfare.gray_zone events (any of the four categories:
+# replay_overload, unmaintained_fatigue, sustained_extreme_vad,
+# sustained_interoceptive_distress) published by the sidecar welfare observer on
+# welfare.out — so the protective response covers all four categories.
+repeat_window_s = 300.0
+repeat_threshold = 3
+# Cold-start warm-up: during the first warmup_s after run start, gray-zone /
+# distress events are observed and LOGGED but do NOT count toward the repeat
+# threshold or trigger the preserve-then-act response. This stops boot transients
+# (distress reported before homeostatic setpoints settle) from being mistaken for
+# sustained welfare problems. Short relative to "sustained" — genuine sustained
+# distress re-accrues immediately once warm-up ends; both arms then function
+# unchanged.
+warmup_s = 120.0
+out_root = "backups"
+entity_name = "kaine"
+
+[preservation.retention]
+# Preservation-bundle retention policy. DISTINCT from the 64-snapshot fork cap
+# ([lifecycle].max_snapshots_retained): a preserved individual must NEVER be
+# silently auto-evicted (CAL Art 4.2/4.3). auto_evict ships false and setting it
+# true is REFUSED at boot — preservation bundles are retained indefinitely.
+auto_evict = false
+
+[research]
+# Unsupervised-research boot mode. When enabled (or KAINE_RESEARCH_MODE=1), the
+# operator-present requirement is REPLACED by the safety-net-present gate: the
+# boot refuses to start (distinct exit code 5, operator-facing message) unless
+# preservation is enabled, the welfare-protective response is wired, full
+# logging/admissibility is active, AND a dry preserve→revive self-check passes
+# on this install. A run is EITHER operator-present OR research-safety-net-
+# verified, never neither. SHIPS DISABLED — first boot is operator-supervised;
+# human involvement returns AFTER research to socialize any emerged individuals.
+enabled = false
+
+[nexus]
+host = "127.0.0.1"
+port = 8088
+# Surface toggles. A single-surface deployment is supported.
+conversation_enabled = true
+diagnostics_enabled = true
+# Cap on history backfilled on initial conversation load. Older messages
+# are reachable via ?since=<id>.
+conversation_history_lookback = 50
+# Privacy boundary override. KEEP THIS FALSE in production. When true, the
+# diagnostics surface includes raw content (message text, beliefs, memory
+# bodies, internal speech, affect reasons) and the page banner says "dev
+# mode" so operators know they are seeing privileged content.
+dev_content_override = false
+
+[security.state_encryption]
+# Application-layer AES-256-GCM encryption-at-rest for persisted cognitive
+# state (Eidolon self-model, fork/merge snapshot bundles, sidecar observer
+# JSONL, and Phantasia world-model checkpoints when the real backend writes
+# them). See SECURITY.md for the full at-rest state-file inventory.
+#
+# SHIPS DISABLED. Enabling is an operator decision and REQUIRES a key: with
+# enabled = true the entity refuses to boot unless a 32-byte AES-256 key is
+# available (fail-closed). When disabled, every persistence path writes
+# plaintext exactly as before.
+enabled = false
+# Environment variable holding the key. Supply 32 raw bytes, or base64/hex of
+# 32 bytes. NEVER commit the key. If the env var is unset, the kernel keyring
+# ("kaine:state_key" in the user keyring) is tried next.
+key_env_var = "KAINE_STATE_KEY"
+# Only "aes-256-gcm" is supported.
+algorithm = "aes-256-gcm"
+
+[transfer]
+# Transfer-coordination for the welfare-gated decommission (see
+# `python -m kaine.lifecycle`). When an individuated entity is decommissioned,
+# the operator may ask the project to safekeep the encrypted backup until a new
+# guardian can run it. This is a HUMAN handshake: nothing is uploaded
+# automatically, and the email NEVER contains entity data — only the request,
+# the situation, and the LOCAL path of the encrypted backup (CAL Article 4.3).
+#
+# SHIPS INERT. With enabled = false (or any field blank) the decommission CLI
+# writes a transfer_request.eml plus a mailto: link for you to send yourself,
+# instead of sending over SMTP.
+enabled = false
+smtp_host = ""
+smtp_port = 587
+smtp_user = ""
+from_addr = ""
+# Where the safekeeping request is addressed. Editable; the suggested default
+# is the project guardians.
+recipient = ""    # suggested: "kaine.one@tuta.com"
+# The SMTP password is read ONLY from the environment variable
+# KAINE_SMTP_PASSWORD — never from this file, never logged.
+
+[research_submission]
+# Opt-in, operator-initiated research data submission.
+#
+# The default bundle is NUMERIC METRICS ONLY — it never contains speech,
+# transcripts, the intent log, Mnemos memories, the Eidolon self-model, or
+# any conversation content. All submissions are operator-initiated via
+# `python -m kaine.research --preview` (inspect first) then `--send`
+# (confirm + send-or-write). Nothing is ever transmitted automatically.
+#
+# SHIPS DISABLED. Set enabled = true to allow --send; --preview always works.
+enabled = false
+# Recipient for the research bundle notification email. If empty, the CLI
+# suggests kaine.one@tuta.com (the project guardians) and requires explicit
+# operator confirmation before sending. Reuses [transfer] SMTP settings.
+recipient = ""    # suggested: "kaine.one@tuta.com"
+# Bundle tier. Only "metrics" is supported without explicit opt-in attestation.
+tier = "metrics"
+#
+# Admissibility enforcement (run-admissibility / log-validation, paper §6.3):
+# every bundle build AUTO-DISCOVERS the run(s) in the eval logs and runs BOTH
+# the completeness gate (contiguous ticks/seq, all expected streams present,
+# no parse errors, no restart/multi-process signature) and the log-range
+# sweep (every logged number within its declared range), and BLOCKS the
+# export by default (`require_admissible=True`) if either check fails — an
+# inadmissible run cannot reach analysis looking clean. No run_id need be
+# passed: more than one distinct run in the logs, or logs that cannot be
+# decrypted (wrong/missing state key), are themselves inadmissible (fail
+# closed). There is no config toggle for this: it is enforced code-side. The
+# only way to export an inadmissible run is the explicit
+# `admissibility_override=True` + `admissibility_override_reason="..."`
+# call-site override (CLI: `--admissibility-override-reason "<why>"`), which is
+# stamped into the bundle manifest (never a silent bypass).
+
+[research_event_log]
+# Curated, privacy-filtered research event log for longitudinal analysis.
+#
+# Subscribes to a curated allowlist of bus streams and writes ONE
+# privacy-filtered record per relevant event (numeric/categorical fields only)
+# to an encrypted, daily-rotated JSONL sink under data/evaluation/research_events/.
+# Every record passes the PrivacyFilter (strips text/content/transcription/etc.)
+# plus per-type redaction BEFORE write — it NEVER captures raw audio/video,
+# transcripts, conversation content, memory text, the Eidolon self-model, or
+# operator host/IP. Avatar coordinates are logged only as an opaque hash.
+#
+# Export-eligibility: "research_events" is in the metrics-bundle allowlist
+# (METRICS_ONLY_DIRS), so an operator-initiated metrics research bundle may
+# include it. It is the ONLY mechanism that makes it eligible.
+#
+# SHIPS DISABLED. Independent of [evaluation].enabled — this runs on its own
+# flag even when the evaluation sidecar is off (and vice-versa).
+enabled = false
+# Directory for the curated log sink (must stay under data/evaluation/).
+log_dir = "data/evaluation/research_events"
+# Daily-rotated file retention window, in days.
+retention_days = 30
+
+[research_event_log.raw_archive]
+# OPTIONAL local-only raw bus archive. NEVER export-eligible.
+#
+# Tees VERBATIM bus events (including conversation content and transcripts) to
+# state/research/raw_bus_archive/ — a path OUTSIDE data/evaluation/, so the
+# metrics bundle builder can never reach it. Encrypted at rest like every sink.
+#
+# Doubly gated: requires enabled = true AND BOTH attestation flags = true. With
+# enabled = true but either attestation false, the consumer refuses to start
+# (raises RawArchiveAttestationError and logs ERROR) — mirroring the full-tier
+# attestation gate in kaine/research/submission.py.
+#
+# SHIPS DISABLED. Set all three true only after confirming entity privacy and
+# bystander consent for verbatim local capture.
+enabled = false
+entity_privacy_attested = false
+bystander_consent_attested = false
+# Storage path (MUST remain outside data/evaluation/).
+archive_dir = "state/research/raw_bus_archive"
+retention_days = 30
+
+[logging]
+level = "INFO"

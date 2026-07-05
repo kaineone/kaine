@@ -1,0 +1,69 @@
+Upstream project: danijar/dreamerv3
+Repository:       https://github.com/danijar/dreamerv3
+Pinned commit:    e3f02248693a79dc8b0ebd62c93683888ddaccfe
+License:          MIT
+SPDX-License-Identifier: MIT
+
+------------------------------------------------------------------------------
+VENDORING PATH (decision recorded per phantasia-dreamerv3/tasks.md task 1.1)
+------------------------------------------------------------------------------
+
+Path (b) was chosen: a SELF-CONTAINED, faithful JAX re-implementation of the
+DreamerV3 RSSM world-model core lives in `rssm.py`, DERIVED FROM and ATTRIBUTED
+TO danijar/dreamerv3 at the pinned commit above.
+
+Why path (b) and not path (a) (vendoring literal upstream source):
+
+danijar/dreamerv3's RSSM is written against the author's custom research infra
+(`ninjax`, `elements`, `embodied`). Those modules are not pip-packaged libraries
+and the RSSM source will NOT import standalone without dragging in the entire
+training harness (replay buffers, distributed runners, logging side effects,
+on-disk checkpointing). Trying to make that research code importable behind a
+thin wrapper is a rathole and — critically — several of those code paths write
+checkpoints / replay shards to disk, which would violate KAINE's load-bearing
+zero-persistence invariant.
+
+`rssm.py` therefore re-implements ONLY the world-model core from the upstream
+architecture:
+  - encoder MLP  (observation -> embedding)
+  - recurrent deterministic state via a GRU cell  (the "h" / deter state)
+  - stochastic categorical OR Gaussian latent  (the "z" / stoch state)
+  - decoder MLP  (latent -> reconstructed observation)
+  - imagination rollout  (prior-only multi-step latent rollout)
+
+It DELIBERATELY EXCLUDES the actor, critic, return head, and reward head.
+KAINE's action selection is Nous (pymdp active inference); Phantasia is a pure
+world model. There is no reward signal and no policy here by design.
+
+The implementation uses only `jax` + `jax.numpy` (and the stdlib). It does NOT
+depend on `einops`, `chex`, `ninjax`, `elements`, or `embodied` at runtime, so
+it runs CPU-only under the `[worldmodel]` optional extra. `chex`/`einops` are
+declared in that extra for parity with the upstream toolchain and to keep the
+door open for future literal-source experiments, but the runnable core here
+needs neither.
+
+The MIT license text below is reproduced from the upstream repository.
+
+------------------------------------------------------------------------------
+MIT License
+------------------------------------------------------------------------------
+
+Copyright (c) 2023 Danijar Hafner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

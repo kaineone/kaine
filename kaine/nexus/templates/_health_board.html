@@ -1,0 +1,84 @@
+{# Service & dependency health board. `health` is the HealthProber snapshot:
+   {dependencies: [{name, role, status, detail, checked_at}], modules: [...]}.
+   Statuses/counts/timestamps are non-content and shown regardless of
+   dev_content_override. #}
+<section id="health" class="panel span-2">
+  <h2>service &amp; dependency health</h2>
+  {% if health and health.dependencies %}
+  <ul class="health-list">
+    {% for dep in health.dependencies %}
+      <li class="health-row" data-dep="{{ dep.name }}">
+        <span>
+          <span class="dep-name">{{ dep.name }}</span>
+          <span class="dep-role">— {{ dep.role }}</span>
+        </span>
+        <span class="chip {{ dep.status }}">{{ dep.status.replace("_", " ") }}</span>
+        <span class="dep-detail">{{ dep.detail }}</span>
+        <span class="checked-at" data-at="{{ dep.checked_at }}">checked {{ dep.checked_at }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="chart-empty">Health probing not configured.</p>
+  {% endif %}
+
+  {% if health and health.model_server %}
+  {% set ms = health.model_server %}
+  <h3>model server (language organ)</h3>
+  <ul class="health-list">
+    <li class="health-row" data-dep="model-server">
+      <span>
+        <span class="dep-name">{{ ms.served_alias or "—" }}</span>
+        <span class="dep-role">— OpenAI-compatible organ server{% if ms.port %} · :{{ ms.port }}{% endif %}</span>
+      </span>
+      <span class="chip {{ ms.state }}">{{ ms.state.replace("_", " ") }}</span>
+      <span class="dep-detail">
+        served alias {{ "listed" if ms.listed else ("not listed" if ms.listed is not none else "unknown") }}{% if ms.detail %} — {{ ms.detail }}{% endif %}
+      </span>
+    </li>
+  </ul>
+  {% endif %}
+
+  {% if health and health.voice_alignment_window %}
+  {% set vaw = health.voice_alignment_window %}
+  <h3>voice-alignment window</h3>
+  <ul class="health-list">
+    <li class="health-row" data-dep="organ-window">
+      <span><span class="dep-name">organ</span></span>
+      <span class="chip {% if vaw.organ_resting %}down{% else %}up{% endif %}">
+        {% if vaw.organ_resting %}resting · {{ vaw.phase }}{% else %}serving{% endif %}
+      </span>
+      <span class="dep-detail">{{ vaw.detail }}</span>
+    </li>
+    {% if vaw.last_adapter_accepted is not none %}
+    <li class="health-row" data-dep="organ-window-adapter">
+      <span><span class="dep-name">last adapter</span></span>
+      <span class="chip {% if vaw.last_adapter_accepted %}up{% else %}warn{% endif %}">
+        {% if vaw.last_adapter_accepted %}accepted{% else %}vetoed{% endif %}
+      </span>
+      <span class="dep-detail">{{ vaw.last_adapter_reason or "" }}</span>
+    </li>
+    {% endif %}
+  </ul>
+  {% endif %}
+
+  {# The module grid is always rendered (the prober always returns a module
+     list) so NexusVitals can rebuild its cells live from health.modules plus
+     recent per-module bus activity — a publishing module is never shown idle. #}
+  <h3 id="module-grid-heading"{% if not (health and health.modules) %} hidden{% endif %}>modules</h3>
+  <div class="module-grid" id="module-grid">
+    {% if health and health.modules %}
+    {% for m in health.modules %}
+      <div class="module-cell {% if m.capturing %}capturing{% elif m.enabled and m.initialized %}on{% else %}off{% endif %}" data-module="{{ m.name }}">
+        <span class="mname">{{ m.name }}</span>
+        <span class="mstate">
+          {%- if not m.enabled -%}disabled
+          {%- elif m.capturing -%}🔴 capturing
+          {%- elif m.initialized -%}running
+          {%- else -%}idle{%- endif -%}
+        </span>
+      </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</section>

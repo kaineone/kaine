@@ -1,0 +1,46 @@
+# Dedicated, lightweight import-boundary check.
+#
+# A pure static check, deliberately separate from the full pytest suite: it
+# installs only import-linter (no torch/redis/services, no entity boot, no
+# secrets) and runs `lint-imports` against the contracts in pyproject.toml
+# [tool.importlinter]. A forbidden import — most importantly any core module
+# importing the kaine.evaluation sidecar outside the two __main__ seams — fails
+# this job in seconds with a precise message, long before the heavy suite runs.
+#
+# See docs/architecture-boundaries.md.
+name: import-boundary
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-imports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install import-linter
+        # Only the contract checker is needed — import-linter parses the source
+        # tree statically and does not import the modules, so the heavy runtime
+        # dependencies (torch, redis, etc.) are not required.
+        run: python -m pip install "import-linter>=2"
+
+      - name: Run import-boundary contracts
+        # import-linter parses the source tree statically; PYTHONPATH=. lets
+        # grimp discover the flat `kaine/` package at the repo root without an
+        # editable install (which would drag in the heavy runtime deps).
+        env:
+          PYTHONPATH: .
+        run: lint-imports

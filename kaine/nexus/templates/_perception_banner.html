@@ -1,0 +1,11 @@
+{% if perception and (perception.audio_live_active or perception.video_live_active) %}
+<div class="live-perception-banner" role="alert">
+  {% if perception.audio_live_active and perception.video_live_active %}
+    🔴 microphone + camera on — live perception active
+  {% elif perception.audio_live_active %}
+    🔴 microphone on — live perception active
+  {% else %}
+    🔴 camera on — live perception active
+  {% endif %}
+</div>
+{% endif %}

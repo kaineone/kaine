@@ -1,0 +1,7 @@
+{% if cycle_control and cycle_control.frozen %}
+<div class="freeze-banner" role="alert">
+  ⏸ FROZEN — the entity is suspended; its subjective time has stopped while
+  operators work. Resume from <a href="/diagnostics/">the diagnostics page</a>.
+  {% if cycle_control.reason %}<span class="freeze-reason">— {{ cycle_control.reason }}</span>{% endif %}
+</div>
+{% endif %}

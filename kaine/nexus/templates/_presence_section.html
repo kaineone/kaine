@@ -1,0 +1,36 @@
+{# Presence board: the entity's affect made visible. A Three.js "ferrofluid"
+   visualizer (LevelMeter, vendored under /static/vendor/, GPL-3.0) idles calm
+   when no entity is running and shifts its mood-ring from live thymos.out affect
+   (derived valence/arousal — never raw audio/content) when a cycle is up.
+   Ids (#board-presence, #presence-canvas, #presence-status) are wired by the
+   module script in console.html — do not rename. #}
+<details class="board" id="board-presence" open>
+  <summary class="board__title board__title--haze"><span class="board__caret" aria-hidden="true">▸</span>Presence</summary>
+  <div class="board__cards">
+    <section class="panel presence-panel">
+      <div class="presence-stage" id="presence-stage">
+        <canvas id="presence-canvas" class="presence-canvas"
+                role="img" aria-label="Entity presence visualizer"></canvas>
+        {# Picture-in-picture over the visualizer's bottom-right: WHAT THE ENTITY
+           SEES (live) + a MUTE control for what it HEARS. The video frame only
+           appears under the dev override (KAINE_PERCEPTION_PREVIEW=1) and only
+           while a frame exists; otherwise it stays hidden (NexusPreview). The
+           mute control works regardless — it flips the audio desired-state. #}
+        <div class="perception-pip" id="perception-pip" hidden>
+          <img id="perception-pip-img" class="perception-pip__img" alt="What the entity currently sees (live)">
+          <div class="perception-pip__caption">entity view · live · not recorded</div>
+        </div>
+        <div class="perception-hud" id="perception-hud" hidden>
+          <button type="button" id="perception-mute" class="perception-mute" aria-pressed="false"
+                  title="Mute / unmute what the entity hears">🔊</button>
+          <span class="perception-meter" id="perception-meter" aria-hidden="true">
+            <span class="perception-meter__fill" id="perception-meter-fill"></span>
+          </span>
+        </div>
+      </div>
+      <p class="muted presence-status" id="presence-status" data-state="idle">
+        Idle — waiting for the entity. The visualizer reflects affect when a cycle is running.
+      </p>
+    </section>
+  </div>
+</details>

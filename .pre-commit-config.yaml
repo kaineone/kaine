@@ -1,0 +1,29 @@
+# Pre-commit hooks for the KAINE repo.
+#
+# Fast, structural gates that run on `git commit`. The headline hook is the
+# import-boundary contract check (import-linter / `lint-imports`): it enforces
+# the load-bearing kaine.evaluation sidecar boundary and the declared layering
+# in seconds, so a forbidden import fails at commit time instead of being
+# discovered only by the full ~8-minute pytest run.
+#
+# Install once per clone:  .venv/bin/pre-commit install
+# Run on all files ad hoc: .venv/bin/pre-commit run --all-files
+#
+# See docs/architecture-boundaries.md for the contracts and rationale.
+repos:
+  - repo: local
+    hooks:
+      - id: lint-imports
+        name: import-boundary contracts (import-linter)
+        description: >-
+          Enforce the kaine.evaluation sidecar boundary and declared layering
+          (pyproject.toml [tool.importlinter]). Core must never import
+          kaine.evaluation except the two __main__ seams.
+        entry: lint-imports
+        language: system
+        # import-linter analyses the whole import graph from the config, not a
+        # file list, so run it once regardless of which files changed.
+        pass_filenames: false
+        always_run: true
+        # Only Python edits can change the import graph.
+        files: \.py$

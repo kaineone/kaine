@@ -1,0 +1,25 @@
+{# Spot supervisor alert banner.
+   Shown when the module supervisor is recovering (yellow) or has escalated to
+   a critical failure requiring operator attention (red).
+   `spot` context var may be absent on pages that don't pass it — default
+   to ok/hidden; JS populates this from health.json and SSE updates.
+   NEVER contains sensory content — statuses and messages Spot writes only. #}
+{% set _spot_state = (spot.state if spot is defined and spot) or "ok" %}
+<div id="spot-banner" class="spot-banner spot-banner--{{ _spot_state }}"
+     data-state="{{ _spot_state }}"
+     role="alert"
+     {% if _spot_state == "ok" %}hidden{% endif %}>
+  <span class="spot-banner__label">
+    {%- if _spot_state == "critical" -%}SPOT CRITICAL
+    {%- elif _spot_state == "recovery" -%}SPOT RECOVERY
+    {%- else -%}SPOT{%- endif -%}
+  </span>
+  <span id="spot-banner-msg" class="spot-banner__msg">
+    {{- (spot.message if spot is defined and spot) or "" -}}
+  </span>
+  {% if spot is defined and spot and spot.module %}
+    <span class="spot-banner__detail">module: <code>{{ spot.module }}</code></span>
+  {% else %}
+    <span id="spot-banner-detail" class="spot-banner__detail"></span>
+  {% endif %}
+</div>

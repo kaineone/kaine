@@ -1,0 +1,1378 @@
+/* ==========================================================================
+   KAINE Nexus — LCARS-inspired operator console (Picard-era homage)
+   Server-rendered Jinja2 + vanilla JS. No build step. No web-font download.
+
+   A refined, modern LCARS *evocation* — not a clone (LCARS is trademarked):
+   a near-black calm field, raised slate panels, gently rounded-rectangle
+   controls, stacked rail segments, and sparing orange-red accent. Tune the
+   look from the CSS variables in :root — they are the intended knobs.
+   ========================================================================== */
+
+:root {
+  /* ---- Operator reference palette (the primary knobs) ------------------- */
+  --bg: #111419;            /* near-black background */
+  --panel: #2F3749;         /* raised panel slate */
+  --panel-2: #222a38;       /* slightly darker panel / insets */
+  --slate: #6D748C;         /* mid blue-grey */
+  --haze: #9EA5BA;          /* light blue-grey: secondary text / labels */
+  --ink: #e8ecf5;           /* primary text (near-white, cool) */
+  --accent: #E7442A;        /* LCARS orange-red — PRIMARY accent, sparing */
+  --accent-amber: #E0913A;  /* warm secondary for section variety */
+
+  /* ---- Derived surfaces ------------------------------------------------- */
+  --bg-elev: #171b22;       /* header / rail field, just above bg */
+  --border: #313a4e;        /* hairline on slate */
+  --border-strong: #44506b; /* stronger divider / control outline */
+  --accent-dim: #b8381f;    /* darker accent for fills (bars, focus) */
+
+  /* ---- Text (aliased onto the palette; legacy names kept) --------------- */
+  --fg: var(--ink);
+  --fg-muted: var(--haze);
+  /* WCAG AA contrast pass: this used to alias 1:1 to --slate (#6D748C), which
+     only cleared ~3.98:1 on --bg and ~2.6:1 on --panel/--panel-2 — well under
+     the 4.5:1 AA floor for the small/normal-weight text that uses it
+     (checked-at timestamps, chart-empty/log placeholders, dep-role labels,
+     axis captions). This value clears >=4.5:1 against every dark surface in
+     the palette (--bg, --bg-elev, --panel, --panel-2). --slate itself is left
+     unchanged — it still serves non-text uses (borders, bar fills, dividers)
+     where contrast rules don't apply. */
+  --fg-dim: #99A1B9;
+
+  /* ---- Status palette --------------------------------------------------- */
+  --up: #4ade80;        --up-bg: #11331f;
+  --down: #f3603f;      --down-bg: #3a1813;
+  --degraded: #E0913A;  --degraded-bg: #3a2c12;
+  --neutral: #7c8696;   --neutral-bg: #1d2430;
+
+  /* ---- Type ------------------------------------------------------------- */
+  /* A condensed/technical system stack for LCARS labels; no runtime font
+     download (no-cloud-runtime). Labels lean on uppercase + letter-spacing. */
+  /* Blocky open-source fonts, vendored locally (no runtime download). Chakra
+     Petch (square/techy, readable) for UI; Orbitron (wide, blocky, sci-fi) for
+     the LCARS display headers. */
+  --font-ui: "Chakra Petch", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Orbitron", "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  /* Bumped up ~2pt across the interface for readability on a 4K console. */
+  --fs-xs: 0.9rem;
+  --fs-sm: 1.0rem;
+  --fs-md: 1.12rem;
+  --fs-lg: 1.35rem;
+  --fs-xl: 1.75rem;
+
+  /* ---- Geometry (LCARS uses big radii + pill controls) ------------------ */
+  --radius: 0.9rem;         /* panel corner radius (elbow feel) */
+  --radius-sm: 0.45rem;     /* small insets */
+  --radius-pill: 0.4rem;    /* gentle rounded-rectangle corners (was 999px capsule) */
+  --rail-w: 172px;          /* left-rail width — fits the longest nav label */
+  --rail-right-w: 21rem;    /* right sidebar (glanceable Health & services) */
+  --gap: 1.1rem;            /* card gap inside a board */
+  --col-gap: 1.4rem;        /* gap between section columns */
+  --row-gap: 1.25rem;       /* gap between boards stacked in the same column */
+  --board-max: 3400px;      /* let 4K breathe; cards stay sane via minmax */
+  --card-min: 430px;        /* min card track width before wrapping (fewer, more readable columns on 4K) */
+  --log-max: 24rem;         /* max height of a long log/table before it scrolls */
+  --col-w: 31rem;           /* width of a section column in the horizontal console */
+  --rows: 2;                /* how many sections stack per column (2 = two-row console) */
+}
+
+* { box-sizing: border-box; }
+
+/* ---- Vendored web fonts (served locally from /static/fonts — no runtime
+   download, no external font CDN; satisfies no-cloud-runtime). Chakra Petch =
+   UI; Orbitron = LCARS display headers. ---------------------------------- */
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/chakra-petch-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/fonts/chakra-petch-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/chakra-petch-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Orbitron";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/fonts/orbitron-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Orbitron";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/orbitron-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Orbitron";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/static/fonts/orbitron-latin-800-normal.woff2") format("woff2");
+}
+
+/* ---- Themed scrollbars (LCARS slate on the dark field) ------------------ */
+* { scrollbar-width: thin; scrollbar-color: var(--slate) var(--bg-elev); }
+::-webkit-scrollbar { width: 13px; height: 13px; }
+::-webkit-scrollbar-track { background: var(--bg-elev); border-radius: var(--radius-pill); }
+::-webkit-scrollbar-thumb {
+  background: var(--slate);
+  border-radius: var(--radius-pill);
+  border: 3px solid var(--bg-elev);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--haze); }
+::-webkit-scrollbar-corner { background: var(--bg-elev); }
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.45;
+}
+
+/* ---- Shell: fixed left rail + scrolling console ------------------------- */
+
+.shell {
+  display: flex;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+.shell__body {
+  flex: 1 1 auto;
+  min-width: 0; /* let the grid shrink instead of overflowing */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;     /* fill the viewport so the console scrolls SIDEWAYS, not down */
+  overflow: hidden;
+}
+
+/* ---- Left rail (the LCARS signature) ----------------------------------- */
+/* A dark column of stacked rounded-end segments. Sticky so it stays put as
+   the console scrolls to its right. Outer corners heavily rounded. */
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: stretch;
+  flex: 0 0 var(--rail-w);
+  width: var(--rail-w);
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 0.7rem;
+  background: var(--bg-elev);
+  border-right: 0;
+  /* Flush with the window edge: no rounded corners on the rail itself. */
+  border-radius: 0;
+}
+/* LCARS spine: a blue-grey bar down the rail's right edge that the KAINE header
+   curves into at the top (the brand bleeds up+right to meet it, forming the LCARS
+   elbow). Blue-grey by default — it turns red ONLY on a red alert. */
+.rail::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 0.5rem;
+  background: var(--panel);
+}
+.shell.red-alert .rail::after { background: var(--accent); }
+/* The KAINE wordmark is an LCARS elbow: a blue-grey bar with a rounded top-right
+   corner that the rail spine flows down from. It bleeds UP to the rail's top edge
+   and RIGHT into the spine so the bar + spine read as one continuous L. The bar
+   is blue-grey (red is reserved for alerts) but the LETTERS are always palette
+   red. */
+.rail__brand {
+  display: block;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.08em; /* Orbitron is wide — keep the wordmark from overrunning */
+  text-transform: uppercase;
+  color: var(--accent);          /* KAINE letters — always palette red */
+  background: var(--panel);      /* blue-grey bar */
+  border: 0;
+  padding: 0.72rem 0.5rem;
+  text-align: center;
+  border-radius: 0 0.9rem 0 0;   /* rounded top-right — the elbow curve */
+  margin-top: -0.9rem;           /* bleed up to the rail's top edge */
+  margin-right: -0.7rem;         /* bleed right into the spine (same colour) */
+  font-size: 1.1rem;
+}
+.rail__status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;     /* centre the STATUS label + the awake/sleeping badge */
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  border-top-left-radius: 1.4rem;
+}
+.rail__name {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rail__label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: var(--haze);
+}
+.rail__status .badge { margin-left: 0; align-self: center; text-align: center; }
+
+.rail__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.rail__nav--pages { margin-top: auto; }
+/* Each nav item is an LCARS segment: rounded on the LEFT, SQUARE on the right so
+   it aligns with — and, when selected, flows into — the rail bar/spine. It is a
+   shade DARKER than the bar when closed, and the bar's own colour when open. */
+.rail__seg {
+  display: block;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.02em; /* tight so the longest labels never clip the segment */
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;  /* last resort — never spill outside the segment */
+  color: var(--haze);
+  background: var(--panel-2);          /* darker than the bar when not open */
+  padding: 0.55rem 0.6rem;
+  margin-right: -0.7rem;               /* bleed right to align with the rail bar */
+  border-radius: 0.4rem 0 0 0.4rem;    /* round left, square right */
+}
+/* Section-toggle buttons reuse the seg; reset native <button> chrome. */
+button.rail__seg { width: 100%; cursor: pointer; font-family: var(--font-ui); text-align: left; border: 0; }
+.rail__seg:hover { background: var(--slate); color: var(--bg); }
+/* Selected / open: the bar's own colour, so the segment reads as part of the bar. */
+.rail__seg.is-active,
+.rail__seg.is-active:hover { background: var(--panel); color: var(--ink); }
+/* Eval/identity segments share the same scheme (uniform across the rail). */
+.rail__seg--alt { background: var(--panel-2); color: var(--haze); }
+.rail__seg--alt:hover { background: var(--slate); color: var(--bg); }
+.rail__seg--alt.is-active { background: var(--panel); color: var(--ink); }
+/* Ghost launchers (Diagnostics popup, Evaluation page): outline style, also
+   square-right and aligned to the bar. */
+.rail__seg--ghost {
+  background: transparent;
+  color: var(--haze);
+  border: 1px solid var(--border-strong);
+  border-right: 0;
+}
+.rail__seg--ghost:hover { color: var(--ink); border-color: var(--slate); background: var(--panel-2); }
+
+/* ---- Right sidebar (Health & services) --------------------------------- */
+/* Opposite the left nav rail. Flush to the window edge, square (no rounded
+   corners), and GLANCEABLE: it never scrolls — the health rows are compact and
+   reveal their detail on hover, so the whole picture fits at a glance. */
+.rail--right:empty { display: none; }
+.rail--right {
+  flex: 0 0 var(--rail-right-w);
+  width: var(--rail-right-w);
+  border-right: 0;
+  border-left: 2px solid var(--panel-2);
+  border-radius: 0;          /* flush + square */
+  overflow: hidden;          /* glanceable — no scrollbar */
+  gap: 0.55rem;
+  padding: 0.85rem 0.7rem;
+}
+.shell.red-alert .rail--right { border-left-color: var(--accent); }
+/* The health board sizes to content inside the rail (the rail is the column);
+   strip the panel chrome so it reads as part of the sidebar, not a card. */
+.rail--right .board { overflow: visible; max-height: none; height: auto; margin: 0; }
+.rail--right .board__cards { overflow: visible; gap: 0.5rem; }
+.rail--right .panel { background: transparent; border: 0; padding: 0; }
+/* Everything in the sidebar runs a size or two smaller so the whole picture —
+   services, model server, voice window, every module, GPU pre-flight — fits in
+   the rail without overflowing off the bottom. */
+.rail--right { font-size: var(--fs-xs); }
+.rail--right .board__title { margin-bottom: 0.35rem; }
+.rail--right h2 { font-size: var(--fs-sm); margin-bottom: 0.4rem; }
+.rail--right h3 {
+  font-size: 0.82rem;
+  margin: 0.5rem 0 0.18rem;
+}
+.rail--right .board__cards > * { margin-bottom: 0.55rem; }
+.rail--right #health .health-row { padding: 0.18rem 0.25rem; }
+.rail--right .dep-name { font-size: 0.86rem; }
+.rail--right .chip { font-size: 0.74rem; padding: 0.14rem 0.45rem; }
+/* Denser module grid: more columns, smaller cells. */
+.rail--right .module-grid {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+.rail--right .module-cell { padding: 0.3rem 0.35rem; font-size: 0.72rem; }
+.rail--right .module-cell .mname { margin-bottom: 0.05rem; }
+/* GPU pre-flight: tables compact, monospace a touch smaller. */
+.rail--right #gpu-preflight table { font-size: 0.72rem; }
+.rail--right #gpu-preflight .muted { font-size: 0.74rem; }
+
+/* ---- Header (slim, inside the console body) ---------------------------- */
+
+header {
+  padding: 1rem 1.5rem 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+}
+header:empty { display: none; }
+header h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  margin: 0;
+  letter-spacing: 0.04em; /* Orbitron is wide — keep the title tight */
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+main {
+  padding: 1rem 1.25rem 1rem 1.5rem;
+  flex: 1 1 auto;
+  min-height: 0;       /* allow the horizontal scroller inside to size correctly */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Horizontal "kanban" console: each section (header bar + its cards) is a board.
+   Boards FLOW into columns by available height (flex column-wrap on .page): a
+   tall section fills a column on its own, while short sections STACK two-or-more
+   per column — fewer columns, less sideways scrolling, more breathing room.
+   The board itself does NOT scroll; its header bar stays put while only the
+   cards region (.board__cards) scrolls vertically (see below). */
+.board {
+  /* A section in the newspaper column flow. Block layout (not flex) so its cards
+     can fragment cleanly across a column boundary; its header flows with the
+     content. No internal scroll and no max-height — overflow is handled by
+     continuing into the next column, never by clipping or a page scroll. */
+  min-width: 0;
+  display: block;
+}
+.board > .board__cards { margin-top: 0.85rem; }
+
+h2 {
+  font-size: var(--fs-lg);
+  margin: 0 0 0.6rem 0;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+h3 {
+  font-size: var(--fs-md);
+  margin: 0.8rem 0 0.4rem 0;
+  color: var(--haze);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.muted { color: var(--fg-muted); font-size: var(--fs-sm); }
+
+/* ---- Layout: labeled board sections + fluid card grid ------------------ */
+
+.page {
+  /* Natural reflow console: boards flow as a CSS multi-column masonry. The
+     browser fits as many --col-w columns as the viewport allows and stretches
+     them to fill the width — so the layout NEVER scrolls sideways; instead the
+     columns resize and boards reflow into one another. Boards are kept whole
+     (break-inside: avoid) and a tall board caps to the viewport and scrolls
+     INTERNALLY (see .board) rather than being forced into a fixed-height row. */
+  columns: var(--col-w, 31rem) auto;
+  column-gap: var(--col-gap, 1.4rem);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;      /* never a horizontal scrollbar — columns resize */
+  overflow-y: auto;        /* detail pages (diagnostics/evaluation) scroll down */
+  padding-bottom: 0.5rem;
+}
+/* The CONSOLE is a single glanceable screen: it never scrolls (either axis).
+   Boards fit the viewport — most collapsed to a header bar — and a long open
+   section CONTINUES into the next column (NexusFlow markers) rather than
+   scrolling or running off-screen. Scoped to --console so the standalone
+   diagnostics/evaluation pages keep their normal vertical scroll. */
+.page--console {
+  column-fill: auto;       /* fill each column to viewport height, then wrap */
+  height: 100%;
+  /* Never scroll vertically. When more sections are open than fit the width, the
+     overflow columns scroll HORIZONTALLY rather than being clipped. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0;
+}
+/* By default a section stays whole within a column (clean for the scrolling
+   detail pages). On the CONSOLE, sections instead FLOW newspaper-style: a section
+   too long for the rest of its column CONTINUES into the next column (a "▸
+   continued" marker is injected by NexusFlow) rather than running off-screen. */
+.board {
+  break-inside: avoid;
+  margin: 0 0 var(--row-gap, 1.25rem);
+  scroll-margin-top: 0.75rem;
+}
+.page--console .board { break-inside: auto; }
+.page--console #board-presence { break-inside: avoid; }  /* canvas is one unit */
+
+/* A closed section leaves the screen entirely (summoned back from its rail
+   button by NexusSections, which animates the slide-in). */
+.board--closed { display: none; }
+/* Cosmetic enter/leave — slide from the rail side. The actual show/hide is a JS
+   class toggle, so these animations can never strand a panel hidden. */
+@keyframes board-enter {
+  from { opacity: 0; transform: translateX(-1.4rem) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes board-leave {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(-1.4rem) scale(0.97); }
+}
+.page--console .board--enter { animation: board-enter 0.42s cubic-bezier(.16,.84,.28,1); }
+.page--console .board--leave { animation: board-leave 0.30s ease-in forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .page--console .board--enter,
+  .page--console .board--leave { animation: none; }
+}
+
+/* Rail anchor jumps glide to their section — motion-gated. */
+@media (prefers-reduced-motion: no-preference) {
+  html, .page { scroll-behavior: smooth; }
+}
+
+/* LCARS section header: uppercase, condensed, generous letter-spacing, in
+   --accent (some boards vary to amber/haze), with a thick rounded left-cap. */
+.board__title {
+  /* Default to a calm blue-grey; the --bar mechanism stays so a section can be
+     flipped red on alert later (see .board__title--accent). */
+  --bar: var(--slate);
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em; /* Orbitron is WIDE — pull spacing in so titles don't overrun */
+  font-weight: 700;
+  color: var(--haze);
+  margin: 0 0 0.9rem 0;
+  padding: 0;
+  border: 0;
+  line-height: 1.5;
+}
+/* The colored block: a thin SQUARE cap to the LEFT of the words, then the same
+   block continues to the RIGHT of the words and runs full width to the window
+   edge — an LCARS-style section divider. The fill bar is flat on its left and
+   bottom edges with only its top-right corner rounded. */
+.board__title::before {
+  content: "";
+  flex: 0 0 0.9rem;
+  height: 2.55rem;
+  background: var(--bar);
+  border-radius: 0.1rem;
+}
+.board__title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 2.55rem;
+  background: var(--bar);
+  border-radius: 0 0.6rem 0 0;
+}
+/* Section bars are blue-grey by default. Diagnostics sections keep the --slate
+   default; evaluation sections use the lighter --haze for gentle differentiation.
+   The --accent variant is RESERVED for the red alert state (a section can be
+   flipped to it later); it is not used as a default anywhere. */
+.board__title--haze { --bar: var(--haze); color: var(--ink); }
+.board__title--accent { --bar: var(--accent); color: var(--accent); }
+
+/* Collapsible boards: the title doubles as the <summary>. Drop the native
+   disclosure triangle (so the ::before left-cap stays first) and make it
+   click-affordant. The ::before / ::after LCARS bars still apply because the
+   summary keeps the .board__title class. */
+summary.board__title {
+  cursor: pointer;
+  list-style: none;
+  /* The header bar stays put while the cards scroll: it is a non-scrolling
+     flex child above the scroll container, and sticky as belt-and-suspenders. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex: 0 0 auto;
+  margin-bottom: 0;        /* board flex-gap supplies the spacing below */
+  /* Never abandon a header at the bottom of a column: keep it with the content
+     that follows so the pair bumps to the next column together. */
+  break-after: avoid;
+  break-inside: avoid;
+}
+summary.board__title::-webkit-details-marker { display: none; }
+
+/* Small rotating caret between the left cap and the label, tinted to the bar.
+   Points right when collapsed, down (90°) when the board is open. */
+.board__caret {
+  flex: 0 0 auto;
+  color: var(--bar);
+  font-size: 0.72em;
+  line-height: 1;
+  opacity: 0.85;
+  transition: transform 0.15s ease;
+}
+details[open] > summary .board__caret { transform: rotate(90deg); }
+
+/* Collapsed boards shrink to just the bar; keep a little breathing room below
+   so adjacent bars still read as separate rows (the .page gap also applies). */
+details.board { margin-bottom: 0.2rem; }
+
+/* Content-height cards that pack densely into as many columns as fit. On a
+   4K-maximized viewport this flows into many columns; cards never grow past a
+   sane width because the track has a minmax min. align-items:start keeps the
+   uPlot charts at an explicit width and stops a tall card stretching its row. */
+/* Cards stack vertically within their section column. This is the SCROLL
+   container — the header bar above stays put while these cards scroll, so the
+   vertical scrollbar reads as a thin LCARS line descending from the header. */
+.board__cards {
+  /* Block flow (not flex) so the run of cards can fragment across a column
+     boundary. Spacing comes from card margins, not flex gap. */
+  display: block;
+}
+.board__cards > * { margin-bottom: var(--gap, 1rem); }
+.board__cards > *:last-child { margin-bottom: 0; }
+/* Each card stays whole — only the SECTION (a run of cards) breaks across a
+   column boundary, between cards, so a card is never sliced in half. */
+.board__cards > * { break-inside: avoid; }
+
+/* A situational section auto-expanded by NexusReveal flashes briefly so the eye
+   is drawn to it (welfare need, divergence). Motion-gated — reduced-motion users
+   get a steady accent tint instead of a pulse. */
+.board--flash > .board__title { animation: board-flash 0.55s ease-in-out 0s 4; }
+.board--flash > .board__title { --bar: var(--accent); color: var(--accent); }
+@keyframes board-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board--flash > .board__title { animation: none; }
+}
+
+/* ---- Evaluation as a living research report ---------------------------- */
+/* A single, document-width reading column (not the multi-column console). Each
+   evaluation board is a report section: its title is the heading, a .report-claim
+   states what the section demonstrates, and the live figures are the evidence. */
+.page--report {
+  column-count: 1;
+  column-width: auto;
+  max-width: 70rem;
+  margin-inline: auto;
+  padding-top: 0.5rem;
+}
+.report-masthead { margin: 0 0 1.6rem; }
+.report-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+}
+.report-lede {
+  font-size: var(--fs-md);
+  color: var(--fg-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+.report-lede em { color: var(--haze); font-style: italic; }
+.report-claim {
+  font-size: var(--fs-md);
+  color: var(--haze);
+  line-height: 1.55;
+  margin: 0 0 1.1rem;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--slate);
+}
+.report-claim strong { color: var(--ink); }
+
+/* Continuation marker injected by NexusFlow at the top of a column where a
+   section spilled over from the previous column. Reads as a faint LCARS tab so
+   the continuation is clearly part of the same section. Stays glued to the card
+   that follows it (break-after: avoid) so it is never stranded at a column end. */
+.continued-marker {
+  break-inside: avoid;
+  break-after: avoid;
+  margin: 0 0 var(--gap, 1rem);
+  padding: 0.3rem 0.7rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--haze);
+  background: var(--panel-2);
+  border-left: 0.4rem solid var(--slate);
+  border-radius: 0 0.5rem 0 0;
+}
+
+/* Legacy alias retained for any unsplit markup; same behavior. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--card-min), 1fr));
+  grid-auto-flow: row dense;
+  gap: var(--gap);
+  align-items: start;
+}
+
+/* A grid item's default min-width:auto lets long unbreakable content (run ids,
+   sha256, JSON) push the column wider than its track. Pin min-width:0 so the
+   track wins and the content wraps. */
+.board__cards > *,
+.grid > * { min-width: 0; }
+
+/* Wide cards span a LIMITED number of columns (not 1/-1). Spanning to the last
+   line would mark every track "occupied" and defeat auto-fit's empty-track
+   collapse, leaving few-card sections padded with phantom columns on a 4K
+   viewport. Spanning 2 keeps them generous while letting trailing empties
+   collapse so the remaining cards stretch to fill the width. `.card--full` is
+   the rare genuine full-bleed case. */
+.board__cards > .card--wide,
+.board__cards > .span-2,
+.span-2 { grid-column: span 2; }
+.board__cards > .card--full { grid-column: 1 / -1; }
+
+@media (max-width: 720px) {
+  .span-2, .board__cards > .card--wide { grid-column: span 1; }
+}
+
+/* LCARS panel: large corner radius with an asymmetric "elbow" feel (bigger
+   radius top-left + bottom-right). Calm slate field; no left edge-strip — the
+   rounded body alone carries the form. */
+.panel {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  /* Square on three corners, rounded only at the bottom-left — an LCARS-style
+     hard box with a single elbow. (top-left top-right bottom-right bottom-left) */
+  border-radius: 0 0 0 var(--radius);
+  padding: 1rem 1.1rem 1rem 1.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.panel > :first-child { margin-top: 0; }
+.panel > h2:first-child {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--fs-md);
+  color: var(--ink);
+}
+/* Hover gives a quiet border/shadow cue only — no movement (a lift on hover was
+   distracting). */
+.board__cards > .panel:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 22px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- Presence board: ferrofluid affect visualizer ---------------------- */
+/* The panel fills the board cell (≈ half-viewport row) so the WebGL canvas
+   renders at the cell's real size, not 0. The viz self-fits via an internal
+   ResizeObserver on the canvas. The board's card region does not scroll. */
+/* The presence board leads the console (top-left). The ferrofluid visualizer
+   FILLS its panel edge-to-edge with NO frame: the panel chrome is stripped and
+   the stage carries an explicit (clamped) height, because the flex chain through
+   <details> won't reliably distribute height to the canvas — so the WebGL canvas
+   always gets real pixels instead of collapsing to 0×0. */
+#board-presence { break-inside: avoid; }  /* the canvas is one unit — never split */
+#board-presence .board__cards { overflow: hidden; }
+.presence-panel {
+  position: relative;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+/* Don't lift the presence panel on hover — the stage fills it. */
+.presence-panel:hover { transform: none; box-shadow: none; }
+/* Frameless stage: fills the panel width, a tall portrait height, no border or
+   radius. The ferrofluid renders onto its own dark field, edge to edge. */
+.presence-stage {
+  position: relative;
+  width: 100%;
+  height: clamp(26rem, 70vh, 46rem);
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, #0c0e16 0%, #05060a 70%);
+}
+.presence-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Status as an unobtrusive caption laid over the bottom of the viz (with a soft
+   scrim for legibility) so the visualizer itself fills the whole panel. */
+.presence-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 1.6rem 1rem 0.7rem;
+  text-align: center;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.01em;
+  background: linear-gradient(to top, rgba(5, 6, 10, 0.85) 0%, rgba(5, 6, 10, 0) 100%);
+  pointer-events: none;
+}
+.presence-status[data-state="live"] { color: var(--haze); }
+
+/* ---- Perception picture-in-picture + audio mute (dev override) ---------- */
+/* A small live view of WHAT THE ENTITY SEES, laid over the visualizer's
+   bottom-right, plus a mute control for what it HEARS. The video only appears
+   under KAINE_PERCEPTION_PREVIEW=1 (NexusPreview toggles [hidden]); nothing is
+   recorded. */
+.perception-pip {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.7rem;
+  width: clamp(9rem, 22%, 15rem);
+  border: 1px solid rgba(158, 165, 186, 0.35);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #05060a;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  z-index: 3;
+}
+.perception-pip[hidden] { display: none; }
+.perception-pip__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #05060a;
+}
+.perception-pip__caption {
+  padding: 0.2rem 0.4rem;
+  font-size: var(--fs-xs);
+  color: var(--haze);
+  letter-spacing: 0.01em;
+  background: rgba(5, 6, 10, 0.8);
+  text-align: center;
+}
+/* Mute button + level meter sit just above/left of the PiP so they are usable
+   even when the video frame is hidden. */
+.perception-hud {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  z-index: 4;
+}
+.perception-hud[hidden] { display: none; }
+/* When the PiP video is showing, lift the HUD above it. */
+.perception-pip:not([hidden]) ~ .perception-hud {
+  bottom: auto;
+  top: 0.7rem;
+}
+.perception-mute {
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(158, 165, 186, 0.4);
+  border-radius: 4px;
+  background: rgba(5, 6, 10, 0.75);
+  color: var(--fg);
+  cursor: pointer;
+}
+.perception-mute[aria-pressed="true"] { border-color: var(--alert, #E7442A); }
+.perception-meter {
+  display: inline-block;
+  width: 4.5rem;
+  height: 0.5rem;
+  border: 1px solid rgba(158, 165, 186, 0.4);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(5, 6, 10, 0.75);
+}
+.perception-meter__fill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(to right, #4ade80, #E0913A, #E7442A);
+  transition: width 0.12s linear;
+}
+
+/* ---- Badges / status chips (pills) ------------------------------------- */
+
+.badge {
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-pill);
+  margin-left: 0.5rem;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.badge.awake { background: var(--up-bg); color: var(--up); }
+.badge.sleeping { background: #18283f; color: #9bb8e8; }
+/* OFFLINE — no cognitive cycle running. Dim/grey, clearly "nothing running"
+   (and the page-load default). #b6bccb on #23272f clears WCAG AA (>=7:1). */
+.badge.offline { background: #23272f; color: #b6bccb; }
+/* FROZEN — cycle up but the experiential loop is suspended. A distinct cool
+   ice/cyan family, clearly "paused", separate from the sleeping blue.
+   #8fe3f0 on #0e2a30 clears WCAG AA (>=7:1). */
+.badge.frozen { background: #0e2a30; color: #8fe3f0; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+}
+.chip::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* `up`/serving = green, neutral/not-configured = grey (calm). Anything that
+   means a PROBLEM (down/error/failed) is red so red consistently signals
+   attention. `warn`/`degraded` use amber for genuine warning states. */
+.chip.up        { color: var(--up);        background: var(--up-bg);        border-color: #1d5436; }
+.chip.down      { color: var(--accent);    background: var(--down-bg);      border-color: #5a2a20; }
+.chip.degraded  { color: var(--degraded);  background: var(--degraded-bg);  border-color: #5a4818; }
+.chip.warn      { color: var(--degraded);  background: var(--degraded-bg);  border-color: #5a4818; }
+.chip.not_configured { color: var(--neutral); background: var(--neutral-bg); border-color: var(--border-strong); }
+
+/* ---- Health board ------------------------------------------------------- */
+
+#health .health-list { list-style: none; margin: 0; padding: 0; }
+/* Glanceable compact rows: ONE line each — name+role on the left, status chip on
+   the right. The detail and checked-at collapse to zero height and reveal on
+   hover (smooth grid-row expand), so the board fits the sidebar with no scroll
+   yet every detail is a hover away. */
+#health .health-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 0fr 0fr;    /* rows 2-3 (detail, checked-at) collapsed */
+  column-gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.28rem 0.3rem;
+  border-radius: 0 0 0 0.3rem;
+  min-width: 0;
+  transition: grid-template-rows 0.18s ease, background 0.12s ease;
+}
+#health .health-row:hover {
+  background: var(--panel-2);
+  grid-template-rows: auto 1fr 1fr;    /* reveal detail + checked-at on hover */
+}
+#health .health-row > span:first-child {
+  grid-row: 1; grid-column: 1;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#health .health-row .chip { grid-row: 1; grid-column: 2; justify-self: end; }
+#health .dep-name { font-weight: 600; }
+#health .dep-role { color: var(--fg-dim); font-size: var(--fs-xs); }
+/* Detail + checked-at occupy the collapsing rows below the name line. */
+#health .dep-detail, #health .checked-at {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  font-size: var(--fs-xs);
+  transition: opacity 0.18s ease;
+}
+#health .dep-detail { grid-row: 2; color: var(--fg-muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
+#health .checked-at { grid-row: 3; color: var(--fg-dim); }
+#health .health-row:hover .dep-detail,
+#health .health-row:hover .checked-at { opacity: 1; }
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.module-cell {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.55rem;
+  background: var(--panel-2);
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+}
+.module-cell .mname { display: block; color: var(--fg); margin-bottom: 0.2rem; }
+.module-cell.on  { border-left: 3px solid var(--up); }
+.module-cell.off { border-left: 3px solid var(--neutral); opacity: 0.7; }
+/* Capturing is a healthy/working state — green like `on`. The red "🔴
+   capturing" label is the only red cue, signalling the live mic/camera. */
+.module-cell.capturing { border-left: 3px solid var(--up); }
+.module-cell .mstate { color: var(--fg-muted); }
+
+/* ---- Banners ------------------------------------------------------------ */
+
+.dev-banner {
+  background: var(--down-bg);
+  color: var(--down);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid #5a2a20;
+  font-size: var(--fs-sm);
+}
+.live-perception-banner {
+  background: var(--accent);
+  color: #fff;
+  padding: 0.6rem 1rem;
+  margin: 0 0 1rem 0;
+  border-radius: var(--radius-pill);
+  font-weight: bold;
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* Operator freeze — impossible to miss; the entity is suspended. */
+.freeze-banner {
+  background: #1e3a5f;
+  color: #cfe3ff;
+  border-bottom: 2px solid #4a90d9;
+  padding: 0.7rem 1rem;
+  text-align: center;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+}
+.freeze-banner .freeze-reason { font-weight: normal; opacity: 0.85; overflow-wrap: anywhere; }
+#freeze-control.frozen { border-color: #4a90d9; background: #16263c; }
+#freeze-status { letter-spacing: 0.03em; }
+
+/* ---- Buttons / forms (pills) ------------------------------------------- */
+
+button, .btn {
+  /* Chakra Petch (--font-ui), NOT Orbitron — Orbitron is too wide for pills and
+     made the labels cramp/overflow. Tightened letter-spacing + nowrap + a touch
+     more horizontal padding so the text always fits. */
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  font-weight: 700;
+  background: var(--slate);
+  color: var(--bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 0.45rem 1.1rem;
+  cursor: pointer;
+}
+button:hover, .btn:hover { background: var(--haze); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.danger { background: var(--down); color: var(--bg); }
+/* "primary" is the emphasised control, but blue-grey now — accent is reserved
+   for attention. The brighter haze fill carries the emphasis. */
+button.primary { background: var(--haze); color: var(--bg); }
+button.primary:hover { filter: brightness(1.1); }
+
+input[type="number"], input[type="text"], select {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 0.32rem 0.7rem;
+  width: 7rem;
+}
+input:focus, select:focus, button:focus-visible {
+  outline: 2px solid var(--haze);
+  outline-offset: 1px;
+}
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.control-row label { font-size: var(--fs-sm); color: var(--fg-muted); }
+
+/* ---- Tables / definition lists ----------------------------------------- */
+
+/* Long logs/tables (sleep-cycle before/after, EFE series, eidolon accuracy, …)
+   collapse to a manageable height and scroll instead of stretching the card. */
+.table-wrap { overflow: auto; max-height: var(--log-max, 24rem); }
+
+table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
+table th, table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+table td { overflow-wrap: anywhere; }
+/* LCARS column headers: haze, uppercase, spaced. */
+table th {
+  color: var(--haze);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+table tbody th { white-space: nowrap; }
+table.mono td { font-family: var(--font-mono); }
+table.mono { table-layout: fixed; }
+table .col-id { min-width: 13rem; white-space: nowrap; }
+
+dl.kv { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.2rem 1rem; }
+dl.kv dt { color: var(--fg-muted); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.04em; }
+dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+
+/* ---- Charts ------------------------------------------------------------- */
+
+.chart {
+  width: 100%;
+  min-height: 160px;
+}
+.chart-empty {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+  font-style: italic;
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 8rem 1fr 3rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--fs-sm);
+  margin: 0.2rem 0;
+}
+.bar-row .bar-track {
+  background: var(--panel-2);
+  border-radius: var(--radius-pill);
+  height: 0.85rem;
+  overflow: hidden;
+}
+.bar-row .bar-fill {
+  background: var(--slate);
+  height: 100%;
+}
+.bar-row .bar-label { font-family: var(--font-mono); color: var(--fg-muted); }
+.bar-row .bar-val { font-family: var(--font-mono); text-align: right; color: var(--fg-muted); }
+
+/* uPlot dark tweaks */
+.uplot { font-family: var(--font-mono); }
+.u-legend { font-size: var(--fs-xs); color: var(--fg-muted); }
+.u-axis { color: var(--fg-dim); }
+
+/* ---- Diagnostics-stream connection indicator ---------------------------- */
+/* Small always-visible badge (task 1.4): live / reconnecting / paused, so a
+   dropped Tailscale link is OBVIOUS rather than the dashboard silently
+   freezing on stale numbers. Starts [hidden] in the markup; NexusConn.attach()
+   reveals it only on pages that actually open the diagnostics stream. */
+.conn-status {
+  position: fixed;
+  top: 0.6rem;
+  right: 0.7rem;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  background: rgba(23, 27, 34, 0.88);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 0.22rem 0.6rem;
+  pointer-events: none;
+}
+.conn-status__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--neutral);
+  flex: 0 0 auto;
+}
+.conn-status[data-state="live"] .conn-status__dot { background: var(--up); }
+.conn-status[data-state="connecting"] .conn-status__dot { background: var(--neutral); }
+.conn-status[data-state="reconnecting"] .conn-status__dot,
+.conn-status[data-state="paused"] .conn-status__dot { background: var(--degraded); }
+@media (prefers-reduced-motion: no-preference) {
+  .conn-status[data-state="reconnecting"] .conn-status__dot {
+    animation: red-alert-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+/* ---- Spot alert overlay ------------------------------------------------- */
+
+@keyframes spot-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+.spot-alert {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 0 solid transparent;
+  z-index: 9999;
+  transition: border-color 0.3s ease, border-width 0.2s ease;
+}
+.spot-alert[data-state="recovery"] { border-width: 6px; border-color: var(--degraded); }
+.spot-alert[data-state="critical"] { border-width: 6px; border-color: var(--down); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .spot-alert[data-state="recovery"],
+  .spot-alert[data-state="critical"] {
+    animation: spot-pulse 2s ease-in-out infinite;
+  }
+}
+
+/* ---- Global RED-ALERT frame -------------------------------------------- */
+/* The whole console goes red when a freeze is initiated or a serious problem
+   appears (down service, spot critical escalation, failed preservation,
+   overrunning cycle). JS toggles `.red-alert` on `.shell`; this draws an
+   unmistakable glowing frame. A fixed pseudo-element is used (not a plain inset
+   box-shadow on .shell) so the rail/body backgrounds can't paint over the glow.
+   Sits just under the spot overlay (z 9999) so both can show together. */
+.shell.red-alert::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 70px rgba(231, 68, 42, 0.22);
+}
+/* Tint the rail divider red while the alert holds (subtle reinforcement). */
+.shell.red-alert .rail { border-right-color: var(--accent); }
+
+@keyframes red-alert-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+/* Slow, non-seizure-inducing pulse — only when motion is allowed; under
+   prefers-reduced-motion: reduce the frame is solid (no animation). */
+@media (prefers-reduced-motion: no-preference) {
+  .shell.red-alert::after { animation: red-alert-pulse 2.4s ease-in-out infinite; }
+}
+
+/* ---- Spot banner -------------------------------------------------------- */
+
+.spot-banner {
+  display: none;
+  padding: 0.65rem 1rem;
+  text-align: center;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.spot-banner[data-state="recovery"],
+.spot-banner[data-state="critical"] { display: flex; }
+.spot-banner--recovery {
+  background: var(--degraded-bg);
+  color: var(--degraded);
+  border-bottom: 2px solid var(--degraded);
+}
+.spot-banner--critical {
+  background: var(--down-bg);
+  color: var(--down);
+  border-bottom: 2px solid var(--down);
+}
+.spot-banner__label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+.spot-banner__msg { font-weight: normal; }
+.spot-banner__detail {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Spot console log --------------------------------------------------- */
+
+.spot-console-log {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  line-height: 1.6;
+  min-height: 3rem;
+  color: var(--ink);          /* near-white — readable on the dark inset */
+}
+.spot-log-line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+.spot-log-line.log-info     { color: var(--ink); }
+.spot-log-line.log-warn     { color: var(--degraded); }
+.spot-log-line.log-error    { color: var(--down); }
+.spot-log-line.log-critical { color: var(--down); font-weight: bold; }
+.spot-log-placeholder { color: var(--fg-dim); font-style: italic; }
+
+/* ---- Run identity / supervision / admissibility ------------------------- */
+.chip.recording     { color: var(--up);       background: var(--up-bg);       border-color: #1d5436; }
+.chip.gap-detected  { color: var(--accent);   background: var(--down-bg);     border-color: #5a2a20; }
+.chip.unknown       { color: var(--neutral);  background: var(--neutral-bg);  border-color: var(--border-strong); }
+
+.supervision-badge {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-pill);
+  margin-bottom: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.supervision-badge--operator {
+  background: var(--up-bg);
+  color: var(--up);
+  border: 1px solid #1d5436;
+}
+.supervision-badge--research {
+  background: var(--degraded-bg);
+  color: var(--degraded);
+  border: 1px solid var(--degraded);
+  font-size: var(--fs-sm);
+}
+.supervision-badge--research strong { letter-spacing: 0.08em; }
+.gate-checks { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.gate-checks .gate-check.ok   { color: var(--up); }
+.gate-checks .gate-check.fail { color: var(--down); font-weight: bold; }
+
+.deterministic-badge {
+  display: inline-block;
+  margin: 0 0 0.6rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: var(--degraded-bg);
+  color: var(--degraded);
+  border: 1px solid var(--degraded);
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+}
+
+/* ---- Preservation / welfare-protective event panel ---------------------- */
+.preservation-log {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  line-height: 1.6;
+  min-height: 3rem;
+  color: var(--ink);          /* near-white — was --fg-muted, too dim to read */
+}
+/* white-space: normal (NOT pre-wrap) so the server-backfilled lines don't render
+   the template's newlines/indentation as blank lines for every absent field —
+   each event collapses to one compact, wrapping line. */
+.preservation-line { display: block; white-space: normal; overflow-wrap: anywhere; word-break: normal; color: var(--ink); margin-bottom: 0.35rem; }
+.preservation-line:last-child { margin-bottom: 0; }
+.preservation-line.log-error { color: var(--down); font-weight: bold; }
+
+/* ---- GPU pre-flight ----------------------------------------------------- */
+#gpu-preflight tr.gpu-short td { color: var(--down); }
+
+/* ---- Medium viewports: right sidebar drops below the console ------------- */
+/* The 26rem Health sidebar would crowd the section grid on a narrow desktop /
+   tablet, so let it wrap to a full-width band UNDER the body rather than
+   squashing the grid. The left nav rail stays put until the 640px fold. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .shell { flex-wrap: wrap; }
+  .rail--right {
+    position: static;
+    flex: 1 1 100%;
+    width: 100%;
+    max-height: none;
+    min-height: 0;
+    border-left: 0;
+    border-top: 2px solid var(--panel-2);
+    border-radius: 0;
+  }
+}
+
+/* ---- Narrow viewports: rail folds to a top strip ------------------------ */
+@media (max-width: 640px) {
+  .shell { flex-direction: column; }
+  .rail {
+    position: static;
+    flex-basis: auto;
+    width: 100%;
+    min-height: 0;
+    max-height: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    border-right: none;
+    border-bottom: 2px solid var(--panel-2);
+    border-radius: 0;
+  }
+  .rail__nav { flex-direction: row; flex-wrap: wrap; }
+  .rail__nav--pages { margin-top: 0; }
+  .rail__status { flex-direction: row; align-items: center; }
+
+  /* The console's horizontal "kanban" (fixed-height columns you scroll
+     SIDEWAYS through, wheel-hijacked to boot) is tuned for a 4K wall, not a
+     phone in portrait: on a narrow screen it forces awkward horizontal
+     scrolling through many skinny columns. Below the fold, switch it to the
+     same natural vertical-scroll flow the diagnostics/evaluation pages
+     already use (task 1.5). The wheel-hijack is separately disabled at this
+     breakpoint in nexus_console.js. */
+  .page--console {
+    columns: 1;
+    column-fill: auto;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: visible;
+    padding-bottom: 0.5rem;
+  }
+  .page--console .board { break-inside: avoid; }
+
+  /* The connection-status badge sits over the rail on a phone; keep it out of
+     the header/brand's way. */
+  .conn-status { top: 0.4rem; right: 0.4rem; }
+}
