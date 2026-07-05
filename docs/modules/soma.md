@@ -65,7 +65,7 @@ Section `[soma]` in `config/kaine.toml`. See also [../configuration.md](../confi
 |---|---|---|
 | `read_interval_s` | `1.0` | Seconds between metric-read cycles |
 | `cycle_latency_target_ms` | `300.0` | Healthy target for the cognitive cycle; deviations above this reduce wellness |
-| `cycle_latency_window` | `64` | Rolling window size for cycle latency samples (note: accepted by boot but unused directly by `Soma` constructor; `SystemMetricsReader` uses its own fixed window of 64) |
+| `cycle_latency_window` | `64` | Rolling window size for cycle latency samples; forwarded from `make_soma` into `Soma.__init__` and on into `SystemMetricsReader(cycle_latency_window=...)` |
 | `baseline_salience` | `0.1` | Salience for routine `soma.report` events |
 | `alert_salience` | `0.7` | Salience when threshold alerts, high prediction error, or fatigue fires |
 | `forward_model_units` | `32` | Hidden size of the `SubstrateForwardModel` CfC reservoir |
@@ -182,6 +182,8 @@ The CfC reservoir itself is never serialised — like Chronos's `CfCNetwork`, it
 | `tests/test_soma_wellness.py` | `compute_wellness()` weighting and normalisation curves |
 | `tests/test_soma_system_reader.py` | `SystemMetricsReader` graceful pynvml degradation |
 | `tests/test_soma_hypnos_flag.py` | `_in_hypnos` flag set/clear, adaptation suspension |
+| `tests/test_soma_warmup.py` | Developmental cold-start warm-up gate — action path only, published prediction error unaffected, hard-threshold override |
+| `tests/test_cycle_soma_regulation.py` | `CycleEngine.consume_soma_regulation` — `reduce_rate`/`shed_module`/`request_maintenance` advisories, missing/unknown action handling |
 | `tests/systems/test_soma_subsystem.py` | Redis-backed subsystem integration |
 
 ---

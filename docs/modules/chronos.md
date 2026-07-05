@@ -19,7 +19,7 @@ Implemented. Ships **disabled** — `[modules].chronos = false` in `config/kaine
 
 In the PP+GWT framing, Chronos is the entity's **temporal self-model**: it keeps track of *when* things happen, *what patterns repeat*, and *how surprising* recent workspace activity is relative to learned expectations.
 
-On every Syneidesis workspace broadcast (10 Hz), Chronos:
+On every Syneidesis workspace broadcast (the experiential rate, ~3.33 Hz conscious-access — not the 10 Hz processing tick), Chronos:
 
 1. **Featurizes the snapshot** — deterministically converts the `WorkspaceSnapshot` (selected events, salience statistics, source identity, inhibition flag, elapsed time) into a fixed 24-dimensional float vector.
 2. **Steps the CfC** — feeds the feature vector through a stateful Closed-form Continuous-time recurrent network, producing a hidden-state vector that encodes temporally compressed workspace history.
@@ -63,7 +63,7 @@ Section `[chronos]` in `config/kaine.toml`. See also [../configuration.md](../co
 | `cfc_units` | `32` | CfC hidden state size; also sets `ForwardPredictionHead` input size |
 | `baseline_salience` | `0.1` | Salience for routine `chronos.report` events |
 | `alert_salience` | `0.7` | Salience when anomaly / rumination fires |
-| `anomaly_window` | `64` | Rolling window length (ticks) for the z-score anomaly detector (consumed by boot; not passed directly to `Chronos` constructor — uses `RollingZScoreAnomaly` default) |
+| `anomaly_window` | `64` | Rolling window length (ticks) for the z-score anomaly detector; forwarded via `make_chronos` into `RollingZScoreAnomaly(window=...)` |
 | `anomaly_alert_threshold` | `3.0` | Z-score (or normalised prediction-error ratio) above which `alert_salience` is applied |
 | `rumination_window` | `32` | Rolling window for the recurrence detector (consumed at boot) |
 | `rumination_threshold` | `4` | Bucket-count threshold for flagging rumination |

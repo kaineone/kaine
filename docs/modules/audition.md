@@ -211,6 +211,7 @@ No `NamedTemporaryFile`, no `.wav` file, no raw audio bytes appear on the bus. T
 | `tests/test_audition_prosody.py` | `extract_prosody()` feature extraction, zero-persistence invariant |
 | `tests/test_audition_live.py` | `LiveMicrophone` VAD loop, locus gate |
 | `tests/test_audio_self_hearing.py` | `SpeakingGate` self-hearing suppression |
+| `tests/test_audition_feed.py` | Deterministic auditory-feed sources — seeded procedural audio (determinism, seek-safety, seed decorrelation) and playlist audio (manifest verify fail-closed, honest PyAV-absent failure) |
 | `tests/systems/test_audition_subsystem.py` | Redis-backed subsystem integration |
 
 ---

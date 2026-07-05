@@ -620,9 +620,10 @@ docker compose -f compose/redis.yml ps
 
 ### Module guard test fails after editing kaine.toml
 
-The `tests/test_module_guard.py` test verifies the committed `config/kaine.toml`
-ships with all modules set to `false`. If you have committed module enables, the
-guard will fail the test suite. Revert the committed file to all-false; keep
+The `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`
+test verifies the committed `config/kaine.toml` ships with all modules set to
+`false`. If you have committed module enables, the guard will fail the test
+suite. Revert the committed file to all-false; keep
 per-install enables only in your local working copy (gitignored).
 
 ---

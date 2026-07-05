@@ -242,15 +242,15 @@ maintenance even under load).
 
 ```toml
 [hypnos]
-# (Top-level) fatigue-triggered maintenance
-fatigue_triggered = true
 interval_seconds = 3600.0
 max_deferral_seconds = 600.0
 per_defer_seconds = 60.0
-downscale_factor = 0.9
-replay_window_s = 5.0
 
 [hypnos.consolidation]
+# Whether Hypnos subscribes to soma.fatigue and triggers on threshold crossing.
+fatigue_triggered = true
+downscale_factor = 0.9        # Synaptic homeostasis downscaling factor
+replay_window_s = 5.0         # Replay window duration (seconds); informational
 associative_replay = false    # Phase 3 feature flag
 
 [hypnos.voice_alignment]

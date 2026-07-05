@@ -100,6 +100,9 @@ Full reference: [`../configuration.md`](../configuration.md). Key `[hypnos]` key
 | `training_device` | `"cuda:0"` | Device for Unsloth training |
 | `adapter_retention` | `5` | Number of accepted adapters to keep |
 | `hot_swap_mode` | `"manual"` | `"manual"` / `"reload_endpoint"` / `"restart_service"` |
+| `reload_endpoint_url` | `""` | URL Hypnos POSTs `{"adapter_path": "<path>"}` to when `hot_swap_mode = "reload_endpoint"` |
+| `restart_service_unit` | `""` | Systemd `--user` unit name restarted when `hot_swap_mode = "restart_service"` |
+| `capability_probe_path` | `""` | Path to a capability-probe JSONL used for the capability-regression check; empty = bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl` |
 | `abliteration_probe_path` | `""` | Path to JSONL welfare veto probe set (empty = bundled default) |
 | `consolidation_divergence_rate_threshold` | `0.5` | Organ-level divergence: rate threshold the assessment reads |
 | `consolidation_divergence_magnitude_threshold` | `0.25` | Organ-level divergence: magnitude threshold the assessment reads |

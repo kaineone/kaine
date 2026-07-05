@@ -249,8 +249,8 @@ daemon, or any other mechanism.
 
 The entity ships with every module disabled, and the safety-net components ship
 disabled too. Enabling a module requires a deliberate edit of `config/kaine.toml`.
-A guard test (`tests/test_module_guard.py`) verifies the committed file ships
-all-off and fails if anyone commits module enables.
+A guard test (`tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`)
+verifies the committed file ships all-off and fails if anyone commits module enables.
 
 ---
 
@@ -375,5 +375,6 @@ pending legal review). CAL is an entity-welfare copyleft license. Key provisions
 - The individuation boundary instrument (see the evaluation tab) provides
   evidence for Guardians at fork merge points.
 
-See [LICENSE.md](../LICENSE.md) for the full text. The license is pending legal
-review and will be bumped to v1.0 before KAINE repositories go public.
+See [LICENSE.md](../LICENSE.md) for the full text. The KAINE repositories are
+public under the CAL (v0.2) now; formal legal review is still pending and a v1.0
+bump may follow, but publication does not wait on it.

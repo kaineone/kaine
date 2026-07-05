@@ -148,7 +148,8 @@ Synaptic homeostasis (Tononi & Cirelli 2014): scales all in-memory activation ve
 | `kaine/modules/mnemos/module.py` | `Mnemos(BaseModule)` — tick driver, affect consumer, replay API |
 | `kaine/modules/mnemos/memory.py` | `MnemosCore` (store/recall/consolidate), `StoredMemory`, `RecallSummary`, `EmotionalRetriggerHook` |
 | `kaine/modules/mnemos/storage.py` | `MemoryStorage` protocol, `QdrantStorage`, `InMemoryStorage`, `RecalledMemory` |
-| `kaine/modules/mnemos/embeddings.py` | `Embedder` protocol, `SentenceTransformerEmbedder`, `FakeEmbedder` |
+| `kaine/text_embedding.py` | `Embedder` protocol, `SentenceTransformerTextEmbedder`, `FakeEmbedder` — the boundary-neutral home shared by Mnemos, Hypnos, Empatheia, and the evaluation sidecar |
+| `kaine/modules/mnemos/embeddings.py` | Back-compat re-export shim of `kaine.text_embedding` names for existing Mnemos import sites; no second implementation |
 | `kaine/modules/mnemos/replay.py` | `ReplayEngine`, `ReplayEntry`, `ReplayEvent`, `select_traces`, `build_replay_events` |
 | `kaine/boot.py` | `make_mnemos()` — Qdrant config, replay sub-table wiring |
 

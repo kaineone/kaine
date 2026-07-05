@@ -57,7 +57,8 @@ action-selection step (Nous → Volition), which is itself gated by inhibition.
 |---|---|---|
 | `lingua.external` | `external_speech` | User-facing text; Vox subscribes here for TTS synthesis |
 | `lingua.internal` | `internal_speech` | Internal monologue; Mnemos and Eidolon subscribe; Vox NEVER reads this |
-| `lingua.out` | both types | Aggregate stream for consumers that want all Lingua output |
+
+`_produce()` writes directly to the mode-specific stream (`lingua.external` or `lingua.internal`) via the bus client, bypassing the default `self.publish` / `<module>.out` routing. There is no aggregate `lingua.out` stream in practice — consumers must subscribe to `lingua.external` and/or `lingua.internal` explicitly.
 
 The `external_speech` event payload also carries `user_input` (the triggering
 text) so the A/B divergence sidecar can compare workspace-conditioned output to a

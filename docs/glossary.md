@@ -121,8 +121,10 @@ EFE combines epistemic value (information gain — how much a policy would reduc
 uncertainty about the world) and pragmatic value (how well a policy achieves
 preferred outcomes). A policy that minimizes EFE simultaneously seeks information
 and avoids undesirable states. KAINE's Nous evaluates EFE over a compact
-generative model (4 factors × 4 states × 4 actions × 1 step) with a 250 ms
-computation timeout. See also: [active inference](#active-inference).
+generative model (4 factors — state counts 4/3/4/4, the salience-band factor
+has 3 states — × 4 actions × 1 step) with a 250 ms computation timeout.
+`max_states_per_factor` (default 4) is an upper-bound cap enforced at boot,
+not the literal per-factor state count. See also: [active inference](#active-inference).
 
 ---
 
@@ -183,7 +185,8 @@ established by consensus. Gray-zone events are logged and flagged for human
 review rather than automated dismissal. Examples: sustained high prediction
 error without resolution, affect system locked in extreme states for extended
 periods. The sidecar welfare observer logs these events to
-`state/evaluation/observers/`. Under the CAL, gray-zone events require documented
+`data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl` (daily-rotated, under
+`paths.evaluation_logs`). Under the CAL, gray-zone events require documented
 human review. See also: [welfare events](#welfare-events-welfare-monitoring).
 
 ---
@@ -257,10 +260,12 @@ virtual (a Mundus body) — never both simultaneously. See: `kaine/modules/mundu
 
 The active inference engine. Nous implements belief updating, policy selection,
 and epistemic action through Expected Free Energy minimization using pymdp 1.0
-(JAX, CPU-only). Nous maintains a compact generative model (default: 4 factors,
-4 states, 4 actions, planning horizon 1). The `[reasoning]` extra
-(`inferactively-pymdp`, `jax[cpu]`) is required. A boot-time complexity check
-ensures the worst-case EFE step product does not exceed the budget threshold.
+(JAX, CPU-only). Nous maintains a compact generative model (default: 4 factors
+with state counts 4/3/4/4 — the salience-band factor has 3 states — 4 actions,
+planning horizon 1). `max_states_per_factor` (default 4) is an upper-bound cap
+enforced at boot, not the literal per-factor state count. The `[reasoning]`
+extra (`inferactively-pymdp`, `jax[cpu]`) is required. A boot-time complexity
+check ensures the worst-case EFE step product does not exceed the budget threshold.
 See: `kaine/modules/nous/`. See also: [active inference](#active-inference).
 
 ---
@@ -447,5 +452,6 @@ consolidation capacity. Welfare events are detected through behavioral indicator
 and system health metrics, not through reading the entity's private cognitive
 content. [Gray-zone welfare events](#gray-zone-welfare-events) require documented
 human review. The welfare observer writes to
-`state/evaluation/observers/welfare.jsonl`. Under the CAL, gray-zone events
+`data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl` (daily-rotated, under
+`paths.evaluation_logs`, default `data/evaluation`). Under the CAL, gray-zone events
 cannot be automatically dismissed. See also: [CAL](#cal-cognitive-architecture-license).

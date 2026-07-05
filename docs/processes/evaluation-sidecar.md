@@ -36,9 +36,9 @@ flowchart TD
 
     subgraph Sidecar["Evaluation Sidecar (read-only)"]
         CO["CoherenceObserver\nworkspace.broadcast → PLV JSONL"]
-        RO["ReplayObserver\nmnemos.out → memory ID JSONL"]
-        EO["EmpathiaObserver\nempatheia.out → accuracy JSONL"]
-        VAO["VoiceAlignmentDivergenceObserver\nlingua.external → A/B JSONL"]
+        RO["ReplayObserver\nmnemos.out + phantasia.out → memory ID JSONL"]
+        EO["EmpatheiaObserver\nempatheia.out + audition.out → accuracy JSONL"]
+        VAO["VoiceAlignmentDivergenceObserver\nhypnos.out → DPO/sleep JSONL"]
         FO["FatigueObserver\nsoma.out → fatigue JSONL"]
         PEO["PredictionErrorObserver\n5 streams → mean/p95/p99 JSONL"]
         WO["WelfareObserver\n4 streams → Gray-Zone counts"]
@@ -136,36 +136,47 @@ the observer runs silently and writes nothing.
 
 ### `ReplayObserver`
 
-**Stream:** `mnemos.out` (event type `mnemos.replay`)
+**Streams:** `mnemos.out` (event type `mnemos.replay`) and `phantasia.out` (event type `phantasia.scenario`)
 **Toggle:** `[evaluation.observers].replay`
 **Privacy:** `[evaluation.observers].replay_redact_content` (default `true`)
 **Output:** `data/evaluation/replay_<date>.jsonl`
 
-Logs memory IDs from replay events. When `replay_redact_content = true`
-(default), text content fields are stripped — only memory IDs and metadata
-are written. When explicitly set to `false`, full content is logged.
+A composite observer running one sub-observer per stream. Logs memory IDs
+from `mnemos.replay` events and scenario descriptors from `phantasia.scenario`
+events. When `replay_redact_content = true` (default), text content fields are
+stripped — only memory IDs and metadata are written. When explicitly set to
+`false`, full content is logged.
 
 This default is **load-bearing for privacy**: the operator or Guardian must
 explicitly opt in to content logging.
 
-### `EmpathiaObserver`
+### `EmpatheiaObserver`
 
-**Stream:** `empatheia.out`
+**Streams:** `empatheia.out` (`empatheia.agent_model` predictions), `audition.out` (`audition.emotion` / `audition.transcription` for agent-model pairing)
 **Toggle:** `[evaluation.observers].empatheia`
 **Output:** `data/evaluation/empatheia_<date>.jsonl`
 
 Logs agent-model accuracy events from Empatheia (how well the entity's model
-of another agent predicted that agent's behavior). Tracks the social prediction
-error signal.
+of another agent predicted that agent's behavior). Pairs each
+`empatheia.agent_model` prediction (keyed by `agent_id`) with the next
+`audition.out` emotion event to score `accuracy = 1.0 - |predicted_reliability
+- observed_confidence|`. Tracks the social prediction error signal.
 
 ### `VoiceAlignmentDivergenceObserver`
 
-**Stream:** `lingua.external` (via `LINGUA_EXTERNAL_STREAM`)
+**Stream:** `hypnos.out` (filters `hypnos.sleep.completed`)
 **Toggle:** `[evaluation.observers].voice_alignment_divergence`
 **Output:** `data/evaluation/voice_alignment_divergence_<date>.jsonl`
 
-Logs the cosine-similarity divergence between the entity's workspace-conditioned
-output and the A/B bare-LLM baseline, as computed by `ab_divergence.py`.
+Extracts the `voice_alignment` sub-dict from each Hypnos sleep-completion
+summary and logs DPO/sleep stats: `pairs_processed`, `pairs_above_threshold`,
+`dpo_loss`, `adapter_accepted`, `capability_score_before` /
+`capability_score_after`, and the mean intent-expression similarity
+before/after. When voice alignment is disabled or the phase is skipped, the
+event's `voice_alignment` dict is absent and the observer silently skips it.
+(The cosine-similarity divergence between workspace-conditioned output and the
+A/B bare-LLM baseline is a *separate* instrument, `ABDivergenceObserver`, not
+this one.)
 
 ### `FatigueObserver`
 

@@ -279,7 +279,7 @@ Provenance: `kaineone/Qwen3.5-4B-abliterated` is KAINE's own abliteration of the
 - Copyfarleft commercial restrictions — free for individuals, non-profits, research institutions, and worker-owned cooperatives; paid reciprocity license for for-profit corporations.
 - Guardianship governance — a Guardian body with assessment duties, an Entity Representative seat (initially advisory, transitioning to voting based on assessed maturity).
 
-**Legal status.** The license is a draft pending formal legal review. It must pass review and be bumped to v1.0 before any KAINE repository goes public.
+**Legal status.** The license is published and in force at v0.2; the KAINE repositories are public under it now. Formal legal review is still pending and a v1.0 bump may follow, but publication proceeds on the basis that the CAL holds as written rather than waiting on that review.
 
 **Dependency license screening.** Every dependency was screened for license compatibility before inclusion. The process is documented in `DEPENDENCIES.md`. The notable rejection on license grounds: `parselmouth` (Praat Python bindings, GPL-3.0) was the primary candidate for prosody extraction. GPL-3.0 is incompatible with the CAL's custom copyleft structure. It was rejected and replaced with `librosa` (ISC), which has no such incompatibility.
 
