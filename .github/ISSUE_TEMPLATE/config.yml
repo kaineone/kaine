@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (private)
+    url: https://github.com/kaineone/kaine/security/advisories/new
+    about: "Report security issues privately — never in a public issue. See SECURITY.md."
+  - name: Documentation
+    url: https://github.com/kaineone/kaine/tree/main/docs
+    about: "Read the docs before filing — many questions are answered there."
+  - name: Project site
+    url: https://kaine.one
+    about: "Background on the KAINE project."

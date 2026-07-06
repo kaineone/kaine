@@ -1,0 +1,5 @@
+# Code owners are requested for review on matching paths and, when review is
+# required by branch protection, must approve. Update the owner(s) / add a team
+# (e.g. @kaineone/maintainers) as the project grows.
+
+* @ErikChevalier
