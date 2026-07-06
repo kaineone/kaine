@@ -23,7 +23,7 @@ dependencies = [
     "qdrant-client>=1.7,<2",
     "sentence-transformers>=2.7,<6",
     "httpx>=0.27,<1",
-    "fastapi>=0.110,<1",
+    "fastapi>=0.139.0,<1",
     "uvicorn[standard]>=0.29,<1",
     "jinja2>=3.1,<4",
     # AES-256-GCM encryption-at-rest for persisted cognitive state
