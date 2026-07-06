@@ -43,7 +43,7 @@ The bridge composes them; it does not rewrite any module.
   memory and released; the bridge writes nothing to disk. No kill/exec
   primitives; read-and-inject only.
 
-The client apps (PWA, playlist feeder) live in the private `kaine-remote`
+The client apps (PWA, playlist feeder) live in the private `Fieldtrip`
 repo and are out of scope here — this change is only the entity-side seam
 they connect to.
 

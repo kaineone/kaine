@@ -40,4 +40,4 @@
 ## 4. Docs
 - [ ] 4.1 docs/configuration.md `[remote_bridge]` section.
 - [ ] 4.2 docs/operations.md: remote operation over Tailscale (serve/cert
-      note; the PWA client lives in the private kaine-remote repo).
+      note; the PWA client lives in the private Fieldtrip repo).
