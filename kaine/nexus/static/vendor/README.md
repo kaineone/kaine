@@ -42,17 +42,17 @@ df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04  uPlot.min.css
   the Three.js files are **MIT**. See the repo-root `THIRD_PARTY_LICENSES.md`.
 - **Files:**
   - `viz.js` — ES module, exports `LevelMeter`. Vendored verbatim from the
-    `kaine-remote` companion app.
+    `Fieldtrip` companion app.
   - `vendor/three.module.js` — three.js r160 (MIT).
   - `vendor/MarchingCubes.js` — three.js r160 `examples/jsm/objects/MarchingCubes.js` (MIT).
 - **Layout:** `viz.js` imports `./vendor/three.module.js` and
   `./vendor/MarchingCubes.js`, so the three.js files live in the nested
-  `vendor/vendor/` directory. This mirrors `kaine-remote`'s layout exactly so the
+  `vendor/vendor/` directory. This mirrors `Fieldtrip`'s layout exactly so the
   vendored source needs **no edits** to resolve its imports locally.
 
 ### Updating the viz
 
-1. Re-copy `viz.js` from `kaine-remote/webapp/viz.js` and the two three.js files
-   from `kaine-remote/webapp/vendor/`.
+1. Re-copy `viz.js` from `Fieldtrip/webapp/viz.js` and the two three.js files
+   from `Fieldtrip/webapp/vendor/`.
 2. Preserve each file's existing license/SPDX header byte-for-byte.
 3. Verify the Presence board renders with no console errors.
