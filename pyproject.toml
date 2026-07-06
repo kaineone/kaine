@@ -77,7 +77,7 @@ perception = ["kaine[audio]", "kaine[vision]"]
 # or CUDA at runtime; jax[cpu] logs a one-line GPU-fallback notice (expected).
 reasoning = [
     "inferactively-pymdp>=1.0",
-    "jax[cpu]>=0.4",
+    "jax[cpu]>=0.10.2",
 ]
 # Voice-alignment DPO training stack (Hypnos sleep-cycle phase).
 # Required only when [hypnos.voice_alignment].enabled = true AND
@@ -99,7 +99,7 @@ training = [
 # UPSTREAM) needs only jax; chex/einops are declared for upstream-toolchain
 # parity. Excludes any actor/critic/return heads — Phantasia is world-model only.
 worldmodel = [
-    "jax[cpu]>=0.4",
+    "jax[cpu]>=0.10.2",
     "chex>=0.1",
     "einops>=0.7",
 ]
