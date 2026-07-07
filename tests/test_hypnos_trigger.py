@@ -222,11 +222,7 @@ async def test_soma_fatigue_not_crossed_does_not_trigger(bus: AsyncBus, tmp_path
     )
     await bus.publish(event)
 
-    # Sleep should NOT have fired within a short window
-    fired = await asyncio.wait_for(
-        asyncio.shield(sleep_fired.wait()),
-        timeout=0.2,
-    ) if False else False  # just wait briefly
+    # Sleep should NOT have fired within a short window.
     await asyncio.sleep(0.15)
     assert not sleep_fired.is_set(), "crossed=false should not trigger maintenance"
     await hypnos.shutdown()

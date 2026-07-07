@@ -657,6 +657,7 @@ def test_committed_config_ships_all_modules_disabled():
     from pathlib import Path
 
     root = Path(__file__).parent.parent
+    blob = ""
     try:
         blob = subprocess.run(
             ["git", "show", "HEAD:config/kaine.toml"],

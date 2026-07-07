@@ -31,7 +31,8 @@ from kaine.modules.topos.feed import (
 
 
 def _read_n(source: SeededProceduralSource, n: int) -> list[np.ndarray]:
-    assert source.open()
+    opened = source.open()
+    assert opened
     frames = []
     for _ in range(n):
         ok, frame = source.read()
