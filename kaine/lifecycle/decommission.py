@@ -792,18 +792,17 @@ def _clear_redis_streams(
 #
 # The canonical CLI lives in kaine.lifecycle.__main__ (run via
 # ``python -m kaine.lifecycle``). For operators who reach for
-# ``python -m kaine.lifecycle.decommission`` we re-export and dispatch to the
-# same main().
+# ``python -m kaine.lifecycle.decommission`` we delegate to that same
+# entrypoint with runpy. Delegating dynamically (rather than importing the
+# entrypoint) keeps the dependency one-directional — the entrypoint imports
+# these destructive primitives, never the reverse — so this module does not
+# form an import cycle with kaine.lifecycle.__main__.
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:  # pragma: no cover - thin shim
-    from kaine.lifecycle.__main__ import main as _main
-
-    return _main(argv)
-
-
 if __name__ == "__main__":  # pragma: no cover
+    import runpy
     import sys
 
-    sys.exit(main())
+    sys.argv[0] = "python -m kaine.lifecycle"
+    runpy.run_module("kaine.lifecycle", run_name="__main__", alter_sys=True)
