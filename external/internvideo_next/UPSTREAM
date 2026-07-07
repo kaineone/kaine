@@ -1,7 +1,7 @@
 Upstream project: OpenGVLab InternVideo-Next (base, patch-14, res-224, 16-frame)
 Repository:       https://huggingface.co/revliter/internvideo_next_base_p14_res224_f16
 Pinned commit:    ff2659b9be360a6b1e94b1eb381778a960da6019
-Retrieved:        <YYYY-MM-DD to be stamped by the lead at review>
+Retrieved:        2026-07-06
 License:          MIT
 SPDX-License-Identifier: MIT
 Paper:            arXiv:2512.01342 (InternVideo-Next, CVPR 2026)
