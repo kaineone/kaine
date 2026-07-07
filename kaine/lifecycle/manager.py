@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult
 
+from kaine.lifecycle._merge_base import AdapterMerger, FakeAdapterMerger
 from kaine.lifecycle.snapshot import (
     ForkSnapshot,
     list_snapshots,
@@ -40,55 +41,12 @@ class UnmergedAdaptersError(RuntimeError):
     """
 
 
-@runtime_checkable
-class AdapterMerger(Protocol):
-    """Merges two parents' LoRA adapter paths into a single adapter set.
-
-    `merger_from_name("auto")` — the shipped default — selects the real
-    `TiesDareAdapterMerger` (`kaine.lifecycle.adapter_merge`) whenever the
-    PEFT extra (`kaine[training]`) is importable, and falls back to this
-    module's no-op `FakeAdapterMerger` otherwise. `FakeAdapterMerger` also
-    remains available as an explicit dev/no-extra selection.
-    """
-
-    def merge(
-        self, adapters_a: list[str], adapters_b: list[str]
-    ) -> tuple[list[str], dict[str, Any]]:
-        ...
-
-
-class FakeAdapterMerger:
-    """No-op merger: unions the two adapter path lists WITHOUT performing
-    any real weight merge.
-
-    This is the fallback used when the PEFT extra (`kaine[training]`) is
-    absent, or when an operator explicitly selects
-    `adapter_merger = "fake"`. When the extra is present,
-    `merger_from_name("auto")` (the shipped default) selects the real
-    `TiesDareAdapterMerger` instead. When this stub actually runs with
-    adapters on both sides (i.e. a genuine fork/merge), it logs so the
-    no-op is visible rather than silent; it stays quiet for the
-    empty/trivial case that dominates default deployments.
-    """
-
-    def merge(
-        self, adapters_a: list[str], adapters_b: list[str]
-    ) -> tuple[list[str], dict[str, Any]]:
-        combined: list[str] = []
-        seen: set[str] = set()
-        for src in (adapters_a, adapters_b):
-            for path in src:
-                if path not in seen:
-                    combined.append(path)
-                    seen.add(path)
-        if adapters_a and adapters_b:
-            log.info(
-                "FakeAdapterMerger: no real merger configured — unioning %d "
-                "adapter path(s) without merging weights (enable "
-                "[lifecycle.adapter_merge] + the PEFT extra for a real merge)",
-                len(combined),
-            )
-        return combined, {"adapter_merge_skipped": "no merger configured"}
+# `AdapterMerger` (Protocol) and `FakeAdapterMerger` live in the leaf module
+# `kaine.lifecycle._merge_base` so this orchestrator and the PEFT-backed
+# `kaine.lifecycle.adapter_merge` both depend on that common leaf instead of on
+# each other (breaking the former manager <-> adapter_merge import cycle). They
+# are re-exported above so `kaine.lifecycle.manager.AdapterMerger` /
+# `.FakeAdapterMerger` stay the public import path.
 
 
 @runtime_checkable
