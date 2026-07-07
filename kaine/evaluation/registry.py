@@ -9,7 +9,6 @@ called during cycle shutdown.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -17,7 +16,6 @@ from typing import Any, Callable, Optional
 from kaine.evaluation.ab_divergence import (
     ABDivergenceObserver,
     BareInferenceClient,
-    FakeBareInferenceClient,
     HTTPBareInferenceClient,
 )
 from kaine.evaluation.affect_correlation import AffectCorrelationRecorder

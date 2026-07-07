@@ -28,7 +28,6 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.thymos import Thymos
 from kaine.modules.thymos.coupling import (
-    EMOTION_VAD,
     CouplingConfig,
     compute_coupling,
 )

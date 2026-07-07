@@ -8,8 +8,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kaine.bus.client import AsyncBus
-from kaine.bus.config import BusConfig
 from kaine.bus.schema import EventValidationError, validate_event
 
 from tests.systems._harness import SubsystemHarness

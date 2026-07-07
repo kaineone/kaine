@@ -21,10 +21,9 @@ import asyncio
 import io
 import logging
 import threading
-import time
 import wave
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, runtime_checkable
+from typing import Any, Awaitable, Callable, Literal, Protocol, runtime_checkable
 
 log = logging.getLogger(__name__)
 

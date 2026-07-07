@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from kaine.setup import model_server as ms
 from kaine.setup.model_server import (

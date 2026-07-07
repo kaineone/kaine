@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from kaine.transfer.email_request import (
     DEFAULT_RECIPIENT,
     RenderedEmail,

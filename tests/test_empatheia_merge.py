@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from kaine.modules.empatheia.agent import AgentModel, EMOTION_CATEGORIES
+from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.store import (
     EmpatheiaMergeStrategy,
     InMemoryAgentStore,

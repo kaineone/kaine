@@ -132,7 +132,6 @@ def test_h8_raises_when_enabled_approved_extras_missing(tmp_path, monkeypatch):
     return None / install FakeTrainer — when voice_alignment is enabled,
     operator-approved, and [training] extras are missing."""
     import sys
-    import importlib
     from kaine.boot import VoiceAlignmentConfigError, _resolve_trainer
 
     monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")

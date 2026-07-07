@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from kaine.evaluation.ab_divergence import FakeBareInferenceClient
-from kaine.evaluation.config import EvaluationConfig, EvaluationPaths
+from kaine.evaluation.config import EvaluationConfig
 from kaine.evaluation.embeddings import HashEmbedder
 from kaine.evaluation.registry import SidecarRegistry
 

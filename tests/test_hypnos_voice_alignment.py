@@ -11,7 +11,6 @@ from kaine.modules.hypnos.voice_alignment import (
     DPOPairBuilder,
     FakeTrainer,
     Trainer,
-    TrainingResult,
     UnslothDPOTrainer,
     VoiceAlignmentConfig,
 )

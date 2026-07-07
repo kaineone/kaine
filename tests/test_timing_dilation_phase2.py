@@ -158,8 +158,6 @@ async def test_topos_capture_cadence_real_sleep_scales():
         awaitable.close()
         raise TimeoutError
 
-    import kaine.modules.topos.live as live_mod
-
     cfg = LiveCameraConfig(capture_interval_s=2.0)
 
     async def _real_timeout(scale: float) -> float:

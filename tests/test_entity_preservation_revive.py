@@ -41,7 +41,6 @@ from kaine.modules.phantasia.module import Phantasia
 from kaine.modules.phantasia.world_model import (
     CheckpointMismatchError,
     FakeWorldModel,
-    TrainOutcome,
 )
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import (

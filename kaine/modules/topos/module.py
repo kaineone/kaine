@@ -23,7 +23,6 @@ from kaine.modules.topos.live import (
     LiveCamera,
     LiveCameraConfig,
     PerceptionUnavailableError,
-    _VideoSource,
 )
 
 log = logging.getLogger(__name__)

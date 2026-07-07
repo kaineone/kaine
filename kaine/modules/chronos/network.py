@@ -124,7 +124,6 @@ class ForwardPredictionHead:
 
     def state_dict(self) -> dict[str, Any]:
         """Return serialisable weight tensors (no raw feature data)."""
-        torch = self._torch
         return {
             "weight": self._head.weight.detach().cpu().tolist(),
             "bias": self._head.bias.detach().cpu().tolist(),

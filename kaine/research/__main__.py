@@ -36,7 +36,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Callable, IO, Optional
+from typing import Callable, IO
 
 log = logging.getLogger(__name__)
 

@@ -2,7 +2,6 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import sys
-import types
 
 import pytest
 

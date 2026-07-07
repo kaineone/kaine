@@ -96,7 +96,6 @@ async def test_in_hypnos_true_after_sleep_started(bus: AsyncBus):
 async def test_weights_frozen_during_hypnos(bus: AsyncBus):
     """Forward-model weights must not change while _in_hypnos is True."""
     pytest.importorskip("torch")
-    reader = FakeMetricsReader({"cpu_percent": 50.0, "ram_percent": 60.0})
     soma = Soma(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await soma.initialize()
     try:
@@ -152,7 +151,6 @@ async def test_in_hypnos_false_after_sleep_completed(bus: AsyncBus):
 async def test_adaptation_resumes_after_sleep_completed(bus: AsyncBus):
     """After hypnos.sleep.completed, online adaptation must be re-enabled."""
     pytest.importorskip("torch")
-    reader = FakeMetricsReader({"cpu_percent": 50.0, "ram_percent": 60.0})
     soma = Soma(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await soma.initialize()
     try:

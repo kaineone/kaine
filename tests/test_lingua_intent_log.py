@@ -4,7 +4,6 @@
 import json
 from pathlib import Path
 
-import pytest
 
 from kaine.modules.lingua.intent_log import IntentExpressionLog
 

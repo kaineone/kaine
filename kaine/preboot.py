@@ -398,7 +398,6 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
                 str(exc) + (f" ({key_note})" if key_note else ""),
             )
         )
-        encryptor = None
     else:
         if encryptor.enabled:
             results.append(

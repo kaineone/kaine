@@ -4,14 +4,8 @@
 """Lifecycle subsystem: snapshot/restore round-trip + fork + merge."""
 from __future__ import annotations
 
-import pytest
 
 from kaine.lifecycle.manager import ForkManager
-from kaine.lifecycle.strategies import (
-    EidolonMergeStrategy,
-    MnemosMergeStrategy,
-    UnionMergeStrategy,
-)
 
 
 class FakeModule:

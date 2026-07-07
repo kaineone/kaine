@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from kaine.modules.hypnos.capability_eval import (
-    CapabilityProbe,
     LocalProbeSetCapabilityEval,
     NoopCapabilityEval,
     _score_response,

@@ -13,7 +13,6 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -23,7 +22,6 @@ from kaine.modules.hypnos.capability_eval import (
 )
 from kaine.modules.hypnos.voice_alignment import (
     DPOPair,
-    TrainingResult,
     VoiceAlignmentConfig,
 )
 

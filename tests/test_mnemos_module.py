@@ -527,7 +527,6 @@ async def _mnemos_with_traces(
     Each entry is ``(text, timestamp)`` so callers can spread traces across
     distinct timestamps (and therefore distinct time-window buckets).
     """
-    import time as _time
 
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()

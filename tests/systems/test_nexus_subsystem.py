@@ -4,7 +4,6 @@
 """Nexus subsystem: routes return expected shapes with the privacy boundary."""
 from __future__ import annotations
 
-import asyncio
 
 import httpx
 import pytest
@@ -15,7 +14,6 @@ from datetime import datetime, timezone
 from kaine.nexus.app import create_app
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import NexusConfig
-from kaine.nexus.conversation import ConversationState
 from kaine.nexus.privacy import PrivacyFilter
 
 

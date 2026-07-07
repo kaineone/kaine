@@ -5,14 +5,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
-from kaine.modules.empatheia.agent import AgentModel, EMOTION_CATEGORIES
+from kaine.modules.empatheia.agent import EMOTION_CATEGORIES
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import InMemoryAgentStore
 

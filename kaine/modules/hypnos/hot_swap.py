@@ -22,7 +22,6 @@ source of truth; hot-swap is best-effort notification only.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re

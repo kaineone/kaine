@@ -324,7 +324,6 @@ def format_suite_report(report: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import json
-    import sys
     from pathlib import Path
 
     parser = argparse.ArgumentParser(

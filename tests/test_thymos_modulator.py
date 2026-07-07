@@ -22,7 +22,7 @@ def _event() -> Event:
 
 
 def test_satisfies_thymos_modulator_protocol():
-    mod = StateModulator(lambda: DimensionalState())
+    mod = StateModulator(DimensionalState)
     assert isinstance(mod, ThymosModulator)
 
 
@@ -64,8 +64,8 @@ async def test_ceiling_at_full_arousal():
 
 def test_invalid_floor_ceiling_rejected():
     with pytest.raises(ValueError):
-        StateModulator(lambda: DimensionalState(), floor=0.5, ceiling=0.3)
+        StateModulator(DimensionalState, floor=0.5, ceiling=0.3)
     with pytest.raises(ValueError):
-        StateModulator(lambda: DimensionalState(), floor=-0.1)
+        StateModulator(DimensionalState, floor=-0.1)
     with pytest.raises(ValueError):
-        StateModulator(lambda: DimensionalState(), ceiling=1.5)
+        StateModulator(DimensionalState, ceiling=1.5)

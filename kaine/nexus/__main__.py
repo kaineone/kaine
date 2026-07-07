@@ -26,7 +26,6 @@ from kaine.nexus.config import load_nexus_config
 from kaine.nexus.health import load_health_prober
 from kaine.nexus.conversation import (
     LINGUA_EXTERNAL_STREAM,
-    HYPNOS_STREAM,
 )
 
 

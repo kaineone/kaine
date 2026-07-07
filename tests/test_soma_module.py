@@ -2,9 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
-import json
 from datetime import datetime, timezone
-from typing import Any
 
 import pytest
 

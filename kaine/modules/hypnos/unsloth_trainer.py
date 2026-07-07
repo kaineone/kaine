@@ -33,7 +33,6 @@ from kaine.modules.hypnos.capability_eval import (
     AbliterationProbeScorer,
     CapabilityEval,
     LocalProbeSetCapabilityEval,
-    load_probes,
 )
 from kaine.modules.hypnos.voice_audit import append_voice_audit
 from kaine.modules.hypnos.hot_swap import dispatch as dispatch_hot_swap

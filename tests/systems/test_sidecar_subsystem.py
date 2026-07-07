@@ -4,7 +4,6 @@
 """Sidecar subsystem: registry boots, observers write JSONL, boundary holds."""
 from __future__ import annotations
 
-import asyncio
 import subprocess
 from pathlib import Path
 

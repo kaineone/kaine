@@ -32,7 +32,6 @@ import pytest
 
 from kaine.bus.schema import Event
 from kaine.cycle.engine import BASE_EPOCH, CognitiveCycle
-from kaine.cycle.types import WorkspaceSnapshot
 from kaine.experiment import set_global_seed
 from kaine.workspace import (
     NoveltyTracker,
@@ -41,7 +40,7 @@ from kaine.workspace import (
     StaticThymosModulator,
     Syneidesis,
 )
-from kaine.workspace.volition import VOLITION_STREAM, Volition
+from kaine.workspace.volition import Volition
 from tests._fakes import FakeClock
 
 SEED = 1234

@@ -35,7 +35,7 @@ def test_change_detector_observes_drop_in_change_for_static_scene():
 def test_habituator_returns_decreasing_novelty_for_static_scene():
     hab = RollingMeanHabituator(window=4)
     n1 = hab.observe([1.0, 0.0])
-    n2 = hab.observe([1.0, 0.0])
+    hab.observe([1.0, 0.0])
     n3 = hab.observe([1.0, 0.0])
     # Novelty / habituation score should decrease with repeated input.
     assert n3 <= n1

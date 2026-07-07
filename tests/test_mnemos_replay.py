@@ -170,7 +170,6 @@ async def test_replay_emits_events_with_content_inside_window(bus: AsyncBus):
     await mnemos.initialize()
     try:
         # Store some memories via core so they land in short_term with affect.
-        from kaine.modules.mnemos.memory import MnemosCore
         for i in range(3):
             await mnemos.core.store(
                 f"memory trace {i}",

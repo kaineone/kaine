@@ -35,7 +35,7 @@ function-local import as a convenience for the CLI.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from kaine.evaluation.benchmarks.instrument_runners.shared import (

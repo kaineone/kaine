@@ -163,8 +163,6 @@ class LatentForwardModel:
         Returns the L2 prediction error ``||latent − last_prediction||``
         (0.0 on the very first frame when there is no prior prediction).
         """
-        torch = self._torch
-
         # 1. Compute prediction error from the previous step's prediction.
         if self._last_prediction is None:
             prediction_error = 0.0

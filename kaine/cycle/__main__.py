@@ -24,12 +24,10 @@ method is what actually starts the work. Boot order:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import signal
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +38,6 @@ from kaine.boot import (
     make_coherence_scorer,
     make_hypnos,
     make_salience_factors,
-    rewire_module,
 )
 from kaine.boot import _CLOCKED_FACTORIES as CLOCKED_FACTORIES
 from kaine.bus.client import AsyncBus

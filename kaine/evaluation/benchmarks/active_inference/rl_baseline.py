@@ -20,7 +20,7 @@ recorded in every result, so the baseline is not strawmanned.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np

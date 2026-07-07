@@ -4,8 +4,6 @@
 """Cycle subsystem: tick collects events, calls syneidesis, broadcasts."""
 from __future__ import annotations
 
-import asyncio
-import time
 
 import pytest
 

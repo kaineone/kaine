@@ -18,9 +18,7 @@ build.
 """
 from __future__ import annotations
 
-from dataclasses import replace
 
-import numpy as np
 import pytest
 
 from kaine.evaluation.benchmarks.active_inference.envs import (

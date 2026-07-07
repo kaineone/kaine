@@ -377,7 +377,7 @@ async def test_mnemos_recall_no_error_flag_on_success(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_storage_error_is_raised_by_qdrant_search():
     """QdrantStorage.search must raise StorageError (not return []) on backend failure."""
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import AsyncMock
 
     from kaine.modules.mnemos.storage import QdrantStorage
 

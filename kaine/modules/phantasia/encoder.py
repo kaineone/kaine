@@ -25,7 +25,6 @@ Pure stdlib — no numpy / no jax — so the suite encodes observations without 
 """
 from __future__ import annotations
 
-from typing import Any
 
 from kaine.cycle.types import WorkspaceSnapshot
 

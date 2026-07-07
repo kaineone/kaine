@@ -35,7 +35,6 @@ from kaine.evaluation.benchmarks.active_inference.envs import DiscretePOMDP
 from kaine.evaluation.benchmarks.active_inference.metrics import (
     NEGATIVE,
     NULL,
-    WIN,
     VerdictConfig,
     aggregate_verdict,
     classify_verdict,
@@ -45,7 +44,6 @@ from kaine.evaluation.benchmarks.active_inference.metrics import (
     steps_to_competence,
 )
 from kaine.evaluation.benchmarks.active_inference.rl_baseline import (
-    QLearningConfig,
     train_q_agent,
     tune_hyperparameters,
 )

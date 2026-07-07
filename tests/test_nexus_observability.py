@@ -64,7 +64,7 @@ NEW_EVENT_TYPES = [
 @pytest.mark.parametrize("source,type_", NEW_EVENT_TYPES)
 def test_new_event_types_use_named_template(source, type_):
     """Each new event type must resolve to a named template (not fallback)."""
-    from kaine.faithful.templates import TEMPLATES, fallback_template
+    from kaine.faithful.templates import TEMPLATES
 
     assert (source, type_) in TEMPLATES, (
         f"({source!r}, {type_!r}) not registered in TEMPLATES"
@@ -188,7 +188,6 @@ async def test_encryption_probe_disabled():
 
 @pytest.mark.asyncio
 async def test_encryption_probe_enabled_with_env_key(monkeypatch):
-    import os
     from kaine.nexus.health import probe_state_encryption, UP
 
     monkeypatch.setenv("KAINE_STATE_KEY", "x" * 32)
@@ -201,7 +200,6 @@ async def test_encryption_probe_enabled_with_env_key(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_encryption_probe_enabled_no_key(monkeypatch):
-    import os
     from kaine.nexus.health import probe_state_encryption, DEGRADED
 
     monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
@@ -919,7 +917,6 @@ async def test_diagnostics_context_flattens_all_blocks(tmp_path):
     import httpx
     from fastapi import FastAPI
     from kaine.nexus.bridge import BusBridge
-    from kaine.nexus.config import NexusConfig
     from kaine.nexus.diagnostics import build_diagnostics_router
     from kaine.nexus.privacy import PrivacyFilter
 

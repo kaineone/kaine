@@ -28,7 +28,7 @@ entirely the live engine's.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -137,7 +137,6 @@ class AIFAgent:
         """
         import jax.numpy as jnp
 
-        agent = self._engine._agent
         # agent.D is the prior over hidden states (list per factor). Carry a
         # batched copy (pymdp uses a leading batch dim of size 1).
         self._prior = [jnp.array(np.asarray(d).reshape(1, -1)) for d in self._model.D]

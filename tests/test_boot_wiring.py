@@ -15,7 +15,6 @@ config path. Phase 9's integration tests used `StreamProducerFake`.
 """
 from __future__ import annotations
 
-from typing import Any
 
 import pytest
 

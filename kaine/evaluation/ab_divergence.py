@@ -9,8 +9,6 @@ chat endpoint as Lingua via httpx so behavior matches the real one.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import random
 from datetime import datetime, timezone

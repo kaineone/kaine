@@ -18,8 +18,6 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.hypnos import (
-    DPOPair,
-    FakeTrainer,
     Hypnos,
     Trainer,
     TrainingResult,

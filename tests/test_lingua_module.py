@@ -20,7 +20,6 @@ from kaine.modules.lingua import (
     IntentExpressionLog,
     Lingua,
 )
-from kaine.workspace.volition import VOLITION_STREAM
 
 
 async def _publish_intent(bus: AsyncBus, kind: str, about: str) -> None:

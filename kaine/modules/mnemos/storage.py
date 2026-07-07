@@ -14,7 +14,7 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 log = logging.getLogger(__name__)
 

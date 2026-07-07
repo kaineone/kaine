@@ -12,7 +12,6 @@ sensitive files are present in eval_root.
 from __future__ import annotations
 
 import json
-import os
 from io import StringIO
 from pathlib import Path
 
@@ -182,7 +181,6 @@ def test_preview_lists_contents_and_excluded_note(tmp_path: Path):
 
 def test_preview_never_sends(tmp_path: Path, monkeypatch):
     """--preview CLI flag must build and print but never call send_or_write."""
-    from kaine.research import submission as sub_mod
     from kaine.transfer import email_request as email_mod
 
     send_called = []
