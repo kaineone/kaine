@@ -69,7 +69,7 @@ class GateResult:
             )
         lines = [
             "Refusing to boot KAINE cycle: the autonomous research safety net is "
-            "not live and verified.",
+            + "not live and verified.",
             "",
             "The research phase runs unsupervised (no human in the loop), so the",
             "safeguards must be present in the system itself. The following are",

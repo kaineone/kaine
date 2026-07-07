@@ -218,7 +218,6 @@ def health_check(
     _probe = probe if probe is not None else verify_served_alias
 
     deadline = _now() + timeout_s
-    last = "no probe attempted"
     while True:
         result = _probe(chat_url, alias, api_key=api_key)
         if result.listed:

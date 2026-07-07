@@ -42,12 +42,11 @@ class _ConcreteModule(BaseModule):
     name = "test_module"
 
     def __init__(self) -> None:
-        # Bypass full __init__ — we only need the class hierarchy for
-        # method resolution, not a live bus.
-        self._bus = _FakeBus()  # type: ignore[assignment]
-        self._tasks = []
-        self._stopped = __import__("asyncio").Event()
-        self._workspace_cursor = "$"
+        # BaseModule.__init__ is synchronous and only needs a bus-shaped
+        # object, so the fake bus satisfies it directly — no need to bypass
+        # the real initialization (which also sets up the oscillator slot
+        # and heartbeat that set_frequency/phase() rely on via getattr).
+        super().__init__(_FakeBus())  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------

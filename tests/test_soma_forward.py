@@ -194,6 +194,7 @@ def test_nonfinite_loss_skips_update():
     # Capture weight snapshot before the bad step.
     before = m.state_dict()
     # Inject non-finite input — the model should survive.
+    err = None
     try:
         err = m.step([float("inf"), float("nan"), 0.0, 0.0])
     except Exception as exc:

@@ -191,9 +191,9 @@ def main() -> None:
             str(py),
             "-c",
             "import torch, json; from kaine.hardware import describe_host; "
-            "print('torch', torch.__version__); "
-            "print('cuda.is_available', torch.cuda.is_available()); "
-            "print(json.dumps(describe_host(), indent=2, default=str))",
+            + "print('torch', torch.__version__); "
+            + "print('cuda.is_available', torch.cuda.is_available()); "
+            + "print(json.dumps(describe_host(), indent=2, default=str))",
         ]
     )
     print("==> install complete")
