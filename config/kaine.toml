@@ -317,7 +317,23 @@ forward_prediction = false
 prediction_error_window = 32
 
 [topos]
+# Encoder backend selector (topos-temporal-video-encoder).
+#   "dinov2"          — frozen DINOv2-small, per-frame 384-dim CLS (shipped default).
+#   "internvideo_next" — temporally-native InternVideo-Next clip encoder (MIT,
+#                        OpenGVLab, vendored + revision-pinned, loaded with
+#                        trust_remote_code=False). Its 16-frame clip forward pass
+#                        lands in Phase 2; selecting it now raises NotImplementedError
+#                        (it never fakes an embedding). The default flips to
+#                        "internvideo_next" once that encoder is real.
+# The InternVideo-Next weights (~182 MB) are fetched once at setup into a
+# git-ignored local dir; runtime never downloads them. Fetch with:
+#   python -m kaine.setup.internvideo_next --yes
+encoder_backend = "dinov2"
 encoder_model_id = "facebook/dinov2-small"
+# InternVideo-Next weights location + pinned revision (used only when
+# encoder_backend = "internvideo_next"; must match external/internvideo_next/UPSTREAM).
+encoder_revision = "ff2659b9be360a6b1e94b1eb381778a960da6019"
+encoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"
 # Per docs/kaine-paper.md §6.1 the secondary GPU (~8 GB VRAM) hosts the
 # world-model encoder. Accepts "auto", "cpu", "cuda", or "cuda:N".
 # resolve_device() falls back to cuda:0 with a warning on single-GPU

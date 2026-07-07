@@ -87,10 +87,22 @@ compose/*.env
 external/*
 !external/dreamerv3/
 external/dreamerv3/__pycache__/
+# Vendored InternVideo-Next modeling source (path a — literal verbatim vendor);
+# re-included for provenance (see external/internvideo_next/UPSTREAM). The 182 MB
+# model.safetensors is NOT vendored here — it is fetched to state/models/ below.
+!external/internvideo_next/
+external/internvideo_next/__pycache__/
+# Never let the 182 MB weights slip in even if fetched into the vendored dir by
+# mistake (the real fetch lands them under state/models/, ignored above).
+external/internvideo_next/*.safetensors
 
 # HuggingFace and model caches
 .cache/
 hf-cache/
+# InternVideo-Next fp16 weights (~182 MB) fetched once at setup by
+# `kaine/setup/internvideo_next.py`. Under state/ (already ignored above); listed
+# explicitly as belt-and-suspenders so the weights never land in git.
+state/models/internvideo_next_base_p14_res224_f16/
 
 # Test artifacts
 .pytest_cache/

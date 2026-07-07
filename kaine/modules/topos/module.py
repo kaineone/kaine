@@ -12,8 +12,9 @@ from kaine.modules.base import BaseModule
 from kaine.modules.topos.change import ChangeDetector, CosineChangeDetector
 from kaine.modules.topos.encoder import (
     DEFAULT_DINOV2_MODEL_ID,
-    DINOv2Encoder,
+    DEFAULT_ENCODER_BACKEND,
     Encoder,
+    make_encoder,
 )
 from kaine.modules.topos.habituation import (
     RollingMeanHabituator,
@@ -43,7 +44,9 @@ class Topos(BaseModule):
         encoder: Optional[Encoder] = None,
         change_detector: Optional[ChangeDetector] = None,
         habituator: Optional[SceneHabituator] = None,
+        encoder_backend: str = DEFAULT_ENCODER_BACKEND,
         encoder_model_id: str = DEFAULT_DINOV2_MODEL_ID,
+        encoder_weights_dir: Any = None,
         device_preference: str | None = "auto",
         baseline_salience: float = 0.2,
         alert_salience: float = 0.7,
@@ -77,9 +80,17 @@ class Topos(BaseModule):
             raise ValueError("change_alert_threshold must be >= 0")
         if prediction_error_window < 2:
             raise ValueError("prediction_error_window must be >= 2")
-        self._encoder: Encoder = encoder or DINOv2Encoder(
-            model_id=encoder_model_id,
+        # Encoder selection (topos-temporal-video-encoder). An explicitly injected
+        # encoder wins (tests, custom wiring); otherwise the encoder_backend
+        # selector builds one. A default (untouched) encoder_model_id is treated as
+        # "unset" so make_encoder can pick the per-backend default id.
+        self._encoder: Encoder = encoder or make_encoder(
+            encoder_backend,
+            model_id=(
+                encoder_model_id if encoder_model_id != DEFAULT_DINOV2_MODEL_ID else None
+            ),
             device_preference=device_preference,
+            weights_dir=encoder_weights_dir,
         )
         self._change_detector: ChangeDetector = (
             change_detector or CosineChangeDetector()

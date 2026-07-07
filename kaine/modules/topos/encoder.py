@@ -19,6 +19,14 @@ from typing import Any, Protocol, runtime_checkable
 log = logging.getLogger(__name__)
 
 DEFAULT_DINOV2_MODEL_ID: str = "facebook/dinov2-small"
+DEFAULT_INTERNVIDEO_NEXT_MODEL_ID: str = "revliter/internvideo_next_base_p14_res224_f16"
+
+# The shipped default encoder backend. Stays "dinov2" — a real, working encoder —
+# until Phase 2 of the topos-temporal-video-encoder change implements the
+# InternVideo-Next clip forward pass; the default flip to "internvideo_next"
+# happens THEN (no pretend processes: never ship a stub as the default path).
+DEFAULT_ENCODER_BACKEND: str = "dinov2"
+ENCODER_BACKENDS: tuple[str, ...] = ("dinov2", "internvideo_next")
 
 
 @runtime_checkable
@@ -154,6 +162,114 @@ class DINOv2Encoder:
         # transformers models are reclaimed by GC; nothing explicit to do.
         self._model = None
         self._processor = None
+
+
+class InternVideoNextEncoder:
+    """Frozen, temporally-native InternVideo-Next clip encoder.
+
+    **Phase 1 (this pass) is a scaffold.** The vendoring, the offline-weights
+    fetch, the no-remote-code loader
+    (:mod:`kaine.modules.topos.internvideo_next_loader`), and this class's wiring
+    into the ``encoder_backend`` selector are REAL. The clip forward pass — the
+    16-frame ``encode_clip`` that runs ``extract_features`` and pools
+    ``[1, 4096, 768] → 768`` — is implemented in Phase 2.
+
+    Until Phase 2, ``load``/``encode`` raise ``NotImplementedError`` (fail
+    honestly). This backend NEVER returns a fake/zero/simulated embedding, and it
+    is NOT the shipped default (that stays ``DINOv2Encoder``). Selecting it before
+    Phase 2 is a loud, explicit error — by design (no pretend processes).
+    """
+
+    def __init__(
+        self,
+        model_id: str = DEFAULT_INTERNVIDEO_NEXT_MODEL_ID,
+        *,
+        device_preference: str | None = "auto",
+        weights_dir: Any = None,
+    ) -> None:
+        from kaine.modules.topos.internvideo_next_loader import (
+            DEFAULT_WEIGHTS_DIR,
+            PINNED_REVISION,
+        )
+
+        self._model_id = model_id
+        self._device_preference = device_preference
+        self._device = "cpu"
+        self._weights_dir = weights_dir if weights_dir is not None else DEFAULT_WEIGHTS_DIR
+        self._revision = PINNED_REVISION
+        self._model: Any = None
+        self._latent_dim: int | None = None
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    @property
+    def revision(self) -> str:
+        return self._revision
+
+    @property
+    def latent_dim(self) -> int:
+        if self._latent_dim is None:
+            raise RuntimeError(
+                "InternVideo-Next encoder not loaded (Phase 2 implements the clip "
+                "forward pass; latent_dim is probed at load)"
+            )
+        return self._latent_dim
+
+    @property
+    def device(self) -> str:
+        return self._device
+
+    def _not_implemented(self) -> NotImplementedError:
+        return NotImplementedError(
+            "InternVideo-Next encoder forward pass lands in Phase 2 of the "
+            "topos-temporal-video-encoder change (clip seam + ring buffer + "
+            "pooling). Phase 1 ships the vendored code, offline-weights fetch, "
+            "no-remote-code loader, and this selector scaffolding only. Until "
+            "Phase 2, use encoder_backend='dinov2' (the shipped default). This "
+            "backend refuses to return a fake embedding."
+        )
+
+    async def load(self) -> None:
+        raise self._not_implemented()
+
+    async def encode(self, image: Any) -> list[float]:
+        raise self._not_implemented()
+
+    async def shutdown(self) -> None:
+        self._model = None
+
+
+def make_encoder(
+    backend: str | None = None,
+    *,
+    model_id: str | None = None,
+    device_preference: str | None = "auto",
+    weights_dir: Any = None,
+) -> Encoder:
+    """Return the encoder for ``backend`` (config ``[topos].encoder_backend``).
+
+    ``"dinov2"`` → :class:`DINOv2Encoder` (the shipped default, a real per-frame
+    encoder); ``"internvideo_next"`` → :class:`InternVideoNextEncoder` (the
+    temporally-native clip encoder; its forward pass is a Phase-2 stub that fails
+    loudly rather than fake a result). ``model_id=None`` selects the per-backend
+    default id. Unknown backends raise ``ValueError``."""
+    resolved = (backend or DEFAULT_ENCODER_BACKEND).strip().lower()
+    if resolved == "dinov2":
+        return DINOv2Encoder(
+            model_id=model_id or DEFAULT_DINOV2_MODEL_ID,
+            device_preference=device_preference,
+        )
+    if resolved == "internvideo_next":
+        return InternVideoNextEncoder(
+            model_id=model_id or DEFAULT_INTERNVIDEO_NEXT_MODEL_ID,
+            device_preference=device_preference,
+            weights_dir=weights_dir,
+        )
+    raise ValueError(
+        f"unknown encoder_backend {resolved!r}; expected one of {ENCODER_BACKENDS}"
+    )
 
 
 def _solid_image(width: int, height: int):

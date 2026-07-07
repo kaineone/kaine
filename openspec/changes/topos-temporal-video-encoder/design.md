@@ -388,25 +388,34 @@ Recorded so the operator can reopen this cleanly, not to act on now:
   provenance-pinned, in exchange for eliminating a `trust_remote_code` runtime
   path.
 
-## Flags for the operator
+## Operator decisions (LOCKED 2026-07-06)
 
-1. **Delete vs. keep DINOv2** (§6). Recommendation: keep as a non-default,
-   non-shipped fallback behind `encoder_backend`; strip the Meta model id from the
-   shipped config either way.
-2. **`clip_stride` default** (§1b). Recommendation: 3 (≈ experiential 3.33 Hz),
-   pending a shakedown GPU benchmark on `cuda:1` — same "benchmark before ship"
-   gate that cleared `vision_sample_hz = 10`. If the GPU comfortably sustains it,
-   a smaller stride (faster salience) is available; if not, a larger stride.
-3. **Pool-vector L2 normalization** (§2). Recommendation: do NOT normalize (keep
-   habituation/prediction-error magnitude signal); re-tune thresholds instead.
-   Low-stakes, reversible.
-4. **`forward_model_units` bump** (§3). Recommendation: raise 128→256 for the
-   768-d target. Pure tuning, not correctness.
-5. **Topos forward model: current online head vs. InternVideo-Next predictor**
-   (§8) — gated on the standalone-interface check. **Gate is currently CLOSED**:
-   the published checkpoint ships **no predictor**, so the option is infeasible
-   as-is. Recommendation: **keep the current small online-adapting head.** If a
-   predictor checkpoint ever appears, adopt only as a **frozen prior + online
-   residual** and only if the accuracy gain outweighs the deepened coupling and
-   the individuation-posture cost. (Never a Phantasia replacement — that stays
-   DreamerV3.)
+All five flags below are **DECIDED**; the recommendations were accepted. One
+sequencing constraint was added at implementation time to honor "no pretend
+processes": the shipped default is **not** flipped to InternVideo-Next until its
+forward pass is genuinely implemented. Implementation is therefore **phased** —
+**Phase 1** vendors the code, ships the offline-weights fetch, the no-remote-code
+loader, and the `encoder_backend` selector (default stays `dinov2`, a real working
+encoder); **Phase 2** implements the real clip pipeline and only then flips the
+default. Selecting `internvideo_next` before Phase 2 raises a loud
+`NotImplementedError` (never a fake embedding).
+
+1. **DINOv2: KEEP** (§6) as a non-default, non-shipped fallback behind
+   `encoder_backend`. InternVideo-Next becomes the shipped default and
+   `facebook/dinov2-small` is stripped from the shipped config + docs — **in
+   Phase 2**, once the encoder is real. Phase 1 keeps `dinov2` as the default.
+   **DECIDED.**
+2. **`clip_stride = 3`** (§1b, ≈ experiential 3.33 Hz), **provisional** pending a
+   shakedown GPU benchmark on the secondary GPU — same "benchmark before ship"
+   gate that cleared `vision_sample_hz = 10`. **DECIDED.**
+3. **Do NOT L2-normalize** the pooled vector (§2) — keep the
+   habituation/prediction-error magnitude signal; re-tune thresholds instead.
+   Prefer the native attention-pool if reachable, else mean. **DECIDED.**
+4. **`forward_model_units` 128 → 256** (§3) for the 768-d target. Pure tuning.
+   **DECIDED.**
+5. **Predictor NOT adopted / option CLOSED** (§8). Verified: the published
+   checkpoint is encoder-only (a single `model.safetensors`; no predictor/decoder
+   class, config, or weights). Topos keeps its current small online-adapting
+   `LatentForwardModel`; Phantasia stays DreamerV3. If a predictor checkpoint ever
+   appears, reopen only as a **frozen prior + online residual**, never as a
+   Phantasia replacement. **DECIDED / CLOSED.**
