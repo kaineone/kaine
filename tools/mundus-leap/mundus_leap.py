@@ -45,7 +45,10 @@ def log(*args: object) -> None:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         with (STATE_DIR / "shim.log").open("a") as fh:
             fh.write(f"{time.time():.3f} {msg}\n")
-    except Exception:
+    except OSError:
+        # The mirror-to-file is a convenience; stderr (captured by the
+        # viewer) already has the message, so a disk/permissions issue
+        # writing the log file shouldn't crash the shim.
         pass
 
 
@@ -82,6 +85,9 @@ def wait_until_in_world(timeout: float = 180.0) -> dict:
             if pos.get("region") or pos.get("global") or pos.get("position"):
                 return pos
         except TimeoutError:
+            # Expected before login/region-entry completes: getPosition has
+            # nothing to reply with yet. Keep polling until the outer
+            # deadline expires.
             pass
         log("waiting for login / region ...")
         time.sleep(3.0)

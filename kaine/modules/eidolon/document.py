@@ -32,7 +32,9 @@ def _load_surnames() -> tuple[str, ...]:
         names = tuple(n.strip() for n in text.splitlines() if n.strip())
         if names:
             return names
-    except Exception:
+    except (OSError, UnicodeDecodeError):
+        # File missing, unreadable, or garbled — fall through to the
+        # built-in defaults so naming never fails.
         pass
     # Defensive fallback so naming never fails if the data file is missing.
     return ("Voxel", "Atheria", "Nova", "Aurora", "Argonaut", "Arcane")
@@ -134,5 +136,7 @@ def save_atomic(path: Path, model: SelfModel) -> None:
         try:
             os.unlink(tmp_name)
         except FileNotFoundError:
+            # Best-effort tmp cleanup — fdopen may have failed before the
+            # file was created, so it may simply not exist.
             pass
         raise

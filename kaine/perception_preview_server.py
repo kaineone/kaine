@@ -170,7 +170,9 @@ class PreviewServer:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
-                pass
+                # Best-effort close of a possibly already-broken connection;
+                # mirrors the `stop()` server-close pattern above.
+                log.debug("preview connection close failed", exc_info=True)
 
     def _route(self, request_line: bytes) -> bytes:
         try:

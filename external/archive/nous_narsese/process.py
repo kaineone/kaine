@@ -74,7 +74,10 @@ class NARProcess:
         try:
             self._proc.stdin.write(b"quit\n")  # type: ignore[union-attr]
             await self._proc.stdin.drain()  # type: ignore[union-attr]
-        except Exception:
+        except OSError:
+            # The process may have already exited (broken/closed pipe); the
+            # wait_for()/terminate()/kill() escalation below still runs
+            # regardless, so a failed graceful "quit" isn't fatal here.
             pass
         try:
             await asyncio.wait_for(self._proc.wait(), timeout=2.0)

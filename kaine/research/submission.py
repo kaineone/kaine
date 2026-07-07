@@ -647,8 +647,24 @@ def _encrypt_bundle(bundle: Bundle) -> None:
             else:
                 try:
                     child.unlink()
-                except OSError:
-                    pass
+                except OSError as exc:
+                    # Encryption itself succeeded (bundle.tar.enc is on disk),
+                    # but this plaintext source file could not be removed
+                    # (permissions, external lock, ...). Silently continuing
+                    # would leave a plaintext copy on disk while the bundle is
+                    # reported as encrypted — surface it so the operator does
+                    # not mistake this for a fully cleaned-up bundle.
+                    log.warning(
+                        "_encrypt_bundle: could not remove plaintext file %s "
+                        "after encryption (%s); it remains on disk",
+                        child,
+                        exc,
+                        exc_info=True,
+                    )
+                    bundle.plaintext_note += (
+                        f"WARNING: plaintext file {child.name} could not be "
+                        "removed after encryption and remains on disk. "
+                    )
         bundle.encrypted = True
     except Exception as exc:
         # Encryption was ENABLED and FAILED.  Set encryption_error (not just

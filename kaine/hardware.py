@@ -127,20 +127,24 @@ def detect_device() -> str:
         if torch.cuda.is_available():
             return "cuda"
     except Exception:
-        pass
+        # A broken/mismatched CUDA driver can raise here instead of just
+        # returning False; fall through to the next backend rather than
+        # crash detection. Debug-level since this is expected on hosts
+        # without a CUDA-capable driver stack.
+        log.debug("torch.cuda.is_available() probe failed", exc_info=True)
     try:
         xpu = getattr(torch, "xpu", None)
         if xpu is not None and xpu.is_available():
             return "xpu"
     except Exception:
-        pass
+        log.debug("torch.xpu.is_available() probe failed", exc_info=True)
     try:
         backends = getattr(torch, "backends", None)
         mps = getattr(backends, "mps", None) if backends else None
         if mps is not None and mps.is_available():
             return "mps"
     except Exception:
-        pass
+        log.debug("torch.backends.mps.is_available() probe failed", exc_info=True)
     return "cpu"
 
 

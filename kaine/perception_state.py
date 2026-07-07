@@ -282,4 +282,7 @@ def reset_for_tests(path_runtime: Path | None = None, path_desired: Path | None 
             try:
                 target.unlink()
             except OSError:
+                # Test-helper cleanup only: another test/process may have
+                # already removed the file between the exists() check and
+                # unlink() — the end state (file gone) is what we want anyway.
                 pass

@@ -97,6 +97,8 @@ def _iter_jsonl_files(root: Path) -> Iterable[Path]:
             path.relative_to(runs_dir)
             continue  # inside runs/ — manifests, not record streams
         except ValueError:
+            # Path.relative_to raises ValueError when path is NOT under
+            # runs_dir — the normal case, meaning this is a real sink file.
             pass
         if path.is_file():
             yield path

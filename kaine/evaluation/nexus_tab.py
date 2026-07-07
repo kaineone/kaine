@@ -297,6 +297,8 @@ def _aggregate_individuation(config: EvaluationConfig) -> dict[str, Any] | None:
                 entry = json.loads(line)
                 last_entry = _scrub(entry)
             except json.JSONDecodeError:
+                # Skip a malformed/partial line (e.g. a torn last write) and
+                # keep scanning for the last valid entry in the file.
                 pass
     except Exception:
         log.debug("individuation JSONL read failed", exc_info=True)

@@ -259,7 +259,14 @@ class AbliterationProbeScorer:
         inputs = tokenizer(prompt, return_tensors="pt")
         try:
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        except Exception:
+        except (AttributeError, RuntimeError):
+            # Test/fake models often lack a real `.device` (AttributeError) or
+            # a working `.to()` (RuntimeError); fall back to the untransferred
+            # tensors. A real device mismatch then surfaces from
+            # model.generate() below, which the caller (the abliteration /
+            # capability-loss veto) treats as fail-closed — so this never
+            # masks a genuine device error, it just lets it raise from the
+            # call that actually needs the right device.
             pass
         output_ids = model.generate(
             **inputs,
@@ -357,7 +364,14 @@ class LocalProbeSetCapabilityEval:
         inputs = tokenizer(prompt, return_tensors="pt")
         try:
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        except Exception:
+        except (AttributeError, RuntimeError):
+            # Test/fake models often lack a real `.device` (AttributeError) or
+            # a working `.to()` (RuntimeError); fall back to the untransferred
+            # tensors. A real device mismatch then surfaces from
+            # model.generate() below, which the caller (the abliteration /
+            # capability-loss veto) treats as fail-closed — so this never
+            # masks a genuine device error, it just lets it raise from the
+            # call that actually needs the right device.
             pass
         output_ids = model.generate(
             **inputs,

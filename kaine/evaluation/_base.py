@@ -162,7 +162,10 @@ class WorkspaceSubscriberObserver(BaseObserver):
                 if nxt not in done:
                     nxt.cancel()
                     with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
-                        await nxt
+                        # Drain the cancelled task so its cancellation completes
+                        # before we break; the result/exception is intentionally
+                        # discarded (suppressed above).
+                        _ = await nxt
                     break
                 try:
                     entry_id, payload = nxt.result()
@@ -179,7 +182,9 @@ class WorkspaceSubscriberObserver(BaseObserver):
             if not stop_wait.done():
                 stop_wait.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await stop_wait
+                    # Drain the cancelled future so cancellation completes
+                    # before returning; result/exception intentionally unused.
+                    _ = await stop_wait
             aclose = getattr(agen, "aclose", None)
             if aclose is not None:
                 with contextlib.suppress(Exception):

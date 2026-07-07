@@ -298,6 +298,10 @@ class LiveCamera:
             try:
                 source.release()
             except Exception:
+                # Best-effort teardown of a source that never finished opening;
+                # `source` is a pluggable _VideoSource (cv2 or a seeded feed) so
+                # its release() failure modes aren't known here, and the open
+                # already failed so there's nothing left to protect.
                 pass
             return False
         self._source = source

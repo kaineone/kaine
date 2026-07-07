@@ -167,7 +167,10 @@ class Topos(BaseModule):
 
             perception_preview.set_video_jpeg(None)
         except Exception:
-            pass
+            # Best-effort: worst case a stale preview frame lingers briefly;
+            # not worth failing shutdown over, but log it like the two
+            # shutdown steps above for consistency.
+            log.debug("clearing perception preview failed", exc_info=True)
 
     def _build_default_live_camera(
         self, config: Optional[LiveCameraConfig]

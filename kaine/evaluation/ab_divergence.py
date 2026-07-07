@@ -276,7 +276,7 @@ class ABDivergenceObserver(StreamSubscriberObserver):
         try:
             await self._client.close()
         except Exception:
-            pass
+            log.warning("bare inference client close failed", exc_info=True)
 
     async def handle(self, entry_id: str, event: Event) -> None:
         if event.type != "external_speech":

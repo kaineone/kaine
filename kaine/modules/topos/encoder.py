@@ -45,11 +45,13 @@ def _coerce_to_pil(image: Any):
         return Image.open(io.BytesIO(bytes(image))).convert("RGB")
     try:
         import numpy as np  # lazy
-
+    except ImportError:
+        # numpy is an optional extra; if it's absent the input just can't be a
+        # numpy array, so fall through to the "unsupported type" error below.
+        pass
+    else:
         if isinstance(image, np.ndarray):
             return Image.fromarray(image).convert("RGB")
-    except Exception:
-        pass
     raise TypeError(
         f"unsupported image type {type(image).__name__}; "
         "expected PIL.Image, bytes, or numpy.ndarray"

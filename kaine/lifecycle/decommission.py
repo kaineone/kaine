@@ -97,6 +97,8 @@ def _chmod_quietly(path: Path, mode: int) -> None:
     try:
         os.chmod(path, mode)
     except (OSError, NotImplementedError):
+        # e.g. no chmod support on this platform, or a permission error on an
+        # already-owner-only file; the caller's hardening is best-effort.
         pass
 
 
@@ -129,6 +131,10 @@ def _atomic_write_text(path: Path, text: str, *, mode: int = 0o600) -> None:
         try:
             os.unlink(tmp_name)
         except FileNotFoundError:
+            # Cleanup of our own tempfile; already gone is fine (e.g. the
+            # failure happened before mkstemp's fd was fully materialized as
+            # a path on this filesystem). The original error is re-raised
+            # below regardless.
             pass
         raise
 
@@ -393,7 +399,10 @@ def capture_backup(
         try:
             client.close()
         except Exception:
-            pass
+            # Best-effort: the export above already completed (or recorded its
+            # own errors); a failure to close the client connection doesn't
+            # change what was captured.
+            log.debug("capture_backup: qdrant client close failed", exc_info=True)
     if not qdrant_written:
         # Unreachable or every collection failed → write volume-copy instructions
         # rather than pretending success (never crash the backup).
@@ -511,8 +520,23 @@ def capture_backup(
                 else:
                     try:
                         child.unlink()
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        # This artifact's content is now also inside
+                        # bundle.tar.enc, but leaving the plaintext copy
+                        # behind after we report "encrypted" would violate
+                        # CAL 4.3 (no lingering plaintext entity content).
+                        # Surface it as a backup error so the operator sees it.
+                        log.warning(
+                            "could not remove plaintext artifact %s after "
+                            "encrypting the bundle; unencrypted entity content "
+                            "may remain on disk",
+                            child,
+                            exc_info=True,
+                        )
+                        errors.append(
+                            f"could not remove plaintext {child.name} after "
+                            f"encryption: {exc}"
+                        )
             encrypted = True
             inventory.append("bundle.tar.enc (encrypted)")
             # Refresh manifest inventory to reflect the encrypted layout.
@@ -688,7 +712,13 @@ def delete_entity_state(
                 try:
                     client.close()
                 except Exception:
-                    pass
+                    # Best-effort: deletion attempts above already recorded
+                    # their own outcomes; a failure to close the connection
+                    # doesn't change what was (or wasn't) dropped.
+                    log.debug(
+                        "delete_entity_state: qdrant client close failed",
+                        exc_info=True,
+                    )
         else:
             result.errors.append("qdrant unreachable; collections not dropped")
 
@@ -748,7 +778,10 @@ def _clear_redis_streams(
         try:
             client.close()
         except Exception:
-            pass
+            # Best-effort: scan/delete above already recorded their own
+            # outcomes; a failure to close the connection doesn't change
+            # what was (or wasn't) cleared.
+            log.debug("_clear_redis_streams: redis client close failed", exc_info=True)
     except Exception as exc:
         errors.append(f"redis unreachable; streams not cleared ({type(exc).__name__})")
     return cleared, errors

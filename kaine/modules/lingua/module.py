@@ -165,6 +165,8 @@ class Lingua(BaseModule):
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.5)
                 except asyncio.TimeoutError:
+                    # Expected: the wait is just the backoff before re-subscribing,
+                    # not a shutdown request — timing out means keep looping.
                     pass
 
     @property
