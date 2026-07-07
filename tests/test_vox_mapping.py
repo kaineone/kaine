@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-import pytest
 
 from kaine.modules.vox.mapping import (
-    ChatterboxParams,
     affect_to_chatterbox,
 )
 from kaine.modules.thymos.state import DimensionalState

@@ -4,8 +4,6 @@
 """Spot restart ladder — light recreate vs heavy rebuild/replace/restore."""
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
 
 import pytest
 

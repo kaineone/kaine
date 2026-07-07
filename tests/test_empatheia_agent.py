@@ -4,7 +4,6 @@
 """Tests for AgentModel — familiarity, histogram updates, and update rules."""
 from __future__ import annotations
 
-import math
 
 import pytest
 

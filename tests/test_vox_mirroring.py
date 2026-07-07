@@ -11,7 +11,6 @@ Covers:
 """
 from __future__ import annotations
 
-import math
 import pytest
 
 from kaine.modules.vox.mapping import ChatterboxParams, affect_to_chatterbox

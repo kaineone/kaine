@@ -5,7 +5,6 @@ import pytest
 
 from kaine.modules.eidolon.drift import (
     DriftDetector,
-    DriftResult,
     SourceDistributionDrift,
 )
 

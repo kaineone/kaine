@@ -11,7 +11,6 @@ import importlib.util
 import pathlib
 import sys
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Import check_license_headers from scripts/ without requiring it to be an

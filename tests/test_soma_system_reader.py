@@ -88,7 +88,7 @@ async def test_invalid_window_rejected():
 
 @pytest.mark.asyncio
 async def test_cpu_and_ram_metrics_present():
-    psutil = pytest.importorskip("psutil")
+    pytest.importorskip("psutil")
     reader = SystemMetricsReader()
     await reader.initialize()
     try:

@@ -3,7 +3,7 @@
 
 import pytest
 
-from kaine.modules.thymos.goals import Goal, GoalLedger, GoalState
+from kaine.modules.thymos.goals import GoalLedger, GoalState
 
 
 def test_add_returns_goal_with_id():

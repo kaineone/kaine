@@ -7,7 +7,7 @@ import copy
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult

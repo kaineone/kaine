@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
 
 from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver

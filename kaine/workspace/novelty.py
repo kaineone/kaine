@@ -6,7 +6,6 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import deque
-from typing import Any
 
 from kaine.bus.schema import Event
 

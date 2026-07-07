@@ -19,7 +19,6 @@ from kaine.modules.praxis import (
 )
 from kaine.modules.praxis.whitelist import CommandWhitelist, WhitelistEntry
 from kaine.security.intent_signing import compute_intent_signature
-from kaine.workspace.volition import VOLITION_STREAM
 
 # The per-boot provenance secret the tests share between the signer (here) and
 # Praxis (via _make_praxis). At a real boot this is generate_intent_secret().

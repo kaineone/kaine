@@ -1,16 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-import asyncio
 
 import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.topos import Topos
-from kaine.modules.topos.change import CosineChangeDetector
 from kaine.modules.topos.encoder import Encoder
-from kaine.modules.topos.habituation import RollingMeanHabituator
 
 
 class FakeEncoder:

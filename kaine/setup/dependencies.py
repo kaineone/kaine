@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 from kaine.net import SERVICE_PORTS, port_listening
 

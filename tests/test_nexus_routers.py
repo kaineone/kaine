@@ -785,8 +785,6 @@ async def test_pages_share_dashboard_layout_marker():
 
 @pytest.mark.asyncio
 async def test_module_states_from_runtime_and_perception(tmp_path):
-    import json
-
     runtime = tmp_path / "cycle_runtime.json"
     runtime.write_text(json.dumps({"modules": ["mnemos", "nous"], "tick_index": 5}))
 

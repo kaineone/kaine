@@ -16,9 +16,7 @@ to the bus (no FakeBus.published entries; no bus object is even required).
 """
 from __future__ import annotations
 
-import json
 import pytest
-from pathlib import Path
 
 from kaine.evaluation.embeddings import HashEmbedder
 from kaine.evaluation.individuation import (

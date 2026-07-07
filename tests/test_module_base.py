@@ -2,12 +2,10 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
-import json
 from datetime import datetime, timezone
 
 import pytest
 
-from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot

@@ -190,7 +190,6 @@ class ModuleOscillator:
     # -- live dynamics ----------------------------------------------------
     def step(self, drive: float) -> None:
         """Advance the LIF population one step under the given drive in [0, 1]."""
-        torch = self._torch
         d = float(drive)
         if d < 0.0:
             d = 0.0

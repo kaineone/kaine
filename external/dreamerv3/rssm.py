@@ -27,7 +27,7 @@ hooks are simply not implemented here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 try:  # pragma: no cover - exercised only under the [worldmodel] extra

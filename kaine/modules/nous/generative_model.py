@@ -47,7 +47,7 @@ encode path tolerates unseen clusters gracefully (they map to the catch-all
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
 import numpy as np

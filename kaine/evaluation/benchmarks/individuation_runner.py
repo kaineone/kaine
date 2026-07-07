@@ -245,7 +245,6 @@ def format_summary(result: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import asyncio
-    import sys
 
     parser = argparse.ArgumentParser(
         prog="python -m kaine.evaluation.benchmarks.individuation_runner",

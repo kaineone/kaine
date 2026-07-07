@@ -16,7 +16,6 @@ import struct
 
 import pytest
 
-from kaine.bus.schema import Event
 from kaine.modules.audition.live import LiveMicConfig, LiveMicrophone
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import FakeSTTClient
@@ -88,7 +87,7 @@ async def test_live_microphone_drives_audition_subsystem_end_to_end():
             state_writer=lambda active: None,
             desired_state_reader=lambda: True,
             stream_factory=lambda **kw: _ScriptedSpeechStream(callback=kw["callback"]),
-            vad_factory=lambda: _ScriptedVAD(),
+            vad_factory=_ScriptedVAD,
         )
         ai = Audition(
             h.bus,

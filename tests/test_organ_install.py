@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import subprocess
 
-import pytest
 
 from kaine.setup import organ
 from kaine.setup.organ import (

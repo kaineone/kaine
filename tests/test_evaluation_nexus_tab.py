@@ -10,8 +10,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from kaine.evaluation.attribution import AttributionRecorder
-from kaine.evaluation.config import EvaluationConfig, EvaluationPaths
+from kaine.evaluation.config import EvaluationConfig
 from kaine.evaluation.nexus_tab import build_evaluation_router, _scrub
 
 
@@ -92,8 +91,6 @@ def test_scrub_drops_content_fields():
 
 @pytest.mark.asyncio
 async def test_attribution_passthrough_to_summary(tmp_path):
-    bus_stub = type("B", (), {"read": lambda self, *a, **kw: [], "current_workspace_id": lambda self: "0"})()
-
     class _AttrStub:
         @property
         def running_total(self):

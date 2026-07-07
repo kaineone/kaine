@@ -4,12 +4,10 @@
 """Soma subsystem: reads system metrics + cycle latency, publishes wellness."""
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
 from kaine.modules.soma.module import Soma
-from kaine.modules.soma.reader import MetricsReader
 
 from tests.systems._harness import SubsystemHarness
 

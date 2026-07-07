@@ -3,7 +3,6 @@
 
 from datetime import datetime, timezone
 
-import pytest
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot

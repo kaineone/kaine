@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from kaine.modules.hypnos.phases import (
-    PhaseResult,
     affective_reset,
     associative_replay,
     consolidate_memory,

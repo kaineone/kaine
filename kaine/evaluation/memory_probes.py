@@ -49,7 +49,6 @@ class MemorySource(Protocol):
 
 def question_for_memory(memory: dict[str, Any]) -> str:
     """Best-effort: ask the system to recall a specific past detail."""
-    summary = memory.get("text") or memory.get("summary") or ""
     when = memory.get("timestamp") or "earlier"
     return f"What did we talk about on {when}? (Hint: it involved this idea.)"
 

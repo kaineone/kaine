@@ -8,7 +8,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Iterable, Protocol, runtime_checkable
+from typing import Any, Iterable, Protocol, runtime_checkable
 
 from kaine.bus.schema import Event
 from kaine.nexus.privacy import PrivacyFilter

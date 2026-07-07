@@ -16,7 +16,6 @@ from kaine.modules.base import BaseModule
 from kaine.modules.lingua.client import (
     ChatClient,
     ChatRequest,
-    ChatResponse,
     OpenAIChatClient,
 )
 from kaine.modules.lingua.context import ContextAssembler

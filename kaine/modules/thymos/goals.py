@@ -13,9 +13,9 @@ from __future__ import annotations
 import re
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable, Optional
+from typing import Optional
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")

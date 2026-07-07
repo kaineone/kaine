@@ -30,7 +30,7 @@ tree's top-level names so tests can assert no actor/critic tensors exist.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 

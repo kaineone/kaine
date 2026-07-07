@@ -36,7 +36,6 @@ from kaine.evaluation.benchmarks.oscillatory_ablation.runner import (
     write_jsonl,
 )
 from kaine.evaluation.benchmarks.oscillatory_ablation.stimulus import (
-    ENGINEERED_STIMULUS,
     MISLABELED_STIMULUS,
     NEUTRAL_STIMULUS,
     ScriptedBus,

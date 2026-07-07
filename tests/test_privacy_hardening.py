@@ -15,10 +15,6 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import Optional
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # 1. HF_HUB_DISABLE_TELEMETRY in DINOv2Encoder.load()

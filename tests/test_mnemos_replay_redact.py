@@ -12,13 +12,11 @@ from __future__ import annotations
 
 import time
 
-import pytest
 
 from kaine.modules.mnemos.replay import (
     ReplayEngine,
     ReplayEntry,
     build_replay_events,
-    select_traces,
 )
 
 

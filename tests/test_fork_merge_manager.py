@@ -12,7 +12,6 @@ from kaine.lifecycle.manager import (
     ForkManager,
     merger_from_name,
 )
-from kaine.lifecycle.snapshot import ForkSnapshot
 
 
 class FakeModule:

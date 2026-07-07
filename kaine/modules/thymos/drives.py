@@ -11,7 +11,7 @@ threshold.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, Optional
+from typing import Optional
 
 
 def _clamp01(x: float) -> float:

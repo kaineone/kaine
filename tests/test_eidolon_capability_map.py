@@ -10,7 +10,6 @@ Coverage (task 6.2):
 """
 from __future__ import annotations
 
-import pytest
 
 from kaine.modules.eidolon.capability_map import CapabilityMapBuilder
 

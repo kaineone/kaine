@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from kaine.lifecycle.snapshot import ForkSnapshot, load_snapshot, save_snapshot
+from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 from kaine.experiment.run_context import _utc_iso, get_run_context
 
 log = logging.getLogger(__name__)

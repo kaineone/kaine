@@ -60,8 +60,8 @@ def test_quantization_groups_similar_states():
         window=8, threshold=3, bucket_resolution=0.5
     )
     # Both states round to the same bucket at resolution 0.5
-    a = det.observe([0.10, 0.10])
-    b = det.observe([0.20, 0.15])
+    det.observe([0.10, 0.10])
+    det.observe([0.20, 0.15])
     c = det.observe([0.00, 0.05])
     # All three should land in the same quantized bucket
     assert c.dominant_count >= 3

@@ -9,7 +9,6 @@ transcription text never reaches the diagnostics SSE."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 import httpx
 import pytest
@@ -103,7 +102,6 @@ def test_privacy_filter_strips_transcription_for_diagnostics():
 
 def test_banner_partial_renders_when_audio_active(tmp_path):
     """Render the conversation page; banner appears when audio is active."""
-    from fastapi.templating import Jinja2Templates
     from kaine.nexus.conversation import _templates as conv_templates
 
     templates = conv_templates()

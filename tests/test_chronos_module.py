@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
@@ -394,7 +393,6 @@ async def test_anomaly_salience_tracks_prediction_error(bus: AsyncBus):
     # Second tick: error computed; with a constant zero predictor and non-trivial
     # feature vector the error should be > 0, normalised to 1.0 ≥ 0.5 → alert
     from kaine.bus import Event as BusEvent
-    import json
     from datetime import datetime, timezone as tz
     # Use a snapshot with a salient event so feature_vec is not all zeros
     ev = BusEvent(

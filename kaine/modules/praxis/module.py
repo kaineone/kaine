@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Iterable, Optional
 

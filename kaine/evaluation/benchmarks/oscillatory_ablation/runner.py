@@ -65,7 +65,6 @@ bus. No live modules, no entity boot, no network.
 """
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -88,8 +87,6 @@ from kaine.workspace import (
 )
 from kaine.workspace.coherence import CoherenceScorer
 from kaine.workspace.volition import Volition
-
-log = logging.getLogger(__name__)
 
 
 class _MonotonicClock:

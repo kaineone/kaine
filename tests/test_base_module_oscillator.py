@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 
 from kaine.modules.base import BaseModule
 from kaine.oscillator import NEUTRAL_PHASE, FakeOscillator

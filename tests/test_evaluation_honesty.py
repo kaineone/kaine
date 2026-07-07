@@ -30,7 +30,6 @@ from kaine.evaluation.embeddings import HashEmbedder, SentenceTransformerTextEmb
 from kaine.evaluation.memory_probes import MemoryProbeRunner
 from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
 from kaine.evaluation.registry import SidecarRegistry
-from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.nexus.health import DEGRADED, DOWN, UP, nous_health_probe
 
 
@@ -484,8 +483,6 @@ async def test_nous_probe_degraded_when_build_fails(monkeypatch):
         lambda **kw: (_ for _ in ()).throw(RuntimeError("build exploded")),
     )
     # Also patch the import inside health.py's _check closure.
-    original = gm_mod.build_generative_model
-
     def _broken(**kw):
         raise RuntimeError("build exploded")
 

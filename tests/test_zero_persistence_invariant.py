@@ -20,7 +20,6 @@ fakes and verifies that NO raw audio or video data lands on disk:
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import struct
 import subprocess
@@ -151,14 +150,14 @@ async def test_no_raw_sense_files_appear_anywhere(tmp_path, monkeypatch):
             silence_hangover_ms=60,
             desired_state_poll_ms=20,
         ),
-        state_writer=lambda active: perception_state.update_audio_runtime(active),
+        state_writer=perception_state.update_audio_runtime,
         desired_state_reader=lambda: True,
         stream_factory=lambda **kw: _LoudMicStream(callback=kw["callback"]),
-        vad_factory=lambda: type(
+        vad_factory=type(
             "VAD",
             (),
             {"is_speech": staticmethod(lambda frame, sr: any(b for b in frame[:200]))},
-        )(),
+        ),
     )
 
     cam = LiveCamera(
@@ -168,7 +167,7 @@ async def test_no_raw_sense_files_appear_anywhere(tmp_path, monkeypatch):
             warmup_frames=0,
             desired_state_poll_ms=20,
         ),
-        state_writer=lambda active: perception_state.update_video_runtime(active),
+        state_writer=perception_state.update_video_runtime,
         desired_state_reader=lambda: True,
         source_factory=lambda device, *, width, height: _FakeCamSource(
             device=device, width=width, height=height
@@ -338,7 +337,7 @@ async def test_deterministic_feed_sources_persist_no_raw_frames(tmp_path, monkey
             warmup_frames=0,
             desired_state_poll_ms=20,
         ),
-        state_writer=lambda active: perception_state.update_video_runtime(active),
+        state_writer=perception_state.update_video_runtime,
         desired_state_reader=lambda: True,
         source_factory=lambda device, *, width, height: SeededProceduralSource(schedule),
         # Identity converter — the synthesized ndarray is just tagged through.

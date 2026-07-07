@@ -21,7 +21,7 @@ import asyncio
 import logging
 import threading
 from dataclasses import dataclass, replace
-from typing import Any, Awaitable, Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Awaitable, Callable, Protocol, runtime_checkable
 
 from kaine.entity_clock import EntityClock
 

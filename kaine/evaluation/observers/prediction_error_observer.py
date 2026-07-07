@@ -30,7 +30,6 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
-from kaine.bus.schema import Event
 from kaine.evaluation._base import BaseObserver, BusReader
 from kaine.evaluation.sink import AsyncJsonlSink
 
