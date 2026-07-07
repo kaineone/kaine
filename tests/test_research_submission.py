@@ -395,7 +395,10 @@ def test_cli_send_confirm_calls_send_or_write(tmp_path: Path):
         return SendResult(sent=False, detail="test fallback")
 
     with mock.patch.object(email_mod, "send_or_write", fake_send):
-        code = main(
+        # This test verifies the send_or_write callback fires on operator
+        # confirmation (asserted via send_called below); the exit code is
+        # covered by the sibling exit-code tests, so it isn't bound here.
+        main(
             ["--send", "--eval-root", str(eval_root), "--out-root", str(out_dir),
              "--config", str(tmp_path / "no-config.toml")],
             input_fn=mock_input,
