@@ -426,14 +426,19 @@ def _start_background(cmd: list[str], *, emit: Any) -> bool:
         return True
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        log = open(LOGFILE, "ab")
-        proc = subprocess.Popen(
-            cmd,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        # Popen dup()s this fd into the launched server, which keeps its own
+        # copy for the life of the process. The parent only needs it open across
+        # the Popen call, so scope it to a context manager: the child inherits a
+        # live log fd while the parent's copy is closed as soon as Popen returns
+        # (no leaked file handle).
+        with open(LOGFILE, "ab") as log:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
         PIDFILE.write_text(str(proc.pid))
         emit(f"model server started (pid {proc.pid}; log {LOGFILE}).\n")
         return True

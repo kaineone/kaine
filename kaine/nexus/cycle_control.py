@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from kaine.cycle.control_state import CONTROL_PATH, freeze, read_control, unfreeze
+from kaine.nexus.log_safety import sanitize_log_value
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def build_cycle_control_router(*, control_path: Path | None = None) -> APIRouter
             c = freeze(reason=body.reason, path=path)
             log.info(
                 "operator freeze requested%s",
-                f": {body.reason}" if body.reason else "",
+                f": {sanitize_log_value(body.reason)}" if body.reason else "",
             )
         else:
             c = unfreeze(path=path)
