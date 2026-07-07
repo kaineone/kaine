@@ -485,6 +485,10 @@ async def verify_organ_generates(
             try:
                 await client.aclose()
             except Exception:
+                # Best-effort teardown of a locally-created client; the
+                # gate's own contract ("Never raises") already committed to
+                # returning a result above regardless of transport cleanup,
+                # and there's no result field to attach a close failure to.
                 pass
 
     text = (getattr(resp, "text", "") or "").strip()

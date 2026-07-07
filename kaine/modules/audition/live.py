@@ -316,6 +316,8 @@ class LiveMicrophone:
 
             perception_preview.set_audio_level(None)
         except Exception:
+            # Best-effort dev-only diagnostic tap; it must never block or
+            # fail stream teardown, so swallow anything it raises.
             pass
         stream = self._stream
         self._stream = None
@@ -347,6 +349,9 @@ class LiveMicrophone:
                     queue.get_nowait()
                     queue.put_nowait(frame)
                 except (asyncio.QueueEmpty, asyncio.QueueFull):
+                    # Both calls run synchronously on the loop thread with no
+                    # yield point between them, so this race shouldn't happen;
+                    # stay defensive and just drop the frame if it ever does.
                     pass
 
         loop.call_soon_threadsafe(_put)

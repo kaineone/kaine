@@ -83,6 +83,8 @@ def _chmod_quietly(path: Path, mode: int) -> None:
     try:
         os.chmod(path, mode)
     except (OSError, NotImplementedError):
+        # e.g. no chmod support on this platform, or a permission error on an
+        # already-owner-only file; the caller's hardening is best-effort.
         pass
 
 
@@ -317,8 +319,26 @@ async def preserve_live(
             else:
                 try:
                     target.unlink()
-                except OSError:
-                    pass
+                except OSError as exc:
+                    if bundle_encrypted:
+                        # The whole point of encrypting the tar is that no
+                        # plaintext entity content remains at rest; a leftover
+                        # plaintext original next to bundle.tar.enc would
+                        # silently defeat that guarantee, so fail loud rather
+                        # than report a complete-looking encrypted bundle.
+                        raise PreservationError(
+                            f"could not remove plaintext original {name!r} "
+                            f"after encrypting the bundle: "
+                            f"{type(exc).__name__}: {exc}"
+                        ) from exc
+                    # Bundle is already plaintext (encryption disabled); a
+                    # leftover duplicate original is redundant, not a new
+                    # exposure — log and continue.
+                    log.warning(
+                        "preserve_live: could not remove plaintext original %s",
+                        name,
+                        exc_info=True,
+                    )
         inventory.append(bundle_artifact)
 
         manifest = {
@@ -447,8 +467,14 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
             # Still apply the (metadata-only) deserialize for consistency.
             try:
                 module.deserialize(copy.deepcopy(state))
-            except Exception:
-                pass
+            except Exception as exc:
+                # Match the plain deserialize path below: revive must fail
+                # loud rather than silently produce a lesser individual whose
+                # weights restored but whose other module state did not.
+                raise ReviveError(
+                    f"revive failed restoring {name!r} metadata after "
+                    f"world-model weight restore: {type(exc).__name__}: {exc}"
+                ) from exc
             continue
 
         try:

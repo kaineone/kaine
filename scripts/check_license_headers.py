@@ -76,6 +76,9 @@ def _has_header(path: pathlib.Path) -> bool:
                 if SPDX_MARKER in line:
                     return True
     except OSError:
+        # Unreadable file (permissions, race with deletion, ...): fail
+        # closed and fall through to `return False` below so it is
+        # reported as an offender rather than silently skipped.
         pass
     return False
 

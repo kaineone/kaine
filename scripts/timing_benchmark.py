@@ -202,10 +202,14 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
             try:
                 await asyncio.wait_for(m.shutdown(), timeout=30.0)
             except Exception:
+                # Best-effort teardown after the benchmark result is already
+                # recorded in `out`; a module failing to shut down cleanly
+                # shouldn't invalidate the timing measurement.
                 pass
         try:
             await bus.close()
         except Exception:
+            # Best-effort teardown; same rationale as above.
             pass
     return out
 
@@ -278,6 +282,9 @@ async def _benchmark_vision(cfg: dict[str, Any], encodes: int) -> dict[str, Any]
         try:
             await encoder.shutdown()
         except Exception:
+            # Best-effort teardown after samples are already recorded in
+            # `out`; an encoder shutdown failure shouldn't invalidate the
+            # timing measurement.
             pass
     return out
 

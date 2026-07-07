@@ -220,6 +220,9 @@ async def _async_self_check(
             await eid.shutdown()
             await eid2.shutdown()
         except Exception:
+            # Best-effort cleanup of throwaway probe instances: the round-trip
+            # already succeeded above, and both objects (and their tmp dir)
+            # are discarded regardless of whether shutdown completes cleanly.
             pass
     return True, None
 

@@ -503,8 +503,12 @@ def cmd_stop(
     try:
         if PIDFILE.exists():
             PIDFILE.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        # Non-fatal: the pidfile may already be gone (race with another
+        # stop) or unremovable (permissions). The server has already been
+        # signalled/disabled above; surface it so a stale pidfile doesn't
+        # go unexplained on the next `status`/`start`.
+        emit(f"could not remove pidfile {PIDFILE} ({exc}).\n")
 
     if not stopped:
         emit("no supervised model server found to stop.\n")

@@ -109,13 +109,19 @@ def _decode_key(raw: str | bytes) -> bytes:
                 decoded = decoder(candidate + "=" * (-len(candidate) % 4))
                 if len(decoded) == _KEY_BYTES:
                     return decoded
-            except Exception:
+            except (ValueError, TypeError):
+                # Not valid base64 (binascii.Error is a ValueError subclass)
+                # under this variant — fall through and try the next decoder,
+                # then hex. `_resolve_key` raises CryptoConfigError below if
+                # every format fails, so a bad key never falls through as an
+                # accepted key.
                 pass
         try:
             decoded = bytes.fromhex(candidate)
             if len(decoded) == _KEY_BYTES:
                 return decoded
         except ValueError:
+            # Not valid hex either; fall through to the error below.
             pass
 
     raise CryptoConfigError(

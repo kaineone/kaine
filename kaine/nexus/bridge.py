@@ -81,6 +81,7 @@ class BusBridge:
         try:
             self._clients.remove(client)
         except ValueError:
+            # Already removed (e.g. double-disconnect) — idempotent by design.
             pass
 
     async def start(self) -> None:
@@ -98,6 +99,7 @@ class BusBridge:
             try:
                 await self._task
             except asyncio.CancelledError:
+                # Expected outcome of the cancel() above, not an error.
                 pass
             self._task = None
 

@@ -109,7 +109,11 @@ def _generate(model: Any, tokenizer: Any, prompt: str, max_new_tokens: int) -> s
     inputs = tokenizer(prompt, return_tensors="pt")
     try:
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
-    except Exception:
+    except (AttributeError, RuntimeError):
+        # Best-effort device placement: some wrapped/offloaded models (e.g.
+        # accelerate meta-device or missing `.device`) don't need or support
+        # an explicit `.to()`; fall back to the tokenizer's original tensors
+        # and let `model.generate` handle placement itself.
         pass
     output_ids = model.generate(
         **inputs,
@@ -274,6 +278,10 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     try:
         tokenizer.save_pretrained(str(tmp_dir))
     except Exception:
+        # Optional metadata only: the promoted LoRA adapter loads against the
+        # base model's own tokenizer at inference time, so a failure here
+        # doesn't affect adapter correctness — don't fail the training job
+        # over a convenience artifact.
         pass
 
     # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability).
@@ -390,8 +398,16 @@ def main(argv: list[str]) -> int:
                     "samples_used": 0,
                 },
             )
-        except Exception:
-            pass
+        except Exception as write_exc:
+            # We're already reporting the original crash via the traceback
+            # written to stderr above; if writing result.json ALSO fails
+            # (e.g. disk full/unwritable job dir), note it but still return
+            # the failing exit code rather than raising a second exception
+            # that would mask the first.
+            sys.stderr.write(
+                f"(also failed to write result.json: "
+                f"{type(write_exc).__name__}: {write_exc})\n"
+            )
         return 1
 
 

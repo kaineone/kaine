@@ -25,8 +25,11 @@ Pure stdlib — no numpy / no jax — so the suite encodes observations without 
 """
 from __future__ import annotations
 
+import logging
 
 from kaine.cycle.types import WorkspaceSnapshot
+
+log = logging.getLogger(__name__)
 
 VERSION: str = "phantasia-encoder-v1"
 
@@ -97,7 +100,15 @@ def encode_snapshot(snapshot: WorkspaceSnapshot) -> list[float]:
                 affect_valence = float(state.get("valence", 0.0))
                 affect_dominance = float(state.get("dominance", 0.0))
             except (TypeError, ValueError):
-                pass
+                # Malformed thymos.state payload (non-numeric arousal/valence/
+                # dominance) — keep the affect slots at their prior/default
+                # values rather than crashing observation encoding, but log it:
+                # this shape of failure previously indicated a real producer/
+                # consumer event-contract bug elsewhere in the workspace.
+                log.debug(
+                    "phantasia encoder: malformed thymos.state affect fields",
+                    exc_info=True,
+                )
 
     vector = list(buckets)
     vector.append(affect_intensity)

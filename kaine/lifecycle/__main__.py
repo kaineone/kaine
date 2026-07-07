@@ -92,8 +92,12 @@ def _cycle_appears_running(runtime_path: Path) -> bool:
         age = time.time() - runtime_path.stat().st_mtime
         if age < RUNTIME_FRESH_SECONDS:
             return True
-    except Exception:
-        pass
+    except OSError:
+        # Best-effort freshness probe: if the file vanished or became
+        # unreadable between the is_file() check above and here, fall
+        # through to "not running" below rather than treating a
+        # transient race as fatal.
+        log.debug("runtime.json mtime check failed", exc_info=True)
     return False
 
 
@@ -117,7 +121,10 @@ def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
             if name:
                 return name
     except Exception:
-        pass
+        # Best-effort: a missing/corrupt/unreadable self-model file just
+        # means this cosmetic display name falls back to "entity"; the
+        # real decommission gates below do not depend on it.
+        log.debug("could not resolve entity name from self-model", exc_info=True)
     return "entity"
 
 

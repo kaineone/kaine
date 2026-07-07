@@ -402,6 +402,8 @@ class Eidolon(BaseModule):
                         self._stopped.wait(), timeout=self._save_interval_s
                     )
                 except asyncio.TimeoutError:
+                    # Expected: the interval elapsing without a stop signal is
+                    # exactly what wakes this loop to run the periodic save.
                     pass
                 if self._stopped.is_set():
                     return

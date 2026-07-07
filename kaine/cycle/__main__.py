@@ -202,7 +202,7 @@ def _cognitive_query_client_factory(registry, eval_cfg):
             try:
                 await client.aclose()
             except Exception:
-                pass
+                log.warning("stack query client close failed", exc_info=True)
 
     return _StackQueryClient()
 
@@ -973,15 +973,19 @@ async def _boot_and_run(
             freeze_task.cancel()
         try:
             await freeze_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        except asyncio.CancelledError:
+            pass  # expected: we just cancelled it
+        except Exception:
+            log.warning("freeze watch task raised during shutdown", exc_info=True)
         if spot_task is not None:
             if not spot_task.done():
                 spot_task.cancel()
             try:
                 await spot_task
-            except (asyncio.CancelledError, Exception):
-                pass
+            except asyncio.CancelledError:
+                pass  # expected: we just cancelled it
+            except Exception:
+                log.warning("spot watchdog task raised during shutdown", exc_info=True)
         for monitor_task in (divergence_task, welfare_task):
             if monitor_task is None:
                 continue
@@ -989,8 +993,12 @@ async def _boot_and_run(
                 monitor_task.cancel()
             try:
                 await monitor_task
-            except (asyncio.CancelledError, Exception):
-                pass
+            except asyncio.CancelledError:
+                pass  # expected: we just cancelled it
+            except Exception:
+                log.warning(
+                    "%s raised during shutdown", monitor_task.get_name(), exc_info=True
+                )
         if preview_server is not None:
             try:
                 await preview_server.stop()

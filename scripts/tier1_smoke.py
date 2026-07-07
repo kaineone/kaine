@@ -108,6 +108,9 @@ async def main() -> int:
     try:
         await bus.close()
     except Exception:
+        # Best-effort teardown at the very end of the smoke run: results have
+        # already been printed above, so a close failure here shouldn't flip
+        # this script's own exit status.
         pass
 
     ok = not init_err and not shut_err and not bg_errors

@@ -49,6 +49,9 @@ class SubsystemHarness:
             try:
                 await self._module.shutdown()
             except Exception:
+                # Best-effort teardown: the harness is exiting regardless,
+                # and a module's shutdown failure shouldn't mask whatever
+                # assertion/error the test itself is already reporting.
                 pass
         if self.bus is not None:
             await self.bus.close()

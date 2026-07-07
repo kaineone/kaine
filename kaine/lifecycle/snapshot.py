@@ -38,6 +38,8 @@ def _chmod_quietly(path: Path, mode: int) -> None:
     try:
         os.chmod(path, mode)
     except (OSError, NotImplementedError):
+        # e.g. no chmod support on this platform, or a permission error on an
+        # already-owner-only file; the caller's hardening is best-effort.
         pass
 
 
