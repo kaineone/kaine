@@ -122,8 +122,11 @@ class AsyncJsonlSink:
         self._seq += 1
         return stamped
 
-    async def write(self, entry: dict[str, Any]) -> None:
-        """Returns immediately. Drops oldest if queue is full."""
+    def enqueue(self, entry: dict[str, Any]) -> None:
+        """Non-blocking sync enqueue — the queue semantics of :meth:`write`,
+        callable from a synchronous hot-path callback running inside the event
+        loop (``asyncio.Queue.put_nowait`` is loop-safe). Returns immediately and
+        drops the oldest entry under backpressure."""
         entry = self._stamp(entry)
         try:
             self._queue.put_nowait(entry)
@@ -139,6 +142,10 @@ class AsyncJsonlSink:
                 # backpressure is acceptable (the entry was already counted as
                 # dropped), so swallow the race rather than raise into the caller.
                 pass
+
+    async def write(self, entry: dict[str, Any]) -> None:
+        """Returns immediately. Drops oldest if queue is full."""
+        self.enqueue(entry)
 
     def write_sync(self, entry: dict[str, Any]) -> None:
         """For test code only — bypasses the async path."""

@@ -94,6 +94,9 @@ class CognitiveCycle:
         affect_observer: Optional[
             Callable[[list[tuple[str, Event]]], None]
         ] = None,
+        ablation_recorder: Optional[
+            Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]
+        ] = None,
     ) -> None:
         if processing_rate_hz <= 0:
             raise ValueError("processing_rate_hz must be positive")
@@ -150,6 +153,12 @@ class CognitiveCycle:
         # byte-identical to the pre-change behavior. Pure: reads collected events
         # only, no clock / RNG / bus I/O, so determinism is preserved.
         self._affect_observer = affect_observer
+        # Live oscillatory-ablation recorder. When set, experiential ticks run the
+        # dual-path selection and hand (primary, counterfactual) here read-only —
+        # the coherence-off counterfactual scored over the SAME tick. None ⇒ no
+        # dual-path pass and select() is called exactly as before, so the entity's
+        # behaviour is unchanged whether or not the ablation is being recorded.
+        self._ablation_recorder = ablation_recorder
 
         self._tick_index = 0
         self._cursors: dict[str, str] = {}
@@ -179,6 +188,16 @@ class CognitiveCycle:
         # event-driven: Hypnos observes the soma.regulation/request_maintenance
         # event on soma.out directly. Nothing reads this flag to drive behaviour.
         self.maintenance_requested: bool = False
+
+    def set_ablation_recorder(
+        self,
+        recorder: Optional[Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]],
+    ) -> None:
+        """Attach or clear the live oscillatory-ablation recorder after
+        construction. The composition root uses this once the sidecar's ablation
+        observer exists (the registry is built after the cycle). ``None`` clears
+        it, restoring plain single-path selection."""
+        self._ablation_recorder = recorder
 
     @property
     def tick_index(self) -> int:
@@ -419,6 +438,7 @@ class CognitiveCycle:
         is_experiential = self._advance_experiential()
 
         snapshot: Optional[WorkspaceSnapshot] = None
+        counterfactual: Optional[WorkspaceSnapshot] = None
         try:
             select_context: dict[str, Any] = {
                 "tick_index": self._tick_index,
@@ -426,10 +446,20 @@ class CognitiveCycle:
             }
             if self._collect_phases:
                 select_context["phases"] = self._collect_module_phases()
-            snapshot = await self._syneidesis.select(
-                events,
-                context=select_context,
-            )
+            # On an experiential tick, when the live ablation is recording, take
+            # the dual-path selection: the primary is byte-identical to select()
+            # (the entity is unaffected) and the counterfactual is the coherence-off
+            # twin over the same events. Otherwise select() exactly as before.
+            if self._ablation_recorder is not None and is_experiential:
+                snapshot, counterfactual = await self._syneidesis.select_dual(
+                    events,
+                    context=select_context,
+                )
+            else:
+                snapshot = await self._syneidesis.select(
+                    events,
+                    context=select_context,
+                )
         except Exception as exc:
             error = True
             error_message = str(exc)
@@ -449,6 +479,23 @@ class CognitiveCycle:
             # structurally enforcing executive inhibition (§37/§147).
             if broadcast_ok and self._volition is not None:
                 await self._run_volition(snapshot)
+
+        # Live oscillatory ablation: hand the paired (primary, counterfactual) to
+        # the recorder read-only. Present only on experiential ticks with the layer
+        # enabled; a recorder fault never disturbs the cycle.
+        if (
+            counterfactual is not None
+            and snapshot is not None
+            and self._ablation_recorder is not None
+        ):
+            try:
+                self._ablation_recorder(snapshot, counterfactual)
+            except Exception:
+                log.warning(
+                    "ablation recorder raised on tick %d; continuing",
+                    self._tick_index,
+                    exc_info=True,
+                )
 
         end = self._entity_clock.wall()
         wall_ms = (end - start) * 1000.0
