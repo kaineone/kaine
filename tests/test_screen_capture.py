@@ -113,7 +113,8 @@ def _source(width: int, height: int, n_frames: int):
 
 def test_reads_frames_then_reports_eof():
     src, proc = _source(4, 2, 2)
-    assert src.open() is True
+    opened = src.open()
+    assert opened is True
     ok, f0 = src.read()
     assert ok and f0.shape == (2, 4, 3) and f0.dtype == np.uint8
     ok, f1 = src.read()
@@ -131,7 +132,8 @@ def test_short_read_is_a_clean_failure():
     src = ScreenCaptureSource(
         CaptureSpec(["-i", ":0.0"]), width=4, height=2, open_process=lambda cmd: proc
     )
-    assert src.open() is True
+    opened = src.open()
+    assert opened is True
     ok, frame = src.read()
     assert ok is False and frame is None
 
