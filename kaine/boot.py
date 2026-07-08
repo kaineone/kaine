@@ -11,6 +11,7 @@ calls the right factory for each enabled module.
 Hypnos depends on Mnemos / Nous / Thymos instances, so it's constructed
 in a second pass after the others are in the registry.
 """
+
 from __future__ import annotations
 
 import logging
@@ -182,8 +183,12 @@ def make_topos(
         if k in section:
             kwargs[k] = section[k]
     # Forward prediction knobs
-    for k in ("forward_prediction", "forward_model_units", "prediction_error_window",
-              "visual_buffer_size"):
+    for k in (
+        "forward_prediction",
+        "forward_model_units",
+        "prediction_error_window",
+        "visual_buffer_size",
+    ):
         if k in section:
             kwargs[k] = section[k]
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
@@ -194,16 +199,17 @@ def make_topos(
     # source_factory and force capture on so LiveCamera reads from the
     # deterministic source.
     mode = str(feed_section.get("mode", "off")).lower()
-    if mode not in ("off", "seeded", "playlist", "live"):
+    if mode not in ("off", "seeded", "playlist", "live", "screen"):
         raise ValueError(
-            f"[perception_feed].mode must be off/seeded/playlist/live, got {mode!r}"
+            "[perception_feed].mode must be off/seeded/playlist/live/screen, "
+            f"got {mode!r}"
         )
     width = int(section.get("capture_width", 640))
     height = int(section.get("capture_height", 480))
     if mode == "live":
         # Real camera path: honour the existing live-camera config below.
         kwargs["capture_enabled"] = True
-    elif mode in ("seeded", "playlist"):
+    elif mode in ("seeded", "playlist", "screen"):
         kwargs["source_factory"] = _build_perception_feed_video_factory(
             mode, feed_section, width=width, height=height
         )
@@ -249,6 +255,9 @@ def _build_perception_feed_video_factory(
         load_playlist_manifest,
     )
 
+    if mode == "screen":
+        return _build_screen_source_factory(feed)
+
     video = dict(feed.get("video") or {})
     if mode == "seeded":
         schedule = SeededSchedule(
@@ -276,6 +285,49 @@ def _build_perception_feed_video_factory(
         return PlaylistSource(manifest)
 
     return _playlist_factory
+
+
+def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
+    """Build a screen/window-capture ``_VideoSource`` factory (ffmpeg-backed).
+
+    Gated by an operator consent attestation: capturing a shared screen means the
+    entity sees whatever is on it, so ``[perception_feed].screen_capture_attested``
+    must be true — the operator attests they consent to that and will not expose
+    third-party private content (the local-capture consent boundary of the paper's
+    §11). Reads the ``[perception_feed.screen]`` target; the per-OS ffmpeg input
+    spec is resolved at build time and the source is opened per LiveCamera cycle.
+    """
+    if not bool(feed.get("screen_capture_attested", False)):
+        raise ValueError(
+            "[perception_feed].mode = 'screen' requires screen_capture_attested = "
+            "true — the operator attests they consent to the entity seeing this "
+            "screen and will not expose third-party private content."
+        )
+    from kaine.modules.topos.screen import (
+        ScreenCaptureSource,
+        ScreenTarget,
+        screen_capture_spec,
+    )
+
+    scr = dict(feed.get("screen") or {})
+    region = scr.get("region")
+    target = ScreenTarget(
+        kind=str(scr.get("target", "fullscreen")).lower(),
+        region=tuple(int(v) for v in region) if region else None,
+        window_title=(scr.get("window_title") or None),
+        display=str(scr.get("display", ":0.0")),
+        framerate=int(scr.get("framerate", 10)),
+        cursor=bool(scr.get("cursor", True)),
+    )
+    spec = screen_capture_spec(target)  # platform auto-detected
+    ffmpeg_path = str(scr.get("ffmpeg_path", "ffmpeg"))
+
+    def _screen_factory(device, *, width, height):  # noqa: ANN001
+        return ScreenCaptureSource(
+            spec, width=width, height=height, ffmpeg_path=ffmpeg_path
+        )
+
+    return _screen_factory
 
 
 def _build_perception_feed_audio_factory(
@@ -317,7 +369,9 @@ def _build_perception_feed_audio_factory(
             surprise_strength=float(audio.get("surprise_strength", 1.0)),
         )
 
-        def _seeded_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
+        def _seeded_factory(
+            *, device, sample_rate, channels, frames_per_block, callback
+        ):  # noqa: ANN001
             return SeededProceduralAudioStream(schedule, callback=callback)
 
         return _seeded_factory
@@ -378,7 +432,9 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
             surprise_interval=surprise_interval,
             surprise_strength=float(video.get("surprise_strength", 1.0)),
         ).as_descriptor()
-        sample_rate = int(audio.get("sample_rate", audition.get("capture_sample_rate", 16000)))
+        sample_rate = int(
+            audio.get("sample_rate", audition.get("capture_sample_rate", 16000))
+        )
         channels = int(audio.get("channels", audition.get("capture_channels", 1)))
         vad_frame_ms = int(audition.get("vad_frame_ms", 30))
         descriptor["audio"] = SeededAudioSchedule(
@@ -403,6 +459,27 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
             # The manifest is verified for real at open() time; the covariate
             # must not crash the run if it can't be read here.
             descriptor["playlist"] = {"manifest_unavailable": True}
+    elif mode == "screen":
+        # Content-free provenance: the capture target kind and, for a named
+        # window, a hash of the title (never the title itself). No pixels, no
+        # window contents — just enough to stratify records by source.
+        import hashlib
+
+        scr = dict(feed.get("screen") or {})
+        src: dict[str, Any] = {"target": str(scr.get("target", "fullscreen")).lower()}
+        if scr.get("window_title"):
+            src["window"] = hashlib.sha256(
+                str(scr["window_title"]).encode()
+            ).hexdigest()[:16]
+        descriptor["screen"] = src
+    # Stimulus-regime label for cross-record stratification (field-tier analysis).
+    descriptor["regime"] = {
+        "off": "off",
+        "seeded": "seeded",
+        "playlist": "playlist",
+        "live": "camera",
+        "screen": "screen",
+    }.get(mode, mode)
     return descriptor
 
 
@@ -483,9 +560,7 @@ def make_mnemos(
     qdrant = section.get("qdrant") or {}
     replay = section.get("replay") or {}
     kwargs: dict[str, Any] = {
-        k: section[k]
-        for k in allowed - {"qdrant", "device", "replay"}
-        if k in section
+        k: section[k] for k in allowed - {"qdrant", "device", "replay"} if k in section
     }
     if "device" in section:
         kwargs["embedder_device_preference"] = section["device"]
@@ -529,14 +604,21 @@ def make_eidolon(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # Build the SelfInferenceEngine from the optional [eidolon.self_inference]
     # sub-table.  Ships disabled by default — operator must set enabled = true.
     si_section = kw.pop("self_inference", None) or {}
-    si_allowed = {"enabled", "vad_window_cycles", "speech_pattern_min_count", "seed_path"}
+    si_allowed = {
+        "enabled",
+        "vad_window_cycles",
+        "speech_pattern_min_count",
+        "seed_path",
+    }
     _require_keys(si_section, si_allowed)
     si_enabled = bool(si_section.get("enabled", False))
     si_kwargs: dict[str, Any] = {"enabled": si_enabled}
     if "vad_window_cycles" in si_section:
         si_kwargs["vad_window_cycles"] = int(si_section["vad_window_cycles"])
     if "speech_pattern_min_count" in si_section:
-        si_kwargs["speech_pattern_min_count"] = int(si_section["speech_pattern_min_count"])
+        si_kwargs["speech_pattern_min_count"] = int(
+            si_section["speech_pattern_min_count"]
+        )
     if "seed_path" in si_section:
         seed_raw = str(si_section["seed_path"]).strip()
         if seed_raw:
@@ -568,8 +650,8 @@ def make_thymos(
         "chronos_stream",
         "mnemos_stream",
         "social_drive_time_scale_s",
-        "drives",   # nested per-drive sub-tables, consumed by DriveSet default
-        "coupling", # nested [thymos.coupling] sub-table
+        "drives",  # nested per-drive sub-tables, consumed by DriveSet default
+        "coupling",  # nested [thymos.coupling] sub-table
     }
     _require_keys(section, allowed)
     baseline = DimensionalState(
@@ -752,12 +834,17 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # stream_factory and force capture on so LiveMicrophone reads from the
     # deterministic source instead of the mic.
     mode = str(feed_section.get("mode", "off")).lower()
-    if mode not in ("off", "seeded", "playlist", "live"):
+    if mode not in ("off", "seeded", "playlist", "live", "screen"):
         raise ValueError(
-            f"[perception_feed].mode must be off/seeded/playlist/live, got {mode!r}"
+            "[perception_feed].mode must be off/seeded/playlist/live/screen, "
+            f"got {mode!r}"
         )
+    # 'screen' is video-only for now: leave audio capture off (desktop-audio
+    # monitor capture is the declared next step). No stream_factory, no capture.
     audio_cfg = dict(feed_section.get("audio") or {})
-    sample_rate = int(audio_cfg.get("sample_rate", section.get("capture_sample_rate", 16000)))
+    sample_rate = int(
+        audio_cfg.get("sample_rate", section.get("capture_sample_rate", 16000))
+    )
     channels = int(audio_cfg.get("channels", section.get("capture_channels", 1)))
     if mode == "live":
         kwargs["capture_enabled"] = True
@@ -822,7 +909,9 @@ def make_vox(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     # Pop all top-level keys; handle mirroring sub-table separately.
     _require_keys(section, allowed)
-    kw: dict[str, Any] = {k: section[k] for k in allowed - {"mirroring"} if k in section}
+    kw: dict[str, Any] = {
+        k: section[k] for k in allowed - {"mirroring"} if k in section
+    }
     # [vox.mirroring] sub-table.
     mirroring_section = section.get("mirroring") or {}
     mirroring_allowed = {"enabled", "mirror_strength", "mirror_ceiling", "decay_s"}
@@ -860,16 +949,14 @@ def make_hypnos(
         "baseline_salience",
         "alert_salience",
         "voice_alignment",  # nested sub-table
-        "consolidation",    # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
+        "consolidation",  # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
     }
     _require_keys(section, allowed)
     voice_cfg_section = section.get("voice_alignment") or {}
     voice_config: Optional[VoiceAlignmentConfig] = None
     if voice_cfg_section:
         base_model_path_raw = voice_cfg_section.get("base_model_path", "")
-        base_model_path: Optional[str] = (
-            str(base_model_path_raw).strip() or None
-        )
+        base_model_path: Optional[str] = str(base_model_path_raw).strip() or None
         reload_endpoint_url_raw = voice_cfg_section.get("reload_endpoint_url", "")
         reload_endpoint_url: Optional[str] = (
             str(reload_endpoint_url_raw).strip() or None
@@ -878,9 +965,7 @@ def make_hypnos(
         restart_service_unit: Optional[str] = (
             str(restart_service_unit_raw).strip() or None
         )
-        capability_probe_path_raw = voice_cfg_section.get(
-            "capability_probe_path", ""
-        )
+        capability_probe_path_raw = voice_cfg_section.get("capability_probe_path", "")
         capability_probe_path: Optional[str] = (
             str(capability_probe_path_raw).strip() or None
         )
@@ -891,16 +976,26 @@ def make_hypnos(
             str(abliteration_probe_path_raw).strip() or None
         )
         voice_config = VoiceAlignmentConfig(
-            intent_log_path=Path(voice_cfg_section.get("intent_log_path", "state/lingua/intent_expression.jsonl")),
-            adapter_output_dir=Path(voice_cfg_section.get("adapter_output_dir", "state/hypnos/adapters")),
+            intent_log_path=Path(
+                voice_cfg_section.get(
+                    "intent_log_path", "state/lingua/intent_expression.jsonl"
+                )
+            ),
+            adapter_output_dir=Path(
+                voice_cfg_section.get("adapter_output_dir", "state/hypnos/adapters")
+            ),
             enabled=bool(voice_cfg_section.get("enabled", False)),
             base_model_path=base_model_path,
-            model_id=str(voice_cfg_section.get("model_id", "kaineone/Qwen3.5-4B-abliterated")),
+            model_id=str(
+                voice_cfg_section.get("model_id", "kaineone/Qwen3.5-4B-abliterated")
+            ),
             max_samples=int(voice_cfg_section.get("max_samples", 200)),
             lora_rank=int(voice_cfg_section.get("lora_rank", 8)),
             learning_rate=float(voice_cfg_section.get("learning_rate", 5e-5)),
             dpo_beta=float(voice_cfg_section.get("dpo_beta", 0.1)),
-            capability_loss_threshold=float(voice_cfg_section.get("capability_loss_threshold", 0.05)),
+            capability_loss_threshold=float(
+                voice_cfg_section.get("capability_loss_threshold", 0.05)
+            ),
             seed=int(voice_cfg_section.get("seed", 42)),
             training_device=str(voice_cfg_section.get("training_device", "cuda:0")),
             adapter_retention=int(voice_cfg_section.get("adapter_retention", 5)),
@@ -1066,9 +1161,7 @@ def _require_non_empty_abliteration_probes(
         require_non_empty_abliteration_probes,
     )
 
-    probe_path = (
-        voice_config.abliteration_probe_path or DEFAULT_ABLITERATION_PROBE_PATH
-    )
+    probe_path = voice_config.abliteration_probe_path or DEFAULT_ABLITERATION_PROBE_PATH
     require_non_empty_abliteration_probes(probe_path)
 
 
@@ -1179,7 +1272,7 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # `expose_<family>`/`expose_<channel>` keys under the adapter table →
     # operator exposure overrides on top of the descriptor defaults.
     expose = {
-        key[len("expose_"):]: bool(value)
+        key[len("expose_") :]: bool(value)
         for key, value in adapter_section.items()
         if key.startswith("expose_")
     }
@@ -1246,9 +1339,7 @@ def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     kwargs: dict[str, Any] = {
-        k: section[k]
-        for k in allowed - {"qdrant"}
-        if k in section
+        k: section[k] for k in allowed - {"qdrant"} if k in section
     }
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
@@ -1566,7 +1657,9 @@ def make_salience_factors(kaine_config: dict[str, Any], affect_provider: Any):
     thymos_factor = str(
         section.get("salience_thymos_factor", _SALIENCE_THYMOS_FACTOR_DEFAULT)
     )
-    goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
+    goal_factor = str(
+        section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT)
+    )
 
     if thymos_factor == "state_modulator":
         thymos_modulator = StateModulator(affect_provider.dimensional_state)
@@ -1661,7 +1754,9 @@ def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
                 "name": getattr(m, "name", None),
                 "values": list(getattr(m, "values", []) or []),
                 "behavioral_norms": list(getattr(m, "behavioral_norms", []) or []),
-                "personality_baseline": dict(getattr(m, "personality_baseline", {}) or {}),
+                "personality_baseline": dict(
+                    getattr(m, "personality_baseline", {}) or {}
+                ),
             }
         except Exception:
             return {}
@@ -1685,7 +1780,9 @@ def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
         return
     effectors = sorted(getattr(praxis, "enabled_effectors", ()) or ())
     engine.set_whitelist_commands(effectors)
-    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
+    log.info(
+        "wired eidolon capability whitelist from praxis (%d effectors)", len(effectors)
+    )
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
@@ -1717,20 +1814,39 @@ def _log_device_assignments(
     """
     rows: list[tuple[str, str]] = []
     if "topos" in registry:
-        rows.append(("topos.encoder", str((kaine_config.get("topos") or {}).get("device", "auto"))))
+        rows.append(
+            (
+                "topos.encoder",
+                str((kaine_config.get("topos") or {}).get("device", "auto")),
+            )
+        )
     if "mnemos" in registry:
-        rows.append(("mnemos.embedder", str((kaine_config.get("mnemos") or {}).get("device", "auto"))))
+        rows.append(
+            (
+                "mnemos.embedder",
+                str((kaine_config.get("mnemos") or {}).get("device", "auto")),
+            )
+        )
     if "audition" in registry:
-        rows.append(("audition.emotion", str((kaine_config.get("audition") or {}).get("emotion_device", "cpu"))))
+        rows.append(
+            (
+                "audition.emotion",
+                str((kaine_config.get("audition") or {}).get("emotion_device", "cpu")),
+            )
+        )
     if "chronos" in registry:
         rows.append(("chronos.network", "cpu (pinned)"))
     if "hypnos" in registry:
         va = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
-        rows.append(("hypnos.voice_alignment", str(va.get("training_device", "cuda:0"))))
-        rows.append((
-            "hypnos.voice_alignment.hot_swap",
-            str(va.get("hot_swap_mode", "manual")),
-        ))
+        rows.append(
+            ("hypnos.voice_alignment", str(va.get("training_device", "cuda:0")))
+        )
+        rows.append(
+            (
+                "hypnos.voice_alignment.hot_swap",
+                str(va.get("hot_swap_mode", "manual")),
+            )
+        )
     if not rows:
         return
     log.info("device assignment summary:")
