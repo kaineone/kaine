@@ -40,9 +40,14 @@ implement it. The lead reviews this design before any code lands.
 - **A fovea target is selected by precision-weighted competition.** The bottom-up
   saliency argmax combines with an optional top-down bias (a goal- or agent-driven
   region from the workspace / Nous / Empatheia) under precision weighting — the same
-  precision-as-attentional-gain the architecture already uses. Thymos arousal sets
-  the fovea *size* ("arousal widens the attentional window," §3.4.3): wide and
-  low-magnification under high arousal, tight and high-magnification under focus.
+  precision-as-attentional-gain the architecture already uses. The Thymos arousal
+  value drives the fovea *size* — a **new, distinct visual coupling**, not the
+  existing arousal→Syneidesis salience-selection window (§3.4.3), which gates *which
+  candidates* reach the workspace, a different system entirely. The visual coupling
+  is grounded in the psychophysics of arousal and the breadth of visual attention
+  (arousal narrows the effective field — the Easterbrook cue-utilization effect),
+  and the exact size↔arousal mapping and its sign are a tuning parameter, not an
+  asserted result.
 - **Two views per tick: peripheral + foveal.** From a single moderate-resolution
   screen grab held in memory, Topos derives a downsampled peripheral view (whole
   field, coarse gist) and a foveal crop around the target scaled to the encoder's
@@ -98,6 +103,9 @@ implement it. The lead reviews this design before any code lands.
 - **Behavior:** effective acuity rises sharply at the attended region for bounded
   capture cost; vision becomes active (an internal epistemic-action loop). Off by
   default; the uniform path remains the shipped behavior until benchmarked.
-- **Open operator decisions:** see `design.md` §Flags — capture-resolution ceiling;
-  single-grab-crop vs the Phase-3 native region capture; whether Phase 1 ships
-  bottom-up-only (no top-down); single vs top-k foveae.
+- **Operator decisions (locked 2026-07-08):** top-down bias is in **Phase 1** (not
+  deferred); **single** fovea; the single grab is at **native** resolution (kept
+  configurable so the host benchmark can dial it back); fovea size is
+  **arousal-driven** (the distinct visual coupling above). Still open for Phase 3:
+  whether to add the native region capture, or rely on the native single-grab crop.
+  See `design.md` §Flags.

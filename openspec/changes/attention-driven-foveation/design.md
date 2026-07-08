@@ -19,11 +19,19 @@ where the weights are precisions, consistent with the precision-as-attentional-g
 the architecture already uses (Feldman and Friston 2010; Bastos et al. 2012). With
 no top-down source the target is purely bottom-up (Phase 1).
 
-**Fovea size from arousal.** Thymos already modulates Syneidesis so that "arousal
-widens the attentional window" (§3.4.3). Map that same arousal onto the foveal crop
-size: high arousal → a wider, lower-magnification fovea (vigilant, broad); low
-arousal / focus → a tight, high-magnification fovea. This reuses an existing signal
-and gives a natural stability knob.
+**Fovea size from arousal — a distinct visual coupling.** Do not conflate this with
+the existing Thymos→Syneidesis mechanism. That mechanism ("arousal widens the
+attentional window," §3.4.3) is a *cognitive salience-selection* window inside the
+workspace/Thymos graph — it scales salience scores and how hard the confidence
+threshold is to clear, i.e. *which candidates* reach the workspace. It says nothing
+about a spatial region of the visual field. Fovea size is a **new** coupling: the
+Thymos arousal *value* is taken as an input and mapped onto the spatial extent of
+the high-acuity crop. The grounding is the psychophysics of arousal and visual
+attention — the Easterbrook (1959) cue-utilization effect, in which higher arousal
+*narrows* the effective visual field (tunnel vision). The default mapping should
+therefore make higher arousal a **tighter, higher-magnification** fovea, but the
+exact function and its sign are a **tuning parameter**, not an asserted result, and
+the coupling ships behind the same benchmark gate as the rest.
 
 ## Producing the two views
 
@@ -109,19 +117,23 @@ normalized 2-D target + size), so the two never diverge.
 - **Latency budget.** Two encodes + crop must fit ~100 ms; the cycle already
   benchmarks the host at startup, so this is measurable before enabling.
 
-## Flags — operator decisions (for review, not yet decided)
+## Flags — operator decisions
 
-1. **Capture-resolution ceiling for the single grab** (1080p suggested) — trades
-   fovea sharpness against per-tick grab bandwidth.
-2. **Phase 3 native region capture: build or defer** — the single-grab-crop of
-   Phase 1 may be sharp enough in practice; the second ffmpeg adds real complexity.
-3. **Phase 1 scope: bottom-up only, or include top-down from day one** — bottom-up
-   alone ships the acuity win with less coupling; top-down needs a workspace→Topos
-   attention channel.
-4. **Single fovea vs top-k** — one is simplest and matches a single point of gaze;
-   top-k spreads acuity across several salient regions at more cost.
-5. **Fovea-size source** — arousal-driven (reuses Thymos, recommended) vs a fixed
-   configured size.
+Locked by the operator 2026-07-08:
+
+1. **Capture resolution of the single grab: NATIVE** (up to 4K), kept configurable
+   so the host benchmark can dial it back if it strains the tick.
+2. **Phase 1 scope: INCLUDE top-down** — the workspace→Topos attention channel is
+   built in Phase 1, not deferred.
+3. **Fovea count: SINGLE.**
+4. **Fovea size: AROUSAL-DRIVEN** (the distinct visual coupling above), sign per the
+   Easterbrook narrowing default, mapping tunable.
+
+Still open (Phase 3):
+
+5. **Native region capture: build or defer** — the native single-grab crop of Phase
+   1 may already be sharp enough; the second capture adds real complexity. Decide
+   after the Phase 1 benchmark.
 
 ## Grounding
 

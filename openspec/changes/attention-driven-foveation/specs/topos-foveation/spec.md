@@ -42,9 +42,11 @@ dwell/hysteresis rule so the fovea does not oscillate between comparable regions
 
 #### Scenario: Arousal sets fovea size
 
-- **WHEN** Thymos arousal is high versus low
-- **THEN** the selected fovea is wider (lower magnification) under high arousal and
-  tighter (higher magnification) under low arousal
+- **WHEN** Thymos arousal differs between two ticks
+- **THEN** the selected fovea size changes monotonically with arousal (this is a
+  distinct visual coupling, not the Syneidesis salience-selection window; the default
+  mapping follows the arousal-narrowing effect — higher arousal, tighter fovea — and
+  the sign is a tuning parameter)
 
 #### Scenario: Comparable regions do not thrash
 

@@ -11,39 +11,46 @@ benchmarked. Until then the shipped perception path is the existing uniform
 downsample; selecting foveation before it is real fails honestly rather than
 returning a fixed/centre fovea.
 
-## 0. Operator decisions — PENDING (see design.md §Flags)
+## 0. Operator decisions — DECIDED (locked by operator 2026-07-08)
 
-- [ ] 0.1 Capture-resolution ceiling for the single grab (suggest 1080p).
-- [ ] 0.2 Phase 3 native region capture: build, or defer if single-grab-crop is
-      sharp enough in practice.
-- [ ] 0.3 Phase 1 scope: bottom-up only, or include top-down from day one.
-- [ ] 0.4 Single fovea vs top-k.
-- [ ] 0.5 Fovea size: arousal-driven (reuses Thymos) vs fixed configured size.
+- [x] 0.1 **Single grab at NATIVE resolution**, kept configurable so the benchmark
+      can dial it back. (design.md §Flags 1)
+- [x] 0.2 **Top-down bias is in Phase 1** (workspace→Topos attention channel built
+      now, not deferred). (Flag 2)
+- [x] 0.3 **Single fovea.** (Flag 3)
+- [x] 0.4 **Fovea size is arousal-driven** — the distinct visual coupling
+      (Easterbrook narrowing default, sign tunable), NOT the Syneidesis salience
+      window. (Flag 4)
+- [ ] 0.5 Phase 3 native region capture: build or defer — decide after the Phase 1
+      benchmark. (Flag 5)
 
-## 1. Phase 1 — spatial saliency + bottom-up fovea + dual view
+## 1. Phase 1 — spatial saliency + fovea (bottom-up + top-down) + dual view
 
 - [ ] 1.1 Add a coarse spatial saliency map to Topos: tile the frame; per-tile
       change and forward-model prediction error; kept in memory only.
-- [ ] 1.2 Select the bottom-up fovea target as the saliency argmax (tile centre),
-      with dwell/hysteresis to damp thrashing.
-- [ ] 1.3 From a single moderate-resolution in-memory grab, derive the peripheral
+- [ ] 1.2 A workspace→Topos attention channel: an optional top-down bias region
+      (from Nous / Empatheia / a goal), injected without Topos importing the
+      workspace (a provider/callback seam, like the affect seam).
+- [ ] 1.3 Select the single fovea target as the argmax of the precision-weighted
+      combination of bottom-up saliency and the top-down bias, with dwell/hysteresis
+      to damp thrashing; fovea size from the Thymos arousal value (distinct visual
+      coupling; Easterbrook-narrowing default sign, tunable).
+- [ ] 1.4 From a single NATIVE-resolution in-memory grab, derive the peripheral
       (downsample) and the foveal crop (array slice → native patch); release frames
       as they age out (zero-persistence guard stays green).
-- [ ] 1.4 Encode both views; extend `topos.report` to carry peripheral + foveal
+- [ ] 1.5 Encode both views; extend `topos.report` to carry peripheral + foveal
       latents + content-free fovea location `(x, y, size)`; keep whole-frame salience
       as a diagnostic and as the fallback when foveation is off.
-- [ ] 1.5 Config: a foveation toggle under `[topos]`/`[perception_feed]`, off by
-      default; grab resolution, tile grid, dwell/hysteresis.
-- [ ] 1.6 Host-benchmark the two-encode + crop cost against the tick budget; gate
-      enabling on it. Report a NULL/regression result honestly.
+- [ ] 1.6 Config: a foveation toggle under `[topos]`/`[perception_feed]`, off by
+      default; grab resolution (native default), tile grid, dwell/hysteresis, the
+      arousal→size mapping.
+- [ ] 1.7 Host-benchmark the two-encode + native-grab + crop cost against the tick
+      budget; gate enabling on it. Report a NULL/regression result honestly, and
+      dial grab resolution back if native strains the budget.
 
-## 2. Phase 2 — top-down bias + attention schema
+## 2. Phase 2 — attention schema
 
-- [ ] 2.1 A workspace→Topos attention channel: an optional top-down region (from
-      Nous / Empatheia / a goal) as a bias map.
-- [ ] 2.2 Combine bottom-up saliency and top-down bias under precision weighting;
-      map Thymos arousal onto fovea size.
-- [ ] 2.3 Publish a *predicted next fovea* from a small forward model (the attention
+- [ ] 2.1 Publish a *predicted next fovea* from a small forward model (the attention
       schema); expose it content-free for the self-model and diagnostics.
 
 ## 3. Phase 3 — saccadic native fovea
