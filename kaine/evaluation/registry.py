@@ -32,6 +32,7 @@ from kaine.evaluation.memory_probes import (
     MemoryProbeRunner,
     MemorySource,
 )
+from kaine.evaluation.observers.ablation_observer import AblationObserver
 from kaine.evaluation.observers.coherence_observer import CoherenceObserver
 from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
 from kaine.evaluation.observers.fatigue_observer import FatigueObserver
@@ -86,10 +87,22 @@ class SidecarRegistry:
         # Sidecar observers exposed for Nexus diagnostics.
         self._prediction_error_observer: PredictionErrorObserver | None = None
         self._welfare_observer: WelfareObserver | None = None
+        # The live oscillatory-ablation recorder is NOT a bus subscriber (it is
+        # driven directly by the cycle), so it is held apart from _observers and
+        # its record() is exposed via the ablation_recorder property. Its sink IS
+        # tracked in _sinks for normal start/stop.
+        self._ablation_observer: AblationObserver | None = None
 
     @property
     def started(self) -> bool:
         return self._started
+
+    @property
+    def ablation_recorder(self):
+        """The cycle-facing ``(primary, counterfactual) -> None`` recorder, or
+        None when the live oscillatory ablation is disabled. The composition root
+        attaches it to the cycle via ``cycle.set_ablation_recorder`` after build."""
+        return self._ablation_observer.record if self._ablation_observer else None
 
     @property
     def _research_active(self) -> bool:
@@ -223,6 +236,11 @@ class SidecarRegistry:
         if config.voice_tracking:
             sink = self._make_sink("voice_tracking", "voice_tracking")
             self._observers.append(VoiceTrackingObserver(self._bus, sink))
+        if config.oscillatory_ablation:
+            # Recorder, not a bus subscriber: its record() is handed to the cycle
+            # via ablation_recorder; only its sink joins the managed lifecycle.
+            sink = self._make_sink("ablation", "ablation")
+            self._ablation_observer = AblationObserver(sink)
         if config.affect_correlation:
             sink = self._make_sink("affect_correlation", "affect_correlation")
             self._observers.append(
