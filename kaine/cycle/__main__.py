@@ -806,6 +806,13 @@ async def _boot_and_run(
             log.warning("evaluation sidecar start failed", exc_info=True)
             sidecar = None
 
+    # Attach the live oscillatory-ablation recorder to the cycle once the sidecar
+    # (and its ablation sink) is up. Off unless [evaluation].oscillatory_ablation
+    # is set; when off this is a no-op and the cycle takes the plain select path.
+    if sidecar is not None and sidecar.ablation_recorder is not None:
+        cycle.set_ablation_recorder(sidecar.ablation_recorder)
+        log.info("live oscillatory ablation attached to cycle")
+
     # Dev-gated LOOPBACK perception-preview server (paper §4.4 explicit
     # override). Populated by Topos/Audition, this bridges the in-RAM preview
     # holder to the SEPARATE Nexus process over a 127.0.0.1-only socket so the
