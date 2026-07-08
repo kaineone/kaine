@@ -339,6 +339,11 @@ class EvaluationConfig:
     eidolon_accuracy: bool = True
     eidolon_accuracy_interval_hours: int = 24
     sleep_snapshots: bool = True
+    # Live oscillatory ablation (concurrent dual-path). Off by default: it scores
+    # each experiential tick twice to record the coherence-off counterfactual, a
+    # small hot-path cost only research runs should pay. The entity's behaviour is
+    # unchanged whether or not it is on.
+    oscillatory_ablation: bool = False
     paths: EvaluationPaths = field(default_factory=EvaluationPaths)
     # Internal — used by ABDivergenceObserver to reach the same OpenAI-compatible
     # model server Lingua uses (/v1/chat/completions). `think` mirrors Lingua's:

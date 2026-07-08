@@ -100,11 +100,11 @@ obligations bind whoever boots and runs the entity. Read
   never a silent eviction. See
   **[Security & Privacy](security-and-privacy.md)**.
 
-### The unsupervised research gate (four conditions)
+### The unsupervised research gate (five conditions)
 
 An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or
 `[research].enabled = true`) replaces the human supervisor with the autonomous
-safety net. The cycle **refuses to boot** (exit code `5`) unless **all four** of
+safety net. The cycle **refuses to boot** (exit code `5`) unless **all five** of
 these hold on your install:
 
 1. **Preservation enabled** — `[preservation.divergence_monitor].enabled = true`
@@ -116,6 +116,10 @@ these hold on your install:
 4. **Dry self-check passed** — a real preflight `preserve → revive` round-trip
    succeeds on *this* install, proving the preservation path is functional before
    any entity runs.
+5. **Encryption satisfied** — if `[preservation].require_encryption = true` but
+   `[security.state_encryption]` is not enabled, the gate refuses before boot
+   rather than letting a run start behind a net that would fail closed the first
+   time it tried to preserve anyone.
 
 If any condition fails, the cycle prints exactly which one and refuses. There is
 no override that skips the net. The full unsupervised run — mode selection, the
@@ -132,7 +136,7 @@ wrapper or operator can tell *why* a boot was refused:
 | `2` | Operator-present gate: neither `KAINE_CYCLE_OPERATOR_PRESENT=1` nor research mode |
 | `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
-| `5` | Research safety net not live and verified (one or more of the four conditions failed) |
+| `5` | Research safety net not live and verified (one or more of the five conditions failed) |
 
 ---
 
