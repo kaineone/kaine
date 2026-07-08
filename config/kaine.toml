@@ -353,6 +353,26 @@ forward_model_units = 128
 prediction_error_window = 32
 # Number of recent latents to keep in the recurrent visual buffer.
 visual_buffer_size = 16
+# Attention-driven foveation (topos-foveation). OFF by default → Topos runs the
+# single whole-frame encode, byte-for-byte unchanged. When on, each frame yields
+# a coarse spatial saliency map, one precision-weighted fovea (bottom-up saliency
+# + an optional top-down bias), and TWO encodes: a downsampled peripheral gist
+# plus a foveal crop at native detail. Enable only after the host benchmark
+# (scripts/bench_foveation.py) confirms two-encode + native-grab fits the tick.
+# For screen mode set capture_width/height to the panel resolution (or use the
+# native grab under [perception_feed.screen]) so the fovea crop is truly native.
+foveation = false
+foveation_grid = [12, 12]           # saliency tiling (rows, cols)
+foveation_hysteresis = 0.15         # dwell damping: a new tile must beat the held
+                                    # one by >15% to move the fovea (anti-thrash)
+# Fovea size is coupled to Thymos arousal (Easterbrook narrowing): high arousal →
+# tighter fovea. These bound the normalized crop half-extent (fraction of the
+# frame's short side). Widen or flip (min>max) to tune the coupling's sign.
+foveation_arousal_size_min = 0.12   # size at arousal = 1.0 (tightest)
+foveation_arousal_size_max = 0.5    # size at arousal = 0.0 (widest)
+peripheral_width = 320              # downsampled whole-field gist geometry
+peripheral_height = 180
+foveal_size = 224                   # square foveal crop fed to the encoder
 
 [nous]
 # Active inference engine (pymdp 1.0, JAX). Install the `reasoning` extra
@@ -603,6 +623,9 @@ prosody_enabled = false
 #              honestly with an install hint (never synthetic silence).
 #   live     — the real camera + real microphone paths (NON-reproducible;
 #              operator-present demos only, never a research run).
+#   screen   — the entity sees a shared desktop/window and hears its audio monitor
+#              (whatever the operator plays there). Field-tier arbitrary stimulus;
+#              zero-persistence holds. See [perception_feed.screen] below.
 # Selecting seeded/playlist turns capture on automatically for both surfaces.
 # SYNCHRONIZATION (honest): coherence is at the media/clip level (playlist) or
 # via the shared seed + cadence (seeded), NOT frame-locked across the two loops.
@@ -620,6 +643,26 @@ sample_rate = 16000             # match [audition].capture_sample_rate
 channels = 1
 base_strength = 0.3             # learnable base soundscape amplitude
 surprise_strength = 1.0         # seed-keyed surprise-burst amplitude (0 = none)
+
+# [perception_feed.screen]      # screen/window capture (mode = "screen"), all off
+# by default. Capture goes through the system ffmpeg binary (gdigrab on Windows,
+# avfoundation on macOS, x11grab on X11) — the one tool carrying every platform's
+# capture indev; a native-Wayland session must run through XWayland.
+# target = "fullscreen"         # "fullscreen" | "region" | "window"
+# region = [0, 0, 1920, 1080]   # required for target = "region" (x, y, w, h)
+# window_title = ""             # required for target = "window" on Windows/gdigrab
+# display = ":0.0"              # X11 display (ignored off X11)
+# framerate = 10                # capture frames per second
+# cursor = true                 # draw the mouse pointer into the frame
+# native = false                # NATIVE GRAB (topos-foveation): capture at the
+#                               # display's own resolution with no downscale, so a
+#                               # foveal crop carries true native detail. Detected
+#                               # via xrandr on X11; on a platform without a probe
+#                               # it falls back to capture_width/height with a note.
+#                               # Enable together with [topos].foveation.
+# monitor_device = ""           # desktop-audio monitor source; Linux defaults to
+#                               # the current sink's .monitor when unset
+# ffmpeg_path = "ffmpeg"        # override if ffmpeg is not on PATH
 
 [vox]
 chatterbox_url = "http://127.0.0.1:8883"

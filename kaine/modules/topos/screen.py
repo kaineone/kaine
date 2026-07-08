@@ -153,6 +153,65 @@ def _require_region(target: ScreenTarget) -> tuple[int, int, int, int]:
     return target.region
 
 
+def _default_run_command(cmd: list[str]) -> str:
+    """Run a short probe command and return its stdout (empty string on failure)."""
+    try:
+        out = subprocess.run(  # noqa: S603 — cmd is a fixed probe (xrandr)
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+            check=False,
+        )
+        return out.stdout.decode("utf-8", "replace")
+    except Exception:
+        return ""
+
+
+def detect_screen_size(
+    target: ScreenTarget,
+    *,
+    platform: str | None = None,
+    run_command: Callable[[list[str]], str] | None = None,
+) -> tuple[int, int] | None:
+    """Best-effort native pixel size of the capture target, for the native grab.
+
+    A region or window target already carries its own resolved geometry, so its
+    size is returned directly. For a fullscreen target the display resolution is
+    probed — on X11 via ``xrandr`` (the current mode, marked ``*``). Returns
+    ``None`` when the size cannot be determined (e.g. no probe on this platform);
+    the caller then falls back to the configured capture geometry rather than
+    guessing. The command runner is injected so the parsing is unit-testable
+    without a display.
+    """
+    if target.kind in ("region", "window") and target.region:
+        _, _, w, h = target.region
+        return (int(w), int(h))
+    platform = platform or current_platform()
+    if platform != "linux":
+        # No portable fullscreen probe wired for gdigrab/avfoundation yet; the
+        # operator sets capture_width/height to the panel resolution instead.
+        return None
+    run = run_command or _default_run_command
+    out = run(["xrandr", "--display", target.display, "--current"])
+    return _parse_xrandr_current(out)
+
+
+def _parse_xrandr_current(text: str) -> tuple[int, int] | None:
+    """Parse the current (``*``-marked) mode's ``WxH`` from ``xrandr`` output."""
+    for line in text.splitlines():
+        if "*" not in line:
+            continue
+        for token in line.split():
+            if "x" in token:
+                w, _, h = token.partition("x")
+                # A mode token is 'WIDTHxHEIGHT' possibly with a trailing '+'.
+                h = h.split("+")[0]
+                if w.isdigit() and h.isdigit():
+                    return (int(w), int(h))
+    return None
+
+
 def _default_open_process(cmd: list[str]) -> Any:
     """Spawn ffmpeg; raise a perception error if the binary is absent."""
     try:
@@ -194,27 +253,35 @@ class ScreenCaptureSource:
         width: int,
         height: int,
         ffmpeg_path: str = "ffmpeg",
+        native: bool = False,
         open_process: Callable[[list[str]], Any] | None = None,
     ) -> None:
         self._spec = spec
         self._width = int(width)
         self._height = int(height)
         self._ffmpeg_path = ffmpeg_path
+        # Native passthrough (topos-foveation): emit frames at the capture's own
+        # resolution with no scale filter, so the foveal crop carries true native
+        # detail. (width, height) must then be the actual capture resolution — the
+        # builder detects it — because they size the raw-frame reshape.
+        self._native = bool(native)
         self._open_process = open_process or _default_open_process
         self._frame_bytes = self._width * self._height * 3
         self._proc: Any = None
 
     def command(self) -> list[str]:
-        """The full ffmpeg command: the OS input spec, scaled to Topos geometry,
-        emitted as raw bgr24 on stdout."""
+        """The full ffmpeg command: the OS input spec, emitted as raw bgr24 on
+        stdout. Scaled to Topos geometry unless native passthrough is set."""
+        scale_args = (
+            [] if self._native else ["-vf", f"scale={self._width}:{self._height}"]
+        )
         return [
             self._ffmpeg_path,
             "-hide_banner",
             "-loglevel",
             "error",
             *self._spec.input_args,
-            "-vf",
-            f"scale={self._width}:{self._height}",
+            *scale_args,
             "-pix_fmt",
             "bgr24",
             "-f",

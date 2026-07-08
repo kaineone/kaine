@@ -21,6 +21,7 @@ method is what actually starts the work. Boot order:
   4. Run the cycle forever.
   5. On signal: shut down cycle, then every module.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -53,7 +54,12 @@ from kaine.perception_state import write_desired_audio, write_desired_video
 from kaine.state_io import write_json_atomic
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
-from kaine.experiment import mint_run_context, set_global_seed, set_run_context, write_manifest
+from kaine.experiment import (
+    mint_run_context,
+    set_global_seed,
+    set_run_context,
+    write_manifest,
+)
 from kaine.hardware import tune_cpu_threads
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.workspace import (
@@ -94,6 +100,30 @@ def _thymos_state_factory(registry):
         return state.get("dimensional") or state
 
     return _get
+
+
+def _wire_topos_arousal(registry, affect_provider) -> bool:
+    """Give Topos the live Thymos arousal scalar that sizes the fovea.
+
+    Attention-driven foveation couples the fovea *size* to arousal (Easterbrook
+    narrowing) — a distinct visual coupling, not the Syneidesis salience window.
+    The composition root already holds the ``AffectStateProvider`` it refreshes
+    each tick from ``thymos.state``; this hands Topos a read-only accessor to its
+    arousal in [0, 1] (dependency injection — Topos never imports the workspace or
+    Thymos). No-op unless Topos is present with foveation enabled. Returns whether
+    it wired, so the caller can ensure the provider is actually refreshed.
+    """
+    try:
+        topos = registry.get("topos") if "topos" in registry else None
+    except Exception:
+        topos = None
+    if topos is None or not getattr(topos, "foveation_enabled", False):
+        return False
+    if not hasattr(topos, "set_arousal_provider"):
+        return False
+    topos.set_arousal_provider(lambda: affect_provider.dimensional_state().arousal)
+    log.info("wired topos fovea size to live thymos arousal")
+    return True
 
 
 def _sleep_state_factory(registry):
@@ -159,8 +189,11 @@ def _memory_source_factory(registry):
                     oldest_ts, oldest = ts, m
             if oldest is None:
                 return None
-            return {"text": oldest.text, "timestamp": oldest.payload.get("timestamp"),
-                    **oldest.payload}
+            return {
+                "text": oldest.text,
+                "timestamp": oldest.payload.get("timestamp"),
+                **oldest.payload,
+            }
 
     return _MnemosMemorySource()
 
@@ -175,7 +208,9 @@ def _cognitive_query_client_factory(registry, eval_cfg):
     from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 
     mnemos = registry.get("mnemos")
-    client = OpenAIChatClient(base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s)
+    client = OpenAIChatClient(
+        base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s
+    )
     model = eval_cfg.chat_model_id
 
     class _StackQueryClient:
@@ -189,7 +224,8 @@ def _cognitive_query_client_factory(registry, eval_cfg):
             try:
                 resp = await client.complete(
                     ChatRequest(
-                        prompt=prompt, model=model,
+                        prompt=prompt,
+                        model=model,
                         system="Answer in the first person from your memories above.",
                         max_tokens=256,
                     )
@@ -436,7 +472,9 @@ def _clear_runtime_state() -> None:
             log.warning("could not remove %s", RUNTIME_PATH, exc_info=True)
 
 
-def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None) -> dict[str, str]:
+def _gather_model_ids(
+    config: dict[str, Any], *, eval_chat_model_id: str | None
+) -> dict[str, str]:
     """Collect the run's model ids from the resolved config's DOCUMENTED model
     keys only.
 
@@ -510,9 +548,9 @@ async def _boot_and_run(
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = (kaine_config.get("lingua") or {}).get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    lingua_api_key = (kaine_config.get("lingua") or {}).get(
+        "api_key"
+    ) or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
     try:
         eval_cfg = load_evaluation_config(
             lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
@@ -662,11 +700,18 @@ async def _boot_and_run(
     thymos_modulator, goal_scorer, downgraded_factors = make_salience_factors(
         kaine_config, affect_provider
     )
-    # The provider only needs refreshing when a real factor reads it. When both
-    # factors are the static negative control the engine stays byte-identical to
-    # the pre-change behavior (no affect observation at all).
-    reads_affect = isinstance(thymos_modulator, StateModulator) or isinstance(
-        goal_scorer, DriveRelevanceGoalScorer
+    # Foveation's fovea size reads the same affect snapshot (arousal → size).
+    # Wiring it also means the provider must be refreshed each tick so the arousal
+    # it reads is live, not the frozen baseline.
+    topos_reads_arousal = _wire_topos_arousal(registry, affect_provider)
+    # The provider only needs refreshing when a real reader consumes it. When both
+    # salience factors are the static negative control AND foveation is off, the
+    # engine stays byte-identical to the pre-change behavior (no affect observation
+    # at all).
+    reads_affect = (
+        isinstance(thymos_modulator, StateModulator)
+        or isinstance(goal_scorer, DriveRelevanceGoalScorer)
+        or topos_reads_arousal
     )
     affect_observer = affect_provider.observe if reads_affect else None
     syneidesis = Syneidesis(
@@ -756,9 +801,7 @@ async def _boot_and_run(
         if name == "hypnos":
             mnemos = registry.get("mnemos") if "mnemos" in registry else None
             thymos = registry.get("thymos") if "thymos" in registry else None
-            phantasia = (
-                registry.get("phantasia") if "phantasia" in registry else None
-            )
+            phantasia = registry.get("phantasia") if "phantasia" in registry else None
             return make_hypnos(
                 bus,
                 dict(kaine_config.get("hypnos") or {}),
@@ -1089,7 +1132,9 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
             "enabled", False
         )
     )
-    encryption_satisfied = (not preservation_cfg.require_encryption) or encryption_enabled
+    encryption_satisfied = (
+        not preservation_cfg.require_encryption
+    ) or encryption_enabled
     return evaluate_research_gate(
         preservation_enabled=preservation_cfg.divergence_monitor.enabled,
         welfare_response_wired=preservation_cfg.welfare_response.enabled,
@@ -1114,7 +1159,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = _load_kaine_config()
     except Exception as exc:
-        sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
+        sys.stderr.write(
+            f"Refusing to boot KAINE cycle: could not load config: {exc}\n"
+        )
         return 1
 
     # The gate is evaluated EXACTLY ONCE here (sync, before the event loop, so
@@ -1147,9 +1194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         return asyncio.run(
-            _boot_and_run(
-                supervision_mode=supervision_mode, gate_checks=gate_checks
-            )
+            _boot_and_run(supervision_mode=supervision_mode, gate_checks=gate_checks)
         )
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")

@@ -252,6 +252,11 @@ class Topos(BaseModule):
             entity_clock=self._clock,
         )
 
+    @property
+    def foveation_enabled(self) -> bool:
+        """Whether attention-driven foveation is active (topos-foveation)."""
+        return self._foveation_enabled
+
     def set_top_down_bias_provider(self, provider: Optional[Any]) -> None:
         """Inject the workspace→Topos top-down attention channel.
 
