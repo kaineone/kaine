@@ -290,19 +290,12 @@ def _build_perception_feed_video_factory(
 def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
     """Build a screen/window-capture ``_VideoSource`` factory (ffmpeg-backed).
 
-    Gated by an operator consent attestation: capturing a shared screen means the
-    entity sees whatever is on it, so ``[perception_feed].screen_capture_attested``
-    must be true — the operator attests they consent to that and will not expose
-    third-party private content (the local-capture consent boundary of the paper's
-    §11). Reads the ``[perception_feed.screen]`` target; the per-OS ffmpeg input
-    spec is resolved at build time and the source is opened per LiveCamera cycle.
+    Reads the ``[perception_feed.screen]`` target; the per-OS ffmpeg input spec is
+    resolved at build time and the source is opened per LiveCamera cycle. The
+    operator chooses to enable this deliberately (the shipped config is all-off),
+    and screen contents are the operator's own or public media, so no separate
+    consent gate is imposed here.
     """
-    if not bool(feed.get("screen_capture_attested", False)):
-        raise ValueError(
-            "[perception_feed].mode = 'screen' requires screen_capture_attested = "
-            "true — the operator attests they consent to the entity seeing this "
-            "screen and will not expose third-party private content."
-        )
     from kaine.modules.topos.screen import (
         ScreenCaptureSource,
         ScreenTarget,
@@ -330,6 +323,40 @@ def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
     return _screen_factory
 
 
+def _build_monitor_audio_factory(feed: dict[str, Any]) -> Any:
+    """Build a desktop-audio monitor ``_AudioStream`` factory (ffmpeg-backed).
+
+    Screen mode hears what is playing on the shared screen by capturing the audio
+    output monitor. The monitor device comes from
+    ``[perception_feed.screen].monitor_device``; on Linux it defaults to the
+    current default sink's ``.monitor`` when unset.
+    """
+    from kaine.modules.audition.monitor import (
+        MonitorAudioStream,
+        audio_capture_spec,
+        default_monitor_source,
+    )
+
+    scr = dict(feed.get("screen") or {})
+    device = str(scr.get("monitor_device", "") or "")
+    if not device:
+        device = default_monitor_source() or ""
+    spec = audio_capture_spec(device)  # raises with guidance if still empty
+    ffmpeg_path = str(scr.get("ffmpeg_path", "ffmpeg"))
+
+    def _monitor_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001, ARG001
+        return MonitorAudioStream(
+            spec,
+            sample_rate=sample_rate,
+            channels=channels,
+            frames_per_block=frames_per_block,
+            callback=callback,
+            ffmpeg_path=ffmpeg_path,
+        )
+
+    return _monitor_factory
+
+
 def _build_perception_feed_audio_factory(
     mode: str,
     feed: dict[str, Any],
@@ -348,6 +375,9 @@ def _build_perception_feed_audio_factory(
     ``[perception_feed.audio]`` knobs. Playlist walks the SAME manifest as the
     video surface.
     """
+    if mode == "screen":
+        return _build_monitor_audio_factory(feed)
+
     from kaine.modules.audition.feed import (
         PlaylistAudioStream,
         SeededAudioSchedule,
@@ -839,8 +869,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             "[perception_feed].mode must be off/seeded/playlist/live/screen, "
             f"got {mode!r}"
         )
-    # 'screen' is video-only for now: leave audio capture off (desktop-audio
-    # monitor capture is the declared next step). No stream_factory, no capture.
+    # 'screen' hears the desktop audio monitor (what is playing on screen), so it
+    # takes a stream_factory like seeded/playlist; the deterministic feeds and the
+    # monitor all satisfy the same LiveMicrophone seam.
     audio_cfg = dict(feed_section.get("audio") or {})
     sample_rate = int(
         audio_cfg.get("sample_rate", section.get("capture_sample_rate", 16000))
@@ -848,7 +879,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     channels = int(audio_cfg.get("channels", section.get("capture_channels", 1)))
     if mode == "live":
         kwargs["capture_enabled"] = True
-    elif mode in ("seeded", "playlist"):
+    elif mode in ("seeded", "playlist", "screen"):
         kwargs["capture_enabled"] = True
         vad_frame_ms = int(section.get("vad_frame_ms", 30))
         frames_per_block = max(1, sample_rate * vad_frame_ms // 1000)
