@@ -28,7 +28,6 @@ class SyneidesisProtocol(Protocol):
 
         Returns ``(primary, None)`` when the coherence layer is disabled.
         """
-        ...
 
 
 @runtime_checkable
