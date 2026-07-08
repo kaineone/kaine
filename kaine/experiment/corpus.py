@@ -94,7 +94,7 @@ class RunMetric:
     group: str | None = None
 
 
-def _coerce_metric(m: Any) -> RunMetric | None:
+def _coerce_metric(m: MetricLike) -> RunMetric | None:
     """Normalise a ``metric_fn`` return into a ``RunMetric`` (or ``None``)."""
     if m is None:
         return None
