@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 
+import numpy as np
 import pytest
 
 from kaine.bus.client import AsyncBus
@@ -372,6 +373,127 @@ async def test_serialize_roundtrip_with_forward_model(bus: AsyncBus):
     fm._buffer.clear()
     probe = [0.2] * 4
     assert fm.predict(probe) == pytest.approx(fresh_fm.predict(probe), abs=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# Attention-driven foveation integration (topos-foveation)
+# ---------------------------------------------------------------------------
+
+
+def _rgb_frame(h=240, w=320, fill=0):
+    return np.full((h, w, 3), fill, dtype=np.uint8)
+
+
+@pytest.mark.asyncio
+async def test_foveation_off_is_single_encode_and_no_extra_keys(bus: AsyncBus):
+    """Default (foveation off): one encode, `latent` present, no fovea keys."""
+    enc = FakeEncoder([[1.0, 0.0, 0.0, 0.0]])
+    topos = Topos(bus, encoder=enc)
+    await topos.process_frame(_rgb_frame())
+    assert enc.calls == 1  # single whole-frame encode
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[0]
+    assert ev.payload["latent"] == [1.0, 0.0, 0.0, 0.0]
+    assert "peripheral" not in ev.payload
+    assert "foveal" not in ev.payload
+    assert "fovea" not in ev.payload
+
+
+@pytest.mark.asyncio
+async def test_foveation_on_emits_two_latents_and_content_free_fovea(bus: AsyncBus):
+    """Foveation on: two encodes (peripheral then foveal); `latent` is the
+    peripheral gist; `fovea` carries only normalized floats."""
+    enc = FakeEncoder([[0.1, 0.2, 0.3, 0.4], [0.9, 0.8, 0.7, 0.6]])
+    topos = Topos(bus, encoder=enc, foveation_enabled=True)
+    await topos.process_frame(_rgb_frame())
+    assert enc.calls == 2  # peripheral + foveal
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[0]
+    # First encode (peripheral) drives `latent`; second is the foveal detail.
+    assert ev.payload["latent"] == [0.1, 0.2, 0.3, 0.4]
+    assert ev.payload["peripheral"] == [0.1, 0.2, 0.3, 0.4]
+    assert ev.payload["foveal"] == [0.9, 0.8, 0.7, 0.6]
+    fovea = ev.payload["fovea"]
+    assert set(fovea) == {"x", "y", "size"}
+    for v in fovea.values():
+        assert isinstance(v, float)
+        assert 0.0 <= v <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_foveation_targets_the_changed_region(bus: AsyncBus):
+    """A localized change on a static field pulls the fovea toward that region."""
+    enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]] * 8)
+    topos = Topos(bus, encoder=enc, foveation_enabled=True)
+    await topos.process_frame(_rgb_frame(fill=0))  # prime saliency baseline
+    f = _rgb_frame(fill=0)
+    f[180:240, 260:320] = 255  # brighten lower-right
+    await topos.process_frame(f)
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[-1]
+    fovea = ev.payload["fovea"]
+    assert fovea["x"] > 0.5 and fovea["y"] > 0.5  # lower-right
+
+
+@pytest.mark.asyncio
+async def test_top_down_bias_provider_moves_the_fovea(bus: AsyncBus):
+    """An injected top-down bias can override the bottom-up argmax."""
+    enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]] * 8)
+    topos = Topos(bus, encoder=enc, foveation_enabled=True, foveation_grid=(4, 4))
+
+    # Bias hard toward the top-left tile regardless of bottom-up saliency.
+    bias = np.zeros((4, 4), dtype=np.float32)
+    bias[0, 0] = 1.0e4  # dwarfs any per-tile pixel-change magnitude (≤255)
+    topos.set_top_down_bias_provider(lambda: bias)
+
+    await topos.process_frame(_rgb_frame(fill=0))
+    f = _rgb_frame(fill=0)
+    f[180:240, 260:320] = 255  # bottom-up wants lower-right...
+    await topos.process_frame(f)
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[-1]
+    fovea = ev.payload["fovea"]
+    assert fovea["x"] < 0.5 and fovea["y"] < 0.5  # ...but top-down wins: top-left
+
+
+@pytest.mark.asyncio
+async def test_arousal_provider_sizes_the_fovea(bus: AsyncBus):
+    """Higher arousal → tighter fovea (Easterbrook narrowing default)."""
+
+    async def _size_at(arousal: float) -> float:
+        b = pytest.importorskip("fakeredis.aioredis")
+        client = b.FakeRedis(decode_responses=True)
+        local_bus = AsyncBus(
+            BusConfig(password="x", audit_required=False), client=client
+        )
+        enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]] * 2)
+        topos = Topos(local_bus, encoder=enc, foveation_enabled=True)
+        topos.set_arousal_provider(lambda: arousal)
+        await topos.process_frame(_rgb_frame())
+        entries = await local_bus.read("topos.out", last_id="0")
+        await local_bus.close()
+        return entries[-1][1].payload["fovea"]["size"]
+
+    calm = await _size_at(0.0)
+    tense = await _size_at(1.0)
+    assert tense < calm
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_degrades_to_bottom_up(bus: AsyncBus):
+    """A throwing provider must not break perception — it degrades gracefully."""
+    enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]] * 2)
+    topos = Topos(bus, encoder=enc, foveation_enabled=True)
+
+    def _boom():
+        raise RuntimeError("provider exploded")
+
+    topos.set_top_down_bias_provider(_boom)
+    topos.set_arousal_provider(_boom)
+    entry_id = await topos.process_frame(_rgb_frame())  # must not raise
+    assert entry_id
+    entries = await bus.read("topos.out", last_id="0")
+    assert "fovea" in entries[-1][1].payload
 
 
 @pytest.mark.asyncio

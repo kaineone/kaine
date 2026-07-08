@@ -19,6 +19,13 @@ from kaine.modules.topos.habituation import (
     RollingMeanHabituator,
     SceneHabituator,
 )
+from kaine.modules.topos.foveation import (
+    FoveaTarget,
+    SpatialSaliency,
+    combine_saliency,
+    foveate,
+    select_fovea,
+)
 from kaine.modules.topos.live import (
     LiveCamera,
     LiveCameraConfig,
@@ -67,6 +74,19 @@ class Topos(BaseModule):
         # sampling rhythm dilates with the mind). Defaults to a real-time clock
         # → behavior-identical.
         entity_clock: Optional[EntityClock] = None,
+        # Attention-driven foveation (topos-foveation). Off by default → the
+        # existing single whole-frame encode is unchanged. When enabled, each
+        # native-resolution frame yields a coarse spatial saliency map, a single
+        # precision-weighted fovea target (bottom-up saliency + an optional
+        # top-down bias, sized by arousal), and two encodes — a downsampled
+        # peripheral gist plus a native foveal crop. See
+        # kaine/modules/topos/foveation.py and openspec topos-foveation.
+        foveation_enabled: bool = False,
+        foveation_grid: tuple[int, int] = (12, 12),
+        foveation_hysteresis: float = 0.15,
+        foveation_size_range: tuple[float, float] = (0.12, 0.5),
+        peripheral_size: tuple[int, int] = (320, 180),
+        foveal_size: tuple[int, int] = (224, 224),
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -107,11 +127,39 @@ class Topos(BaseModule):
         self._forward_model: Optional[Any] = None  # LatentForwardModel, lazy
 
         from collections import deque
+
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
 
         # Hypnos sleep flag — suspend forward-model adaptation during sleep.
         self._in_hypnos: bool = False
         self._hypnos_cursor: str = "$"
+
+        # Attention-driven foveation state (topos-foveation). All memory-only.
+        self._foveation_enabled: bool = bool(foveation_enabled)
+        self._foveation_size_range: tuple[float, float] = (
+            float(foveation_size_range[0]),
+            float(foveation_size_range[1]),
+        )
+        self._foveation_hysteresis: float = float(foveation_hysteresis)
+        self._peripheral_size: tuple[int, int] = (
+            int(peripheral_size[0]),
+            int(peripheral_size[1]),
+        )
+        self._foveal_size: tuple[int, int] = (
+            int(foveal_size[0]),
+            int(foveal_size[1]),
+        )
+        self._saliency: Optional[SpatialSaliency] = (
+            SpatialSaliency(grid=foveation_grid) if self._foveation_enabled else None
+        )
+        self._prev_fovea: Optional[FoveaTarget] = None
+        # Injected seams (wired at boot, like the affect / speaking-gate seams).
+        # Topos never imports the workspace: the top-down bias provider returns a
+        # saliency-grid-shaped bias map (or None) sourced from the workspace /
+        # Nous / a goal, and the arousal provider returns the current Thymos
+        # arousal scalar in [0, 1] that sizes the fovea (Easterbrook narrowing).
+        self._top_down_bias_provider: Optional[Any] = None
+        self._arousal_provider: Optional[Any] = None
 
         # Dev-gated preview slot (KAINE_PERCEPTION_PREVIEW=1). A single overwritten
         # in-memory JPEG of the most recent frame — never persisted, no file. Off
@@ -204,8 +252,90 @@ class Topos(BaseModule):
             entity_clock=self._clock,
         )
 
+    def set_top_down_bias_provider(self, provider: Optional[Any]) -> None:
+        """Inject the workspace→Topos top-down attention channel.
+
+        ``provider`` is a zero-arg callable returning either ``None`` (no bias
+        this tick) or a 2-D saliency bias map; a map whose shape differs from the
+        spatial-saliency grid is resized to the grid before combination. Topos
+        never imports the workspace — this seam is wired at boot.
+        """
+        self._top_down_bias_provider = provider
+
+    def set_arousal_provider(self, provider: Optional[Any]) -> None:
+        """Inject the Thymos arousal channel that sizes the fovea.
+
+        ``provider`` is a zero-arg callable returning the current arousal scalar
+        in [0, 1]. This is the distinct *visual* coupling (Easterbrook
+        narrowing), NOT the Syneidesis salience-selection window.
+        """
+        self._arousal_provider = provider
+
+    def _read_top_down_bias(self, grid_shape: tuple[int, int]) -> Any:
+        """Pull the top-down bias map from the provider, resized to the saliency
+        grid. Returns None on no provider, no bias, or any provider failure —
+        foveation degrades to bottom-up-only rather than breaking perception."""
+        if self._top_down_bias_provider is None:
+            return None
+        try:
+            bias = self._top_down_bias_provider()
+        except Exception:
+            log.debug("topos top-down bias provider failed (non-fatal)", exc_info=True)
+            return None
+        if bias is None:
+            return None
+        import numpy as np
+
+        arr = np.asarray(bias, dtype=np.float32)
+        if arr.shape == grid_shape:
+            return arr
+        from kaine.modules.topos.foveation import _lazy_cv2
+
+        cv2 = _lazy_cv2()
+        gh, gw = grid_shape
+        return cv2.resize(arr, (gw, gh), interpolation=cv2.INTER_AREA)
+
+    def _read_arousal(self) -> float:
+        """Pull the current arousal scalar; 0.0 (widest fovea) on absence/failure."""
+        if self._arousal_provider is None:
+            return 0.0
+        try:
+            return float(self._arousal_provider())
+        except Exception:
+            log.debug("topos arousal provider failed (non-fatal)", exc_info=True)
+            return 0.0
+
     async def process_frame(self, image: Any) -> str:
-        embedding = await self._encoder.encode(image)
+        fovea: Optional[FoveaTarget] = None
+        peripheral_latent: Any = None
+        foveal_latent: Any = None
+        if self._foveation_enabled and self._saliency is not None:
+            # Spatial attention: coarse per-tile saliency, precision-weighted
+            # combination with the top-down bias, arousal-sized single fovea.
+            bottom_up = self._saliency.observe(image)
+            top_down = self._read_top_down_bias(self._saliency.grid)
+            combined = combine_saliency(bottom_up, top_down)
+            fovea = select_fovea(
+                combined,
+                arousal=self._read_arousal(),
+                size_range=self._foveation_size_range,
+                prev=self._prev_fovea,
+                hysteresis=self._foveation_hysteresis,
+            )
+            self._prev_fovea = fovea
+            peripheral_view, foveal_view = foveate(
+                image,
+                fovea,
+                peripheral_size=self._peripheral_size,
+                foveal_size=self._foveal_size,
+            )
+            # Two encodes: peripheral gist drives change/habituation/salience
+            # (whole-field continuity); foveal carries the attended detail.
+            peripheral_latent = await self._encoder.encode(peripheral_view)
+            foveal_latent = await self._encoder.encode(foveal_view)
+            embedding = peripheral_latent
+        else:
+            embedding = await self._encoder.encode(image)
         change = float(self._change_detector.observe(embedding))
         habituation = float(self._habituator.observe(embedding))
 
@@ -251,15 +381,23 @@ class Topos(BaseModule):
         except Exception:
             log.debug("topos preview tap failed (non-fatal)", exc_info=True)
 
+        report: dict[str, Any] = {
+            "latent": embedding,
+            "change_score": change,
+            "habituation_score": habituation,
+            "encoder_model_id": self._encoder.model_id,
+            "prediction_error": prediction_error,
+        }
+        if fovea is not None:
+            # Foveation on: `latent` is the peripheral gist (kept for backward-
+            # compatible consumers); the attended detail and the content-free
+            # fovea location ride alongside it.
+            report["peripheral"] = peripheral_latent
+            report["foveal"] = foveal_latent
+            report["fovea"] = fovea.to_dict()
         return await self.publish(
             "topos.report",
-            {
-                "latent": embedding,
-                "change_score": change,
-                "habituation_score": habituation,
-                "encoder_model_id": self._encoder.model_id,
-                "prediction_error": prediction_error,
-            },
+            report,
             salience=salience,
         )
 
