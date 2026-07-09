@@ -58,6 +58,9 @@ data/**
 !data/
 !data/evaluation/
 !data/workspace_trajectory/
+# Abliteration-lens research inputs (checked-in content, not runtime output).
+!data/abliteration_lens/
+!data/abliteration_lens/**
 !data/.gitkeep
 !data/evaluation/.gitkeep
 !data/workspace_trajectory/.gitkeep
