@@ -164,6 +164,16 @@ def make_topos(
         "forward_model_units",
         "prediction_error_window",
         "visual_buffer_size",
+        # Attention-driven foveation (topos-foveation). Off by default → the
+        # single whole-frame encode is unchanged. See make_topos foveation block.
+        "foveation",
+        "foveation_grid",
+        "foveation_hysteresis",
+        "foveation_arousal_size_min",
+        "foveation_arousal_size_max",
+        "peripheral_width",
+        "peripheral_height",
+        "foveal_size",
         # Unified deterministic perception feed (unified-perception-feed). This
         # is the resolved top-level [perception_feed] config, injected by
         # build_registry under this reserved key (NOT a [topos.*] key the
@@ -192,6 +202,35 @@ def make_topos(
         if k in section:
             kwargs[k] = section[k]
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
+
+    # Attention-driven foveation (topos-foveation). Off by default → Topos runs
+    # the single whole-frame encode. When on, each frame yields a spatial saliency
+    # map, one arousal-sized fovea, and a peripheral + foveal encode. The grab is
+    # native by default — for screen mode set capture_width/height to the panel
+    # resolution (the host benchmark can dial it back). See openspec topos-foveation.
+    if bool(section.get("foveation", False)):
+        kwargs["foveation_enabled"] = True
+        grid = section.get("foveation_grid")
+        if grid is not None:
+            kwargs["foveation_grid"] = (int(grid[0]), int(grid[1]))
+        if "foveation_hysteresis" in section:
+            kwargs["foveation_hysteresis"] = float(section["foveation_hysteresis"])
+        size_min = section.get("foveation_arousal_size_min")
+        size_max = section.get("foveation_arousal_size_max")
+        if size_min is not None or size_max is not None:
+            lo = float(size_min if size_min is not None else 0.12)
+            hi = float(size_max if size_max is not None else 0.5)
+            kwargs["foveation_size_range"] = (lo, hi)
+        pw = section.get("peripheral_width")
+        ph = section.get("peripheral_height")
+        if pw is not None or ph is not None:
+            kwargs["peripheral_size"] = (
+                int(pw if pw is not None else 320),
+                int(ph if ph is not None else 180),
+            )
+        if "foveal_size" in section:
+            fs = int(section["foveal_size"])
+            kwargs["foveal_size"] = (fs, fs)
 
     # Unified deterministic perception feed selection (unified-perception-feed).
     # mode "off"/"live" leave the existing behaviour (off = capture disabled;
@@ -299,6 +338,7 @@ def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
     from kaine.modules.topos.screen import (
         ScreenCaptureSource,
         ScreenTarget,
+        detect_screen_size,
         screen_capture_spec,
     )
 
@@ -315,7 +355,36 @@ def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
     spec = screen_capture_spec(target)  # platform auto-detected
     ffmpeg_path = str(scr.get("ffmpeg_path", "ffmpeg"))
 
+    # Native grab (topos-foveation): capture at the display's own resolution with
+    # no scale filter so the foveal crop carries true native detail. Detected once
+    # at build time; on any platform without a probe (or if detection fails) it
+    # falls back to the configured capture geometry with a logged note — honest
+    # NULL rather than a guessed resolution.
+    native_req = bool(scr.get("native", False))
+    native_size: tuple[int, int] | None = None
+    if native_req:
+        native_size = detect_screen_size(target)
+        if native_size is None:
+            log.warning(
+                "screen native grab requested but display size could not be "
+                "detected; falling back to configured capture geometry"
+            )
+        else:
+            log.info(
+                "screen native grab: capturing at detected %dx%d (no downscale)",
+                native_size[0],
+                native_size[1],
+            )
+
     def _screen_factory(device, *, width, height):  # noqa: ANN001
+        if native_size is not None:
+            return ScreenCaptureSource(
+                spec,
+                width=native_size[0],
+                height=native_size[1],
+                native=True,
+                ffmpeg_path=ffmpeg_path,
+            )
         return ScreenCaptureSource(
             spec, width=width, height=height, ffmpeg_path=ffmpeg_path
         )

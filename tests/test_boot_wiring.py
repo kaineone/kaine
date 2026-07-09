@@ -13,6 +13,7 @@ at __init__ time.
 This is the FIRST test that exercises real module classes through the
 config path. Phase 9's integration tests used `StreamProducerFake`.
 """
+
 from __future__ import annotations
 
 
@@ -156,8 +157,10 @@ def test_make_topos_live_mode_forces_capture_on():
     bus = _bus()
     topos = make_topos(
         bus,
-        {"encoder_model_id": "facebook/dinov2-small",
-         "perception_feed": {"mode": "live"}},
+        {
+            "encoder_model_id": "facebook/dinov2-small",
+            "perception_feed": {"mode": "live"},
+        },
     )
     assert topos._capture_enabled is True
     # Live mode uses the real cv2 path — no deterministic source injected.
@@ -169,8 +172,10 @@ def test_make_topos_off_feed_keeps_camera_path():
     bus = _bus()
     topos = make_topos(
         bus,
-        {"encoder_model_id": "facebook/dinov2-small",
-         "perception_feed": {"mode": "off"}},
+        {
+            "encoder_model_id": "facebook/dinov2-small",
+            "perception_feed": {"mode": "off"},
+        },
     )
     assert topos._capture_enabled is False
     assert topos._source_factory is None
@@ -181,9 +186,68 @@ def test_make_topos_rejects_bad_feed_mode():
     with pytest.raises(ValueError):
         make_topos(
             bus,
-            {"encoder_model_id": "facebook/dinov2-small",
-             "perception_feed": {"mode": "bogus"}},
+            {
+                "encoder_model_id": "facebook/dinov2-small",
+                "perception_feed": {"mode": "bogus"},
+            },
         )
+
+
+def test_make_topos_foveation_off_by_default():
+    """No [topos].foveation key → foveation stays off (single whole-frame encode)."""
+    bus = _bus()
+    topos = make_topos(bus, {"encoder_model_id": "facebook/dinov2-small"})
+    assert topos.foveation_enabled is False
+
+
+def test_make_topos_foveation_threads_config():
+    """[topos].foveation = true plus knobs flow through to the module."""
+    bus = _bus()
+    topos = make_topos(
+        bus,
+        {
+            "encoder_model_id": "facebook/dinov2-small",
+            "foveation": True,
+            "foveation_grid": [8, 10],
+            "foveation_hysteresis": 0.25,
+            "foveation_arousal_size_min": 0.1,
+            "foveation_arousal_size_max": 0.6,
+            "peripheral_width": 256,
+            "peripheral_height": 144,
+            "foveal_size": 196,
+        },
+    )
+    assert topos.foveation_enabled is True
+    assert topos._saliency.grid == (8, 10)
+    assert topos._foveation_hysteresis == 0.25
+    assert topos._foveation_size_range == (0.1, 0.6)
+    assert topos._peripheral_size == (256, 144)
+    assert topos._foveal_size == (196, 196)
+
+
+def test_make_topos_screen_native_grab_detects_and_passes_through(monkeypatch):
+    """[perception_feed.screen].native builds a native-passthrough source at the
+    detected resolution; the ffmpeg command carries no scale filter."""
+    import kaine.modules.topos.screen as screen_mod
+
+    monkeypatch.setattr(screen_mod, "detect_screen_size", lambda target: (2560, 1440))
+    bus = _bus()
+    topos = make_topos(
+        bus,
+        {
+            "encoder_model_id": "facebook/dinov2-small",
+            "capture_width": 640,
+            "capture_height": 480,
+            "perception_feed": {
+                "mode": "screen",
+                "screen": {"target": "fullscreen", "native": True},
+            },
+        },
+    )
+    src = topos._source_factory(0, width=640, height=480)
+    assert src._native is True
+    assert (src._width, src._height) == (2560, 1440)  # detected, not configured
+    assert not any(a.startswith("scale=") for a in src.command())
 
 
 def test_make_nous_from_config():
@@ -437,8 +501,7 @@ def test_make_audition_live_mode_forces_capture_on():
     bus = _bus()
     a = make_audition(
         bus,
-        {"speaches_url": "http://127.0.0.1:8000",
-         "perception_feed": {"mode": "live"}},
+        {"speaches_url": "http://127.0.0.1:8000", "perception_feed": {"mode": "live"}},
     )
     assert a._capture_enabled is True
     assert a._stream_factory is None
@@ -449,8 +512,10 @@ def test_make_audition_rejects_bad_feed_mode():
     with pytest.raises(ValueError):
         make_audition(
             bus,
-            {"speaches_url": "http://127.0.0.1:8000",
-             "perception_feed": {"mode": "bogus"}},
+            {
+                "speaches_url": "http://127.0.0.1:8000",
+                "perception_feed": {"mode": "bogus"},
+            },
         )
 
 
@@ -634,6 +699,7 @@ def test_metrics_collector_snapshots_live_cycle_values():
         def all_modules(self):
             class M:
                 name = "soma"
+
             return iter([M()])
 
     collector = MetricsCollector(FakeCycle(), FakeRegistry())
@@ -660,14 +726,19 @@ def test_committed_config_ships_all_modules_disabled():
     try:
         blob = subprocess.run(
             ["git", "show", "HEAD:config/kaine.toml"],
-            capture_output=True, text=True, cwd=root, check=True,
+            capture_output=True,
+            text=True,
+            cwd=root,
+            check=True,
         ).stdout
     except Exception:
         pytest.skip("git not available to read the committed config")
     parsed = tomllib.loads(blob)
     modules = parsed.get("modules", {})
     enabled = sorted(name for name, on in modules.items() if on)
-    assert enabled == [], f"committed config must ship all modules off; enabled: {enabled}"
+    assert enabled == [], (
+        f"committed config must ship all modules off; enabled: {enabled}"
+    )
 
     # And building from an all-off config yields an empty registry.
     assert len(build_registry(_bus(), {"modules": {}})) == 0
