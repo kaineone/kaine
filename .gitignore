@@ -110,3 +110,5 @@ unsloth_compiled_cache/
 
 # Local scheduler lock — runtime artifact, never published
 .claude/scheduled_tasks.lock
+!external/jlens/
+external/jlens/**/__pycache__/
