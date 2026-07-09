@@ -210,7 +210,7 @@ async def _run(cfg: dict[str, Any], iters: int, use_screen: bool) -> dict[str, A
             baseline.append((time.perf_counter() - t0) * 1000.0)
 
             t0 = time.perf_counter()
-            p, fo = _saliency_and_views()
+            _saliency_and_views()  # time the view derivation only; views unused
             sal.append((time.perf_counter() - t0) * 1000.0)
 
             t0 = time.perf_counter()
@@ -229,6 +229,8 @@ async def _run(cfg: dict[str, Any], iters: int, use_screen: bool) -> dict[str, A
         try:
             await encoder.shutdown()
         except Exception:
+            # Best-effort: a shutdown failure must not invalidate the timings
+            # already collected in `out` (this is a throwaway probe process).
             pass
     return out
 
@@ -292,8 +294,9 @@ async def main(argv: Optional[list[str]] = None) -> int:
     # The CPU the tick actually pays for the grab is the read/copy (p50), NOT the
     # blocking wait for the next frame (p95 ≈ frame period), which overlaps the
     # sampling cadence rather than stealing compute from the tick.
+    # _pct returns a real value for non-empty samples, so the guard keeps this
+    # finite (0.0 when there was no grab, e.g. the seeded-frame path).
     grab_p50 = _pct(grab_samples, 0.50) if grab_samples else 0.0
-    grab_p50 = grab_p50 if grab_p50 == grab_p50 else 0.0  # nan-safe
     compute_p95 = fov_p95 + grab_p50
 
     print(f"vision tick budget (1/{vision_hz:g} Hz): {budget_ms:.2f} ms")

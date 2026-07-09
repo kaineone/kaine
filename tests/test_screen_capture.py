@@ -187,7 +187,8 @@ def test_native_frame_reshapes_at_detected_resolution():
         native=True,
         open_process=lambda cmd: _FakeProc(frame_bytes),
     )
-    assert src.open()
+    opened = src.open()
+    assert opened
     ok, frame = src.read()
     assert ok and frame.shape == (2, 2, 3)
 
