@@ -456,9 +456,11 @@ def _render_readme(
         "",
         "## What this is",
         "",
-        "De-identified NUMERIC METRICS ONLY, reshaped from an allowlisted KAINE "
-        "research-participation bundle. No transcripts, memories, self-model, "
-        "internal monologue, or conversation content is present.",
+        (
+            "De-identified NUMERIC METRICS ONLY, reshaped from an allowlisted KAINE "
+            "research-participation bundle. No transcripts, memories, self-model, "
+            "internal monologue, or conversation content is present."
+        ),
         "",
         "## External disclosure",
         "",
@@ -503,8 +505,10 @@ def _render_readme(
         "- Eidolon self-model",
         "- conversation content (any turn text)",
         "- replay logs",
-        "- the LOCAL-ONLY raw bus archive (state/research/raw_bus_archive/), which "
-        "lives outside data/evaluation/ and is never in any bundle",
+        (
+            "- the LOCAL-ONLY raw bus archive (state/research/raw_bus_archive/), which "
+            "lives outside data/evaluation/ and is never in any bundle"
+        ),
         "",
     ]
     if attestation is not None:
