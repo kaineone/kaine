@@ -87,9 +87,14 @@ async def test_workspace_below_threshold_no_event(bus: AsyncBus, tmp_path: Path)
     )
     await eidolon.initialize()
     try:
+        # Eidolon publishes an initial self-model seed to eidolon.out at boot
+        # (the bus-mediated persona snapshot a split-host Lingua consumes). Seek
+        # past it so this test measures only the below-threshold drift behavior.
+        tail = await bus.client.xrevrange("eidolon.out", count=1)
+        cursor = (tail[0][0] if tail else "0")
         for _ in range(5):
             await eidolon.on_workspace(_snapshot(["soma", "chronos"]))
-        entries = await bus.read("eidolon.out", last_id="0")
+        entries = await bus.read("eidolon.out", last_id=cursor)
         assert len(entries) == 0
     finally:
         await eidolon.shutdown()
@@ -131,8 +136,11 @@ async def test_drift_event_carries_no_contents(bus: AsyncBus, tmp_path: Path):
     )
     await eidolon.initialize()
     try:
+        # Seek past the boot self-model seed so entries[0] is the drift event.
+        tail = await bus.client.xrevrange("eidolon.out", count=1)
+        cursor = (tail[0][0] if tail else "0")
         await eidolon.on_workspace(_snapshot(["soma"]))
-        entries = await bus.read("eidolon.out", last_id="0")
+        entries = await bus.read("eidolon.out", last_id=cursor)
         _, ev = entries[0]
         # Forbidden keys per the privacy boundary.
         for forbidden in ("text", "payload", "value", "belief"):

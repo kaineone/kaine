@@ -182,6 +182,7 @@ source_modules = [
     "kaine.text_embedding",
     "kaine.bus",
     "kaine.cycle",
+    "kaine.distributed",
     "kaine.experiment",
     "kaine.faithful",
     "kaine.lifecycle",

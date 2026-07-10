@@ -27,6 +27,13 @@ log = logging.getLogger(__name__)
 EXTERNAL_STREAM: str = "lingua.external"
 INTERNAL_STREAM: str = "lingua.internal"
 
+#: The bus stream + event type carrying Eidolon's self-model snapshot. Lingua
+#: consumes this over the bus to seed its persona, so the language organ can run
+#: in a separate process / on a separate trusted host from Eidolon instead of
+#: holding an in-process reference to it (``distributed-deployment``).
+EIDOLON_OUT_STREAM: str = "eidolon.out"
+EIDOLON_SELF_MODEL_TYPE: str = "eidolon.self_model"
+
 
 class Lingua(BaseModule):
     """Language organ — the LLM speaks *from* the conscious workspace, not from
@@ -112,6 +119,11 @@ class Lingua(BaseModule):
             persona_internal=persona_internal,
         )
         self._self_model_provider = self_model_provider
+        # Latest self-model snapshot observed on eidolon.out (bus-mediated persona
+        # seed). Preferred over the in-process provider so Lingua can run split
+        # from Eidolon; None until the first snapshot arrives (fresh boot → the
+        # minimal persona, exactly as an empty in-process model would give).
+        self._bus_self_model: Optional[dict[str, Any]] = None
         self._latest_snapshot: Optional[WorkspaceSnapshot] = None
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
@@ -126,12 +138,64 @@ class Lingua(BaseModule):
         self._self_model_provider = provider
 
     def _self_model(self) -> dict[str, Any]:
+        # Prefer the bus-mediated snapshot (works single-host AND split-host).
+        # Fall back to an injected in-process provider only when no snapshot has
+        # been observed yet (e.g. a test that wires a provider directly).
+        if self._bus_self_model is not None:
+            return dict(self._bus_self_model)
         if self._self_model_provider is None:
             return {}
         try:
             return self._self_model_provider() or {}
         except Exception:
             return {}
+
+    async def _self_model_cache_loop(self) -> None:
+        """Cache the latest Eidolon self-model snapshot published on eidolon.out.
+
+        This is the bus-mediated replacement for the former in-process
+        ``_wire_lingua_self_model`` accessor: Lingua seeds its persona from the
+        self-model *snapshot* Eidolon publishes rather than reaching into the
+        live Eidolon object, so the two modules may run in different processes /
+        on different trusted hosts sharing one authenticated bus. Only the
+        persona-seeding fields are kept (no cognitive text is retained).
+        """
+        # Read from the stream head so a snapshot already published at boot (the
+        # Eidolon initial publish) seeds the persona immediately; the stream is
+        # low-volume (one self-model snapshot per identity update).
+        cursor = "0-0"
+        while not self._stopped.is_set():
+            try:
+                entries = await self._bus.read(
+                    EIDOLON_OUT_STREAM, last_id=cursor, count=32, block_ms=0
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                try:
+                    await asyncio.wait_for(self._stopped.wait(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    pass
+                continue
+            if entries:
+                cursor = entries[-1][0]
+                for _entry_id, ev in entries:
+                    if ev.type == EIDOLON_SELF_MODEL_TYPE:
+                        self._bus_self_model = {
+                            "name": ev.payload.get("name"),
+                            "values": list(ev.payload.get("values", []) or []),
+                            "behavioral_norms": list(
+                                ev.payload.get("behavioral_norms", []) or []
+                            ),
+                            "personality_baseline": dict(
+                                ev.payload.get("personality_baseline", {}) or {}
+                            ),
+                        }
+            else:
+                try:
+                    await asyncio.wait_for(self._stopped.wait(), timeout=0.1)
+                except asyncio.TimeoutError:
+                    pass
 
     async def _snapshot_cache_loop(self) -> None:
         """Passively cache the latest conscious coalition for prompt assembly.
@@ -196,6 +260,11 @@ class Lingua(BaseModule):
         self._tasks.append(
             asyncio.create_task(
                 self._snapshot_cache_loop(), name=f"{self.name}-snapshot-cache"
+            )
+        )
+        self._tasks.append(
+            asyncio.create_task(
+                self._self_model_cache_loop(), name=f"{self.name}-self-model-cache"
             )
         )
 
