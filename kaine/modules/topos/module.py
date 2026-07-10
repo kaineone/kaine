@@ -23,6 +23,7 @@ from kaine.modules.topos.habituation import (
     SceneHabituator,
 )
 from kaine.modules.topos.foveation import (
+    FoveaPredictor,
     FoveaTarget,
     SpatialSaliency,
     combine_saliency,
@@ -203,6 +204,14 @@ class Topos(BaseModule):
             SpatialSaliency(grid=foveation_grid) if self._foveation_enabled else None
         )
         self._prev_fovea: Optional[FoveaTarget] = None
+        # Attention schema (topos-foveation Phase 2): a small forward model of the
+        # fovea's own trajectory. Each foveated tick it predicts the *next* fovea
+        # location from the recent gaze motion; the content-free prediction rides
+        # in the report for the self-model and diagnostics. Memory-only, only
+        # instantiated when foveation is on.
+        self._fovea_predictor: Optional[FoveaPredictor] = (
+            FoveaPredictor() if self._foveation_enabled else None
+        )
         # Injected seams (wired at boot, like the affect / speaking-gate seams).
         # Topos never imports the workspace: the top-down bias provider returns a
         # saliency-grid-shaped bias map (or None) sourced from the workspace /
@@ -384,6 +393,7 @@ class Topos(BaseModule):
             return ""  # off the strided-clip cadence; buffer and wait
 
         fovea: Optional[FoveaTarget] = None
+        predicted_fovea: Optional[FoveaTarget] = None
         peripheral_latent: Any = None
         foveal_latent: Any = None
         if self._foveation_enabled and self._saliency is not None:
@@ -400,6 +410,10 @@ class Topos(BaseModule):
                 hysteresis=self._foveation_hysteresis,
             )
             self._prev_fovea = fovea
+            # Attention schema: predict where the fovea will be next tick from its
+            # recent trajectory. Content-free; published alongside the fovea.
+            if self._fovea_predictor is not None:
+                predicted_fovea = self._fovea_predictor.predict_next(fovea)
             peripheral_view, foveal_view = foveate(
                 image,
                 fovea,
@@ -472,6 +486,9 @@ class Topos(BaseModule):
             report["peripheral"] = peripheral_latent
             report["foveal"] = foveal_latent
             report["fovea"] = fovea.to_dict()
+            # Attention schema: the content-free predicted next fovea location.
+            if predicted_fovea is not None:
+                report["predicted_fovea"] = predicted_fovea.to_dict()
         return await self.publish(
             "topos.report",
             report,
