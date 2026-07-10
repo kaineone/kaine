@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+[Unit]
+Description=KAINE vector store (Qdrant)
+
+[Container]
+ContainerName=kaine-qdrant
+Image=docker.io/qdrant/qdrant:v1.18.0
+Network=kaine.network
+PublishPort=127.0.0.1:6533:6333
+Volume=kaine-qdrant-data.volume:/qdrant/storage
+Environment=QDRANT__SERVICE__API_KEY=${KAINE_QDRANT_API_KEY}
+Environment=QDRANT__TELEMETRY_DISABLED=true
+HealthCmd=curl -fsS -H "api-key: $QDRANT__SERVICE__API_KEY" http://127.0.0.1:6333/readyz
+HealthInterval=10s
+HealthRetries=5
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

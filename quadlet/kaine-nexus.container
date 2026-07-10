@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+[Unit]
+Description=KAINE Nexus web UI (always-up, holds no entity)
+Requires=kaine-redis.service kaine-qdrant.service
+After=kaine-redis.service kaine-qdrant.service
+
+[Container]
+ContainerName=kaine-nexus
+Image=kaine:cuda
+Network=kaine.network
+PublishPort=127.0.0.1:8088:8088
+Exec=python -m kaine.nexus
+Volume=%h/projects/kaine/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
+Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
+Volume=kaine-state.volume:/state
+Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
+Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
+HealthCmd=curl -fsS http://127.0.0.1:8088/diagnostics/health.json
+HealthInterval=15s
+HealthRetries=5
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

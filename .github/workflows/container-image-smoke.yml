@@ -1,0 +1,90 @@
+name: container-image-smoke
+
+# Image-build smoke test for the containerized deployment (design §12 D4).
+#
+# Builds the CPU and CUDA image flavors and runs a NON-ENTITY smoke:
+#   - `python -m kaine.cycle` with NO operator gate MUST refuse to boot (exit 2)
+#     — it never births an entity in CI.
+#   - the offline-mode env guards (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE) are set.
+#   - no model weights are present in any image layer.
+# It never boots an entity, never needs a GPU, never downloads weights.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - "docker/**"
+      - ".dockerignore"
+      - "compose/**"
+      - ".github/workflows/container-image-smoke.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - "docker/**"
+      - ".dockerignore"
+      - "compose/**"
+      - ".github/workflows/container-image-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    name: build ${{ matrix.flavor }} + non-entity smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: cpu
+            build_base: python:3.12-slim
+            runtime_base: python:3.12-slim
+          # CUDA build compiles against the NVIDIA devel base; no GPU is needed
+          # to BUILD or to run the non-entity smoke (refusal path is CPU-only).
+          - flavor: cuda
+            build_base: nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
+            runtime_base: nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.flavor }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: kaine:${{ matrix.flavor }}
+          build-args: |
+            FLAVOR=${{ matrix.flavor }}
+            BUILD_BASE=${{ matrix.build_base }}
+            RUNTIME_BASE=${{ matrix.runtime_base }}
+
+      - name: Cycle refuses to boot with no operator gate (no entity)
+        run: |
+          set +e
+          docker run --rm kaine:${{ matrix.flavor }} python -m kaine.cycle
+          code=$?
+          echo "exit code: $code"
+          test "$code" -eq 2
+
+      - name: Offline model guards are set in the image
+        run: |
+          docker run --rm kaine:${{ matrix.flavor }} \
+            sh -c 'test "$HF_HUB_OFFLINE" = "1" && test "$TRANSFORMERS_OFFLINE" = "1"'
+
+      - name: No model weights baked into any layer
+        run: |
+          # Fail if any weight extension exists inside the image filesystem.
+          docker run --rm kaine:${{ matrix.flavor }} sh -c '
+            found=$(find / -xdev \( -name "*.gguf" -o -name "*.safetensors" \
+              -o -name "*.ckpt" -o -name "*.pt" -o -name "*.bin" \) \
+              -not -path "/opt/venv/*" 2>/dev/null | head -n 5)
+            if [ -n "$found" ]; then
+              echo "model weights found in image layer:"; echo "$found"; exit 1
+            fi
+            echo "no model weights in image"'

@@ -1,0 +1,65 @@
+# Build-context hygiene for the KAINE image (design §7).
+#
+# NOTHING sensitive or heavyweight enters the build context. The image ships
+# ONLY the committed all-off config/kaine.toml (copied explicitly in the
+# Dockerfile); operator overlays, secrets, voices, adapters, and all entity
+# state are mounted at runtime, never built in. Model weights live in the
+# kaine-models volume, never a layer. Podman reads .containerignore, which is a
+# copy of this file.
+
+# --- Entity state (never in an image; owner-only, encrypted at rest) ---
+state/
+runtime-logs/
+backups/
+research_out/
+
+# --- Operator config + secrets (bind-mounted read-only at runtime, never COPYed) ---
+config/*.operator.toml
+config/secrets.toml
+compose/.env
+.env
+
+# --- Private voices + adapters ---
+voices/
+**/*.wav
+**/*.flac
+state/hypnos/adapters/
+state/forks/merged_adapters/
+
+# --- Model weights / caches (provisioned to the kaine-models volume) ---
+models/
+**/*.gguf
+**/*.safetensors
+**/*.ckpt
+**/*.pt
+**/*.bin
+.cache/
+**/__pycache__/
+*.py[cod]
+
+# --- Dev / venv / VCS / editor noise ---
+.venv/
+venv/
+env/
+ENV/
+.git/
+.github/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# --- Docs / tests / research artifacts not needed at runtime ---
+tests/
+docs/
+openspec/
+eval_probes/
+data/

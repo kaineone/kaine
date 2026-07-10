@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# THE ENTITY. This unit has NO [Install] section on purpose: the cognitive cycle
+# is NEVER auto-started and never survives a reboot unattended. Boot it
+# deliberately, operator-present (design §10):
+#
+#   systemctl --user set-environment KAINE_CYCLE_OPERATOR_PRESENT=1
+#   systemctl --user start kaine-cycle
+#
+# The cycle ALSO refuses to boot at the application layer unless
+# KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net is verified), so
+# even a stray start does not birth an entity. No boot-gate variable is set here.
+[Unit]
+Description=KAINE cognitive cycle (the entity — manually started, never auto)
+Requires=kaine-redis.service kaine-qdrant.service
+After=kaine-redis.service kaine-qdrant.service
+
+[Container]
+ContainerName=kaine-cycle
+Image=kaine:cuda
+Network=kaine.network
+Exec=python -m kaine.cycle
+AddDevice=nvidia.com/gpu=1
+SecurityLabelDisable=true
+Volume=%h/projects/kaine/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
+Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
+Volume=kaine-state.volume:/state
+# Perception scratch is RAM-backed and ephemeral — zero raw-sense-data
+# persistence (design §7).
+Tmpfs=/app/state/perception
+Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
+Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
+Environment=KAINE_STATE_KEY=${KAINE_STATE_KEY}
+
+[Service]
+# One-shot supervised run; do NOT auto-restart the entity.
+Restart=no
+
+# NO [Install] SECTION — the entity is never enabled/auto-started.

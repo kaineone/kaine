@@ -1,0 +1,293 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# The KAINE service topology of record (design.md §2). One Compose project
+# stands up the full local instance — event bus, vector store, model server,
+# speech-to-text, text-to-speech, and the Nexus web UI — WITHOUT the cognitive
+# cycle. Every port is loopback-only, matching compose/redis.yml / qdrant.yml.
+#
+#   Default bring-up (no entity):
+#     docker compose -f compose/kaine.yml up -d
+#
+#   One-shot setup — pull images + download ALL model weights into the shared
+#   kaine-models volume (design §6); runtime then reaches no network for models:
+#     docker compose -f compose/kaine.yml --profile setup run --rm kaine-provision
+#
+#   Boot the cognitive cycle — a DELIBERATE, operator-supervised step. The cycle
+#   still refuses to start without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the
+#   research safety net); see FIRST_BOOT.md:
+#     KAINE_CYCLE_OPERATOR_PRESENT=1 \
+#       docker compose -f compose/kaine.yml --profile cycle run --rm kaine-cycle
+#
+# GPU: the reservations below target a two-GPU NVIDIA host (organ on card 0,
+# vision + TTS on card 1). For a single GPU or CPU-only host, overlay
+# compose/kaine.single-gpu.yml or compose/kaine.cpu.yml (see D2 docs). Secrets
+# and gate flags come from compose/.env (see compose/.env.example).
+
+name: kaine
+
+# --- reusable fragments ---------------------------------------------------
+x-kaine-image: &kaine-image
+  build:
+    context: ..
+    dockerfile: Dockerfile
+    args:
+      FLAVOR: ${KAINE_FLAVOR:-cuda}
+  image: ${KAINE_IMAGE:-kaine:${KAINE_FLAVOR:-cuda}}
+
+# NVIDIA device reservation fragments (design §4). Docker reads
+# deploy.resources.reservations.devices; the CPU/single-GPU overlays drop them.
+x-gpu-card0: &gpu-card0
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            device_ids: ["${KAINE_ORGAN_GPU:-0}"]
+            capabilities: [gpu]
+
+x-gpu-card1: &gpu-card1
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            device_ids: ["${KAINE_VISION_GPU:-1}"]
+            capabilities: [gpu]
+
+services:
+  # ---- existing containerized services (event bus + vector store) --------
+  kaine-redis:
+    image: redis:7.2-alpine
+    container_name: kaine-redis
+    ports:
+      - "127.0.0.1:${KAINE_REDIS_HOST_PORT:-6479}:6379"
+    command:
+      - redis-server
+      - --requirepass
+      - ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      - --bind
+      - "0.0.0.0"
+      - --protected-mode
+      - "yes"
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 1gb
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
+    volumes:
+      - kaine-redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'redis-cli -a "$$KAINE_REDIS_PASSWORD" ping | grep PONG'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    environment:
+      KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+
+  kaine-qdrant:
+    image: qdrant/qdrant:v1.18.0
+    container_name: kaine-qdrant
+    ports:
+      - "127.0.0.1:${KAINE_QDRANT_HOST_PORT:-6533}:6333"
+    environment:
+      QDRANT__SERVICE__API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - kaine-qdrant-data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          wget -q -O - --header "api-key: $$QDRANT__SERVICE__API_KEY"
+          http://127.0.0.1:6333/readyz | grep -q "all shards are ready"
+          || curl -fsS -H "api-key: $$QDRANT__SERVICE__API_KEY"
+              http://127.0.0.1:6333/readyz >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ---- model server: OpenAI-compatible language organ (design §5) --------
+  # Default image is a generic OpenAI-compatible GGUF server (llama.cpp). Set
+  # KAINE_MODEL_SERVER_IMAGE / _CMD to use vLLM or another server. For the
+  # Unsloth shared inference+training server, use the `organ=host` override
+  # (compose/kaine.organ-host.yml) — REQUIRED when the voice-alignment trainer
+  # is enabled, since the trainer is not containerized.
+  kaine-model-server:
+    <<: *gpu-card0
+    image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    container_name: kaine-model-server
+    ports:
+      - "127.0.0.1:${KAINE_MODEL_SERVER_HOST_PORT:-11434}:8080"
+    command: ${KAINE_MODEL_SERVER_CMD:---model /models/organ/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --api-key ${KAINE_MODEL_SERVER_API_KEY:-}}
+    volumes:
+      - kaine-models:/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:8080/v1/models >/dev/null'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---- speech-to-text: Speaches / faster-distil-Whisper ------------------
+  # Runs on CPU with medium.en — running Speaches on GPU triggers a cuDNN crash
+  # when the secondary GPU also serves TTS (docs/getting-started.md#speaches).
+  # No GPU reservation by design.
+  kaine-speaches:
+    image: ${KAINE_SPEACHES_IMAGE:-ghcr.io/speaches-ai/speaches:latest-cpu}
+    container_name: kaine-speaches
+    ports:
+      - "127.0.0.1:${KAINE_SPEACHES_HOST_PORT:-8000}:8000"
+    environment:
+      HF_HOME: /models/hf
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - kaine-models:/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:8000/v1/models >/dev/null'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---- text-to-speech: Chatterbox (shares the secondary GPU) -------------
+  # No canonical upstream image; set KAINE_CHATTERBOX_IMAGE to your build.
+  kaine-chatterbox:
+    <<: *gpu-card1
+    image: ${KAINE_CHATTERBOX_IMAGE:-kaine-chatterbox:local}
+    container_name: kaine-chatterbox
+    ports:
+      - "127.0.0.1:${KAINE_CHATTERBOX_HOST_PORT:-8883}:8883"
+    environment:
+      HF_HOME: /models/hf
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - kaine-models:/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:8883/get_predefined_voices >/dev/null'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---- Nexus web UI: always-up, holds NO entity (design §2) --------------
+  kaine-nexus:
+    <<: *kaine-image
+    container_name: kaine-nexus
+    command: ["python", "-m", "kaine.nexus"]
+    ports:
+      - "127.0.0.1:${KAINE_NEXUS_HOST_PORT:-8088}:8088"
+    environment:
+      KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
+      KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+    volumes:
+      # Operator overlay + secrets bind-mounted READ-ONLY, never COPYed (design §8).
+      - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
+      - ../config/secrets.toml:/app/config/secrets.toml:ro
+      - kaine-state:/state
+    restart: unless-stopped
+    depends_on:
+      kaine-redis:
+        condition: service_healthy
+      kaine-qdrant:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:8088/diagnostics/health.json >/dev/null'
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---- the cognitive cycle: THE ENTITY. profile-gated, never default up --
+  # `profiles: [cycle]` keeps it out of a plain `up`. The cycle refuses to boot
+  # unless the operator explicitly exports KAINE_CYCLE_OPERATOR_PRESENT=1 (or the
+  # research safety net is verified). NO boot-gate var is defaulted permissive
+  # here (design §8): the operator sets them explicitly, preserving supervised
+  # first boot.
+  kaine-cycle:
+    <<: [*kaine-image, *gpu-card1]
+    profiles: [cycle]
+    container_name: kaine-cycle
+    command: ["python", "-m", "kaine.cycle"]
+    environment:
+      KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
+      KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+      # Encryption-at-rest key (design §7); empty unless the operator sets it.
+      KAINE_STATE_KEY: ${KAINE_STATE_KEY:-}
+      # Boot gates: NOT defaulted to a permissive value. The operator must pass
+      # them on the command line to boot the entity.
+      KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
+      KAINE_RESEARCH_MODE: ${KAINE_RESEARCH_MODE:-}
+    volumes:
+      - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
+      - ../config/secrets.toml:/app/config/secrets.toml:ro
+      - kaine-state:/state
+    # Perception scratch, if any, is RAM-backed and ephemeral — never a durable
+    # volume. Zero raw-sense-data persistence is load-bearing (design §7).
+    tmpfs:
+      - /app/state/perception
+    depends_on:
+      kaine-redis:
+        condition: service_healthy
+      kaine-qdrant:
+        condition: service_healthy
+
+  # ---- setup one-shot: provision images + ALL model weights (design §6) --
+  # Downloads the abliterated organ, distil-Whisper, Chatterbox, emotion2vec+,
+  # DINOv2, and MiniLM into the shared kaine-models volume BEFORE first boot, so
+  # runtime reaches no network for models. Reuses the repo's `hf download`
+  # organ provisioning. Runs under `--profile setup`, never at normal `up`.
+  kaine-provision:
+    <<: *kaine-image
+    profiles: [setup]
+    container_name: kaine-provision
+    entrypoint: ["python", "-m", "kaine.setup.provision"]
+    environment:
+      HF_HOME: /models/hf
+      # Setup phase is the ONLY time network model fetches are allowed.
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+    volumes:
+      - kaine-models:/models
+
+volumes:
+  kaine-redis-data:
+    name: kaine-redis-data
+  kaine-qdrant-data:
+    name: kaine-qdrant-data
+  # Model weights (HF_HOME + organ GGUF). Provisioned at setup; read-mostly.
+  # NEVER an image layer.
+  kaine-models:
+    name: kaine-models
+  # The entity's life: CAL-gated forks, preservation bundles, individuation,
+  # world/self models, control state, audit + incident logs. Owner-only perms
+  # preserved inside the container; encrypted at rest when state encryption is
+  # on. Survives down/up. NO raw-sense-data path exists here.
+  kaine-state:
+    name: kaine-state

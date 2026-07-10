@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# User-defined bridge network for the KAINE Quadlet topology. All inter-service
+# traffic stays on this network; only the loopback PublishPort lines on the
+# individual units expose ports to the host.
+[Unit]
+Description=KAINE internal container network
+
+[Network]
+NetworkName=kaine

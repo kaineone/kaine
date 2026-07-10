@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# CPU-only overlay (design §4: "the always-works fallback"). Drops every GPU
+# device reservation and selects the CPU image flavor / CPU server images. Fully
+# functional, substantially slower (paper §4.1).
+#
+#   KAINE_FLAVOR=cpu \
+#     docker compose -f compose/kaine.yml -f compose/kaine.cpu.yml up -d
+#
+# Build the CPU image once:
+#   docker build -t kaine:cpu \
+#     --build-arg FLAVOR=cpu \
+#     --build-arg BUILD_BASE=python:3.12-slim \
+#     --build-arg RUNTIME_BASE=python:3.12-slim .
+
+services:
+  kaine-model-server:
+    image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    deploy:
+      resources:
+        reservations:
+          devices: []
+  kaine-chatterbox:
+    deploy:
+      resources:
+        reservations:
+          devices: []
+  kaine-nexus:
+    image: ${KAINE_IMAGE:-kaine:cpu}
+    build:
+      args:
+        FLAVOR: cpu
+  kaine-cycle:
+    image: ${KAINE_IMAGE:-kaine:cpu}
+    build:
+      args:
+        FLAVOR: cpu
+    deploy:
+      resources:
+        reservations:
+          devices: []
