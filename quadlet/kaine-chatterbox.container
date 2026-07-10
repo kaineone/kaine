@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+[Unit]
+Description=KAINE text-to-speech (Chatterbox)
+
+[Container]
+ContainerName=kaine-chatterbox
+Image=kaine-chatterbox:local
+Network=kaine.network
+PublishPort=127.0.0.1:8883:8883
+Volume=kaine-models.volume:/models:ro
+AddDevice=nvidia.com/gpu=1
+SecurityLabelDisable=true
+Environment=HF_HOME=/models/hf
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+HealthCmd=curl -fsS http://127.0.0.1:8883/get_predefined_voices
+HealthInterval=15s
+HealthRetries=10
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

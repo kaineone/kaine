@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# ROCm (AMD GPU) overlay — EXPERIMENTAL until smoke-tested on real hardware
+# (design §4, §13: no pretend vendor support). Replaces the NVIDIA device
+# reservations with the ROCm kfd/dri device mounts + the video/render
+# supplementary groups.
+#
+#   KAINE_FLAVOR=rocm \
+#     docker compose -f compose/kaine.yml -f compose/kaine.rocm.yml up -d
+#
+# Build the ROCm image (unvalidated):
+#   docker build -t kaine:rocm \
+#     --build-arg FLAVOR=rocm \
+#     --build-arg BUILD_BASE=rocm/dev-ubuntu-22.04:6.2-complete \
+#     --build-arg RUNTIME_BASE=rocm/dev-ubuntu-22.04:6.2 .
+
+x-rocm-devices: &rocm-devices
+  devices:
+    - /dev/kfd
+    - /dev/dri
+  group_add:
+    - video
+    - render
+  security_opt:
+    - seccomp:unconfined
+  deploy:
+    resources:
+      reservations:
+        devices: []
+
+services:
+  kaine-model-server:
+    <<: *rocm-devices
+    image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-rocm}
+  kaine-chatterbox:
+    <<: *rocm-devices
+  kaine-nexus:
+    image: ${KAINE_IMAGE:-kaine:rocm}
+    build:
+      args:
+        FLAVOR: rocm
+  kaine-cycle:
+    <<: *rocm-devices
+    image: ${KAINE_IMAGE:-kaine:rocm}
+    build:
+      args:
+        FLAVOR: rocm

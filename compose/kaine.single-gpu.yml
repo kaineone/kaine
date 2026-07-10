@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# Single-GPU overlay (design §4: "secondary workloads move onto the primary
+# card"). Pins the organ, vision, and TTS all to card 0 so a one-GPU host runs
+# the full stack.
+#
+#   docker compose -f compose/kaine.yml -f compose/kaine.single-gpu.yml up -d
+
+services:
+  kaine-chatterbox:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+  kaine-cycle:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]

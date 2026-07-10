@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+[Unit]
+Description=KAINE event bus (Redis Streams)
+
+[Container]
+ContainerName=kaine-redis
+Image=docker.io/library/redis:7.2-alpine
+Network=kaine.network
+PublishPort=127.0.0.1:6479:6379
+Volume=kaine-redis-data.volume:/data
+Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
+Exec=redis-server --requirepass ${KAINE_REDIS_PASSWORD} --bind 0.0.0.0 --protected-mode yes --appendonly yes --appendfsync everysec --maxmemory 1gb --maxmemory-policy noeviction --save ""
+HealthCmd=redis-cli -a "$KAINE_REDIS_PASSWORD" ping
+HealthInterval=10s
+HealthRetries=5
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -32,6 +32,19 @@ _INDEX_BY_FLAVOR: dict[str, str | None] = {
 }
 
 
+def torch_index_url(flavor: str) -> str | None:
+    """Return the pip ``--index-url`` for ``flavor`` (``None`` for MPS/PyPI).
+
+    Single source of truth for the accelerator→wheel-index mapping. The
+    container image build reuses this verbatim (`install.py --print-index
+    <flavor>`) instead of re-deriving the CUDA/ROCm/XPU/CPU index URLs, so the
+    Dockerfile and the host installer can never drift.
+    """
+    if flavor not in _INDEX_BY_FLAVOR:
+        raise KeyError(flavor)
+    return _INDEX_BY_FLAVOR[flavor]
+
+
 def run(cmd: list[str], **kwargs) -> None:
     print("==>", " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
@@ -127,6 +140,22 @@ def main() -> None:
     group.add_argument("--rocm", dest="force", action="store_const", const="rocm")
     group.add_argument("--xpu",  dest="force", action="store_const", const="xpu")
     group.add_argument("--mps",  dest="force", action="store_const", const="mps")
+    parser.add_argument(
+        "--print-index",
+        metavar="FLAVOR",
+        choices=sorted(_INDEX_BY_FLAVOR),
+        help=(
+            "print the pip --index-url for FLAVOR "
+            "(cuda|rocm|xpu|cpu|mps) and exit; prints an empty line for mps "
+            "(default PyPI). Used by the container image build to reuse this "
+            "mapping instead of re-deriving it."
+        ),
+    )
+    parser.add_argument(
+        "--print-torch-spec",
+        action="store_true",
+        help="print the pinned torch requirement spec and exit",
+    )
     parser.add_argument("--python", default="python3", help="interpreter for the venv")
     parser.add_argument(
         "--no-wizard",
@@ -143,6 +172,16 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+
+    # Accessor mode: emit the wheel index / torch spec and exit before any
+    # venv work, so the image build can shell out for a single source of truth.
+    if args.print_torch_spec:
+        print(TORCH_SPEC)
+        return
+    if args.print_index is not None:
+        index_url = torch_index_url(args.print_index)
+        print(index_url if index_url is not None else "")
+        return
 
     repo_root = Path(__file__).resolve().parent.parent
     os.chdir(repo_root)

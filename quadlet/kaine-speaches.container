@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+[Unit]
+Description=KAINE speech-to-text (Speaches / faster-distil-Whisper)
+
+[Container]
+# CPU-only by design: Speaches on GPU triggers a cuDNN crash when the secondary
+# GPU also serves TTS (docs/getting-started.md#speaches). No AddDevice line.
+ContainerName=kaine-speaches
+Image=ghcr.io/speaches-ai/speaches:latest-cpu
+Network=kaine.network
+PublishPort=127.0.0.1:8000:8000
+Volume=kaine-models.volume:/models:ro
+Environment=HF_HOME=/models/hf
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+HealthCmd=curl -fsS http://127.0.0.1:8000/v1/models
+HealthInterval=15s
+HealthRetries=10
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
