@@ -16,7 +16,10 @@ What it provisions:
     ``kaine.setup.organ`` provisioning — a real ``hf download``),
   - the speech-to-text model (faster-distil-Whisper medium.en),
   - the emotion encoder (emotion2vec+),
-  - the vision encoder (DINOv2-small),
+  - the vision encoder — the shipped default ``[topos].encoder_backend =
+    "internvideo_next"`` fetches the revision-pinned InternVideo-Next weights
+    (reusing ``kaine.setup.internvideo_next``); only when the operator selects
+    ``encoder_backend = "dinov2"`` is DINOv2-small fetched instead,
   - the memory embedder (all-MiniLM-L6-v2),
   - the text-to-speech model (Chatterbox).
 
@@ -34,6 +37,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from kaine.setup.internvideo_next import (
+    INTERNVIDEO_NEXT_REPO,
+    internvideo_next_download_cmd,
+    run_internvideo_next_download,
+)
 from kaine.setup.organ import (
     OrganDownloadResult,
     detect_organ_backend,
@@ -50,6 +58,20 @@ DEFAULT_EMOTION_REPO = "emotion2vec/emotion2vec_plus_base"
 DEFAULT_VISION_REPO = "facebook/dinov2-small"
 DEFAULT_EMBEDDER_REPO = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_TTS_REPO = "resemble-ai/chatterbox"
+
+# Shipped-default Topos encoder backend. Kept in sync with
+# kaine.modules.topos.encoder.DEFAULT_ENCODER_BACKEND and config/kaine.toml
+# [topos].encoder_backend. Held as a bare string so the setup phase never pulls
+# the heavy torch-bearing encoder module just to read a default.
+DEFAULT_ENCODER_BACKEND = "internvideo_next"
+
+
+def encoder_backend(config: Optional[dict[str, Any]] = None) -> str:
+    """The configured Topos encoder backend, lower-cased; the shipped default
+    (``internvideo_next``) when the operator sets none."""
+    topos = (config or {}).get("topos") or {}
+    val = topos.get("encoder_backend")
+    return str(val).strip().lower() if val else DEFAULT_ENCODER_BACKEND
 
 
 @dataclass(frozen=True)
@@ -77,6 +99,10 @@ class ProvisionPlan:
 
     organ_commands: tuple[tuple[str, ...], ...] = ()
     aux_models: tuple[AuxModel, ...] = ()
+    # The InternVideo-Next weights fetch argv, present ONLY when the configured
+    # (or default) encoder backend is ``internvideo_next``. Empty otherwise (the
+    # DINOv2 backend fetches its weights as a plain aux model instead).
+    internvideo_command: tuple[str, ...] = ()
     _config: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -87,19 +113,39 @@ def _cfg_repo(config: dict[str, Any], section: str, key: str, default: str) -> s
 
 
 def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
-    """The non-organ models to provision, reading configured ids where present."""
+    """The non-organ models provisioned as a plain ``hf download <repo>``, reading
+    configured ids where present.
+
+    The vision encoder is backend-dependent and only DINOv2 is a plain repo
+    download: it appears here ONLY when ``[topos].encoder_backend = "dinov2"``.
+    The shipped default (``internvideo_next``) is a revision-pinned single-file
+    fetch handled separately (see :func:`internvideo_next_fetch_cmd` and
+    ``run_provision``), so it is deliberately NOT an ``AuxModel``."""
     cfg = config or {}
-    return (
+    models = [
         AuxModel(_cfg_repo(cfg, "audition", "stt_model_id", DEFAULT_STT_REPO),
                  "speech-to-text (faster-distil-Whisper)"),
         AuxModel(_cfg_repo(cfg, "audition", "model_id", DEFAULT_EMOTION_REPO),
                  "emotion encoder (emotion2vec+)"),
-        AuxModel(_cfg_repo(cfg, "topos", "model_id", DEFAULT_VISION_REPO),
-                 "vision encoder (DINOv2-small)"),
+    ]
+    if encoder_backend(cfg) == "dinov2":
+        models.append(
+            AuxModel(_cfg_repo(cfg, "topos", "encoder_model_id", DEFAULT_VISION_REPO),
+                     "vision encoder (DINOv2-small)")
+        )
+    models.extend([
         AuxModel(_cfg_repo(cfg, "mnemos", "embedder_model_id", DEFAULT_EMBEDDER_REPO),
                  "memory embedder (all-MiniLM-L6-v2)"),
         AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"),
-    )
+    ])
+    return tuple(models)
+
+
+def internvideo_next_fetch_cmd() -> tuple[str, ...]:
+    """The revision-pinned ``hf download`` argv for the InternVideo-Next encoder
+    weights (empty tuple is never returned — this is only consulted when the
+    backend is ``internvideo_next``)."""
+    return tuple(internvideo_next_download_cmd())
 
 
 def plan_provision(config: dict[str, Any]) -> ProvisionPlan:
@@ -108,9 +154,15 @@ def plan_provision(config: dict[str, Any]) -> ProvisionPlan:
     backend = detect_organ_backend()
     organ_plan = plan_organ_download(modules, backend, config=config)
     organ_cmds = tuple(tuple(a.command) for a in organ_plan.artifacts)
+    iv_cmd = (
+        internvideo_next_fetch_cmd()
+        if encoder_backend(config) == "internvideo_next"
+        else ()
+    )
     return ProvisionPlan(
         organ_commands=organ_cmds,
         aux_models=aux_models(config),
+        internvideo_command=iv_cmd,
         _config=config,
     )
 
@@ -144,6 +196,22 @@ def run_provision(
 
     have_hf = shutil.which("hf") is not None
     aux_results: list[ProvisionResult] = []
+
+    # The shipped default vision backend (internvideo_next) is a revision-pinned
+    # single-file fetch into the deterministic git-ignored weights dir — reuse the
+    # dedicated fetcher so the download lands where the loader reads it. DINOv2, if
+    # selected instead, is fetched below as a plain aux model.
+    if encoder_backend(config) == "internvideo_next":
+        iv = run_internvideo_next_download(consent=True, runner=run)
+        aux_results.append(
+            ProvisionResult(
+                repo=INTERNVIDEO_NEXT_REPO,
+                purpose="vision encoder (InternVideo-Next)",
+                ok=iv.ok,
+                detail=iv.detail,
+            )
+        )
+
     for model in aux_models(config):
         if not have_hf:
             aux_results.append(

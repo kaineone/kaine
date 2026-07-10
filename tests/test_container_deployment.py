@@ -257,14 +257,23 @@ def test_quadlet_cycle_has_no_install_section():
 # 3.1 — setup provisioner plans every model weight (no network in the test)
 # --------------------------------------------------------------------------
 def test_provision_plans_all_models_without_network():
+    from kaine.setup.internvideo_next import INTERNVIDEO_NEXT_REPO
     from kaine.setup.provision import aux_models, run_provision
 
+    # Default (no config) → the shipped internvideo_next backend. The always-on
+    # aux models are present; DINOv2 is NOT (it is fetched only when selected).
     repos = {m.repo for m in aux_models({})}
     assert "Systran/faster-distil-whisper-medium.en" in repos
-    assert "facebook/dinov2-small" in repos
     assert "sentence-transformers/all-MiniLM-L6-v2" in repos
     assert "emotion2vec/emotion2vec_plus_base" in repos
     assert "resemble-ai/chatterbox" in repos
+    assert "facebook/dinov2-small" not in repos
+
+    # Selecting the DINOv2 backend swaps in DINOv2 as a plain aux download.
+    dino_repos = {
+        m.repo for m in aux_models({"topos": {"encoder_backend": "dinov2"}})
+    }
+    assert "facebook/dinov2-small" in dino_repos
 
     # Inject a fake runner so NOTHING hits the network.
     calls: list[list[str]] = []
@@ -279,14 +288,32 @@ def test_provision_plans_all_models_without_network():
         return _R()
 
     config = {"modules": {"lingua": True}}
-    _, _ = run_provision(
-        config, consent=True, runner=fake_runner
-    )
+    _, aux_results = run_provision(config, consent=True, runner=fake_runner)
     # consent=False provisions nothing.
     assert run_provision(config, consent=False, runner=fake_runner) == ([], [])
-    # Every planned command is an `hf download`.
+    # Every issued command is an `hf download` (organ, aux, and the default
+    # InternVideo-Next weights fetch all route through the injected runner).
     assert calls, "run_provision must issue downloads through the injected runner"
     assert all(c[:2] == ["hf", "download"] for c in calls)
+    # The default backend fetches the InternVideo-Next weights (revision-pinned).
+    assert any(INTERNVIDEO_NEXT_REPO in c for c in calls)
+    assert any(r.repo == INTERNVIDEO_NEXT_REPO for r in aux_results)
+
+    # With the DINOv2 backend selected, the InternVideo fetch is NOT issued and
+    # DINOv2 IS downloaded as a plain aux model.
+    dino_calls: list[list[str]] = []
+
+    def dino_runner(cmd, **kwargs):
+        dino_calls.append(list(cmd))
+        return fake_runner(cmd, **kwargs)
+
+    run_provision(
+        {"modules": {"lingua": True}, "topos": {"encoder_backend": "dinov2"}},
+        consent=True,
+        runner=dino_runner,
+    )
+    assert not any(INTERNVIDEO_NEXT_REPO in c for c in dino_calls)
+    assert any("facebook/dinov2-small" in c for c in dino_calls)
 
 
 # --------------------------------------------------------------------------

@@ -70,13 +70,23 @@ vision = [
 # encoder is actually loaded — the vendored modeling code (external/
 # internvideo_next, path a — see its UPSTREAM) imports these at forward time.
 # Lazy-imported: the build/test suite stays green without them (vision tests use
-# fake encoders). flash_attn requires a CUDA toolchain to build and run, so this
-# extra targets a GPU host; the DINOv2 fallback needs none of it. transformers +
-# torch are already core; only these vendored-code deps are added here.
+# fake encoders). These are pure-Python/prebuilt-wheel deps that install cleanly
+# on a fresh clone with NO CUDA toolchain — the loader's DEFAULT path is the
+# eager attention path, which needs NO flash-attn. transformers + torch are
+# already core; only these vendored-code deps are added here.
 internvideo = [
     "einops>=0.7",
     "timm>=0.9",
     "easydict>=1.10",
+]
+# OPTIONAL fused-attention fast path for the InternVideo-Next encoder. Install
+# ONLY on a GPU host that wants the flash-attn kernels: flash-attn has NO
+# prebuilt wheel for the pinned torch (2.x / cu128) and needs a CUDA toolchain
+# to compile, so `pip install .[internvideo]` must NOT depend on it — a fresh
+# researcher gets the eager path by default. Layer this extra on top of
+# `internvideo` (`pip install .[internvideo,internvideo-flash]`) when the fused
+# path is wanted.
+internvideo-flash = [
     "flash-attn>=2.5",
 ]
 # Aggregate convenience extra: everything the reproducible perception feed needs

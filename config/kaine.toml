@@ -331,8 +331,10 @@ prediction_error_window = 32
 # The InternVideo-Next weights (~182 MB) are fetched once at setup into a
 # git-ignored local dir; runtime never downloads them. Fetch with:
 #   python -m kaine.setup.internvideo_next --yes
-# The real encoder needs a CUDA host with the [internvideo] extra
-# (einops/timm/flash_attn/easydict). Loading it without those raises at boot.
+# The real encoder needs the [internvideo] extra (einops/timm/easydict); loading
+# it without those raises at boot. The default is the eager attention path, which
+# needs NO flash-attn and NO CUDA toolchain — add the optional [internvideo-flash]
+# extra only on a GPU host that wants the fused flash-attn kernels.
 encoder_backend = "internvideo_next"
 encoder_model_id = "revliter/internvideo_next_base_p14_res224_f16"
 # InternVideo-Next weights location + pinned revision (must match
