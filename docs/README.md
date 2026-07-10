@@ -68,6 +68,14 @@ configuration, mechanisms, key files, how to enable, and zero-persistence notes.
 [Mundus](modules/mundus.md) ·
 [Echo](modules/echo.md)
 
+## Guides
+
+Developer how-tos for extending KAINE:
+
+- [Building embodiment adapters for Mundus](guides/embodiment-adapters.md) — give a
+  KAINE entity a new body (a physical robot, a VR/game avatar, a simulator, a custom
+  effector) by implementing the `EmbodimentAdapter` contract; the core never changes.
+
 ## Processes
 
 How the modules combine into system-level behavior:

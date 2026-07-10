@@ -28,16 +28,24 @@ independent conditions to activate:
 Both must be true; `_enabled()` returns `False` if either is absent.
 `[modules].mundus` must also be `true` for the module to be constructed at all.
 
-> **Motor control not yet reachable by the entity:** the `_intent_loop` listens
-> for `intent.avatar.*` events on the Volition stream, and the continuous-setpoint
-> sink listens for graded channel commands. Volition currently emits only
-> `intent.speak`, `intent.think`, and `intent.act`; no module produces an
-> `intent.avatar.*` event or drives the continuous channels. So the symbolic motor
-> families and the continuous channels are unreachable at runtime — only speech
-> mirroring (`_speech_loop`, reflecting `lingua.external` into the body's local
-> chat) is live. The exposure flags still gate which families/channels *would* be
-> allowed once a producer exists (the continuous producer is the
-> `intuitive-embodiment-control-surface` change).
+> **Continuous motor control is now producible; symbolic verbs are still
+> operator-only.** The `_intent_loop` listens for `intent.avatar.*` events on the
+> Volition stream. The **continuous** producer gap is closed by the
+> [continuous embodiment control surface](#continuous-embodiment-control-surface):
+> its `ContinuousMotorSurface` emits a per-tick `intent.avatar.control` carrying
+> the five clamped continuous channels, which the core routes to the continuous
+> setpoint sink (`apply_setpoints`) and mirrors back as an efference copy on
+> `mundus.efference`. That surface is **off by default** (`[mundus.control_surface].enabled = false`)
+> and its default `MotorPolicy` is *quiescent* — it scripts no gait, so nothing
+> moves until a learned policy is injected at the seam. The **symbolic** verb
+> families (`move`, `turn`, `say`, …) still have no learned-policy producer; they
+> remain operator-only tools driven through `apply_action`, plus the speech mirror
+> (`_speech_loop`, reflecting `lingua.external` into the body's local chat). The
+> exposure flags gate which families/channels are allowed regardless.
+>
+> **New adapters:** to give the entity a new body (a robot, a VR/game avatar, a
+> simulator, a custom effector), see the guide
+> [Building embodiment adapters for Mundus](../guides/embodiment-adapters.md).
 
 ---
 
@@ -51,9 +59,12 @@ Within the GWT framing, Mundus is the **embodiment control plane**. The core:
 - Translates the adapter's perception frames (`FeedFrame`s) into `mundus.*` bus
   events, applying the salience policy and stripping every raw sense buffer the
   descriptor names before anything reaches the bus.
-- Forwards `intent.avatar.*` intents from Volition to the adapter's symbolic sink,
-  and (future) continuous setpoints to its graded sink — both gated by the current
-  perception locus and per-family / per-channel exposure.
+- Forwards symbolic `intent.avatar.<family>` intents from Volition to the adapter's
+  symbolic sink, and routes the per-tick `intent.avatar.control` command to the
+  adapter's continuous graded sink (`apply_setpoints`) — both gated by the current
+  perception locus and per-family / per-channel exposure. Each continuous control
+  tick also publishes an efference copy on `mundus.efference` so the forward model
+  can close the loop.
 - Optionally mirrors the entity's external speech (`lingua.external`) to the body's
   local chat.
 
@@ -89,9 +100,13 @@ locomotion/gaze rates clamped to `[-1, 1]` and the `interact` reach trigger to
 | Stream | Event / mechanism | Description |
 |---|---|---|
 | adapter `feed()` | `_feed_loop` + `_handle_feed` | Perception frames from the attached body |
-| `volition.out` | `_intent_loop` | `intent.avatar.*` events → adapter symbolic sink |
-| (future producer) | `apply_setpoints` | Continuous graded channel commands → adapter continuous sink |
+| `volition.out` | `_intent_loop` → `_send_action` | `intent.avatar.<family>` symbolic verbs → adapter `apply_action` |
+| `volition.out` | `_intent_loop` → `_drive_control` | `intent.avatar.control` per-tick command → clamped/gated `apply_setpoints` + `mundus.efference` copy |
 | `lingua.external` | `_speech_loop` (if `mirror_speech = true`) | Text → `say` action to local chat |
+
+The `intent.avatar.control` producer is the `ContinuousMotorSurface`
+([below](#continuous-embodiment-control-surface)); its payload carries the five
+continuous channel scalars under `payload["channels"]`.
 
 ---
 
@@ -125,10 +140,56 @@ symbolic sink only when:
 
 For a body that declares continuous channels, setpoints are forwarded to the
 adapter's graded sink only when the locus is `virtual`, the channel is exposed
-(default **off**), and the value is clamped to the channel's declared range. A
-symbolic-only body (no continuous channels) simply rejects the whole setpoint
-request as unsupported — that rejection happens before, and independent of,
-the locus check; it is not itself locus-gated.
+(default **off**), and the value is clamped to the channel's declared range
+(`CONTINUOUS_CHANNEL_RANGE` in `kaine/modules/mundus/channels.py`). A symbolic-only
+body (no continuous channels) simply rejects the whole setpoint request as
+unsupported — that rejection happens before, and independent of, the locus check;
+it is not itself locus-gated.
+
+### Efference copy (`mundus.efference`)
+
+Every continuous control tick (`_drive_control`) publishes an **efference copy** of
+the command the entity emitted — the channel scalars clamped to range, regardless
+of which channels were gated off before reaching the body — on `mundus.efference`
+(salience 0.2), with `{"channels": {...}, "forwarded": <bool>}`. This is a copy of
+*what the entity emitted*, not of what reached the body, and it is time-aligned with
+the outgoing action so the forward model can `predict → compare → correct` against
+the coupled proprioceptive/visual feedback that arrives back through the body's own
+feed (`mundus.proprio` / `mundus.visual.*`). The efference copy is what makes the
+control surface a **closed loop** rather than an open-loop joystick.
+
+---
+
+## Continuous embodiment control surface
+
+The `intent.avatar.control` producer — the entity's per-tick continuous motor
+command — lives in `kaine/modules/mundus/control_surface.py`
+(`intuitive-embodiment-control-surface`). It closes the *continuous* producer gap:
+before it, nothing in the build emitted a per-tick motor command, so the entity
+could not drive a body on its own. It is deliberately **continuous control** (five
+graded channels), not a symbolic verb menu.
+
+Its pieces:
+
+| Piece | Role |
+|---|---|
+| `ContinuousMotorSurface` | Composes the parts; `emit()` produces a clamped, curriculum-masked `ControlCommand` each tick (null while inhibited or before birth); `observe_feedback()` feeds the coupled feedback back through the forward model |
+| `MotorPolicy` (protocol) | The entity's **learned** control policy — the emergent part; maps an observation to raw setpoints |
+| `QuiescentMotorPolicy` | The honest default: emits nothing — **scripts no gait**. A real learned policy is injected in its place |
+| `MotorCurriculum` | Freeze-then-free DOF progression (a provided training/safety scaffold, Bernstein 1967): M1 `drive`+`yaw_rate` → M2 +`gaze_yaw`/`gaze_pitch` → M3 +`interact`. A DOF is freed **only on demonstrated competence** (a falling forward-model prediction error), never on elapsed time |
+| `EfferenceLoop` | Closes the loop through the **existing** Soma `SubstrateForwardModel` (efference copy + proprioception → predict/compare/correct). **No new learner** is introduced |
+
+The five canonical channels and their clamp ranges (`channels.py`,
+`CONTINUOUS_CHANNEL_RANGE`): `drive` `[-1,1]`, `yaw_rate` `[-1,1]`, `gaze_yaw`
+`[-1,1]`, `gaze_pitch` `[-1,1]`, `interact` `[0,1]` (a single non-negative graded
+reach trigger). `strafe` is deliberately deferred and is not a channel. Gaze is
+decoupled from the body.
+
+The surface is **inert before the birth handoff** (`on_birth()`, the reciprocal
+half of the developmental-stage birth transition) and emits the null command while
+the workspace is inhibited — on top of Mundus's two-layer gate and the locus gate
+enforced on the forwarding path. Symbolic verb families remain operator-only: the
+surface **cannot** emit them (it produces only continuous channels).
 
 ---
 
@@ -147,6 +208,23 @@ the shipped `stub` needs no configuration.
 | `speech_stream` | `"lingua.external"` | Source stream for speech mirroring |
 
 `[modules].mundus` must be `true` for the module to be instantiated.
+
+### `[mundus.control_surface]`
+
+The continuous embodiment control surface (the per-tick motor producer). **Off by
+default** — the entity drives a body on its own only when this is explicitly
+enabled, on top of the two-layer operational gate and the `embodied` developmental
+stage. When `enabled = true`, `make_mundus` builds a `ContinuousMotorSurface` (with
+a `MotorCurriculum` from the keys below) and hands it to the core.
+
+| Key | Default | Description |
+|---|---|---|
+| `enabled` | `false` | Construct and wire the control surface at all |
+| `competence_threshold` | `0.05` | A DOF is freed only when the rolling forward-model prediction error is at or below this — the competence gate |
+| `min_samples` | `32` | Minimum observed ticks before competence is judged (below this, competence is `None`) |
+| `window` | `64` | Rolling window of prediction errors used for the competence readout (must be ≥ `min_samples`) |
+
+Advancement is competence-gated, **never** wall-clock scheduled.
 
 Per-body exposure defaults come from the adapter's descriptor. A transport-backed
 body's world-mutating or consent-sensitive families default **off** (operator
@@ -205,8 +283,10 @@ operator sees it and Thymos/Eidolon register the solicitation as perception.
 
 | File | Role |
 |---|---|
-| `kaine/modules/mundus/module.py` | `Mundus` — the body-agnostic core: gating, locus, intent/speech loops, feed→event mapping, continuous-setpoint routing |
+| `kaine/modules/mundus/module.py` | `Mundus` — the body-agnostic core: gating, locus, intent/speech loops, feed→event mapping, continuous-setpoint routing + efference copy |
 | `kaine/modules/mundus/adapter.py` | `EmbodimentAdapter` protocol, `EmbodimentCapabilities` descriptor, `FeedFrame` |
+| `kaine/modules/mundus/channels.py` | `CONTINUOUS_CHANNEL_RANGE` — canonical continuous-channel vocabulary + clamp ranges (leaf module shared by the core and the control surface) |
+| `kaine/modules/mundus/control_surface.py` | The continuous motor producer: `ContinuousMotorSurface`, `MotorPolicy`/`QuiescentMotorPolicy`, `MotorCurriculum`, `EfferenceLoop` |
 | `kaine/modules/mundus/adapters/stub.py` | Shipped transport-free reference body; exercises the continuous-control path |
 | `kaine/modules/mundus/bridge.py` | Reference length-prefixed MessagePack wire helpers (`read_frame`, `write_frame`) for a future transport-backed adapter |
 | `openspec/changes/body-agnostic-embodiment-adapters/` | The control-plane design of record |
@@ -242,6 +322,7 @@ operator sees it and Thymos/Eidolon register the solicitation as perception.
 | File | Coverage |
 |---|---|
 | `tests/test_mundus_module.py` | Two-layer gate; feed mapping via descriptor; raw-buffer stripping; core salience policy; symbolic action exposure + locus gating; speech mirroring; continuous-setpoint clamping / exposure / locus gating; symbolic-only rejection; capability-descriptor validation; cursor serialize/deserialize — all driven through the transport-free stub and a small in-file fake adapter |
+| `tests/test_mundus_control_surface.py` | The continuous control surface: channel shape/clamping, gaze decoupling, symbolic exclusion, mandatory closed loop + no-new-learner, competence-gated (not time-gated) curriculum, birth/inhibition/locus/exposure gates, quiescent-not-scripted default, and producer → control-plane → body end-to-end over the stub |
 
 ---
 
