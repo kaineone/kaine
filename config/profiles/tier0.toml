@@ -1,0 +1,39 @@
+# Tier 0 — edge / sensor node (openspec deployment-tiers)
+#
+# Host class: ~512 MB-class single-board computer or a retired low-RAM phone.
+# Role: symbolic reasoning + episodic memory + perception satellite, optionally
+# feeding a higher tier over the bus. No torch runtime — everything heavy runs on
+# the GGML/ONNX family (llama.cpp, sqlite-vec).
+#
+# This overlay is INERT and VOICE-FREE by contract (openspec: "Tier profiles
+# preserve the safety invariants"): it selects runtime backends and device/
+# cycle-rate hints and DISABLES faculties this host cannot bear, but it NEVER
+# enables a module and embeds NO private predefined voice. Enabling modules and
+# selecting a voice remain local operator actions, exactly as for config/kaine.toml.
+# It layers BETWEEN the shipped defaults and your config/kaine.operator.toml,
+# which still wins.
+#
+# Apply deliberately:  KAINE_PROFILE=tier0 python -m kaine.cycle
+#               or:    python -m kaine.cycle --profile tier0
+
+[modules]
+# Faculties absent below the torch cliff — explicitly held off (never on).
+topos = false        # no vision runtime on a ~512 MB host
+audition = false     # no STT/emotion at Tier 0 (optional whisper.cpp-tiny batch is manual)
+vox = false          # no expressive TTS
+empatheia = false
+phantasia = false
+
+[lingua]
+# In-process sub-1B GGUF (slow) — no Ollama/torch server. A >=2B LLM does NOT
+# fit a 512 MB host; this is a symbolic-reasoning node, not a conversational one.
+backend = "llama_cpp"
+
+[mnemos]
+# In-process vector store — no Qdrant server, near-zero idle footprint.
+backend = "sqlite_vec"
+device = "cpu"
+
+# Slow the subjective clock: an edge CPU cannot sustain the workstation cycle rate.
+[oscillator]
+enabled = false

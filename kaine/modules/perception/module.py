@@ -118,6 +118,7 @@ class PerceptionLocus(BaseModule):
             inhibited=self._inhibited,
             since_last_switch_s=since,
             min_dwell_s=self._min_dwell_s,
+            locked_by=d.locked_by,
         )
         if allowed:
             ps.write_desired_locus(requested, path=self._desired_path)
