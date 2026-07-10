@@ -69,6 +69,9 @@ data/**
 # (hypnos-consolidation): it is the hard gate that prevents voice-alignment
 # from re-introducing refusal conditioning. Exempt it from the *.jsonl rule.
 !eval_probes/abliteration_probes.jsonl
+# Abliteration-lens research inputs are checked-in content (the broad *.jsonl
+# rule above would otherwise swallow them).
+!data/abliteration_lens/*.jsonl
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
@@ -115,3 +118,6 @@ unsloth_compiled_cache/
 .claude/scheduled_tasks.lock
 !external/jlens/
 external/jlens/**/__pycache__/
+
+# Isolated transformers>=5 env for the offline abliteration-lens run (not committed).
+.venv-lens/

@@ -88,18 +88,43 @@ def _import_jlens() -> Any:
 
 
 def load_lens_model(
-    model_ref: str, *, device: str = "cuda", dtype: str = "bfloat16"
+    model_ref: str,
+    *,
+    device: str = "cuda",
+    dtype: str = "bfloat16",
+    max_memory: Optional[dict[Any, str]] = None,
 ) -> Any:
-    """Load an HF causal LM + tokenizer and wrap it as a jlens LensModel."""
+    """Load an HF causal LM + tokenizer and wrap it as a jlens LensModel.
+
+    ``device="auto"`` spreads the model across all visible GPUs via
+    ``device_map="auto"`` (needed for a 4B model whose weights + Jacobian-fit
+    backward pass do not fit one consumer card). ``device_map="auto"`` greedily
+    FILLS the first GPU, leaving no room for the backward pass, so pass
+    ``max_memory`` (e.g. ``{0: "6GiB", 1: "6GiB", "cpu": "50GiB"}``) to cap each
+    device and reserve headroom, spilling the remainder to CPU. Any other
+    ``device`` loads the model whole and moves it there. The dtype kwarg is
+    spelled ``dtype`` (transformers >= 5) with a ``torch_dtype`` fallback.
+    """
     jlens = _import_jlens()
     import torch  # type: ignore[import-not-found]
     import transformers  # type: ignore[import-not-found]
 
     torch_dtype = getattr(torch, dtype)
-    hf = transformers.AutoModelForCausalLM.from_pretrained(
-        model_ref, torch_dtype=torch_dtype
-    )
-    hf = hf.to(device) if device else hf
+    load_kwargs: dict[str, Any] = {}
+    if device == "auto":
+        load_kwargs["device_map"] = "auto"
+        if max_memory is not None:
+            load_kwargs["max_memory"] = max_memory
+    try:
+        hf = transformers.AutoModelForCausalLM.from_pretrained(
+            model_ref, dtype=torch_dtype, **load_kwargs
+        )
+    except TypeError:  # transformers < 5 spells it torch_dtype
+        hf = transformers.AutoModelForCausalLM.from_pretrained(
+            model_ref, torch_dtype=torch_dtype, **load_kwargs
+        )
+    if device and device != "auto":
+        hf = hf.to(device)
     tok = transformers.AutoTokenizer.from_pretrained(model_ref)
     return jlens.from_hf(hf, tok)
 
