@@ -1430,6 +1430,30 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     for key in ("mirror_speech", "speech_stream"):
         if key in section:
             kwargs[key] = section[key]
+
+    # Continuous embodiment control surface (`intuitive-embodiment-control-surface`):
+    # the entity's per-tick continuous motor producer + freeze-then-free curriculum
+    # + closed-loop forward model. Off by default (ships conservative); constructed
+    # only when [mundus.control_surface].enabled = true. The producer is held by the
+    # control plane but its per-tick driving loop is the cycle's motor seam.
+    cs_section = dict(section.get("control_surface", {}) or {})
+    if bool(cs_section.get("enabled", False)):
+        from kaine.modules.mundus.control_surface import (
+            ContinuousMotorSurface,
+            MotorCurriculum,
+        )
+
+        curriculum_kwargs: dict[str, Any] = {}
+        for cfg_key, arg_key in (
+            ("competence_threshold", "competence_threshold"),
+            ("min_samples", "min_samples"),
+            ("window", "window"),
+        ):
+            if cfg_key in cs_section:
+                curriculum_kwargs[arg_key] = cs_section[cfg_key]
+        curriculum = MotorCurriculum(**curriculum_kwargs) if curriculum_kwargs else None
+        kwargs["control_surface"] = ContinuousMotorSurface(curriculum=curriculum)
+
     # Constructed only when [modules].mundus is on; the operational two-layer gate
     # is [mundus].enabled (default true here) AND KAINE_MUNDUS_OPERATOR_APPROVED=1.
     return Mundus(

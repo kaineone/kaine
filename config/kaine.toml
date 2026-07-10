@@ -955,6 +955,25 @@ expose_gesture = true
 expose_teleport = false
 expose_touch = false
 
+[mundus.control_surface]
+# The minimal, continuous, learnable embodiment control surface (the entity's
+# per-tick motor producer) — `intuitive-embodiment-control-surface`. Off by
+# default: the entity drives a body on its own ONLY when this is explicitly
+# enabled, on top of the two-layer gate + the `embodied` developmental stage.
+# The surface emits four continuous locomotion/gaze rates plus one interaction
+# trigger; the loop is closed with an efference copy fed to the existing forward
+# model. No gait is scripted — only the action-space structure and the
+# freeze-then-free progression are provided (Bernstein 1967).
+enabled = false
+# Motor curriculum (freeze-then-free) — a PROVIDED training/safety scaffold, not
+# innate. Each degree of freedom is freed only when the motor-competence readout
+# (a falling forward-model prediction error over `window` observed ticks) stays
+# at or below `competence_threshold`, measured over at least `min_samples` ticks.
+# Advancement is competence-gated, NEVER scheduled by wall-clock.
+competence_threshold = 0.05
+min_samples = 32
+window = 64
+
 [evaluation]
 # Architecture-thesis instrumentation. Disable for production once the
 # thesis is validated. Adds NO core-module dependencies; observes the
