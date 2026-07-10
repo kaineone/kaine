@@ -4,12 +4,16 @@
 """Vector storage backends for Mnemos.
 
 `MemoryStorage` is the protocol; `QdrantStorage` is the production
-default; `InMemoryStorage` is the deterministic fallback for tests
-(also serves as a starting point for the future SQLite minimal
-deployment backend).
+default (Tier 2); `InMemoryStorage` is the deterministic fallback for
+tests; `SqliteVecStorage` is the in-process edge backend (Tier 0/1) —
+an ``asg017/sqlite-vec`` vector index with near-zero idle footprint and
+no server, selected by ``[mnemos].backend = "sqlite_vec"`` (openspec
+runtime-backends). All three satisfy the SAME protocol and store the same
+CLS collections, so selecting a backend never changes Mnemos's semantics.
 """
 from __future__ import annotations
 
+import json
 import logging
 import math
 import uuid
@@ -222,6 +226,292 @@ class InMemoryStorage:
                         "payload": dict(p.get("payload") or {}),
                         "affect": dict(affect) if affect else None,
                     }
+                )
+                total += 1
+        return total
+
+
+class SqliteVecStorage:
+    """In-process vector store on ``sqlite-vec`` (edge backend, Tier 0/1).
+
+    A single SQLite file holds a ``vec0`` virtual table for the vectors plus a
+    companion metadata table for text/payload/affect; cosine KNN runs inside the
+    process with no Qdrant server and near-zero idle footprint — the single-user
+    edge counterpart of :class:`QdrantStorage`. It stores the same CLS
+    collections and exposes the same ``search`` (``query_points``-equivalent)
+    API, so Mnemos's memory semantics are unchanged (openspec runtime-backends).
+
+    ``sqlite_vec`` is imported lazily inside :meth:`initialize` (mirroring
+    :class:`QdrantStorage`'s lazy ``qdrant_client`` import), so a Tier-2 install
+    that never selects this backend does not need the dependency.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        *,
+        db_path: str = "state/mnemos/mnemos.db",
+        distance: str = "cosine",
+    ) -> None:
+        if latent_dim <= 0:
+            raise ValueError("latent_dim must be positive")
+        self._latent_dim = int(latent_dim)
+        self._db_path = str(db_path)
+        self._distance = distance
+        self._db: Any = None
+
+    @property
+    def latent_dim(self) -> int:
+        return self._latent_dim
+
+    async def initialize(self) -> None:
+        if self._db is not None:
+            return
+        import asyncio
+
+        def _open() -> Any:
+            import os
+            import sqlite3
+
+            import sqlite_vec  # type: ignore[import-untyped]
+
+            parent = os.path.dirname(self._db_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            db = sqlite3.connect(self._db_path)
+            db.enable_load_extension(True)
+            sqlite_vec.load(db)
+            db.enable_load_extension(False)
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS memories ("
+                "rowid INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT, "
+                "point_id TEXT, text TEXT, payload TEXT, affect TEXT)"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS memories_collection "
+                "ON memories(collection)"
+            )
+            db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS memories_pid "
+                "ON memories(collection, point_id)"
+            )
+            db.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0("
+                f"embedding float[{self._latent_dim}] distance_metric=cosine)"
+            )
+            db.commit()
+            return db
+
+        self._db = await asyncio.to_thread(_open)
+
+    async def shutdown(self) -> None:
+        if self._db is not None:
+            db, self._db = self._db, None
+            try:
+                db.close()
+            except Exception:
+                log.warning("sqlite-vec close failed", exc_info=True)
+
+    async def ensure_collection(self, name: str) -> None:
+        # Collections are a metadata column, not a separate table — nothing to
+        # create up-front. Kept for protocol parity with Qdrant.
+        return
+
+    async def upsert(
+        self,
+        collection: str,
+        *,
+        vector: list[float],
+        text: str,
+        payload: dict[str, Any],
+        affect: dict[str, Any] | None,
+        point_id: str | None = None,
+    ) -> str:
+        import asyncio
+        import struct
+
+        if len(vector) != self._latent_dim:
+            raise ValueError(
+                f"vector dim {len(vector)} != storage latent_dim {self._latent_dim}"
+            )
+        pid = point_id or uuid.uuid4().hex
+        blob = struct.pack(f"{self._latent_dim}f", *[float(x) for x in vector])
+        payload_json = json.dumps(payload or {})
+        affect_json = json.dumps(affect) if affect else None
+
+        def _write() -> None:
+            db = self._db
+            assert db is not None
+            cur = db.execute(
+                "SELECT rowid FROM memories WHERE collection = ? AND point_id = ?",
+                (collection, pid),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                rowid = int(row[0])
+                db.execute(
+                    "UPDATE memories SET text = ?, payload = ?, affect = ? "
+                    "WHERE rowid = ?",
+                    (text, payload_json, affect_json, rowid),
+                )
+                db.execute(
+                    "UPDATE vec_memories SET embedding = ? WHERE rowid = ?",
+                    (blob, rowid),
+                )
+            else:
+                cur = db.execute(
+                    "INSERT INTO memories (collection, point_id, text, payload, "
+                    "affect) VALUES (?, ?, ?, ?, ?)",
+                    (collection, pid, text, payload_json, affect_json),
+                )
+                rowid = int(cur.lastrowid)
+                db.execute(
+                    "INSERT INTO vec_memories (rowid, embedding) VALUES (?, ?)",
+                    (rowid, blob),
+                )
+            db.commit()
+
+        await asyncio.to_thread(_write)
+        return pid
+
+    async def search(
+        self,
+        collection: str,
+        *,
+        query_vector: list[float],
+        limit: int,
+    ) -> list[RecalledMemory]:
+        import asyncio
+        import struct
+
+        blob = struct.pack(
+            f"{self._latent_dim}f", *[float(x) for x in query_vector]
+        )
+        k = max(0, int(limit))
+        if k == 0:
+            return []
+
+        def _query() -> list[RecalledMemory]:
+            db = self._db
+            if db is None:
+                raise StorageError("sqlite-vec search before initialize()")
+            try:
+                cur = db.execute(
+                    "SELECT m.point_id, v.distance, m.text, m.payload, m.affect "
+                    "FROM vec_memories v JOIN memories m ON m.rowid = v.rowid "
+                    "WHERE v.embedding MATCH ? AND m.collection = ? AND k = ? "
+                    "ORDER BY v.distance",
+                    (blob, collection, k),
+                )
+                rows = cur.fetchall()
+            except Exception as exc:
+                raise StorageError(
+                    f"sqlite-vec search failed for collection {collection!r}: {exc}"
+                ) from exc
+            out: list[RecalledMemory] = []
+            for point_id, distance, text, payload_json, affect_json in rows:
+                # vec0 cosine distance → similarity score on the same [-1, 1]
+                # scale Qdrant/InMemory report.
+                score = 1.0 - float(distance)
+                affect = json.loads(affect_json) if affect_json else None
+                out.append(
+                    RecalledMemory(
+                        point_id=str(point_id),
+                        score=score,
+                        text=str(text or ""),
+                        payload=json.loads(payload_json) if payload_json else {},
+                        affect=affect,
+                    )
+                )
+            return out
+
+        return await asyncio.to_thread(_query)
+
+    async def delete(self, collection: str, point_id: str) -> None:
+        import asyncio
+
+        def _del() -> None:
+            db = self._db
+            assert db is not None
+            cur = db.execute(
+                "SELECT rowid FROM memories WHERE collection = ? AND point_id = ?",
+                (collection, point_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return
+            rowid = int(row[0])
+            db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid,))
+            db.execute("DELETE FROM memories WHERE rowid = ?", (rowid,))
+            db.commit()
+
+        await asyncio.to_thread(_del)
+
+    async def count(self, collection: str) -> int:
+        import asyncio
+
+        def _count() -> int:
+            db = self._db
+            if db is None:
+                return 0
+            cur = db.execute(
+                "SELECT COUNT(*) FROM memories WHERE collection = ?", (collection,)
+            )
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+
+        return await asyncio.to_thread(_count)
+
+    async def export(self) -> dict[str, list[dict[str, Any]]]:
+        import asyncio
+        import struct
+
+        def _export() -> dict[str, list[dict[str, Any]]]:
+            db = self._db
+            if db is None:
+                raise StorageError("sqlite-vec export before initialize()")
+            out: dict[str, list[dict[str, Any]]] = {}
+            try:
+                cur = db.execute(
+                    "SELECT m.collection, m.point_id, m.text, m.payload, m.affect, "
+                    "v.embedding FROM memories m JOIN vec_memories v "
+                    "ON v.rowid = m.rowid"
+                )
+                for coll, pid, text, payload_json, affect_json, emb in cur.fetchall():
+                    vec = list(struct.unpack(f"{self._latent_dim}f", emb))
+                    affect = json.loads(affect_json) if affect_json else None
+                    out.setdefault(str(coll), []).append(
+                        {
+                            "id": str(pid),
+                            "vector": vec,
+                            "text": str(text or ""),
+                            "payload": json.loads(payload_json) if payload_json else {},
+                            "affect": affect,
+                        }
+                    )
+            except Exception as exc:
+                raise StorageError(f"sqlite-vec export failed: {exc}") from exc
+            return out
+
+        return await asyncio.to_thread(_export)
+
+    async def import_(self, collections: dict[str, list[dict[str, Any]]]) -> int:
+        total = 0
+        for name, points in (collections or {}).items():
+            for p in points:
+                vec = list(p.get("vector") or [])
+                if len(vec) != self._latent_dim:
+                    raise StorageError(
+                        f"imported point in {name!r} has vector dim {len(vec)} "
+                        f"!= storage latent_dim {self._latent_dim}"
+                    )
+                await self.upsert(
+                    name,
+                    vector=vec,
+                    text=str(p.get("text", "")),
+                    payload=dict(p.get("payload") or {}),
+                    affect=(dict(p["affect"]) if p.get("affect") else None),
+                    point_id=str(p.get("id") or uuid.uuid4().hex),
                 )
                 total += 1
         return total

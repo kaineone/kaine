@@ -31,6 +31,7 @@ import logging
 import os
 import platform
 import re
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -459,3 +460,226 @@ def describe_host() -> dict[str, Any]:
         "xpu_names": xpu_names,
         "xpu_devices": xpu_devices,
     }
+
+
+# ---------------------------------------------------------------------------
+# Host-capability probe → recommended deployment tier (openspec host-probe).
+#
+# The portability thesis is that KAINE is the architecture, not the hardware:
+# the same mind inhabits hardware from a retired phone to a datacenter, trading
+# capability for reach rather than changing identity. The probe reports what the
+# host can bear and RECOMMENDS a tier; it never applies a profile or starts the
+# entity — profile selection stays an operator action, consistent with the
+# operator-supervised boot.
+# ---------------------------------------------------------------------------
+
+#: RAM floor (GiB) below which the torch/transformers runtime is unrealistic and
+#: the host is an edge/sensor node (Tier 0). The GGML/ONNX family still runs.
+TIER1_MIN_RAM_GB = 4.0
+
+#: 32-bit ARM (armv6/armv7) cannot realistically bear the torch stack; such a
+#: host is capped at the Tier-0 symbolic-reasoning + memory + sensor role.
+_ARM32_ARCHES = ("armv6", "armv7", "armv6l", "armv7l")
+
+#: The honest capability matrix, per tier. ``present`` / ``degraded`` / ``absent``
+#: name what each tier can and cannot do (openspec deployment-tiers). Rendered by
+#: ``scripts/probe-host`` and mirrored in ``docs/deployment-tiers.md``.
+TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
+    0: {
+        "name": "edge / sensor node",
+        "host": "~512 MB-class SBC or retired low-RAM phone",
+        "summary": (
+            "symbolic reasoning + episodic memory + perception satellite; "
+            "no torch runtime"
+        ),
+        "present": ["soma", "chronos", "nous", "mnemos (sqlite-vec)", "eidolon", "thymos"],
+        "degraded": ["lingua (sub-1B GGUF, slow)", "audio-in (optional whisper.cpp-tiny batch STT)"],
+        "absent": ["topos vision", "vocal emotion", "expressive TTS", "≥2B LLM"],
+    },
+    1: {
+        "name": "embodied CPU agent",
+        "host": "4–8 GB-class SBC or retired 8 GB smartphone (e.g. under Termux)",
+        "summary": "CPU multimodal at chat pace; periodic (not streaming) vision",
+        "present": [
+            "lingua (1–2B GGUF)",
+            "audio-in STT (whisper.cpp/faster-whisper)",
+            "audio-out TTS (Piper)",
+            "mnemos embeddings (ONNX MiniLM)",
+            "topos vision (ONNX/dinov2.cpp, periodic)",
+        ],
+        "degraded": ["vision is periodic, not streaming", "short contexts"],
+        "absent": ["expressive TTS", "vocal emotion", "streaming vision"],
+    },
+    2: {
+        "name": "workstation",
+        "host": "single/dual-GPU workstation (the current default)",
+        "summary": "full real-time multimodal (the untouched default)",
+        "present": [
+            "lingua (Gemma E2B on GPU via Ollama)",
+            "topos vision (DINOv2 torch)",
+            "vocal emotion (emotion2vec+)",
+            "audio-in STT (faster-whisper, >realtime)",
+            "audio-out TTS (Chatterbox, expressive)",
+            "mnemos (Qdrant + sentence-transformers)",
+        ],
+        "degraded": [],
+        "absent": [],
+    },
+    3: {
+        "name": "datacenter / multi-GPU",
+        "host": "multi-GPU server",
+        "summary": "larger LLMs, longer contexts, concurrent instances, redundancy",
+        "present": ["everything at Tier 2, with more headroom"],
+        "degraded": [],
+        "absent": [],
+    },
+}
+
+
+@dataclass(frozen=True)
+class TierRecommendation:
+    """The probe's report: host facts + a recommended tier and why.
+
+    ``tier`` is a *recommendation* only — nothing here applies a profile or
+    starts the entity. ``capabilities`` is the matrix row for ``tier``.
+    """
+
+    tier: int
+    reason: str
+    total_ram_gb: float | None
+    cpu_arch: str
+    accelerator: str
+    torch_importable: bool
+    gpu_count: int
+
+    @property
+    def profile(self) -> str:
+        return f"tier{self.tier}"
+
+    @property
+    def capabilities(self) -> dict[str, Any]:
+        return TIER_CAPABILITIES[self.tier]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "tier": self.tier,
+            "profile": self.profile,
+            "reason": self.reason,
+            "total_ram_gb": self.total_ram_gb,
+            "cpu_arch": self.cpu_arch,
+            "accelerator": self.accelerator,
+            "torch_importable": self.torch_importable,
+            "gpu_count": self.gpu_count,
+            "capabilities": self.capabilities,
+        }
+
+
+def total_ram_gb() -> float | None:
+    """Best-effort total physical RAM in GiB, or ``None`` if undetectable.
+
+    Tries POSIX ``sysconf`` first (no third-party dependency), then
+    ``/proc/meminfo``, then ``psutil`` if it happens to be installed. Returns
+    ``None`` rather than guessing when none of those work.
+    """
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        phys_pages = os.sysconf("SC_PHYS_PAGES")
+        if page_size > 0 and phys_pages > 0:
+            return round(page_size * phys_pages / (1024 ** 3), 2)
+    except (ValueError, OSError, AttributeError):
+        pass
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    kib = int(line.split()[1])
+                    return round(kib / (1024 ** 2), 2)
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        return round(int(psutil.virtual_memory().total) / (1024 ** 3), 2)
+    except Exception:
+        return None
+
+
+def cpu_arch() -> str:
+    """Normalized CPU architecture string, e.g. ``x86_64`` / ``aarch64`` / ``armv7l``."""
+    return (platform.machine() or "unknown").lower()
+
+
+def _is_arm32(arch: str) -> bool:
+    a = arch.lower()
+    return any(a.startswith(prefix) for prefix in _ARM32_ARCHES)
+
+
+def torch_importable() -> bool:
+    """True iff ``torch`` imports on this host (the torch/transformers cliff)."""
+    return _try_torch() is not None
+
+
+def recommend_tier(
+    *,
+    ram_gb: float | None = None,
+    arch: str | None = None,
+    torch_ok: bool | None = None,
+    gpu_count: int | None = None,
+    accelerator: str | None = None,
+) -> TierRecommendation:
+    """Map host capabilities to a recommended deployment tier.
+
+    Recommends only — it does not apply a profile or start the entity. The
+    override arguments exist for deterministic testing across host classes; when
+    omitted each is probed from the live host.
+
+    The ladder mirrors the runtime cliff (openspec design):
+
+    * **Tier 0** — torch does not import, RAM is below the Tier-1 floor, or the
+      CPU is 32-bit ARM: an edge / sensor node (GGML/ONNX only, no torch).
+    * **Tier 1** — torch imports and RAM ≥ :data:`TIER1_MIN_RAM_GB` but no
+      accelerator is present: an embodied CPU agent.
+    * **Tier 2** — an accelerator (CUDA / ROCm / MPS / XPU) with exactly one GPU:
+      the workstation default.
+    * **Tier 3** — two or more GPUs: datacenter / multi-GPU.
+    """
+    arch_v = (arch if arch is not None else cpu_arch()).lower()
+    ram_v = ram_gb if ram_gb is not None else total_ram_gb()
+    torch_v = torch_ok if torch_ok is not None else torch_importable()
+    if gpu_count is not None:
+        gpu_v = int(gpu_count)
+    else:
+        gpu_v = _cuda_device_count() + _xpu_device_count()
+    if accelerator is not None:
+        accel_v = accelerator
+    else:
+        detected = detect_device()
+        accel_v = detected if detected in ("cuda", "xpu", "mps") else "cpu"
+    has_accelerator = accel_v in ("cuda", "xpu", "mps") or gpu_v > 0
+
+    def _rec(tier: int, reason: str) -> TierRecommendation:
+        return TierRecommendation(
+            tier=tier,
+            reason=reason,
+            total_ram_gb=ram_v,
+            cpu_arch=arch_v,
+            accelerator=accel_v,
+            torch_importable=bool(torch_v),
+            gpu_count=gpu_v,
+        )
+
+    # 32-bit ARM cannot bear the torch stack — capped at the sensor role.
+    if _is_arm32(arch_v):
+        return _rec(0, f"32-bit ARM ({arch_v}); torch stack not viable")
+    if not torch_v:
+        return _rec(0, "torch does not import on this host")
+    if ram_v is not None and ram_v < TIER1_MIN_RAM_GB:
+        return _rec(
+            0, f"RAM {ram_v} GB below Tier-1 floor of {TIER1_MIN_RAM_GB} GB"
+        )
+    if has_accelerator:
+        if gpu_v >= 2:
+            return _rec(3, f"{gpu_v} GPUs present (multi-GPU)")
+        return _rec(2, f"accelerator present ({accel_v})")
+    return _rec(1, "torch importable, adequate RAM, no accelerator (CPU agent)")
+
