@@ -17,7 +17,7 @@ class SyneidesisProtocol(Protocol):
         events: list[tuple[str, Event]],
         context: dict[str, Any],
     ) -> WorkspaceSnapshot:
-        ...
+        """Select the conscious workspace snapshot for ``events``."""
 
     async def select_dual(
         self,
