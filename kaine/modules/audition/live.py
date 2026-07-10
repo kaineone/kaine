@@ -15,6 +15,7 @@ Queue, the in-memory WAV blob lives only in a BytesIO, and every
 reference is released after the sink call returns. Nothing in this file
 opens a file for writing. Ever.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -63,6 +64,11 @@ class LiveMicConfig:
     silence_hangover_ms: int = 600
     desired_state_poll_ms: int = 250
     source_label: str = "live_mic"
+    # General auditory perception (auditory-perception): when set, deliver the
+    # audio in fixed ``window_ms`` windows to the sink instead of VAD-segmented
+    # speech utterances, so non-speech is heard rather than gated out upstream.
+    continuous_capture: bool = False
+    window_ms: int = 500
 
 
 class _RMSVAD:
@@ -80,6 +86,7 @@ class _RMSVAD:
         if not frame:
             return False
         import struct
+
         n = len(frame) // 2
         if n == 0:
             return False
@@ -161,7 +168,9 @@ def _tap_audio_level(frame: bytes, sample_rate: int) -> None:
         pass
 
 
-def encode_wav(pcm: bytes, *, sample_rate: int, channels: int, sampwidth: int = 2) -> bytes:
+def encode_wav(
+    pcm: bytes, *, sample_rate: int, channels: int, sampwidth: int = 2
+) -> bytes:
     """Wrap raw PCM as a WAV blob entirely in memory. NO file path,
     EVER. The output bytes are handed to the parent's process_audio."""
     buf = io.BytesIO()
@@ -225,9 +234,7 @@ class LiveMicrophone:
         frames_per_second = max(1, 1000 // max(1, self._cfg.vad_frame_ms))
         self._pcm_queue = asyncio.Queue(maxsize=frames_per_second * 5)
         self._stopped.clear()
-        self._task = asyncio.create_task(
-            self._supervise(), name="live-mic-supervisor"
-        )
+        self._task = asyncio.create_task(self._supervise(), name="live-mic-supervisor")
 
     async def shutdown(self) -> None:
         self._stopped.set()
@@ -250,7 +257,10 @@ class LiveMicrophone:
                 elif not desired and self._active:
                     await self._stop_stream()
                 if self._active:
-                    await self._consume_one_utterance()
+                    if self._cfg.continuous_capture:
+                        await self._consume_one_window()
+                    else:
+                        await self._consume_one_utterance()
                 else:
                     try:
                         await asyncio.wait_for(
@@ -278,7 +288,9 @@ class LiveMicrophone:
             return self._active
 
     async def _start_stream(self) -> None:
-        frames_per_block = max(1, self._cfg.sample_rate * self._cfg.vad_frame_ms // 1000)
+        frames_per_block = max(
+            1, self._cfg.sample_rate * self._cfg.vad_frame_ms // 1000
+        )
         try:
             self._stream = self._stream_factory(
                 device=self._cfg.device,
@@ -415,10 +427,39 @@ class LiveMicrophone:
                 await self._flush_utterance(buffer, min_frames)
                 return
 
+    async def _consume_one_window(self) -> None:
+        """General-auditory-perception capture: buffer a fixed ``window_ms`` window
+        of frames and flush it to the sink regardless of speech, so any sound is
+        heard. No VAD gating and no min-length drop — the sink (Audition) does the
+        speech routing and salience."""
+        frame_ms = max(1, self._cfg.vad_frame_ms)
+        window_frames = max(1, self._cfg.window_ms // frame_ms)
+        assert self._pcm_queue is not None
+        buffer: list[bytes] = []
+        while not self._stopped.is_set() and self._active:
+            if self._desired_reader is not None and not self._read_desired():
+                await self._stop_stream()
+                return
+            try:
+                frame = await asyncio.wait_for(
+                    self._pcm_queue.get(),
+                    timeout=self._cfg.desired_state_poll_ms / 1000.0,
+                )
+            except asyncio.TimeoutError:
+                continue
+            _tap_audio_level(frame, self._cfg.sample_rate)
+            buffer.append(frame)
+            if len(buffer) >= window_frames:
+                await self._flush_utterance(buffer, min_frames=1)
+                return
+
     async def _flush_utterance(self, frames: list[bytes], min_frames: int) -> None:
         try:
             if len(frames) < min_frames:
-                log.info("live mic utterance_ended duration_frames=%d (below min)", len(frames))
+                log.info(
+                    "live mic utterance_ended duration_frames=%d (below min)",
+                    len(frames),
+                )
                 return
             pcm = b"".join(frames)
             wav_bytes = encode_wav(

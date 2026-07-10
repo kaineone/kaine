@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -907,6 +908,12 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "prediction_error_window",
         "auditory_buffer_size",
         "prosody_enabled",
+        # General auditory perception (auditory-perception). Off by default → the
+        # existing speech pipeline is unchanged. See the block below.
+        "general_audition",
+        "arousal_window_min",
+        "arousal_window_max",
+        "acoustic_change_alert_threshold",
         # Unified deterministic perception feed (unified-perception-feed). The
         # resolved top-level [perception_feed] config, injected by build_registry
         # under this reserved key. Selecting seeded/playlist supplies a
@@ -979,6 +986,31 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             kwargs[k] = int(section[k])
     if "prosody_enabled" in section:
         kwargs["prosody_enabled"] = bool(section["prosody_enabled"])
+
+    # General auditory perception (auditory-perception). When on, every captured
+    # window is perceived as sound and speech-to-text runs only on detected
+    # speech. The live mic must then deliver CONTINUOUS windows rather than
+    # VAD-segmented utterances, or non-speech would be gated out before it is
+    # heard; ``continuous_capture=True`` on the mic config switches it to
+    # fixed-window delivery. The deterministic feeds and the desktop monitor
+    # already stream continuous blocks.
+    if bool(section.get("general_audition", False)):
+        kwargs["general_audition"] = True
+        wmin = section.get("arousal_window_min")
+        wmax = section.get("arousal_window_max")
+        if wmin is not None or wmax is not None:
+            kwargs["arousal_window_range"] = (
+                float(wmin if wmin is not None else 0.15),
+                float(wmax if wmax is not None else 1.0),
+            )
+        if "acoustic_change_alert_threshold" in section:
+            kwargs["acoustic_change_alert_threshold"] = float(
+                section["acoustic_change_alert_threshold"]
+            )
+        if isinstance(kwargs.get("live_mic_config"), LiveMicConfig):
+            kwargs["live_mic_config"] = replace(
+                kwargs["live_mic_config"], continuous_capture=True
+            )
     return Audition(bus, **kwargs)
 
 

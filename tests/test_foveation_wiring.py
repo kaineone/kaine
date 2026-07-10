@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
-from kaine.cycle.__main__ import _wire_topos_arousal
+from kaine.cycle.__main__ import _wire_audition_arousal, _wire_topos_arousal
 from kaine.cycle.affect_state import AffectStateProvider
 
 
@@ -76,3 +76,41 @@ def test_foveation_on_wires_live_arousal():
     # After a state update, the accessor reflects the live arousal.
     provider.observe([_thymos_state_event(0.82)])
     assert topos.arousal_provider() == 0.82
+
+
+# --------------------------------------------------------------------------- #
+# Audition arousal seam (attention-driven-audition), mirroring the topos wiring
+# --------------------------------------------------------------------------- #
+
+
+class _FakeAudition:
+    name = "audition"
+
+    def __init__(self, general_audition: bool) -> None:
+        self.general_audition = general_audition
+        self.arousal_provider = None
+
+    def set_arousal_provider(self, provider) -> None:
+        self.arousal_provider = provider
+
+
+def test_no_audition_is_a_noop():
+    assert _wire_audition_arousal(_FakeRegistry(), AffectStateProvider()) is False
+
+
+def test_general_audition_off_does_not_wire():
+    a = _FakeAudition(general_audition=False)
+    assert (
+        _wire_audition_arousal(_FakeRegistry(audition=a), AffectStateProvider())
+        is False
+    )
+    assert a.arousal_provider is None
+
+
+def test_general_audition_on_wires_live_arousal():
+    a = _FakeAudition(general_audition=True)
+    provider = AffectStateProvider()
+    assert _wire_audition_arousal(_FakeRegistry(audition=a), provider) is True
+    assert a.arousal_provider() == 0.3  # thymos baseline before any state
+    provider.observe([_thymos_state_event(0.77)])
+    assert a.arousal_provider() == 0.77
