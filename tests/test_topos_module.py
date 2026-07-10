@@ -405,6 +405,7 @@ async def test_foveation_off_is_single_encode_and_no_extra_keys(bus: AsyncBus):
     assert "peripheral" not in ev.payload
     assert "foveal" not in ev.payload
     assert "fovea" not in ev.payload
+    assert "predicted_fovea" not in ev.payload
 
 
 @pytest.mark.asyncio
@@ -426,6 +427,37 @@ async def test_foveation_on_emits_two_latents_and_content_free_fovea(bus: AsyncB
     for v in fovea.values():
         assert isinstance(v, float)
         assert 0.0 <= v <= 1.0
+    # Attention schema: the content-free predicted next fovea rides alongside.
+    predicted = ev.payload["predicted_fovea"]
+    assert set(predicted) == {"x", "y", "size"}
+    for v in predicted.values():
+        assert isinstance(v, float)
+        assert 0.0 <= v <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_attention_schema_predicts_toward_the_fovea_trajectory(bus: AsyncBus):
+    """The predicted next fovea extrapolates the fovea's motion: as a localized
+    change pulls the fovea toward the lower-right over successive ticks, the
+    prediction leads the current fovea in that direction."""
+    enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]] * 12)
+    # A fine grid so the argmax can march tile-by-tile toward the corner.
+    topos = Topos(bus, encoder=enc, foveation_enabled=True, foveation_grid=(16, 16))
+    await topos.process_frame(_rgb_frame(fill=0))  # prime saliency baseline
+    # Two ticks of the bright patch marching toward the lower-right corner.
+    f1 = _rgb_frame(fill=0)
+    f1[120:180, 160:220] = 255
+    await topos.process_frame(f1)
+    f2 = _rgb_frame(fill=0)
+    f2[180:240, 260:320] = 255
+    await topos.process_frame(f2)
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[-1]
+    fovea = ev.payload["fovea"]
+    predicted = ev.payload["predicted_fovea"]
+    # A rightward+downward drift → the prediction leads the current fovea.
+    assert predicted["x"] >= fovea["x"]
+    assert predicted["y"] >= fovea["y"]
 
 
 @pytest.mark.asyncio
