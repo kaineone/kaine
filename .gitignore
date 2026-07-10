@@ -86,7 +86,7 @@ config/kaine.operator.toml
 compose/.env
 compose/*.env
 
-# Upstream third-party source trees built locally (ONA, Firestorm/LEAP, etc.).
+# Upstream third-party source trees built locally (ONA, etc.).
 # Ignore the *contents* of external/ rather than the directory itself, so the
 # small vendored DreamerV3 RSSM world-model source (path b) can be re-included
 # below for provenance (see external/dreamerv3/UPSTREAM).

@@ -8,8 +8,8 @@ perception and action to and from a body through a pluggable `EmbodimentAdapter`
 rather than binding to any one platform. The module core SHALL contain no wire
 protocol, transport, or platform-specific vocabulary; each body (a virtual world, a VR
 runtime, a robot, or another effector platform) SHALL be a separate adapter the core
-drives through one narrow interface. This supersedes the OpenSim-bound Mundus of
-`opensim-connector`, whose viewer/LEAP binding becomes one adapter behind this seam.
+drives through one narrow interface. This supersedes the reference-body-bound Mundus of
+`reference-connector`, whose viewer/wire-shim binding becomes one adapter behind this seam.
 
 #### Scenario: The core is platform-independent
 - **WHEN** a new body is added
@@ -92,8 +92,8 @@ producer is out of scope (it is `intuitive-embodiment-control-surface`).
 - **THEN** the adapter reports the channel unsupported and the core logs it, taking no
   body action
 
-### Requirement: The OpenSim adapter preserves the prior behavior and is marked transitional
-The OpenSim adapter SHALL reproduce the pre-refactor Mundus behavior bit-for-bit — the
+### Requirement: The reference adapter preserves the prior behavior and is marked transitional
+The reference adapter SHALL reproduce the pre-refactor Mundus behavior bit-for-bit — the
 same loopback bridge listener, the same length-prefixed-MessagePack frames and `reqid`
 generation, the same single-connection semantics, the same feed→event map, the same
 default exposures, and the same speech-mirror shape — and it SHALL declare itself
@@ -101,8 +101,8 @@ transitional in its descriptor so its later removal is an expected, bounded oper
 test SHALL assert the adapter's descriptor equals the prior module constants so any
 behavior drift fails continuous integration.
 
-#### Scenario: The OpenSim path is unchanged after the refactor
-- **WHEN** the OpenSim adapter is selected and the LEAP shim connects
+#### Scenario: The reference-body path is unchanged after the refactor
+- **WHEN** the reference adapter is selected and the wire shim connects
 - **THEN** perception events, action frames, and the speech mirror are indistinguishable
   from the pre-refactor module, and the existing Mundus tests pass
 
@@ -117,6 +117,6 @@ SHALL live under the adapter's own table, not flat in `[mundus]`.
 - **THEN** boot fails with a clear error and no partial/blind embodiment is constructed
 
 #### Scenario: Adapter-scoped settings
-- **WHEN** `[mundus].adapter = "opensim"`
-- **THEN** the core reads bridge host/port and exposure flags from `[mundus.opensim]`,
+- **WHEN** `[mundus].adapter = "reference"`
+- **THEN** the core reads bridge host/port and exposure flags from `[mundus.reference]`,
   and settings for other adapters are ignored

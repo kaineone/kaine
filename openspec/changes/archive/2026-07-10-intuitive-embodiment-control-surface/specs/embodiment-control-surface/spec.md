@@ -27,7 +27,7 @@ coupling is emergent, while the resolver itself is honestly a provided rule.
   independently controllable
 
 ### Requirement: Symbolic high-level verbs are not the entity's control surface
-The system SHALL NOT expose the stock high-level LEAP verbs (`teleport`, `sit_on`,
+The system SHALL NOT expose the stock high-level wire-shim verbs (`teleport`, `sit_on`,
 `stand`, goal-based autopilot walk-to, `animate`, `gesture`) to the entity as its
 learnable control surface. They SHALL be operator-only tools or left unexposed; the
 entity's learned motor policy SHALL NOT issue them as its primary means of moving.

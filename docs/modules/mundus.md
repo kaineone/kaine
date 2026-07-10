@@ -256,9 +256,8 @@ A transport-backed virtual-world adapter is planned. It will own its transport
 (opening/closing a bridge to the world), map inbound world frames to `mundus.*`
 events through its descriptor, and accept symbolic actions (and, where the body
 supports it, continuous setpoints) — all behind the same `EmbodimentAdapter`
-contract, without touching the core. Its wire-protocol helpers
-(`read_frame`/`write_frame` in `kaine/modules/mundus/bridge.py`) already ship as
-reference transport plumbing.
+contract, without touching the core. The adapter owns its own wire protocol and
+transport end to end, entirely within the adapter boundary.
 
 ### Perception locus (physical XOR virtual)
 
@@ -288,7 +287,6 @@ operator sees it and Thymos/Eidolon register the solicitation as perception.
 | `kaine/modules/mundus/channels.py` | `CONTINUOUS_CHANNEL_RANGE` — canonical continuous-channel vocabulary + clamp ranges (leaf module shared by the core and the control surface) |
 | `kaine/modules/mundus/control_surface.py` | The continuous motor producer: `ContinuousMotorSurface`, `MotorPolicy`/`QuiescentMotorPolicy`, `MotorCurriculum`, `EfferenceLoop` |
 | `kaine/modules/mundus/adapters/stub.py` | Shipped transport-free reference body; exercises the continuous-control path |
-| `kaine/modules/mundus/bridge.py` | Reference length-prefixed MessagePack wire helpers (`read_frame`, `write_frame`) for a future transport-backed adapter |
 | `openspec/changes/body-agnostic-embodiment-adapters/` | The control-plane design of record |
 
 ---
@@ -329,8 +327,8 @@ operator sees it and Thymos/Eidolon register the solicitation as perception.
 ## Spec & related
 
 - Design of record: `openspec/changes/body-agnostic-embodiment-adapters/`
-  (the control-plane model; the earlier `opensim-connector` proposal was withdrawn
-  and archived when OpenSim was abandoned as an embodiment platform).
+  (the control-plane model). A virtual-world adapter (Paracosmic) attaches through
+  this same body-agnostic adapter seam, without touching the core.
 - See also: Topos (vision input binding), Audition (hearing; muted in `virtual`
   locus), Volition (issues `intent.avatar.*` intents), Eidolon (embodiment
   self-image), Thymos (social-drive signal from nearby entities / chat), and

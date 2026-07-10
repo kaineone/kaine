@@ -10,25 +10,25 @@ it learns to operate — not the stock symbolic verb menu. Six continuous scalar
 one interaction trigger, gaze decoupled from the body, closed with efference copy and
 proprioceptive/visual feedback, and freed one degree of freedom at a time as
 competence grows. This is the embodied counterpart to the gestational sensory
-curriculum, and it fills the `intent.avatar.*` producer hole `opensim-connector` left
+curriculum, and it fills the `intent.avatar.*` producer hole `reference-connector` left
 open — deliberately with continuous control rather than pre-solved verbs.
 
-## 2. Dependencies and relationship to `opensim-connector`
+## 2. Dependencies and relationship to `reference-connector`
 
-- **Depends on `opensim-connector`** landing: the Mundus module, the LEAP shim
-  (`tools/mundus-leap/`), the Firestorm-for-OpenSim fork, and the frame side-channel.
+- **Depends on `reference-connector`** landing: the Mundus module, the wire shim
+  (`tools/mundus-wire/`), the reference-body viewer fork, and the frame side-channel.
   This change extends them with a continuous control op + feedback pump.
-- **Refines its action vocabulary.** `opensim-connector`'s `world-action-intents`
+- **Refines its action vocabulary.** `reference-connector`'s `world-action-intents`
   spec exposes symbolic `intent.avatar.{move, turn, sit_on, stand, animate, gesture,
   teleport, touch}` verbs (locomotion as goal-based autopilot). For the *entity's own
   control*, this change **replaces** that with the continuous surface (§4) and demotes
   the symbolic verbs to operator-only. Because `world-action-intents` is not yet a
   live (archived) spec, this change does not edit it; it ADDs a new
-  `embodiment-control-surface` capability and flags that, when `opensim-connector` is
+  `embodiment-control-surface` capability and flags that, when `reference-connector` is
   implemented, its vocabulary spec should defer to this surface for the entity.
-  ("Operator-only" here means the operator's **own logged-in OpenSim viewer session** —
+  ("Operator-only" here means the operator's **own logged-in reference-body viewer session** —
   their normal out-of-band access — not a new operator command channel through
-  Mundus/LEAP; no "operator console" plumbing is implied or required. The point is
+  Mundus or the wire shim; no "operator console" plumbing is implied or required. The point is
   simply that these verbs are **not** wired into the entity's learned motor policy.)
 - **Gated by `developmental-maturation-gate`**: the surface is active only once the
   stage is `embodied`. On the **birth-transition event** (emitted by Change B), the
@@ -40,11 +40,11 @@ open — deliberately with continuous control rather than pre-solved verbs.
 
 ### 2.1 One probe correction to carry forward
 
-An external survey suggested stock Firestorm exposes "no high-level `LLAgent` LEAP
-API." The operator's own probe of the Firestorm checkout contradicts this: there **is**
+An external survey suggested the stock viewer exposes "no high-level control
+API." The operator's own probe of the viewer checkout contradicts this: there **is**
 an `LLAgentListener` exposing `startAutoPilot`, `requestSit`, `requestStand`,
 `requestTouch`, `requestTeleport`, `lookAt`, `playAnimation`, and symbolic scene
-queries (`opensim-connector/design.md` §3.1). So the rich symbolic surface is readily
+queries (the reference connector's `design.md` §3.1). So the rich symbolic surface is readily
 available — which is *precisely why* we must deliberately choose **not** to hand it to
 the entity. What is NOT readily available is a **continuous per-tick control** op;
 that is the fork work here (§6).
@@ -130,23 +130,23 @@ Phantasia world model. The design reuses them rather than adding a new learner. 
 is **not optional**: a surface without efference copy + coupled feedback is an open-loop
 joystick and is explicitly disallowed.
 
-## 6. The fork / LEAP work: continuous control
+## 6. The fork / wire-shim work: continuous control
 
 - **Clean path (recommended):** a small custom `LLAgent`-wrapping `LLEventAPI` in the
-  Firestorm fork that (a) accepts the continuous setpoints
+  viewer fork that (a) accepts the continuous setpoints
   `{drive, yaw_rate, gaze_yaw, gaze_pitch, strafe, interact}` per tick, writing them
   into the agent control-flag / camera path, and (b) emits a **feedback pump**
   (efference copy + proprioception + collision/interact result) on the same cadence.
   This is the locomotion/gaze counterpart to Puppetry's pose-streaming API and rides
-  the fork `opensim-connector` already plans.
+  the fork `reference-connector` already plans.
 - **Crude stopgap:** map the scalars onto held synthetic `LLWindow` keys / mouse-look
   (`AGENT_CONTROL_*`). Real but key-level and coarse — a poor fit for a graded learner;
   acceptable only as a first bring-up.
-- **Verify LEAP is enabled.** Stock Firestorm ships LEAP launching disabled; the
+- **Verify the wire shim is enabled.** The stock viewer ships wire-shim launching disabled; the
   operator's fork must have re-enabled it. Confirm on the actual build before assuming
-  the LEAP surface is reachable. (The operator's probe shows `LLAgentListener` present
-  in the checkout, so the APIs exist; confirm the `--leap` launch path is live.)
-- **Transport:** LEAP is one child process over stdin/stdout, LLSD-framed; use binary
+  the wire-shim surface is reachable. (The operator's probe shows `LLAgentListener` present
+  in the checkout, so the APIs exist; confirm the wire-shim launch path is live.)
+- **Transport:** the wire shim is one child process over stdin/stdout, LLSD-framed; use binary
   LLSD for the per-tick control/feedback if latency matters (as Puppetry does). The
   continuous op emits feedback on the same cadence it accepts commands, or the forward
   model has nothing coherent to learn against.
@@ -173,10 +173,10 @@ sensory curriculum.
   unchanged; the surface is inert without both.
 - **Stage gate:** active only when the developmental stage is `embodied` (Change B).
 - **Inhibition:** a workspace inhibition pauses `intent.avatar.*` forwarding (per
-  `opensim-connector`); the continuous surface honors it — inhibition zeroes the
+  `reference-connector`); the continuous surface honors it — inhibition zeroes the
   action.
 - **Bounded actions:** scalars clamped; no unbounded command reaches the viewer.
-- **Inbound world = data, not commands:** reused from `opensim-connector`
+- **Inbound world = data, not commands:** reused from `reference-connector`
   (auto-decline offers/lures, default-deny script permissions). In-world text/objects
   never become instructions.
 - **World-mutating / economy actions** stay opt-in and are not part of the entity's

@@ -48,7 +48,7 @@ None (behavior is unchanged; only names change).
 ## Impact
 
 - **Depends on:** `audio-input`, `audio-output` (shipped). Should land after the
-  open PR stack (audio-out-playback → language-organ → opensim-embodiment)
+  open PR stack (audio-out-playback → language-organ → reference-body-embodiment)
   merges to avoid conflicts.
 - **Repo:** renames two packages, two config sections, ~20 test files, Nexus
   references, volition constants. ~445 reference sites.
