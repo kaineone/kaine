@@ -37,7 +37,7 @@ On each utterance boundary (detected by the VAD in `LiveMicrophone`, or on a dir
 | `LiveMicrophone` task | `process_audio(bytes, sample_rate)` | VAD-segmented PCM utterances from the real microphone |
 | `kaine.perception_state` | `effective_audio_capture()` poll (250 ms) | Locus gate: microphone runs only when locus is `physical` and audio is desired |
 | Vox `SpeakingGate` | `gate.is_speaking()` | Drops captures during the entity's own speech (self-hearing suppression) |
-| External callers | `process_audio()` directly | Programmatic injection (e.g. from virtual-world chat feed in the OpenSim connector) |
+| External callers | `process_audio()` directly | Programmatic injection (e.g. from a virtual-world chat feed via a Mundus body) |
 
 Audition does **not** subscribe to the workspace broadcast.
 

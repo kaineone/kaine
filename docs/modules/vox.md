@@ -175,9 +175,8 @@ released (transient).
 ## Enabling & use
 
 1. Set `[modules].vox = true` in `config/kaine.toml`.
-2. Start Chatterbox TTS (see `docs/CONNECTION_GUIDE.md` for the recommended launch
-   command — run with the operator's predefined voice available in its `voices/`
-   directory).
+2. Start Chatterbox TTS — run with the operator's predefined voice available in
+   its `voices/` directory.
 3. Set `predefined_voice_id` to the voice filename served by Chatterbox. Do not
    commit personal voice filenames to the repository.
 4. Enable Lingua (Vox subscribes to its output) and Thymos (for affect-driven

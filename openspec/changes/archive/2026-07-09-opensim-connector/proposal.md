@@ -1,3 +1,5 @@
+> WITHDRAWN 2026-07-09: OpenSim abandoned as an embodiment platform; superseded by the Paracosmic connector.
+
 # opensim-connector
 
 > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper now describes

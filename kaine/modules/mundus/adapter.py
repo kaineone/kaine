@@ -47,7 +47,7 @@ class EmbodimentCapabilities:
     """What a body can do — read by the core instead of being hardcoded.
 
     Fields:
-      name: adapter identity, e.g. ``"opensim"``, ``"stub"``.
+      name: adapter identity, e.g. ``"stub"``.
       transitional: ``True`` marks a body expected to be retired (the seam's
         reference/conformance body rather than a long-lived one).
       feed_events: feed ``kind`` → (bus event type, baseline salience in [0,1]).

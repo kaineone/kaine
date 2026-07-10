@@ -200,7 +200,7 @@ freeze and a Spot recovery freeze do not conflict.
 ### Perception locus control
 
 KAINE has a **perceptual locus** — physical (real-world microphone/camera) or
-virtual (OpenSim/Paracosm embodiment via Mundus). The locus is exclusive: only
+virtual (a Mundus embodiment body). The locus is exclusive: only
 one mode is active at a time. The Perception module enforces this invariant.
 
 Toggle from the diagnostics page Perception card, or via API:
@@ -445,7 +445,7 @@ Module-specific prerequisites:
 | `phantasia` | `[worldmodel]` extra for DreamerV3 backend (default `fake` needs none) |
 | `praxis` | Shell whitelist is empty by default; populate it deliberately before enabling |
 | `perception` | No extras; physical-XOR-virtual locus arbiter — add the flag manually to `[modules]` (not shipped in the default block) |
-| `mundus` | Double-gated: `[mundus].enabled = true` AND `KAINE_MUNDUS_OPERATOR_APPROVED=1` in the environment, in addition to `[modules].mundus = true`; the selected body's adapter reachable (for the default OpenSim adapter: forked Firestorm viewer + LEAP shim running) |
+| `mundus` | Double-gated: `[mundus].enabled = true` AND `KAINE_MUNDUS_OPERATOR_APPROVED=1` in the environment, in addition to `[modules].mundus = true`. The shipped default `stub` adapter is transport-free (no external body to reach); a transport-backed body would additionally require its adapter's transport reachable |
 
 ---
 

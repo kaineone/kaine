@@ -247,10 +247,10 @@ re-injecting selected memory traces into the workspace. See: `kaine/modules/mnem
 The body-agnostic embodiment control plane. Mundus routes perception and action
 to and from a *body* through a pluggable adapter, translating the body's sensory
 frames into bus events and the entity's action intents into commands on the body.
-Bodies are pluggable; the current adapter drives an avatar in a local OpenSim grid
-via a LEAP-based bridge. The perceptual locus is physical (real-world sensors) or
-virtual (a Mundus body) — never both simultaneously. See: `kaine/modules/mundus/`,
-`docs/CONNECTION_GUIDE.md`.
+Bodies are pluggable. No transport-backed body ships today; the shipped adapter is
+the transport-free `stub` reference body, and a virtual-world (Paracosmic) adapter
+is planned. The perceptual locus is physical (real-world sensors) or virtual (a
+Mundus body) — never both simultaneously. See: `kaine/modules/mundus/`.
 
 ---
 
@@ -291,7 +291,7 @@ modules that produced them. The layer ships disabled and requires the
 ### Perceptual locus
 
 The mode of KAINE's sensory engagement — physical (real-world microphone and
-camera) or virtual (OpenSim/Paracosm via Mundus). The locus is exclusive: only
+camera) or virtual (a Mundus embodiment body). The locus is exclusive: only
 one mode is active at a time. The Perception module (`kaine/modules/perception/`)
 enforces this invariant. Toggling between modes requires a confirm step from the
 Nexus diagnostics page. See: `kaine/modules/perception/module.py`.
