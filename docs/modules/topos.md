@@ -78,6 +78,8 @@ All events are published to the **`topos.out`** stream.
 
 `latent` is the full 768-dim pooled clip vector (384-dim CLS token under the `dinov2` fallback). Downstream modules (e.g. Mnemos, Empatheia) may store or index these latents. `prediction_error` is 0.0 when `forward_prediction = false` or on the first clip.
 
+When **attention-driven foveation** is enabled (`[topos].foveation = true`, off by default — see the section below), the same `topos.report` additionally carries a `peripheral` latent, a `foveal` latent, and two **content-free** fovea locations: `fovea` and `predicted_fovea`, each a `{x, y, size}` dict of normalized floats in `[0, 1]` (never pixels). In this mode `latent` aliases the peripheral gist for backward-compatible consumers. When foveation is off, none of these keys is present and the report is exactly the single whole-frame form above.
+
 ---
 
 ## Configuration
@@ -110,6 +112,13 @@ Section `[topos]` in `config/kaine.toml`. See also [../configuration.md](../conf
 | `forward_model_units` | `128` | Hidden size of the `LatentForwardModel` MLP |
 | `prediction_error_window` | `32` | Rolling window (frames) for normalising visual prediction-error salience |
 | `visual_buffer_size` | `16` | Number of recent latents kept in the recurrent visual buffer |
+| `foveation` | `false` | Enable attention-driven foveation (see the section below). Requires a per-frame encoder (`encoder_backend = "dinov2"`, `clip_len = 1`) — combining it with a multi-frame clip encoder is rejected at construction |
+| `foveation_grid` | `[12, 12]` | Saliency tiling `(rows, cols)` |
+| `foveation_hysteresis` | `0.15` | Dwell damping: a new tile must beat the held one by >15% to move the fovea (anti-thrash) |
+| `foveation_arousal_size_min` | `0.12` | Fovea half-extent at arousal = 1.0 (tightest — Easterbrook narrowing) |
+| `foveation_arousal_size_max` | `0.5` | Fovea half-extent at arousal = 0.0 (widest) |
+| `peripheral_width` / `peripheral_height` | `320` / `180` | Downsampled whole-field peripheral gist geometry |
+| `foveal_size` | `224` | Square foveal crop fed to the encoder |
 
 The shared top-level `[perception_feed]` section selects a **deterministic, unified A/V perception feed** for reproducible research runs — it drives **both** Topos (vision) and Audition (hearing) from one source of truth (see the section below):
 
@@ -188,6 +197,20 @@ encoder and the required backend for the spatial-foveation path.
 
 Both encoders accept `PIL.Image`, `bytes`, or `numpy.ndarray`; BGR ndarrays from OpenCV are converted to RGB in the capture path before being handed to the encoder.
 
+### Attention-driven foveation (topos-foveation)
+
+Off by default. When `[topos].foveation = true`, Topos does not encode the whole frame uniformly — it spends resolution where its own attention is, biologically-inspired foveation driven directly by cognition rather than by eye-tracking hardware. Each per-frame tick (`clip_len == 1`; the combination with a multi-frame clip encoder is rejected at construction), from a **single in-memory grab**:
+
+1. **Coarse spatial saliency** (`SpatialSaliency`, `kaine/modules/topos/foveation.py`) — the frame is reduced to a `foveation_grid` (default 12×12) of per-tile grayscale means and scored by absolute change against the previous tick's tiles. Memory-only; nothing touches disk.
+2. **Precision-weighted fovea selection** (`combine_saliency` + `select_fovea`) — the bottom-up saliency is combined with an optional **top-down bias** map (precision weighting), and the single fovea is the argmax tile centre, damped by `foveation_hysteresis` so comparable tiles do not thrash. The fovea **size** is set from the current Thymos arousal (`arousal_to_size`, Easterbrook narrowing default — higher arousal → tighter fovea; the sign is a tuning parameter, not an asserted result). This is a **distinct visual coupling**, not the Syneidesis salience-selection window.
+3. **Two views from the one grab** (`foveate`) — a downsampled `peripheral` gist (whole field) and a native-detail `foveal` crop around the target, both derived from the same in-memory frame and released as they age out (the zero-persistence invariant holds).
+4. **Two encodes** — the peripheral view drives change/habituation/salience (whole-field continuity); the foveal view carries the attended detail. Both ride in the report as `peripheral` / `foveal` latents.
+5. **Attention schema** (`FoveaPredictor`) — a small constant-velocity forward model of the fovea's own trajectory predicts where the fovea will be next tick from its recent motion (an EMA of successive deltas, clamped to `[0, 1]`). The content-free prediction is published as `predicted_fovea` for the self-model and diagnostics: the entity carries a model of where its own visual attention is *and will be* (Graziano and Webb 2015).
+
+**Injected seams (no workspace import).** Topos never imports the workspace. The top-down bias and the arousal are supplied through provider callbacks wired at the composition root — `set_top_down_bias_provider(fn)` (returns a saliency-grid-shaped bias map or `None`) and `set_arousal_provider(fn)` (returns the arousal scalar in `[0, 1]`), mirroring the affect seam. A missing or throwing provider degrades gracefully to bottom-up-only rather than breaking perception. The arousal seam is wired at boot (`_wire_topos_arousal`); the top-down seam is built and tested but stays unwired until a real workspace region-of-interest signal exists.
+
+The fovea location (normalized 2-D target + size) is deliberately the same shape the paper's §3.4.6 Mundus "gaze direction decoupled from the body" control scalar can consume, so screen gaze and a future embodied camera gaze can share one mechanism. Enable only after `scripts/bench_foveation.py` confirms the two-encode + native-grab cost fits the tick; the native single grab is configured under `[perception_feed.screen].native`.
+
 ### CosineChangeDetector
 
 Returns `1 − cosine_similarity(previous_latent, current_latent)`. Range `[0, 2]`; 0 for identical frames, 1 for orthogonal, 2 for anti-correlated. First frame returns 0.0 (no previous).
@@ -223,6 +246,7 @@ At the end of `process_frame()`, if the operator has set the environment variabl
 | `kaine/modules/topos/change.py` | `CosineChangeDetector` and `ChangeDetector` protocol |
 | `kaine/modules/topos/habituation.py` | `RollingMeanHabituator` and `SceneHabituator` protocol |
 | `kaine/modules/topos/forward.py` | `LatentForwardModel` — online visual prediction MLP |
+| `kaine/modules/topos/foveation.py` | Foveation core — `SpatialSaliency`, `combine_saliency`, `select_fovea`, `arousal_to_size`, `foveate`, `FoveaPredictor` (attention schema) |
 | `kaine/modules/topos/live.py` | `LiveCamera` — camera supervisor task, locus gate, zero-persistence |
 
 ---
@@ -318,6 +342,8 @@ Neither surface persists raw stimulus: the seeded sources store only `(seed, sch
 | `tests/test_topos_change.py` | `CosineChangeDetector` boundary cases |
 | `tests/test_topos_habituation.py` | `RollingMeanHabituator` static vs varied scenes |
 | `tests/test_topos_forward.py` | `LatentForwardModel` step, non-finite guard, serialisation |
+| `tests/test_foveation.py` | Spatial saliency, precision-weighted fovea select, arousal→size, view derivation, `FoveaPredictor` attention schema |
+| `tests/test_foveation_wiring.py` | Composition-root arousal seam wiring (`_wire_topos_arousal`) |
 | `tests/test_topos_dinov2.py` | DINOv2 frozen weights, device placement |
 | `tests/test_topos_live.py` | `LiveCamera` open/close, locus gate behaviour |
 | `tests/test_topos_feed.py` | Seeded source determinism/cadence/seed-decorrelation; playlist verify + fail-closed |
