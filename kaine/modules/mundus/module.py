@@ -7,9 +7,9 @@ Mundus routes the entity's perception and action to and from a *body* through a
 pluggable :class:`~kaine.modules.mundus.adapter.EmbodimentAdapter`. The core owns
 the entity-facing contract — gating, locus, intent routing, the speech mirror,
 salience policy, and zero-raw-sense-data persistence — and knows nothing about
-any wire protocol. Each body (OpenSim today, a VR runtime or robot later) is a
-separate adapter, selected in config and injected here; adding a body never
-touches this core.
+any wire protocol. Each body (the transport-free ``stub`` reference body today, a
+virtual world, VR runtime, or robot later) is a separate adapter, selected in
+config and injected here; adding a body never touches this core.
 
 Incoming perception (``FeedFrame``s from the adapter) becomes ``mundus.*`` bus
 events; ``intent.avatar.*`` intents from Volition become symbolic actions, and

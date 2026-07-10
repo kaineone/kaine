@@ -6,7 +6,6 @@ from kaine.modules.mundus.adapter import (
     EmbodimentCapabilities,
     FeedFrame,
 )
-from kaine.modules.mundus.adapters.opensim import OpenSimAdapter
 from kaine.modules.mundus.adapters.stub import StubAdapter
 from kaine.modules.mundus.bridge import (
     ACTION_DEFAULT_EXPOSED,
@@ -27,7 +26,6 @@ __all__ = [
     "EmbodimentAdapter",
     "EmbodimentCapabilities",
     "FeedFrame",
-    "OpenSimAdapter",
     "StubAdapter",
     "read_frame",
     "write_frame",

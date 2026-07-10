@@ -101,7 +101,6 @@ How the modules combine into system-level behavior:
 - KAINE Paper — the architecture's conceptual basis and rationale (maintained in its own repository)
 - [Vision Document](kaine-vision-document.md) — project intent
 - [Architecture Roadmap](history/architecture-roadmap.md) — the (completed) build plan (historical)
-- [Connection Guide](CONNECTION_GUIDE.md) — connecting the supporting services
 
 ## Conventions used in these docs
 

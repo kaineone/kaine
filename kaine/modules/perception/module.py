@@ -10,12 +10,12 @@ inhibition + minimum dwell), audited onto the bus, and — when applied — writ
 the new locus to perception desired-state so Topos/Audio-In rebind (the real
 camera/mic go dark on a move to `virtual`).
 
-**Producer gap (opensim-connector, deferred):** The `intent.perception.switch`
+**Producer gap (deferred virtual-world embodiment):** The `intent.perception.switch`
 event type consumed by this module has no producer yet. Volition only emits
 `intent.speak`, `intent.think`, and `intent.act`; nothing in the current build
 emits `intent.perception.switch`. As a result the entity-initiated self-switch
 path cannot fire from the entity. The `allow_self_switch` config knob (default
-``False``) is reserved for the deferred opensim-connector change and should
+``False``) is reserved for deferred virtual-world embodiment work and should
 remain ``False`` until that work lands. Locus changes are operator-driven (via
 Nexus desired-state writes) until then.
 """

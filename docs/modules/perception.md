@@ -15,7 +15,7 @@ Implemented. Ships **disabled** by default — add `perception = true` under `[m
 - The `PerceptionLocus` module has **no config section** in `config/kaine.toml`; all parameters are specified directly under `[modules]`-adjacent keys or use their code defaults.
 - `allow_self_switch` defaults to `false` — the entity cannot change its own locus unless an operator explicitly enables it.
 
-> **Current limitation:** Entity-initiated self-switch (`intent.perception.switch`) has no producer yet. Volition only emits `intent.speak`, `intent.think`, and `intent.act`; nothing in the current build emits `intent.perception.switch`. The `allow_self_switch` flag is therefore reserved for the deferred `opensim-connector` change and has no effect until that work lands. Locus changes are operator-driven only.
+> **Current limitation:** Entity-initiated self-switch (`intent.perception.switch`) has no producer yet. Volition only emits `intent.speak`, `intent.think`, and `intent.act`; nothing in the current build emits `intent.perception.switch`. The `allow_self_switch` flag is therefore reserved for deferred virtual-world embodiment work and has no effect until that work lands. Locus changes are operator-driven only.
 
 ---
 
@@ -26,7 +26,7 @@ In the PP+GWT framing, the **perceptual locus** is the entity's answer to *which
 | Locus | Meaning |
 |---|---|
 | `physical` | Real camera and microphone active; avatar/virtual feeds dark |
-| `virtual` | In-world (e.g. OpenSim) visual and chat feeds active; real camera and microphone off |
+| `virtual` | In-world (a Mundus embodiment body) visual and chat feeds active; real camera and microphone off |
 | `off` | All perceptual inputs disabled |
 
 `PerceptionLocus` enforces this mutual exclusion. It does not itself start or stop the camera or microphone — those modules (`Topos`, `Audition`) poll `kaine.perception_state.effective_video_capture()` / `effective_audio_capture()` respectively. Writing the locus to `state/perception/desired.json` atomically propagates to both organs within one poll interval (default 250 ms).
@@ -209,6 +209,6 @@ The bus events (`perception.locus.changed`, `perception.locus.denied`) contain o
 
 ## Spec & Related
 
-- OpenSpec: [`openspec/changes/opensim-connector/specs/perception-locus/spec.md`](../../openspec/changes/opensim-connector/specs/perception-locus/spec.md)
+- OpenSpec: [`openspec/changes/archive/2026-07-09-opensim-connector/specs/perception-locus/spec.md`](../../openspec/changes/archive/2026-07-09-opensim-connector/specs/perception-locus/spec.md) (archived; the `opensim-connector` proposal was withdrawn when OpenSim was abandoned, but the perception-locus spec captured the locus contract)
 - Related modules: [`topos.md`](topos.md) (visual perception, polls locus gate), [`audition.md`](audition.md) (audio perception, polls locus gate), [`mundus.md`](mundus.md) (virtual-world embodiment), [`eidolon.md`](eidolon.md) (embodiment self-model)
 - Cognitive cycle: [`../processes/cognitive-cycle.md`](../processes/cognitive-cycle.md)
