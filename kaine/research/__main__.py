@@ -88,6 +88,84 @@ def _research_email_body(*, bundle_path: str, recipient: str, tier: str) -> str:
     )
 
 
+def _run_claude_science_export(
+    *,
+    bundle,
+    out_dir: Path,
+    plan: bool,
+    enabled: bool,
+    input_fn: Callable[[str], str],
+    out: IO[str],
+    err: IO[str],
+) -> int:
+    """Preview → attest → confirm → write a Claude Science project folder.
+
+    Returns 0 on success, 1 on refusal/error, 2 on a fail-safe no-write
+    (EOF/interrupt/decline), mirroring the --send exit-code convention.
+    """
+    from kaine.research.claude_science_export import (
+        ClaudeScienceExportError,
+        DisclosureAttestation,
+        EXTERNAL_DISCLOSURE_NOTICE,
+        export_project,
+        plan_project,
+        preview_project,
+    )
+
+    # Refuse an encrypted bundle up front (cannot reshape a ciphertext blob).
+    try:
+        project = plan_project(bundle=bundle, out_dir=out_dir, plan=plan)
+    except ClaudeScienceExportError as exc:
+        err.write(f"ERROR: {exc}\n")
+        return 1
+
+    out.write(preview_project(project) + "\n")
+
+    if not enabled:
+        out.write(
+            "\nNOTE: [research_submission.claude_science].enabled is false in "
+            "config. You may still produce the folder, but you must confirm "
+            "explicitly below.\n"
+        )
+
+    out.write("\n" + EXTERNAL_DISCLOSURE_NOTICE + "\n\n")
+
+    # Guardian-consent external-disclosure attestation (who / why), then a final
+    # confirm. Any EOF/interrupt fails safe: nothing is written.
+    try:
+        operator = input_fn("Guardian/operator name for this disclosure: ").strip()
+        reason = input_fn("Reason for this disclosure (for the write-up): ").strip()
+        ok = input_fn(
+            "Write the Claude Science project folder now? [y/N]: "
+        ).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        out.write("\nAborted (EOF/interrupt). Nothing written.\n")
+        return 2
+
+    if ok not in ("y", "yes"):
+        out.write("Not confirmed. Nothing written.\n")
+        return 2
+
+    attestation = DisclosureAttestation(
+        operator=operator or "(unspecified)",
+        reason=reason or "(unspecified)",
+    )
+    try:
+        written = export_project(
+            bundle=bundle, out_dir=out_dir, plan=plan, attestation=attestation
+        )
+    except ClaudeScienceExportError as exc:
+        err.write(f"ERROR: {exc}\n")
+        return 1
+
+    out.write(f"\nWrote Claude Science project: {written.project_dir}\n")
+    out.write(
+        "Open this FOLDER in Claude Science manually. Doing so transmits the "
+        "numeric metrics to a cloud service (external disclosure).\n"
+    )
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -138,6 +216,28 @@ def main(
         help="Build, preview, confirm, encrypt, then send-or-write via kaine.transfer.",
     )
     parser.add_argument(
+        "--claude-science",
+        action="store_true",
+        help=(
+            "Produce a metrics-only Claude Science project FOLDER (reshaped "
+            "CSV/JSON + README + manifest) from the allowlisted bundle. Previews "
+            "the full file inventory and requires an explicit confirmation before "
+            "writing. Governed as an external cloud disclosure under guardian "
+            "consent — never sends anything itself; the operator opens the folder "
+            "manually."
+        ),
+    )
+    parser.add_argument(
+        "--claude-science-out",
+        default="claude_science_out",
+        help="Parent directory for the Claude Science project folder.",
+    )
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="With --claude-science, also emit an optional plan.json descriptor.",
+    )
+    parser.add_argument(
         "--run-id",
         default=None,
         help=(
@@ -169,11 +269,12 @@ def main(
     )
     args = parser.parse_args(argv)
 
-    if not args.preview and not args.send:
+    if not args.preview and not args.send and not args.claude_science:
         parser.print_help(out)
         out.write(
             "\nHint: use --preview to inspect the bundle contents, "
-            "or --send to submit it.\n"
+            "--send to submit it, or --claude-science to produce a metrics-only "
+            "Claude Science project folder.\n"
         )
         return 0
 
@@ -254,6 +355,22 @@ def main(
     except Exception as exc:
         err.write(f"ERROR building bundle: {type(exc).__name__}: {exc}\n")
         return 1
+
+    # --- Claude Science export path -----------------------------------------
+    # A metrics-only, operator-initiated, external-disclosure path. Reuses the
+    # SAME allowlisted bundle just built; reshapes it into a project folder the
+    # operator opens manually. Preview + explicit confirm before any write;
+    # EOF/interrupt fails safe (no write) with exit code 2.
+    if args.claude_science:
+        return _run_claude_science_export(
+            bundle=bundle,
+            out_dir=Path(args.claude_science_out),
+            plan=args.plan,
+            enabled=bool((rs_cfg.get("claude_science") or {}).get("enabled", False)),
+            input_fn=input_fn or input,
+            out=out,
+            err=err,
+        )
 
     # --- Preview ------------------------------------------------------------
     preview_text = preview(bundle)

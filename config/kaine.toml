@@ -1321,6 +1321,28 @@ tier = "metrics"
 # call-site override (CLI: `--admissibility-override-reason "<why>"`), which is
 # stamped into the bundle manifest (never a silent bypass).
 
+[research_submission.claude_science]
+# Claude Science export: reshape the SAME allowlisted, metrics-only research
+# bundle into a Claude Science project FOLDER (analysis-ready CSV/JSON + a
+# generated README data dictionary + the bundle manifest copied verbatim). It
+# is a THIN ADAPTER over the research-submission bundle builder and reuses its
+# exact allowlist (METRICS_ONLY_DIRS) — so conversation text, memories, the
+# self-model, the internal monologue, and the local-only raw bus archive are
+# excluded BY CONSTRUCTION, never by a filter that could miss something.
+#
+# Because Claude Science is a CLOUD workbench, opening the produced folder
+# transmits these numeric metrics to a cloud service. It is therefore governed
+# as an EXTERNAL DISCLOSURE under guardian consent (CAL Article 4.3), exactly
+# like sharing results with the project: operator-initiated only, full
+# file-inventory preview, and an explicit confirmation + guardian-consent
+# attestation before anything is written. It is EXPLORATORY only — never part
+# of the deterministic PASS/NULL/NEGATIVE verdict pipeline. The export is
+# metrics-only ALWAYS; there is no cognitive-content Claude Science tier.
+#
+# SHIPS DISABLED. Operator path: `python -m kaine.research --claude-science`
+# (preview + confirm). Nothing is ever produced or transmitted automatically.
+enabled = false
+
 [research_event_log]
 # Curated, privacy-filtered research event log for longitudinal analysis.
 #
