@@ -1,0 +1,8 @@
+name: "KAINE CodeQL config"
+
+# Vendored third-party code lives under external/ (each subdir has an UPSTREAM
+# provenance file). It is not first-party and we do not modify it, so exclude it
+# from analysis — otherwise upstream idioms (e.g. Protocol `...` stub bodies in
+# external/jlens) surface as findings on our PRs that we would not act on.
+paths-ignore:
+  - external

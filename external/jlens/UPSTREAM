@@ -1,0 +1,62 @@
+Upstream project: anthropics/jacobian-lens
+Repository:       https://github.com/anthropics/jacobian-lens
+Pinned commit:    581d398613e5602a5af361e1c34d3a92ea82ba8e
+License:          Apache-2.0 (see external/jlens/LICENSE)
+SPDX-License-Identifier: Apache-2.0
+
+------------------------------------------------------------------------------
+WHAT THIS IS
+------------------------------------------------------------------------------
+
+The Jacobian lens (jlens): companion reference implementation for
+"Verbalizable Representations Form a Global Workspace in Language Models"
+(Gurnee et al. 2026, https://transformer-circuits.pub/2026/workspace/index.html).
+
+It reads out what an internal decoder-transformer activation is *disposed to make
+the model say*: it transports a residual-stream vector at any layer/position into
+the final-layer basis with an averaged input-output Jacobian, then decodes it
+through the model's unembedding into a ranked list of vocabulary tokens.
+
+------------------------------------------------------------------------------
+WHY VENDORED (path a: literal upstream source, pinned)
+------------------------------------------------------------------------------
+
+Upstream states plainly: "Reference implementation. Not maintained and not
+accepting contributions." So it is vendored at the pinned commit above rather
+than taken as a package dependency — there will be no upstream releases to track,
+and pinning fixes the exact code our results were produced with.
+
+The literal upstream `jlens/` package is vendored verbatim (path a), unlike the
+DreamerV3 case (path b, a re-implementation): jlens depends only on torch +
+HuggingFace transformers/tokenizers, which KAINE already has via the [training]
+extras, so the source imports standalone with no research-harness baggage.
+
+------------------------------------------------------------------------------
+HOW KAINE USES IT
+------------------------------------------------------------------------------
+
+Offline, build/research-time ONLY. No runtime module under `kaine/` imports
+jlens (enforced by keeping all jlens-touching code under `scripts/` and this
+`external/` tree). See:
+
+  * openspec/changes/mechanistic-abliteration-lens/  — the design + spec.
+  * scripts/abliteration_lens.py                     — the analysis entrypoint.
+
+The tool fits a Jacobian lens on the abliterated organ and compares the vanilla
+base vs the abliterated model layer by layer, so a residual or relocated refusal
+disposition is visible even when the behavioral abliteration gate passes. The
+lens is an averaged-Jacobian approximation and an interpretive signal — it
+corroborates the behavioral gate, it does not prove complete refusal removal.
+
+------------------------------------------------------------------------------
+LAYOUT
+------------------------------------------------------------------------------
+
+  jlens/          the upstream package, verbatim (Apache-2.0 headers intact)
+  testing/tiny.py the upstream tests/tiny.py fake CPU model, kept so our tests
+                  exercise the real lens code paths without downloading weights
+  LICENSE         upstream Apache-2.0 license
+  README.md       upstream README (reference)
+
+Excluded from the vendor: assets/ (large PNGs), data/ (datasets), uv.lock,
+walkthrough.ipynb, and the .git history — none are needed to run the lens.
