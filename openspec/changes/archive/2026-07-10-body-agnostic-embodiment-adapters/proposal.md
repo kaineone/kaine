@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented — Mundus is a body-agnostic embodiment control plane with pluggable adapters (25/25 tasks).
+
 # Refactor Mundus into a body-agnostic embodiment control plane with pluggable adapters
 
 ## Why

@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented — per-fork subjective-time dilation shipped (14/14 tasks).
+
 # Per-fork subjective-time profile (Phase 4 of biological timing)
 
 ## Why

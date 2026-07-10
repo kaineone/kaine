@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: realized externally in Paracosmic; the kaine-side stimulus is consumed through the existing perception seam.
+
 # Gestational womb stimulus and coupled-rhythm oscillatory regulation
 
 ## Why

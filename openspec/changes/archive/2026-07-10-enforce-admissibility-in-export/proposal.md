@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented — both admissibility checks enforced in the research export path (11/11 tasks).
+
 # Enforce both admissibility checks in the research export path
 
 ## Why

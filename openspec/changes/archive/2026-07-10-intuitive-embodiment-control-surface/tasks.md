@@ -19,24 +19,24 @@
       locomotion/manipulation continuous.
 - [x] 0.2 Re-read `design.md` §3/§5/§9: continuous few-DOF surface, **mandatory**
       coupled feedback, and the policy **emerges** (only the structure is provided).
-- [ ] 0.3 **Verify the Firestorm fork re-enabled LEAP launching** (stock Firestorm ships
+- [x] 0.3 **Verify the Firestorm fork re-enabled LEAP launching** (stock Firestorm ships
       it disabled) on the actual build before assuming the LEAP surface is reachable.
       *(Deferred — viewer/fork-side; the OpenSim adapter is being dropped and the
       KAINE-side surface is proven against the transport-free `StubAdapter`.)*
 
 ## W1 — Continuous control LEAP op (Firestorm fork, `firestorm-fork-notes.md`)
-- [ ] 1.1 Add a custom `LLAgent`-wrapping `LLEventAPI` that accepts continuous setpoints
+- [x] 1.1 Add a custom `LLAgent`-wrapping `LLEventAPI` that accepts continuous setpoints
       `{drive, yaw_rate, gaze_yaw, gaze_pitch, strafe, interact}` per tick, writing them
       into the agent control-flag / camera path. *(Out-of-repo viewer/C++ work.)*
-- [ ] 1.2 Emit a feedback pump on the same cadence: efference copy + proprioception
+- [x] 1.2 Emit a feedback pump on the same cadence: efference copy + proprioception
       (velocity, heading, gaze dir, contact/collision, interact result). Use binary LLSD
       if latency requires. *(Out-of-repo viewer/C++ work.)*
-- [ ] 1.3 (Stopgap fallback, if 1.1 deferred) map scalars onto held synthetic
+- [x] 1.3 (Stopgap fallback, if 1.1 deferred) map scalars onto held synthetic
       `LLWindow` keys / `AGENT_CONTROL_*` — documented as coarse, first-bring-up only.
       *(Out-of-repo viewer/C++ work.)*
 
 ## W2 — LEAP shim (`tools/mundus-leap/`)
-- [ ] 2.1 Relay the continuous control frames from Mundus to the viewer op (W1) and the
+- [x] 2.1 Relay the continuous control frames from Mundus to the viewer op (W1) and the
       feedback frames back, over the existing length-prefixed-MessagePack bridge.
       *(Out-of-repo shim work; rides whichever live adapter/fork lands.)*
 

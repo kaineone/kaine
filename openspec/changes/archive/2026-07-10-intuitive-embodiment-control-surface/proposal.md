@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented via PR #32 — the kaine-side continuous control surface shipped. The 5 remaining tasks were out-of-repo OpenSim/LEAP viewer work, mooted by dropping the OpenSim adapter.
+
 # An intuitive, learnable embodiment control surface for Mundus
 
 > **Dependency re-pointed (2026-07-05):** `opensim-connector` is superseded by
