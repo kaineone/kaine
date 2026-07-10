@@ -1,6 +1,6 @@
 # Topos
 
-KAINE's visual-perception organ: encodes live camera frames with a frozen DINOv2 model, detects scene change and habituation, and optionally predicts the next visual latent.
+KAINE's visual-perception organ: encodes live camera frames with a frozen, temporally-native video encoder (InternVideo-Next), detects scene change and habituation, and optionally predicts the next visual latent.
 
 ---
 
@@ -8,12 +8,34 @@ KAINE's visual-perception organ: encodes live camera frames with a frozen DINOv2
 
 Implemented. Ships **disabled** — `[modules].topos = false` in `config/kaine.toml`.
 
-- Requires `torch` and `transformers` (for DINOv2). Install these via the standard KAINE dependency set.
+- Requires `torch` and `transformers` (core deps). The default InternVideo-Next
+  encoder additionally needs the `[internvideo]` extra (`einops`, `timm`,
+  `flash_attn`, `easydict`) and a CUDA host; its ~182 MB fp16 weights are fetched
+  **once at setup** into a git-ignored local dir (`python -m kaine.setup.internvideo_next --yes`)
+  and loaded fully offline (vendored modeling code, `trust_remote_code=False`, no
+  runtime network). The `dinov2` fallback needs none of the `[internvideo]` deps.
 - Live camera capture requires the `[vision]` extras: `pip install -e .[vision]` (adds `opencv-python-headless`, `Pillow`).
-- The DINOv2 encoder defaults to `cuda:1`; `resolve_device()` falls back with a warning to `cuda:0` on single-GPU hosts, and further to `cpu` on CPU-only hosts.
-- The optional `LatentForwardModel` runs **CPU-only** regardless of the DINOv2 device.
+- The encoder defaults to `cuda:1`; `resolve_device()` falls back with a warning to `cuda:0` on single-GPU hosts, and further to `cpu` on CPU-only hosts.
+- The optional `LatentForwardModel` runs **CPU-only** regardless of the encoder device; its latent dimension follows the active encoder (768 for InternVideo-Next).
 - Encoder weights are **frozen** (`eval()`, `requires_grad_(False)`) — Topos never trains the encoder.
 - Forward-model adaptation is automatically suspended during Hypnos offline cycles.
+
+### Encoder backend selector
+
+`[topos].encoder_backend` chooses the encoder behind the swappable `Encoder`
+protocol:
+
+- **`internvideo_next`** (shipped default) — OpenGVLab's InternVideo-Next base
+  (MIT, 91M params). A **16-frame clip** → one **768-dim** motion-aware latent.
+  Topos keeps a RAM-only ring buffer of the most recent 16 frames and produces
+  one clip latent every `clip_stride` frame-ticks (a strided sliding window). At
+  the shipped `vision_sample_hz = 10`, `clip_stride = 3` emits ~3.33 Hz — the
+  experiential / conscious-access rate. No Meta-owned model is loaded by default.
+- **`dinov2`** — a selectable Apache-2.0 per-frame fallback (`clip_len = 1`,
+  384-dim DINOv2-small CLS token). Required for the spatial-foveation path.
+
+**Warmup.** No `topos.report` is published until the ring buffer first fills
+(16 frames ≈ 1.6 s at 10 Hz). This is expected; the first report follows the fill.
 
 ---
 
@@ -21,8 +43,8 @@ Implemented. Ships **disabled** — `[modules].topos = false` in `config/kaine.t
 
 In the PP+GWT framing, Topos is the entity's **exteroceptive vision channel**. Each time a frame arrives from the live camera — or is injected programmatically — Topos produces:
 
-1. A **DINOv2 CLS-token latent** (384-dim at `dinov2-small` defaults) encoding the current scene.
-2. A **change score** (`1 − cosine_similarity(previous_latent, current_latent)`): how much has the scene changed relative to the immediately preceding frame?
+1. A **temporally-native clip latent** (768-dim, InternVideo-Next; 384-dim CLS token under the `dinov2` fallback) encoding the recent 16-frame clip — motion included, not a single still frame.
+2. A **change score** (`1 − cosine_similarity(previous_latent, current_latent)`): how much has the scene changed relative to the previous clip latent?
 3. A **habituation score** (`1 / (1 + mean_pairwise_L2_to_buffer_mean)`): how repetitive has recent visual experience been? Approaches 1.0 for a static scene; approaches 0.0 for maximally varied input.
 4. Optionally, a **visual prediction error** — the `LatentForwardModel` predicts the next latent from the current one and a recurrent visual buffer; the L2 error between prediction and observation drives salience such that a *surprising* scene change is more salient than an equally large but *expected* one.
 
@@ -54,7 +76,7 @@ All events are published to the **`topos.out`** stream.
 |---|---|---|
 | `topos.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error` | `baseline_salience` (default 0.2) when quiet; `alert_salience` (default 0.7) when `change_score >= change_alert_threshold` (0.5) or normalised prediction error ≥ 2.0× rolling mean |
 
-`latent` is the full 384-dim CLS-token vector. Downstream modules (e.g. Mnemos, Empatheia) may store or index these latents. `prediction_error` is 0.0 when `forward_prediction = false` or on the first frame.
+`latent` is the full 768-dim pooled clip vector (384-dim CLS token under the `dinov2` fallback). Downstream modules (e.g. Mnemos, Empatheia) may store or index these latents. `prediction_error` is 0.0 when `forward_prediction = false` or on the first clip.
 
 ---
 
@@ -64,7 +86,14 @@ Section `[topos]` in `config/kaine.toml`. See also [../configuration.md](../conf
 
 | Key | Default | Meaning |
 |---|---|---|
-| `encoder_model_id` | `"facebook/dinov2-small"` | HuggingFace model ID for DINOv2; weights downloaded once at first init |
+| `encoder_backend` | `"internvideo_next"` | Encoder selector: `internvideo_next` (default, temporally-native clip) or `dinov2` (per-frame fallback) |
+| `encoder_model_id` | `"revliter/internvideo_next_base_p14_res224_f16"` | Model ID for the active backend (set `"facebook/dinov2-small"` with `encoder_backend = "dinov2"`) |
+| `encoder_revision` | pinned SHA | Pinned commit for the vendored InternVideo-Next code + weights; a mismatch is a load-time error |
+| `encoder_local_dir` | `state/models/…` | Git-ignored dir the setup step fetches weights into; runtime loads only from here |
+| `clip_len` | `16` | Frames per clip the encoder consumes (fixed 1 for `dinov2`) |
+| `clip_stride` | `3` | Strided sliding window: one clip latent every N frame-ticks (~3.33 Hz at 10 Hz sampling) |
+| `clip_resolution` | `224` | Clip input resolution |
+| `pooling` | `"attention"` | `attention` (native pool head) or `mean` (mean over patch tokens) → 768-dim |
 | `device` | `"cuda:1"` | Preferred device for the encoder; resolved via `resolve_device()` with fallback |
 | `change_alert_threshold` | `0.5` | `change_score` above which `alert_salience` is applied (absent forward model) |
 | `habituation_window` | `16` | Currently **non-effective**: `make_topos` validates the key but never forwards it — `Topos.__init__` constructs `RollingMeanHabituator()` with no window argument, so this setting has no effect on the running habituator |
@@ -121,7 +150,8 @@ graph TD
     LocusGate -->|true| Cam
     Cam -->|PIL.Image| ProcessFrame["Topos.process_frame()"]
 
-    ProcessFrame --> Encode["DINOv2Encoder\n(frozen, AsyncThread)\n→ 384-dim CLS latent"]
+    ProcessFrame --> RingBuf["RAM-only 16-frame ring\n(strided sliding window)"]
+    RingBuf -->|clip on cadence| Encode["InternVideoNextEncoder\n(frozen, AsyncThread)\n16-frame clip → 768-dim latent"]
     Encode --> ChangeD["CosineChangeDetector\n1 − cosine_sim(prev, cur)"]
     Encode --> Habituator["RollingMeanHabituator\n1/(1+mean_L2)"]
     Encode --> FwdModel["LatentForwardModel (opt)\n[latent ‖ buffer_mean] → MLP → predicted_latent\nonline SGD, CPU-only"]
@@ -133,11 +163,30 @@ graph TD
     HypnosOut["hypnos.out"] -->|sleep.started/completed| FwdModel
 ```
 
-### DINOv2Encoder
+### InternVideoNextEncoder (default)
 
-Loaded lazily on first `initialize()`. Uses `transformers.AutoModel` + `AutoImageProcessor` for `facebook/dinov2-small`. Model runs in `eval()` mode; all parameters have `requires_grad = False`. Forward pass extracts the CLS token from `last_hidden_state[:, 0, :]`, yielding a 384-dim float list. All inference runs in a thread (`asyncio.to_thread`) to keep the event loop free.
+Loaded lazily on first `initialize()`. Loads the **vendored, revision-pinned**
+modeling code (`external/internvideo_next/`) plus locally cached weights via the
+no-remote-code loader (`internvideo_next_loader.load_internvideo_next`):
+`trust_remote_code=False`, `local_files_only=True`, `HF_HUB_OFFLINE=1` — no
+`Auto*` code resolution and no runtime network. The model runs in `eval()` mode
+with `requires_grad = False` on every parameter (frozen). `encode_clip` builds a
+16-frame `pixel_values` tensor via the `VideoMAEImageProcessor`, runs the frozen
+forward, and pools `[1, 4096, 768] → 768` — the native attention-pool head
+(`pooling = "attention"`, CLIP-aligned) or a mean over patch tokens
+(`pooling = "mean"`). The pooled vector is **not** L2-normalized (the habituation
+and prediction-error signals carry information in its magnitude). `latent_dim` is
+probed from a dummy clip forward at load. Inference runs in a thread
+(`asyncio.to_thread`) to keep the event loop free.
 
-Accepts `PIL.Image`, `bytes`, or `numpy.ndarray`; BGR ndarrays from OpenCV are converted to RGB in the capture path before being handed to the encoder.
+### DINOv2Encoder (fallback)
+
+Selectable via `encoder_backend = "dinov2"`. Uses `transformers.AutoModel` +
+`AutoImageProcessor` for `facebook/dinov2-small`, frozen, extracting the 384-dim
+CLS token per frame (`clip_len = 1`). Retained as a proven Apache-2.0 per-frame
+encoder and the required backend for the spatial-foveation path.
+
+Both encoders accept `PIL.Image`, `bytes`, or `numpy.ndarray`; BGR ndarrays from OpenCV are converted to RGB in the capture path before being handed to the encoder.
 
 ### CosineChangeDetector
 
@@ -149,7 +198,7 @@ Maintains a deque of `window` (default 16) recent latent vectors. Scores `1 / (1
 
 ### LatentForwardModel (optional)
 
-Architecture mirrors `AuditoryForwardModel` (Audition): `[latent ‖ buffer_mean] → Linear(2·384 → units) → Tanh → Linear(units → 384)`, CPU only, SGD online, non-finite guard. Visual buffer is a bounded deque (`visual_buffer_size = 16`). Serialises weight tensors and a statistical buffer summary (mean/variance per feature) — never raw latents. Soma's `SubstrateForwardModel` uses a different architecture — a CfC reservoir via `ncps` (see [`soma.md`](soma.md)) — rather than this shallow-MLP pattern.
+Architecture mirrors `AuditoryForwardModel` (Audition): `[latent ‖ buffer_mean] → Linear(2·latent_dim → units) → Tanh → Linear(units → latent_dim)`, where `latent_dim` follows the active encoder (768 for InternVideo-Next, 384 for the DINOv2 fallback); CPU only, SGD online, non-finite guard. A persisted checkpoint whose tensor shapes do not match the running encoder's `latent_dim` is **discarded with a warning** on `deserialize` (the online model re-learns) rather than force-loaded. Visual buffer is a bounded deque (`visual_buffer_size = 16`). Serialises weight tensors and a statistical buffer summary (mean/variance per feature) — never raw latents. Soma's `SubstrateForwardModel` uses a different architecture — a CfC reservoir via `ncps` (see [`soma.md`](soma.md)) — rather than this shallow-MLP pattern.
 
 Alert condition when forward model is active: normalised error ≥ 2.0 (i.e. current frame error is twice the rolling mean) **or** `change_score >= change_alert_threshold`.
 
@@ -168,7 +217,9 @@ At the end of `process_frame()`, if the operator has set the environment variabl
 | File | Role |
 |---|---|
 | `kaine/modules/topos/module.py` | `Topos` class — `process_frame()`, Hypnos loop, serialisation |
-| `kaine/modules/topos/encoder.py` | `DINOv2Encoder`, `Encoder` protocol, image coercion |
+| `kaine/modules/topos/encoder.py` | `InternVideoNextEncoder`, `DINOv2Encoder`, `Encoder` protocol, `make_encoder` selector, image coercion |
+| `kaine/modules/topos/internvideo_next_loader.py` | No-remote-code offline loader for the vendored InternVideo-Next encoder |
+| `external/internvideo_next/` | Vendored, revision-pinned InternVideo-Next modeling code (MIT) + `UPSTREAM` provenance |
 | `kaine/modules/topos/change.py` | `CosineChangeDetector` and `ChangeDetector` protocol |
 | `kaine/modules/topos/habituation.py` | `RollingMeanHabituator` and `SceneHabituator` protocol |
 | `kaine/modules/topos/forward.py` | `LatentForwardModel` — online visual prediction MLP |
@@ -189,7 +240,7 @@ capture_enabled = true   # requires pip install -e .[vision]
 capture_device = 0       # or a RTSP URL for an IP camera
 ```
 
-DINOv2 weights are downloaded from HuggingFace on first boot and cached locally. Set `HF_HOME` or `TRANSFORMERS_CACHE` to control the cache location. No external runtime services are needed after the initial download.
+InternVideo-Next weights are fetched **once at setup** (`python -m kaine.setup.internvideo_next --yes`) into a git-ignored local dir (`state/models/…`) at the pinned revision; runtime loads only from there with `trust_remote_code=False` and never touches the network. The DINOv2 fallback downloads `facebook/dinov2-small` from HuggingFace on first use (set `HF_HOME`/`TRANSFORMERS_CACHE` to control its cache). No external runtime services are needed after the initial fetch.
 
 ---
 

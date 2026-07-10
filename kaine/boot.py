@@ -141,7 +141,21 @@ def make_topos(
     from kaine.modules.topos.module import Topos
 
     allowed = {
+        # Encoder selection (topos-temporal-video-encoder). encoder_backend
+        # picks DINOv2 (shipped default, real) or InternVideo-Next (Phase-2
+        # clip encoder). encoder_revision/encoder_local_dir pin + locate the
+        # vendored InternVideo-Next weights; unused by the DINOv2 default.
+        "encoder_backend",
         "encoder_model_id",
+        "encoder_revision",
+        "encoder_local_dir",
+        # InternVideo-Next clip seam (topos-temporal-video-encoder): clip length,
+        # strided-clip cadence, input resolution, and token pooling. Ignored by
+        # the DINOv2 fallback (clip_len is fixed at 1 there).
+        "clip_len",
+        "clip_stride",
+        "clip_resolution",
+        "pooling",
         "device",
         "change_alert_threshold",
         "habituation_window",  # consumed by habituator default
@@ -186,8 +200,26 @@ def make_topos(
     feed_section = dict(section.pop("perception_feed", {}) or {})
     _require_keys(section, allowed - {"perception_feed"})
     kwargs: dict[str, Any] = {}
+    if "encoder_backend" in section:
+        kwargs["encoder_backend"] = section["encoder_backend"]
     if "encoder_model_id" in section:
         kwargs["encoder_model_id"] = section["encoder_model_id"]
+    if "encoder_local_dir" in section:
+        kwargs["encoder_weights_dir"] = section["encoder_local_dir"]
+    # InternVideo-Next clip seam knobs (topos-temporal-video-encoder). clip_len
+    # and clip_resolution/pooling configure the clip encoder; clip_stride is the
+    # Topos-level strided-clip cadence.
+    if "clip_len" in section:
+        kwargs["encoder_clip_len"] = int(section["clip_len"])
+    if "clip_resolution" in section:
+        kwargs["encoder_clip_resolution"] = int(section["clip_resolution"])
+    if "pooling" in section:
+        kwargs["encoder_pooling"] = str(section["pooling"])
+    if "clip_stride" in section:
+        kwargs["clip_stride"] = int(section["clip_stride"])
+    # encoder_revision is pinned in the loader (PINNED_REVISION); the config key
+    # is accepted for operator visibility/override but the shipped default relies
+    # on the pinned value, so it is not forwarded as a Topos kwarg here.
     if "device" in section:
         kwargs["device_preference"] = section["device"]
     for k in ("change_alert_threshold", "baseline_salience", "alert_salience"):

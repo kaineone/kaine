@@ -14,6 +14,7 @@ from kaine.modules.topos.encoder import Encoder
 class FakeEncoder:
     model_id = "fake/encoder-test"
     latent_dim = 4
+    clip_len = 1  # per-frame test double (clip seam: a 1-frame clip)
 
     def __init__(self, vectors: list[list[float]] | None = None) -> None:
         self.calls = 0
@@ -31,6 +32,9 @@ class FakeEncoder:
         vec = self._vectors[self.calls % len(self._vectors)]
         self.calls += 1
         return list(vec)
+
+    async def encode_clip(self, frames):
+        return await self.encode(frames[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +75,10 @@ class FakeForwardModel:
                 {"weight": [[0.0] * self.latent_dim], "bias": [0.0]},
             ]
         }
+
+    def matches_state_shape(self, state: dict) -> bool:
+        layers = state.get("layers", [])
+        return isinstance(layers, list) and len(layers) >= 2
 
     def load_state_dict(self, state: dict) -> None:
         layers = state.get("layers", [])

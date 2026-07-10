@@ -7,8 +7,13 @@ from kaine.modules.topos.change import (
 )
 from kaine.modules.topos.encoder import (
     DEFAULT_DINOV2_MODEL_ID,
+    DEFAULT_ENCODER_BACKEND,
+    DEFAULT_INTERNVIDEO_NEXT_MODEL_ID,
+    ENCODER_BACKENDS,
     DINOv2Encoder,
     Encoder,
+    InternVideoNextEncoder,
+    make_encoder,
 )
 from kaine.modules.topos.habituation import (
     RollingMeanHabituator,
@@ -20,8 +25,13 @@ __all__ = [
     "ChangeDetector",
     "CosineChangeDetector",
     "DEFAULT_DINOV2_MODEL_ID",
+    "DEFAULT_ENCODER_BACKEND",
+    "DEFAULT_INTERNVIDEO_NEXT_MODEL_ID",
+    "ENCODER_BACKENDS",
     "DINOv2Encoder",
     "Encoder",
+    "InternVideoNextEncoder",
+    "make_encoder",
     "RollingMeanHabituator",
     "SceneHabituator",
     "Topos",

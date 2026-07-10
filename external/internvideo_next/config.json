@@ -1,0 +1,26 @@
+{
+  "_name_or_path": "./",
+  "architectures": [
+    "InternVideoNext"
+  ],
+  "auto_map": {
+    "AutoConfig": "modeling_config.InternVideoNextConfig",
+    "AutoModel": "modeling_internvideo_next.InternVideoNext"
+  },
+  "model_config": {
+    "attn_pool_num_heads": 16,
+    "clip_embed_dim": 768,
+    "depth": 12,
+    "embed_dim": 768,
+    "img_size": 224,
+    "mlp_ratio": 4,
+    "num_frames": 16,
+    "num_heads": 12,
+    "patch_size": 14,
+    "tubelet_size": 1
+  },
+  "model_type": "InternVideoNext_Base",
+  "torch_dtype": "float16",
+  "transformers_version": "4.40.1",
+  "use_cache": true
+}

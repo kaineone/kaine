@@ -98,7 +98,8 @@ SSPL SaaS clause does not apply to private local use).
 | Model / weights | License | Notes |
 |---|---|---|
 | Published KAINE organ — GGUF (`kaineone/Qwen3.5-4B-abliterated-GGUF`) and safetensors (`kaineone/Qwen3.5-4B-abliterated`) | Apache-2.0 | KAINE's own abliteration of Qwen3.5-4B; GGUF served via the local model server, safetensors is the Stage-2 trainer base; license follows the Apache-2.0 base |
-| `facebook/dinov2-small` | Apache-2.0 | Frozen ViT-S/14 visual encoder (Topos) |
+| InternVideo-Next base (`revliter/internvideo_next_base_p14_res224_f16`, OpenGVLab) | MIT | Frozen temporally-native visual encoder (Topos, shipped default). Modeling code vendored + revision-pinned in `external/internvideo_next/`; weights fetched once at setup. Off Meta. |
+| `facebook/dinov2-small` | Apache-2.0 | Frozen ViT-S/14 visual encoder (Topos, selectable non-default fallback) |
 | emotion2vec+ (`iic/emotion2vec_plus_base`) | Apache-2.0 | Loaded via funasr from HuggingFace hub |
 | `all-MiniLM-L6-v2` | Apache-2.0 | Sentence-transformers memory embedder (Mnemos) |
 | Whisper / faster-Whisper (`Systran/faster-distil-whisper-medium.en`) | MIT | Served by Speaches STT host service |

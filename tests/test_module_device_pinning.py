@@ -25,6 +25,7 @@ async def test_topos_factory_forwards_cuda_index():
         topos = make_topos(
             h.bus,
             {
+                "encoder_backend": "dinov2",
                 "encoder_model_id": "facebook/dinov2-small",
                 "device": "cuda:1",
                 "change_alert_threshold": 0.5,

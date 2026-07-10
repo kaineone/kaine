@@ -206,6 +206,9 @@ def test_make_topos_foveation_threads_config():
     topos = make_topos(
         bus,
         {
+            # Foveation is a per-frame spatial path — it requires the per-frame
+            # (clip_len=1) DINOv2 fallback, not the temporally-native default.
+            "encoder_backend": "dinov2",
             "encoder_model_id": "facebook/dinov2-small",
             "foveation": True,
             "foveation_grid": [8, 10],

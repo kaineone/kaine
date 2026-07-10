@@ -20,6 +20,7 @@ async def test_build_registry_logs_topos_device(caplog):
                 {
                     "modules": {"topos": True, "mnemos": True, "audition": True},
                     "topos": {
+                        "encoder_backend": "dinov2",
                         "encoder_model_id": "facebook/dinov2-small",
                         "device": "cuda:1",
                         "change_alert_threshold": 0.5,
