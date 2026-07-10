@@ -195,6 +195,7 @@ class HealthProber:
             "preservation": self._preservation_block(),
             "welfare": self._welfare_block(),
             "admissibility": self._admissibility_block(),
+            "backends": self._backends_block(),
             "checked_at": _now_iso(),
         }
 
@@ -210,6 +211,20 @@ class HealthProber:
             self._PRESERVATION_ALLOWED_FIELDS,
             limit=limit,
         )
+
+    def _backends_block(self) -> dict[str, Any]:
+        """Runtime-backend load failures (openspec runtime-backends, task 1.4).
+
+        A heavy organ whose configured backend could not load on this host
+        records a structured, content-free reason via
+        :mod:`kaine.backend_state`; this surfaces those so a degraded/disabled
+        capability reads as degraded, never as silently working. ``ok`` when
+        every selected backend loaded (the Tier-2 default case: empty list).
+        """
+        from kaine.backend_state import backend_failures_snapshot
+
+        failures = backend_failures_snapshot()
+        return {"ok": not failures, "failures": failures}
 
     def _welfare_block(self) -> dict[str, Any]:
         return blocks.welfare_block(self.evaluation_logs_path)

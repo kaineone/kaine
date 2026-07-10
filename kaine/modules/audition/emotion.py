@@ -58,6 +58,44 @@ class EmotionClassifier(Protocol):
 DEFAULT_EMOTION_MODEL_ID = "emotion2vec/emotion2vec_plus_base"
 
 
+class NullEmotionClassifier:
+    """Vocal-emotion disabled — the Tier-0/Tier-1 case (openspec runtime-backends).
+
+    emotion2vec+ (funasr) has no clean edge port, so vocal emotion is a
+    Tier-2-only faculty; below it the classifier is *explicitly* disabled rather
+    than silently loading a heavy model. Selected by setting
+    ``[audition].emotion_model_id = ""``. It satisfies the same
+    :class:`EmotionClassifier` protocol and always returns a neutral,
+    zero-confidence result tagged ``disabled`` — so Audition still transcribes
+    speech; it simply reports no vocal affect, and reports that honestly (a
+    removed capability is surfaced, not silently faked as real neutrality).
+    """
+
+    MODEL_ID = ""
+
+    @property
+    def model_id(self) -> str:
+        return self.MODEL_ID
+
+    async def classify(
+        self,
+        audio_bytes: bytes,
+        *,
+        sample_rate: int,
+    ) -> EmotionResult:
+        return EmotionResult(
+            category="neutral",
+            confidence=0.0,
+            scores={c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
+            model="disabled",
+            latency_ms=0.0,
+            raw={"disabled": True},
+        )
+
+    async def shutdown(self) -> None:
+        return
+
+
 class Emotion2vecClassifier:
     """Wrapper around emotion2vec+ via funasr.
 

@@ -191,6 +191,153 @@ class OpenAIChatClient:
             self._client = None
 
 
+class LlamaCppChatClient:
+    """In-process GGUF chat client via ``llama-cpp-python`` (edge backend).
+
+    This is the Tier-0/Tier-1 runtime for the Lingua organ: the same speech
+    contract as :class:`OpenAIChatClient`, but the model runs *in process* on the
+    GGML/NEON runtime (no Ollama/torch server, no network) so it ports down to a
+    ~512 MB-class SBC or a retired phone under a userland like Termux (openspec
+    runtime-backends). Selecting a backend never changes Lingua's published
+    events — it emits the same ``lingua.speech`` / evaluation events under either
+    backend; only the implementation of the organ differs.
+
+    ``llama_cpp`` is imported lazily inside :meth:`_ensure_llama`, so a Tier-2
+    install that never selects this backend does not need the dependency, and a
+    host that selects it but lacks the wheel degrades to the declared HTTP
+    fallback rather than crashing the boot.
+    """
+
+    def __init__(
+        self,
+        *,
+        model_path: Optional[str] = None,
+        repo_id: Optional[str] = None,
+        filename: Optional[str] = None,
+        n_ctx: int = 2048,
+        n_threads: Optional[int] = None,
+        chat_format: Optional[str] = None,
+    ) -> None:
+        if not model_path and not repo_id:
+            raise ValueError(
+                "LlamaCppChatClient requires model_path (a local .gguf) or "
+                "repo_id (+ filename) to fetch the GGUF weights"
+            )
+        self._model_path = model_path
+        self._repo_id = repo_id
+        self._filename = filename
+        self._n_ctx = int(n_ctx)
+        self._n_threads = n_threads
+        self._chat_format = chat_format
+        self._llama: Any = None
+
+    @property
+    def base_url(self) -> str:
+        # No network endpoint — the model is in-process. Report the local source
+        # so diagnostics/A-B provenance still have a stable identifier.
+        return f"llama-cpp://{self._model_path or self._repo_id}"
+
+    def _ensure_llama(self) -> Any:
+        if self._llama is None:
+            from llama_cpp import Llama  # type: ignore[import-untyped]
+
+            if self._model_path:
+                self._llama = Llama(
+                    model_path=self._model_path,
+                    n_ctx=self._n_ctx,
+                    n_threads=self._n_threads,
+                    chat_format=self._chat_format,
+                    verbose=False,
+                )
+            else:
+                self._llama = Llama.from_pretrained(
+                    repo_id=self._repo_id,
+                    filename=self._filename,
+                    n_ctx=self._n_ctx,
+                    n_threads=self._n_threads,
+                    chat_format=self._chat_format,
+                    verbose=False,
+                )
+        return self._llama
+
+    async def complete(self, request: ChatRequest) -> ChatResponse:
+        import asyncio
+        import time as _time
+
+        messages: list[dict[str, str]] = []
+        if request.system:
+            messages.append({"role": "system", "content": request.system})
+        messages.append({"role": "user", "content": request.prompt})
+
+        def _run() -> dict[str, Any]:
+            llama = self._ensure_llama()
+            return llama.create_chat_completion(
+                messages=messages,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                stop=list(request.stop) if request.stop else None,
+            )
+
+        start = _time.monotonic()
+        # llama.cpp inference is blocking + CPU-bound — run it off the event loop
+        # so the cognitive cycle is not stalled by a slow edge generation.
+        data = await asyncio.to_thread(_run)
+        elapsed_ms = (_time.monotonic() - start) * 1000.0
+        choice = (data.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        text = message.get("content") or ""
+        usage = data.get("usage") or {}
+        return ChatResponse(
+            text=text,
+            model=str(data.get("model", request.model)),
+            prompt_tokens=int(usage.get("prompt_tokens", 0)),
+            completion_tokens=int(usage.get("completion_tokens", 0)),
+            latency_ms=elapsed_ms,
+            raw=data,
+        )
+
+    async def aclose(self) -> None:
+        # Llama holds a native handle; drop the reference so it can be GC'd.
+        self._llama = None
+
+
+def build_chat_client_registry(
+    *,
+    chat_url: str,
+    api_key: Optional[str],
+    timeout_s: float,
+    model_id: Optional[str] = None,
+    gguf_path: Optional[str] = None,
+    gguf_filename: Optional[str] = None,
+) -> Any:
+    """Backend registry for the Lingua chat client (openspec runtime-backends).
+
+    ``ollama`` (the default, an alias ``openai`` too) is the current workstation
+    HTTP path — an OpenAI-compatible server (Ollama on CUDA, or any conforming
+    llama.cpp/vLLM server). ``llama_cpp`` is the in-process GGUF edge runtime; it
+    declares ``ollama`` as its fallback, so a host that selects it without the
+    wheel degrades to the HTTP client with a surfaced reason instead of crashing.
+    """
+    from kaine.modules.backends import BackendRegistry
+
+    registry: BackendRegistry[ChatClient] = BackendRegistry("lingua", default="ollama")
+
+    def _http() -> ChatClient:
+        return OpenAIChatClient(base_url=chat_url, api_key=api_key, timeout_s=timeout_s)
+
+    def _llama_cpp() -> ChatClient:
+        return LlamaCppChatClient(
+            model_path=gguf_path,
+            repo_id=None if gguf_path else model_id,
+            filename=gguf_filename,
+        )
+
+    registry.register("ollama", _http)
+    registry.register("openai", _http)
+    registry.register("llama_cpp", _llama_cpp, fallback="ollama")
+    return registry
+
+
 class FakeChatClient:
     """Scriptable stand-in for tests.
 

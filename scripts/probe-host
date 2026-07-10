@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""Host-capability probe → recommended KAINE deployment tier.
+
+Reports total RAM, CPU architecture, accelerator presence, and whether the
+PyTorch runtime imports, then prints the RECOMMENDED tier and that tier's
+capability-matrix row. It recommends only — it never applies a profile or starts
+the entity (openspec host-probe). To act on the recommendation the operator
+selects the profile deliberately, e.g.::
+
+    KAINE_PROFILE=tier1 python -m kaine.cycle
+    python -m kaine.cycle --profile tier1
+
+Run: .venv/bin/python scripts/probe-host          # human-readable
+     .venv/bin/python scripts/probe-host --json    # machine-readable
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from kaine.hardware import recommend_tier
+
+
+def _render_text(rec) -> str:  # noqa: ANN001
+    caps = rec.capabilities
+    lines: list[str] = []
+    lines.append("=== KAINE host-capability probe ===")
+    lines.append("")
+    ram = f"{rec.total_ram_gb} GB" if rec.total_ram_gb is not None else "unknown"
+    lines.append(f"  RAM             : {ram}")
+    lines.append(f"  CPU arch        : {rec.cpu_arch}")
+    lines.append(f"  accelerator     : {rec.accelerator}")
+    lines.append(f"  GPU count       : {rec.gpu_count}")
+    lines.append(f"  torch importable: {rec.torch_importable}")
+    lines.append("")
+    lines.append(f"  RECOMMENDED TIER: {rec.tier}  ({caps['name']})")
+    lines.append(f"  profile         : {rec.profile}")
+    lines.append(f"  reason          : {rec.reason}")
+    lines.append(f"  target host     : {caps['host']}")
+    lines.append("")
+    lines.append(f"  summary : {caps['summary']}")
+    lines.append(f"  present : {', '.join(caps['present']) or '—'}")
+    lines.append(f"  degraded: {', '.join(caps['degraded']) or '—'}")
+    lines.append(f"  absent  : {', '.join(caps['absent']) or '—'}")
+    lines.append("")
+    lines.append("This is a recommendation only. To use it, select the profile")
+    lines.append(f"deliberately: KAINE_PROFILE={rec.profile} python -m kaine.cycle")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--json", action="store_true", help="emit the recommendation as JSON"
+    )
+    args = parser.parse_args(argv)
+
+    rec = recommend_tier()
+    if args.json:
+        print(json.dumps(rec.as_dict(), indent=2))
+    else:
+        print(_render_text(rec))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
