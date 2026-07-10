@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: realized in the design pass (PR #27) and the paper's related-work.
+
 # Situate KAINE against the emergent global workspace found in language models
 
 ## Why

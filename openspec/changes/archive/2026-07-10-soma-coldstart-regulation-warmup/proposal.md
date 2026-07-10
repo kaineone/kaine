@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented — Soma cold-start allostatic warm-up shipped (29/29 tasks).
+
 # Developmental warm-up for Soma's cold-start allostatic response
 
 ## Why

@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented — goal and Thymos factors wired into live workspace salience (18/18 tasks).
+
 # Wire the goal and Thymos factors into live workspace salience
 
 ## Why

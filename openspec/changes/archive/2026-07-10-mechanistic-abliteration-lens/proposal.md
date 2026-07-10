@@ -1,3 +1,5 @@
+> ARCHIVED 2026-07-10: implemented via PR #28 — the jlens mechanistic refusal-disposition tool shipped (jlens vendored under external/jlens/; scripts/abliteration_lens.py runs the base-vs-abliterated per-layer delta, offline/build-time only).
+
 # Mechanistic verification of abliteration via the Jacobian lens
 
 ## Why
