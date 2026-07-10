@@ -1,58 +1,66 @@
 /* ==========================================================================
-   KAINE Nexus — LCARS-inspired operator console (Picard-era homage)
+   KAINE Nexus — retro-futurist operator console
    Server-rendered Jinja2 + vanilla JS. No build step. No web-font download.
 
-   A refined, modern LCARS *evocation* — not a clone (LCARS is trademarked):
-   a near-black calm field, raised slate panels, gently rounded-rectangle
-   controls, stacked rail segments, and sparing orange-red accent. Tune the
-   look from the CSS variables in :root — they are the intended knobs.
+   A refined, modern retro-futurist console *evocation* —
+   carrying the Kaine brand (see the kaine-brand repo): an obsidian near-black
+   field, raised obsidian-glass panels, gently rounded-rectangle controls,
+   stacked rail segments, an illuminated GOLD structural accent, and a single
+   blood-RED signal reserved for alerts. Type is Oxanium (display) / Inter (UI)
+   / JetBrains Mono (data). Tune the look from the CSS variables in :root —
+   they are the intended knobs.
    ========================================================================== */
 
 :root {
-  /* ---- Operator reference palette (the primary knobs) ------------------- */
-  --bg: #111419;            /* near-black background */
-  --panel: #2F3749;         /* raised panel slate */
-  --panel-2: #222a38;       /* slightly darker panel / insets */
-  --slate: #6D748C;         /* mid blue-grey */
-  --haze: #9EA5BA;          /* light blue-grey: secondary text / labels */
-  --ink: #e8ecf5;           /* primary text (near-white, cool) */
-  --accent: #E7442A;        /* LCARS orange-red — PRIMARY accent, sparing */
-  --accent-amber: #E0913A;  /* warm secondary for section variety */
+  /* ---- Kaine brand palette on console structure (the primary knobs) ------- */
+  /* Arcane-cyberpunk (see the kaine-brand repo): obsidian near-black surfaces,
+     illuminated gold-parchment text, and a single blood-red signal reserved for
+     alerts. The console shapes — elbows, rails, big radii, colour-blocked panels —
+     are kept intact; only the colour blocking is remapped, so GOLD carries the
+     structure (bars, elbows, active states) and RED is the signal. */
+  --bg: #050507;            /* obsidian near-black background */
+  --panel: #16151c;         /* raised obsidian panel (glass base) */
+  --panel-2: #100f15;       /* slightly darker panel / insets */
+  --slate: #6e5c3a;         /* muted gold-brown: borders, bar fills, dividers */
+  --haze: #9A7F62;          /* dim gold: secondary text / labels */
+  --ink: #DBC9A8;           /* primary text — illuminated gold-parchment */
+  --accent: #C4963C;        /* GOLD — the structural console accent, illuminated */
+  --accent-amber: #DBC9A8;  /* parchment — warm secondary for section variety */
+
+  /* ---- Signal (blood-red — reserved for alerts, per the brand) ---------- */
+  --brand-red: #CC0000;     /* the signal: red-alert rail, primary alert fills */
+  --accent-red: #FF5C5C;    /* brighter red on dark — error text / status */
 
   /* ---- Derived surfaces ------------------------------------------------- */
-  --bg-elev: #171b22;       /* header / rail field, just above bg */
-  --border: #313a4e;        /* hairline on slate */
-  --border-strong: #44506b; /* stronger divider / control outline */
-  --accent-dim: #b8381f;    /* darker accent for fills (bars, focus) */
+  --bg-elev: #0a0a0e;       /* header / rail field, just above bg */
+  --border: #2a2620;        /* warm hairline on obsidian */
+  --border-strong: #4a3f28; /* stronger gold divider / control outline */
+  --accent-dim: #8B6914;    /* darker gold for fills (bars, focus) */
 
   /* ---- Text (aliased onto the palette; legacy names kept) --------------- */
   --fg: var(--ink);
   --fg-muted: var(--haze);
-  /* WCAG AA contrast pass: this used to alias 1:1 to --slate (#6D748C), which
-     only cleared ~3.98:1 on --bg and ~2.6:1 on --panel/--panel-2 — well under
-     the 4.5:1 AA floor for the small/normal-weight text that uses it
-     (checked-at timestamps, chart-empty/log placeholders, dep-role labels,
-     axis captions). This value clears >=4.5:1 against every dark surface in
-     the palette (--bg, --bg-elev, --panel, --panel-2). --slate itself is left
-     unchanged — it still serves non-text uses (borders, bar fills, dividers)
-     where contrast rules don't apply. */
-  --fg-dim: #99A1B9;
+  /* WCAG AA contrast pass: kept as a distinct, slightly lighter gold than
+     --haze so the small/normal-weight text that uses it (checked-at timestamps,
+     chart-empty/log placeholders, dep-role labels, axis captions) clears
+     >=4.5:1 against every obsidian surface in the palette (--bg, --bg-elev,
+     --panel, --panel-2). --slate stays reserved for non-text uses (borders, bar
+     fills, dividers) where contrast rules don't apply. */
+  --fg-dim: #a8926a;
 
   /* ---- Status palette --------------------------------------------------- */
-  --up: #4ade80;        --up-bg: #11331f;
-  --down: #f3603f;      --down-bg: #3a1813;
-  --degraded: #E0913A;  --degraded-bg: #3a2c12;
-  --neutral: #7c8696;   --neutral-bg: #1d2430;
+  --up: #6fcf97;        --up-bg: #10281b;
+  --down: #FF5C5C;      --down-bg: #38130f;
+  --degraded: #C4963C;  --degraded-bg: #2c2210;
+  --neutral: #8a7c62;   --neutral-bg: #17140d;
 
-  /* ---- Type ------------------------------------------------------------- */
-  /* A condensed/technical system stack for LCARS labels; no runtime font
-     download (no-cloud-runtime). Labels lean on uppercase + letter-spacing. */
-  /* Blocky open-source fonts, vendored locally (no runtime download). Chakra
-     Petch (square/techy, readable) for UI; Orbitron (wide, blocky, sci-fi) for
-     the LCARS display headers. */
-  --font-ui: "Chakra Petch", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-display: "Orbitron", "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  /* ---- Type — Kaine brand (Oxanium display / Inter body / JetBrains Mono) */
+  /* Vendored locally (no runtime download; no-cloud-runtime). Oxanium is the
+     display face for console headers and uppercase labels; Inter carries the UI
+     and body; JetBrains Mono is the metadata/data face. */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Oxanium", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Bumped up ~2pt across the interface for readability on a 4K console. */
   --fs-xs: 0.9rem;
   --fs-sm: 1.0rem;
@@ -60,7 +68,7 @@
   --fs-lg: 1.35rem;
   --fs-xl: 1.75rem;
 
-  /* ---- Geometry (LCARS uses big radii + pill controls) ------------------ */
+  /* ---- Geometry (big radii + pill controls) ------------------ */
   --radius: 0.9rem;         /* panel corner radius (elbow feel) */
   --radius-sm: 0.45rem;     /* small insets */
   --radius-pill: 0.4rem;    /* gentle rounded-rectangle corners (was 999px capsule) */
@@ -79,52 +87,56 @@
 * { box-sizing: border-box; }
 
 /* ---- Vendored web fonts (served locally from /static/fonts — no runtime
-   download, no external font CDN; satisfies no-cloud-runtime). Chakra Petch =
-   UI; Orbitron = LCARS display headers. ---------------------------------- */
+   download, no external font CDN; satisfies no-cloud-runtime). The Kaine brand
+   type system: Oxanium (display/headers/uppercase labels), Inter (UI/body),
+   JetBrains Mono (metadata/data). ------------------------------------------ */
 @font-face {
-  font-family: "Chakra Petch";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/static/fonts/chakra-petch-latin-400-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/oxanium-latin-400-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Chakra Petch";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/static/fonts/chakra-petch-latin-500-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/oxanium-latin-500-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Chakra Petch";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/static/fonts/chakra-petch-latin-700-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  font-style: normal; font-weight: 600; font-display: swap;
+  src: url("/static/fonts/oxanium-latin-600-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Orbitron";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/static/fonts/orbitron-latin-600-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/static/fonts/oxanium-latin-700-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Orbitron";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/static/fonts/orbitron-latin-700-normal.woff2") format("woff2");
+  font-family: "Inter";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/inter-latin-400-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Orbitron";
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url("/static/fonts/orbitron-latin-800-normal.woff2") format("woff2");
+  font-family: "Inter";
+  font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/inter-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal; font-weight: 600; font-display: swap;
+  src: url("/static/fonts/inter-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
 }
 
-/* ---- Themed scrollbars (LCARS slate on the dark field) ------------------ */
+/* ---- Themed scrollbars (slate on the dark field) ------------------ */
 * { scrollbar-width: thin; scrollbar-color: var(--slate) var(--bg-elev); }
 ::-webkit-scrollbar { width: 13px; height: 13px; }
 ::-webkit-scrollbar-track { background: var(--bg-elev); border-radius: var(--radius-pill); }
@@ -162,7 +174,7 @@ body {
   overflow: hidden;
 }
 
-/* ---- Left rail (the LCARS signature) ----------------------------------- */
+/* ---- Left rail (the console signature) ----------------------------------- */
 /* A dark column of stacked rounded-end segments. Sticky so it stays put as
    the console scrolls to its right. Outer corners heavily rounded. */
 .rail {
@@ -183,8 +195,8 @@ body {
   /* Flush with the window edge: no rounded corners on the rail itself. */
   border-radius: 0;
 }
-/* LCARS spine: a blue-grey bar down the rail's right edge that the KAINE header
-   curves into at the top (the brand bleeds up+right to meet it, forming the LCARS
+/* console spine: a blue-grey bar down the rail's right edge that the KAINE header
+   curves into at the top (the brand bleeds up+right to meet it, forming the console
    elbow). Blue-grey by default — it turns red ONLY on a red alert. */
 .rail::after {
   content: "";
@@ -195,8 +207,8 @@ body {
   width: 0.5rem;
   background: var(--panel);
 }
-.shell.red-alert .rail::after { background: var(--accent); }
-/* The KAINE wordmark is an LCARS elbow: a blue-grey bar with a rounded top-right
+.shell.red-alert .rail::after { background: var(--brand-red); }
+/* The KAINE wordmark is an elbow: a blue-grey bar with a rounded top-right
    corner that the rail spine flows down from. It bleeds UP to the rail's top edge
    and RIGHT into the spine so the bar + spine read as one continuous L. The bar
    is blue-grey (red is reserved for alerts) but the LETTERS are always palette
@@ -206,7 +218,7 @@ body {
   text-decoration: none;
   font-family: var(--font-display);
   font-weight: 800;
-  letter-spacing: 0.08em; /* Orbitron is wide — keep the wordmark from overrunning */
+  letter-spacing: 0.08em; /* Oxanium is wide — keep the wordmark from overrunning */
   text-transform: uppercase;
   color: var(--accent);          /* KAINE letters — always palette red */
   background: var(--panel);      /* blue-grey bar */
@@ -249,7 +261,7 @@ body {
   gap: 0.3rem;
 }
 .rail__nav--pages { margin-top: auto; }
-/* Each nav item is an LCARS segment: rounded on the LEFT, SQUARE on the right so
+/* Each nav item is a segment: rounded on the LEFT, SQUARE on the right so
    it aligns with — and, when selected, flows into — the rail bar/spine. It is a
    shade DARKER than the bar when closed, and the bar's own colour when open. */
 .rail__seg {
@@ -303,7 +315,7 @@ button.rail__seg { width: 100%; cursor: pointer; font-family: var(--font-ui); te
   gap: 0.55rem;
   padding: 0.85rem 0.7rem;
 }
-.shell.red-alert .rail--right { border-left-color: var(--accent); }
+.shell.red-alert .rail--right { border-left-color: var(--brand-red); }
 /* The health board sizes to content inside the rail (the rail is the column);
    strip the panel chrome so it reads as part of the sidebar, not a card. */
 .rail--right .board { overflow: visible; max-height: none; height: auto; margin: 0; }
@@ -349,7 +361,7 @@ header h1 {
   font-family: var(--font-display);
   font-size: var(--fs-xl);
   margin: 0;
-  letter-spacing: 0.04em; /* Orbitron is wide — keep the title tight */
+  letter-spacing: 0.04em; /* Oxanium is wide — keep the title tight */
   text-transform: uppercase;
   font-weight: 800;
 }
@@ -462,7 +474,7 @@ h3 {
   html, .page { scroll-behavior: smooth; }
 }
 
-/* LCARS section header: uppercase, condensed, generous letter-spacing, in
+/* console section header: uppercase, condensed, generous letter-spacing, in
    --accent (some boards vary to amber/haze), with a thick rounded left-cap. */
 .board__title {
   /* Default to a calm blue-grey; the --bar mechanism stays so a section can be
@@ -474,7 +486,7 @@ h3 {
   font-family: var(--font-display);
   font-size: var(--fs-sm);
   text-transform: uppercase;
-  letter-spacing: 0.08em; /* Orbitron is WIDE — pull spacing in so titles don't overrun */
+  letter-spacing: 0.08em; /* Oxanium is WIDE — pull spacing in so titles don't overrun */
   font-weight: 700;
   color: var(--haze);
   margin: 0 0 0.9rem 0;
@@ -484,7 +496,7 @@ h3 {
 }
 /* The colored block: a thin SQUARE cap to the LEFT of the words, then the same
    block continues to the RIGHT of the words and runs full width to the window
-   edge — an LCARS-style section divider. The fill bar is flat on its left and
+   edge — a console-style section divider. The fill bar is flat on its left and
    bottom edges with only its top-right corner rounded. */
 .board__title::before {
   content: "";
@@ -509,7 +521,7 @@ h3 {
 
 /* Collapsible boards: the title doubles as the <summary>. Drop the native
    disclosure triangle (so the ::before left-cap stays first) and make it
-   click-affordant. The ::before / ::after LCARS bars still apply because the
+   click-affordant. The ::before / ::after accent bars still apply because the
    summary keeps the .board__title class. */
 summary.board__title {
   cursor: pointer;
@@ -550,7 +562,7 @@ details.board { margin-bottom: 0.2rem; }
    uPlot charts at an explicit width and stops a tall card stretching its row. */
 /* Cards stack vertically within their section column. This is the SCROLL
    container — the header bar above stays put while these cards scroll, so the
-   vertical scrollbar reads as a thin LCARS line descending from the header. */
+   vertical scrollbar reads as a thin accent line descending from the header. */
 .board__cards {
   /* Block flow (not flex) so the run of cards can fragment across a column
      boundary. Spacing comes from card margins, not flex gap. */
@@ -614,7 +626,7 @@ details.board { margin-bottom: 0.2rem; }
 .report-claim strong { color: var(--ink); }
 
 /* Continuation marker injected by NexusFlow at the top of a column where a
-   section spilled over from the previous column. Reads as a faint LCARS tab so
+   section spilled over from the previous column. Reads as a faint tab so
    the continuation is clearly part of the same section. Stays glued to the card
    that follows it (break-after: avoid) so it is never stranded at a column end. */
 .continued-marker {
@@ -662,14 +674,14 @@ details.board { margin-bottom: 0.2rem; }
   .span-2, .board__cards > .card--wide { grid-column: span 1; }
 }
 
-/* LCARS panel: large corner radius with an asymmetric "elbow" feel (bigger
+/* Panel: large corner radius with an asymmetric "elbow" feel (bigger
    radius top-left + bottom-right). Calm slate field; no left edge-strip — the
    rounded body alone carries the form. */
 .panel {
   position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
-  /* Square on three corners, rounded only at the bottom-left — an LCARS-style
+  /* Square on three corners, rounded only at the bottom-left — a console-style
      hard box with a single elbow. (top-left top-right bottom-right bottom-left) */
   border-radius: 0 0 0 var(--radius);
   padding: 1rem 1.1rem 1rem 1.25rem;
@@ -756,7 +768,7 @@ details.board { margin-bottom: 0.2rem; }
   right: 0.7rem;
   bottom: 0.7rem;
   width: clamp(9rem, 22%, 15rem);
-  border: 1px solid rgba(158, 165, 186, 0.35);
+  border: 1px solid rgba(154, 127, 98, 0.35);
   border-radius: 4px;
   overflow: hidden;
   background: #05060a;
@@ -801,18 +813,18 @@ details.board { margin-bottom: 0.2rem; }
   font-size: 1rem;
   line-height: 1;
   padding: 0.25rem 0.4rem;
-  border: 1px solid rgba(158, 165, 186, 0.4);
+  border: 1px solid rgba(154, 127, 98, 0.4);
   border-radius: 4px;
   background: rgba(5, 6, 10, 0.75);
   color: var(--fg);
   cursor: pointer;
 }
-.perception-mute[aria-pressed="true"] { border-color: var(--alert, #E7442A); }
+.perception-mute[aria-pressed="true"] { border-color: var(--brand-red); }
 .perception-meter {
   display: inline-block;
   width: 4.5rem;
   height: 0.5rem;
-  border: 1px solid rgba(158, 165, 186, 0.4);
+  border: 1px solid rgba(154, 127, 98, 0.4);
   border-radius: 3px;
   overflow: hidden;
   background: rgba(5, 6, 10, 0.75);
@@ -821,7 +833,7 @@ details.board { margin-bottom: 0.2rem; }
   display: block;
   width: 0%;
   height: 100%;
-  background: linear-gradient(to right, #4ade80, #E0913A, #E7442A);
+  background: linear-gradient(to right, var(--up), var(--accent), var(--brand-red));
   transition: width 0.12s linear;
 }
 
@@ -965,22 +977,22 @@ details.board { margin-bottom: 0.2rem; }
 }
 /* Operator freeze — impossible to miss; the entity is suspended. */
 .freeze-banner {
-  background: #1e3a5f;
-  color: #cfe3ff;
-  border-bottom: 2px solid #4a90d9;
+  background: #172029;         /* muted steel over obsidian — cold, not bright */
+  color: #b9c6cd;             /* dim cool-parchment, readable on the steel */
+  border-bottom: 2px solid #3d6478;
   padding: 0.7rem 1rem;
   text-align: center;
   font-weight: bold;
   letter-spacing: 0.04em;
 }
 .freeze-banner .freeze-reason { font-weight: normal; opacity: 0.85; overflow-wrap: anywhere; }
-#freeze-control.frozen { border-color: #4a90d9; background: #16263c; }
+#freeze-control.frozen { border-color: #3d6478; background: #16222b; }
 #freeze-status { letter-spacing: 0.03em; }
 
 /* ---- Buttons / forms (pills) ------------------------------------------- */
 
 button, .btn {
-  /* Chakra Petch (--font-ui), NOT Orbitron — Orbitron is too wide for pills and
+  /* Inter (--font-ui), NOT Oxanium — Oxanium is a touch wide for pills and
      made the labels cramp/overflow. Tightened letter-spacing + nowrap + a touch
      more horizontal padding so the text always fits. */
   font-family: var(--font-ui);
@@ -1040,7 +1052,7 @@ table th, table td {
   border-bottom: 1px solid var(--border);
 }
 table td { overflow-wrap: anywhere; }
-/* LCARS column headers: haze, uppercase, spaced. */
+/* Column headers: haze, uppercase, spaced. */
 table th {
   color: var(--haze);
   font-weight: 700;
@@ -1175,10 +1187,10 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   inset: 0;
   pointer-events: none;
   z-index: 9998;
-  box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 70px rgba(231, 68, 42, 0.22);
+  box-shadow: inset 0 0 0 4px var(--brand-red), inset 0 0 70px rgba(204, 0, 0, 0.28);
 }
 /* Tint the rail divider red while the alert holds (subtle reinforcement). */
-.shell.red-alert .rail { border-right-color: var(--accent); }
+.shell.red-alert .rail { border-right-color: var(--brand-red); }
 
 @keyframes red-alert-pulse {
   0%, 100% { opacity: 1; }

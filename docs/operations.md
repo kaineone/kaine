@@ -59,7 +59,7 @@ docker compose -f compose/qdrant.yml down -v
 
 ## Nexus dashboard tour
 
-Nexus runs at `http://127.0.0.1:8088`. The look is an LCARS-inspired evocation —
+Nexus runs at `http://127.0.0.1:8088`. The look is a retro-futurist console evocation —
 near-black field, slate panels, red reserved for attention.
 
 | Surface | URL | Content policy |

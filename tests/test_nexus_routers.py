@@ -917,16 +917,16 @@ def test_fonts_served_locally_no_external_font_url():
     assert "fonts.gstatic.com" not in css
     assert "http://" not in css and "https://" not in css
     fonts_dir = base / "static" / "fonts"
-    for fname in (
-        "chakra-petch-latin-400-normal.woff2",
-        "chakra-petch-latin-500-normal.woff2",
-        "chakra-petch-latin-700-normal.woff2",
-        "orbitron-latin-600-normal.woff2",
-        "orbitron-latin-700-normal.woff2",
-        "orbitron-latin-800-normal.woff2",
-    ):
-        assert fname in css, fname
+    # Every woff2 the CSS references must exist on disk (derived, not hard-coded).
+    import re
+
+    referenced = re.findall(r"/static/fonts/([^\"')]+\.woff2)", css)
+    assert referenced, "no @font-face woff2 references found in style.css"
+    for fname in referenced:
         assert (fonts_dir / fname).exists(), fname
+    # The Kaine brand type system: Oxanium (display), Inter (UI), JetBrains Mono.
+    for family in ("oxanium", "inter", "jetbrains-mono"):
+        assert any(family in f for f in referenced), family
 
 
 # ---- Spot supervisor health block ----------------------------------------
