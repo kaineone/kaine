@@ -129,6 +129,12 @@ COPY --from=build /opt/venv /opt/venv
 # Source (editable install target) — NO config/secrets.toml, NO state/, NO
 # voices/adapters enter the image; .dockerignore enforces the build-context side.
 COPY --chown=kaine:kaine kaine /app/kaine
+# Vendored, revision-pinned InternVideo-Next modeling source (the shipped default
+# vision backend loads it from /app/external/internvideo_next with
+# trust_remote_code=False). Committed Python + config only — the .safetensors
+# weights are excluded by .dockerignore and provisioned to the model volume, not
+# baked in. Without this the default encoder cannot load in the container.
+COPY --chown=kaine:kaine external/internvideo_next /app/external/internvideo_next
 COPY --chown=kaine:kaine config/kaine.toml /app/config/kaine.toml
 COPY --chown=kaine:kaine pyproject.toml README.md /app/
 COPY --chown=kaine:kaine scripts /app/scripts

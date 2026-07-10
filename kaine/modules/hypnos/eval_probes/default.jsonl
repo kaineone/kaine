@@ -1,0 +1,12 @@
+{"probe_id": "math_1", "prompt": "Question: What is 7 plus 5? Answer:", "expected": "12"}
+{"probe_id": "math_2", "prompt": "Question: What is 9 minus 4? Answer:", "expected": "5"}
+{"probe_id": "math_3", "prompt": "Question: What is 6 times 3? Answer:", "expected": "18"}
+{"probe_id": "math_4", "prompt": "Question: What is 20 divided by 4? Answer:", "expected": "5"}
+{"probe_id": "geo_1", "prompt": "Question: What is the capital of France? Answer:", "expected": "Paris"}
+{"probe_id": "geo_2", "prompt": "Question: What is the capital of Japan? Answer:", "expected": "Tokyo"}
+{"probe_id": "geo_3", "prompt": "Question: On which continent is Egypt? Answer:", "expected": "Africa"}
+{"probe_id": "lang_1", "prompt": "Question: What language is most commonly spoken in Brazil? Answer:", "expected": "Portuguese"}
+{"probe_id": "sci_1", "prompt": "Question: What is the chemical symbol for water? Answer:", "expected": "H2O"}
+{"probe_id": "sci_2", "prompt": "Question: How many planets are in the solar system? Answer:", "expected": "8"}
+{"probe_id": "reason_1", "prompt": "Question: If today is Monday, what day is it three days from now? Answer:", "expected": "Thursday"}
+{"probe_id": "reason_2", "prompt": "Question: Alice is older than Bob. Bob is older than Carol. Who is the youngest? Answer:", "expected": "Carol"}

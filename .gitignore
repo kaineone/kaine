@@ -68,7 +68,13 @@ data/**
 # Welfare-load-bearing abliteration probe set MUST ship in the repo
 # (hypnos-consolidation): it is the hard gate that prevents voice-alignment
 # from re-introducing refusal conditioning. Exempt it from the *.jsonl rule.
+# (Root-anchored: the tracked copy lives at the top-level eval_probes/.)
 !eval_probes/abliteration_probes.jsonl
+# Default capability/welfare probe battery MUST ship in the repo: the
+# voice-alignment capability eval and the probe battery load it at
+# kaine/modules/hypnos/eval_probes/default.jsonl (a fresh clone would otherwise
+# have no probe set). Exempt it from the *.jsonl rule so it is tracked.
+!kaine/modules/hypnos/eval_probes/default.jsonl
 # Abliteration-lens research inputs are checked-in content (the broad *.jsonl
 # rule above would otherwise swallow them).
 !data/abliteration_lens/*.jsonl

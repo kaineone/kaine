@@ -260,7 +260,8 @@ services:
 
   # ---- setup one-shot: provision images + ALL model weights (design §6) --
   # Downloads the abliterated organ, distil-Whisper, Chatterbox, emotion2vec+,
-  # DINOv2, and MiniLM into the shared kaine-models volume BEFORE first boot, so
+  # the InternVideo-Next clip encoder (the shipped default vision backend; DINOv2
+  # only if [topos].encoder_backend = "dinov2"), and MiniLM BEFORE first boot, so
   # runtime reaches no network for models. Reuses the repo's `hf download`
   # organ provisioning. Runs under `--profile setup`, never at normal `up`.
   kaine-provision:
