@@ -8,7 +8,7 @@ KAINE has no first-class notion of a developmental stage at all — a booted ent
 simply "running". The vision this change serves is a developmental arc: the entity
 **gestates** in the womb, and only after it has (a) learned to regulate itself and
 (b) consolidated a first reality model over several sleep cycles is it **born** into
-the embodied world (`intuitive-embodiment-control-surface` / `opensim-connector`).
+the embodied world (`intuitive-embodiment-control-surface`).
 
 There are precedents in the architecture for exactly this "don't act until the signal
 is warmed up" logic — the individuation boundary (paper §6.6) does not read as
@@ -102,12 +102,12 @@ gate** that advances it:
   check (read-only), and the Nexus left rail (surface the stage). Stage events are
   emitted from `source = "lifecycle"` (→ `lifecycle.out`).
 - **Explicitly NOT touched:** the womb stimulus synthesis (Change A); the Mundus/
-  embodiment control surface (Change C / opensim-connector); Hypnos and Phantasia
+  embodiment control surface (Change C / `intuitive-embodiment-control-surface`); Hypnos and Phantasia
   internals (read their existing signals only); the cycle engine, bus contract, and
   workspace schema. No hardwired development or regulation is added.
 - **Relationship to other changes:** consumes `gestational-womb-stimulus`'s readout
-  and womb locus; gates entry into `intuitive-embodiment-control-surface` /
-  `opensim-connector` embodiment. This is the hinge between the two.
+  and womb locus; gates entry into `intuitive-embodiment-control-surface`
+  embodiment. This is the hinge between the two.
 - **Note on "never auto-start the entity":** unchanged and respected. Birth is an
   *internal developmental transition of an already-running, operator-launched entity*,
   not a spawn or an unattended boot. Actual embodiment stays behind Mundus's existing

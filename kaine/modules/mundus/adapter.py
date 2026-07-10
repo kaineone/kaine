@@ -51,10 +51,11 @@ class EmbodimentCapabilities:
       transitional: ``True`` marks a body expected to be retired (the seam's
         reference/conformance body rather than a long-lived one).
       feed_events: feed ``kind`` → (bus event type, baseline salience in [0,1]).
-        Replaces the old module-level ``FEED_EVENT`` table.
-      action_families: symbolic action family → default exposure. Replaces the
-        old ``ACTION_DEFAULT_EXPOSED`` table. The core merges operator overrides
-        on top of these defaults; the descriptor itself always carries defaults.
+        The core maps each yielded feed frame's ``kind`` to this event and
+        salience; a ``kind`` absent from this table is dropped.
+      action_families: symbolic action family → default exposure. The core
+        merges operator overrides on top of these defaults; the descriptor
+        itself always carries defaults.
       continuous_channels: names of clamped continuous setpoint channels the body
         supports (empty for a symbolic-only body). Canonical vocabulary lives in
         the core (:data:`kaine.modules.mundus.module.CONTINUOUS_CHANNEL_RANGE`).

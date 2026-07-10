@@ -5,8 +5,8 @@
 > curriculum, the safety gates, config, and tests all land in
 > `kaine/modules/mundus/` (see `control_surface.py`, `module.py`). No entity is
 > booted; every test runs offline against the transport-free `StubAdapter`. The
-> viewer-side work (W1 Firestorm-fork LEAP op, W2 LEAP shim relay) is **out of
-> this repo** and remains open: the OpenSim adapter is being retired, and the
+> viewer-side work (W1 viewer-fork wire-shim op, W2 the wire shim relay) is **out of
+> this repo** and remains open: the reference adapter is being retired, and the
 > continuous transport rides whichever live adapter/fork is wired later. Tasks
 > below are checked where landed and annotated where deferred to the fork.
 
@@ -19,12 +19,12 @@
       locomotion/manipulation continuous.
 - [x] 0.2 Re-read `design.md` §3/§5/§9: continuous few-DOF surface, **mandatory**
       coupled feedback, and the policy **emerges** (only the structure is provided).
-- [x] 0.3 **Verify the Firestorm fork re-enabled LEAP launching** (stock Firestorm ships
-      it disabled) on the actual build before assuming the LEAP surface is reachable.
-      *(Deferred — viewer/fork-side; the OpenSim adapter is being dropped and the
+- [x] 0.3 **Verify the viewer fork re-enabled wire-shim launching** (the stock viewer ships
+      it disabled) on the actual build before assuming the wire-shim surface is reachable.
+      *(Deferred — viewer/fork-side; the reference adapter is being dropped and the
       KAINE-side surface is proven against the transport-free `StubAdapter`.)*
 
-## W1 — Continuous control LEAP op (Firestorm fork, `firestorm-fork-notes.md`)
+## W1 — Continuous control wire-shim op (viewer fork, `viewer-fork-notes.md`)
 - [x] 1.1 Add a custom `LLAgent`-wrapping `LLEventAPI` that accepts continuous setpoints
       `{drive, yaw_rate, gaze_yaw, gaze_pitch, strafe, interact}` per tick, writing them
       into the agent control-flag / camera path. *(Out-of-repo viewer/C++ work.)*
@@ -35,7 +35,7 @@
       `LLWindow` keys / `AGENT_CONTROL_*` — documented as coarse, first-bring-up only.
       *(Out-of-repo viewer/C++ work.)*
 
-## W2 — LEAP shim (`tools/mundus-leap/`)
+## W2 — The wire shim (`tools/mundus-wire/`)
 - [x] 2.1 Relay the continuous control frames from Mundus to the viewer op (W1) and the
       feedback frames back, over the existing length-prefixed-MessagePack bridge.
       *(Out-of-repo shim work; rides whichever live adapter/fork lands.)*
@@ -65,7 +65,7 @@
 - [x] 4.1 Added the entity's continuous motor policy seam
       (`ContinuousMotorSurface`) emitting `intent.avatar.control` per tick
       (`intent_payload`) from an injectable (emergent) `MotorPolicy`. This is the
-      producer `opensim-connector` left unbuilt — as continuous control, not symbolic
+      producer the reference connector left unbuilt — as continuous control, not symbolic
       verbs.
 - [x] 4.2 Wired the coupled feedback into the forward-model reuse: `EfferenceLoop`
       feeds the efference copy + proprioception to Soma's `SubstrateForwardModel`
@@ -114,6 +114,6 @@
 
 ## W10 — Validation
 - [x] 10.1 `openspec validate intuitive-embodiment-control-surface --strict` passes.
-- [x] 10.2 Mundus + forward-model test suites green; `opensim-connector`'s gates,
+- [x] 10.2 Mundus + forward-model test suites green; `reference-connector`'s gates,
       inhibition handling, and inbound-world safety are reused unmodified; import-linter
       5/5.

@@ -209,6 +209,6 @@ The bus events (`perception.locus.changed`, `perception.locus.denied`) contain o
 
 ## Spec & Related
 
-- OpenSpec: [`openspec/changes/archive/2026-07-09-opensim-connector/specs/perception-locus/spec.md`](../../openspec/changes/archive/2026-07-09-opensim-connector/specs/perception-locus/spec.md) (archived; the `opensim-connector` proposal was withdrawn when OpenSim was abandoned, but the perception-locus spec captured the locus contract)
+- OpenSpec: [`openspec/specs/perception-locus/spec.md`](../../openspec/specs/perception-locus/spec.md) — the perception-locus contract (physical XOR virtual, operator control/lock, gated self-switch) shipped by the live [`kaine/modules/perception/`](../../kaine/modules/perception/) module
 - Related modules: [`topos.md`](topos.md) (visual perception, polls locus gate), [`audition.md`](audition.md) (audio perception, polls locus gate), [`mundus.md`](mundus.md) (virtual-world embodiment), [`eidolon.md`](eidolon.md) (embodiment self-model)
 - Cognitive cycle: [`../processes/cognitive-cycle.md`](../processes/cognitive-cycle.md)

@@ -1,4 +1,15 @@
-## ADDED Requirements
+# perception-locus Specification
+
+## Purpose
+
+Defines the perception-locus contract shipped by the live `kaine/modules/perception/`
+module: the single authority that binds the entity's perceptual organs to exactly one
+world at a time (physical XOR virtual), the operator's live control and lock over it
+from Nexus, and the gated policy under which the entity may switch its own locus. This
+contract is body-agnostic — it holds regardless of which embodiment adapter provides the
+virtual world.
+
+## Requirements
 
 ### Requirement: Perception binds to one world at a time (physical XOR virtual)
 
@@ -20,7 +31,7 @@ SHALL be `physical`.
 #### Scenario: Physical locus does not perceive or act in-world
 
 - **WHEN** the locus is `physical`
-- **THEN** `intent.avatar.*` intents are not forwarded to the viewer
+- **THEN** `intent.avatar.*` intents are not forwarded to the body
 - **AND** in-world visual and chat feeds are not consumed by Topos/Audio_In
 
 ### Requirement: The operator controls and can lock the perception locus from Nexus

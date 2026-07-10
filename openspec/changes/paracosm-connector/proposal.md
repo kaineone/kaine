@@ -4,8 +4,9 @@
 > framing collapses the old "one sibling module per world" model (a separate
 > `Kosmos` module here) into "one Mundus + per-body adapters." A future paracosm
 > body is therefore a **Mundus adapter**, not its own module (operator-confirmed
-> fold, 2026-07-05). Note also the operator's stated direction to drop OpenSim and
-> rebuild the paracosm around VR-style continuous body controls — the eventual
+> fold, 2026-07-05). Note also the operator's stated direction to drop the
+> transitional reference body and rebuild the paracosm around VR-style continuous
+> body controls — the eventual
 > paracosm adapter targets that, not this Bevy-voxel bridge. Kept for provenance.
 
 ## Why

@@ -84,4 +84,4 @@ deterministic mode in operator config.
   seeded generator needs no external assets and is usable immediately.
 - Non-goals: audio-in deterministic stimulus (Audition; a parallel follow-up if
   wanted), embodiment/Mundus, and the entity-initiated locus switch (deferred with
-  opensim-connector).
+  the reference connector).

@@ -7,12 +7,6 @@ from kaine.modules.mundus.adapter import (
     FeedFrame,
 )
 from kaine.modules.mundus.adapters.stub import StubAdapter
-from kaine.modules.mundus.bridge import (
-    ACTION_DEFAULT_EXPOSED,
-    FEED_EVENT,
-    read_frame,
-    write_frame,
-)
 from kaine.modules.mundus.control_surface import (
     MOTOR_CHANNELS,
     MOTOR_STAGES,
@@ -39,10 +33,6 @@ __all__ = [
     "EmbodimentCapabilities",
     "FeedFrame",
     "StubAdapter",
-    "read_frame",
-    "write_frame",
-    "FEED_EVENT",
-    "ACTION_DEFAULT_EXPOSED",
     # Continuous embodiment control surface (the producer).
     "ContinuousMotorSurface",
     "ControlCommand",
