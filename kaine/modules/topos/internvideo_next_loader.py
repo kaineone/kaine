@@ -131,11 +131,20 @@ def load_internvideo_next(
 
     config_cls, model_cls = _classes if _classes is not None else _import_vendored_classes()
 
-    # Use the VENDORED classes' own from_pretrained (NOT Auto*), against a LOCAL
-    # dir, with trust_remote_code=False + local_files_only=True. auto_map is never
-    # consulted; no code or weights are fetched from the hub.
+    # Use the VENDORED classes' own from_pretrained (NOT Auto*), with
+    # trust_remote_code=False + local_files_only=True. auto_map is never consulted;
+    # no code or weights are fetched from the hub.
+    #
+    # The config lives in the VENDORED, reviewed, revision-pinned in-tree package
+    # (external/internvideo_next/config.json) — NOT in the weights dir. The setup
+    # fetch pulls only model.safetensors into ``wdir`` (config.json is vendored,
+    # not re-downloaded), so the config is read from the vendored dir exactly as
+    # the VideoMAE processor is (see encoder._load_videomae_processor). This is
+    # also strictly safer than trusting a downloaded config. The weights (the
+    # single safetensors) are then loaded from ``wdir`` with the vendored config
+    # passed in explicitly, so no config.json is required alongside the weights.
     config = config_cls.from_pretrained(
-        str(wdir), local_files_only=True, trust_remote_code=False
+        str(vendored_code_dir()), local_files_only=True, trust_remote_code=False
     )
     model = model_cls.from_pretrained(
         str(wdir),
