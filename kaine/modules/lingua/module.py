@@ -175,6 +175,7 @@ class Lingua(BaseModule):
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.2)
                 except asyncio.TimeoutError:
+                    # no stop signal within the backoff window; keep polling
                     pass
                 continue
             if entries:
@@ -195,6 +196,7 @@ class Lingua(BaseModule):
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.1)
                 except asyncio.TimeoutError:
+                    # no stop signal yet; keep polling the stream
                     pass
 
     async def _snapshot_cache_loop(self) -> None:

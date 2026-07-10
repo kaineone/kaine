@@ -75,13 +75,14 @@ class Runner(Protocol):
     """A place a batch job can run."""
 
     @property
-    def tier(self) -> TrustTier: ...
+    def tier(self) -> TrustTier:
+        """The trust tier this runner executes jobs at."""
 
     def accepts(self, job: BatchJob) -> bool:
         """Whether this runner can, in principle, run ``job``."""
-        ...
 
-    def run(self, job: BatchJob, workdir: Path) -> RunResult: ...
+    def run(self, job: BatchJob, workdir: Path) -> RunResult:
+        """Run ``job`` in ``workdir`` and return its result."""
 
 
 class LocalTrustedRunner:

@@ -59,7 +59,8 @@ class CapabilityVerifier(Protocol):
     to its own in-house training, re-run on trusted hardware.
     """
 
-    def verify(self, job: BatchJob, artifact_path: Path) -> VerifierOutcome: ...
+    def verify(self, job: BatchJob, artifact_path: Path) -> VerifierOutcome:
+        """Return the capability-veto outcome for ``job``'s ``artifact_path``."""
 
 
 @runtime_checkable
@@ -70,7 +71,8 @@ class IndependentEvaluator(Protocol):
     capability probes is still caught by a second, independent measure.
     """
 
-    def evaluate(self, job: BatchJob, artifact_path: Path) -> VerifierOutcome: ...
+    def evaluate(self, job: BatchJob, artifact_path: Path) -> VerifierOutcome:
+        """Return an independent evaluation outcome for ``job``'s ``artifact_path``."""
 
 
 #: A fork-being welfare/individuation/admissibility gate: given the returned
