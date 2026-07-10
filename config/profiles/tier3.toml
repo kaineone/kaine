@@ -1,0 +1,19 @@
+# Tier 3 — datacenter / multi-GPU (openspec deployment-tiers)
+#
+# Host class: a multi-GPU server. Same architecture as Tier 2 with more headroom
+# — larger LLMs, longer contexts, higher-rate vision, redundancy. Multi-instance
+# fleets and cross-host module splits are the subject of the companion
+# distributed-substrate change, NOT this one; this overlay only pins the Tier-2
+# backends and leaves scale-up (larger model ids, longer contexts, per-module GPU
+# placement) to the operator's local config/kaine.operator.toml.
+#
+# INERT + VOICE-FREE by contract (see tier0.toml header): it enables no module
+# and embeds no private voice.
+#
+# Apply deliberately:  KAINE_PROFILE=tier3 python -m kaine.cycle
+
+[lingua]
+backend = "ollama"      # OpenAI-compatible HTTP server
+
+[mnemos]
+backend = "qdrant"      # KAINE-owned Qdrant container

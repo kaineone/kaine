@@ -18,6 +18,7 @@ from kaine.modules.audition.emotion import (
     EmotionClassifier,
     Emotion2vecClassifier,
     EmotionResult,
+    NullEmotionClassifier,
 )
 from kaine.modules.audition.acoustic import (
     AcousticEncoder,
@@ -103,10 +104,18 @@ class Audition(BaseModule):
         self._stt_client: STTClient = stt_client or SpeachesClient(
             base_url=speaches_url, timeout_s=request_timeout_s
         )
-        self._emotion_classifier: EmotionClassifier = (
-            emotion_classifier
-            or Emotion2vecClassifier(model_id=emotion_model_id, device=emotion_device)
-        )
+        # Vocal emotion is a Tier-2-only faculty (emotion2vec+ has no clean edge
+        # port). An empty emotion_model_id explicitly disables it — the Tier-0/1
+        # case — via the Null classifier, which still lets speech be transcribed
+        # (openspec runtime-backends). A non-empty id loads emotion2vec+ as before.
+        if emotion_classifier is not None:
+            self._emotion_classifier = emotion_classifier
+        elif not (emotion_model_id or "").strip():
+            self._emotion_classifier = NullEmotionClassifier()
+        else:
+            self._emotion_classifier = Emotion2vecClassifier(
+                model_id=emotion_model_id, device=emotion_device
+            )
         self._emotion_device = emotion_device
         self._stt_model = stt_model
         self._baseline_salience = float(baseline_salience)

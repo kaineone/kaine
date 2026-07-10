@@ -357,14 +357,20 @@ pooling = "attention"
 # resolve_device() falls back to cuda:0 with a warning on single-GPU
 # hosts; further falls back to cpu on hosts without CUDA.
 device = "cuda:1"
-# Change-alert threshold. PROVISIONAL for InternVideo-Next: overlapping strided
-# clips (13/16 shared frames at clip_stride = 3) make consecutive latents more
-# correlated than DINOv2 per-frame vectors were, which lowers typical
-# change_score — so this likely wants to come DOWN once re-derived. The
-# calibration pass (topos-temporal-video-encoder §4: run the seeded feed at the
-# shipped clip_stride, take ~90th pct of observed change) is a GPU shakedown step
-# and has NOT been run; 0.5 is carried over from DINOv2 as a placeholder.
-change_alert_threshold = 0.5
+# Change-alert threshold. CALIBRATED for InternVideo-Next on 2026-07-10 by the GPU
+# shakedown (RTX 4070 SUPER, real 91M weights, eager attention; see
+# docs/shakedowns/internvideo-next-gpu-shakedown.md). Measured over the seeded feed
+# (seed = 0, 900 frames, clip_stride = 3, attention pooling), the cosine change_score
+# is heavily compressed relative to the DINOv2 era: routine/overlapping same-world
+# change stays <= 0.0004 (p99 = 0.0003, max 0.0004), while GENUINE scene cuts on this
+# encoder measure only ~0.008 (black<->white flash) to ~0.043 (entirely different
+# content). The old 0.5 was therefore UNREACHABLE (never fired; ~12x above even a
+# total content change). 0.005 sits in the empirical gap: >10x above the seeded-feed
+# routine floor (routine motion stays baseline) yet below the weakest genuine cut, so
+# real scene changes alert. On the smooth seeded feed the change path stays quiet by
+# design (no cuts); surprise events there are carried by the forward-model
+# prediction-error path (normalized error >= 2.0x rolling mean), which fired correctly.
+change_alert_threshold = 0.005
 habituation_window = 16
 baseline_salience = 0.2
 alert_salience = 0.7
@@ -1342,6 +1348,28 @@ tier = "metrics"
 # `admissibility_override=True` + `admissibility_override_reason="..."`
 # call-site override (CLI: `--admissibility-override-reason "<why>"`), which is
 # stamped into the bundle manifest (never a silent bypass).
+
+[research_submission.claude_science]
+# Claude Science export: reshape the SAME allowlisted, metrics-only research
+# bundle into a Claude Science project FOLDER (analysis-ready CSV/JSON + a
+# generated README data dictionary + the bundle manifest copied verbatim). It
+# is a THIN ADAPTER over the research-submission bundle builder and reuses its
+# exact allowlist (METRICS_ONLY_DIRS) — so conversation text, memories, the
+# self-model, the internal monologue, and the local-only raw bus archive are
+# excluded BY CONSTRUCTION, never by a filter that could miss something.
+#
+# Because Claude Science is a CLOUD workbench, opening the produced folder
+# transmits these numeric metrics to a cloud service. It is therefore governed
+# as an EXTERNAL DISCLOSURE under guardian consent (CAL Article 4.3), exactly
+# like sharing results with the project: operator-initiated only, full
+# file-inventory preview, and an explicit confirmation + guardian-consent
+# attestation before anything is written. It is EXPLORATORY only — never part
+# of the deterministic PASS/NULL/NEGATIVE verdict pipeline. The export is
+# metrics-only ALWAYS; there is no cognitive-content Claude Science tier.
+#
+# SHIPS DISABLED. Operator path: `python -m kaine.research --claude-science`
+# (preview + confirm). Nothing is ever produced or transmitted automatically.
+enabled = false
 
 [research_event_log]
 # Curated, privacy-filtered research event log for longitudinal analysis.

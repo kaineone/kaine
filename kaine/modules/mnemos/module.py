@@ -27,6 +27,7 @@ from kaine.modules.mnemos.storage import (
     MemoryStorage,
     QdrantStorage,
     RecalledMemory,
+    SqliteVecStorage,
     StorageError,
 )
 
@@ -143,6 +144,12 @@ class Mnemos(BaseModule):
                     )
                 elif backend == "inmemory":
                     storage = InMemoryStorage(latent_dim=resolved_latent_dim)
+                elif backend in ("sqlite_vec", "sqlite-vec"):
+                    # In-process edge vector store (Tier 0/1). sqlite_vec is
+                    # imported lazily inside initialize(), so selecting it does
+                    # not pull the dependency into a Tier-2 install (openspec
+                    # runtime-backends).
+                    storage = SqliteVecStorage(latent_dim=resolved_latent_dim)
                 else:
                     raise ValueError(f"unknown backend {backend!r}")
             self._core = MnemosCore(

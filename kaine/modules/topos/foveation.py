@@ -37,6 +37,11 @@ class FoveaTarget:
         return {"x": float(self.x), "y": float(self.y), "size": float(self.size)}
 
 
+def _clip01(value: float) -> float:
+    """Clamp a scalar to the normalized [0, 1] fovea range."""
+    return 0.0 if value < 0.0 else 1.0 if value > 1.0 else float(value)
+
+
 def _lazy_cv2() -> Any:
     try:
         import cv2  # type: ignore[import-untyped]
@@ -137,6 +142,48 @@ def select_fovea(
         if float(sal[ty, tx]) <= float(sal[pty, ptx]) * (1.0 + hysteresis):
             return FoveaTarget(prev.x, prev.y, size)  # hold location, resize
     return FoveaTarget((tx + 0.5) / gw, (ty + 0.5) / gh, size)
+
+
+class FoveaPredictor:
+    """A small forward model of the fovea's own trajectory — the attention schema.
+
+    Publishing where the fovea *is* makes the entity's visual attention legible;
+    predicting where it will go *next* is the concrete attention-schema step
+    (Graziano and Webb 2015): the entity carries a model of its own attention. This
+    is a constant-velocity forward model — it estimates the fovea's velocity from
+    its recent trajectory (an exponential moving average of successive deltas,
+    ``momentum`` is the EMA retention) and extrapolates one step, clamped to the
+    normalized range. On the first observation velocity is zero, so the prediction
+    is the current target (best guess: the gaze stays put).
+
+    Content-free and memory-only: it consumes and emits only normalized
+    ``(x, y, size)`` — never pixels — so the predicted next fovea is publishable
+    for the self-model and diagnostics exactly like the current fovea location.
+    """
+
+    def __init__(self, *, momentum: float = 0.5) -> None:
+        if not 0.0 <= momentum <= 1.0:
+            raise ValueError("momentum must be in [0, 1]")
+        self._momentum = float(momentum)
+        self._prev: FoveaTarget | None = None
+        self._vx = 0.0
+        self._vy = 0.0
+        self._vsize = 0.0
+
+    def predict_next(self, current: FoveaTarget) -> FoveaTarget:
+        """Update the velocity estimate from ``current`` and return the predicted
+        next fovea (one-step constant-velocity extrapolation, clamped to [0, 1])."""
+        if self._prev is not None:
+            m = self._momentum
+            self._vx = m * self._vx + (1.0 - m) * (current.x - self._prev.x)
+            self._vy = m * self._vy + (1.0 - m) * (current.y - self._prev.y)
+            self._vsize = m * self._vsize + (1.0 - m) * (current.size - self._prev.size)
+        self._prev = current
+        return FoveaTarget(
+            _clip01(current.x + self._vx),
+            _clip01(current.y + self._vy),
+            _clip01(current.size + self._vsize),
+        )
 
 
 def foveate(
