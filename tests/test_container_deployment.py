@@ -88,9 +88,10 @@ def test_dockerfile_shape():
     # flavor build-arg + reuse of install.py's index
     assert "ARG FLAVOR" in text
     assert "install.py --print-index" in text
-    # non-root user + volumes + offline guards
+    # non-root user + volumes + offline guards. The state volume mounts at
+    # /app/state (the app writes state CWD-relative under WORKDIR /app), not /state.
     assert "useradd" in text and "USER kaine" in text
-    assert 'VOLUME ["/state", "/models"]' in text
+    assert 'VOLUME ["/app/state", "/models"]' in text
     assert "HF_HUB_OFFLINE=1" in text and "TRANSFORMERS_OFFLINE=1" in text
     # default CMD is the cycle; nexus overrides it in compose
     assert 'CMD ["python", "-m", "kaine.cycle"]' in text
@@ -198,10 +199,42 @@ def test_state_is_named_volume_and_config_bind_mounts_are_readonly():
     assert "kaine-models" in doc["volumes"]
     for svc_name in ("kaine-cycle", "kaine-nexus"):
         vols = doc["services"][svc_name]["volumes"]
-        assert any(v.endswith("/state") for v in vols), svc_name
+        # Entity state persists at /app/state — the app writes state CWD-relative
+        # under WORKDIR /app, so a /state mount would capture nothing it writes.
+        assert any(v == "kaine-state:/app/state" for v in vols), svc_name
         for v in vols:
             if "operator.toml" in v or "secrets.toml" in v:
                 assert v.endswith(":ro"), f"{svc_name}: {v} must be read-only"
+
+
+def test_provisioned_weights_land_where_the_services_read_them():
+    # The persistence contract that makes a from-scratch container actually boot:
+    # provisioned model weights must be written to the shared kaine-models volume
+    # (not the ephemeral /app/state), and the services that consume them must read
+    # from that same volume at the same paths.
+    from kaine.setup.organ import ORGAN_GGUF_DIR, ORGAN_GGUF_FILE
+
+    doc = _load_compose()
+
+    # Provision + cycle redirect the model-weights root onto /models (the shared
+    # kaine-models volume) via KAINE_MODELS_DIR, so weights persist there.
+    for svc in ("kaine-provision", "kaine-cycle"):
+        assert doc["services"][svc]["environment"]["KAINE_MODELS_DIR"] == "/models", svc
+
+    # Provision writes to kaine-models; the cycle reads it (encoder + embedder)
+    # read-only.
+    assert any(
+        "kaine-models:/models" in v for v in doc["services"]["kaine-provision"]["volumes"]
+    )
+    assert any(
+        v == "kaine-models:/models:ro" for v in doc["services"]["kaine-cycle"]["volumes"]
+    )
+
+    # The llama.cpp server's -m path is EXACTLY where the organ provisioner writes
+    # the GGUF under /models — same subdir name, same filename. (.name is stable
+    # regardless of the configured root, so this holds for local and container.)
+    expected = f"/models/{ORGAN_GGUF_DIR.name}/{ORGAN_GGUF_FILE}"
+    assert expected in doc["services"]["kaine-model-server"]["command"], expected
 
 
 # --------------------------------------------------------------------------

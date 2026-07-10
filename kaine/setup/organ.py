@@ -42,6 +42,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from kaine.model_paths import models_dir
+
 # The published organ's repository ids (HF-repo-id-as-served-alias convention).
 ORGAN_GGUF_REPO = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 ORGAN_SAFETENSORS_REPO = "kaineone/Qwen3.5-4B-abliterated"
@@ -50,9 +52,12 @@ ORGAN_SAFETENSORS_REPO = "kaineone/Qwen3.5-4B-abliterated"
 # local directory it is downloaded into. The model server is launched with
 # ``-m <served_gguf_path()>`` — llama-server's ``-m`` takes a real file PATH, not an
 # HF repo id, so the download lands the file at a known path the launcher can point
-# at directly (no dependence on the opaque hub-cache snapshot layout).
+# at directly (no dependence on the opaque hub-cache snapshot layout). The parent
+# is the shared model-weights root (``state/models`` locally, ``/models`` in the
+# container — see kaine.model_paths); the subdirectory name is stable so the
+# provision step and the model server agree on the served path.
 ORGAN_GGUF_FILE = "KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf"
-ORGAN_GGUF_DIR = Path("state/models/Qwen3.5-4B-abliterated-GGUF")
+ORGAN_GGUF_DIR = models_dir() / "Qwen3.5-4B-abliterated-GGUF"
 
 
 def served_gguf_path() -> Path:

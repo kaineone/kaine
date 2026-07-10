@@ -14,7 +14,7 @@ Volume=kaine-models.volume:/models:ro
 # Rootless NVIDIA via CDI — requires `nvidia-ctk cdi generate` (see README).
 AddDevice=nvidia.com/gpu=0
 SecurityLabelDisable=true
-Exec=--model /models/organ/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080
+Exec=--model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080
 HealthCmd=curl -fsS http://127.0.0.1:8080/v1/models
 HealthInterval=15s
 HealthRetries=10

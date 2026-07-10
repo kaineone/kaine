@@ -130,7 +130,7 @@ services:
     container_name: kaine-model-server
     ports:
       - "127.0.0.1:${KAINE_MODEL_SERVER_HOST_PORT:-11434}:8080"
-    command: ${KAINE_MODEL_SERVER_CMD:---model /models/organ/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --api-key ${KAINE_MODEL_SERVER_API_KEY:-}}
+    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --api-key ${KAINE_MODEL_SERVER_API_KEY:-}}
     volumes:
       - kaine-models:/models:ro
     restart: unless-stopped
@@ -207,7 +207,10 @@ services:
       # Operator overlay + secrets bind-mounted READ-ONLY, never COPYed (design §8).
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
       - ../config/secrets.toml:/app/config/secrets.toml:ro
-      - kaine-state:/state
+      # The app writes its state CWD-relative under WORKDIR /app (Dockerfile), so
+      # the durable state volume mounts at /app/state — NOT /state — or nothing
+      # the entity writes would survive down/up.
+      - kaine-state:/app/state
     restart: unless-stopped
     depends_on:
       kaine-redis:
@@ -240,6 +243,9 @@ services:
       KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
       # Encryption-at-rest key (design §7); empty unless the operator sets it.
       KAINE_STATE_KEY: ${KAINE_STATE_KEY:-}
+      # Model weights live on the shared read-mostly kaine-models volume, apart
+      # from the entity-state volume — the encoder + embedder load from here.
+      KAINE_MODELS_DIR: /models
       # Boot gates: NOT defaulted to a permissive value. The operator must pass
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
@@ -247,7 +253,11 @@ services:
     volumes:
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
       - ../config/secrets.toml:/app/config/secrets.toml:ro
-      - kaine-state:/state
+      # Durable entity state at /app/state (the app writes CWD-relative; see nexus).
+      - kaine-state:/app/state
+      # Provisioned weights (InternVideo-Next encoder, MiniLM embedder, emotion2vec)
+      # read-only from the shared model volume; HF_HOME=/models/hf is baked in.
+      - kaine-models:/models:ro
     # Perception scratch, if any, is RAM-backed and ephemeral — never a durable
     # volume. Zero raw-sense-data persistence is load-bearing (design §7).
     tmpfs:
@@ -271,6 +281,10 @@ services:
     entrypoint: ["python", "-m", "kaine.setup.provision"]
     environment:
       HF_HOME: /models/hf
+      # Land the organ GGUF + InternVideo-Next weights on the shared model volume
+      # (not the entity-state volume) so the model server and cycle find them; the
+      # per-model subdir names are unchanged, only the root moves off state/models.
+      KAINE_MODELS_DIR: /models
       # Setup phase is the ONLY time network model fetches are allowed.
       HF_HUB_OFFLINE: "0"
       TRANSFORMERS_OFFLINE: "0"
