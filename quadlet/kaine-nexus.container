@@ -13,7 +13,8 @@ PublishPort=127.0.0.1:8088:8088
 Exec=python -m kaine.nexus
 Volume=%h/projects/kaine/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
 Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
-Volume=kaine-state.volume:/state
+# Durable entity state mounts at /app/state (the app writes state CWD-relative).
+Volume=kaine-state.volume:/app/state
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
 HealthCmd=curl -fsS http://127.0.0.1:8088/diagnostics/health.json

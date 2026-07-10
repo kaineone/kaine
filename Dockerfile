@@ -94,7 +94,7 @@ RUN pip install -e "${KAINE_EXTRAS}"
 
 # =========================================================================
 # Stage 2 — runtime: slim base, non-root user, venv + source copied in, offline
-# model guards, /state + /models as volumes. No model weights in any layer.
+# model guards, /app/state + /models as volumes. No model weights in any layer.
 # =========================================================================
 FROM ${RUNTIME_BASE} AS runtime
 
@@ -119,11 +119,14 @@ RUN if ! command -v python3.12 >/dev/null 2>&1; then \
      && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Non-root runtime user (design §7): owns /state and /models; owner-only perms
-# are established by the entrypoint on the mounted volumes, never baked in.
+# Non-root runtime user (design §7): owns /app/state and /models; owner-only perms
+# are established by the entrypoint on the mounted volumes, never baked in. The
+# entity state volume mounts at /app/state (the app writes state CWD-relative
+# under WORKDIR /app, below), so that dir must exist kaine-owned in the image for
+# a freshly created named volume to inherit owner-only perms.
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin kaine \
- && mkdir -p /state /models /app \
- && chown -R kaine:kaine /state /models /app
+ && mkdir -p /app/state /models \
+ && chown -R kaine:kaine /app /models
 
 COPY --from=build /opt/venv /opt/venv
 # Source (editable install target) — NO config/secrets.toml, NO state/, NO
@@ -147,7 +150,7 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 
-VOLUME ["/state", "/models"]
+VOLUME ["/app/state", "/models"]
 USER kaine
 
 # tini reaps zombies; the entrypoint fixes volume perms then dispatches. The

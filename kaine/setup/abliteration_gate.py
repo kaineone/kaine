@@ -41,6 +41,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from kaine.model_paths import models_dir
 from kaine.modules.hypnos.capability_eval import (
     AbliterationProbeScorer,
     AbliterationVerdict,
@@ -274,7 +275,7 @@ async def gate_initial_abliteration(
 # --------------------------------------------------------------------------- #
 
 
-DEFAULT_VERDICT_PATH = Path("state/models/abliteration_verification.json")
+DEFAULT_VERDICT_PATH = models_dir() / "abliteration_verification.json"
 
 
 def write_abliteration_verdict(

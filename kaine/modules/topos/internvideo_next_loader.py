@@ -44,6 +44,8 @@ import types
 from pathlib import Path
 from typing import Any, Optional
 
+from kaine.model_paths import models_dir
+
 log = logging.getLogger(__name__)
 
 # The pinned upstream commit SHA. MUST equal external/internvideo_next/UPSTREAM
@@ -53,9 +55,11 @@ PINNED_REVISION = "ff2659b9be360a6b1e94b1eb381778a960da6019"
 # The single fp16 weights file in the published repo.
 WEIGHTS_FILENAME = "model.safetensors"
 
-# Repo-relative dir the setup step downloads the weights into (under state/,
-# git-ignored). Runtime loads ONLY from here — never the hub.
-DEFAULT_WEIGHTS_DIR = Path("state/models/internvideo_next_base_p14_res224_f16")
+# Dir the setup step downloads the weights into, under the shared model-weights
+# root (``state/models`` locally, git-ignored; ``/models`` on the container's
+# kaine-models volume — see kaine.model_paths). Runtime loads ONLY from here —
+# never the hub.
+DEFAULT_WEIGHTS_DIR = models_dir() / "internvideo_next_base_p14_res224_f16"
 
 # Optional revision marker the setup step / loader use to detect a
 # code-vs-weights revision mismatch (see _read_recorded_revision).

@@ -25,13 +25,18 @@ AddDevice=nvidia.com/gpu=1
 SecurityLabelDisable=true
 Volume=%h/projects/kaine/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
 Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
-Volume=kaine-state.volume:/state
+# Durable entity state mounts at /app/state — the app writes state CWD-relative
+# under WORKDIR /app, so /state would not persist anything the entity writes.
+Volume=kaine-state.volume:/app/state
+# Provisioned weights (encoder + embedder) read-only from the shared model volume.
+Volume=kaine-models.volume:/models:ro
 # Perception scratch is RAM-backed and ephemeral — zero raw-sense-data
 # persistence (design §7).
 Tmpfs=/app/state/perception
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
 Environment=KAINE_STATE_KEY=${KAINE_STATE_KEY}
+Environment=KAINE_MODELS_DIR=/models
 
 [Service]
 # One-shot supervised run; do NOT auto-restart the entity.

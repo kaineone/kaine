@@ -15,8 +15,10 @@ set -eu
 
 # Owner-only perms on the persistent volumes. chmod on a dir we own is safe as
 # non-root; if the mount is not writable (read-only bind) we do not fail the
-# whole boot — the app enforces its own at-rest guarantees.
-for d in /state /models; do
+# whole boot — the app enforces its own at-rest guarantees. The entity-state
+# volume mounts at /app/state (the app writes state CWD-relative under WORKDIR
+# /app); /models is the shared read-mostly weights volume.
+for d in /app/state /models; do
     if [ -d "$d" ]; then
         chmod 0700 "$d" 2>/dev/null || true
     fi
