@@ -357,14 +357,20 @@ pooling = "attention"
 # resolve_device() falls back to cuda:0 with a warning on single-GPU
 # hosts; further falls back to cpu on hosts without CUDA.
 device = "cuda:1"
-# Change-alert threshold. PROVISIONAL for InternVideo-Next: overlapping strided
-# clips (13/16 shared frames at clip_stride = 3) make consecutive latents more
-# correlated than DINOv2 per-frame vectors were, which lowers typical
-# change_score — so this likely wants to come DOWN once re-derived. The
-# calibration pass (topos-temporal-video-encoder §4: run the seeded feed at the
-# shipped clip_stride, take ~90th pct of observed change) is a GPU shakedown step
-# and has NOT been run; 0.5 is carried over from DINOv2 as a placeholder.
-change_alert_threshold = 0.5
+# Change-alert threshold. CALIBRATED for InternVideo-Next on 2026-07-10 by the GPU
+# shakedown (RTX 4070 SUPER, real 91M weights, eager attention; see
+# docs/shakedowns/internvideo-next-gpu-shakedown.md). Measured over the seeded feed
+# (seed = 0, 900 frames, clip_stride = 3, attention pooling), the cosine change_score
+# is heavily compressed relative to the DINOv2 era: routine/overlapping same-world
+# change stays <= 0.0004 (p99 = 0.0003, max 0.0004), while GENUINE scene cuts on this
+# encoder measure only ~0.008 (black<->white flash) to ~0.043 (entirely different
+# content). The old 0.5 was therefore UNREACHABLE (never fired; ~12x above even a
+# total content change). 0.005 sits in the empirical gap: >10x above the seeded-feed
+# routine floor (routine motion stays baseline) yet below the weakest genuine cut, so
+# real scene changes alert. On the smooth seeded feed the change path stays quiet by
+# design (no cuts); surprise events there are carried by the forward-model
+# prediction-error path (normalized error >= 2.0x rolling mean), which fired correctly.
+change_alert_threshold = 0.005
 habituation_window = 16
 baseline_salience = 0.2
 alert_salience = 0.7

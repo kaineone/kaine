@@ -1379,3 +1379,36 @@ def test_vitals_template_hooks_present():
     # hidden when the cycle is running.
     assert 'hidden' in diag_sections
     assert 'NexusVitals.init' in (tpl / "console.html").read_text()
+
+
+def _nexus_console_js() -> str:
+    return (
+        Path(__file__).resolve().parents[1]
+        / "kaine" / "nexus" / "static" / "nexus_console.js"
+    ).read_text()
+
+
+def test_single_multiplexed_eventsource_across_the_bundle():
+    """Central invariant of the realtime refactor (tasks 1.1 / V.2): the whole
+    diagnostics bundle constructs exactly ONE ``EventSource``. Every feature
+    (charts, fatigue, spot, preservation, vitals, reveal, presence, and the
+    counter-only metrics stream) receives events by subscribing to the shared
+    NexusStream dispatcher rather than opening its own connection — this is what
+    keeps the console under the browser's ~6-connection-per-host cap so streams
+    do not stall behind each other. A regression that reintroduces a per-feature
+    ``new EventSource`` fails here."""
+    js = _nexus_js()
+    console_js = _nexus_console_js()
+    total_sources = js.count("new EventSource") + console_js.count("new EventSource")
+    assert total_sources == 1, (
+        f"expected exactly one EventSource in the diagnostics bundle, "
+        f"found {total_sources} — a feature reopened its own stream"
+    )
+    # The single construction lives in the NexusStream dispatcher, and features
+    # fan out through its subscribe() API.
+    assert "new EventSource" in js
+    assert "window.NexusStream" in js
+    assert "subscribe:" in js or "subscribe(" in js
+    # The formerly-independent counter-only metrics stream now delegates to the
+    # shared dispatcher instead of opening a second EventSource.
+    assert "NexusSSE" in js and "subscribeMetrics" in js

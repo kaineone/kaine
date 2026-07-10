@@ -131,9 +131,12 @@ def test_loader_passes_trust_remote_code_false_and_local_only(tmp_path):
         _telemetry_env=env,
     )
 
-    # Both config and model loaded from the LOCAL dir with the security kwargs.
+    # Config loads from the VENDORED, reviewed, pinned in-tree package (config.json
+    # is vendored, not re-downloaded); the weights load from the LOCAL fetch dir.
+    # Both use the security kwargs.
+    assert fake_config.calls[0]["path"] == str(vendored_code_dir())
+    assert fake_model.calls[0]["path"] == str(wdir)
     for rec in (fake_config.calls[0], fake_model.calls[0]):
-        assert rec["path"] == str(wdir)
         assert rec["kwargs"]["trust_remote_code"] is False
         assert rec["kwargs"]["local_files_only"] is True
     # Telemetry disabled AND hub reachability forbidden before any load.
