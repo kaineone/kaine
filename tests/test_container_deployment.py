@@ -33,13 +33,6 @@ _DOCKERFILE = _REPO_ROOT / "Dockerfile"
 _DOCKERIGNORE = _REPO_ROOT / ".dockerignore"
 _QUADLET = _REPO_ROOT / "quadlet"
 
-_RAW_SENSE_TOKENS = (
-    "state/perception",
-    "state/audio_out",
-    "audio_out",
-    "perception",
-)
-
 
 def _load_compose() -> dict:
     with _COMPOSE.open() as fh:
@@ -286,7 +279,7 @@ def test_provision_plans_all_models_without_network():
         return _R()
 
     config = {"modules": {"lingua": True}}
-    organ_results, aux_results = run_provision(
+    _, _ = run_provision(
         config, consent=True, runner=fake_runner
     )
     # consent=False provisions nothing.
