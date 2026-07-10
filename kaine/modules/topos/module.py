@@ -68,7 +68,13 @@ class Topos(BaseModule):
         device_preference: str | None = "auto",
         baseline_salience: float = 0.2,
         alert_salience: float = 0.7,
-        change_alert_threshold: float = 0.5,
+        # Calibrated for the InternVideo-Next clip encoder by the GPU shakedown
+        # (config/kaine.toml [topos] carries the rationale + measured distribution).
+        # Cosine change on attention-pooled clip embeddings is far more compressed
+        # than DINOv2 per-frame CLS was (genuine scene cuts ~0.008-0.043, routine
+        # <=0.0004), so the alert threshold sits low; the old DINOv2-era 0.5 was
+        # unreachable. The runtime value comes from config; this is the fallback.
+        change_alert_threshold: float = 0.005,
         # Live camera (eyes-only). See kaine/modules/topos/live.py.
         capture_enabled: bool = False,
         live_camera: Optional[LiveCamera] = None,
