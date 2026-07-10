@@ -1,0 +1,22 @@
+# Tier 2 — workstation (openspec deployment-tiers)
+#
+# Host class: the current single/dual-GPU Linux workstation. This is the DEFAULT
+# and is behaviour-identical to the shipped config/kaine.toml — selecting no
+# profile at all gives you exactly this. It is shipped as an explicit overlay so
+# the tier ladder is complete and an operator can pin "Tier 2" by name.
+#
+# Full real-time multimodal: Gemma/Qwen organ on GPU via an OpenAI-compatible
+# server, DINOv2/InternVideo vision, emotion2vec+, faster-whisper, Chatterbox,
+# Qdrant + sentence-transformers.
+#
+# INERT + VOICE-FREE by contract (see tier0.toml header): it only names the
+# Tier-2 default backends, which equal today's behaviour. It enables no module
+# and embeds no private voice.
+#
+# Apply deliberately:  KAINE_PROFILE=tier2 python -m kaine.cycle
+
+[lingua]
+backend = "ollama"      # OpenAI-compatible HTTP server (today's default)
+
+[mnemos]
+backend = "qdrant"      # KAINE-owned Qdrant container (today's default)
