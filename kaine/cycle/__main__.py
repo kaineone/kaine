@@ -24,6 +24,7 @@ method is what actually starts the work. Boot order:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 import os
@@ -402,16 +403,26 @@ def _load_kaine_config(
     *,
     secrets_path: str | os.PathLike[str] | None = None,
     env: dict[str, str] | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
-    from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
+    from kaine.config import (
+        OPERATOR_CONFIG_PATH,
+        load_kaine_config,
+        resolve_profile_name,
+    )
 
     target = Path(path or "config/kaine.toml")
     if not target.exists():
         raise FileNotFoundError(f"config/kaine.toml not found at {target}")
-    # Deep-merge the gitignored operator override (config/kaine.operator.toml)
-    # over the shipped config before merging secrets, so operator choices from
-    # the first-run wizard apply at boot.
-    config = load_kaine_config(target, OPERATOR_CONFIG_PATH)
+    # Resolve the deployment-tier profile (explicit --profile wins over the
+    # KAINE_PROFILE env var; None → Tier-2 default). The profile overlay layers
+    # BETWEEN the shipped defaults and the operator's local working config, so
+    # operator choices from the first-run wizard still win (openspec
+    # deployment-tiers). Secrets merge last.
+    resolved_profile = resolve_profile_name(profile, env=env)
+    config = load_kaine_config(
+        target, OPERATOR_CONFIG_PATH, profile=resolved_profile
+    )
     _merge_qdrant_secret(config, secrets_path=secrets_path, env=env)
     return config
 
@@ -1178,10 +1189,24 @@ def main(argv: list[str] | None = None) -> int:
         research_mode_requested,
     )
 
+    # --profile selects a named deployment-tier overlay (openspec
+    # deployment-tiers); it merely layers config, exactly like KAINE_PROFILE, and
+    # never auto-applies beyond the operator's deliberate choice here. Unknown
+    # flags are left for the existing downstream handling (parse_known_args).
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--profile", default=None)
+    known, _ = parser.parse_known_args(argv)
+
     # Load config early enough to decide the boot mode. A run is EITHER
-    # operator-present OR research-safety-net-verified, never neither.
+    # operator-present OR research-safety-net-verified, never neither. The
+    # no-profile path calls _load_kaine_config() with its historical signature
+    # (so existing seams are unchanged); a profile is threaded only when the
+    # operator explicitly selected one via --profile / KAINE_PROFILE.
     try:
-        config = _load_kaine_config()
+        if known.profile is None and "KAINE_PROFILE" not in os.environ:
+            config = _load_kaine_config()
+        else:
+            config = _load_kaine_config(profile=known.profile)
     except Exception as exc:
         sys.stderr.write(
             f"Refusing to boot KAINE cycle: could not load config: {exc}\n"

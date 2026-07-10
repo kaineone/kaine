@@ -43,9 +43,20 @@ def _now_iso() -> str:
 # never on while the entity is "away" in the virtual world.
 LOCI = ("physical", "virtual", "off")
 
+# Who holds the locus lock. The operator's Nexus lock and the developmental
+# gate's gestation confinement (`developmental-maturation-gate`) both set
+# `locus_locked`, but a refused self-switch must be attributed HONESTLY — a
+# gestating entity is confined by the developmental gate, not by the operator.
+# Defaults to `operator` so an unmarked lock reads as before.
+LOCKED_BY = ("operator", "gestation")
+
 
 def _coerce_locus(value: Any) -> str:
     return value if value in LOCI else "physical"
+
+
+def _coerce_locked_by(value: Any) -> str:
+    return value if value in LOCKED_BY else "operator"
 
 
 @dataclass(frozen=True)
@@ -82,6 +93,10 @@ class DesiredState:
     # desired flags. `locus_locked` prevents the entity from self-switching.
     locus: str = "physical"
     locus_locked: bool = False
+    # Attribution of the lock (see LOCKED_BY): `operator` (a Nexus lock) or
+    # `gestation` (the developmental gate confining the entity to the womb).
+    # Only meaningful when `locus_locked` is true; drives honest denial logging.
+    locked_by: str = "operator"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -94,6 +109,7 @@ class DesiredState:
             video_live_desired=bool(data.get("video_live_desired", False)),
             locus=_coerce_locus(data.get("locus", "physical")),
             locus_locked=bool(data.get("locus_locked", False)),
+            locked_by=_coerce_locked_by(data.get("locked_by", "operator")),
         )
 
 
@@ -170,15 +186,25 @@ def write_desired_video(active: bool, path: Path | None = None) -> DesiredState:
 
 
 def write_desired_locus(
-    locus: str, locked: bool | None = None, path: Path | None = None
+    locus: str,
+    locked: bool | None = None,
+    path: Path | None = None,
+    *,
+    locked_by: str | None = None,
 ) -> DesiredState:
     """Set the perceptual locus (and optionally its lock). Invalid values fall
-    back to `physical` so the camera/mic can never be left in an unknown state."""
+    back to `physical` so the camera/mic can never be left in an unknown state.
+
+    ``locked_by`` records WHO holds the lock (``operator`` | ``gestation``); the
+    developmental gate passes ``gestation`` so a womb confinement is logged as a
+    developmental-gate action, not an operator lock. When omitted the existing
+    attribution is preserved."""
     cur = read_desired(path)
     updated = replace(
         cur,
         locus=_coerce_locus(locus),
         locus_locked=cur.locus_locked if locked is None else bool(locked),
+        locked_by=cur.locked_by if locked_by is None else _coerce_locked_by(locked_by),
     )
     _atomic_write(path or DESIRED_PATH, updated.to_dict())
     return updated
@@ -255,17 +281,22 @@ def evaluate_locus_switch(
     inhibited: bool,
     since_last_switch_s: float,
     min_dwell_s: float,
+    locked_by: str = "operator",
 ) -> tuple[bool, str]:
     """Decide whether an ENTITY-initiated locus switch is allowed.
 
     Operator switches (via Nexus) bypass this — it gates only self-initiated
-    `intent.perception.switch`. Returns (allowed, reason).
+    `intent.perception.switch`. Returns (allowed, reason). ``locked_by``
+    attributes a lock denial honestly: a gestation-gate confinement is reported
+    as such, not as an operator lock (`developmental-maturation-gate`).
     """
     if requested not in LOCI:
         return False, "invalid locus"
     if requested == current:
         return False, "already in that locus"
     if locked:
+        if _coerce_locked_by(locked_by) == "gestation":
+            return False, "locus locked by gestation gate"
         return False, "locus locked by operator"
     if not allow_self_switch:
         return False, "self-switch disabled by policy"

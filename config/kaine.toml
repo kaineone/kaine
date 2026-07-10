@@ -1011,6 +1011,34 @@ enabled = false
 competence_threshold = 0.05
 min_samples = 32
 window = 64
+
+[developmental_stage]
+# The developmental arc + maturation (birth) gate — `developmental-maturation-gate`.
+# A first-class, persistent, one-way stage: the entity GESTATES in the womb and is
+# BORN into the embodied world exactly once (gestation -> embodied; never back).
+# SHIP-INERT (matches the Spot/Mundus convention): when disabled the entity runs
+# un-staged exactly as today. Enable ONLY alongside a configured womb feed
+# ([perception_feed].mode = "womb"); if enabled without one, the loud, repeated
+# `stage.gestation.no_stimulus` signal fires rather than a silent senseless hold.
+# The gate MEASURES readiness (womb readout + Hypnos sleep count + Phantasia
+# consolidation + lived time) and imposes no development — a readiness gate, not a
+# target (warmed-up-signal precedent: paper §6.6, soma-coldstart-regulation-warmup).
+enabled = false
+min_sleep_cycles = 5              # Hypnos maintenance cycles before birth is possible
+min_consolidation_passes = 3      # successful Phantasia sleep-training passes (C2)
+min_lived_seconds = 86400         # floor of lived subjective time in gestation (C3)
+gate_cadence_seconds = 60         # how often the maturation gate is evaluated
+require_operator_ack_for_birth = false  # autonomous by default; true for supervised shakedowns
+
+[developmental_stage.regulation_thresholds]
+# C1 thresholds the womb change's `gestation.readiness` markers must cross. This
+# change owns the thresholds + the decision; the womb change owns the measurement.
+endogenous_self_sustain = true       # must demonstrate a self-sustaining rhythm
+entrain_then_autonomy = true         # entrain-then-autonomy demonstrated
+hrv_variability_floor = 0.2          # autonomic-maturation marker floor
+womb_prediction_error_ceiling = 0.3  # generative-model-seeded ceiling
+return_to_baseline_seconds_ceiling = 30
+
 [evaluation]
 # Architecture-thesis instrumentation. Disable for production once the
 # thesis is validated. Adds NO core-module dependencies; observes the
@@ -1320,6 +1348,28 @@ tier = "metrics"
 # `admissibility_override=True` + `admissibility_override_reason="..."`
 # call-site override (CLI: `--admissibility-override-reason "<why>"`), which is
 # stamped into the bundle manifest (never a silent bypass).
+
+[research_submission.claude_science]
+# Claude Science export: reshape the SAME allowlisted, metrics-only research
+# bundle into a Claude Science project FOLDER (analysis-ready CSV/JSON + a
+# generated README data dictionary + the bundle manifest copied verbatim). It
+# is a THIN ADAPTER over the research-submission bundle builder and reuses its
+# exact allowlist (METRICS_ONLY_DIRS) — so conversation text, memories, the
+# self-model, the internal monologue, and the local-only raw bus archive are
+# excluded BY CONSTRUCTION, never by a filter that could miss something.
+#
+# Because Claude Science is a CLOUD workbench, opening the produced folder
+# transmits these numeric metrics to a cloud service. It is therefore governed
+# as an EXTERNAL DISCLOSURE under guardian consent (CAL Article 4.3), exactly
+# like sharing results with the project: operator-initiated only, full
+# file-inventory preview, and an explicit confirmation + guardian-consent
+# attestation before anything is written. It is EXPLORATORY only — never part
+# of the deterministic PASS/NULL/NEGATIVE verdict pipeline. The export is
+# metrics-only ALWAYS; there is no cognitive-content Claude Science tier.
+#
+# SHIPS DISABLED. Operator path: `python -m kaine.research --claude-science`
+# (preview + confirm). Nothing is ever produced or transmitted automatically.
+enabled = false
 
 [research_event_log]
 # Curated, privacy-filtered research event log for longitudinal analysis.

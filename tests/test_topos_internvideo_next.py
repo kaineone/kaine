@@ -469,15 +469,16 @@ async def test_encoder_load_uses_offline_loader_not_automodel(monkeypatch):
     """The production load path (no injected model) goes through the vendored,
     no-remote-code loader — NOT AutoModel(trust_remote_code=True). Asserts the
     offline loader is invoked with the pinned revision, and no hub reachability."""
-    import kaine.modules.topos.internvideo_next_loader as loader_mod
-
     recorded: dict = {}
 
     def fake_loader(**kwargs):
         recorded.update(kwargs)
         return _FakeIVModel()
 
-    monkeypatch.setattr(loader_mod, "load_internvideo_next", fake_loader)
+    monkeypatch.setattr(
+        "kaine.modules.topos.internvideo_next_loader.load_internvideo_next",
+        fake_loader,
+    )
     monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
 
     enc = InternVideoNextEncoder()

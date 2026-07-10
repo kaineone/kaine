@@ -1,0 +1,37 @@
+# Tier 1 — embodied CPU agent (openspec deployment-tiers)
+#
+# Host class: 4–8 GB-class single-board computer, or a retired 8 GB flagship
+# smartphone under a userland like Termux. torch may be present but there is no
+# accelerator, so heavy models run on the edge runtimes at CPU pace: a 1–2B GGUF
+# LLM at chat pace, periodic (not streaming) vision, ONNX embeddings.
+#
+# INERT + VOICE-FREE by contract (see tier0.toml header): backends + device/
+# cycle-rate hints + disabling unsupported faculties only; no module is enabled
+# and no private voice is embedded. Layers between the shipped defaults and your
+# local config/kaine.operator.toml, which still wins.
+#
+# Apply deliberately:  KAINE_PROFILE=tier1 python -m kaine.cycle
+
+[modules]
+# No expressive TTS below Tier 2. (A Piper TTS edge backend is staged but not yet
+# shipped; until it lands, Vox stays off at Tier 1.)
+vox = false
+
+[lingua]
+backend = "llama_cpp"   # 1–2B GGUF at chat pace
+
+[mnemos]
+backend = "sqlite_vec"  # in-process vector store
+device = "cpu"          # ONNX MiniLM embeddings on the CPU
+
+[topos]
+# Vision is periodic, not streaming, at this tier. Pin the encoder to the CPU;
+# the workstation default targets a discrete GPU (cuda:1).
+device = "cpu"
+
+[audition]
+# Vocal emotion (emotion2vec+/funasr) is a Tier-2-only faculty — no clean edge
+# port — so it is explicitly DISABLED here (empty model id → Null classifier).
+# Speech is still transcribed; only vocal affect is absent, and reported so.
+emotion_model_id = ""
+emotion_device = "cpu"
