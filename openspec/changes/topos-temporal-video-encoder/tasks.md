@@ -1,18 +1,21 @@
 # Tasks — Topos temporally-native video encoder (InternVideo-Next)
 
-Implementation is **phased**. **Phase 1 (this pass): foundation + loader only** —
+Implementation was **phased**. **Phase 1 (done): foundation + loader** —
 vendoring, offline-weights fetch, provenance, the no-remote-code loader, and the
-`encoder_backend` selector scaffolding. **Phase 2 (later pass): the real encoder**
-— clip seam, ring buffer, cadence, pooling, salience re-tuning, and only then the
-default flip to InternVideo-Next.
+`encoder_backend` selector scaffolding. **Phase 2 (done, this pass): the real
+encoder** — clip seam, ring buffer, cadence, pooling, the dim-cascade guard, and
+the default flip to InternVideo-Next.
 
-**No pretend processes (load-bearing sequencing).** InternVideo-Next MUST NOT
-become the shipped default until its clip forward pass is genuinely implemented
-(Phase 2). Through Phase 1 the shipped default stays `DINOv2Encoder` (a real,
-working encoder); selecting `encoder_backend = "internvideo_next"` before Phase 2
-raises a loud `NotImplementedError` (fail honestly) — it never returns a
-fake/zero/simulated embedding. The default flip lives in Phase 2 (task 6.1),
-after the real encoder exists.
+**No pretend processes (load-bearing sequencing).** The default flipped to
+InternVideo-Next only now that its clip forward pass is genuinely implemented (a
+real VideoMAE-preprocessed 16-frame clip → frozen forward → native-attention or
+mean pool → 768-d). It never returns a fake/zero/simulated embedding: where the
+real 91M model cannot run (no CUDA / `[internvideo]` deps / fetched weights in
+this environment), the code fails honestly (`FileNotFoundError` on missing
+weights, revision-mismatch error, etc.), and the integration is validated with an
+injected fake torch model/processor — the salience-re-tuning calibration (§5) and
+the real forward-pass dry-run (7.2) remain DEFERRED to a GPU shakedown rather than
+faked.
 
 ## 0. Operator decisions — DECIDED (locked by operator 2026-07-06)
 
@@ -49,10 +52,10 @@ after the real encoder exists.
       `HF_HUB_DISABLE_TELEMETRY=1`. Loader (`internvideo_next_loader.py`) verified
       to pass `trust_remote_code=False` + `local_files_only=True` and to import the
       vendored classes directly — NO runtime hub access, NO remote code.
-- [ ] 1.5 Declare `einops` / `timm` / `flash_attn` / `easydict` (vendored-code
-      deps) in an extra — **deferred to Phase 2** (the real forward pass), since
-      Phase 1 never imports the modeling module (the stub encoder raises before
-      load). Recorded here so it is not forgotten.
+- [x] 1.5 Declare `einops` / `timm` / `flash_attn` / `easydict` (vendored-code
+      deps) in a new `[internvideo]` extra (`pyproject.toml`) — the vendored
+      modeling code hard-imports flash_attn/einops at forward time, so this extra
+      targets a CUDA host; the DINOv2 fallback needs none of it.
 
 ## 2. Clip-native encoder seam
 
@@ -62,71 +65,95 @@ after the real encoder exists.
       `InternVideoNextEncoder` (`"internvideo_next"`), wired through `Topos` +
       `make_topos` + config. **Phase-1 default = `"dinov2"`** (real encoder);
       selecting `"internvideo_next"` raises `NotImplementedError` until Phase 2.
-- [ ] 2.1 **PHASE 2.** Extend the `Encoder` protocol: add `clip_len: int` and
-      `async encode_clip(frames) -> list[float]`.
-- [ ] 2.2 **PHASE 2.** Fill `InternVideoNextEncoder`: load the vendored classes
-      via the Phase-1 loader (frozen `eval()` / `requires_grad_(False)`, fp16 on
-      `[topos].device`), `clip_len = 16`; `encode_clip` runs `extract_features` and
-      pools `[1, 4096, 768] → 768` (native attention-pool if reachable, else mean);
-      probes `latent_dim = 768` at load.
-- [ ] 2.3 **PHASE 2.** Adapt / retain `DINOv2Encoder` as `clip_len = 1`
-      (`encode_clip` encodes `frames[-1]`).
+- [x] 2.1 Extended the `Encoder` protocol: added `clip_len: int` and
+      `async encode_clip(frames) -> list[float]` (docstring bodies, not bare
+      `...`, for CodeQL); kept per-frame `encode` for the foveation path.
+- [x] 2.2 Filled `InternVideoNextEncoder`: loads the vendored classes via the
+      no-remote-code loader (frozen `eval()` / `requires_grad_(False)`, fp16 on
+      `[topos].device`), `clip_len = 16`; `encode_clip` builds a VideoMAE
+      `pixel_values` clip and pools `[1, 4096, 768] → 768` via the **native
+      attention-pool** head (`model(pixel_values)` → `clip_projector`; verified
+      reachable by inspection) with a `pooling = "mean"` alternative; probes
+      `latent_dim = 768` at load. Real load requires a CUDA host + `[internvideo]`
+      deps + fetched weights (unavailable in CI); validated by fake model/processor
+      injection (`load(_model=..., _processor=...)`).
+- [x] 2.3 `DINOv2Encoder` retained as `clip_len = 1` (`encode_clip` encodes
+      `frames[-1]`).
 
 ## 3. Topos ring buffer + clip cadence
 
-- [ ] 3.1 Add a RAM-only `deque(maxlen=clip_len)` frame ring buffer to `Topos`.
-      `process_frame` appends; when full AND on the `clip_stride` boundary, call
-      `encode_clip` and run the salience pipeline + publish; otherwise buffer and
-      return without publishing.
-- [ ] 3.2 No `topos.report` until the buffer first fills (warmup ≈ 1.6 s @ 10 Hz);
-      document it.
-- [ ] 3.3 Confirm EntityClock dilation carries through (stride counted in
-      frame-ticks — no extra clock wiring).
-- [ ] 3.4 Zero-persistence: add an explicit RAM-only note at the buffer site; keep
-      the buffer out of `serialize()`.
+- [x] 3.1 Added a RAM-only `deque(maxlen=clip_len)` frame ring buffer to `Topos`.
+      `process_frame` appends; when full AND on the `clip_stride` boundary, calls
+      `encode_clip` and runs the salience pipeline + publishes; otherwise buffers
+      and returns `""` without publishing.
+- [x] 3.2 No `topos.report` until the buffer first fills (warmup ≈ 1.6 s @ 10 Hz);
+      documented in topos.md + config; covered by
+      `test_no_report_until_ring_buffer_fills`.
+- [x] 3.3 EntityClock dilation carries through — the stride is counted in
+      frame-ticks (which already dilate); no extra clock wiring added.
+- [x] 3.4 Zero-persistence: explicit RAM-only note at the buffer site and in
+      `serialize()`; the buffer is absent from `serialize()` output
+      (`test_serialize_excludes_frame_ring_buffer`).
 
 ## 4. Dim cascade 384 → 768
 
-- [ ] 4.1 Verify `LatentForwardModel` input dim auto-derives to 768 via
-      `encoder.latent_dim` (no code change expected); optionally bump
-      `forward_model_units` per 0.4.
-- [ ] 4.2 Guard `Topos.deserialize`: if a forward-model checkpoint's tensor shapes
-      don't match the running `latent_dim`, discard the forward-model weights with
-      a warning (the online model re-learns). Add a test.
-- [ ] 4.3 Confirm-and-document that Phantasia `obs_dim` (19, workspace-derived) is
-      UNAFFECTED — no Phantasia code/config/checkpoint change.
+- [x] 4.1 `LatentForwardModel` input dim auto-derives via `encoder.latent_dim`
+      (→ 768 for InternVideo-Next) — no code change; `forward_model_units` bumped
+      128 → 256 in config per 0.4.
+- [x] 4.2 Guarded `Topos.deserialize` with `LatentForwardModel.matches_state_shape`:
+      a checkpoint whose tensor shapes don't match the running `latent_dim` is
+      discarded with a warning (re-learns online), not force-loaded. Test:
+      `test_deserialize_discards_mismatched_forward_model`.
+- [x] 4.3 Confirmed Phantasia `obs_dim` (19, workspace-derived — no Topos latent
+      flows into it) is UNAFFECTED; no Phantasia code/config/checkpoint change.
 
 ## 5. Salience re-tuning (calibration pass)
 
-- [ ] 5.1 Run the new encoder over the seeded `reproducible-perception` feed at
-      the shipped `clip_stride`, `forward_prediction` on; record change /
-      habituation / normalized-prediction-error distributions.
-- [ ] 5.2 Re-derive `change_alert_threshold` (~90th pct of observed change);
-      re-verify `baseline_salience` / `alert_salience`. Commit derived values with
-      the feed seed + window as provenance.
+- [ ] 5.1 **DEFERRED — requires the real encoder (CUDA + `[internvideo]` deps +
+      fetched weights), unavailable in this environment.** Run the new encoder over
+      the seeded `reproducible-perception` feed at the shipped `clip_stride`,
+      `forward_prediction` on; record change / habituation / normalized-prediction-
+      error distributions. This is a GPU shakedown step, same gate as the
+      `clip_stride` / `vision_sample_hz` benchmarks.
+- [ ] 5.2 **DEFERRED (blocked on 5.1).** Re-derive `change_alert_threshold`
+      (~90th pct of observed change); re-verify `baseline_salience` /
+      `alert_salience`. `change_alert_threshold` currently carries the DINOv2 value
+      0.5 as a **documented provisional placeholder** (config comment flags it as
+      likely too high for overlapping strided clips); no fabricated "calibrated"
+      constant was committed.
 
 ## 6. Config, docs, tests
 
-- [ ] 6.1 **PHASE 2 (the default flip — after the real encoder exists).**
-      `config/kaine.toml [topos]`: flip `encoder_backend` to `"internvideo_next"`,
-      set `encoder_model_id` (InternVideo-Next), `clip_len`, `clip_stride`,
-      `clip_resolution = 224`, `pooling`, re-tuned thresholds; REMOVE
-      `facebook/dinov2-small` as the default. Phase 1 already added the
-      `encoder_backend` / `encoder_revision` / `encoder_local_dir` keys (default
-      `"dinov2"`); this task only performs the flip once InternVideo-Next is real.
-- [ ] 6.2 Update `docs/modules/topos.md` (768-dim temporally-native clip embedding,
-      clip cadence, warmup, ring buffer, no-remote-code loading) and
-      `docs/tech-choices.md` (replace the DINOv2 §Vision entry with InternVideo-Next:
-      MIT, OpenGVLab, vendored+pinned, temporally-native).
-- [ ] 6.3 Update the opt-in real-encoder test (`KAINE_TOPOS_RUN_REAL_ENCODER=1`) to
-      assert a 768-dim pooled vector from a 16-frame clip. Fake-encoder unit tests
-      stay dim-agnostic.
-- [ ] 6.4 Add a test asserting no `trust_remote_code=True` and no runtime hub
-      access on the encoder load path.
+- [x] 6.1 `config/kaine.toml [topos]`: flipped `encoder_backend` to
+      `"internvideo_next"`, `encoder_model_id` to the InternVideo-Next id, added
+      `clip_len = 16` / `clip_stride = 3` / `clip_resolution = 224` /
+      `pooling = "attention"`; REMOVED `facebook/dinov2-small` as the default (now
+      the documented fallback). Also flipped the code constant
+      `DEFAULT_ENCODER_BACKEND` and threaded the new keys through `boot.make_topos`.
+      `change_alert_threshold` left at the provisional 0.5 (see 5.2 — not re-tuned,
+      honestly flagged rather than faked).
+- [x] 6.2 Updated `docs/modules/topos.md` (768-dim temporally-native clip
+      embedding, clip cadence, warmup, ring buffer, no-remote-code loading,
+      backend selector) and `docs/tech-choices.md` (replaced the DINOv2 §Vision
+      entry with InternVideo-Next: MIT, OpenGVLab, vendored+pinned, temporally
+      native, off-Meta). Also refreshed configuration/licenses/architecture/
+      glossary/security-and-privacy where they named DINOv2 as the default.
+- [x] 6.3 Added the opt-in real-encoder test
+      (`test_real_internvideo_next_produces_768_from_16_frame_clip`,
+      `KAINE_TOPOS_RUN_REAL_ENCODER=1` + weights present) asserting a 768-dim
+      pooled vector from a 16-frame clip. Fake-encoder unit tests stay dim-agnostic.
+- [x] 6.4 Added `test_encoder_load_uses_offline_loader_not_automodel` (the encoder
+      load path goes through the no-remote-code loader, not `AutoModel`, with the
+      pinned revision + `HF_HUB_OFFLINE=1`), alongside the existing loader tests
+      asserting `trust_remote_code=False` + `local_files_only=True`.
 
 ## 7. Verify
 
-- [ ] 7.1 Full suite green (no entity boot).
-- [ ] 7.2 Pre-boot dry-run: perception feed → new encoder → `topos.report` at the
-      clip cadence, 768-d latent, re-tuned salience firing sanely on the seeded
-      feed; loaded fully offline from vendored code + local weights.
+- [x] 7.1 Full suite green (no entity boot; vision tests use fake encoders).
+- [ ] 7.2 **DEFERRED — requires the real encoder (CUDA + `[internvideo]` deps +
+      fetched weights).** Pre-boot dry-run: perception feed → new encoder →
+      `topos.report` at the clip cadence, 768-d latent, salience firing sanely on
+      the seeded feed; loaded fully offline from vendored code + local weights. The
+      full end-to-end wiring (ring buffer → clip cadence → salience → publish) is
+      covered against a fake clip encoder; only the real 91M forward pass is
+      un-exercised in this environment.

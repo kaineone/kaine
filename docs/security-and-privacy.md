@@ -33,10 +33,15 @@ Model weights are downloaded from public repositories during setup. Once cached
 the system can run with no network connection, though it is not restricted to
 offline operation. HuggingFace telemetry is
 suppressed (`HF_HUB_DISABLE_TELEMETRY=1`) before any model load in both the
-Topos DINOv2 encoder and the Mnemos sentence-transformer embedder. The only
-post-setup download risk is the first run of Topos (DINOv2-small,
-`facebook/dinov2-small`) and Mnemos (all-MiniLM-L6-v2) if their HuggingFace
-caches are empty. Both are open (not gated) downloads, and telemetry is
+Topos vision encoder and the Mnemos sentence-transformer embedder. The default
+Topos encoder (InternVideo-Next) is **stronger**: its weights are fetched once at
+setup and it loads fully offline from **vendored, revision-pinned** modeling code
+with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1` —
+no code is fetched or executed from the hub at runtime, closing the
+`trust_remote_code` supply-chain path the model card would otherwise use. The only
+post-setup download risk is the first run of Mnemos (all-MiniLM-L6-v2), or the
+DINOv2 fallback (`facebook/dinov2-small`) if selected, when their HuggingFace
+caches are empty. These are open (not gated) downloads, and telemetry is
 suppressed even on that first download.
 
 ---
@@ -54,8 +59,10 @@ file is written to disk.
 
 When `[topos].capture_enabled = true`, `LiveCamera` opens
 `cv2.VideoCapture(device)`. Raw frames live in process memory, get converted to
-in-memory PIL images, are handed to the DINOv2 encoder, and are released. No
-`.png`, `.jpg`, `.mp4`, or `.webm` file is written to disk.
+in-memory PIL images, are buffered in a RAM-only 16-frame ring, are handed to the
+encoder as a clip, and are released as they age out. The ring buffer is never
+serialized and never written to disk. No `.png`, `.jpg`, `.mp4`, or `.webm` file
+is written to disk.
 
 The invariant is enforced in code and verified by
 `tests/test_zero_persistence_invariant.py`:

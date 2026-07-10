@@ -106,7 +106,7 @@ graph TD
 |---|------|-------|------|--------------------|
 | 1 | **Soma** | Prediction | `kaine/modules/soma/` | CfC forward model (ncps); pynvml + psutil; fatigue accumulator |
 | 2 | **Chronos** | Prediction | `kaine/modules/chronos/` | CfC (~32 units, ncps); event-rhythm forward model |
-| 3 | **Topos** | Prediction | `kaine/modules/topos/` | DINOv2-small (frozen); ncps frame-prediction forward model |
+| 3 | **Topos** | Prediction | `kaine/modules/topos/` | InternVideo-Next (frozen, temporally-native clip; DINOv2 fallback); online forward model |
 | 4 | **Audition** | Prediction | `kaine/modules/audition/` | Speaches distil-Whisper; emotion2vec+; auditory forward model |
 | 5 | **Nous** | Cognition | `kaine/modules/nous/` | pymdp (JAX); active inference — belief updating + EFE policy selection |
 | 6 | **Mnemos** | Cognition | `kaine/modules/mnemos/` | Qdrant; all-MiniLM-L6-v2 (384-dim, CPU); episodic / semantic / procedural |

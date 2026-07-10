@@ -11,8 +11,10 @@ from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.topos.change import ChangeDetector, CosineChangeDetector
 from kaine.modules.topos.encoder import (
-    DEFAULT_DINOV2_MODEL_ID,
+    DEFAULT_CLIP_LEN,
+    DEFAULT_CLIP_RESOLUTION,
     DEFAULT_ENCODER_BACKEND,
+    DEFAULT_POOLING,
     Encoder,
     make_encoder,
 )
@@ -52,8 +54,17 @@ class Topos(BaseModule):
         change_detector: Optional[ChangeDetector] = None,
         habituator: Optional[SceneHabituator] = None,
         encoder_backend: str = DEFAULT_ENCODER_BACKEND,
-        encoder_model_id: str = DEFAULT_DINOV2_MODEL_ID,
+        encoder_model_id: str | None = None,
         encoder_weights_dir: Any = None,
+        encoder_pooling: str = DEFAULT_POOLING,
+        encoder_clip_resolution: int = DEFAULT_CLIP_RESOLUTION,
+        encoder_clip_len: int = DEFAULT_CLIP_LEN,
+        # Strided sliding window (topos-temporal-video-encoder §1b): produce one
+        # clip latent every `clip_stride` frame-ticks once the ring buffer fills.
+        # The shipped config sets clip_stride = 3 (~3.33 Hz, the experiential
+        # rate) for InternVideo-Next; the class default of 1 preserves the
+        # per-frame cadence for the DINOv2 (clip_len=1) fallback and test doubles.
+        clip_stride: int = 1,
         device_preference: str | None = "auto",
         baseline_salience: float = 0.2,
         alert_salience: float = 0.7,
@@ -100,17 +111,20 @@ class Topos(BaseModule):
             raise ValueError("change_alert_threshold must be >= 0")
         if prediction_error_window < 2:
             raise ValueError("prediction_error_window must be >= 2")
+        if int(clip_stride) < 1:
+            raise ValueError("clip_stride must be >= 1")
         # Encoder selection (topos-temporal-video-encoder). An explicitly injected
         # encoder wins (tests, custom wiring); otherwise the encoder_backend
-        # selector builds one. A default (untouched) encoder_model_id is treated as
-        # "unset" so make_encoder can pick the per-backend default id.
+        # selector builds one (default: the temporally-native InternVideo-Next
+        # clip encoder). model_id=None lets make_encoder pick the per-backend id.
         self._encoder: Encoder = encoder or make_encoder(
             encoder_backend,
-            model_id=(
-                encoder_model_id if encoder_model_id != DEFAULT_DINOV2_MODEL_ID else None
-            ),
+            model_id=encoder_model_id,
             device_preference=device_preference,
             weights_dir=encoder_weights_dir,
+            clip_len=encoder_clip_len,
+            pooling=encoder_pooling,
+            clip_resolution=encoder_clip_resolution,
         )
         self._change_detector: ChangeDetector = (
             change_detector or CosineChangeDetector()
@@ -140,6 +154,31 @@ class Topos(BaseModule):
         from collections import deque
 
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
+
+        # Clip-native seam (topos-temporal-video-encoder §1a). The ring buffer is
+        # a bounded, RAM-ONLY deque of the most recent `clip_len` frames — it is
+        # NEVER serialized (see serialize()) and NEVER written to disk; each frame
+        # is released as it ages out of the bounded deque, exactly as a single
+        # frame was dropped before. `clip_len` is the encoder's frame count
+        # (1 for the DINOv2 fallback / per-frame test doubles, 16 for
+        # InternVideo-Next). One clip latent is produced every `clip_stride`
+        # frame-ticks once the buffer fills; no topos.report is published during
+        # the warmup before the first fill.
+        self._clip_len: int = int(getattr(self._encoder, "clip_len", 1))
+        self._clip_stride: int = int(clip_stride)
+        self._frame_buffer: deque[Any] = deque(maxlen=self._clip_len)
+        self._frames_seen: int = 0
+
+        # Spatial foveation (per-frame, topos-foveation) and a temporally-native
+        # multi-frame clip encoder are alternative encoding regimes and do not
+        # compose; the design specifies foveation against a per-frame encoder.
+        # Reject the combination loudly rather than silently mis-encode.
+        if foveation_enabled and self._clip_len > 1:
+            raise ValueError(
+                "foveation requires a per-frame encoder (clip_len == 1); the "
+                f"selected encoder has clip_len == {self._clip_len}. Use "
+                "encoder_backend='dinov2' with foveation, or disable foveation."
+            )
 
         # Hypnos sleep flag — suspend forward-model adaptation during sleep.
         self._in_hypnos: bool = False
@@ -321,7 +360,29 @@ class Topos(BaseModule):
             log.debug("topos arousal provider failed (non-fatal)", exc_info=True)
             return 0.0
 
+    async def _encode_clip(self, frames: list[Any]) -> list[float]:
+        """Encode the current clip via the encoder's clip seam.
+
+        Prefers ``encode_clip`` (DINOv2 fallback encodes the last frame;
+        InternVideo-Next pools a 16-frame clip). Minimal per-frame test doubles
+        that predate the clip seam fall back to ``encode(frames[-1])``."""
+        enc = self._encoder
+        encode_clip = getattr(enc, "encode_clip", None)
+        if encode_clip is not None:
+            return await encode_clip(frames)
+        return await enc.encode(frames[-1])
+
     async def process_frame(self, image: Any) -> str:
+        # Clip-native ring buffer (topos-temporal-video-encoder §1a/§1b). Append
+        # the incoming frame; publish nothing until the buffer first fills
+        # (warmup), then produce one clip latent every `clip_stride` frame-ticks.
+        self._frame_buffer.append(image)
+        self._frames_seen += 1
+        if len(self._frame_buffer) < self._clip_len:
+            return ""  # warmup: no report until the ring buffer first fills
+        if (self._frames_seen - self._clip_len) % self._clip_stride != 0:
+            return ""  # off the strided-clip cadence; buffer and wait
+
         fovea: Optional[FoveaTarget] = None
         peripheral_latent: Any = None
         foveal_latent: Any = None
@@ -351,7 +412,7 @@ class Topos(BaseModule):
             foveal_latent = await self._encoder.encode(foveal_view)
             embedding = peripheral_latent
         else:
-            embedding = await self._encoder.encode(image)
+            embedding = await self._encode_clip(list(self._frame_buffer))
         change = float(self._change_detector.observe(embedding))
         habituation = float(self._habituator.observe(embedding))
 
@@ -458,6 +519,9 @@ class Topos(BaseModule):
             raise
 
     def serialize(self) -> dict[str, Any]:
+        # The frame ring buffer is RAM-only and is deliberately NOT included here
+        # (zero-raw-sense-data persistence): only the encoder id and the forward
+        # model's weights + a statistical buffer summary are emitted.
         state: dict[str, Any] = {
             "encoder_model_id": self._encoder.model_id,
         }
@@ -478,4 +542,19 @@ class Topos(BaseModule):
                 self._encoder.model_id,
             )
         if "forward_model" in state and self._forward_model is not None:
-            self._forward_model.load_state_dict(state["forward_model"])
+            fm_state = state["forward_model"]
+            # Dim-cascade guard (topos-temporal-video-encoder §3, task 4.2): a
+            # checkpoint sized to a different encoder latent_dim (e.g. an old
+            # 384-dim DINOv2 snapshot loaded under the 768-dim InternVideo-Next
+            # encoder) must NOT be forced into the running model. Discard it with
+            # a warning; the online forward model re-learns from scratch (it is an
+            # online adapter — safe) rather than raising a shape error.
+            if not self._forward_model.matches_state_shape(fm_state):
+                log.warning(
+                    "topos: discarding forward-model checkpoint — its tensor "
+                    "shapes do not match the running encoder latent_dim %d; the "
+                    "online forward model will re-learn from scratch",
+                    self._forward_model.latent_dim,
+                )
+            else:
+                self._forward_model.load_state_dict(fm_state)

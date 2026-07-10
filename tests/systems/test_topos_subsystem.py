@@ -18,7 +18,12 @@ from tests.systems._harness import SubsystemHarness
 @pytest.mark.asyncio
 async def test_topos_constructs_lazy_encoder():
     async with SubsystemHarness() as h:
-        topos = Topos(h.bus, encoder_model_id="facebook/dinov2-small", device_preference="cpu")
+        topos = Topos(
+            h.bus,
+            encoder_backend="dinov2",
+            encoder_model_id="facebook/dinov2-small",
+            device_preference="cpu",
+        )
         # No initialize() — we don't want to download weights.
         assert topos.name == "topos"
         assert isinstance(topos.serialize(), dict)

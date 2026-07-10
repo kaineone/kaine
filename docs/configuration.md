@@ -202,7 +202,7 @@ Per-module enable flags. All ship as `false`. Enabling a module is a local-only 
 | `echo` | boolean | `false` | EchoModule — test infrastructure only. Never enable in production. |
 | `soma` | boolean | `false` | Predictive interoception (substrate monitoring, fatigue, homeostatic regulation). |
 | `chronos` | boolean | `false` | Temporal awareness and event-rhythm prediction. |
-| `topos` | boolean | `false` | Vision encoder (DINOv2-small) and live camera. |
+| `topos` | boolean | `false` | Vision encoder (InternVideo-Next; DINOv2 fallback) and live camera. |
 | `nous` | boolean | `false` | Active inference engine (pymdp/JAX). Requires `[reasoning]` extra. |
 | `mnemos` | boolean | `false` | Vector-store memory (Qdrant). |
 | `eidolon` | boolean | `false` | Self-model: values, norms, personality baseline, capability map. |
@@ -290,13 +290,20 @@ Temporal awareness: models event rhythm across the bus with a CfC network (~32 u
 
 ## `[topos]`
 
-Vision module: frozen DINOv2-small encoder embeds live camera frames; a shallow forward model predicts the next latent. Salience is driven by prediction error. Raw frames never touch disk. See [modules/topos.md](modules/topos.md).
+Vision module: a frozen, temporally-native video encoder (InternVideo-Next) embeds a 16-frame clip of live camera frames into one 768-dim motion-aware latent; a shallow forward model predicts the next latent. Salience is driven by prediction error. Raw frames never touch disk (RAM-only ring buffer). See [modules/topos.md](modules/topos.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `encoder_model_id` | string | `"facebook/dinov2-small"` | HuggingFace model ID for the frozen DINOv2 encoder (ViT-S/14, 384-dim). |
+| `encoder_backend` | string | `"internvideo_next"` | Encoder selector behind the `Encoder` protocol: `"internvideo_next"` (default, temporally-native clip) or `"dinov2"` (per-frame Apache-2.0 fallback, required for foveation). |
+| `encoder_model_id` | string | `"revliter/internvideo_next_base_p14_res224_f16"` | Model ID for the active backend (set `"facebook/dinov2-small"` when `encoder_backend = "dinov2"`). |
+| `encoder_revision` | string | pinned SHA | Pinned commit for the vendored InternVideo-Next code + weights; a code/weights mismatch is a load-time error. |
+| `encoder_local_dir` | string | `state/models/…` | Git-ignored dir the setup step fetches weights into; runtime loads only from here (no remote code, no network). |
+| `clip_len` | integer | `16` | Frames per clip the encoder consumes (fixed 1 under `dinov2`). |
+| `clip_stride` | integer | `3` | Strided sliding window: one clip latent every N frame-ticks (~3.33 Hz at 10 Hz sampling; PROVISIONAL pending the shakedown GPU benchmark). |
+| `clip_resolution` | integer | `224` | Clip input resolution. |
+| `pooling` | string | `"attention"` | Token pooling → 768-dim: `"attention"` (native pool head) or `"mean"`. |
 | `device` | string | `"cuda:1"` | Compute device for the encoder. Accepts `"auto"`, `"cpu"`, `"cuda"`, `"cuda:N"`. `resolve_device()` falls back to `cuda:0` on single-GPU hosts, then to `cpu`, with a logged warning. Per paper §6.1 the secondary GPU (~8 GB VRAM) hosts the encoder. |
-| `change_alert_threshold` | float | `0.5` | Cosine-distance threshold above which a visual change raises alert salience. |
+| `change_alert_threshold` | float | `0.5` | Cosine-distance threshold above which a visual change raises alert salience (PROVISIONAL for InternVideo-Next; re-derive via the seeded-feed calibration pass). |
 | `habituation_window` | integer | `16` | Rolling-window length (frames) for the visual habituator. Accepted but forwarded to the habituator default rather than the Topos constructor directly. |
 | `baseline_salience` | float | `0.2` | Salience during expected visual state. |
 | `alert_salience` | float | `0.7` | Salience on unexpected visual change. |
@@ -306,8 +313,8 @@ Vision module: frozen DINOv2-small encoder embeds live camera frames; a shallow 
 | `capture_width` | integer | `640` | Capture frame width (pixels). |
 | `capture_height` | integer | `480` | Capture frame height (pixels). |
 | `capture_warmup_frames` | integer | `3` | Frames discarded on startup to let the sensor stabilize. |
-| `forward_prediction` | boolean | `false` | Enable the visual forward model. Ships disabled; the DINOv2 encoder stays frozen — only the forward model trains. |
-| `forward_model_units` | integer | `128` | Hidden-layer width of the shallow MLP forward model (CPU). |
+| `forward_prediction` | boolean | `false` | Enable the visual forward model. Ships disabled; the encoder stays frozen — only the forward model trains (its dims follow the active encoder). |
+| `forward_model_units` | integer | `256` | Hidden-layer width of the shallow MLP forward model (CPU). |
 | `prediction_error_window` | integer | `32` | Rolling-window size (frames) for normalizing the visual prediction error signal. |
 | `visual_buffer_size` | integer | `16` | Number of recent latents kept in the recurrent visual buffer for temporal integration. |
 

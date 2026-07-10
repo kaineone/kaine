@@ -30,10 +30,12 @@ This document records every major technology and dependency decision in KAINE, t
 | `sounddevice` | Live microphone capture | MIT | CPU | `[audio]` |
 | `av` (PyAV) | Playlist audio-track decode for the reproducible perception feed (`PlaylistAudioStream`) | BSD-3-Clause | CPU | `[audio]` |
 | Chatterbox TTS | Speech synthesis (Vox) | per upstream | GPU (secondary, ~8 GB VRAM) | — (host service) |
-| `transformers` (HuggingFace) | DINOv2 loader, tokenizer | Apache-2.0 | GPU (cuda:1) | — (core dep) |
-| `facebook/dinov2-small` | Visual encoder (Topos) | Apache-2.0 | GPU (cuda:1) | — |
+| `transformers` (HuggingFace) | Vision encoder loader, tokenizer, VideoMAE processor | Apache-2.0 | GPU (cuda:1) | — (core dep) |
+| InternVideo-Next base (OpenGVLab) | Visual encoder (Topos, shipped default) | MIT | GPU (cuda:1) | `[internvideo]` (vendored code deps) |
+| `facebook/dinov2-small` | Visual encoder (Topos, selectable fallback) | Apache-2.0 | GPU (cuda:1) | — |
+| `einops` / `timm` / `flash_attn` / `easydict` | Vendored InternVideo-Next modeling-code deps | MIT / Apache-2.0 / BSD-3 / MIT | GPU (CUDA) | `[internvideo]` |
 | `opencv-python-headless` | Live camera capture (Topos) | Apache-2.0 | CPU | `[vision]` |
-| `torch` | Tensor backend (CfC, DINOv2, QLoRA) | BSD-3-Clause | GPU-optional | — (core dep) |
+| `torch` | Tensor backend (CfC, vision encoder, QLoRA) | BSD-3-Clause | GPU-optional | — (core dep) |
 | FastAPI + uvicorn + Jinja2 | Nexus web UI | MIT | CPU | — (core dep) |
 | `cryptography` (AESGCM) | AES-256-GCM state encryption | Apache-2.0 | CPU | — (core dep, lazy) |
 | `pydantic` | Data validation | MIT | CPU | — (core dep) |
@@ -128,7 +130,7 @@ decode playlist media (cv2 video + PyAV audio). Install it with
 
 **Why Qdrant.** Qdrant is an Apache-2.0 vector database with an async Python client (`AsyncQdrantClient`), mandatory API key authentication (required even on loopback), and a lightweight container footprint. It runs locally (port 6533, KAINE-owned compose stack) and has no runtime cloud dependency. Note: `AsyncQdrantClient.search()` was removed in client 1.12+; Mnemos uses `query_points()` with the vector via `query=` and results under `.points`.
 
-**Why all-MiniLM-L6-v2.** The model is ~80 MB, runs comfortably on CPU, and produces 384-dimensional embeddings sufficient for semantic recall. Pinning the embedder to CPU per paper §6.1 leaves `cuda:1` fully available for Topos (DINOv2) and `cuda:0` for Lingua/Hypnos. Operators can override to a CUDA device via `[mnemos].device` if they have VRAM headroom.
+**Why all-MiniLM-L6-v2.** The model is ~80 MB, runs comfortably on CPU, and produces 384-dimensional embeddings sufficient for semantic recall. Pinning the embedder to CPU per paper §6.1 leaves `cuda:1` fully available for Topos (InternVideo-Next) and `cuda:0` for Lingua/Hypnos. Operators can override to a CUDA device via `[mnemos].device` if they have VRAM headroom.
 
 **CPU/local stance.** CPU by default. The embedder and Qdrant client both run locally with no required network dependency after the initial model download.
 
@@ -214,17 +216,55 @@ Provenance: `kaineone/Qwen3.5-4B-abliterated` is KAINE's own abliteration of the
 
 ---
 
-## Vision: DINOv2-small (Topos)
+## Vision: InternVideo-Next (Topos)
 
-**Role.** A frozen DINOv2-small (ViT-S/14) encoder embeds live camera frames into a 384-dimensional latent space for visual prediction error computation.
+**Role.** A frozen, temporally-native video encoder (OpenGVLab's InternVideo-Next
+base, ViT, 91M params) embeds a **16-frame clip** of live camera frames into a
+single **768-dimensional** motion-aware latent for change / habituation /
+prediction-error salience. It replaces the per-frame DINOv2-small encoder as the
+shipped default (realizing the paper §10 "temporally-native embeddings" upgrade).
 
-**Why DINOv2-small.** DINOv2 is a self-supervised vision transformer trained without labels, making it an appropriate frozen feature extractor for novelty and change detection without any task-specific head. The small variant (ViT-S/14, ~22M parameters) fits a secondary GPU with ~8 GB VRAM (cuda:1 per paper §6.1). The encoder is frozen — fine-tuning it is not in the design; only the small forward-model head on top is trainable. The paper (§10) identifies a stronger self-supervised video encoder — one yielding richer, temporally-native embeddings versus DINOv2's per-frame features — as a future upgrade, kept vendor-neutral and dropping in behind the swappable `Encoder` protocol in `topos/encoder.py`.
+**Why InternVideo-Next.** It is a self-supervised video encoder trained without
+labels, so it is an appropriate frozen feature extractor for novelty and change
+detection without any task-specific head — and unlike DINOv2 it is **temporally
+native**: one clip latent already encodes motion, instead of reconstructing
+temporal structure indirectly from a sequence of independent per-frame vectors.
+91M params in fp16 fit the secondary GPU with ~8 GB VRAM (cuda:1 per paper §6.1).
+It ships behind the swappable `Encoder` protocol in `topos/encoder.py`; the
+architecture is Encoder-Predictor-Decoder but KAINE uses **only the frozen
+encoder** as a feature extractor — the world model (Phantasia / DreamerV3) is
+untouched. The published base checkpoint is encoder-only (no predictor/decoder
+weights), so Topos keeps its own small online forward model.
 
-**Why frozen.** A frozen encoder prevents the vision system from being fine-tuned through adversarial visual inputs. Salience is also bounded by the scoring function, providing a second mitigation layer.
+**Off Meta.** DINOv2-small was the last `facebook/`-namespaced model KAINE loaded;
+InternVideo-Next (MIT, OpenGVLab) removes the project's sole Meta dependency. A
+default install now pulls no Meta weights. DINOv2-small (Apache-2.0) remains a
+selectable, non-default per-frame fallback (`encoder_backend = "dinov2"`).
 
-**CPU/local stance.** GPU by default (cuda:1). Falls back to cuda:0 with a warning on single-GPU hosts, then to CPU. Requires the `[vision]` extra (`opencv-python-headless`) for live capture; the encoder itself is in the `transformers` core dep.
+**Why frozen.** A frozen encoder prevents the vision system from being fine-tuned
+through adversarial visual inputs. Salience is also bounded by the scoring
+function, a second mitigation layer.
 
-**License.** `facebook/dinov2-small` weights: Apache-2.0. `transformers`: Apache-2.0.
+**No remote code (supply chain).** The model card's
+`AutoModel.from_pretrained(..., trust_remote_code=True)` would execute Python
+fetched from the hub at load. Instead the modeling code is **vendored** into
+`external/internvideo_next/` at a **pinned commit SHA** (with `UPSTREAM`
+provenance and the MIT license), and loaded with `trust_remote_code=False`,
+`local_files_only=True`, `HF_HUB_OFFLINE=1` — no `Auto*` code resolution, no
+runtime network. Weights (~182 MB fp16) are fetched **once at setup** into a
+git-ignored local dir at the same pinned revision; a code/weights revision
+mismatch is a load-time error.
+
+**CPU/local stance.** GPU by default (cuda:1). Falls back to cuda:0 with a warning
+on single-GPU hosts, then to CPU. The vendored modeling code needs the
+`[internvideo]` extra (`einops`, `timm`, `flash_attn`, `easydict`) and a CUDA host
+at load; `transformers` + `torch` are core. Live capture needs the `[vision]`
+extra (`opencv-python-headless`). The DINOv2 fallback needs none of the
+`[internvideo]` deps.
+
+**License.** `revliter/internvideo_next_base_p14_res224_f16` weights + vendored
+modeling code: MIT. `facebook/dinov2-small` (fallback): Apache-2.0.
+`transformers`: Apache-2.0.
 
 ---
 
@@ -262,7 +302,7 @@ Provenance: `kaineone/Qwen3.5-4B-abliterated` is KAINE's own abliteration of the
 
 **Role.** The cognitive cycle (continuous loop at 10 Hz) and all module I/O are implemented in Python asyncio. All modules are coroutine-based; the bus client (`kaine.bus.client.AsyncBus`) uses `redis.asyncio`.
 
-**Why asyncio.** KAINE's cycle is I/O-bound (bus reads/writes, HTTP calls to external services) with CPU-bound peaks during embedding and encoding. asyncio allows dozens of concurrent module coroutines to share one event loop without thread overhead, while heavy CPU tasks (embedding, DINOv2 encoding, CfC forward pass) block only their own coroutine for at most one tick.
+**Why asyncio.** KAINE's cycle is I/O-bound (bus reads/writes, HTTP calls to external services) with CPU-bound peaks during embedding and encoding. asyncio allows dozens of concurrent module coroutines to share one event loop without thread overhead, while heavy CPU tasks (embedding, video-clip encoding, CfC forward pass) block only their own coroutine for at most one tick.
 
 **CPU thread tuning.** The cycle entrypoint calls `tune_cpu_threads()` at boot, which caps PyTorch's CPU thread pool at `cpu_count // 2` to prevent oversubscription when multiple CPU-bound modules run concurrently.
 
@@ -295,7 +335,7 @@ The shipped `kaine.toml` defaults reflect a dual-GPU reference configuration: a 
 |---|---|---|
 | Lingua → model server (external) | cuda:0 (primary GPU, ~12 GB+ VRAM) | `CUDA_VISIBLE_DEVICES` in the model server's launch config |
 | Hypnos voice alignment training | cuda:0 | `[hypnos.voice_alignment].training_device` |
-| Topos DINOv2 encoder | cuda:1 (secondary GPU, ~8 GB VRAM) | `[topos].device` |
+| Topos InternVideo-Next encoder | cuda:1 (secondary GPU, ~8 GB VRAM) | `[topos].device` |
 | Mnemos sentence-transformer | cpu | `[mnemos].device` |
 | Audition emotion2vec+ | cpu | `[audition].emotion_device` |
 | Chronos CfC network | cpu (pinned in code) | n/a — pinned by `chronos/network.py` |

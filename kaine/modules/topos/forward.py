@@ -3,9 +3,12 @@
 
 """Latent forward model for Topos.
 
-Predicts the next DINOv2 latent vector from the current latent and a
+Predicts the next visual latent vector from the current latent and a
 recurrent visual buffer.  Adapts online with a single small gradient step
-per frame; skips any non-finite update (non-finite guard).
+per produced clip latent; skips any non-finite update (non-finite guard).
+The latent dimension follows the active encoder (``latent_dim`` — 768 for the
+default InternVideo-Next clip encoder, 384 for the DINOv2 fallback); nothing
+here hardcodes a dimension.
 
 Design constraints (matching the Chronos ForwardPredictionHead pattern)
 -----------------------------------------------------------------------
@@ -17,7 +20,7 @@ Design constraints (matching the Chronos ForwardPredictionHead pattern)
   non-finite, protecting against degenerate inputs.
 - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
   setting ``suspended = True``.
-- The DINOv2 encoder is NEVER touched by this module — it is frozen by its
+- The visual encoder is NEVER touched by this module — it is frozen by its
   own class and nothing here requests gradients for it.
 """
 from __future__ import annotations
@@ -34,7 +37,7 @@ _DEFAULT_LR: float = 1e-3
 
 
 class LatentForwardModel:
-    """Shallow MLP that predicts the next DINOv2 latent from the current one.
+    """Shallow MLP that predicts the next visual latent from the current one.
 
     Architecture
     ------------
@@ -253,6 +256,31 @@ class LatentForwardModel:
                     }
                 )
         return {"layers": layers}
+
+    def matches_state_shape(self, state: dict[str, Any]) -> bool:
+        """Whether a ``state_dict()`` snapshot's tensor shapes fit this model.
+
+        Guards the dim cascade (topos-temporal-video-encoder §3): a checkpoint
+        sized to a different encoder ``latent_dim`` (input ``2*latent_dim`` →
+        hidden ``units`` → output ``latent_dim``) must be detected BEFORE any
+        ``copy_``, so a mismatch is discarded rather than raising. Returns False
+        on any malformed/short layer list too."""
+        layers = state.get("layers")
+        if not isinstance(layers, list) or len(layers) < 2:
+            return False
+        try:
+            first_w = layers[0]["weight"]
+            last_w = layers[-1]["weight"]
+            in_units = len(first_w)  # hidden width
+            in_dim = len(first_w[0])  # 2 * latent_dim
+            out_dim = len(last_w)  # latent_dim
+        except (KeyError, TypeError, IndexError):
+            return False
+        return (
+            in_units == self._units
+            and in_dim == 2 * self._latent_dim
+            and out_dim == self._latent_dim
+        )
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         """Restore MLP weights from a ``state_dict()`` snapshot."""

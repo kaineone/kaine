@@ -64,6 +64,21 @@ audio = [
 vision = [
     "opencv-python-headless>=4.8,<5",
 ]
+# Temporally-native InternVideo-Next clip encoder for Topos
+# (topos-temporal-video-encoder). Required only when
+# [topos].encoder_backend = "internvideo_next" (the shipped default) AND the
+# encoder is actually loaded — the vendored modeling code (external/
+# internvideo_next, path a — see its UPSTREAM) imports these at forward time.
+# Lazy-imported: the build/test suite stays green without them (vision tests use
+# fake encoders). flash_attn requires a CUDA toolchain to build and run, so this
+# extra targets a GPU host; the DINOv2 fallback needs none of it. transformers +
+# torch are already core; only these vendored-code deps are added here.
+internvideo = [
+    "einops>=0.7",
+    "timm>=0.9",
+    "easydict>=1.10",
+    "flash-attn>=2.5",
+]
 # Aggregate convenience extra: everything the reproducible perception feed needs
 # (the unified [perception_feed] — cv2 decodes playlist video, sounddevice/av
 # decode playlist audio, mic/camera for live mode). Self-referential extras are

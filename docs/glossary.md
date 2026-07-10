@@ -427,12 +427,15 @@ operation. Requires the `[training]` extra (`peft`). Without the extra, a no-op
 
 ### Topos
 
-The visual perception module. Topos uses a frozen DINOv2-small (ViT-S/14,
-`facebook/dinov2-small`) encoder to embed live camera frames into 384-dimensional
-latents. A small forward model predicts the next frame's latent; visual salience
-is driven by prediction error. Raw video frames live in process memory only —
-never on disk. Capture is disabled by default; requires the `[vision]` extra and
-`[topos].capture_enabled = true`. See: `kaine/modules/topos/`.
+The visual perception module. Topos uses a frozen, temporally-native video
+encoder (InternVideo-Next base, MIT) to embed a 16-frame clip of live camera
+frames — buffered in a RAM-only ring — into one 768-dimensional motion-aware
+latent, produced on a strided sliding window (~3.33 Hz). A per-frame DINOv2-small
+(Apache-2.0, 384-dim) is a selectable fallback. A small forward model predicts
+the next clip latent; visual salience is driven by prediction error. Raw video
+frames live in process memory only — never on disk. Capture is disabled by
+default; requires the `[vision]` extra and `[topos].capture_enabled = true`. See:
+`kaine/modules/topos/`.
 
 ### Two-layer safety gate
 

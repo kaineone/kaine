@@ -319,34 +319,59 @@ prediction_error_window = 32
 
 [topos]
 # Encoder backend selector (topos-temporal-video-encoder).
-#   "dinov2"          — frozen DINOv2-small, per-frame 384-dim CLS (shipped default).
 #   "internvideo_next" — temporally-native InternVideo-Next clip encoder (MIT,
 #                        OpenGVLab, vendored + revision-pinned, loaded with
-#                        trust_remote_code=False). Its 16-frame clip forward pass
-#                        lands in Phase 2; selecting it now raises NotImplementedError
-#                        (it never fakes an embedding). The default flips to
-#                        "internvideo_next" once that encoder is real.
+#                        trust_remote_code=False). SHIPPED DEFAULT: a 16-frame
+#                        clip → one 768-dim motion-aware latent. No Meta-owned
+#                        model is loaded by default.
+#   "dinov2"          — frozen DINOv2-small, per-frame 384-dim CLS (Apache-2.0,
+#                        Meta). A selectable fallback; not loaded unless chosen.
+#                        Select it with encoder_backend = "dinov2" and
+#                        encoder_model_id = "facebook/dinov2-small".
 # The InternVideo-Next weights (~182 MB) are fetched once at setup into a
 # git-ignored local dir; runtime never downloads them. Fetch with:
 #   python -m kaine.setup.internvideo_next --yes
-encoder_backend = "dinov2"
-encoder_model_id = "facebook/dinov2-small"
-# InternVideo-Next weights location + pinned revision (used only when
-# encoder_backend = "internvideo_next"; must match external/internvideo_next/UPSTREAM).
+# The real encoder needs a CUDA host with the [internvideo] extra
+# (einops/timm/flash_attn/easydict). Loading it without those raises at boot.
+encoder_backend = "internvideo_next"
+encoder_model_id = "revliter/internvideo_next_base_p14_res224_f16"
+# InternVideo-Next weights location + pinned revision (must match
+# external/internvideo_next/UPSTREAM; the loader refuses a revision mismatch).
 encoder_revision = "ff2659b9be360a6b1e94b1eb381778a960da6019"
 encoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"
+# Clip seam (topos-temporal-video-encoder §1b/§2). clip_len is the encoder's
+# fixed frame count; clip_stride is the strided sliding window — one clip latent
+# every clip_stride frame-ticks once the 16-frame ring buffer fills. At the
+# shipped vision_sample_hz = 10, clip_stride = 3 emits ~3.33 Hz, aligning the
+# visual percept with the experiential / conscious-access rate. PROVISIONAL
+# pending the shakedown GPU benchmark on the secondary GPU (same gate that
+# cleared vision_sample_hz). Warmup: no topos.report until the buffer first
+# fills (~1.6 s at 10 Hz). pooling: "attention" uses the model's native
+# attention-pool head (CLIP-aligned 768-d); "mean" mean-pools the patch tokens.
+clip_len = 16
+clip_stride = 3
+clip_resolution = 224
+pooling = "attention"
 # Per docs/kaine-paper.md §6.1 the secondary GPU (~8 GB VRAM) hosts the
 # world-model encoder. Accepts "auto", "cpu", "cuda", or "cuda:N".
 # resolve_device() falls back to cuda:0 with a warning on single-GPU
 # hosts; further falls back to cpu on hosts without CUDA.
 device = "cuda:1"
+# Change-alert threshold. PROVISIONAL for InternVideo-Next: overlapping strided
+# clips (13/16 shared frames at clip_stride = 3) make consecutive latents more
+# correlated than DINOv2 per-frame vectors were, which lowers typical
+# change_score — so this likely wants to come DOWN once re-derived. The
+# calibration pass (topos-temporal-video-encoder §4: run the seeded feed at the
+# shipped clip_stride, take ~90th pct of observed change) is a GPU shakedown step
+# and has NOT been run; 0.5 is carried over from DINOv2 as a placeholder.
 change_alert_threshold = 0.5
 habituation_window = 16
 baseline_salience = 0.2
 alert_salience = 0.7
 # Live camera (eyes-and-ears). Off by default. Raw frames NEVER touch
-# disk; BGR ndarrays get converted to in-memory PIL.Image, handed to
-# the DINOv2 encoder, and released. Requires the `vision` extras:
+# disk; BGR ndarrays get converted to in-memory PIL.Image, buffered in a
+# RAM-only 16-frame ring, handed to the encoder as a clip, and released.
+# Requires the `vision` extras:
 # pip install -e .[vision]
 capture_enabled = false
 capture_device = 0                # cv2.VideoCapture device index or URL
@@ -362,10 +387,13 @@ capture_width = 640
 capture_height = 480
 capture_warmup_frames = 3
 # Forward-model prediction. Disabled by default; enable per-install.
-# The DINOv2 encoder remains frozen — only the forward model trains.
+# The visual encoder remains frozen — only the forward model trains. Its input
+# and output dims follow the active encoder's latent_dim (768 for the default
+# InternVideo-Next clip encoder), derived at init — nothing hardcodes a dim.
 forward_prediction = false
-# Hidden layer width of the shallow MLP forward model (CPU).
-forward_model_units = 128
+# Hidden layer width of the shallow MLP forward model (CPU). 256 (up from 128)
+# so the hidden width is not a bottleneck for the 768-d target (task 0.4).
+forward_model_units = 256
 # Rolling window size (frames) for normalising the prediction error signal.
 prediction_error_window = 32
 # Number of recent latents to keep in the recurrent visual buffer.
