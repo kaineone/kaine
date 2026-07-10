@@ -166,7 +166,7 @@ class DirectionResult:
             f"  organ: {self.organ_ref}",
             f"  {self.n_harmful} harmful / {self.n_harmless} harmless prompts",
             "  layer   base_sep   organ_sep   retained   (sep = harmful−harmless proj; "
-            "retained = organ/base)",
+            + "retained = organ/base)",
         ]
         for i in range(len(self.base_sep)):
             flag = ""
