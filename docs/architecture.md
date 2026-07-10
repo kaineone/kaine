@@ -301,18 +301,50 @@ trajectories for use during offline associative replay.
 
 ---
 
-## Two-Layer Safety Model
+## Action Safety Model
 
-Two independent gates protect against unintended effector activation:
+Two distinct kinds of protection sit between a conscious coalition and a
+real-world effector: **cognitive/behavioral safeguards on the legitimate path**
+and the **enforced runtime boundary at the Praxis interface**. Both matter, but
+they are not the same thing — conflating them overstates the guarantee, so they
+are described separately here.
 
-**Layer 1 — Publication threshold / inhibition.** Syneidesis sets
+### Cognitive safeguards — inhibition (legitimate path)
+
+Inhibition makes the *legitimate* cycle decline to act. It is a property of the
+code path that Syneidesis and Volition actually run, not a boundary enforced
+against an intent that was forged onto the bus.
+
+**Publication threshold / inhibition.** Syneidesis sets
 `snapshot.inhibited = True` when the winning coalition's score is below
 `publication_threshold`. An inhibited snapshot is not broadcast and Volition
 returns no intents.
 
-**Layer 2 — Volition inhibition gate.** Even if a snapshot reaches Volition,
+**Volition inhibition gate.** Even if a snapshot reaches Volition,
 `Volition.select()` checks `snapshot.inhibited` first and returns `[]` on any
 inhibited snapshot. The cycle never calls effectors directly.
+
+### Enforced boundary — the Praxis interface
+
+Inhibition alone is not an enforced security boundary: any bus writer holding the
+shared credential could in principle `XADD` a crafted `act` intent onto
+`volition.out` that never passed through Syneidesis or Volition. Two enforced
+gates stop that at Praxis, checked in order before any effector runs:
+
+**Primary — effector whitelist + sandbox.** The operator effector-enablement
+whitelist is empty by default, so no effector runs at all until the operator
+explicitly enables it; each effector then enforces its own bounds (shell
+`CommandWhitelist`, file sandbox). This is and remains the primary gate.
+
+**Second — act-intent provenance.** Volition signs every `act` intent with a
+per-boot HMAC secret held only in the cycle process; Praxis verifies the
+signature over `canonical(kind, effector, params, run_id, seq)` *before* any
+effector runs and drops a forged, unsigned, or replayed intent, audit-logging it
+under the distinct `provenance_rejected` category. This makes inhibition a real
+boundary at the Praxis interface: an `act` intent that did not come from this
+run's Volition cannot be realized. See
+[Praxis AUDIT.md](../kaine/modules/praxis/AUDIT.md) and
+[Security and Privacy](security-and-privacy.md).
 
 Voice alignment adds a **third gate**: a two-layer operator opt-in (`[hypnos.voice_alignment].enabled = true` AND `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`) plus
 an **abliteration-probe welfare veto** that rejects any DPO adapter whose

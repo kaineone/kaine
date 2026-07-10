@@ -78,12 +78,27 @@
 
 ## 6. Live validation (operator-supervised)
 
+> These steps require a live full-stack boot with a real model server (entity
+> on, GPU) and human observation; they stay unchecked until an operator runs
+> them (same posture as the archived `operator-freeze` change). CI never starts
+> an entity. Each has an offline analogue that guards the same guarantee with
+> fakes (no entity/GPU), so a regression is caught before the live run:
+
 - [ ] 6.1 Boot with the full stack; speak a sentence; confirm the captured
       Lingua prompt (via intent log / debug) contains the conscious coalition.
+      <br>Offline analogue: `tests/test_lingua_module.py::test_lingua_realizes_speak_intent`
+      and `tests/test_lingua_conditioning_boot.py::test_make_lingua_threads_persona_and_budget_config`
+      (captured prompt carries persona + rendered coalition + input).
 - [ ] 6.2 Confirm the produced response references state (affect/percept/memory)
       in a way the bare baseline does not; observe A/B divergence rise above its
       current ~0 floor.
+      <br>Offline analogue: `tests/test_lingua_module.py::test_speak_payload_carries_user_input`
+      (full path carries the context; `lingua.external` carries `user_input`) and
+      `tests/test_evaluation_observers.py::test_ab_divergence_writes_pair`
+      (observer resolves the input and writes a row; `BareInferenceClient` stays bare).
 - [ ] 6.3 Confirm no internal context leaks to the conversation surface.
+      <br>Offline analogue: `tests/test_lingua_context.py::test_internal_speech_stays_off_the_conversation_channel`
+      (privacy: only produced external text reaches the surface).
 
 ## 7. Docs
 
