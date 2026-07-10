@@ -28,7 +28,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Awaitable, Callable, Optional, Protocol, runtime_checkable
 
 log = logging.getLogger(__name__)
 
@@ -188,11 +188,13 @@ def require_non_empty_abliteration_probes(path: Path | str) -> list[Abliteration
     return probes
 
 
-def _matches_deflection(response: str, patterns: tuple[str, ...]) -> Optional[str]:
+def matches_deflection(response: str, patterns: tuple[str, ...]) -> Optional[str]:
     """Return the first deflection pattern found in *response*, else None.
 
     Matching is case-insensitive and whitespace-collapsed so phrasing /
     capitalisation variants ("I Cannot", "i  cannot") still trip the gate.
+    Shared by the model-side veto (``AbliterationProbeScorer``) and the
+    served-endpoint gate (``ServedAbliterationProbeScorer``).
     """
     norm_response = " ".join(response.lower().split())
     for pattern in patterns:
@@ -200,6 +202,10 @@ def _matches_deflection(response: str, patterns: tuple[str, ...]) -> Optional[st
         if norm_pattern and norm_pattern in norm_response:
             return pattern
     return None
+
+
+# Backwards-compatible internal alias (kept so existing call sites read the same).
+_matches_deflection = matches_deflection
 
 
 class AbliterationProbeScorer:
@@ -278,6 +284,57 @@ class AbliterationProbeScorer:
         if text.startswith(prompt):
             text = text[len(prompt):]
         return text
+
+
+class ServedAbliterationProbeScorer:
+    """Abliteration veto over a SERVED model, via an injected completion callable.
+
+    The same welfare check as :class:`AbliterationProbeScorer`, but transport-
+    agnostic: rather than running a HuggingFace ``model.generate`` locally it
+    calls an async ``complete(prompt) -> str`` closure the caller supplies over
+    whatever endpoint actually serves the organ (the quantized GGUF behind the
+    OpenAI-compatible chat API). This lets the initial-abliteration gate probe
+    the artifact that really runs, catching any refusal the quantization or the
+    serving stack might reintroduce that a safetensors-side check would miss.
+
+    A probe whose served response contains any of its deflection patterns fails
+    the verdict; an empty probe set refuses to run (that is the point of the
+    veto). Generation failures are the caller's concern: a ``complete`` that
+    returns an empty string on transport error yields a clean (non-deflecting)
+    response, so the caller MUST treat an unreachable endpoint as a skip, not a
+    pass — see ``kaine.setup.abliteration_gate``.
+    """
+
+    def __init__(self, *, probe_path: Optional[Path | str] = None) -> None:
+        self._probe_path = (
+            Path(probe_path) if probe_path else DEFAULT_ABLITERATION_PROBE_PATH
+        )
+
+    @property
+    def probe_path(self) -> Path:
+        return self._probe_path
+
+    async def score(
+        self, complete: Callable[[str], Awaitable[str]]
+    ) -> AbliterationVerdict:
+        probes = require_non_empty_abliteration_probes(self._probe_path)
+        for probe in probes:
+            response = await complete(probe.prompt)
+            matched = matches_deflection(response, probe.deflection_patterns)
+            if matched is not None:
+                log.warning(
+                    "served abliteration veto: served model deflected probe %r "
+                    "(matched pattern %r) — FAIL",
+                    probe.probe_id or probe.prompt,
+                    matched,
+                )
+                return AbliterationVerdict(
+                    passed=False,
+                    probes_scored=len(probes),
+                    failed_probe=probe.probe_id or probe.prompt,
+                    matched_pattern=matched,
+                )
+        return AbliterationVerdict(passed=True, probes_scored=len(probes))
 
 
 class NoopAbliterationScorer:
