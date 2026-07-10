@@ -1398,7 +1398,7 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # build it from its own nested `[mundus.<adapter>]` table. Adapter-specific
     # settings (transport, per-family/channel exposure) live under that table,
     # never flat in `[mundus]`. An unknown adapter name fails closed at boot.
-    adapter_name = str(section.get("adapter", "opensim"))
+    adapter_name = str(section.get("adapter", "stub"))
     adapter_section = dict(section.get(adapter_name, {}) or {})
 
     # `expose_<family>`/`expose_<channel>` keys under the adapter table →
@@ -1409,14 +1409,7 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         if key.startswith("expose_")
     }
 
-    if adapter_name == "opensim":
-        from kaine.modules.mundus.adapters.opensim import OpenSimAdapter
-
-        adapter = OpenSimAdapter(
-            host=str(adapter_section.get("bridge_host", "127.0.0.1")),
-            port=int(adapter_section.get("bridge_port", 7781)),
-        )
-    elif adapter_name == "stub":
+    if adapter_name == "stub":
         from kaine.modules.mundus.adapters.stub import StubAdapter
 
         adapter = StubAdapter()

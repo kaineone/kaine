@@ -241,7 +241,8 @@ hypnos = false
 empatheia = false
 phantasia = false
 # Embodiment helpers. Perception arbitrates the physical-XOR-virtual sense
-# locus; Mundus bridges intents to an OpenSim/Firestorm grid. Both off by
+# locus; Mundus routes intents/perception to a body through a pluggable adapter
+# (the shipped default is the transport-free `stub` reference body). Both off by
 # default; Mundus additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
 perception = false
 mundus = false
@@ -905,7 +906,7 @@ learning_rate = 0.001
 # physical camera/mic are inhibited, and vice-versa.
 # Allow the entity to switch its own sense locus via praxis intents. Off by
 # default — locus changes are operator-driven until trust is established.
-# NOTE: allow_self_switch is reserved for the deferred opensim-connector work;
+# NOTE: allow_self_switch is reserved for deferred virtual-world embodiment work;
 # no module currently produces intent.perception.switch, so this flag has no
 # effect until that change is implemented.
 allow_self_switch = false
@@ -932,28 +933,15 @@ port = 8089
 # KAINE_MUNDUS_OPERATOR_APPROVED=1 environment variable (operator layer). Both
 # must be true before any action reaches a body.
 enabled = true
-adapter = "opensim"
+# `stub` is the shipped reference body: a transport-free, wholly local adapter
+# that pins the protocol (including the continuous-channel path). No transport-
+# backed body ships today; a virtual-world (Paracosmic) adapter is planned.
+# The stub needs no configuration; adapter-specific settings live under their own
+# `[mundus.<adapter>]` table (added when a transport-backed adapter ships).
+adapter = "stub"
 # Mirror Lingua's external speech into the body's local chat.
 mirror_speech = true
 speech_stream = "lingua.external"
-
-[mundus.opensim]
-# OpenSim/Firestorm embodiment bridge (the transitional reference body). Read
-# only when [mundus].adapter = "opensim".
-bridge_host = "127.0.0.1"
-bridge_port = 7781
-# Per-action-family exposure to the grid. expose_<family> = false hard-denies
-# that family regardless of intents. Locomotion/expression default on;
-# teleport and touch default off (more disruptive / consent-sensitive).
-expose_move = true
-expose_turn = true
-expose_say = true
-expose_sit_on = true
-expose_stand = true
-expose_animate = true
-expose_gesture = true
-expose_teleport = false
-expose_touch = false
 
 [mundus.control_surface]
 # The minimal, continuous, learnable embodiment control surface (the entity's
@@ -973,7 +961,6 @@ enabled = false
 competence_threshold = 0.05
 min_samples = 32
 window = 64
-
 [evaluation]
 # Architecture-thesis instrumentation. Disable for production once the
 # thesis is validated. Adds NO core-module dependencies; observes the

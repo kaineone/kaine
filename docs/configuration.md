@@ -1026,30 +1026,14 @@ Ships disabled. Set all three flags true only after confirming entity privacy an
 
 Body-agnostic embodiment control plane. Mundus routes perception and action to and from a *body* through a pluggable adapter selected here; adapter-specific settings live under `[mundus.<adapter>]`. Enabled via the three-layer gate: `[modules].mundus = true` (module toggle) AND `[mundus].enabled = true` (config layer) AND the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1` (operator layer). All three must be true before any action reaches the body. Per-family and per-channel exposure flags additionally gate world-mutating verbs and continuous channels.
 
+The shipped default is the transport-free `stub` reference body, which needs no configuration. No transport-backed body ships today; a virtual-world (Paracosmic) adapter is planned, and its settings will live under its own `[mundus.<adapter>]` table.
+
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Config-layer gate (the module-level toggle `[modules].mundus` is the first gate; this is the second, and `KAINE_MUNDUS_OPERATOR_APPROVED=1` is the third). |
-| `adapter` | string | `"opensim"` | Which body to construct. Only this adapter is built, from its `[mundus.<adapter>]` table; an unknown name fails closed at boot. |
+| `adapter` | string | `"stub"` | Which body to construct. Only this adapter is built, from its `[mundus.<adapter>]` table (the stub needs none); an unknown name fails closed at boot. |
 | `mirror_speech` | boolean | `true` | Forward Lingua external speech to the body as local-chat `say` actions. |
 | `speech_stream` | string | `"lingua.external"` | Bus stream Mundus subscribes to for speech to mirror. |
-
-## `[mundus.opensim]`
-
-Settings for the OpenSim adapter (the transitional reference body: an avatar in a local OpenSim grid via a forked Firestorm viewer over a LEAP shim). Read only when `[mundus].adapter = "opensim"`.
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `bridge_host` | string | `"127.0.0.1"` | TCP listen address for the LEAP shim bridge. |
-| `bridge_port` | integer | `7781` | TCP listen port. |
-| `expose_move` | boolean | `true` | Expose avatar movement actions. |
-| `expose_turn` | boolean | `true` | Expose avatar turn actions. |
-| `expose_say` | boolean | `true` | Expose avatar local-chat say actions. |
-| `expose_sit_on` | boolean | `true` | Expose avatar sit-on-object actions. |
-| `expose_stand` | boolean | `true` | Expose avatar stand actions. |
-| `expose_animate` | boolean | `true` | Expose avatar animation actions. |
-| `expose_gesture` | boolean | `true` | Expose avatar gesture actions. |
-| `expose_teleport` | boolean | `false` | Expose teleport actions. Defaults OFF (world-mutating; operator opt-in). |
-| `expose_touch` | boolean | `false` | Expose touch/interact actions. Defaults OFF (operator opt-in). |
 
 ---
 
@@ -1059,7 +1043,7 @@ Perception locus arbiter (physical-XOR-virtual sense gating). Enabled via `[modu
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `allow_self_switch` | boolean | `false` | Allow the entity to switch its own perceptual locus via `praxis` intents. Off by default — locus changes are operator-driven until trust is established. Reserved for the deferred OpenSim-connector work; no module currently produces `intent.perception.switch`, so this flag has no effect yet. |
+| `allow_self_switch` | boolean | `false` | Allow the entity to switch its own perceptual locus via `praxis` intents. Off by default — locus changes are operator-driven until trust is established. Reserved for deferred virtual-world embodiment work; no module currently produces `intent.perception.switch`, so this flag has no effect yet. |
 | `min_dwell_s` | float | `30.0` | Minimum seconds the locus must hold before another switch is honoured. |
 
 ---

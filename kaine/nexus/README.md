@@ -4,7 +4,7 @@ Nexus is the loopback-only operator dashboard (`python -m kaine.nexus`). It is
 server-rendered (Jinja2 + vanilla JS, no build step) and all assets are served
 locally — there is no CDN or runtime network fetch.
 
-The look is an LCARS-inspired evocation (not a clone): a near-black field, slate
+The look is a retro-futurist console evocation: a near-black field, slate
 panels, red reserved for attention/alerts, blue-grey chrome everywhere else.
 
 ## Surfaces

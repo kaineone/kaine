@@ -24,7 +24,7 @@
   {% include "_spot_banner.html" %}
   {% set _path = request.url.path if request is defined and request else "" %}
   <div class="shell">
-    {# LCARS-style left rail: stacked rounded-end segments. #}
+    {# console-style left rail: stacked rounded-end segments. #}
     <aside class="rail">
       {% block rail %}
       <a class="rail__brand" href="/">KAINE</a>

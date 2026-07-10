@@ -4,8 +4,10 @@
 """Concrete embodiment adapters behind the Mundus control plane.
 
 Each body the entity can inhabit is one adapter here; the core selects exactly
-one at boot. ``opensim`` is the transitional reference/conformance body (the old
-OpenSim/LEAP bridge, behavior preserved); ``stub`` is a transport-free reference
-body that pins the continuous-channel path. Neither is imported eagerly, so a
-missing optional dependency of one adapter never breaks the other.
+one at boot. ``stub`` is the shipped reference body: a transport-free, wholly
+local adapter that pins the protocol — including the continuous-channel path — so
+the body-agnostic core is exercised end to end without any external world. No
+transport-backed body ships today; a virtual-world (Paracosmic) adapter is
+planned. Adapters are not imported eagerly, so a missing optional dependency of
+one never breaks another.
 """
