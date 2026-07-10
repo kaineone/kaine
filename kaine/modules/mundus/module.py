@@ -49,11 +49,12 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 from kaine import perception_state
 from kaine.modules.base import BaseModule
 from kaine.modules.mundus.adapter import EmbodimentAdapter, FeedFrame
+from kaine.modules.mundus.channels import CONTINUOUS_CHANNEL_RANGE
 from kaine.workspace.volition import VOLITION_STREAM
 
 if TYPE_CHECKING:
-    # Imported for typing only — control_surface.py imports CONTINUOUS_CHANNEL_RANGE
-    # from this module, so a runtime import here would be circular.
+    # Imported for typing only — the control surface is injected at construction,
+    # so the core never needs it at runtime.
     from kaine.modules.mundus.control_surface import ContinuousMotorSurface
 
 log = logging.getLogger(__name__)
@@ -64,18 +65,6 @@ _AVATAR_PREFIX = "intent.avatar."
 # `payload["channels"]`. It is NOT a symbolic action family — it is routed to the
 # continuous setpoint sink, not `apply_action`, and drives the body directly.
 _CONTROL_ACTION = "control"
-
-# Canonical continuous-channel vocabulary and clamp ranges, shared with
-# `intuitive-embodiment-control-surface` so every graded-control adapter and that
-# change agree by construction. `interact` is a single graded-reach trigger, so
-# its range is non-negative; the locomotion/gaze rates are bidirectional.
-CONTINUOUS_CHANNEL_RANGE: dict[str, tuple[float, float]] = {
-    "drive": (-1.0, 1.0),
-    "yaw_rate": (-1.0, 1.0),
-    "gaze_yaw": (-1.0, 1.0),
-    "gaze_pitch": (-1.0, 1.0),
-    "interact": (0.0, 1.0),
-}
 
 
 def operator_approved() -> bool:

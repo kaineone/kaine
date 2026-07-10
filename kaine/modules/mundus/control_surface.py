@@ -56,7 +56,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Protocol, runtime_checkable
 
-from kaine.modules.mundus.module import CONTINUOUS_CHANNEL_RANGE
+from kaine.modules.mundus.channels import CONTINUOUS_CHANNEL_RANGE
 
 log = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ class MotorPolicy(Protocol):
     """
 
     def __call__(self, observation: Any) -> Mapping[str, float]:
-        ...
+        """Return the policy's desired setpoints for the given observation."""
 
 
 class QuiescentMotorPolicy:
