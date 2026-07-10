@@ -105,7 +105,7 @@
   // Closed sections leave the screen; their rail button summons them back. The
   // section slides IN FROM ITS BUTTON and expands into place (a FLIP transform:
   // it starts shrunk at the button's position and grows to its layout slot) —
-  // an LCARS-style entrance. Dismissing reverses it: the section shrinks back
+  // a console-style entrance. Dismissing reverses it: the section shrinks back
   // toward the button and leaves. Motion-gated.
   var NexusSections = {
     _btn: function (id) { return document.querySelector('.rail__seg[data-board="' + id + '"]'); },

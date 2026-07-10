@@ -3,7 +3,7 @@
 ## Why
 
 A UI review of `kaine/nexus` found the observability surface is well-built (coherent
-hand-rolled LCARS theme, uPlot ring buffers, targeted DOM updates, strong
+hand-rolled retro-futurist console theme, uPlot ring buffers, targeted DOM updates, strong
 accessibility scaffolding, and a genuinely sound render-layer privacy boundary), but
 its update path has a structural problem that makes a continuously-updating stream
 feel laggy, plus several polish and remote-usability gaps. The operator runs this

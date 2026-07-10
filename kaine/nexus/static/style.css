@@ -1,8 +1,8 @@
 /* ==========================================================================
-   KAINE Nexus — LCARS-inspired operator console (Picard-era homage)
+   KAINE Nexus — retro-futurist operator console
    Server-rendered Jinja2 + vanilla JS. No build step. No web-font download.
 
-   A refined, modern LCARS *evocation* — not a clone (LCARS is trademarked) —
+   A refined, modern retro-futurist console *evocation* —
    carrying the Kaine brand (see the kaine-brand repo): an obsidian near-black
    field, raised obsidian-glass panels, gently rounded-rectangle controls,
    stacked rail segments, an illuminated GOLD structural accent, and a single
@@ -12,10 +12,10 @@
    ========================================================================== */
 
 :root {
-  /* ---- Kaine brand palette on LCARS structure (the primary knobs) ------- */
+  /* ---- Kaine brand palette on console structure (the primary knobs) ------- */
   /* Arcane-cyberpunk (see the kaine-brand repo): obsidian near-black surfaces,
      illuminated gold-parchment text, and a single blood-red signal reserved for
-     alerts. The LCARS shapes — elbows, rails, big radii, colour-blocked panels —
+     alerts. The console shapes — elbows, rails, big radii, colour-blocked panels —
      are kept intact; only the colour blocking is remapped, so GOLD carries the
      structure (bars, elbows, active states) and RED is the signal. */
   --bg: #050507;            /* obsidian near-black background */
@@ -24,7 +24,7 @@
   --slate: #6e5c3a;         /* muted gold-brown: borders, bar fills, dividers */
   --haze: #9A7F62;          /* dim gold: secondary text / labels */
   --ink: #DBC9A8;           /* primary text — illuminated gold-parchment */
-  --accent: #C4963C;        /* GOLD — the structural LCARS accent, illuminated */
+  --accent: #C4963C;        /* GOLD — the structural console accent, illuminated */
   --accent-amber: #DBC9A8;  /* parchment — warm secondary for section variety */
 
   /* ---- Signal (blood-red — reserved for alerts, per the brand) ---------- */
@@ -56,7 +56,7 @@
 
   /* ---- Type — Kaine brand (Oxanium display / Inter body / JetBrains Mono) */
   /* Vendored locally (no runtime download; no-cloud-runtime). Oxanium is the
-     display face for LCARS headers and uppercase labels; Inter carries the UI
+     display face for console headers and uppercase labels; Inter carries the UI
      and body; JetBrains Mono is the metadata/data face. */
   --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-display: "Oxanium", "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -68,7 +68,7 @@
   --fs-lg: 1.35rem;
   --fs-xl: 1.75rem;
 
-  /* ---- Geometry (LCARS uses big radii + pill controls) ------------------ */
+  /* ---- Geometry (big radii + pill controls) ------------------ */
   --radius: 0.9rem;         /* panel corner radius (elbow feel) */
   --radius-sm: 0.45rem;     /* small insets */
   --radius-pill: 0.4rem;    /* gentle rounded-rectangle corners (was 999px capsule) */
@@ -136,7 +136,7 @@
   src: url("/static/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
 }
 
-/* ---- Themed scrollbars (LCARS slate on the dark field) ------------------ */
+/* ---- Themed scrollbars (slate on the dark field) ------------------ */
 * { scrollbar-width: thin; scrollbar-color: var(--slate) var(--bg-elev); }
 ::-webkit-scrollbar { width: 13px; height: 13px; }
 ::-webkit-scrollbar-track { background: var(--bg-elev); border-radius: var(--radius-pill); }
@@ -174,7 +174,7 @@ body {
   overflow: hidden;
 }
 
-/* ---- Left rail (the LCARS signature) ----------------------------------- */
+/* ---- Left rail (the console signature) ----------------------------------- */
 /* A dark column of stacked rounded-end segments. Sticky so it stays put as
    the console scrolls to its right. Outer corners heavily rounded. */
 .rail {
@@ -195,8 +195,8 @@ body {
   /* Flush with the window edge: no rounded corners on the rail itself. */
   border-radius: 0;
 }
-/* LCARS spine: a blue-grey bar down the rail's right edge that the KAINE header
-   curves into at the top (the brand bleeds up+right to meet it, forming the LCARS
+/* console spine: a blue-grey bar down the rail's right edge that the KAINE header
+   curves into at the top (the brand bleeds up+right to meet it, forming the console
    elbow). Blue-grey by default — it turns red ONLY on a red alert. */
 .rail::after {
   content: "";
@@ -208,7 +208,7 @@ body {
   background: var(--panel);
 }
 .shell.red-alert .rail::after { background: var(--brand-red); }
-/* The KAINE wordmark is an LCARS elbow: a blue-grey bar with a rounded top-right
+/* The KAINE wordmark is an elbow: a blue-grey bar with a rounded top-right
    corner that the rail spine flows down from. It bleeds UP to the rail's top edge
    and RIGHT into the spine so the bar + spine read as one continuous L. The bar
    is blue-grey (red is reserved for alerts) but the LETTERS are always palette
@@ -261,7 +261,7 @@ body {
   gap: 0.3rem;
 }
 .rail__nav--pages { margin-top: auto; }
-/* Each nav item is an LCARS segment: rounded on the LEFT, SQUARE on the right so
+/* Each nav item is a segment: rounded on the LEFT, SQUARE on the right so
    it aligns with — and, when selected, flows into — the rail bar/spine. It is a
    shade DARKER than the bar when closed, and the bar's own colour when open. */
 .rail__seg {
@@ -474,7 +474,7 @@ h3 {
   html, .page { scroll-behavior: smooth; }
 }
 
-/* LCARS section header: uppercase, condensed, generous letter-spacing, in
+/* console section header: uppercase, condensed, generous letter-spacing, in
    --accent (some boards vary to amber/haze), with a thick rounded left-cap. */
 .board__title {
   /* Default to a calm blue-grey; the --bar mechanism stays so a section can be
@@ -496,7 +496,7 @@ h3 {
 }
 /* The colored block: a thin SQUARE cap to the LEFT of the words, then the same
    block continues to the RIGHT of the words and runs full width to the window
-   edge — an LCARS-style section divider. The fill bar is flat on its left and
+   edge — a console-style section divider. The fill bar is flat on its left and
    bottom edges with only its top-right corner rounded. */
 .board__title::before {
   content: "";
@@ -521,7 +521,7 @@ h3 {
 
 /* Collapsible boards: the title doubles as the <summary>. Drop the native
    disclosure triangle (so the ::before left-cap stays first) and make it
-   click-affordant. The ::before / ::after LCARS bars still apply because the
+   click-affordant. The ::before / ::after accent bars still apply because the
    summary keeps the .board__title class. */
 summary.board__title {
   cursor: pointer;
@@ -562,7 +562,7 @@ details.board { margin-bottom: 0.2rem; }
    uPlot charts at an explicit width and stops a tall card stretching its row. */
 /* Cards stack vertically within their section column. This is the SCROLL
    container — the header bar above stays put while these cards scroll, so the
-   vertical scrollbar reads as a thin LCARS line descending from the header. */
+   vertical scrollbar reads as a thin accent line descending from the header. */
 .board__cards {
   /* Block flow (not flex) so the run of cards can fragment across a column
      boundary. Spacing comes from card margins, not flex gap. */
@@ -626,7 +626,7 @@ details.board { margin-bottom: 0.2rem; }
 .report-claim strong { color: var(--ink); }
 
 /* Continuation marker injected by NexusFlow at the top of a column where a
-   section spilled over from the previous column. Reads as a faint LCARS tab so
+   section spilled over from the previous column. Reads as a faint tab so
    the continuation is clearly part of the same section. Stays glued to the card
    that follows it (break-after: avoid) so it is never stranded at a column end. */
 .continued-marker {
@@ -674,14 +674,14 @@ details.board { margin-bottom: 0.2rem; }
   .span-2, .board__cards > .card--wide { grid-column: span 1; }
 }
 
-/* LCARS panel: large corner radius with an asymmetric "elbow" feel (bigger
+/* Panel: large corner radius with an asymmetric "elbow" feel (bigger
    radius top-left + bottom-right). Calm slate field; no left edge-strip — the
    rounded body alone carries the form. */
 .panel {
   position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
-  /* Square on three corners, rounded only at the bottom-left — an LCARS-style
+  /* Square on three corners, rounded only at the bottom-left — a console-style
      hard box with a single elbow. (top-left top-right bottom-right bottom-left) */
   border-radius: 0 0 0 var(--radius);
   padding: 1rem 1.1rem 1rem 1.25rem;
@@ -1052,7 +1052,7 @@ table th, table td {
   border-bottom: 1px solid var(--border);
 }
 table td { overflow-wrap: anywhere; }
-/* LCARS column headers: haze, uppercase, spaced. */
+/* Column headers: haze, uppercase, spaced. */
 table th {
   color: var(--haze);
   font-weight: 700;
