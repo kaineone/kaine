@@ -25,43 +25,46 @@ continuous channels gate per-channel and default unexposed.
 This module never blocks the cognitive cycle: all body I/O runs in its own
 asyncio tasks; bus publishes are fire-and-forget.
 
-**Producer gap — avatar motor control (deferred):** The ``_intent_loop``
-consumes ``intent.avatar.*`` events from the Volition stream. Volition currently
-emits only ``intent.speak``, ``intent.think``, and ``intent.act``; nothing in the
-current build emits any ``intent.avatar.*`` event, and no producer drives the
-continuous setpoint sink (that is ``intuitive-embodiment-control-surface``). As a
-result the motor families and continuous channels are unreachable at runtime; only
-the ``_speech_loop`` — mirroring ``lingua.external`` text into local chat — is
-live today. The exposure flags still gate which families/channels *would* be
-allowed once a Volition producer exists.
+**Producer gap — closed as continuous control:** The ``_intent_loop`` consumes
+``intent.avatar.*`` events from the Volition stream. Symbolic verb families still
+have no producer wired into the entity's learned policy (they remain operator-only
+tools). The *continuous* producer gap, however, is closed by
+``intuitive-embodiment-control-surface``: the
+:class:`~kaine.modules.mundus.control_surface.ContinuousMotorSurface` emits a
+per-tick ``intent.avatar.control`` carrying the continuous channel scalars, which
+this module routes to the continuous setpoint sink (``_drive_control`` →
+:meth:`apply_setpoints`, clamped and per-channel gated) and mirrors back as an
+efference copy (``mundus.efference``) time-aligned with the outgoing action so the
+forward model can close the loop. The ``_speech_loop`` — mirroring
+``lingua.external`` text into local chat — also remains live. The exposure flags
+still gate which families/channels are allowed.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-from typing import Any, Callable, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine import perception_state
 from kaine.modules.base import BaseModule
 from kaine.modules.mundus.adapter import EmbodimentAdapter, FeedFrame
+from kaine.modules.mundus.channels import CONTINUOUS_CHANNEL_RANGE
 from kaine.workspace.volition import VOLITION_STREAM
+
+if TYPE_CHECKING:
+    # Imported for typing only — the control surface is injected at construction,
+    # so the core never needs it at runtime.
+    from kaine.modules.mundus.control_surface import ContinuousMotorSurface
 
 log = logging.getLogger(__name__)
 
 _AVATAR_PREFIX = "intent.avatar."
-
-# Canonical continuous-channel vocabulary and clamp ranges, shared with
-# `intuitive-embodiment-control-surface` so every graded-control adapter and that
-# change agree by construction. `interact` is a single graded-reach trigger, so
-# its range is non-negative; the locomotion/gaze rates are bidirectional.
-CONTINUOUS_CHANNEL_RANGE: dict[str, tuple[float, float]] = {
-    "drive": (-1.0, 1.0),
-    "yaw_rate": (-1.0, 1.0),
-    "gaze_yaw": (-1.0, 1.0),
-    "gaze_pitch": (-1.0, 1.0),
-    "interact": (0.0, 1.0),
-}
+# The continuous control intent (`intuitive-embodiment-control-surface`): the
+# entity's per-tick motor command, carrying the continuous channel scalars under
+# `payload["channels"]`. It is NOT a symbolic action family — it is routed to the
+# continuous setpoint sink, not `apply_action`, and drives the body directly.
+_CONTROL_ACTION = "control"
 
 
 def operator_approved() -> bool:
@@ -83,9 +86,17 @@ class Mundus(BaseModule):
         speech_stream: str = "lingua.external",
         intent_stream: str = VOLITION_STREAM,
         locus_reader: Optional[Callable[[], str]] = None,
+        control_surface: Optional["ContinuousMotorSurface"] = None,
     ) -> None:
         super().__init__(bus)
         self._adapter = adapter
+        # The continuous motor producer (the entity's per-tick learned policy +
+        # freeze-then-free curriculum + closed-loop forward model). Held here so
+        # the control plane and its producer are constructed together and the
+        # producer is reachable; the per-tick driving loop is the cycle's motor
+        # seam (`intuitive-embodiment-control-surface`), not started by the
+        # control plane. None until wired — the surface is inert without it.
+        self._control_surface = control_surface
         caps = adapter.capabilities()
         # The body only acts when the entity's perceptual locus is `virtual`.
         self._locus_reader = locus_reader or (lambda: perception_state.read_desired().locus)
@@ -105,6 +116,11 @@ class Mundus(BaseModule):
         self._intent_cursor = "0-0"
         self._speech_cursor = "0-0"
         self._tasks: list[asyncio.Task] = []
+
+    @property
+    def control_surface(self) -> Optional["ContinuousMotorSurface"]:
+        """The continuous motor producer, if one was wired (else None)."""
+        return self._control_surface
 
     def _enabled(self) -> bool:
         return self._config_enabled and operator_approved()
@@ -204,6 +220,23 @@ class Mundus(BaseModule):
         if self._locus_reader() != "virtual":
             log.debug("mundus: locus not virtual; not driving setpoints")
             return False
+        gated = self._gate_channels(channels)
+        if not gated:
+            return False
+        try:
+            return await self._adapter.apply_setpoints(gated)
+        except Exception:
+            log.exception("mundus: failed to apply setpoints")
+            return False
+
+    def _gate_channels(self, channels: dict[str, float]) -> dict[str, float]:
+        """Gate + clamp continuous channels: on-body, per-channel exposure, range.
+
+        The producer is never trusted — an unknown channel, an unexposed channel,
+        or an out-of-range value is respectively dropped or clamped here, at the
+        boundary. Returns the channels that survive gating, clamped to range.
+        """
+        caps = self._adapter.capabilities()
         gated: dict[str, float] = {}
         for name, value in channels.items():
             if name not in caps.continuous_channels:
@@ -214,13 +247,35 @@ class Mundus(BaseModule):
                 continue
             lo, hi = CONTINUOUS_CHANNEL_RANGE.get(name, (-1.0, 1.0))
             gated[name] = max(lo, min(hi, float(value)))
-        if not gated:
-            return False
-        try:
-            return await self._adapter.apply_setpoints(gated)
-        except Exception:
-            log.exception("mundus: failed to apply setpoints")
-            return False
+        return gated
+
+    async def _drive_control(self, channels: dict[str, float]) -> bool:
+        """Route one continuous control tick (`intent.avatar.control`) to the body.
+
+        Drives the gated/clamped setpoints AND publishes the efference copy — the
+        scalars the entity emitted (clamped to range) — onto the bus time-aligned
+        with the outgoing action, so the forward model can predict -> compare ->
+        correct against the coupled proprioceptive/visual feedback (which arrives
+        via the body's own feed as `mundus.proprio` / `mundus.visual.*`). Feedback
+        is mandatory, not optional: the efference copy is what makes the surface a
+        closed loop rather than an open-loop joystick.
+        """
+        forwarded = await self.apply_setpoints(channels)
+        # Efference copy of the EMITTED command (clamped), regardless of which
+        # channels were gated off — it is a copy of what the entity emitted, not
+        # of what reached the body.
+        efference: dict[str, float] = {}
+        for name, value in channels.items():
+            if name not in CONTINUOUS_CHANNEL_RANGE:
+                continue
+            lo, hi = CONTINUOUS_CHANNEL_RANGE[name]
+            efference[name] = max(lo, min(hi, float(value)))
+        await self.publish(
+            "mundus.efference",
+            {"channels": efference, "forwarded": bool(forwarded)},
+            salience=0.2,
+        )
+        return forwarded
 
     async def _intent_loop(self) -> None:
         while True:
@@ -240,6 +295,15 @@ class Mundus(BaseModule):
             for _id, event in entries:
                 if event.type.startswith(_AVATAR_PREFIX):
                     family = event.type[len(_AVATAR_PREFIX):]
+                    if family == _CONTROL_ACTION:
+                        # Continuous per-tick motor command → setpoint sink, NOT
+                        # the symbolic `apply_action` path. This is the producer
+                        # gap closed as continuous control.
+                        channels = (event.payload or {}).get("channels") or {}
+                        if isinstance(channels, dict):
+                            await self._drive_control(
+                                {str(k): float(v) for k, v in channels.items()})
+                        continue
                     await self._send_action(family, **(event.payload or {}))
 
     async def _speech_loop(self) -> None:
