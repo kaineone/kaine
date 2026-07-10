@@ -126,6 +126,28 @@ def _wire_topos_arousal(registry, affect_provider) -> bool:
     return True
 
 
+def _wire_audition_arousal(registry, affect_provider) -> bool:
+    """Give Audition the live Thymos arousal scalar that sizes the auditory window.
+
+    The auditory analog of ``_wire_topos_arousal``: general auditory perception
+    couples the breadth of the auditory attentional window to arousal (Easterbrook
+    narrowing). No-op unless Audition is present with general auditory perception
+    enabled. Returns whether it wired, so the caller can ensure the provider is
+    refreshed each tick.
+    """
+    try:
+        audition = registry.get("audition") if "audition" in registry else None
+    except Exception:
+        audition = None
+    if audition is None or not getattr(audition, "general_audition", False):
+        return False
+    if not hasattr(audition, "set_arousal_provider"):
+        return False
+    audition.set_arousal_provider(lambda: affect_provider.dimensional_state().arousal)
+    log.info("wired audition attentional window to live thymos arousal")
+    return True
+
+
 def _sleep_state_factory(registry):
     """Thunk returning a paired snapshot of mnemos/nous/thymos/chronos
     states for sleep_snapshots observer."""
@@ -704,14 +726,16 @@ async def _boot_and_run(
     # Wiring it also means the provider must be refreshed each tick so the arousal
     # it reads is live, not the frozen baseline.
     topos_reads_arousal = _wire_topos_arousal(registry, affect_provider)
+    audition_reads_arousal = _wire_audition_arousal(registry, affect_provider)
     # The provider only needs refreshing when a real reader consumes it. When both
-    # salience factors are the static negative control AND foveation is off, the
-    # engine stays byte-identical to the pre-change behavior (no affect observation
-    # at all).
+    # salience factors are the static negative control AND foveation / general
+    # auditory perception are off, the engine stays byte-identical to the
+    # pre-change behavior (no affect observation at all).
     reads_affect = (
         isinstance(thymos_modulator, StateModulator)
         or isinstance(goal_scorer, DriveRelevanceGoalScorer)
         or topos_reads_arousal
+        or audition_reads_arousal
     )
     affect_observer = affect_provider.observe if reads_affect else None
     syneidesis = Syneidesis(

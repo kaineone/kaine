@@ -453,6 +453,30 @@ def test_make_audition_from_config():
     assert a.name == "audition"
     # No perception_feed → live mic path, no deterministic stream factory.
     assert a._stream_factory is None
+    assert a.general_audition is False  # off by default
+
+
+def test_make_audition_general_audition_threads_config():
+    bus = _bus()
+    a = make_audition(
+        bus,
+        {
+            "stt_model": "fake",
+            "general_audition": True,
+            "arousal_window_min": 0.2,
+            "arousal_window_max": 0.9,
+            "acoustic_change_alert_threshold": 0.4,
+            "capture_enabled": True,
+            "vad_backend": "rms",
+        },
+    )
+    assert a.general_audition is True
+    assert a._arousal_window_range == (0.2, 0.9)
+    assert a._acoustic_change_alert_threshold == 0.4
+    assert a._acoustic_encoder is not None
+    # Capture switches to continuous windows so non-speech is heard, not gated.
+    assert a._live_mic is not None
+    assert a._live_mic._cfg.continuous_capture is True
 
 
 def test_make_audition_seeded_feed_selects_stream_factory():
