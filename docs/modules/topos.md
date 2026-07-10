@@ -86,7 +86,7 @@ The shared top-level `[perception_feed]` section selects a **deterministic, unif
 
 | Key | Default | Meaning |
 |---|---|---|
-| `mode` | `"off"` | `off` (no feed; honour each module's `capture_enabled`) / `seeded` / `playlist` / `live` |
+| `mode` | `"off"` | `off` (no feed; honour each module's `capture_enabled`) / `seeded` / `playlist` / `live` / `screen` |
 | `seed` | `0` | Seeded mode: both surfaces are a pure function of this seed |
 | `playlist_manifest` | `""` | Playlist mode: path to the single checksummed media manifest pinning **both** surfaces |
 | `[perception_feed.video].surprise_interval` | `150` | Seeded mode: **shared cross-modal** cadence (frames/blocks) of surprise events |
@@ -95,6 +95,20 @@ The shared top-level `[perception_feed]` section selects a **deterministic, unif
 | `[perception_feed.audio].channels` | `1` | Seeded mode: audio channel count |
 | `[perception_feed.audio].base_strength` | `0.3` | Seeded mode: learnable base soundscape amplitude |
 | `[perception_feed.audio].surprise_strength` | `1.0` | Seeded mode: seed-keyed surprise-burst amplitude (`0` disables) |
+
+**`screen` mode** turns a shared desktop or a single window into the live vision
+source (and its desktop-audio monitor into the hearing source — see
+[audition](audition.md)). Instead of the webcam, boot injects a
+`ScreenCaptureSource` (`kaine/modules/topos/screen.py`) that spawns the **system
+ffmpeg binary** (`gdigrab`/`avfoundation`/`x11grab` per OS) to grab frames at the
+configured rate and hand Topos the same BGR frames the webcam would — so nothing
+downstream of `process_frame` changes. Because it feeds the *camera* seam, screen
+mode runs under the **physical** locus (it obeys `effective_video_capture()` like
+the webcam) and is non-reproducible — operator-present demos, never a research run.
+Configured under `[perception_feed.screen]` (`target`, `region`, `window_title`,
+`display`, `framerate`, `cursor`, `native`, `ffmpeg_path`); see the
+[configuration reference](../configuration.md#perception_feedscreen). As with all
+perception, frames are held in memory and released, never written to disk.
 
 ---
 

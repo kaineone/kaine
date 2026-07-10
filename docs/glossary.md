@@ -250,7 +250,29 @@ frames into bus events and the entity's action intents into commands on the body
 Bodies are pluggable. No transport-backed body ships today; the shipped adapter is
 the transport-free `stub` reference body, and a virtual-world (Paracosmic) adapter
 is planned. The perceptual locus is physical (real-world sensors) or virtual (a
-Mundus body) — never both simultaneously. See: `kaine/modules/mundus/`.
+Mundus body) — never both simultaneously. The entity drives a continuous-capable
+body through the *continuous embodiment control surface* (below). See:
+`kaine/modules/mundus/`.
+
+### Continuous embodiment control surface
+
+The entity's per-tick continuous motor producer for a Mundus body
+(`kaine/modules/mundus/control_surface.py`). Rather than a menu of symbolic verbs,
+it emits five clamped continuous channels — `drive`, `yaw_rate`, `gaze_yaw`,
+`gaze_pitch`, `interact` — as an `intent.avatar.control` command each tick. A
+freeze-then-free curriculum frees degrees of freedom only on demonstrated
+competence (a falling forward-model error), and an efference copy closes the loop
+through Soma's existing forward model. No gait is scripted: the default policy is
+quiescent, and a learned policy is injected at the seam. Off by default. See:
+[`mundus.md`](modules/mundus.md).
+
+### Efference copy
+
+A copy of a motor command the entity emits, fed forward to the forward model so it
+can predict the command's sensory consequences and compare them against what
+actually arrives (`predict → compare → correct`; Wolpert et al. 1995). Mundus
+publishes one on `mundus.efference` each continuous control tick — the mechanism
+that makes the control surface a closed loop rather than an open-loop joystick.
 
 ---
 

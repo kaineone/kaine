@@ -22,7 +22,7 @@ Three loci are defined in `kaine/perception_state.py`:
 
 | Locus | Meaning | Real camera/mic |
 |-------|---------|----------------|
-| `physical` | The entity perceives the room — real camera and microphone | Allowed (subject to desired-state flags) |
+| `physical` | The entity perceives the room — real camera and microphone, or a screen/window capture feed (`[perception_feed].mode = "screen"`), which substitutes the camera/mic source at the same seam | Allowed (subject to desired-state flags) |
 | `virtual` | The entity perceives a virtual source — the deterministic perception feed (seeded/playlist), or an embodied avatar feed (e.g. Mundus) when that path is wired in | Forced off |
 | `off` | No perception | Forced off |
 
