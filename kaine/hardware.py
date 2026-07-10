@@ -587,6 +587,7 @@ def total_ram_gb() -> float | None:
         if page_size > 0 and phys_pages > 0:
             return round(page_size * phys_pages / (1024 ** 3), 2)
     except (ValueError, OSError, AttributeError):
+        # sysconf unavailable on this platform — fall through to /proc/meminfo
         pass
     try:
         with open("/proc/meminfo", encoding="utf-8") as fh:
@@ -595,6 +596,7 @@ def total_ram_gb() -> float | None:
                     kib = int(line.split()[1])
                     return round(kib / (1024 ** 2), 2)
     except (OSError, ValueError, IndexError):
+        # no readable /proc/meminfo — fall through to the psutil probe
         pass
     try:
         import psutil  # type: ignore[import-untyped]
