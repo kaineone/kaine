@@ -109,18 +109,20 @@ faked.
 
 ## 5. Salience re-tuning (calibration pass)
 
-- [ ] 5.1 **DEFERRED — requires the real encoder (CUDA + `[internvideo]` deps +
-      fetched weights), unavailable in this environment.** Run the new encoder over
-      the seeded `reproducible-perception` feed at the shipped `clip_stride`,
-      `forward_prediction` on; record change / habituation / normalized-prediction-
-      error distributions. This is a GPU shakedown step, same gate as the
-      `clip_stride` / `vision_sample_hz` benchmarks.
-- [ ] 5.2 **DEFERRED (blocked on 5.1).** Re-derive `change_alert_threshold`
-      (~90th pct of observed change); re-verify `baseline_salience` /
-      `alert_salience`. `change_alert_threshold` currently carries the DINOv2 value
-      0.5 as a **documented provisional placeholder** (config comment flags it as
-      likely too high for overlapping strided clips); no fabricated "calibrated"
-      constant was committed.
+- [x] 5.1 **DONE (GPU shakedown 2026-07-10, RTX 4070 SUPER).** Ran the real encoder
+      over the seeded feed (seed 0, 900 frames) at the shipped `clip_stride = 3`,
+      `forward_prediction` on; recorded change / habituation / normalized-prediction-
+      error distributions. See `docs/shakedowns/internvideo-next-gpu-shakedown.md`.
+      Key result: cosine `change_score` is heavily compressed on attention-pooled
+      embeddings (routine ≤ 0.0004, genuine scene cuts only ~0.008–0.043); the
+      informative surprise signal is the forward-model prediction error (fired at the
+      2.0× factor).
+- [x] 5.2 **DONE.** Re-derived `change_alert_threshold` → **0.005** (was 0.5, which
+      was unreachable — ~12× above even a total content change). Anchored between the
+      measured routine floor (≤ 0.0004) and the encoder's measured scene-cut scale
+      (≥ 0.008), since the smooth seeded feed has no genuine cuts to take a naive 90th
+      percentile of. `baseline_salience` (0.2) / `alert_salience` (0.7) re-verified,
+      unchanged. Set in `config/kaine.toml [topos]` + the `Topos` fallback default.
 
 ## 6. Config, docs, tests
 
@@ -150,10 +152,12 @@ faked.
 ## 7. Verify
 
 - [x] 7.1 Full suite green (no entity boot; vision tests use fake encoders).
-- [ ] 7.2 **DEFERRED — requires the real encoder (CUDA + `[internvideo]` deps +
-      fetched weights).** Pre-boot dry-run: perception feed → new encoder →
-      `topos.report` at the clip cadence, 768-d latent, salience firing sanely on
-      the seeded feed; loaded fully offline from vendored code + local weights. The
-      full end-to-end wiring (ring buffer → clip cadence → salience → publish) is
-      covered against a fake clip encoder; only the real 91M forward pass is
-      un-exercised in this environment.
+- [x] 7.2 **DONE (GPU shakedown 2026-07-10).** Pre-boot dry-run: seeded feed → real
+      encoder → `topos.report` at the clip cadence produced 768-d latents (all
+      finite), salience firing sanely (baseline on routine, alert on the surprise via
+      the prediction-error path); loaded fully offline from vendored code + local
+      weights (config from the vendored dir, weights from the fetch dir), 91.0M params
+      with zero missing/unexpected keys. Real forward pass: ~78 ms/clip median,
+      ~1.06 GB peak VRAM, run WITHOUT flash_attn via the model's own eager attention
+      path (no prebuilt wheel for torch 2.11/cu128). See
+      `docs/shakedowns/internvideo-next-gpu-shakedown.md`.

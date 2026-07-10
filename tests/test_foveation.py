@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from kaine.modules.topos.foveation import (
+    FoveaPredictor,
     FoveaTarget,
     SpatialSaliency,
     arousal_to_size,
@@ -136,3 +137,50 @@ def test_fovea_near_edge_is_clamped_not_crashing():
     # target at the extreme corner with a large size — must clamp, not raise
     peripheral, foveal = foveate(f, FoveaTarget(1.0, 1.0, 0.9), foveal_size=(32, 32))
     assert foveal.shape == (32, 32, 3)
+
+
+# --------------------------------------------------------------------------- #
+# FoveaPredictor — attention schema (predicted next fovea)
+# --------------------------------------------------------------------------- #
+
+
+def test_first_prediction_is_the_current_target():
+    # No prior trajectory → zero velocity → predict "stay put".
+    p = FoveaPredictor()
+    cur = FoveaTarget(0.4, 0.6, 0.2)
+    pred = p.predict_next(cur)
+    assert pred.x == pytest.approx(cur.x)
+    assert pred.y == pytest.approx(cur.y)
+    assert pred.size == pytest.approx(cur.size)
+
+
+def test_constant_velocity_extrapolates_forward():
+    # A steady rightward+downward drift should be extrapolated one step ahead.
+    p = FoveaPredictor(momentum=0.0)  # no smoothing → pure last-delta velocity
+    p.predict_next(FoveaTarget(0.10, 0.10, 0.30))
+    p.predict_next(FoveaTarget(0.20, 0.25, 0.30))  # velocity (+0.10, +0.15, 0)
+    pred = p.predict_next(FoveaTarget(0.30, 0.40, 0.30))
+    assert pred.x == pytest.approx(0.40)
+    assert pred.y == pytest.approx(0.55)
+    assert pred.size == pytest.approx(0.30)
+
+
+def test_prediction_is_clamped_to_unit_range():
+    p = FoveaPredictor(momentum=0.0)
+    p.predict_next(FoveaTarget(0.7, 0.5, 0.5))
+    pred = p.predict_next(FoveaTarget(0.95, 0.5, 0.5))  # velocity +0.25 → 1.20
+    assert pred.x == pytest.approx(1.0)  # clamped, not out of range
+    assert 0.0 <= pred.y <= 1.0 and 0.0 <= pred.size <= 1.0
+
+
+def test_prediction_is_content_free():
+    # A predicted fovea is only normalized coordinates + size — never pixels.
+    p = FoveaPredictor()
+    d = p.predict_next(FoveaTarget(0.3, 0.7, 0.25)).to_dict()
+    assert set(d) == {"x", "y", "size"}
+    assert all(isinstance(v, float) for v in d.values())
+
+
+def test_momentum_must_be_in_unit_range():
+    with pytest.raises(ValueError):
+        FoveaPredictor(momentum=1.5)
