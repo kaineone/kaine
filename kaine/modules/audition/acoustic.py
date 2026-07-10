@@ -33,12 +33,15 @@ class AcousticEncoder(Protocol):
     """Turns an audio window into a fixed general acoustic embedding."""
 
     @property
-    def embedding_dim(self) -> int: ...
+    def embedding_dim(self) -> int:
+        """The fixed embedding dimension the encoder produces."""
 
     @property
-    def model_id(self) -> str: ...
+    def model_id(self) -> str:
+        """A stable identifier for the encoder (recorded with the perception)."""
 
-    def embed(self, audio_bytes: bytes, sample_rate: int) -> list[float]: ...
+    def embed(self, audio_bytes: bytes, sample_rate: int) -> list[float]:
+        """Encode one audio window into an ``embedding_dim``-length embedding."""
 
 
 def _pcm16_to_float(audio_bytes: bytes) -> np.ndarray:
