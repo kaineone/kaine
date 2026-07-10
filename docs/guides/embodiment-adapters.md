@@ -114,9 +114,10 @@ class EmbodimentCapabilities:
 Convention: use the existing `mundus.*` event names (`mundus.proprio`,
 `mundus.chat`, `mundus.entity`, `mundus.visual.raw`, `mundus.notice`,
 `mundus.action.result`, …) so downstream modules and the operator UI already
-understand your feed. The `bridge.py` reference tables (`FEED_EVENT`,
-`ACTION_DEFAULT_EXPOSED`) show a realistic transport-backed vocabulary you can crib
-from.
+understand your feed. Declare a realistic transport-backed vocabulary in your
+adapter's `feed_events` and `action_families` descriptor fields, mapping each
+world feed `kind` to a `mundus.*` event and each action family to its default
+exposure.
 
 ---
 

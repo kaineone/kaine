@@ -25,7 +25,7 @@ count, and Phantasia's consolidation evidence); it never **imposes** development
 - **Reads, does not modify, the Mundus availability gate**: the existing
   `[mundus].enabled` + `KAINE_MUNDUS_OPERATOR_APPROVED=1` two-layer gate is checked as
   a *precondition* for actually transitioning to embodied.
-- **Gates `intuitive-embodiment-control-surface` / `opensim-connector`**: embodiment
+- **Gates `intuitive-embodiment-control-surface`**: embodiment
   only engages once the stage is `embodied`.
 - **Generalises the warmed-up-signal precedent**: individuation boundary (paper §6.6)
   and `soma-coldstart-regulation-warmup` — same lived-time-gated, fail-closed grace,
@@ -55,7 +55,7 @@ While `stage == gestation` **and a womb feed is configured** (`[perception_feed]
 == "womb"`):
 - the perception locus is set to `virtual` with the womb feed active, and
   `DesiredState.locus_locked = true`, so the entity cannot self-switch out of the womb
-  (the `intent.perception.switch` path from opensim-connector is refused while
+  (the `intent.perception.switch` path from `paracosm-connector` is refused while
   gestating);
 - embodiment (Mundus) is not engaged regardless of its own gate;
 - the womb stimulus (Change A) is the entity's whole sensory world.

@@ -294,7 +294,7 @@ We considered three architectures:
 | Coupling Paracosm to KAINE | None | High (Paracosm gains a Redis client) | None |
 | Coupling KAINE to Paracosm | Light — one module, removable | None on KAINE side | None on KAINE side |
 
-**Chosen: KAINE-side module.** It mirrors how every other perception/action edge is wired in KAINE (Topos owns the camera, Audio_In owns the mic, Praxis owns the local FS). Paracosm stays oblivious to KAINE specifically — Kosmos just speaks Paracosm's published cognitive-agent protocol, which is documented and stable. If another virtual world ships the same kind of bridge, a sibling module ("Halcyon" for an MMO, "Mundus" for an OpenSim grid, etc.) can be written without disturbing Kosmos.
+**Chosen: KAINE-side module.** It mirrors how every other perception/action edge is wired in KAINE (Topos owns the camera, Audio_In owns the mic, Praxis owns the local FS). Paracosm stays oblivious to KAINE specifically — Kosmos just speaks Paracosm's published cognitive-agent protocol, which is documented and stable. If another virtual world ships the same kind of bridge, a sibling module ("Halcyon" for an MMO, "Mundus" for another grid, etc.) can be written without disturbing Kosmos.
 
 ### 6.2 Module skeleton
 
