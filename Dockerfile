@@ -48,12 +48,26 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# python3.12 + venv + build toolchain (CUDA/HIP extensions may compile here).
+# Build toolchain — CUDA/HIP extensions may compile during pip; git lets pip
+# resolve any VCS deps; ca-certificates/gnupg back the deadsnakes PPA fetch below.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-        python3.12 python3.12-venv python3.12-dev python3-pip \
-        build-essential git ca-certificates \
+        build-essential git ca-certificates gnupg \
  && rm -rf /var/lib/apt/lists/*
+
+# python3.12 + venv + dev headers. Already present on python:3.12-slim (the CPU
+# build base) — the guard is a no-op there. On the CUDA build base (Ubuntu jammy,
+# whose apt ships only python3.10) it comes from the deadsnakes PPA.
+RUN if ! command -v python3.12 >/dev/null 2>&1; then \
+        apt-get update \
+     && apt-get install -y --no-install-recommends \
+            software-properties-common ca-certificates gnupg \
+     && add-apt-repository -y ppa:deadsnakes/ppa \
+     && apt-get update \
+     && apt-get install -y --no-install-recommends \
+            python3.12 python3.12-venv python3.12-dev \
+     && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
@@ -85,10 +99,25 @@ RUN pip install -e "${KAINE_EXTRAS}"
 FROM ${RUNTIME_BASE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# tini reaps zombies as PID 1; ca-certificates for TLS trust. Both bases.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-        python3.12 ca-certificates tini \
+        tini ca-certificates gnupg \
  && rm -rf /var/lib/apt/lists/*
+
+# python3.12 runtime interpreter — the copied-in venv symlinks to it. Present on
+# python:3.12-slim (the CPU runtime base); from deadsnakes on the CUDA runtime
+# base (Ubuntu jammy). The guard is a no-op when python3.12 already exists.
+RUN if ! command -v python3.12 >/dev/null 2>&1; then \
+        apt-get update \
+     && apt-get install -y --no-install-recommends \
+            software-properties-common ca-certificates gnupg \
+     && add-apt-repository -y ppa:deadsnakes/ppa \
+     && apt-get update \
+     && apt-get install -y --no-install-recommends python3.12 \
+     && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Non-root runtime user (design §7): owns /state and /models; owner-only perms
 # are established by the entrypoint on the mounted volumes, never baked in.
