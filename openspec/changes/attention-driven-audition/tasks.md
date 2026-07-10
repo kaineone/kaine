@@ -24,25 +24,25 @@ is real fails honestly rather than faking acoustic salience.
 
 ## 1. Phase 1 — general acoustic front end + salience + arousal-modulated window
 
-- [ ] 1.1 Add a frozen general audio encoder collaborator to Audition: each
+- [x] 1.1 Add a frozen general audio encoder collaborator to Audition: each
       captured window → acoustic embedding; memory-only, released as it ages
       (zero-persistence guard stays green). Fake encoder for tests, like vision.
-- [ ] 1.2 An acoustic forward model over the embedding + a recurrent auditory
+- [x] 1.2 An acoustic forward model over the embedding + a recurrent auditory
       buffer; salience = change + normalized prediction error over the embedding,
       covering any sound (not the emotion/timing/energy feature vector). Keep the
       buffer a statistical descriptor (mean/variance), never raw audio/embeddings.
-- [ ] 1.3 A workspace→Audition arousal seam (provider/callback, no workspace
+- [x] 1.3 A workspace→Audition arousal seam (provider/callback, no workspace
       import, like the affect / topos-arousal seams); arousal sets the auditory
       attentional window (distinct affective→perceptual coupling; sign tunable).
-- [ ] 1.4 A single arousal-modulated attended window over the input; publish a
+- [x] 1.4 A single arousal-modulated attended window over the input; publish a
       content-free attended-stream/salience descriptor (which stream, how salient
       — never audio) on `audition.out`.
-- [ ] 1.5 Speech as a specialization: a voice-activity/speech detector routes
+- [x] 1.5 Speech as a specialization: a voice-activity/speech detector routes
       detected-speech segments to the existing STT + vocal-emotion path (→ Lingua),
       off the general perceptual path; the general path perceives the rest.
-- [ ] 1.6 Config: a general-audition toggle under `[audition]`, off by default;
+- [x] 1.6 Config: a general-audition toggle under `[audition]`, off by default;
       encoder id, buffer/window sizes, arousal→window mapping, speech-gate mode.
-- [ ] 1.7 Host-benchmark the acoustic-encode (+ speech path on speech only) cost
+- [x] 1.7 Host-benchmark the acoustic-encode (+ speech path on speech only) cost
       against the tick budget; gate enabling on it. Report a NULL/regression
       result honestly.
 
