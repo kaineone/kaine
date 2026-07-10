@@ -1949,33 +1949,26 @@ def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) ->
 
 
 def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
-    """Give Lingua a read-only accessor to the Eidolon self-model so its persona
-    is seeded from accumulated identity (values/norms/name). No-op unless both
-    modules are enabled; on a fresh start the model is empty and the persona
-    stays minimal."""
+    """Confirm Lingua seeds its persona from the *bus-mediated* Eidolon
+    self-model snapshot rather than an in-process Eidolon reference.
+
+    Previously this injected a live ``eidolon.model`` accessor into Lingua — a
+    direct boot-time Python reference that pinned the two modules into one
+    process. That reference is the coupling the ``distributed-deployment``
+    change removes: Eidolon now publishes its self-model to ``eidolon.out`` and
+    Lingua caches it via its own ``_self_model_cache_loop`` (over the shared
+    authenticated bus), so the language organ can run in a separate process /
+    on a separate trusted GPU host. This helper therefore no longer wires an
+    object handle; it stays as the documented seam (and a boot log) so the
+    single-host default is unchanged and the decoupling is explicit.
+
+    Hypnos→Mnemos/Nous/Thymos remains an in-process reference (the next
+    decoupling target — see docs/deployment-topologies.md); only the read-only
+    Lingua→Eidolon accessor is bus-mediated here.
+    """
     if "lingua" not in registry or "eidolon" not in registry:
         return
-    lingua = registry.get("lingua")
-    eidolon = registry.get("eidolon")
-    if not hasattr(lingua, "set_self_model_provider"):
-        return
-
-    def _provider() -> dict[str, Any]:
-        try:
-            m = eidolon.model
-            return {
-                "name": getattr(m, "name", None),
-                "values": list(getattr(m, "values", []) or []),
-                "behavioral_norms": list(getattr(m, "behavioral_norms", []) or []),
-                "personality_baseline": dict(
-                    getattr(m, "personality_baseline", {}) or {}
-                ),
-            }
-        except Exception:
-            return {}
-
-    lingua.set_self_model_provider(_provider)
-    log.info("wired lingua persona to eidolon self-model")
+    log.info("lingua persona seeded from bus-mediated eidolon.self_model snapshot")
 
 
 def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:

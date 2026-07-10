@@ -140,6 +140,14 @@ class Eidolon(BaseModule):
                 self._periodic_save_loop(), name=f"{self.name}-periodic-save"
             )
         )
+        # Publish an initial self-model snapshot to eidolon.out so a bus-mediated
+        # consumer (a split-host Lingua) can seed its persona at boot rather than
+        # waiting for the first sleep-driven update. On a fresh start the model is
+        # empty, so this seeds the same minimal persona as the single-host default.
+        try:
+            await self._publish_self_model()
+        except Exception:
+            log.debug("eidolon initial self-model publish failed", exc_info=True)
         if self._inference.enabled:
             self._tasks.append(
                 asyncio.create_task(
@@ -376,11 +384,20 @@ class Eidolon(BaseModule):
             raise
 
     async def _publish_self_model(self) -> None:
-        """Publish the populated self-model fields to eidolon.out."""
+        """Publish the populated self-model fields to eidolon.out.
+
+        This is the bus-mediated self-model snapshot other trusted-host modules
+        (notably Lingua's persona seeding) consume in place of an in-process
+        Eidolon reference, so the language organ can run in a separate process /
+        host over the shared bus (``distributed-deployment``). ``name`` is
+        included so a split Lingua seeds the same persona as the single-host
+        default.
+        """
         m = self._model
         await self.publish(
             "eidolon.self_model",
             {
+                "name": getattr(m, "name", None),
                 "values": list(m.values),
                 "behavioral_norms": list(m.behavioral_norms),
                 "personality_baseline": dict(m.personality_baseline),

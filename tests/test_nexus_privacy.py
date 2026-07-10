@@ -152,6 +152,7 @@ _CONTENT_SUSPECT_TOKENS = (
 _REVIEWED_OPERATIONAL_KEYS = frozenset(
     {
         "agent_label",     # empatheia: modeled-agent familiarity label (metric)
+        "name",            # eidolon self-model name on eidolon.out + module/metric names — operational identity, not cognition content
         "error_detail",    # mnemos: exception detail string
         "error_reason",    # nous: exception reason string
         "reason",          # hypnos/phantasia/perception/preservation: short reason enum (consumer-read)
