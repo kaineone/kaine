@@ -92,9 +92,10 @@
 - [ ] 6.2 Confirm the produced response references state (affect/percept/memory)
       in a way the bare baseline does not; observe A/B divergence rise above its
       current ~0 floor.
-      <br>Offline analogue: `tests/test_lingua_context.py` A/B path — full request
-      carries the assembled context while `BareInferenceClient` stays bare, and
-      `lingua.external` carries `user_input` so `ab_divergence` writes a row.
+      <br>Offline analogue: `tests/test_lingua_module.py::test_speak_payload_carries_user_input`
+      (full path carries the context; `lingua.external` carries `user_input`) and
+      `tests/test_evaluation_observers.py::test_ab_divergence_writes_pair`
+      (observer resolves the input and writes a row; `BareInferenceClient` stays bare).
 - [ ] 6.3 Confirm no internal context leaks to the conversation surface.
       <br>Offline analogue: `tests/test_lingua_context.py::test_internal_speech_stays_off_the_conversation_channel`
       (privacy: only produced external text reaches the surface).
