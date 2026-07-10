@@ -6,13 +6,24 @@ from kaine.modules.mundus.adapter import (
     EmbodimentCapabilities,
     FeedFrame,
 )
-from kaine.modules.mundus.adapters.opensim import OpenSimAdapter
 from kaine.modules.mundus.adapters.stub import StubAdapter
 from kaine.modules.mundus.bridge import (
     ACTION_DEFAULT_EXPOSED,
     FEED_EVENT,
     read_frame,
     write_frame,
+)
+from kaine.modules.mundus.control_surface import (
+    MOTOR_CHANNELS,
+    MOTOR_STAGES,
+    ContinuousMotorSurface,
+    ControlCommand,
+    EfferenceLoop,
+    MotorCurriculum,
+    MotorFeedback,
+    MotorPolicy,
+    QuiescentMotorPolicy,
+    clamp_channel,
 )
 from kaine.modules.mundus.module import (
     CONTINUOUS_CHANNEL_RANGE,
@@ -27,10 +38,20 @@ __all__ = [
     "EmbodimentAdapter",
     "EmbodimentCapabilities",
     "FeedFrame",
-    "OpenSimAdapter",
     "StubAdapter",
     "read_frame",
     "write_frame",
     "FEED_EVENT",
     "ACTION_DEFAULT_EXPOSED",
+    # Continuous embodiment control surface (the producer).
+    "ContinuousMotorSurface",
+    "ControlCommand",
+    "MotorFeedback",
+    "MotorPolicy",
+    "QuiescentMotorPolicy",
+    "MotorCurriculum",
+    "EfferenceLoop",
+    "MOTOR_CHANNELS",
+    "MOTOR_STAGES",
+    "clamp_channel",
 ]

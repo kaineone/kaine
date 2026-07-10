@@ -19,6 +19,13 @@ from kaine.modules.audition.emotion import (
     Emotion2vecClassifier,
     EmotionResult,
 )
+from kaine.modules.audition.acoustic import (
+    AcousticEncoder,
+    SpectralAcousticEncoder,
+    arousal_to_window,
+    cosine_change,
+    detect_speech,
+)
 from kaine.modules.audition.forward import (
     AuditoryForwardModel,
     FEATURE_DIM,
@@ -76,6 +83,17 @@ class Audition(BaseModule):
         auditory_buffer_size: int = 16,
         # Prosody extraction (disabled by default — purely additive).
         prosody_enabled: bool = False,
+        # General auditory perception (auditory-perception). Off by default → the
+        # existing speech pipeline is unchanged. When enabled, each captured window
+        # is encoded to a general acoustic embedding and scored for salience by
+        # change + forward-model prediction error over that embedding, so any sound
+        # (not only a voice) is perceived; speech-to-text and vocal emotion run as
+        # a specialization on windows detected as speech. See
+        # kaine/modules/audition/acoustic.py and openspec auditory-perception.
+        general_audition: bool = False,
+        acoustic_encoder: Optional[AcousticEncoder] = None,
+        arousal_window_range: tuple[float, float] = (0.15, 1.0),
+        acoustic_change_alert_threshold: float = 0.35,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -119,6 +137,32 @@ class Audition(BaseModule):
         # Prosody flag.
         self._prosody_enabled = bool(prosody_enabled)
 
+        # General auditory perception (auditory-perception). All memory-only.
+        self._general_audition = bool(general_audition)
+        self._arousal_window_range = (
+            float(arousal_window_range[0]),
+            float(arousal_window_range[1]),
+        )
+        self._acoustic_change_alert_threshold = float(acoustic_change_alert_threshold)
+        self._acoustic_encoder: Optional[AcousticEncoder] = None
+        self._acoustic_forward_model: Optional[AuditoryForwardModel] = None
+        self._prev_acoustic_embedding: Optional[list[float]] = None
+        self._acoustic_errors: deque[float] = deque(
+            maxlen=self._prediction_error_window_size
+        )
+        if self._general_audition:
+            self._acoustic_encoder = acoustic_encoder or SpectralAcousticEncoder()
+            self._acoustic_forward_model = AuditoryForwardModel(
+                feature_dim=self._acoustic_encoder.embedding_dim,
+                units=int(forward_model_units),
+                auditory_buffer_size=int(auditory_buffer_size),
+            )
+        # Arousal seam (wired at boot, like the topos-arousal / affect seams): a
+        # zero-arg callable returning the current Thymos arousal in [0, 1] that
+        # sizes the auditory attentional window. Audition never imports the
+        # workspace; None → widest window.
+        self._arousal_provider: Optional[Callable[[], float]] = None
+
     @property
     def stt_client(self) -> STTClient:
         return self._stt_client
@@ -130,6 +174,67 @@ class Audition(BaseModule):
     def set_speaking_gate(self, gate: "SpeakingGate") -> None:
         """Inject the shared self-hearing gate (wired in build_registry)."""
         self._speaking_gate = gate
+
+    @property
+    def general_audition(self) -> bool:
+        """Whether general auditory perception is active (auditory-perception)."""
+        return self._general_audition
+
+    def set_arousal_provider(self, provider: Optional[Callable[[], float]]) -> None:
+        """Inject the Thymos arousal channel that sizes the auditory window.
+
+        Zero-arg callable returning arousal in [0, 1]. Distinct affective→auditory
+        coupling (Easterbrook), mirroring the topos-arousal seam.
+        """
+        self._arousal_provider = provider
+
+    def _read_arousal(self) -> float:
+        if self._arousal_provider is None:
+            return 0.0
+        try:
+            return float(self._arousal_provider())
+        except Exception:
+            log.debug("audition arousal provider failed (non-fatal)", exc_info=True)
+            return 0.0
+
+    async def _perceive_acoustic(
+        self, audio_bytes: bytes, sample_rate: int, source_label: str
+    ) -> None:
+        """General acoustic perception: encode the window, score salience by change
+        and forward-model prediction error over the embedding, and publish a
+        content-free ``audition.perception`` event so any sound — not only a voice —
+        reaches the workspace. Memory-only; never writes audio."""
+        assert self._acoustic_encoder is not None
+        assert self._acoustic_forward_model is not None
+        embedding = self._acoustic_encoder.embed(audio_bytes, sample_rate)
+        change = cosine_change(embedding, self._prev_acoustic_embedding)
+        self._prev_acoustic_embedding = embedding
+        prediction_error = self._acoustic_forward_model.step(embedding)
+        self._acoustic_errors.append(prediction_error)
+        # Normalise the error against its rolling mean (Chronos/Topos convention):
+        # steady, predictable sound stays low-salience even at non-zero error.
+        mean_err = (
+            sum(self._acoustic_errors) / len(self._acoustic_errors)
+            if self._acoustic_errors
+            else 0.0
+        )
+        normalised = prediction_error / mean_err if mean_err > 0 else 0.0
+        alert = normalised >= 2.0 or change >= self._acoustic_change_alert_threshold
+        salience = self._alert_salience if alert else self._baseline_salience
+        window = arousal_to_window(
+            self._read_arousal(), window_range=self._arousal_window_range
+        )
+        await self.publish(
+            "audition.perception",
+            {
+                "source_label": source_label,
+                "change_score": change,
+                "prediction_error": prediction_error,
+                "encoder_model_id": self._acoustic_encoder.model_id,
+                "attended_window": window,
+            },
+            salience=salience,
+        )
 
     async def initialize(self) -> None:
         await super().initialize()
@@ -152,7 +257,9 @@ class Audition(BaseModule):
         await super().shutdown()
         for closeable in (self._stt_client, self._emotion_classifier):
             try:
-                shutdown = getattr(closeable, "shutdown", None) or getattr(closeable, "aclose", None)
+                shutdown = getattr(closeable, "shutdown", None) or getattr(
+                    closeable, "aclose", None
+                )
                 if shutdown:
                     await shutdown()
             except Exception:
@@ -207,6 +314,15 @@ class Audition(BaseModule):
             log.debug("audition dropped self-heard capture during playback")
             return None, None
 
+        # General auditory perception: perceive every window as sound (any sound,
+        # not only a voice), then run the speech specialization only on windows
+        # detected as speech. When disabled, the whole window is treated as speech
+        # so the existing pipeline is byte-for-byte unchanged.
+        if self._general_audition:
+            await self._perceive_acoustic(audio_bytes, sample_rate, source_label)
+            if not detect_speech(audio_bytes, sample_rate):
+                return None, None
+
         start_time = time.monotonic()
 
         stt_task = asyncio.create_task(
@@ -215,9 +331,7 @@ class Audition(BaseModule):
             )
         )
         emo_task = asyncio.create_task(
-            self._emotion_classifier.classify(
-                audio_bytes, sample_rate=sample_rate
-            )
+            self._emotion_classifier.classify(audio_bytes, sample_rate=sample_rate)
         )
         stt_result_or_exc, emo_result_or_exc = await asyncio.gather(
             stt_task, emo_task, return_exceptions=True
@@ -230,7 +344,9 @@ class Audition(BaseModule):
         # ------------------------------------------------------------------
         if isinstance(emo_result_or_exc, BaseException):
             # On error use a neutral distribution.
-            emo_scores_for_fm = {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES}
+            emo_scores_for_fm = {
+                c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES
+            }
         else:
             emo_scores_for_fm = emo_result_or_exc.scores
 
@@ -312,7 +428,10 @@ class Audition(BaseModule):
         ZERO PERSISTENCE: the NumPy array lives only in the thread call and
         is released on return. Nothing is written to disk.
         """
-        from kaine.modules.audition.prosody import audio_bytes_to_float32, extract_prosody
+        from kaine.modules.audition.prosody import (
+            audio_bytes_to_float32,
+            extract_prosody,
+        )
 
         try:
             audio_array = await asyncio.to_thread(
@@ -476,7 +595,9 @@ class Audition(BaseModule):
             try:
                 self._forward_model.load_state_dict(state["forward_model"])
             except Exception:
-                log.warning("audition: failed to restore forward model weights", exc_info=True)
+                log.warning(
+                    "audition: failed to restore forward model weights", exc_info=True
+                )
 
 
 def _estimate_energy(audio_bytes: bytes) -> float:
@@ -500,7 +621,7 @@ def _estimate_energy(audio_bytes: bytes) -> float:
         if len(pcm) < 2:
             return 0.0
         samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        rms = float(np.sqrt(np.mean(samples ** 2)))
+        rms = float(np.sqrt(np.mean(samples**2)))
         return min(rms, 1.0)
     except Exception:
         return 0.0

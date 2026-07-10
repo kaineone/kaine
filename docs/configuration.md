@@ -554,12 +554,13 @@ Unified deterministic perception feed (reproducible research stimulus). A single
 - `seeded` — in-repo procedural generators; `frame(seed, i)` and `pcm(seed, i)` are pure functions, reproducible per seed yet not anticipable to the entity. Needs no external media. One seed drives both surfaces and surprise events are cross-modal (a blob + a burst on shared cadence slots). This is the shipped, no-install-required option, but it is candidly unlikely to be research-grade stimulus — it is procedural noise, not naturalistic content.
 - `playlist` — operator-curated, openly-licensed media pinned by one checksummed manifest (`playlist_manifest`); both video and the audio track come from the same media, advancing clip-by-clip. A digest mismatch fails the run. This is the shipped, intended eventual replacement for `seeded` once an operator supplies a manifest. Audio decode needs PyAV (`av`); absent, it fails honestly with an install hint (never synthetic silence).
 - `live` — the real camera + real microphone paths (non-reproducible; operator-present demos only, never a research run).
+- `screen` — the entity **watches a shared desktop or a single window** and **hears its desktop-audio monitor** (whatever the operator plays there — a browser, a media player, a game). A field-tier, arbitrary live-stimulus source: nothing stream-specific to wire up. Both surfaces go through the **system ffmpeg binary** (`gdigrab` on Windows, `avfoundation` on macOS, `x11grab` + `pulse` on X11; a native-Wayland session must run through XWayland). Non-reproducible, so operator-present only, never a research run; the zero-persistence invariant still holds (no raw frame or PCM touches disk). Configured under `[perception_feed.screen]` (all off by default).
 
 Synchronization is honest, not frame-locked: coherence is at the media/clip level (`playlist`) or via the shared seed + cadence (`seeded`), not frame-locked across the two loops.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `mode` | string | `"off"` | `"off"`, `"seeded"`, `"playlist"`, or `"live"`. See above. |
+| `mode` | string | `"off"` | `"off"`, `"seeded"`, `"playlist"`, `"live"`, or `"screen"`. See above. |
 | `seed` | integer | `0` | `seeded` mode: both surfaces are a pure function of this seed. |
 | `playlist_manifest` | string | `""` | `playlist` mode: path to the shared checksummed manifest. |
 
@@ -582,6 +583,22 @@ Seeded-audio knobs.
 | `channels` | integer | `1` | Audio channel count. |
 | `base_strength` | float | `0.3` | Learnable base soundscape amplitude. |
 | `surprise_strength` | float | `1.0` | Seed-keyed surprise-burst amplitude. `0` = none. |
+
+### `[perception_feed.screen]`
+
+Screen / window capture knobs — only read when `[perception_feed].mode = "screen"`. All off by default. The video capture becomes a Topos `_VideoSource` (`kaine/modules/topos/screen.py`); the desktop-audio monitor becomes an Audition `_AudioStream` (`kaine/modules/audition/monitor.py`). For a native-detail foveal crop set `[topos].capture_width`/`capture_height` to the panel resolution or enable `native` together with `[topos].foveation`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `target` | string | `"fullscreen"` | What to capture: `"fullscreen"`, `"region"`, or `"window"`. |
+| `region` | list of int | — | Required for `target = "region"`: `[x, y, width, height]`. |
+| `window_title` | string | `""` | Required for `target = "window"` on Windows (`gdigrab` grabs by title). |
+| `display` | string | `":0.0"` | X11 display to grab; ignored off X11. |
+| `framerate` | integer | `10` | Capture frames per second. |
+| `cursor` | boolean | `true` | Draw the mouse pointer into the frame. |
+| `native` | boolean | `false` | Native grab: capture at the display's own resolution with no downscale, so a foveal crop carries true native detail (detected via `xrandr` on X11; falls back to the configured capture geometry with a logged note where no probe exists). Enable together with `[topos].foveation`. |
+| `monitor_device` | string | `""` | Desktop-audio monitor source; on Linux defaults to the current sink's `.monitor` when unset. |
+| `ffmpeg_path` | string | `"ffmpeg"` | Override if the `ffmpeg` binary is not on `PATH`. |
 
 ---
 
@@ -1026,30 +1043,25 @@ Ships disabled. Set all three flags true only after confirming entity privacy an
 
 Body-agnostic embodiment control plane. Mundus routes perception and action to and from a *body* through a pluggable adapter selected here; adapter-specific settings live under `[mundus.<adapter>]`. Enabled via the three-layer gate: `[modules].mundus = true` (module toggle) AND `[mundus].enabled = true` (config layer) AND the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1` (operator layer). All three must be true before any action reaches the body. Per-family and per-channel exposure flags additionally gate world-mutating verbs and continuous channels.
 
+The shipped default is the transport-free `stub` reference body, which needs no configuration. No transport-backed body ships today; a virtual-world (Paracosmic) adapter is planned, and its settings will live under its own `[mundus.<adapter>]` table.
+
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Config-layer gate (the module-level toggle `[modules].mundus` is the first gate; this is the second, and `KAINE_MUNDUS_OPERATOR_APPROVED=1` is the third). |
-| `adapter` | string | `"opensim"` | Which body to construct. Only this adapter is built, from its `[mundus.<adapter>]` table; an unknown name fails closed at boot. |
+| `adapter` | string | `"stub"` | Which body to construct. Only this adapter is built, from its `[mundus.<adapter>]` table (the stub needs none); an unknown name fails closed at boot. |
 | `mirror_speech` | boolean | `true` | Forward Lingua external speech to the body as local-chat `say` actions. |
 | `speech_stream` | string | `"lingua.external"` | Bus stream Mundus subscribes to for speech to mirror. |
 
-## `[mundus.opensim]`
+### `[mundus.control_surface]`
 
-Settings for the OpenSim adapter (the transitional reference body: an avatar in a local OpenSim grid via a forked Firestorm viewer over a LEAP shim). Read only when `[mundus].adapter = "opensim"`.
+The continuous embodiment control surface (`intuitive-embodiment-control-surface`) — the entity's per-tick continuous motor producer. It emits four continuous locomotion/gaze rates plus one interaction trigger (`drive`, `yaw_rate`, `gaze_yaw`, `gaze_pitch`, `interact`), clamped at the boundary, and closes the loop with an efference copy fed to the *existing* Soma forward model (no new learner). **Off by default**: the entity drives a body on its own only when this is explicitly enabled, on top of the two-layer operational gate and the `embodied` developmental stage. No gait is scripted — the default motor policy is quiescent (emits nothing); only the action-space structure and the freeze-then-free progression are provided (Bernstein 1967). The per-channel exposure flags (default off) still gate which channels reach the body.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `bridge_host` | string | `"127.0.0.1"` | TCP listen address for the LEAP shim bridge. |
-| `bridge_port` | integer | `7781` | TCP listen port. |
-| `expose_move` | boolean | `true` | Expose avatar movement actions. |
-| `expose_turn` | boolean | `true` | Expose avatar turn actions. |
-| `expose_say` | boolean | `true` | Expose avatar local-chat say actions. |
-| `expose_sit_on` | boolean | `true` | Expose avatar sit-on-object actions. |
-| `expose_stand` | boolean | `true` | Expose avatar stand actions. |
-| `expose_animate` | boolean | `true` | Expose avatar animation actions. |
-| `expose_gesture` | boolean | `true` | Expose avatar gesture actions. |
-| `expose_teleport` | boolean | `false` | Expose teleport actions. Defaults OFF (world-mutating; operator opt-in). |
-| `expose_touch` | boolean | `false` | Expose touch/interact actions. Defaults OFF (operator opt-in). |
+| `enabled` | boolean | `false` | Construct and wire the control surface at all. When `false`, no per-tick motor producer exists. |
+| `competence_threshold` | float | `0.05` | A degree of freedom is freed only when the rolling forward-model prediction error is at or below this. Competence-gated, never wall-clock scheduled. |
+| `min_samples` | integer | `32` | Minimum observed ticks before competence is judged; below this the readout is `None` and no DOF frees. |
+| `window` | integer | `64` | Rolling window of prediction errors for the competence readout. Must be ≥ `min_samples`. |
 
 ---
 
@@ -1059,7 +1071,7 @@ Perception locus arbiter (physical-XOR-virtual sense gating). Enabled via `[modu
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `allow_self_switch` | boolean | `false` | Allow the entity to switch its own perceptual locus via `praxis` intents. Off by default — locus changes are operator-driven until trust is established. Reserved for the deferred OpenSim-connector work; no module currently produces `intent.perception.switch`, so this flag has no effect yet. |
+| `allow_self_switch` | boolean | `false` | Allow the entity to switch its own perceptual locus via `praxis` intents. Off by default — locus changes are operator-driven until trust is established. Reserved for deferred virtual-world embodiment work; no module currently produces `intent.perception.switch`, so this flag has no effect yet. |
 | `min_dwell_s` | float | `30.0` | Minimum seconds the locus must hold before another switch is honoured. |
 
 ---

@@ -241,7 +241,8 @@ hypnos = false
 empatheia = false
 phantasia = false
 # Embodiment helpers. Perception arbitrates the physical-XOR-virtual sense
-# locus; Mundus bridges intents to an OpenSim/Firestorm grid. Both off by
+# locus; Mundus routes intents/perception to a body through a pluggable adapter
+# (the shipped default is the transport-free `stub` reference body). Both off by
 # default; Mundus additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
 perception = false
 mundus = false
@@ -369,6 +370,26 @@ forward_model_units = 128
 prediction_error_window = 32
 # Number of recent latents to keep in the recurrent visual buffer.
 visual_buffer_size = 16
+# Attention-driven foveation (topos-foveation). OFF by default → Topos runs the
+# single whole-frame encode, byte-for-byte unchanged. When on, each frame yields
+# a coarse spatial saliency map, one precision-weighted fovea (bottom-up saliency
+# + an optional top-down bias), and TWO encodes: a downsampled peripheral gist
+# plus a foveal crop at native detail. Enable only after the host benchmark
+# (scripts/bench_foveation.py) confirms two-encode + native-grab fits the tick.
+# For screen mode set capture_width/height to the panel resolution (or use the
+# native grab under [perception_feed.screen]) so the fovea crop is truly native.
+foveation = false
+foveation_grid = [12, 12]           # saliency tiling (rows, cols)
+foveation_hysteresis = 0.15         # dwell damping: a new tile must beat the held
+                                    # one by >15% to move the fovea (anti-thrash)
+# Fovea size is coupled to Thymos arousal (Easterbrook narrowing): high arousal →
+# tighter fovea. These bound the normalized crop half-extent (fraction of the
+# frame's short side). Widen or flip (min>max) to tune the coupling's sign.
+foveation_arousal_size_min = 0.12   # size at arousal = 1.0 (tightest)
+foveation_arousal_size_max = 0.5    # size at arousal = 0.0 (widest)
+peripheral_width = 320              # downsampled whole-field gist geometry
+peripheral_height = 180
+foveal_size = 224                   # square foveal crop fed to the encoder
 
 [nous]
 # Active inference engine (pymdp 1.0, JAX). Install the `reasoning` extra
@@ -619,6 +640,9 @@ prosody_enabled = false
 #              honestly with an install hint (never synthetic silence).
 #   live     — the real camera + real microphone paths (NON-reproducible;
 #              operator-present demos only, never a research run).
+#   screen   — the entity sees a shared desktop/window and hears its audio monitor
+#              (whatever the operator plays there). Field-tier arbitrary stimulus;
+#              zero-persistence holds. See [perception_feed.screen] below.
 # Selecting seeded/playlist turns capture on automatically for both surfaces.
 # SYNCHRONIZATION (honest): coherence is at the media/clip level (playlist) or
 # via the shared seed + cadence (seeded), NOT frame-locked across the two loops.
@@ -636,6 +660,26 @@ sample_rate = 16000             # match [audition].capture_sample_rate
 channels = 1
 base_strength = 0.3             # learnable base soundscape amplitude
 surprise_strength = 1.0         # seed-keyed surprise-burst amplitude (0 = none)
+
+# [perception_feed.screen]      # screen/window capture (mode = "screen"), all off
+# by default. Capture goes through the system ffmpeg binary (gdigrab on Windows,
+# avfoundation on macOS, x11grab on X11) — the one tool carrying every platform's
+# capture indev; a native-Wayland session must run through XWayland.
+# target = "fullscreen"         # "fullscreen" | "region" | "window"
+# region = [0, 0, 1920, 1080]   # required for target = "region" (x, y, w, h)
+# window_title = ""             # required for target = "window" on Windows/gdigrab
+# display = ":0.0"              # X11 display (ignored off X11)
+# framerate = 10                # capture frames per second
+# cursor = true                 # draw the mouse pointer into the frame
+# native = false                # NATIVE GRAB (topos-foveation): capture at the
+#                               # display's own resolution with no downscale, so a
+#                               # foveal crop carries true native detail. Detected
+#                               # via xrandr on X11; on a platform without a probe
+#                               # it falls back to capture_width/height with a note.
+#                               # Enable together with [topos].foveation.
+# monitor_device = ""           # desktop-audio monitor source; Linux defaults to
+#                               # the current sink's .monitor when unset
+# ffmpeg_path = "ffmpeg"        # override if ffmpeg is not on PATH
 
 [vox]
 chatterbox_url = "http://127.0.0.1:8883"
@@ -878,7 +922,7 @@ learning_rate = 0.001
 # physical camera/mic are inhibited, and vice-versa.
 # Allow the entity to switch its own sense locus via praxis intents. Off by
 # default — locus changes are operator-driven until trust is established.
-# NOTE: allow_self_switch is reserved for the deferred opensim-connector work;
+# NOTE: allow_self_switch is reserved for deferred virtual-world embodiment work;
 # no module currently produces intent.perception.switch, so this flag has no
 # effect until that change is implemented.
 allow_self_switch = false
@@ -905,29 +949,34 @@ port = 8089
 # KAINE_MUNDUS_OPERATOR_APPROVED=1 environment variable (operator layer). Both
 # must be true before any action reaches a body.
 enabled = true
-adapter = "opensim"
+# `stub` is the shipped reference body: a transport-free, wholly local adapter
+# that pins the protocol (including the continuous-channel path). No transport-
+# backed body ships today; a virtual-world (Paracosmic) adapter is planned.
+# The stub needs no configuration; adapter-specific settings live under their own
+# `[mundus.<adapter>]` table (added when a transport-backed adapter ships).
+adapter = "stub"
 # Mirror Lingua's external speech into the body's local chat.
 mirror_speech = true
 speech_stream = "lingua.external"
 
-[mundus.opensim]
-# OpenSim/Firestorm embodiment bridge (the transitional reference body). Read
-# only when [mundus].adapter = "opensim".
-bridge_host = "127.0.0.1"
-bridge_port = 7781
-# Per-action-family exposure to the grid. expose_<family> = false hard-denies
-# that family regardless of intents. Locomotion/expression default on;
-# teleport and touch default off (more disruptive / consent-sensitive).
-expose_move = true
-expose_turn = true
-expose_say = true
-expose_sit_on = true
-expose_stand = true
-expose_animate = true
-expose_gesture = true
-expose_teleport = false
-expose_touch = false
-
+[mundus.control_surface]
+# The minimal, continuous, learnable embodiment control surface (the entity's
+# per-tick motor producer) — `intuitive-embodiment-control-surface`. Off by
+# default: the entity drives a body on its own ONLY when this is explicitly
+# enabled, on top of the two-layer gate + the `embodied` developmental stage.
+# The surface emits four continuous locomotion/gaze rates plus one interaction
+# trigger; the loop is closed with an efference copy fed to the existing forward
+# model. No gait is scripted — only the action-space structure and the
+# freeze-then-free progression are provided (Bernstein 1967).
+enabled = false
+# Motor curriculum (freeze-then-free) — a PROVIDED training/safety scaffold, not
+# innate. Each degree of freedom is freed only when the motor-competence readout
+# (a falling forward-model prediction error over `window` observed ticks) stays
+# at or below `competence_threshold`, measured over at least `min_samples` ticks.
+# Advancement is competence-gated, NEVER scheduled by wall-clock.
+competence_threshold = 0.05
+min_samples = 32
+window = 64
 [evaluation]
 # Architecture-thesis instrumentation. Disable for production once the
 # thesis is validated. Adds NO core-module dependencies; observes the

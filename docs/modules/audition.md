@@ -37,7 +37,7 @@ On each utterance boundary (detected by the VAD in `LiveMicrophone`, or on a dir
 | `LiveMicrophone` task | `process_audio(bytes, sample_rate)` | VAD-segmented PCM utterances from the real microphone |
 | `kaine.perception_state` | `effective_audio_capture()` poll (250 ms) | Locus gate: microphone runs only when locus is `physical` and audio is desired |
 | Vox `SpeakingGate` | `gate.is_speaking()` | Drops captures during the entity's own speech (self-hearing suppression) |
-| External callers | `process_audio()` directly | Programmatic injection (e.g. from virtual-world chat feed in the OpenSim connector) |
+| External callers | `process_audio()` directly | Programmatic injection (e.g. from a virtual-world chat feed via a Mundus body) |
 
 Audition does **not** subscribe to the workspace broadcast.
 
@@ -88,10 +88,11 @@ Section `[audition]` in `config/kaine.toml`. See also [../configuration.md](../c
 
 ### Deterministic auditory feed
 
-For reproducible research runs, the shared top-level `[perception_feed]` section (documented under [topos](topos.md#reproducible-perception-feed)) drives Audition's hearing surface alongside Topos's vision surface from one source of truth. When `[perception_feed].mode` is `seeded` or `playlist`, boot injects an `_AudioStream` factory through Audition's `stream_factory` seam (the precise mirror of Topos's `source_factory`) and forces capture on, so `LiveMicrophone` reads from the deterministic source instead of the real microphone:
+For reproducible research runs, the shared top-level `[perception_feed]` section (documented under [topos](topos.md#reproducible-perception-feed)) drives Audition's hearing surface alongside Topos's vision surface from one source of truth. When `[perception_feed].mode` is `seeded`, `playlist`, or `screen`, boot injects an `_AudioStream` factory through Audition's `stream_factory` seam (the precise mirror of Topos's `source_factory`) and forces capture on, so `LiveMicrophone` reads from the injected source instead of the real microphone:
 
 - **`seeded`** — `SeededProceduralAudioStream` synthesizes int16 PCM as a pure function of `(seed, block_index)`: a learnable base soundscape (seed-derived low-frequency sinusoids) plus seed-keyed surprise bursts on the **shared cross-modal cadence** (`[perception_feed.video].surprise_interval`). It is *sound, not speech* — STT may transcribe a block as empty; the research signal is auditory prediction-error + salience.
 - **`playlist`** — `PlaylistAudioStream` decodes the audio track of the **same** checksummed manifest media via **PyAV** (`av`, shipped in the `[audio]` extra), resamples to `sample_rate`/`channels`, and emits PCM. A digest mismatch fails closed; if PyAV is absent it raises `PerceptionUnavailableError` with an install hint (never synthetic silence). For a research install that provisions both playlist surfaces (cv2 video + PyAV audio) in one step, use `bash scripts/install.sh --research` or `pip install -e .[perception]`.
+- **`screen`** — `MonitorAudioStream` (`kaine/modules/audition/monitor.py`) captures the **desktop-audio monitor** (a loopback of the output) via the system ffmpeg binary — `pulse` on Linux (a sink's `.monitor` source), `dshow` on Windows, `avfoundation` on macOS — so the entity *hears* whatever is playing on the shared screen it watches (see [topos](topos.md) for the paired vision source). The monitor device comes from `[perception_feed.screen].monitor_device` (Linux defaults to the current sink's `.monitor` when unset). Non-reproducible (operator-present only, never a research run); PCM is still held in memory and released, never written to disk.
 
 The zero-persistence invariant holds: raw PCM lives only in memory, never on disk (the build-time guard covers `kaine/modules/audition/feed.py`).
 

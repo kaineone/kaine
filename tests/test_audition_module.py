@@ -6,6 +6,7 @@ import io
 import os
 import wave
 
+import numpy as np
 import pytest
 
 from kaine.bus.client import AsyncBus
@@ -17,6 +18,18 @@ from kaine.modules.audition import (
     FakeEmotionClassifier,
     FakeSTTClient,
 )
+from kaine.modules.audition.acoustic import FakeAcousticEncoder
+
+
+def _tone(
+    freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000
+) -> bytes:
+    t = np.arange(int(seconds * sr)) / sr
+    return (amp * np.sin(2 * np.pi * freq * t) * 32767).astype("<i2").tobytes()
+
+
+def _silence(seconds: float = 0.2, sr: int = 16000) -> bytes:
+    return np.zeros(int(seconds * sr), dtype="<i2").tobytes()
 
 
 @pytest.fixture
@@ -69,8 +82,14 @@ async def test_transcription_payload_shape(bus: AsyncBus):
         )
         entries = await bus.read("audition.out", last_id="0", count=10)
         trans = next(e for _, e in entries if e.type == "audition.transcription")
-        for key in ("text", "source_label", "model", "sample_rate",
-                    "audio_bytes_length", "latency_ms"):
+        for key in (
+            "text",
+            "source_label",
+            "model",
+            "sample_rate",
+            "audio_bytes_length",
+            "latency_ms",
+        ):
             assert key in trans.payload
         assert trans.payload["text"] == "hello world"
         assert trans.payload["source_label"] == "mic1"
@@ -88,8 +107,14 @@ async def test_emotion_payload_shape(bus: AsyncBus):
         await audition.process_audio(b"\x00", sample_rate=16000)
         entries = await bus.read("audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
-        for key in ("category", "confidence", "scores", "model",
-                    "source_label", "latency_ms"):
+        for key in (
+            "category",
+            "confidence",
+            "scores",
+            "model",
+            "source_label",
+            "latency_ms",
+        ):
             assert key in emo.payload
         assert emo.payload["category"] in CATEGORIES
     finally:
@@ -99,7 +124,9 @@ async def test_emotion_payload_shape(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_stt_failure_still_publishes_emotion(bus: AsyncBus):
     class FailingSTT(FakeSTTClient):
-        async def transcribe(self, audio_bytes, *, sample_rate, model, filename="audio.wav"):
+        async def transcribe(
+            self, audio_bytes, *, sample_rate, model, filename="audio.wav"
+        ):
             raise RuntimeError("boom")
 
     audition = Audition(
@@ -147,9 +174,11 @@ async def test_emotion_failure_still_publishes_transcription(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_non_neutral_emotion_raises_salience(bus: AsyncBus):
     happy = EmotionResult(
-        category="happy", confidence=0.9,
+        category="happy",
+        confidence=0.9,
         scores={c: (0.9 if c == "happy" else 0.0) for c in CATEGORIES},
-        model="fake", latency_ms=1.0,
+        model="fake",
+        latency_ms=1.0,
     )
     audition = Audition(
         bus,
@@ -178,6 +207,7 @@ async def test_serialize_yields_model_ids(bus: AsyncBus):
 # ---------------------------------------------------------------------------
 # Forward model: serialize includes buffer_summary with no raw data
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_serialize_includes_forward_model_state(bus: AsyncBus):
@@ -232,6 +262,7 @@ async def test_forward_model_state_no_raw_tensors(bus: AsyncBus):
 # ---------------------------------------------------------------------------
 # Prosody: audition.prosody published when enabled; no bytes in payload
 # ---------------------------------------------------------------------------
+
 
 def _make_wav_bytes(n_samples: int = 1600, sample_rate: int = 16000) -> bytes:
     """Build a minimal silent WAV blob in memory."""
@@ -330,6 +361,7 @@ async def test_prosody_not_published_when_disabled(bus: AsyncBus):
 # Zero-persistence: no raw audio written to disk
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_zero_persistence_no_named_temp_file(bus: AsyncBus, monkeypatch):
     """process_audio must never call tempfile.NamedTemporaryFile."""
@@ -352,7 +384,7 @@ async def test_zero_persistence_no_named_temp_file(bus: AsyncBus, monkeypatch):
         await audition.shutdown()
 
     assert calls == [], (
-        f"NamedTemporaryFile was called during process_audio — zero-persistence violated"
+        "NamedTemporaryFile was called during process_audio — zero-persistence violated"
     )
 
 
@@ -377,7 +409,9 @@ async def test_real_speaches_transcribes(bus: AsyncBus):
 
     from kaine.modules.audition.stt_client import SpeachesClient
 
-    async with httpx.AsyncClient(base_url="http://127.0.0.1:8000", timeout=15.0) as probe:
+    async with httpx.AsyncClient(
+        base_url="http://127.0.0.1:8000", timeout=15.0
+    ) as probe:
         resp = await probe.get("/v1/models")
         resp.raise_for_status()
         served = [m.get("id", "") for m in resp.json().get("data", [])]
@@ -388,11 +422,16 @@ async def test_real_speaches_transcribes(bus: AsyncBus):
 
     # Generate a 1-second silent WAV at 16kHz.
     import struct
+
     n = 16000
     header = (
-        b"RIFF" + struct.pack("<I", 36 + n * 2) + b"WAVE"
-        + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
-        + b"data" + struct.pack("<I", n * 2)
+        b"RIFF"
+        + struct.pack("<I", 36 + n * 2)
+        + b"WAVE"
+        + b"fmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+        + b"data"
+        + struct.pack("<I", n * 2)
     )
     silent = header + b"\x00\x00" * n
     client = SpeachesClient()
@@ -401,3 +440,110 @@ async def test_real_speaches_transcribes(bus: AsyncBus):
         assert isinstance(result.text, str)  # may be empty for silence
     finally:
         await client.aclose()
+
+
+# --------------------------------------------------------------------------- #
+# General auditory perception (auditory-perception)
+# --------------------------------------------------------------------------- #
+
+
+def _general_audition(bus: AsyncBus, **overrides) -> Audition:
+    return _make_audition(
+        bus,
+        general_audition=True,
+        acoustic_encoder=FakeAcousticEncoder(embedding_dim=8),
+        **overrides,
+    )
+
+
+@pytest.mark.asyncio
+async def test_general_audition_off_publishes_no_perception_event(bus: AsyncBus):
+    audition = _make_audition(bus)  # default: general_audition off
+    await audition.initialize()
+    try:
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        assert not any(e.type == "audition.perception" for _, e in entries)
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_general_audition_perceives_non_speech_without_transcribing(
+    bus: AsyncBus,
+):
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        # A 7 kHz tone is not speech -> perceived acoustically, no STT/emotion.
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        types = {e.type for _, e in entries}
+        assert "audition.perception" in types
+        assert "audition.transcription" not in types
+        assert "audition.emotion" not in types
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_general_audition_speech_runs_the_speech_specialization(bus: AsyncBus):
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        # A 300 Hz tone with energy is in the speech band -> perception + speech.
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        types = {e.type for _, e in entries}
+        assert {
+            "audition.perception",
+            "audition.transcription",
+            "audition.emotion",
+        } <= types
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_perception_event_is_content_free(bus: AsyncBus):
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        perc = next(e for _, e in entries if e.type == "audition.perception")
+        assert set(perc.payload) == {
+            "source_label",
+            "change_score",
+            "prediction_error",
+            "encoder_model_id",
+            "attended_window",
+        }
+        # numeric metadata only — no audio bytes anywhere in the payload
+        for v in perc.payload.values():
+            assert not isinstance(v, (bytes, bytearray))
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_arousal_provider_narrows_the_auditory_window(bus: AsyncBus):
+    async def _window_at(arousal: float) -> float:
+        b = pytest.importorskip("fakeredis.aioredis")
+        client = b.FakeRedis(decode_responses=True)
+        local = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+        audition = _general_audition(local)
+        audition.set_arousal_provider(lambda: arousal)
+        await audition.initialize()
+        try:
+            await audition.process_audio(_tone(7000), sample_rate=16000)
+            entries = await local.read("audition.out", last_id="0", count=10)
+            perc = next(e for _, e in entries if e.type == "audition.perception")
+            return perc.payload["attended_window"]
+        finally:
+            await audition.shutdown()
+            await local.close()
+
+    calm = await _window_at(0.0)
+    tense = await _window_at(1.0)
+    assert tense < calm  # Easterbrook: higher arousal -> tighter window

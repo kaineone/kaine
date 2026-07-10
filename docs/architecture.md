@@ -119,7 +119,7 @@ graph TD
 | 13 | **Praxis** | Expression | `kaine/modules/praxis/` | File-write / notify / shell (empty whitelist by default) |
 | 14 | **Hypnos** | Maintenance | `kaine/modules/hypnos/` | Five-phase consolidation pipeline; DPO+QLoRA voice alignment (Unsloth) |
 | 15 | **Perception** | Embodiment (shipped inactive) | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
-| 16 | **Mundus** | Embodiment (shipped inactive) | `kaine/modules/mundus/` | Body-agnostic embodiment control plane; routes perception/action to a body through a pluggable adapter (OpenSim adapter ships today); double-gated (config + operator env var) |
+| 16 | **Mundus** | Embodiment (shipped inactive) | `kaine/modules/mundus/` | Body-agnostic embodiment control plane; routes perception/action to a body through a pluggable adapter (transport-free `stub` reference body ships today; a virtual-world adapter is planned); a continuous embodiment control surface (off by default) is the entity's per-tick motor producer; double-gated (config + operator env var) |
 
 Links to per-module detail pages: [modules/soma.md](modules/soma.md) ·
 [modules/chronos.md](modules/chronos.md) ·

@@ -22,7 +22,7 @@ Three loci are defined in `kaine/perception_state.py`:
 
 | Locus | Meaning | Real camera/mic |
 |-------|---------|----------------|
-| `physical` | The entity perceives the room — real camera and microphone | Allowed (subject to desired-state flags) |
+| `physical` | The entity perceives the room — real camera and microphone, or a screen/window capture feed (`[perception_feed].mode = "screen"`), which substitutes the camera/mic source at the same seam | Allowed (subject to desired-state flags) |
 | `virtual` | The entity perceives a virtual source — the deterministic perception feed (seeded/playlist), or an embodied avatar feed (e.g. Mundus) when that path is wired in | Forced off |
 | `off` | No perception | Forced off |
 
@@ -148,7 +148,7 @@ this event type and applies the `evaluate_locus_switch` policy gate below.
 module is a real consumer/handler for `intent.perception.switch`, and the
 gating logic below is real and tested, but nothing in the current codebase
 emits that event: Volition only emits `intent.speak`, `intent.think`, and
-`intent.act`. Until a producer lands (deferred to the opensim-connector work),
+`intent.act`. Until a producer lands (deferred to virtual-world embodiment work),
 the entity cannot self-switch in practice, and `allow_self_switch` should stay
 at its default of `false`. Locus changes are operator-driven (via Nexus) until
 then. The gate:

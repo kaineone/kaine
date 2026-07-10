@@ -247,10 +247,32 @@ re-injecting selected memory traces into the workspace. See: `kaine/modules/mnem
 The body-agnostic embodiment control plane. Mundus routes perception and action
 to and from a *body* through a pluggable adapter, translating the body's sensory
 frames into bus events and the entity's action intents into commands on the body.
-Bodies are pluggable; the current adapter drives an avatar in a local OpenSim grid
-via a LEAP-based bridge. The perceptual locus is physical (real-world sensors) or
-virtual (a Mundus body) — never both simultaneously. See: `kaine/modules/mundus/`,
-`docs/CONNECTION_GUIDE.md`.
+Bodies are pluggable. No transport-backed body ships today; the shipped adapter is
+the transport-free `stub` reference body, and a virtual-world (Paracosmic) adapter
+is planned. The perceptual locus is physical (real-world sensors) or virtual (a
+Mundus body) — never both simultaneously. The entity drives a continuous-capable
+body through the *continuous embodiment control surface* (below). See:
+`kaine/modules/mundus/`.
+
+### Continuous embodiment control surface
+
+The entity's per-tick continuous motor producer for a Mundus body
+(`kaine/modules/mundus/control_surface.py`). Rather than a menu of symbolic verbs,
+it emits five clamped continuous channels — `drive`, `yaw_rate`, `gaze_yaw`,
+`gaze_pitch`, `interact` — as an `intent.avatar.control` command each tick. A
+freeze-then-free curriculum frees degrees of freedom only on demonstrated
+competence (a falling forward-model error), and an efference copy closes the loop
+through Soma's existing forward model. No gait is scripted: the default policy is
+quiescent, and a learned policy is injected at the seam. Off by default. See:
+[`mundus.md`](modules/mundus.md).
+
+### Efference copy
+
+A copy of a motor command the entity emits, fed forward to the forward model so it
+can predict the command's sensory consequences and compare them against what
+actually arrives (`predict → compare → correct`; Wolpert et al. 1995). Mundus
+publishes one on `mundus.efference` each continuous control tick — the mechanism
+that makes the control surface a closed loop rather than an open-loop joystick.
 
 ---
 
@@ -291,7 +313,7 @@ modules that produced them. The layer ships disabled and requires the
 ### Perceptual locus
 
 The mode of KAINE's sensory engagement — physical (real-world microphone and
-camera) or virtual (OpenSim/Paracosm via Mundus). The locus is exclusive: only
+camera) or virtual (a Mundus embodiment body). The locus is exclusive: only
 one mode is active at a time. The Perception module (`kaine/modules/perception/`)
 enforces this invariant. Toggling between modes requires a confirm step from the
 Nexus diagnostics page. See: `kaine/modules/perception/module.py`.

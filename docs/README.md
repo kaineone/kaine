@@ -68,6 +68,14 @@ configuration, mechanisms, key files, how to enable, and zero-persistence notes.
 [Mundus](modules/mundus.md) ·
 [Echo](modules/echo.md)
 
+## Guides
+
+Developer how-tos for extending KAINE:
+
+- [Building embodiment adapters for Mundus](guides/embodiment-adapters.md) — give a
+  KAINE entity a new body (a physical robot, a VR/game avatar, a simulator, a custom
+  effector) by implementing the `EmbodimentAdapter` contract; the core never changes.
+
 ## Processes
 
 How the modules combine into system-level behavior:
@@ -101,7 +109,6 @@ How the modules combine into system-level behavior:
 - KAINE Paper — the architecture's conceptual basis and rationale (maintained in its own repository)
 - [Vision Document](kaine-vision-document.md) — project intent
 - [Architecture Roadmap](history/architecture-roadmap.md) — the (completed) build plan (historical)
-- [Connection Guide](CONNECTION_GUIDE.md) — connecting the supporting services
 
 ## Conventions used in these docs
 

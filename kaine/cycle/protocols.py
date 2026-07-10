@@ -19,6 +19,16 @@ class SyneidesisProtocol(Protocol):
     ) -> WorkspaceSnapshot:
         ...
 
+    async def select_dual(
+        self,
+        events: list[tuple[str, Event]],
+        context: dict[str, Any],
+    ) -> tuple[WorkspaceSnapshot, WorkspaceSnapshot | None]:
+        """Primary selection plus its coherence-off counterfactual (live ablation).
+
+        Returns ``(primary, None)`` when the coherence layer is disabled.
+        """
+
 
 @runtime_checkable
 class ModuleRegistryProtocol(Protocol):

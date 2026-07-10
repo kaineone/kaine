@@ -4,8 +4,8 @@
 """Stub embodiment adapter — a transport-free reference body.
 
 This adapter proves body-agnosticism with a second, wholly local body and pins
-the protocol — especially the continuous-channel path the OpenSim adapter does
-not exercise. It has no socket, no wire, no external dependency:
+the protocol — especially the continuous-channel path a real transport-backed
+adapter would drive. It has no socket, no wire, no external dependency:
 
 * :meth:`feed` yields nothing by default; tests may inject scripted
   :class:`FeedFrame`s via :meth:`push_frame`;
@@ -15,8 +15,9 @@ not exercise. It has no socket, no wire, no external dependency:
 
 It declares symbolic no-op families plus the canonical continuous channels
 (``drive``, ``yaw_rate``, ``gaze_yaw``, ``gaze_pitch``, ``interact``) and is
-``transitional=False``. It ships unselected and off — it is a reference/test
-body, not a real one.
+``transitional=False``. It is the shipped reference body and ships off (the
+Mundus module is inactive by default) — a reference/test body, not a real one; a
+transport-backed virtual-world adapter is planned.
 """
 from __future__ import annotations
 

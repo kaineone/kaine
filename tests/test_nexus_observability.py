@@ -790,7 +790,9 @@ def test_perception_feed_block_off_by_default(tmp_path):
     block = _prober(tmp_path)._perception_feed_block()
     assert block["mode"] == "off"
     assert block["reproducible"] is False
-    assert block["descriptor"] == {"mode": "off"}
+    # Every descriptor carries a content-free stimulus-regime label for
+    # cross-record field-tier stratification; "off" is itself a regime.
+    assert block["descriptor"] == {"mode": "off", "regime": "off"}
 
 
 def test_perception_feed_block_seeded_surfaces_seed(tmp_path):
