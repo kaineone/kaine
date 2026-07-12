@@ -53,3 +53,41 @@ def test_load_nexus_config_reads_kaine_toml(tmp_path):
 def test_load_nexus_config_missing_returns_defaults(tmp_path):
     cfg = load_nexus_config(tmp_path / "nope.toml")
     assert cfg == NexusConfig()
+
+
+def test_env_host_overrides_toml(tmp_path, monkeypatch):
+    # Containers reach Nexus via a published port that cannot reach a server bound
+    # to the container's own 127.0.0.1 (the shipped default). KAINE_NEXUS_HOST lets
+    # the deployment bind all interfaces without editing the baked config.
+    config_file = tmp_path / "kaine.toml"
+    config_file.write_text("[nexus]\nhost = \"127.0.0.1\"\nport = 8088\n")
+    monkeypatch.setenv("KAINE_NEXUS_HOST", "0.0.0.0")
+    monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
+    cfg = load_nexus_config(config_file)
+    assert cfg.host == "0.0.0.0"
+    assert cfg.port == 8088  # unchanged when only host is overridden
+
+
+def test_env_port_overrides_toml(tmp_path, monkeypatch):
+    config_file = tmp_path / "kaine.toml"
+    config_file.write_text("[nexus]\nhost = \"127.0.0.1\"\nport = 8088\n")
+    monkeypatch.delenv("KAINE_NEXUS_HOST", raising=False)
+    monkeypatch.setenv("KAINE_NEXUS_PORT", "9099")
+    cfg = load_nexus_config(config_file)
+    assert cfg.host == "127.0.0.1"
+    assert cfg.port == 9099
+
+
+def test_env_override_applies_without_toml(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_NEXUS_HOST", "0.0.0.0")
+    cfg = load_nexus_config(tmp_path / "nope.toml")
+    assert cfg.host == "0.0.0.0"
+
+
+def test_no_env_leaves_toml_host(tmp_path, monkeypatch):
+    config_file = tmp_path / "kaine.toml"
+    config_file.write_text("[nexus]\nhost = \"127.0.0.1\"\n")
+    monkeypatch.delenv("KAINE_NEXUS_HOST", raising=False)
+    monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
+    cfg = load_nexus_config(config_file)
+    assert cfg.host == "127.0.0.1"
