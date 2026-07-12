@@ -1061,9 +1061,6 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # already stream continuous blocks.
     if bool(section.get("general_audition", False)):
         kwargs["general_audition"] = True
-    # STT gate (default true = unchanged). When false, no transcript path.
-    if "transcription_enabled" in section:
-        kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
         wmin = section.get("arousal_window_min")
         wmax = section.get("arousal_window_max")
         if wmin is not None or wmax is not None:
@@ -1079,6 +1076,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             kwargs["live_mic_config"] = replace(
                 kwargs["live_mic_config"], continuous_capture=True
             )
+    # STT gate (default true = unchanged). When false, no transcript path.
+    if "transcription_enabled" in section:
+        kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
     return Audition(bus, **kwargs)
 
 

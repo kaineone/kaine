@@ -28,13 +28,13 @@ def test_audio_is_prediction_error_not_transcript():
     assert cfg["audition"]["general_audition"] is True
 
 
-def test_vision_is_foveated_and_feed_is_raw_av():
+def test_vision_is_foveated_and_feed_runs_out_of_box():
     cfg = _cfg()
     assert cfg["topos"]["foveation"] is True
-    # Playlist mode: a fixed reference stimulus corpus (manifest-pinned), decoded
-    # directly — not a PRNG seed and not screen-captured. The manifest path itself
-    # is operator/media-specific and set in the operator config, not the profile.
-    assert cfg["perception_feed"]["mode"] == "playlist"
+    # The committed profile defaults to the seeded feed so a fresh install runs
+    # with no media; the reproducible perceptual run upgrades to a reference
+    # stimulus corpus (mode="playlist" + a manifest) via the operator config.
+    assert cfg["perception_feed"]["mode"] == "seeded"
 
 
 def test_voice_is_self_initiated_no_chatbot():
