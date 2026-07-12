@@ -210,8 +210,24 @@ def test_selector_rejects_unknown_backend():
         make_encoder("clip")
 
 
+# Structural Encoder-protocol conformance checked on the CLASS. Not
+# ``isinstance(enc, Encoder)``: isinstance against a ``@runtime_checkable``
+# Protocol invokes property getters on Python 3.12.4+, and ``latent_dim`` raises
+# before ``load()`` (see #65). ``hasattr(type(enc), name)`` sees the descriptor.
+_ENCODER_MEMBERS = (
+    "model_id",
+    "latent_dim",
+    "clip_len",
+    "load",
+    "encode",
+    "encode_clip",
+    "shutdown",
+)
+
+
 def test_internvideo_next_encoder_satisfies_protocol():
-    assert isinstance(InternVideoNextEncoder(), Encoder)
+    enc = InternVideoNextEncoder()
+    assert all(hasattr(type(enc), name) for name in _ENCODER_MEMBERS)
 
 
 def test_internvideo_next_clip_len_and_defaults():

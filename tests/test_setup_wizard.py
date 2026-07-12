@@ -290,9 +290,26 @@ def test_defaults_does_not_modify_shipped_config():
     assert SHIPPED.read_bytes() == before
 
 
-def test_defaults_full_run_does_not_download_organ(tmp_path: Path):
+def test_defaults_full_run_does_not_download_organ(tmp_path: Path, monkeypatch):
     """In --defaults mode the organ step shows the plan + command but downloads
     nothing (no consent path) — the wizard never installs silently."""
+    # The "[--defaults] organ not downloaded" line is only reached when a
+    # supported accelerator toolchain is present (backend.available); on a
+    # CPU-only host the wizard prints the acquisition guide instead. Force an
+    # available backend so this test deterministically exercises the --defaults
+    # branch regardless of the CI host's accelerators (#68). Only `.available`
+    # is overridden; the real backend's summary/plan compatibility is preserved.
+    import dataclasses
+
+    from kaine.setup import organ as organ_mod
+
+    _real_detect = organ_mod.detect_organ_backend
+    monkeypatch.setattr(
+        organ_mod,
+        "detect_organ_backend",
+        lambda *a, **k: dataclasses.replace(_real_detect(*a, **k), available=True),
+    )
+
     op = tmp_path / "op.toml"
     out = io.StringIO()
     rc = setup_main(
