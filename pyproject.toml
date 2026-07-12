@@ -46,7 +46,7 @@ test = [
 # Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
 # Required only if [audition].capture_enabled = true. Lazy-imported.
 audio = [
-    "sounddevice>=0.4,<1",
+    "sounddevice>=0.5.5,<1",
     "webrtcvad>=2.0,<3",
     # Vocal-emotion recognition (emotion2vec+ via funasr) for audition. funasr
     # pulls torchaudio, which must MATCH the host torch wheel (CUDA vs CPU) —
