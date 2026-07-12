@@ -1,0 +1,67 @@
+# The offline test suite — the FIRST CI job that actually runs pytest.
+#
+# Until this job, nothing in CI exercised the test suite: import-boundary and
+# CodeQL are static, and container-image-smoke only builds the image and asserts
+# the cycle refuses to boot without an operator gate (it never runs pytest). That
+# left a gap — a dependency-range bump (Dependabot edits pyproject.toml) or a code
+# change could land with the 3000+ test suite never run in CI. This job closes it.
+#
+# Path-filtered to code, tests, and pyproject so a Dependabot dependency bump is
+# actually validated here (install the new version, run the suite) instead of
+# passing on static checks alone. Offline: fakes stand in for external services;
+# no entity boot, no network services, no secrets. CPU torch keeps the install
+# light (the forward models are CPU-only by policy).
+name: tests
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "kaine/**"
+      - "tests/**"
+      - "conftest.py"
+      - "pyproject.toml"
+      - ".github/workflows/tests.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "kaine/**"
+      - "tests/**"
+      - "conftest.py"
+      - "pyproject.toml"
+      - ".github/workflows/tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (offline suite, py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install CPU torch
+        # The default torch wheel is multi-GB (CUDA). The suite is CPU-only by
+        # policy (forward models pin cpu), so the CPU wheel is both sufficient and
+        # far lighter. Scoped to this step's index; the package install below uses
+        # PyPI for everything else and sees torch already satisfied.
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install package + test extra
+        run: python -m pip install ".[test]"
+
+      - name: Run the offline test suite
+        run: python -m pytest -q
