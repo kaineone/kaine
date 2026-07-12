@@ -38,7 +38,23 @@ class NexusConfig:
 
 def load_nexus_config(path: str | os.PathLike[str] | None = None) -> NexusConfig:
     target = Path(path or "config/kaine.toml")
-    if not target.exists():
-        return NexusConfig()
-    raw = tomllib.loads(target.read_text())
-    return NexusConfig.from_mapping(raw.get("nexus"))
+    raw: dict[str, Any] = {}
+    if target.exists():
+        raw = tomllib.loads(target.read_text())
+    config = NexusConfig.from_mapping(raw.get("nexus"))
+    # Deployment override: containers reach Nexus through a published port mapping,
+    # which cannot reach a server bound to the container's own 127.0.0.1 (the shipped
+    # default). KAINE_NEXUS_HOST / KAINE_NEXUS_PORT let the deployment bind all
+    # interfaces inside the container without editing the baked config. The compose
+    # publish rule keeps external exposure loopback-only.
+    host = os.environ.get("KAINE_NEXUS_HOST")
+    port = os.environ.get("KAINE_NEXUS_PORT")
+    if host or port:
+        from dataclasses import replace
+
+        config = replace(
+            config,
+            host=host or config.host,
+            port=int(port) if port else config.port,
+        )
+    return config

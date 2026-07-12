@@ -259,7 +259,15 @@ def load_internvideo_next(
     env.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     env.setdefault("HF_HUB_OFFLINE", "1")
 
-    wdir = Path(weights_dir) if weights_dir is not None else DEFAULT_WEIGHTS_DIR
+    # Resolve the default at CALL time, not from the import-time DEFAULT_WEIGHTS_DIR
+    # constant: that constant freezes models_dir() at module import, which can predate
+    # KAINE_MODELS_DIR taking effect (observed in the container — the weights live on
+    # the /models volume but the frozen constant still pointed at the local
+    # state/models default). models_dir() re-reads the env, so call-time is correct.
+    if weights_dir is not None:
+        wdir = Path(weights_dir)
+    else:
+        wdir = models_dir() / "internvideo_next_base_p14_res224_f16"
     if not wdir.exists():
         raise FileNotFoundError(
             f"InternVideo-Next weights dir not found: {wdir}. Fetch them once at "

@@ -139,3 +139,7 @@ external/jlens/**/__pycache__/
 
 # Isolated transformers>=5 env for the offline abliteration-lens run (not committed).
 .venv-lens/
+
+# Operator-local compose overlays — host-specific mounts (e.g. a reference-corpus
+# media bind at its absolute host path), never committed.
+compose/*.local.yml

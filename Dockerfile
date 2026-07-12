@@ -90,7 +90,11 @@ COPY kaine /src/kaine
 COPY config /src/config
 COPY scripts /src/scripts
 WORKDIR /src
-RUN pip install -e "${KAINE_EXTRAS}"
+# PIP_ONLY_BINARY=av forces the prebuilt PyAV wheel (bundles ffmpeg) when the
+# [audio] extra is selected. Its source tarball needs pkg-config + ffmpeg-dev and
+# would leave a runtime .so dependency the slim runtime stage lacks — the wheel is
+# self-contained. No effect on builds that don't pull av (the lean default).
+RUN PIP_ONLY_BINARY=av pip install -e "${KAINE_EXTRAS}"
 
 # =========================================================================
 # Stage 2 — runtime: slim base, non-root user, venv + source copied in, offline

@@ -33,6 +33,11 @@ x-kaine-image: &kaine-image
     dockerfile: Dockerfile
     args:
       FLAVOR: ${KAINE_FLAVOR:-cuda}
+      # The running entity needs the perception runtime extras the lean default
+      # (.[test]) omits: [internvideo] (Topos encoder: einops/timm/easydict),
+      # [audio] (Audition + playlist decode: funasr/librosa/av), [vision]
+      # (opencv). Override to a leaner/richer set for other deployments.
+      KAINE_EXTRAS: ${KAINE_EXTRAS:-.[test,vision,audio,internvideo]}
   image: ${KAINE_IMAGE:-kaine:${KAINE_FLAVOR:-cuda}}
 
 # NVIDIA device reservation fragments (design §4). Docker reads
@@ -106,13 +111,12 @@ services:
       - kaine-qdrant-data:/qdrant/storage
     restart: unless-stopped
     healthcheck:
-      test:
-        - CMD-SHELL
-        - >
-          wget -q -O - --header "api-key: $$QDRANT__SERVICE__API_KEY"
-          http://127.0.0.1:6333/readyz | grep -q "all shards are ready"
-          || curl -fsS -H "api-key: $$QDRANT__SERVICE__API_KEY"
-              http://127.0.0.1:6333/readyz >/dev/null
+      # qdrant:v1.18.0 ships neither wget nor curl (the image is minimal), so an
+      # HTTP-client probe exits 127 and the container is falsely unhealthy, blocking
+      # every dependent. The image DOES ship bash, whose /dev/tcp opens a TCP socket
+      # with no external tools — qdrant binds 6333 only once it is serving, so a
+      # successful connect is a sound readiness signal.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -130,7 +134,13 @@ services:
     container_name: kaine-model-server
     ports:
       - "127.0.0.1:${KAINE_MODEL_SERVER_HOST_PORT:-11434}:8080"
-    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --api-key ${KAINE_MODEL_SERVER_API_KEY:-}}
+    # The API key is supplied via LLAMA_API_KEY (below), NOT a --api-key flag: an
+    # empty ${KAINE_MODEL_SERVER_API_KEY} would render a bare `--api-key` with no
+    # value, which llama-server rejects ("expected value for argument"), crash-looping
+    # the organ. The env var tolerates empty (= no auth) and a set value (= auth).
+    environment:
+      LLAMA_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080}
     volumes:
       - kaine-models:/models:ro
     restart: unless-stopped
@@ -201,8 +211,19 @@ services:
       - "127.0.0.1:${KAINE_NEXUS_HOST_PORT:-8088}:8088"
     environment:
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      # Bus by service name on the bridge network (see kaine-cycle). Nexus reaches
+      # the bus through load_bus_config, which reads KAINE_REDIS_URL over the toml.
+      KAINE_REDIS_URL: redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
       KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
       KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+      # Same at-rest posture as the cycle, so the "state encryption" health line is
+      # not DEGRADED and Nexus can read/write the shared encrypted fork/snapshots.
+      KAINE_STATE_KEY: ${KAINE_STATE_KEY:-}
+      # Bind the diagnostics server on all interfaces INSIDE the container so the
+      # published 127.0.0.1:8088 mapping can reach it; the shipped [nexus].host is
+      # 127.0.0.1, which binds the container's own loopback and is unreachable via
+      # the port mapping. Publishing is still loopback-only (see ports:).
+      KAINE_NEXUS_HOST: 0.0.0.0
     volumes:
       # Operator overlay + secrets bind-mounted READ-ONLY, never COPYed (design §8).
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
@@ -211,6 +232,9 @@ services:
       # the durable state volume mounts at /app/state — NOT /state — or nothing
       # the entity writes would survive down/up.
       - kaine-state:/app/state
+      # Shared run-manifest volume (see kaine-cycle) — Nexus reads the admissibility
+      # manifest the cycle writes here.
+      - kaine-runs:/app/data/evaluation/runs
     restart: unless-stopped
     depends_on:
       kaine-redis:
@@ -218,9 +242,11 @@ services:
       kaine-qdrant:
         condition: service_healthy
     healthcheck:
+      # python (always present in the image) instead of curl (which is not) — a
+      # curl-based check exits 127 and marks the container falsely unhealthy.
       test:
         - CMD-SHELL
-        - 'curl -fsS http://127.0.0.1:8088/diagnostics/health.json >/dev/null'
+        - 'python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(''http://127.0.0.1:8088/diagnostics/health.json'', timeout=4).status==200 else 1)"'
       interval: 15s
       timeout: 5s
       retries: 5
@@ -239,6 +265,11 @@ services:
     command: ["python", "-m", "kaine.cycle"]
     environment:
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      # On the compose bridge network the bus is reached by SERVICE NAME, not the
+      # host-facing 127.0.0.1:6479 mapping the shipped config/kaine.toml targets.
+      # load_bus_config honours KAINE_REDIS_URL over the toml host/port, so this
+      # redirects the bus for the containerized cycle without editing that config.
+      KAINE_REDIS_URL: redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
       KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
       KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
       # Encryption-at-rest key (design §7); empty unless the operator sets it.
@@ -258,10 +289,19 @@ services:
       # Provisioned weights (InternVideo-Next encoder, MiniLM embedder, emotion2vec)
       # read-only from the shared model volume; HF_HOME=/models/hf is baked in.
       - kaine-models:/models:ro
-    # Perception scratch, if any, is RAM-backed and ephemeral — never a durable
-    # volume. Zero raw-sense-data persistence is load-bearing (design §7).
-    tmpfs:
-      - /app/state/perception
+      # Evaluation run manifests on a SHARED volume so the Nexus admissibility probe
+      # (runs_manifest_root = data/evaluation/runs) sees the manifest the cycle
+      # writes — otherwise each container has its own ephemeral /app/data and Nexus
+      # reports "manifest absent". No raw sense data is written here (manifests only).
+      - kaine-runs:/app/data/evaluation/runs
+      # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
+      # raw-sense-data persistence, design §7). Long-form with mode 1777 because a
+      # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
+      # root ownership and is otherwise unwritable by the non-root `kaine` user.
+      - type: tmpfs
+        target: /app/state/perception
+        tmpfs:
+          mode: 01777
     depends_on:
       kaine-redis:
         condition: service_healthy
@@ -306,3 +346,7 @@ volumes:
   # on. Survives down/up. NO raw-sense-data path exists here.
   kaine-state:
     name: kaine-state
+  # Evaluation run manifests, shared read/write between the cycle (writer) and
+  # Nexus (admissibility reader). Metadata only — never raw sense data.
+  kaine-runs:
+    name: kaine-runs
