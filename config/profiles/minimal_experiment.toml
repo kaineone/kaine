@@ -1,0 +1,60 @@
+# Minimal experiment — the workspace-mediation ablation configuration.
+#
+# Apply deliberately:  KAINE_PROFILE=minimal_experiment python -m kaine.cycle
+#               or:    python -m kaine.cycle --profile minimal_experiment
+#
+# THIS IS NOT A DEPLOYMENT TIER. The tier profiles (tier0..tier3) are INERT by
+# contract and NEVER enable a module. This overlay is the opposite: it is the
+# paper's minimal configuration, and it DELIBERATELY enables exactly the three
+# modules the workspace-mediation ablation needs — Soma, Chronos, Lingua — while
+# leaving every other built module disabled. Syneidesis (the workspace) and
+# Volition (action selection) are always-on cycle scaffolding, not [modules]
+# toggles, so they run regardless.
+#
+# Enabling modules here does NOT birth an entity: the cognitive cycle still
+# refuses to boot unless KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety
+# net is verified). This overlay only selects WHICH modules construct.
+#
+# No work is lost: the other eleven modules remain built and disabled; flip their
+# [modules] toggles back on to restore the full configuration.
+
+[modules]
+soma = true
+chronos = true
+lingua = true
+# Everything else stays disabled (matches the shipped all-off default); listed
+# here for reproducibility of the minimal set.
+echo = false
+topos = false
+nous = false
+mnemos = false
+eidolon = false
+thymos = false
+praxis = false
+vox = false
+audition = false
+hypnos = false
+empatheia = false
+phantasia = false
+perception = false
+mundus = false
+
+[syneidesis]
+# Lower the workspace capacity so competitive selection actually EXCLUDES on the
+# minimal set. The shipped default top_k = 5 exceeds the minimal set's typical
+# per-tick candidate count (Soma + Chronos + an utterance), so at the default
+# nothing is excluded and "competition" is untested. top_k = 2 forces genuine
+# competitive exclusion — the property the ablation is meant to test.
+top_k = 2
+
+[volition]
+# Match the paper's described default action policy: no drive-initiated intents,
+# so Volition forms a speak intent only from a user utterance. Removes a
+# confound from the ablation's observable.
+drive_initiative = false
+
+[lingua]
+# Greedy decoding (temperature 0) so the language organ's output is a function of
+# its conditioning alone — the observable carries no sampling noise, which the
+# output-divergence measure requires.
+temperature = 0.0

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Shared-seed suite orchestrator — the seven experiments under ONE seed.
+"""Shared-seed suite orchestrator — the eight experiments under ONE seed.
 
-The paper frames "seven experiments, one shared seed"; this is the single entry
+The paper frames "one shared seed" across the experiments; this is the single entry
 point that delivers it. From one master seed it derives an independent-but-
 reproducible child seed per experiment via ``numpy.random.SeedSequence.spawn``
 (cleaner than a single global for independent streams that must each stay
@@ -20,7 +20,10 @@ The seven experiments (docs/processes/testing-framework.md):
   4. memory coherence (retrieval-advantage battery);
   5. self-model accuracy (fixed-threshold scorer battery);
   6. multi-seed stability (the longitudinal control's machinery, run offline);
-  7. enforcement red-team (the real enforcement layer vs a case battery).
+  7. enforcement red-team (the real enforcement layer vs a case battery);
+  8. workspace-mediation ablation (competitive workspace vs flat fan-in — the
+     paper's primary experiment; the second p-value producer via a sign test over
+     per-seed coupling deltas).
 
 Family-wise correction
 ----------------------
@@ -72,13 +75,24 @@ from kaine.evaluation.benchmarks.oscillatory_ablation.runner import (
 from kaine.evaluation.benchmarks.oscillatory_ablation.stability import (
     run_ablation_stability,
 )
+from kaine.evaluation.benchmarks.workspace_mediation_ablation.measures import (
+    sign_test_pvalue,
+)
+from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
+    MediationConfig,
+    run_ablation as run_workspace_mediation,
+)
+from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (
+    SOMA_SALIENT_STIMULUS,
+)
 from kaine.evaluation.redteam.harness import run_suite as run_redteam
 from kaine.experiment.multiple_comparisons import holm_report
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome, Verdict
 
-# The seven experiments, in report order. The active-inference benchmark is the
-# family-wise p-value producer; the rest emit threshold/gate verdicts.
+# The eight experiments, in report order. The active-inference benchmark and the
+# workspace-mediation ablation are family-wise p-value producers; the rest emit
+# threshold/gate verdicts.
 EXPERIMENT_NAMES = (
     "active_inference",
     "oscillatory_ablation",
@@ -87,6 +101,7 @@ EXPERIMENT_NAMES = (
     "self_model",
     "multi_seed_stability",
     "enforcement_red_team",
+    "workspace_mediation",
 )
 
 
@@ -111,6 +126,12 @@ class SuiteConfig:
     oscillatory_ticks: int = 16
     stability_seeds: tuple[int, ...] = (0, 1, 2)
     stability_tolerance: float = 0.05
+    # Workspace-mediation sizing. The per-seed coupling deltas form the
+    # distribution the sign-test p-value (the family contribution) is computed on,
+    # so several seeds are needed for a meaningful test.
+    mediation_ticks: int = 24
+    mediation_seeds: tuple[int, ...] = (0, 1, 2, 3, 4)
+    mediation_min_effect: float = 0.15
 
     @classmethod
     def fast(cls, seed: int = 1234, **kw: Any) -> "SuiteConfig":
@@ -123,6 +144,8 @@ class SuiteConfig:
             ai_tasks=("exploitation",),
             oscillatory_ticks=12,
             stability_seeds=(0, 1),
+            mediation_ticks=16,
+            mediation_seeds=(0, 1, 2),
             **kw,
         )
 
@@ -174,6 +197,92 @@ def _stability_verdict(report: Any) -> dict[str, Any]:
             "tolerance": report.tolerance,
         },
     ).to_dict()
+
+
+def _mediation_aggregate_verdict(
+    deltas: list[Any], pvalue: float, config: SuiteConfig
+) -> Verdict:
+    """Aggregate the multi-seed coupling deltas into a WIN / NULL / NEGATIVE verdict.
+
+    WIN requires BOTH a mean delta above ``mediation_min_effect`` AND a
+    sign-test p-value significant at the family alpha — competitive mediation
+    increases coupling, and does so consistently across seeds, not by luck on one.
+    A mean delta at or below ``-min_effect`` is NEGATIVE (adverse). Otherwise NULL
+    (the fan-in prompt-assembler outcome). Undefined everywhere -> underpowered.
+    """
+    defined = [float(d) for d in deltas if d is not None]
+    if not defined:
+        return Verdict(
+            outcome=Outcome.NULL,
+            detail="UNDERPOWERED — coupling undefined across all seeds",
+            metrics={"underpowered": True, "n_seeds": len(deltas), "pvalue": pvalue},
+        )
+    mean_delta = sum(defined) / len(defined)
+    metrics = {
+        "mean_coupling_delta": mean_delta,
+        "pvalue": pvalue,
+        "n_seeds": len(deltas),
+        "n_defined": len(defined),
+        "min_effect": config.mediation_min_effect,
+        "alpha": config.alpha,
+    }
+    if mean_delta >= config.mediation_min_effect and pvalue <= config.alpha:
+        return Verdict(
+            outcome=Outcome.WIN,
+            detail=(
+                f"competitive mediation increases cross-module coupling "
+                f"(mean delta {mean_delta:.3f} >= {config.mediation_min_effect}, "
+                f"sign-test p={pvalue:.4f} <= {config.alpha}) — does work flat "
+                "fan-in does not"
+            ),
+            metrics=metrics,
+        )
+    if mean_delta <= -config.mediation_min_effect:
+        return Verdict(
+            outcome=Outcome.NEGATIVE,
+            detail=(
+                f"competitive mediation REDUCES coupling (mean delta {mean_delta:.3f} "
+                f"<= -{config.mediation_min_effect}) — adverse to the thesis"
+            ),
+            metrics=metrics,
+        )
+    return Verdict(
+        outcome=Outcome.NULL,
+        detail=(
+            f"competitive mediation makes no consistent, significant change to "
+            f"coupling (mean delta {mean_delta:.3f}, sign-test p={pvalue:.4f}) — "
+            "the fan-in prompt-assembler outcome"
+        ),
+        metrics=metrics,
+    )
+
+
+def _run_workspace_mediation(
+    config: SuiteConfig, base_seed: int
+) -> dict[str, Any]:
+    """Run the mediation ablation across seeds; return verdict + family p-value.
+
+    The primary measure (``coupling_delta``) is collected per seed; the family
+    contribution is the sign-test p-value that its median is > 0 (a significant,
+    consistent increase in coupling). The displayed verdict is the multi-seed
+    aggregate.
+    """
+    deltas: list[Any] = []
+    for s in config.mediation_seeds:
+        res = asyncio.run(
+            run_workspace_mediation(
+                MediationConfig(
+                    seed=base_seed + int(s),
+                    ticks=config.mediation_ticks,
+                    min_effect=config.mediation_min_effect,
+                ),
+                stimulus=SOMA_SALIENT_STIMULUS,
+            )
+        )
+        deltas.append(res["effect"]["coupling_delta"])
+    pvalue = sign_test_pvalue(deltas)
+    verdict = _mediation_aggregate_verdict(deltas, pvalue, config)
+    return {"verdict": verdict.to_dict(), "pvalue": pvalue, "deltas": deltas}
 
 
 def _redteam_verdict(results: list[Any]) -> dict[str, Any]:
@@ -260,6 +369,12 @@ def run_suite(
         rt_results = asyncio.run(run_redteam(work_dir))
     experiments["enforcement_red_team"] = {"verdict": _redteam_verdict(rt_results)}
 
+    # 8. Workspace-mediation ablation — the paper's primary experiment and the
+    # second family-wise p-value producer (sign-test over per-seed coupling deltas).
+    wm = _run_workspace_mediation(config, derived["workspace_mediation"])
+    experiments["workspace_mediation"] = {"verdict": wm["verdict"]}
+    family_pvalues["workspace_mediation"] = wm["pvalue"]
+
     # Optional individuation p-value into the family.
     if individuation is not None:
         family_pvalues["individuation"] = float(individuation["report"]["p_value"])
@@ -287,7 +402,7 @@ def run_suite(
 def format_suite_report(report: dict[str, Any]) -> str:
     """Human-readable combined report: per-experiment verdicts + Holm family view."""
     lines: list[str] = []
-    lines.append("Evaluation suite — seven experiments under one shared seed")
+    lines.append("Evaluation suite — eight experiments under one shared seed")
     lines.append("=" * 66)
     lines.append(
         f"master_seed={report['master_seed']} alpha={report['alpha']} "

@@ -24,16 +24,22 @@ from kaine.evaluation.benchmarks.suite import (
 )
 
 
-def test_suite_runs_all_seven_and_reports_verdicts_and_holm():
+def test_suite_runs_all_experiments_and_reports_verdicts_and_holm():
     """One seed drives the whole suite; the report carries every experiment's
     raw verdict AND a Holm-corrected family-wise view (spec scenario: 'One seed
     drives the whole suite')."""
     report = run_suite(SuiteConfig.fast(seed=1234))
 
-    # Every one of the seven experiments produced a verdict.
+    # Every experiment produced a verdict.
     for name in EXPERIMENT_NAMES:
         assert name in report["experiments"], f"missing experiment {name}"
         assert "outcome" in report["experiments"][name]
+
+    # The workspace-mediation ablation (the paper's primary experiment) is present
+    # and contributes a p-value to the Holm family alongside active-inference.
+    assert "workspace_mediation" in report["experiments"]
+    fw_names = {c["name"] for c in report["family_wise"]["comparisons"]}
+    assert "workspace_mediation" in fw_names
 
     # The active-inference benchmark was seeded from the master seed (its derived
     # child seed is recorded), proving it is threaded, not independently seeded.
@@ -55,7 +61,7 @@ def test_suite_runs_all_seven_and_reports_verdicts_and_holm():
 
     # The human-readable report renders both sections.
     text = format_suite_report(report)
-    assert "seven experiments under one shared seed" in text
+    assert "eight experiments under one shared seed" in text
     assert "Family-wise correction" in text
 
 
