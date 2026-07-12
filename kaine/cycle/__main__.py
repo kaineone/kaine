@@ -420,6 +420,20 @@ def _load_kaine_config(
     # operator choices from the first-run wizard still win (openspec
     # deployment-tiers). Secrets merge last.
     resolved_profile = resolve_profile_name(profile, env=env)
+    if resolved_profile is None:
+        # The base-thesis form is the project's default entity configuration:
+        # a fresh install that boots the cycle with no explicit profile gets the
+        # five predictive-workspace processors, STT off, and the self-initiated
+        # voice. An explicit --profile / KAINE_PROFILE still wins, and the
+        # operator's own config still layers on top. The boot gate is unchanged —
+        # this selects WHICH modules construct, never whether an entity boots.
+        # Fall back to the shipped defaults if the profile file is absent (a
+        # partial tree) rather than failing, since this is a default, not an
+        # explicit selection.
+        from kaine.config import profile_path
+
+        if profile_path("thesis_test").exists():
+            resolved_profile = "thesis_test"
     config = load_kaine_config(
         target, OPERATOR_CONFIG_PATH, profile=resolved_profile
     )
@@ -770,12 +784,32 @@ async def _boot_and_run(
     # An operator can disable drive initiative — falling back to the plain
     # default policy — via `[volition].drive_initiative = false`.
     volition_cfg = kaine_config.get("volition") or {}
+    policy_name = str(volition_cfg.get("policy", "")).strip().lower()
     drive_initiative = bool(volition_cfg.get("drive_initiative", True))
     # Sign act intents with the per-boot secret so Praxis can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
     intent_signer = IntentSigner(intent_secret, run_ctx.run_id)
-    if drive_initiative:
+    if policy_name == "self_initiated_report":
+        # Self-initiated report gate: the entity speaks only from its own
+        # precision-weighted surprise (no user-utterance / chatbot trigger).
+        # Refractory timing reads the shared subjective clock.
+        from kaine.workspace.report_policy import SelfInitiatedReportPolicy
+
+        _report_clock = (
+            registry.entity_clock.now if registry.entity_clock is not None else None
+        )
+        volition = Volition(
+            policy=SelfInitiatedReportPolicy(
+                report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
+                think_threshold=float(volition_cfg.get("think_threshold", 0.45)),
+                speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
+                think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
+                clock=_report_clock,
+            ),
+            signer=intent_signer,
+        )
+    elif drive_initiative:
         volition = Volition(
             policy=DriveBiasedActionSelectionPolicy(), signer=intent_signer
         )

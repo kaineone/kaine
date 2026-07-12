@@ -73,6 +73,41 @@ async def test_process_audio_publishes_two_events(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
+async def test_transcription_gate_off_publishes_no_transcript(bus: AsyncBus):
+    """transcription_enabled=false: no audition.transcription and no STT call —
+    the entity hears sound as prediction error, not a transcript (the STT-ectomy).
+    Emotion (an affect signal) is unaffected."""
+
+    class _RecordingSTT(FakeSTTClient):
+        def __init__(self):
+            super().__init__(responses=["should not run"])
+            self.calls = 0
+
+        async def transcribe(self, *a, **k):
+            self.calls += 1
+            return await super().transcribe(*a, **k)
+
+    stt = _RecordingSTT()
+    audition = Audition(
+        bus,
+        stt_client=stt,
+        emotion_classifier=FakeEmotionClassifier(),
+        stt_model="fake-stt",
+        transcription_enabled=False,
+    )
+    await audition.initialize()
+    try:
+        await audition.process_audio(b"\x00" * 1024, sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        types = {e.type for _, e in entries}
+        assert "audition.transcription" not in types  # no transcript
+        assert "audition.emotion" in types  # affect signal unaffected
+        assert stt.calls == 0  # STT model never invoked
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_transcription_payload_shape(bus: AsyncBus):
     audition = _make_audition(bus)
     await audition.initialize()
