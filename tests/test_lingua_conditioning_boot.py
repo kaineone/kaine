@@ -142,30 +142,20 @@ async def test_context_max_events_config_bounds_the_coalition(bus, tmp_path):
     assert "a low-salience aside" not in req.prompt  # dropped by the cap of 1
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Pre-existing failure, surfaced by the new pytest CI job. This test asserts "
-        "the OLD in-process wiring where _wire_lingua_self_model injected Eidolon's "
-        "self-model into Lingua's persona directly. The distributed-deployment change "
-        "made that wiring a documented no-op seam: the self-model now reaches Lingua "
-        "over the bus (eidolon.out -> Lingua._self_model_cache_loop), which this test "
-        "does not drive. Quarantined here to keep CI green; the correct fix (rewrite "
-        "the test around the bus-mediated path, or assert the no-op seam) belongs in a "
-        "dedicated lingua/eidolon PR, not this CI-infrastructure change."
-    ),
-    strict=False,
-)
 @pytest.mark.asyncio
-async def test_wire_lingua_self_model_seeds_persona(bus, tmp_path):
-    """_wire_lingua_self_model connects Eidolon's accumulated identity into the
-    persona, so a populated self-model surfaces in the system prompt (task 3.4)."""
-    lingua = _lingua(bus, tmp_path)
-    eidolon = _FakeEidolon(_FakeEidolonModel(values=["honesty", "curiosity"]))
-    registry = ModuleRegistry()
-    registry.register(lingua)
-    registry.register(eidolon)
+async def test_lingua_persona_seeds_from_bus_mediated_self_model(bus, tmp_path):
+    """Lingua seeds its first-person persona from the Eidolon self-model it caches
+    off the bus, so a populated self-model surfaces in the system prompt (task 3.4).
 
-    _wire_lingua_self_model(registry)
+    The distributed-deployment change made ``_wire_lingua_self_model`` a documented
+    no-op seam: the self-model now reaches Lingua as an ``eidolon.self_model``
+    snapshot on ``eidolon.out``, cached by ``_self_model_cache_loop`` into
+    ``_bus_self_model`` (the bus read itself is covered by
+    ``test_lingua_bus_self_model.py``). Here we assert that the cached model
+    surfaces in the persona — the behavior the old in-process wiring used to test."""
+    lingua = _lingua(bus, tmp_path)
+    # The snapshot _self_model_cache_loop stores from an eidolon.self_model event.
+    lingua._bus_self_model = {"values": ["honesty", "curiosity"]}
     await lingua.speak("hi", snapshot=None)
 
     req = lingua.chat_client.requests[-1]

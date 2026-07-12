@@ -276,8 +276,28 @@ def _make_wav_bytes(n_samples: int = 1600, sample_rate: int = 16000) -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_prosody_published_when_enabled(bus: AsyncBus):
+def _fake_extract_prosody(audio, *, sample_rate: int = 16000):
+    """Deterministic stand-in for the real librosa/pyin extractor.
+
+    The real ``extract_prosody`` runs pyin on a thread pool — slow (1-2 s cold)
+    and env-dependent (silent CI runs timed out or produced nothing). STT and
+    emotion are already faked here; faking prosody the same way makes the publish
+    path deterministic and fast without depending on the audio stack (#67)."""
+    return {
+        "f0_mean_hz": 120.0,
+        "f0_std_hz": 5.0,
+        "f0_voiced_frac": 0.8,
+        "rms_mean": 0.1,
+        "rms_std": 0.02,
+        "tempo_bpm": 90.0,
+    }
+
+
+async def test_prosody_published_when_enabled(bus: AsyncBus, monkeypatch):
     """When prosody_enabled=True, an audition.prosody event is published."""
+    monkeypatch.setattr(
+        "kaine.modules.audition.prosody.extract_prosody", _fake_extract_prosody
+    )
     audition = Audition(
         bus,
         stt_client=FakeSTTClient(responses=["hi"]),
@@ -289,8 +309,7 @@ async def test_prosody_published_when_enabled(bus: AsyncBus):
     try:
         wav = _make_wav_bytes(n_samples=16000)  # 1 second of silence
         await audition.process_audio(wav, sample_rate=16000)
-        # pyin on the thread pool can take ~1-2 s on first call; poll
-        # up to 5 s so the test stays robust without a hard sleep.
+        # Prosody is published from a thread; poll briefly (the fake is instant).
         deadline = asyncio.get_event_loop().time() + 5.0
         while asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.1)
@@ -309,8 +328,11 @@ async def test_prosody_published_when_enabled(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_prosody_payload_no_bytes(bus: AsyncBus):
+async def test_prosody_payload_no_bytes(bus: AsyncBus, monkeypatch):
     """audition.prosody payload must contain no bytes values."""
+    monkeypatch.setattr(
+        "kaine.modules.audition.prosody.extract_prosody", _fake_extract_prosody
+    )
     audition = Audition(
         bus,
         stt_client=FakeSTTClient(responses=["hi"]),

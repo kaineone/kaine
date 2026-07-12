@@ -27,9 +27,30 @@ def test_dinov2_encoder_constructed_lazily():
         _ = enc.latent_dim
 
 
+# Encoder-protocol members, checked structurally on the CLASS. We avoid
+# ``isinstance(enc, Encoder)`` because ``isinstance`` against a
+# ``@runtime_checkable`` Protocol invokes data-member property getters on Python
+# 3.12.4+, and ``Encoder.latent_dim`` intentionally raises before ``load()`` — so
+# isinstance on an unloaded encoder raises instead of returning True (see #65).
+# ``hasattr(type(enc), name)`` sees the property descriptor without calling it.
+_ENCODER_MEMBERS = (
+    "model_id",
+    "latent_dim",
+    "clip_len",
+    "load",
+    "encode",
+    "encode_clip",
+    "shutdown",
+)
+
+
+def _implements_encoder(obj) -> bool:
+    return all(hasattr(type(obj), name) for name in _ENCODER_MEMBERS)
+
+
 def test_dinov2_encoder_satisfies_encoder_protocol():
     enc = DINOv2Encoder()
-    assert isinstance(enc, Encoder)
+    assert _implements_encoder(enc)
 
 
 def test_dinov2_encoder_device_default_is_auto():
