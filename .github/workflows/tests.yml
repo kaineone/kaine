@@ -60,8 +60,24 @@ jobs:
         # PyPI for everything else and sees torch already satisfied.
         run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Install package + test extra
-        run: python -m pip install ".[test]"
+      - name: Install package (editable) + the extras the suite exercises
+        # EDITABLE (-e): a non-editable install ships only the packages enumerated
+        # in [tool.setuptools] and silently omits others (e.g. kaine.oscillator),
+        # so a subprocess `python -m kaine.cycle` fails to import. -e puts the whole
+        # source tree on the path, matching how the suite is run locally.
+        #
+        # Extras: ~30 tests hard-require optional deps (opencv for foveation/topos,
+        # pymdp+jax for active-inference, librosa for prosody, snnTorch for the
+        # oscillator) and ModuleNotFoundError rather than skip when they are absent,
+        # so the suite is only green with them installed. The heavy/fragile extras
+        # whose tests DO skip-when-missing are left out on purpose: `audio`'s funasr
+        # (emotion2vec + torchaudio matching), `training`'s unsloth, `worldmodel`'s
+        # dreamerv3, and `internvideo-flash` (flash-attn has no prebuilt wheel). The
+        # light audio deps (librosa/av/webrtcvad/soundfile) are pulled directly so
+        # the prosody path runs without dragging in funasr.
+        run: |
+          python -m pip install -e ".[test,vision,internvideo,reasoning,oscillator]" \
+            librosa av webrtcvad soundfile
 
       - name: Run the offline test suite
         run: python -m pytest -q
