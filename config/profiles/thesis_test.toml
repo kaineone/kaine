@@ -39,15 +39,21 @@ perception = false
 mundus = false
 
 [perception_feed]
-# Raw audio-visual world via window/screen capture (the "window sharing" path):
-# ffmpeg grabs the shared screen/window for Topos and the desktop-audio monitor
-# for Audition, so the entity sees the frames and hears the sound of a video
-# playing. NOTE: screen mode reads the HOST display (X11) and PulseAudio monitor —
-# run the cycle where those are reachable (host, or a container with the X11 +
-# Pulse sockets passed in), and enable the capture locus at boot. The simpler
-# deterministic alternative that needs no display/audio passthrough is
-# mode = "playlist" (a video file the feed auto-plays).
-mode = "screen"
+# Raw audio-visual world from a fixed REFERENCE STIMULUS CORPUS (not a PRNG
+# "seed", and not synthetic noise — the predictive processors need real-world
+# structure to predict). Playlist mode decodes the media files directly into
+# Topos (frames) and Audition (sound), so it needs no host display/audio
+# passthrough and is more reproducible than screen-capturing a player. The corpus
+# is pinned by a manifest ([[item]] path/sha256/fps, fail-closed verified), so
+# reproducibility is by the manifest identity — anyone with the same publicly
+# archived media (e.g. an archive.org set) played in the same order reproduces
+# the stimulus.
+mode = "playlist"
+# The manifest path is OPERATOR- and MEDIA-specific, so set it in your local
+# config/kaine.operator.toml (not this committed profile):
+#   [perception_feed]
+#   playlist_manifest = "/path/to/your/reference-corpus.manifest.toml"
+# Build it from a media directory / .xspf with tools/build_playlist_manifest.py.
 
 [topos]
 # Attention-driven foveation ON: the arousal-sized fovea IS the precision-weighted

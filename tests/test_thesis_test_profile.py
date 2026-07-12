@@ -31,7 +31,10 @@ def test_audio_is_prediction_error_not_transcript():
 def test_vision_is_foveated_and_feed_is_raw_av():
     cfg = _cfg()
     assert cfg["topos"]["foveation"] is True
-    assert cfg["perception_feed"]["mode"] == "screen"
+    # Playlist mode: a fixed reference stimulus corpus (manifest-pinned), decoded
+    # directly — not a PRNG seed and not screen-captured. The manifest path itself
+    # is operator/media-specific and set in the operator config, not the profile.
+    assert cfg["perception_feed"]["mode"] == "playlist"
 
 
 def test_voice_is_self_initiated_no_chatbot():
