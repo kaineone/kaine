@@ -92,6 +92,12 @@ class Audition(BaseModule):
         # a specialization on windows detected as speech. See
         # kaine/modules/audition/acoustic.py and openspec auditory-perception.
         general_audition: bool = False,
+        # Speech-to-text gate. Default true = the existing pipeline. When false,
+        # the STT model is never invoked and no `audition.transcription` event is
+        # published; only the acoustic-perception prediction error and the affect
+        # signals (emotion/prosody) reach the workspace. Preserves the STT code,
+        # only bypasses it — audio enters as prediction error, not a transcript.
+        transcription_enabled: bool = True,
         acoustic_encoder: Optional[AcousticEncoder] = None,
         arousal_window_range: tuple[float, float] = (0.15, 1.0),
         acoustic_change_alert_threshold: float = 0.35,
@@ -148,6 +154,7 @@ class Audition(BaseModule):
 
         # General auditory perception (auditory-perception). All memory-only.
         self._general_audition = bool(general_audition)
+        self._transcription_enabled = bool(transcription_enabled)
         self._arousal_window_range = (
             float(arousal_window_range[0]),
             float(arousal_window_range[1]),
@@ -334,17 +341,26 @@ class Audition(BaseModule):
 
         start_time = time.monotonic()
 
-        stt_task = asyncio.create_task(
-            self._stt_client.transcribe(
-                audio_bytes, sample_rate=sample_rate, model=self._stt_model
-            )
-        )
         emo_task = asyncio.create_task(
             self._emotion_classifier.classify(audio_bytes, sample_rate=sample_rate)
         )
-        stt_result_or_exc, emo_result_or_exc = await asyncio.gather(
-            stt_task, emo_task, return_exceptions=True
-        )
+        # STT is gated: when transcription is disabled the model is never invoked
+        # (the entity hears sound as prediction error, not a transcript). Emotion
+        # still runs — it is an affective state signal, not a transcript.
+        if self._transcription_enabled:
+            stt_task = asyncio.create_task(
+                self._stt_client.transcribe(
+                    audio_bytes, sample_rate=sample_rate, model=self._stt_model
+                )
+            )
+            stt_result_or_exc, emo_result_or_exc = await asyncio.gather(
+                stt_task, emo_task, return_exceptions=True
+            )
+        else:
+            stt_result_or_exc = None
+            (emo_result_or_exc,) = await asyncio.gather(
+                emo_task, return_exceptions=True
+            )
 
         duration_s = time.monotonic() - start_time
 
@@ -387,7 +403,10 @@ class Audition(BaseModule):
         # Publish transcription and emotion, salience weighted by error.
         # ------------------------------------------------------------------
         stt_result: Optional[TranscriptionResult] = None
-        if isinstance(stt_result_or_exc, BaseException):
+        if not self._transcription_enabled:
+            # Gated off: no transcript reaches the workspace.
+            pass
+        elif isinstance(stt_result_or_exc, BaseException):
             await self._publish_transcription_error(
                 source_label=source_label,
                 sample_rate=sample_rate,

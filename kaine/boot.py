@@ -975,6 +975,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         # General auditory perception (auditory-perception). Off by default → the
         # existing speech pipeline is unchanged. See the block below.
         "general_audition",
+        "transcription_enabled",
         "arousal_window_min",
         "arousal_window_max",
         "acoustic_change_alert_threshold",
@@ -1060,6 +1061,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # already stream continuous blocks.
     if bool(section.get("general_audition", False)):
         kwargs["general_audition"] = True
+    # STT gate (default true = unchanged). When false, no transcript path.
+    if "transcription_enabled" in section:
+        kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
         wmin = section.get("arousal_window_min")
         wmax = section.get("arousal_window_max")
         if wmin is not None or wmax is not None:

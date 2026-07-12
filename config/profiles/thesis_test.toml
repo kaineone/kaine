@@ -1,0 +1,71 @@
+# Thesis-test configuration — the base-thesis form of the entity.
+#
+# Apply deliberately:  KAINE_PROFILE=thesis_test python -m kaine.cycle
+#               or:    python -m kaine.cycle --profile thesis_test
+#
+# NOT A DEPLOYMENT TIER. This is the honest, falsifiable base-thesis form of the
+# system (Baars global workspace + predictive processing): several DIVERSE
+# predictive processors compete for a shared workspace; the winning coalition is
+# broadcast back and becomes the context they predict against next; the language
+# organ is demoted to an OUTPUT-ONLY voice; and no input path lets a transcript
+# reach the model (so it is not a chatbot). Everything is by GATING — every other
+# module and the STT code remain built, just switched off, until the base thesis
+# is proven or disproven.
+#
+# Enabling modules here does NOT birth an entity: the cycle still refuses to boot
+# without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net).
+
+[modules]
+# The diverse predictive processors the thesis needs: two internal (interoception,
+# time) and two externally grounded (foveated vision, raw sound). Syneidesis (the
+# workspace) and Volition (action) are always-on scaffolding. Lingua is the voice.
+soma = true
+chronos = true
+topos = true
+audition = true
+lingua = true
+# Richer faculties — gated OFF until a positive base result (never deleted).
+echo = false
+nous = false
+mnemos = false
+eidolon = false
+thymos = false
+praxis = false
+vox = false
+hypnos = false
+empatheia = false
+phantasia = false
+perception = false
+mundus = false
+
+[perception_feed]
+# Raw audio-visual world via window/screen capture (the "window sharing" path):
+# ffmpeg grabs the shared screen/window for Topos and the desktop-audio monitor
+# for Audition, so the entity sees the frames and hears the sound of a video
+# playing. NOTE: screen mode reads the HOST display (X11) and PulseAudio monitor —
+# run the cycle where those are reachable (host, or a container with the X11 +
+# Pulse sockets passed in), and enable the capture locus at boot. The simpler
+# deterministic alternative that needs no display/audio passthrough is
+# mode = "playlist" (a video file the feed auto-plays).
+mode = "screen"
+
+[topos]
+# Attention-driven foveation ON: the arousal-sized fovea IS the precision-weighted
+# attention the thesis names — perception enters as foveated prediction error.
+foveation = true
+
+[audition]
+# STT-ectomy: audio enters ONLY as prediction error, never as a transcript. The
+# entity hears the sound of speech; it does not read it. The STT code is preserved,
+# just bypassed — closing the chatbot confound in the ablation.
+transcription_enabled = false
+# Acoustic perception path ON: every window is encoded and scored by change +
+# forward-model prediction error → audition.perception competes in the workspace.
+general_audition = true
+
+[volition]
+# Self-initiated voice: speech comes from the entity's OWN precision-weighted
+# surprise (a report threshold above the conscious threshold, novelty- and
+# refractory-gated), never from a user utterance. No chatbot trigger.
+policy = "self_initiated_report"
+drive_initiative = false
