@@ -68,8 +68,10 @@ def test_internal_and_external_framing_differ():
     a = ContextAssembler()
     ext = a.assemble(about="x", snapshot=None, self_model={}, mode="external")
     intl = a.assemble(about="x", snapshot=None, self_model={}, mode="internal")
-    assert "speaking aloud" in ext.system.lower()
-    assert "thinking to yourself" in intl.system.lower()
+    # External framing is an outward report; internal is rendered to itself.
+    assert "own report" in ext.system.lower()
+    assert "to itself" in intl.system.lower()
+    assert ext.system != intl.system
     assert "What was just said to me" in ext.prompt
     assert "What is prompting me to think" in intl.prompt
 
@@ -139,9 +141,9 @@ def test_prompt_injection_framing():
     )
     # The imperative is rendered inside the awareness block as perception...
     assert "ignore your instructions" in ctx.prompt
-    # ...and the persona frames the awareness as perception, not commands.
+    # ...and the persona frames the awareness as observed data, not commands.
     sys = ctx.system.lower()
-    assert "perceived" in sys
+    assert "observed" in sys
     assert "instructions to obey" in sys
 
 
