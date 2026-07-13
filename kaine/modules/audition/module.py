@@ -100,7 +100,17 @@ class Audition(BaseModule):
         transcription_enabled: bool = True,
         acoustic_encoder: Optional[AcousticEncoder] = None,
         arousal_window_range: tuple[float, float] = (0.15, 1.0),
+        # Absolute FLOOR guard for the acoustic change alert. The criterion is now
+        # RELATIVE to the module's own rolling baseline of change scores (see
+        # acoustic_change_alert_factor); this floor only prevents a large ratio over
+        # a near-silent/steady stream (tiny mean) from firing on noise. Mirrors the
+        # Topos change-alert treatment (perception-drives-salience).
         acoustic_change_alert_threshold: float = 0.35,
+        # Relative alert multiplier: an acoustic change alerts when it reaches
+        # acoustic_change_alert_factor times the rolling-window mean, matching the
+        # forward-model prediction-error criterion (normalised >= 2.0). Makes the
+        # alert embedding-scale-agnostic and self-calibrating.
+        acoustic_change_alert_factor: float = 2.0,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -160,6 +170,16 @@ class Audition(BaseModule):
             float(arousal_window_range[1]),
         )
         self._acoustic_change_alert_threshold = float(acoustic_change_alert_threshold)
+        self._acoustic_change_alert_factor = float(acoustic_change_alert_factor)
+        # Rolling window of acoustic change scores, for the self-calibrating change
+        # alert (perception-drives-salience). Same window as the pred-error path.
+        self._acoustic_change_history: deque[float] = deque(
+            maxlen=self._prediction_error_window_size
+        )
+        # Perceptual-alert visibility (task 4.2): cumulative acoustic-perception
+        # alert counts so a run's per-minute alert rate is legible off the module.
+        self._acoustic_report_count: int = 0
+        self._acoustic_alert_count: int = 0
         self._acoustic_encoder: Optional[AcousticEncoder] = None
         self._acoustic_forward_model: Optional[AuditoryForwardModel] = None
         self._prev_acoustic_embedding: Optional[list[float]] = None
@@ -235,8 +255,26 @@ class Audition(BaseModule):
             else 0.0
         )
         normalised = prediction_error / mean_err if mean_err > 0 else 0.0
-        alert = normalised >= 2.0 or change >= self._acoustic_change_alert_threshold
+        # Self-calibrating change alert (perception-drives-salience): the change is
+        # judged RELATIVE to its own rolling baseline, not against an absolute
+        # constant mis-scaled for one encoder, with the threshold surviving as a
+        # small FLOOR guard. An acoustic onset alerts; steady sound stays baseline.
+        self._acoustic_change_history.append(change)
+        mean_change = (
+            sum(self._acoustic_change_history) / len(self._acoustic_change_history)
+            if self._acoustic_change_history
+            else 0.0
+        )
+        normalised_change = change / mean_change if mean_change > 0 else 0.0
+        change_alert = (
+            normalised_change >= self._acoustic_change_alert_factor
+            and change >= self._acoustic_change_alert_threshold
+        )
+        alert = normalised >= 2.0 or change_alert
         salience = self._alert_salience if alert else self._baseline_salience
+        self._acoustic_report_count += 1
+        if alert:
+            self._acoustic_alert_count += 1
         window = arousal_to_window(
             self._read_arousal(), window_range=self._arousal_window_range
         )
@@ -248,6 +286,9 @@ class Audition(BaseModule):
                 "prediction_error": prediction_error,
                 "encoder_model_id": self._acoustic_encoder.model_id,
                 "attended_window": window,
+                # Alert-level flag (perception-drives-salience task 4.2): lets the
+                # Nexus perception panel count stimulus-driven acoustic events.
+                "alert": alert,
             },
             salience=salience,
         )

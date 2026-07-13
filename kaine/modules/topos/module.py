@@ -69,13 +69,22 @@ class Topos(BaseModule):
         device_preference: str | None = "auto",
         baseline_salience: float = 0.2,
         alert_salience: float = 0.7,
-        # Calibrated for the InternVideo-Next clip encoder by the GPU shakedown
-        # (config/kaine.toml [topos] carries the rationale + measured distribution).
-        # Cosine change on attention-pooled clip embeddings is far more compressed
-        # than DINOv2 per-frame CLS was (genuine scene cuts ~0.008-0.043, routine
-        # <=0.0004), so the alert threshold sits low; the old DINOv2-era 0.5 was
-        # unreachable. The runtime value comes from config; this is the fallback.
+        # Absolute FLOOR guard for the change-alert (perception-drives-salience).
+        # The alert criterion is now RELATIVE to the module's own rolling baseline
+        # of change scores (see change_alert_factor); this floor only prevents a
+        # large ratio over a near-static stream (tiny mean) from firing on noise.
+        # It is deliberately small — the relative criterion, not this constant, is
+        # the primary gate, so the alert self-calibrates to any encoder's embedding
+        # scale (InternVideo-Next clip latent, foveal gist, DINOv2 CLS). The old
+        # absolute-threshold semantics were mis-scaled for the InternVideo latent
+        # and never fired on real content. The runtime value comes from config.
         change_alert_threshold: float = 0.005,
+        # Relative alert multiplier: a change (or its normalised analogue) alerts
+        # when it reaches change_alert_factor times the module's rolling-window
+        # mean. Mirrors the forward-model prediction-error criterion (normalised
+        # >= 2.0, the Chronos convention), so both perceptual-salience paths use
+        # the same embedding-scale-agnostic, self-calibrating rule.
+        change_alert_factor: float = 2.0,
         # Live camera (eyes-only). See kaine/modules/topos/live.py.
         capture_enabled: bool = False,
         live_camera: Optional[LiveCamera] = None,
@@ -116,6 +125,8 @@ class Topos(BaseModule):
             raise ValueError("alert_salience must be in [0, 1]")
         if change_alert_threshold < 0:
             raise ValueError("change_alert_threshold must be >= 0")
+        if change_alert_factor < 1.0:
+            raise ValueError("change_alert_factor must be >= 1.0")
         if prediction_error_window < 2:
             raise ValueError("prediction_error_window must be >= 2")
         if int(clip_stride) < 1:
@@ -140,6 +151,7 @@ class Topos(BaseModule):
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._change_alert_threshold = float(change_alert_threshold)
+        self._change_alert_factor = float(change_alert_factor)
         self._capture_enabled = bool(capture_enabled)
         self._source_factory = source_factory
         self._clock = entity_clock or EntityClock()
@@ -161,6 +173,16 @@ class Topos(BaseModule):
         from collections import deque
 
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
+        # Rolling window of change scores, for the self-calibrating change alert
+        # (perception-drives-salience). Same window as the prediction-error path.
+        self._change_history: deque[float] = deque(
+            maxlen=self._prediction_error_window
+        )
+        # Perceptual-alert visibility (perception-drives-salience task 4.2):
+        # cumulative counts so a run's "perception actually fired N times" is
+        # observable off the module (and via the `alert` field on each report).
+        self._report_count: int = 0
+        self._alert_count: int = 0
 
         # Clip-native seam (topos-temporal-video-encoder §1a). The ring buffer is
         # a bounded, RAM-ONLY deque of the most recent `clip_len` frames — it is
@@ -176,16 +198,16 @@ class Topos(BaseModule):
         self._frame_buffer: deque[Any] = deque(maxlen=self._clip_len)
         self._frames_seen: int = 0
 
-        # Spatial foveation (per-frame, topos-foveation) and a temporally-native
-        # multi-frame clip encoder are alternative encoding regimes and do not
-        # compose; the design specifies foveation against a per-frame encoder.
-        # Reject the combination loudly rather than silently mis-encode.
-        if foveation_enabled and self._clip_len > 1:
-            raise ValueError(
-                "foveation requires a per-frame encoder (clip_len == 1); the "
-                f"selected encoder has clip_len == {self._clip_len}. Use "
-                "encoder_backend='dinov2' with foveation, or disable foveation."
-            )
+        # Spatial foveation (topos-foveation) composes with a temporally-native
+        # clip encoder (perception-drives-salience task 3): the peripheral gist and
+        # foveal crop are each encoded through the encoder's clip seam
+        # (`_encode_clip`), which encodes a `clip_len`-frame clip — for a per-frame
+        # encoder (DINOv2, clip_len == 1) this is the historical single-frame
+        # encode, and for the InternVideo-Next clip encoder (clip_len == 16) the
+        # view is presented as a static clip. Foveation was rebuilt off DINOv2, so
+        # the old `clip_len == 1` guard (which forced foveation off under the
+        # shipped encoder) is retired; the peripheral gist still drives
+        # change/habituation/salience while the fovea is sized by arousal.
 
         # Hypnos sleep flag — suspend forward-model adaptation during sleep.
         self._in_hypnos: bool = False
@@ -322,6 +344,20 @@ class Topos(BaseModule):
         """Whether attention-driven foveation is active (topos-foveation)."""
         return self._foveation_enabled
 
+    @property
+    def perception_alert_stats(self) -> dict[str, Any]:
+        """Cumulative alert-level perception counts (perception-drives-salience
+        task 4.2): ``reports`` published, ``alerts`` that crossed alert level, and
+        the ``alert_rate`` fraction. Makes 'perception actually fired N times'
+        legible to diagnostics / the Nexus perception panel without re-deriving
+        the salience decision off the bus."""
+        reports = self._report_count
+        return {
+            "reports": reports,
+            "alerts": self._alert_count,
+            "alert_rate": (self._alert_count / reports) if reports else 0.0,
+        }
+
     def set_top_down_bias_provider(self, provider: Optional[Any]) -> None:
         """Inject the workspace→Topos top-down attention channel.
 
@@ -427,14 +463,40 @@ class Topos(BaseModule):
                 foveal_size=self._foveal_size,
             )
             # Two encodes: peripheral gist drives change/habituation/salience
-            # (whole-field continuity); foveal carries the attended detail.
-            peripheral_latent = await self._encoder.encode(peripheral_view)
-            foveal_latent = await self._encoder.encode(foveal_view)
+            # (whole-field continuity); foveal carries the attended detail. Both go
+            # through the clip seam so foveation composes with the clip encoder —
+            # a per-frame encoder (clip_len == 1) encodes the single view; the
+            # InternVideo-Next clip encoder (clip_len == 16) encodes the view as a
+            # static clip (perception-drives-salience task 3).
+            peripheral_latent = await self._encode_clip(
+                [peripheral_view] * self._clip_len
+            )
+            foveal_latent = await self._encode_clip([foveal_view] * self._clip_len)
             embedding = peripheral_latent
         else:
             embedding = await self._encode_clip(list(self._frame_buffer))
         change = float(self._change_detector.observe(embedding))
         habituation = float(self._habituator.observe(embedding))
+
+        # Self-calibrating change alert (perception-drives-salience). The alert
+        # criterion is RELATIVE to the module's own rolling baseline of change
+        # scores, not an absolute constant, so it is independent of the encoder's
+        # embedding scale. A perceptual discontinuity — change at least
+        # change_alert_factor times the rolling-window mean — alerts; a steady
+        # stream near its own baseline stays quiet. change_alert_threshold survives
+        # only as a small absolute FLOOR guard so a large ratio over a near-static
+        # stream (tiny mean) cannot fire on noise.
+        self._change_history.append(change)
+        mean_change = (
+            sum(self._change_history) / len(self._change_history)
+            if self._change_history
+            else 0.0
+        )
+        normalised_change = change / mean_change if mean_change > 0 else 0.0
+        change_alert = (
+            normalised_change >= self._change_alert_factor
+            and change >= self._change_alert_threshold
+        )
 
         # Forward-prediction salience path.
         prediction_error: float = 0.0
@@ -450,18 +512,23 @@ class Topos(BaseModule):
                 normalised = prediction_error / mean_err if mean_err > 0 else 0.0
             else:
                 normalised = 0.0
-            # Use normalised error as a proxy for the alert threshold check.
-            # Threshold of 2.0 means the frame's error must be twice the
-            # rolling mean before it is considered surprising.  This matches
-            # the Chronos convention (normalised vs anomaly_alert_threshold).
-            alert = normalised >= 2.0 or change >= self._change_alert_threshold
+            # Alert on EITHER a surprising forward-model prediction error OR a
+            # self-calibrating perceptual discontinuity — both relative to their
+            # own rolling baselines (the Chronos `normalised >= 2.0` convention),
+            # so salience is stimulus-driven prediction error, not a constant. The
+            # prediction-error threshold stays fixed at the proven 2.0; the tunable
+            # change_alert_factor governs the change-detector path.
+            alert = normalised >= 2.0 or change_alert
             salience = self._alert_salience if alert else self._baseline_salience
         else:
-            salience = (
-                self._alert_salience
-                if change >= self._change_alert_threshold
-                else self._baseline_salience
-            )
+            alert = change_alert
+            salience = self._alert_salience if alert else self._baseline_salience
+
+        # Perceptual-alert visibility (task 4.2): count and expose whether this
+        # report crossed alert level, so a run's per-minute alert rate is legible.
+        self._report_count += 1
+        if alert:
+            self._alert_count += 1
 
         # Dev-gated preview tap (LAST thing, after all real perception work):
         # mirror this frame as a single in-memory JPEG so a Nexus diagnostic can
@@ -484,6 +551,10 @@ class Topos(BaseModule):
             "habituation_score": habituation,
             "encoder_model_id": self._encoder.model_id,
             "prediction_error": prediction_error,
+            # Whether this report crossed alert level (perception-drives-salience):
+            # lets the Nexus perception panel and off-bus analysis count stimulus-
+            # driven perceptual events without re-deriving the salience decision.
+            "alert": alert,
         }
         if fovea is not None:
             # Foveation on: `latent` is the peripheral gist (kept for backward-

@@ -570,3 +570,122 @@ async def test_serialized_buffer_no_raw_tensors(bus: AsyncBus):
     assert "n_frames" in buf
     assert "mean" in buf
     assert "variance" in buf
+
+
+# ---------------------------------------------------------------------------
+# Self-calibrating change alert (perception-drives-salience)
+# ---------------------------------------------------------------------------
+
+_STEADY = [0.5, 0.5, 0.5, 0.5]
+_STEP = [0.5, -0.5, 0.5, -0.5]  # orthogonal to _STEADY → cosine change ≈ 1.0
+
+
+@pytest.mark.asyncio
+async def test_change_step_alerts_relative_to_own_baseline(bus: AsyncBus):
+    """A step-change — change far above the module's OWN rolling baseline —
+    alerts, with no absolute constant tuned to the embedding scale. A steady
+    stream stays at baseline. This is the fix for flat-baseline perception."""
+    enc = FakeEncoder([_STEADY, _STEADY, _STEADY, _STEADY, _STEP])
+    topos = Topos(
+        bus,
+        encoder=enc,
+        forward_prediction=False,  # isolate the self-calibrating change path
+        change_alert_threshold=1e-4,  # small floor guard, not the primary gate
+        change_alert_factor=2.0,
+        baseline_salience=0.2,
+        alert_salience=0.7,
+    )
+    for _ in range(5):
+        await topos.process_frame(None)
+    entries = await bus.read("topos.out", last_id="0")
+    saliences = [ev.salience for _, ev in entries]
+    # The four steady frames stay at baseline; the step alerts.
+    assert all(s == pytest.approx(0.2) for s in saliences[:4])
+    assert saliences[4] == pytest.approx(0.7)
+    assert entries[4][1].payload["alert"] is True
+    assert all(entries[i][1].payload["alert"] is False for i in range(4))
+
+
+@pytest.mark.asyncio
+async def test_change_alert_is_embedding_scale_agnostic(bus: AsyncBus):
+    """The SAME step alerts whether the embedding scale is large or tiny — the
+    criterion is relative to the module's own baseline, not an absolute constant.
+    A fixed 0.005-style threshold would fire on one scale and never on the other."""
+    async def _step_alerts(scale: float, local_bus: AsyncBus) -> bool:
+        steady = [scale * v for v in _STEADY]
+        step = [scale * v for v in _STEP]
+        enc = FakeEncoder([steady, steady, steady, steady, step])
+        topos = Topos(
+            local_bus, encoder=enc, forward_prediction=False,
+            change_alert_threshold=1e-6, change_alert_factor=2.0,
+            baseline_salience=0.2, alert_salience=0.7,
+        )
+        for _ in range(5):
+            await topos.process_frame(None)
+        entries = await local_bus.read("topos.out", last_id="0")
+        return entries[4][1].payload["alert"] is True
+
+    # cosine change is scale-invariant, so both scales alert on the step — the
+    # point is the criterion does not depend on an absolute embedding magnitude.
+    assert await _step_alerts(1.0, bus) is True
+    b = pytest.importorskip("fakeredis.aioredis")
+    client = b.FakeRedis(decode_responses=True)
+    other = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    try:
+        assert await _step_alerts(1000.0, other) is True
+    finally:
+        await other.close()
+
+
+@pytest.mark.asyncio
+async def test_change_step_alerts_with_foveation_on(bus: AsyncBus):
+    """Foveation on: the peripheral gist (encoded through the clip seam) drives
+    the same self-calibrating alert — proving perception reaches salience with the
+    guard against clip encoders retired (perception-drives-salience task 3)."""
+    foveal = [0.9, 0.8, 0.7, 0.6]  # attended detail (2nd encode/tick), constant
+    vectors: list[list[float]] = []
+    for peripheral in (_STEADY, _STEADY, _STEADY, _STEADY, _STEP):
+        vectors.append(peripheral)  # 1st encode/tick → peripheral gist → salience
+        vectors.append(foveal)      # 2nd encode/tick → foveal detail
+    enc = FakeEncoder(vectors)
+    topos = Topos(
+        bus,
+        encoder=enc,
+        foveation_enabled=True,
+        forward_prediction=False,
+        change_alert_threshold=1e-4,
+        baseline_salience=0.2,
+        alert_salience=0.7,
+    )
+    for _ in range(5):
+        await topos.process_frame(_rgb_frame())
+    entries = await bus.read("topos.out", last_id="0")
+    saliences = [ev.salience for _, ev in entries]
+    assert all(s == pytest.approx(0.2) for s in saliences[:4])
+    assert saliences[4] == pytest.approx(0.7)
+    # The peripheral gist is what drives `latent`/salience under foveation.
+    assert entries[4][1].payload["latent"] == _STEP
+    assert entries[4][1].payload["peripheral"] == _STEP
+
+
+@pytest.mark.asyncio
+async def test_perception_alert_stats_track_alert_rate(bus: AsyncBus):
+    """The module exposes cumulative alert-level counts so a run's per-minute
+    alert rate is legible (perception-drives-salience task 4.2)."""
+    enc = FakeEncoder([_STEADY, _STEADY, _STEADY, _STEADY, _STEP])
+    topos = Topos(
+        bus, encoder=enc, forward_prediction=False,
+        change_alert_threshold=1e-4, change_alert_factor=2.0,
+    )
+    for _ in range(5):
+        await topos.process_frame(None)
+    stats = topos.perception_alert_stats
+    assert stats["reports"] == 5
+    assert stats["alerts"] == 1
+    assert stats["alert_rate"] == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_change_alert_factor_validated(bus: AsyncBus):
+    with pytest.raises(ValueError):
+        Topos(bus, encoder=FakeEncoder(), change_alert_factor=0.5)

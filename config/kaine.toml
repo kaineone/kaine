@@ -359,20 +359,26 @@ pooling = "attention"
 # resolve_device() falls back to cuda:0 with a warning on single-GPU
 # hosts; further falls back to cpu on hosts without CUDA.
 device = "cuda:1"
-# Change-alert threshold. CALIBRATED for InternVideo-Next on 2026-07-10 by the GPU
-# shakedown (RTX 4070 SUPER, real 91M weights, eager attention; see
-# docs/shakedowns/internvideo-next-gpu-shakedown.md). Measured over the seeded feed
-# (seed = 0, 900 frames, clip_stride = 3, attention pooling), the cosine change_score
-# is heavily compressed relative to the DINOv2 era: routine/overlapping same-world
-# change stays <= 0.0004 (p99 = 0.0003, max 0.0004), while GENUINE scene cuts on this
-# encoder measure only ~0.008 (black<->white flash) to ~0.043 (entirely different
-# content). The old 0.5 was therefore UNREACHABLE (never fired; ~12x above even a
-# total content change). 0.005 sits in the empirical gap: >10x above the seeded-feed
-# routine floor (routine motion stays baseline) yet below the weakest genuine cut, so
-# real scene changes alert. On the smooth seeded feed the change path stays quiet by
-# design (no cuts); surprise events there are carried by the forward-model
-# prediction-error path (normalized error >= 2.0x rolling mean), which fired correctly.
-change_alert_threshold = 0.005
+# Change-alert FLOOR guard. As of perception-drives-salience this is NO LONGER the
+# primary threshold: the change alert is now RELATIVE to the module's own rolling
+# baseline (see change_alert_factor), so it self-calibrates to any encoder's
+# embedding scale instead of an absolute constant tuned to one. MIGRATION NOTE:
+# operators who previously set this as "the change threshold" should re-read it as a
+# small noise floor. Background: the 2026-07-10 GPU shakedown (RTX 4070 SUPER, real
+# 91M weights; docs/shakedowns/internvideo-next-gpu-shakedown.md) measured, on the
+# seeded feed, routine change <= 0.0004 and genuine scene cuts ~0.008-0.043 — but on
+# the real reference corpus the first base-thesis run stayed FLAT (Topos never
+# alerted on 3830/3830 reports): an absolute threshold mis-scales across content, so
+# the relative criterion replaces it. This floor only stops a large ratio over a
+# near-static stream (tiny mean) from firing on noise; keep it well below the
+# weakest real discontinuity. 1e-4 sits below the seeded routine floor yet above
+# numerical noise. The relative factor, not this constant, decides alerts.
+change_alert_threshold = 1e-4
+# Relative alert multiplier: a change alerts when it reaches change_alert_factor
+# times the rolling-window mean of change scores. Mirrors the forward-model
+# prediction-error criterion (normalised error >= 2.0), so both perceptual-salience
+# paths use the same embedding-scale-agnostic, self-calibrating rule.
+change_alert_factor = 2.0
 habituation_window = 16
 baseline_salience = 0.2
 alert_salience = 0.7
@@ -394,11 +400,15 @@ vision_sample_hz = 10.0
 capture_width = 640
 capture_height = 480
 capture_warmup_frames = 3
-# Forward-model prediction. Disabled by default; enable per-install.
+# Forward-model prediction. ENABLED by default (perception-drives-salience): the
+# base thesis is that perception enters the workspace as forward-model prediction
+# error, so this path — not a raw change threshold — is the primary perceptual
+# salience driver. The first containerized run had it off and perception never
+# influenced the workspace (Topos emitted baseline salience on 3830/3830 reports).
 # The visual encoder remains frozen — only the forward model trains. Its input
 # and output dims follow the active encoder's latent_dim (768 for the default
 # InternVideo-Next clip encoder), derived at init — nothing hardcodes a dim.
-forward_prediction = false
+forward_prediction = true
 # Hidden layer width of the shallow MLP forward model (CPU). 256 (up from 128)
 # so the hidden width is not a bottleneck for the 768-d target (task 0.4).
 forward_model_units = 256
@@ -650,6 +660,14 @@ forward_model_units = 32
 prediction_error_window = 32
 # Number of recent utterance feature vectors kept in the recurrent buffer.
 auditory_buffer_size = 16
+# General auditory perception (auditory-perception; enabled via general_audition,
+# operator-set). Its acoustic change alert is self-calibrating, mirroring Topos
+# (perception-drives-salience): an acoustic onset alerts when its change reaches
+# acoustic_change_alert_factor times the rolling-window mean; acoustic_change_alert_
+# threshold survives only as a small absolute FLOOR guard (was an absolute threshold
+# mis-scaled for the encoder). Defaults: factor = 2.0, threshold = 0.35. The
+# forward-model prediction-error path (normalised error >= 2.0) is always active
+# here and is the primary driver.
 # In-memory speaker prosody extraction (librosa). Off by default. When
 # enabled, publishes audition.prosody with numeric features only — no raw
 # audio on the bus, no disk writes.

@@ -596,11 +596,34 @@ async def test_serialize_excludes_frame_ring_buffer(bus):
 
 
 @pytest.mark.asyncio
-async def test_foveation_rejected_with_clip_encoder(bus):
+async def test_foveation_composes_with_clip_encoder(bus):
+    """perception-drives-salience task 3: foveation now COMPOSES with a temporally
+    native clip encoder — the stale clip_len==1 guard is retired. The peripheral
+    gist and foveal crop are encoded through the clip seam (encode_clip, a static
+    clip), so a clip encoder whose per-frame encode() raises still foveates."""
+    import numpy as np
+
     from kaine.modules.topos import Topos
 
-    with pytest.raises(ValueError, match="clip_len == 1|per-frame encoder"):
-        Topos(bus, encoder=_FakeClipEncoder(), foveation_enabled=True)
+    enc = _FakeClipEncoder()  # clip_len == 16; per-frame encode() raises
+    # Construction no longer raises with a clip encoder + foveation.
+    topos = Topos(bus, encoder=enc, foveation_enabled=True, clip_stride=1)
+
+    def _np_frame(fill: int) -> np.ndarray:
+        return np.full((32, 48, 3), fill % 256, dtype=np.uint8)
+
+    for i in range(17):  # fill the clip_len ring buffer, then emit foveated reports
+        await topos.process_frame(_np_frame(i * 9))
+    entries = await bus.read("topos.out", last_id="0")
+    assert entries, "foveation with a clip encoder emitted no report"
+    _, ev = entries[-1]
+    # Peripheral + foveal were both encoded through the clip seam (encode_clip) —
+    # NOT the per-frame encode() a clip encoder does not provide.
+    assert "peripheral" in ev.payload
+    assert "foveal" in ev.payload
+    assert "fovea" in ev.payload
+    assert ev.payload["latent"] == ev.payload["peripheral"]  # gist drives salience
+    assert enc.clip_calls >= 2  # at least one peripheral + one foveal clip encode
 
 
 @pytest.mark.asyncio
