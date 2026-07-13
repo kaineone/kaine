@@ -573,8 +573,10 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "source_label",
             "change_score",
             "prediction_error",
+            "normalised_error",
             "encoder_model_id",
             "attended_window",
+            "alert",
         }
         # numeric metadata only — no audio bytes anywhere in the payload
         for v in perc.payload.values():
@@ -604,3 +606,52 @@ async def test_arousal_provider_narrows_the_auditory_window(bus: AsyncBus):
     calm = await _window_at(0.0)
     tense = await _window_at(1.0)
     assert tense < calm  # Easterbrook: higher arousal -> tighter window
+
+
+class _ConstErrorForwardModel:
+    """Test double: constant prediction error, isolating the change-alert path
+    from the forward-model path (normalised error stays ~1.0 → never alerts)."""
+
+    def step(self, embedding):  # noqa: ARG002
+        return 1.0
+
+
+@pytest.mark.asyncio
+async def test_acoustic_onset_alerts_relative_to_baseline(bus: AsyncBus):
+    """Self-calibrating acoustic alert (perception-drives-salience): an onset —
+    change far above the module's own rolling baseline — alerts; steady sound
+    stays at baseline. The threshold is a small floor, not an absolute gate."""
+    audition = _general_audition(bus, acoustic_change_alert_threshold=0.01)
+    audition._acoustic_forward_model = _ConstErrorForwardModel()
+    await audition.initialize()
+    try:
+        steady = _tone(300)
+        onset = _tone(6000)  # very different bytes → near-orthogonal embedding
+        for _ in range(4):
+            await audition.process_audio(steady, sample_rate=16000)
+        await audition.process_audio(onset, sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        perc = [e for _, e in entries if e.type == "audition.perception"]
+        assert len(perc) == 5
+        # The four steady windows stay at baseline; the onset alerts.
+        assert all(p.payload["alert"] is False for p in perc[:4])
+        assert perc[4].payload["alert"] is True
+        assert perc[4].salience == pytest.approx(audition._alert_salience)
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_acoustic_change_alert_stats(bus: AsyncBus):
+    """Cumulative acoustic alert counts are tracked for run visibility (task 4.2)."""
+    audition = _general_audition(bus, acoustic_change_alert_threshold=0.01)
+    audition._acoustic_forward_model = _ConstErrorForwardModel()
+    await audition.initialize()
+    try:
+        for _ in range(3):
+            await audition.process_audio(_tone(300), sample_rate=16000)
+        await audition.process_audio(_tone(6000), sample_rate=16000)
+        assert audition._acoustic_report_count == 4
+        assert audition._acoustic_alert_count == 1
+    finally:
+        await audition.shutdown()

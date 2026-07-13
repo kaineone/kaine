@@ -158,6 +158,7 @@ def make_topos(
         "pooling",
         "device",
         "change_alert_threshold",
+        "change_alert_factor",
         "habituation_window",  # consumed by habituator default
         "baseline_salience",
         "alert_salience",
@@ -222,7 +223,12 @@ def make_topos(
     # on the pinned value, so it is not forwarded as a Topos kwarg here.
     if "device" in section:
         kwargs["device_preference"] = section["device"]
-    for k in ("change_alert_threshold", "baseline_salience", "alert_salience"):
+    for k in (
+        "change_alert_threshold",
+        "change_alert_factor",
+        "baseline_salience",
+        "alert_salience",
+    ):
         if k in section:
             kwargs[k] = section[k]
     # Forward prediction knobs
@@ -979,6 +985,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "arousal_window_min",
         "arousal_window_max",
         "acoustic_change_alert_threshold",
+        "acoustic_change_alert_factor",
         # Unified deterministic perception feed (unified-perception-feed). The
         # resolved top-level [perception_feed] config, injected by build_registry
         # under this reserved key. Selecting seeded/playlist supplies a
@@ -1071,6 +1078,10 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         if "acoustic_change_alert_threshold" in section:
             kwargs["acoustic_change_alert_threshold"] = float(
                 section["acoustic_change_alert_threshold"]
+            )
+        if "acoustic_change_alert_factor" in section:
+            kwargs["acoustic_change_alert_factor"] = float(
+                section["acoustic_change_alert_factor"]
             )
         if isinstance(kwargs.get("live_mic_config"), LiveMicConfig):
             kwargs["live_mic_config"] = replace(
