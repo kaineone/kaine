@@ -95,6 +95,7 @@ async def test_live_microphone_drives_audition_subsystem_end_to_end():
             emotion_classifier=FakeEmotionClassifier(),
             capture_enabled=True,
             live_microphone=live_mic,
+            transcription_enabled=True,  # end-to-end STT path (deactivated by default)
         )
         # Rebind the live mic's sink to the actual Audition.process_audio
         # now that ai exists.
