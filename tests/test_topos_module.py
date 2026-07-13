@@ -689,3 +689,22 @@ async def test_perception_alert_stats_track_alert_rate(bus: AsyncBus):
 async def test_change_alert_factor_validated(bus: AsyncBus):
     with pytest.raises(ValueError):
         Topos(bus, encoder=FakeEncoder(), change_alert_factor=0.5)
+
+
+@pytest.mark.asyncio
+async def test_foveation_accepts_pil_frames_from_the_live_feed(bus: AsyncBus):
+    """The live camera / perception feed delivers PIL Images, not numpy arrays.
+    Foveation's saliency + view derivation must coerce them (regression: the
+    spatial-saliency path assumed ndarray and raised 'Image has no attribute ndim'
+    when foveation first ran against the real feed)."""
+    from PIL import Image
+
+    enc = FakeEncoder([[0.1, 0.2, 0.3, 0.4], [0.9, 0.8, 0.7, 0.6]])
+    topos = Topos(bus, encoder=enc, foveation_enabled=True)
+    pil_frame = Image.new("RGB", (320, 240), (30, 60, 90))
+    entry_id = await topos.process_frame(pil_frame)  # must not raise
+    assert entry_id
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[0]
+    assert "peripheral" in ev.payload and "foveal" in ev.payload
+    assert "fovea" in ev.payload

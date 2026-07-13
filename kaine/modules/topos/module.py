@@ -423,6 +423,29 @@ class Topos(BaseModule):
             return await encode_clip(frames)
         return await enc.encode(frames[-1])
 
+    @staticmethod
+    def _foveation_frame(image: Any) -> Any:
+        """Coerce an incoming frame to an HxWx3 numpy RGB array for the foveation
+        path. The live camera / perception feed delivers PIL Images, but the spatial
+        saliency (per-tile means) and view derivation (cv2 resize/crop) operate on a
+        numpy array. Test doubles already pass ndarrays (a no-op here)."""
+        import numpy as np
+
+        if isinstance(image, np.ndarray):
+            return image
+        from PIL import Image as _PILImage
+
+        if isinstance(image, _PILImage.Image):
+            return np.asarray(image.convert("RGB"))
+        if isinstance(image, (bytes, bytearray)):
+            import io
+
+            return np.asarray(
+                _PILImage.open(io.BytesIO(bytes(image))).convert("RGB")
+            )
+        # Last resort: let numpy try (e.g. a torch tensor exposes __array__).
+        return np.asarray(image)
+
     async def process_frame(self, image: Any) -> str:
         # Clip-native ring buffer (topos-temporal-video-encoder §1a/§1b). Append
         # the incoming frame; publish nothing until the buffer first fills
@@ -439,9 +462,12 @@ class Topos(BaseModule):
         peripheral_latent: Any = None
         foveal_latent: Any = None
         if self._foveation_enabled and self._saliency is not None:
+            # The live feed delivers PIL Images; saliency + view derivation need a
+            # numpy RGB frame. Coerce once (no-op for the ndarray test doubles).
+            frame_np = self._foveation_frame(image)
             # Spatial attention: coarse per-tile saliency, precision-weighted
             # combination with the top-down bias, arousal-sized single fovea.
-            bottom_up = self._saliency.observe(image)
+            bottom_up = self._saliency.observe(frame_np)
             top_down = self._read_top_down_bias(self._saliency.grid)
             combined = combine_saliency(bottom_up, top_down)
             fovea = select_fovea(
@@ -457,7 +483,7 @@ class Topos(BaseModule):
             if self._fovea_predictor is not None:
                 predicted_fovea = self._fovea_predictor.predict_next(fovea)
             peripheral_view, foveal_view = foveate(
-                image,
+                frame_np,
                 fovea,
                 peripheral_size=self._peripheral_size,
                 foveal_size=self._foveal_size,
