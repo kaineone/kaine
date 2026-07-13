@@ -324,16 +324,52 @@ async def test_appraisal_path_unchanged_by_coupling(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_disabled_coupling_no_event_consumption(bus: AsyncBus):
-    """When coupling is disabled the peer loop must not subscribe to audition.out."""
+async def test_disabled_coupling_no_emotion_stream_consumption(bus: AsyncBus):
+    """When emotion coupling is disabled the empatheia stream is not subscribed.
+
+    (Perception→arousal reads topos.out / audition.out unconditionally — arousal
+    is pre-attentive — so those ARE subscribed; the emotion/empatheia coupling
+    stays gated by CouplingConfig.enabled.)
+    """
     cfg = CouplingConfig(enabled=False)
     thymos = Thymos(bus, coupling=cfg, publish_interval_s=999.0)
     await thymos.initialize()
     try:
-        # audition.out stream must not be in the cursors when disabled.
-        assert "audition.out" not in thymos._cursors
+        assert "empatheia.out" not in thymos._cursors  # emotion coupling stays gated
+        # perception→arousal streams are always read
+        assert "topos.out" in thymos._cursors
+        assert "audition.out" in thymos._cursors
     finally:
         await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_perceptual_surprise_arouses_scaled_by_normalised_error(bus: AsyncBus):
+    """Perception→arousal coupling: a perceptual ALERT raises arousal, scaled by the
+    normalised prediction error (surprise above the expected level); a well-predicted
+    event does not arouse. Mirrors the interoceptive soma-alert→arousal path."""
+    thymos = Thymos(bus, publish_interval_s=999.0)
+    for stream, typ in (("topos.out", "topos.report"),
+                        ("audition.out", "audition.perception")):
+        base = thymos._state.arousal
+        # A strong surprise (normalised error 5 → surprise 4, capped) arouses.
+        strong = Event(
+            source=typ.split(".")[0], type=typ,
+            payload={"alert": True, "normalised_error": 5.0}, salience=0.8,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await thymos._handle_peer_event(stream, strong)
+        aroused = thymos._state.arousal
+        assert aroused > base, f"{typ} alert must raise arousal"
+        # A larger surprise arouses more (scaling), until the per-event cap.
+        # A well-predicted (non-alert) event does NOT arouse.
+        calm = Event(
+            source=typ.split(".")[0], type=typ,
+            payload={"alert": False, "normalised_error": 1.0}, salience=0.2,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await thymos._handle_peer_event(stream, calm)
+        assert thymos._state.arousal == aroused, "well-predicted input must not arouse"
 
 
 @pytest.mark.asyncio
