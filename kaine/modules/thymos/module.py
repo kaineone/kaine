@@ -113,6 +113,18 @@ class Thymos(BaseModule):
         # Streams for coupling inputs (populated in initialize).
         self._audition_emotion_stream = "audition.out"
         self._empatheia_agent_model_stream = "empatheia.out"
+        # Perception→arousal coupling: perceptual surprise (topos scene dynamics,
+        # audition acoustic onsets) arouses the entity, scaled by the normalised
+        # prediction error, mirroring the interoceptive soma-alert→arousal path.
+        # These streams are read UNCONDITIONALLY (arousal is pre-attentive — a
+        # startle does not require the emotion-coupling path to be enabled).
+        self._topos_stream = "topos.out"
+        self._perception_streams = [self._topos_stream, self._audition_emotion_stream]
+        # Gain on the normalised-surprise → arousal nudge (per alert event). The
+        # per-event contribution is capped so arousal BUILDS over sustained surprise
+        # rather than saturating on one frame.
+        self._perception_arousal_gain = 0.15
+        self._perception_arousal_cap = 4.0
 
     @property
     def state(self) -> DimensionalState:
@@ -136,8 +148,11 @@ class Thymos(BaseModule):
 
     async def initialize(self) -> None:
         peer_streams = [self._soma_stream, self._chronos_stream, self._mnemos_stream]
+        # Perception→arousal streams are read unconditionally (topos.out always;
+        # audition.out carries both perception and, when coupling is on, emotion).
+        peer_streams.append(self._topos_stream)
+        peer_streams.append(self._audition_emotion_stream)
         if self._coupling.enabled:
-            peer_streams.append(self._audition_emotion_stream)
             peer_streams.append(self._empatheia_agent_model_stream)
         for stream in peer_streams:
             try:
@@ -228,9 +243,15 @@ class Thymos(BaseModule):
             self._last_emotion = emotion
         # Nudge dimensional state by the appraisal — pleasant raises
         # valence, novelty raises arousal.
+        # The novelty proxy is signed (var*4 - 0.2), so a low-variance / calm
+        # perceptual stream yields novelty ~ -0.2 and would actively DECAY arousal
+        # (~ -0.01/tick), pinning it near zero on a mostly-calm corpus and leaving
+        # the entity under-aroused. Floor the arousal nudge at 0 so a quiet scene
+        # relaxes toward the baseline drift target rather than being suppressed
+        # below it, while genuine surprise (positive novelty) still raises arousal.
         self._state = self._state.nudged(
             valence=0.05 * scores.intrinsic_pleasantness,
-            arousal=0.05 * scores.novelty,
+            arousal=0.05 * max(0.0, scores.novelty),
         )
 
     def _score_snapshot(self, snapshot: WorkspaceSnapshot) -> AppraisalScores:
@@ -325,9 +346,10 @@ class Thymos(BaseModule):
                     self._soma_stream,
                     self._chronos_stream,
                     self._mnemos_stream,
+                    self._topos_stream,              # perception→arousal (always)
+                    self._audition_emotion_stream,   # perception + emotion (always)
                 ]
                 if self._coupling.enabled:
-                    peer_streams.append(self._audition_emotion_stream)
                     peer_streams.append(self._empatheia_agent_model_stream)
                 for stream in peer_streams:
                     try:
@@ -350,6 +372,22 @@ class Thymos(BaseModule):
             raise
 
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
+        # Perception→arousal coupling (operator-directed): a perceptual alert —
+        # a scene cut (topos.report) or an acoustic onset (audition.perception) —
+        # arouses the entity, scaled by the NORMALISED prediction error (surprise
+        # relative to the module's own rolling baseline). Mirrors the interoceptive
+        # soma-alert→arousal path so vision/hearing can startle the mind. Only the
+        # SURPRISE above the expected level (normalised - 1) counts, capped per
+        # event so arousal builds over sustained surprise rather than saturating.
+        if event.type in ("topos.report", "audition.perception"):
+            if event.payload.get("alert"):
+                norm = float(event.payload.get("normalised_error", 0.0) or 0.0)
+                surprise = min(self._perception_arousal_cap, max(0.0, norm - 1.0))
+                if surprise > 0.0:
+                    self._state = self._state.nudged(
+                        arousal=self._perception_arousal_gain * surprise,
+                    )
+            return
         if stream == self._soma_stream and event.type == "soma.report":
             wellness = float(event.payload.get("wellness", 1.0))
             # Low wellness drags valence down; high arousal alerts spike arousal.
