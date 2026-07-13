@@ -247,12 +247,26 @@ def test_no_named_volume_captures_raw_sense_data():
         assert "perception" not in low and "audio_out" not in low, vol_name
 
 
+def _mount_target_and_tmpfs(v):
+    """Return (target, is_tmpfs) for a compose mount, handling BOTH the short
+    string form (``source:target:mode``, always a bind/named volume) and the long
+    dict form (``{type, target, ...}``) — a perception scratch may be declared
+    either as a top-level ``tmpfs:`` entry or a ``volumes:`` entry of type tmpfs."""
+    if isinstance(v, dict):
+        return str(v.get("target", "")), (v.get("type") == "tmpfs")
+    s = str(v)
+    parts = s.split(":")
+    return (parts[1] if len(parts) > 1 else s), False
+
+
 def test_no_durable_bind_or_volume_mounts_a_raw_sense_path():
     doc = _load_compose()
     named_volumes = set(doc.get("volumes", {}))
     for name, svc in doc["services"].items():
         for v in svc.get("volumes", []) or []:
-            target = str(v).split(":")[1] if ":" in str(v) else str(v)
+            target, is_tmpfs = _mount_target_and_tmpfs(v)
+            if is_tmpfs:
+                continue  # RAM-backed scratch is ephemeral — the invariant is fine
             for token in ("state/perception", "state/audio_out", "audio_out"):
                 if token in target:
                     pytest.fail(f"{name} mounts a raw-sense path durably: {v}")
@@ -260,9 +274,19 @@ def test_no_durable_bind_or_volume_mounts_a_raw_sense_path():
         # named/durable volume.
         for tp in svc.get("tmpfs", []) or []:
             assert "perception" in tp or "audio_out" in tp or tp  # tmpfs is fine
-    # The cycle's only perception scratch is tmpfs.
+
+    def _tmpfs_targets(svc):
+        # tmpfs declared either short-form (top-level tmpfs:) or long-form
+        # (volumes: entry with type: tmpfs).
+        yield from (str(t) for t in svc.get("tmpfs", []) or [])
+        for v in svc.get("volumes", []) or []:
+            target, is_tmpfs = _mount_target_and_tmpfs(v)
+            if is_tmpfs:
+                yield target
+
+    # The cycle's only perception scratch is tmpfs (either declaration form).
     cycle = doc["services"]["kaine-cycle"]
-    assert any("perception" in t for t in cycle.get("tmpfs", []) or [])
+    assert any("perception" in t for t in _tmpfs_targets(cycle))
     # And no named volume backs it.
     assert not any("perception" in nv for nv in named_volumes)
 
