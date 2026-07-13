@@ -8,7 +8,7 @@ def test_defaults():
     cfg = NexusConfig()
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 8088
-    assert cfg.conversation_enabled is True
+    assert cfg.conversation_enabled is False  # deactivated by default (base-thesis form)
     assert cfg.diagnostics_enabled is True
     assert cfg.conversation_history_lookback == 50
     assert cfg.dev_content_override is False

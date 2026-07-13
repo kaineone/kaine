@@ -46,7 +46,9 @@ async def _make_client(
     health_prober=None,
     rate_control_publisher=None,
 ):
-    config = config or NexusConfig()
+    # Conversation is deactivated by default in the base-thesis form; these router
+    # tests exercise both surfaces, so enable conversation unless a test overrides.
+    config = config or NexusConfig(conversation_enabled=True)
     bus = StubBus()
     privacy = PrivacyFilter(dev_content_override=config.dev_content_override)
     bridge = BusBridge(bus, privacy, streams=[], poll_interval_s=0.01)
