@@ -526,6 +526,7 @@ class Topos(BaseModule):
 
         # Forward-prediction salience path.
         prediction_error: float = 0.0
+        normalised_error: float = 0.0  # exposed on the report for the affect coupling
         if self._forward_prediction and self._forward_model is not None:
             self._forward_model.suspended = self._in_hypnos
             prediction_error = self._forward_model.step(embedding)
@@ -538,6 +539,7 @@ class Topos(BaseModule):
                 normalised = prediction_error / mean_err if mean_err > 0 else 0.0
             else:
                 normalised = 0.0
+            normalised_error = normalised
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
             # own rolling baselines (the Chronos `normalised >= 2.0` convention),
@@ -577,6 +579,10 @@ class Topos(BaseModule):
             "habituation_score": habituation,
             "encoder_model_id": self._encoder.model_id,
             "prediction_error": prediction_error,
+            # Prediction error normalised against the rolling-window mean (the same
+            # quantity the alert criterion uses). Exposed so the affect layer can
+            # scale arousal by perceptual surprise (perception→arousal coupling).
+            "normalised_error": normalised_error,
             # Whether this report crossed alert level (perception-drives-salience):
             # lets the Nexus perception panel and off-bus analysis count stimulus-
             # driven perceptual events without re-deriving the salience decision.

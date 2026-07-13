@@ -573,6 +573,7 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "source_label",
             "change_score",
             "prediction_error",
+            "normalised_error",
             "encoder_model_id",
             "attended_window",
             "alert",

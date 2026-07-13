@@ -284,6 +284,10 @@ class Audition(BaseModule):
                 "source_label": source_label,
                 "change_score": change,
                 "prediction_error": prediction_error,
+                # Normalised acoustic prediction error (rolling-window relative) —
+                # exposed so the affect layer can scale arousal by acoustic surprise
+                # (perception→arousal coupling).
+                "normalised_error": normalised,
                 "encoder_model_id": self._acoustic_encoder.model_id,
                 "attended_window": window,
                 # Alert-level flag (perception-drives-salience task 4.2): lets the
