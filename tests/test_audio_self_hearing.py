@@ -68,6 +68,9 @@ def test_gate_nonpositive_duration_is_noop():
 # ---- audition drops self-heard capture --------------------------------------
 
 def _make_audition(bus, **overrides):
+    # STT is deactivated by default; these self-hearing tests exercise the STT
+    # path, so opt in explicitly.
+    overrides.setdefault("transcription_enabled", True)
     return Audition(
         bus,
         stt_client=FakeSTTClient(responses=["hello world"]),

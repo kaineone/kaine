@@ -626,6 +626,11 @@ alert_salience = 0.7
 
 [audition]
 speaches_url = "http://127.0.0.1:8000"
+# Speech-to-text is built but DEACTIVATED BY DEFAULT: in the base-thesis form the
+# entity hears sound as prediction error, never as a transcript, so no text reaches
+# the language organ. Set true (in an override, beyond the base thesis) to re-enable
+# the full STT pipeline configured below.
+transcription_enabled = false
 # The STT model id Speaches has loaded (or is configured to download
 # lazily). This MUST match a model your Speaches instance actually serves —
 # a mismatch returns 404 and silently breaks the voice loop. List served
@@ -1284,8 +1289,11 @@ enabled = false
 [nexus]
 host = "127.0.0.1"
 port = 8088
-# Surface toggles. A single-surface deployment is supported.
-conversation_enabled = true
+# Surface toggles. A single-surface deployment is supported. The conversation
+# surface is a user-facing input channel; it is deactivated by default so the
+# base-thesis form is observed, not conversed with (no external input reaches the
+# language organ). Enable it for interactive configurations beyond the base thesis.
+conversation_enabled = false
 diagnostics_enabled = true
 # Cap on history backfilled on initial conversation load. Older messages
 # are reachable via ?since=<id>.

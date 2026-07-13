@@ -14,7 +14,7 @@ from typing import Any
 class NexusConfig:
     host: str = "127.0.0.1"
     port: int = 8088
-    conversation_enabled: bool = True
+    conversation_enabled: bool = False
     diagnostics_enabled: bool = True
     conversation_history_lookback: int = 50
     # Privacy override. Default False. When True, diagnostics surface

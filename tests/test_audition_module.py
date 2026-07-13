@@ -42,6 +42,9 @@ async def bus():
 
 
 def _make_audition(bus: AsyncBus, **overrides) -> Audition:
+    # STT is deactivated by default in the module; this helper builds the full
+    # pipeline (STT on) so transcription-path tests opt in explicitly.
+    overrides.setdefault("transcription_enabled", True)
     return Audition(
         bus,
         stt_client=FakeSTTClient(responses=["hello world"]),
@@ -169,6 +172,7 @@ async def test_stt_failure_still_publishes_emotion(bus: AsyncBus):
         stt_client=FailingSTT(),
         emotion_classifier=FakeEmotionClassifier(),
         stt_model="fake-stt",
+        transcription_enabled=True,
     )
     await audition.initialize()
     try:
