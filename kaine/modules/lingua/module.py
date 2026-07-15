@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
@@ -410,8 +409,13 @@ class Lingua(BaseModule):
                 # Outer (shutdown) cancellation raced in while the generation was
                 # still running — cancel it so it can't leak, then propagate.
                 task.cancel()
-                with contextlib.suppress(BaseException):
+                try:
                     await task
+                except (Exception, asyncio.CancelledError):
+                    # Swallow whatever the settling task raises (its own
+                    # cancellation or a cleanup error); the bare ``raise`` below
+                    # re-raises the outer cancellation we are still handling.
+                    pass
                 raise
         except Exception:
             log.exception("lingua generation task failed")
@@ -424,8 +428,12 @@ class Lingua(BaseModule):
         if task is None or task.done():
             return
         task.cancel()
-        with contextlib.suppress(BaseException):
+        try:
             await task
+        except (Exception, asyncio.CancelledError):
+            # Best-effort settle of the cancelled task; shutdown propagation is
+            # handled by the caller's own re-raise.
+            pass
 
     def _record_preemption(self, mode: Optional[str]) -> None:
         tick = getattr(self._latest_snapshot, "tick_index", None)
