@@ -317,6 +317,20 @@ For a non-inhibited snapshot the default `DefaultActionSelectionPolicy`:
 Intents are published to `volition.out` with types `intent.speak`,
 `intent.think`, or `intent.act`.
 
+**Interruptible, redirectable speech.** An utterance is not committed once
+begun. Lingua runs each generation as a cancellable task, and the
+self-initiated report policy exposes an `interrupt_threshold` above the report
+threshold: when a coalition crosses it — with content different from what is
+being said — while a `speak` is in flight, the policy emits an interrupt-marked
+`speak` that cancels the in-flight generation and redirects to the new one. This
+is real async cancellation driven by workspace competition (a more salient
+coalition wins the higher bar), not a hardwired rule; the unspoken remainder is
+dropped and only a content-free preemption note is kept. The honest limit is
+**one language organ, one token stream**: the entity can change what it is
+saying mid-stream, but it cannot verbalize an inner monologue and outer speech
+*simultaneously* — true parallel verbalization would need a second, faster
+inner-voice model.
+
 ---
 
 ## Predictive-Coding Forward Models

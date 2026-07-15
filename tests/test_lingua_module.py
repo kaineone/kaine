@@ -330,3 +330,188 @@ async def test_think_payload_excludes_user_input(bus: AsyncBus, tmp_path: Path):
     entries = await bus.client.xrange(INTERNAL_STREAM)
     payload = json.loads(entries[0][1]["payload"])
     assert "user_input" not in payload
+
+
+# --- interruptible / preemptable generation (interruptible-utterance) ---------
+
+
+class _GatedChatClient:
+    """Chat client whose ``complete`` blocks until released, so a test can hold
+    a generation 'in flight' and assert a preemption really cancels it.
+
+    Test double — lives only in tests/ (the real client hits the LLM server).
+    ``started`` is set when a completion begins; ``release`` lets a completion
+    finish. ``cancelled`` counts completions aborted mid-flight.
+    """
+
+    def __init__(self, responses=None):
+        from kaine.modules.lingua.client import ChatResponse  # noqa: F401
+
+        self._responses = list(responses or [])
+        self.requests = []
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.completed = 0
+        self.cancelled = 0
+        self.closed = False
+
+    @property
+    def base_url(self) -> str:
+        return "http://fake/v1"
+
+    async def complete(self, request):
+        from kaine.modules.lingua.client import ChatResponse
+
+        self.requests.append(request)
+        self.started.set()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
+        text = self._responses.pop(0) if self._responses else "done"
+        self.completed += 1
+        return ChatResponse(
+            text=text,
+            model=request.model,
+            prompt_tokens=1,
+            completion_tokens=1,
+            latency_ms=1.0,
+            raw={},
+        )
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+async def _publish_speak(bus: AsyncBus, about: str, *, interrupt: bool = False) -> None:
+    payload = {"kind": "speak", "about": about}
+    if interrupt:
+        payload["interrupt"] = True
+    event = Event(
+        source="volition",
+        type="intent.speak",
+        payload=payload,
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await bus.publish(event)
+
+
+@pytest.mark.asyncio
+async def test_uninterrupted_generation_completes_via_loop(bus: AsyncBus, tmp_path: Path):
+    """With no interrupt, a generation driven through the intent loop completes
+    and publishes exactly as before this change."""
+    client = _GatedChatClient(responses=["a full reply"])
+    lingua = Lingua(
+        bus, chat_client=client,
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"), model_id="m",
+    )
+    await lingua.initialize()
+    try:
+        await _publish_speak(bus, "hello")
+        await asyncio.wait_for(client.started.wait(), timeout=2.0)
+        client.release.set()  # let it finish
+        entries = await _wait_for_entries(bus, EXTERNAL_STREAM)
+        assert len(entries) == 1
+        assert json.loads(entries[0][1]["payload"])["text"] == "a full reply"
+        assert client.completed == 1
+        assert client.cancelled == 0
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_aborts_and_redirects(bus: AsyncBus, tmp_path: Path):
+    """An interrupt-marked speak arriving mid-generation cancels the in-flight
+    generation and redirects to the new one; the aborted line is never published
+    and a content-free preemption record is written."""
+    log_path = tmp_path / "intent.jsonl"
+    client = _GatedChatClient(responses=["redirected reply"])
+    lingua = Lingua(
+        bus, chat_client=client,
+        intent_log=IntentExpressionLog(log_path), model_id="m",
+    )
+    await lingua.initialize()
+    try:
+        # First (ordinary) speak begins and blocks in flight.
+        await _publish_speak(bus, "the first thing")
+        await asyncio.wait_for(client.started.wait(), timeout=2.0)
+        client.started.clear()
+        # An urgent interrupt arrives while the first is still generating.
+        await _publish_speak(bus, "something more important", interrupt=True)
+        # The redirect begins only after the first is aborted.
+        await asyncio.wait_for(client.started.wait(), timeout=2.0)
+        assert client.cancelled == 1  # the first generation was really cancelled
+        client.release.set()
+        entries = await _wait_for_entries(bus, EXTERNAL_STREAM)
+        # Exactly the redirect is published — the aborted first was never emitted.
+        assert len(entries) == 1
+        assert json.loads(entries[0][1]["payload"])["text"] == "redirected reply"
+        # A content-free preemption record notes the abort (no cognitive text).
+        records = [
+            json.loads(l) for l in log_path.read_text().splitlines() if l.strip()
+        ]
+        preemptions = [r for r in records if r.get("event") == "preempted"]
+        assert len(preemptions) == 1
+        assert "generated_text" not in preemptions[0]
+        assert "prompt" not in preemptions[0]
+        assert preemptions[0]["mode"] == "external"
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_already_emitted_utterance_is_not_unsaid(bus: AsyncBus, tmp_path: Path):
+    """A generation that already completed and published before an interrupt
+    arrives stays published — only an in-flight remainder is dropped."""
+    client = _GatedChatClient(responses=["first said", "second said"])
+    lingua = Lingua(
+        bus, chat_client=client,
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"), model_id="m",
+    )
+    await lingua.initialize()
+    try:
+        await _publish_speak(bus, "first")
+        await asyncio.wait_for(client.started.wait(), timeout=2.0)
+        client.started.clear()
+        client.release.set()  # let the first fully complete + publish
+        first_entries = await _wait_for_entries(bus, EXTERNAL_STREAM)
+        assert len(first_entries) == 1
+        # Now an interrupt arrives — the first is already done, so nothing to
+        # cancel; the second is generated. The first utterance remains on-stream.
+        client.release.clear()
+        await _publish_speak(bus, "urgent", interrupt=True)
+        await asyncio.wait_for(client.started.wait(), timeout=2.0)
+        client.release.set()
+        deadline = asyncio.get_event_loop().time() + 2.0
+        while asyncio.get_event_loop().time() < deadline:
+            entries = await bus.client.xrange(EXTERNAL_STREAM)
+            if len(entries) >= 2:
+                break
+            await asyncio.sleep(0.02)
+        entries = await bus.client.xrange(EXTERNAL_STREAM)
+        texts = [json.loads(e[1]["payload"])["text"] for e in entries]
+        assert "first said" in texts  # not un-said
+        assert client.cancelled == 0  # first had finished; nothing was aborted
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancels_in_flight_generation(bus: AsyncBus, tmp_path: Path):
+    """Shutting down while a generation is in flight cancels it cleanly — no
+    leaked task, no publish of the aborted utterance."""
+    client = _GatedChatClient(responses=["never emitted"])
+    lingua = Lingua(
+        bus, chat_client=client,
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"), model_id="m",
+    )
+    await lingua.initialize()
+    await _publish_speak(bus, "hanging")
+    await asyncio.wait_for(client.started.wait(), timeout=2.0)
+    await lingua.shutdown()  # must not hang or leak
+    assert client.cancelled == 1
+    assert client.closed is True
+    entries = await bus.client.xrange(EXTERNAL_STREAM)
+    assert entries == []
