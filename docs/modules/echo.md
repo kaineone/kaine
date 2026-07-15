@@ -1,5 +1,7 @@
 # Echo
 
+**Permanent test infrastructure** — must stay disabled in production.
+
 Minimal built-in test module — records every workspace snapshot it receives and
 can publish a single `echo.ping` event on demand.
 

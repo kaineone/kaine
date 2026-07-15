@@ -1,5 +1,7 @@
 # Chronos
 
+**Base-thesis active** — enabled by default in the `thesis_test` profile (`config/profiles/thesis_test.toml`).
+
 KAINE's temporal-context organ: encodes workspace history with a Closed-form Continuous-time (CfC) network and detects anomaly, rumination, and idle time.
 
 ---

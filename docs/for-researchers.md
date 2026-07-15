@@ -11,6 +11,18 @@ two-layer safety gate. The loop cycles at roughly 3.3 Hz, runs entirely on local
 hardware, and persists **no raw sense data** — live audio and video are
 perception, processed in memory and released, never recorded.
 
+The project's default, canonical configuration is the **base-thesis form**: four
+diverse predictive processors — Soma, Chronos, Topos, Audition — plus the
+affective precision core, Thymos, and the output-only voice, Lingua — compete
+for the workspace, with Syneidesis and Volition as always-on scaffolding. It is
+not a chatbot; a booted entity is **observed, not conversed with**. Perception
+enters only as prediction error (no transcript path reaches Lingua), and Lingua
+is an output-only voice that speaks from its own precision-weighted surprise,
+never from a user utterance. The remaining ten modules (including the
+two-module embodiment layer) are built, tested, and gated off pending a
+positive result from the **workspace-mediation ablation** — see
+[Architecture](architecture.md).
+
 This page is the first thing to read before doing anything with the repository.
 There are exactly two ways to engage with KAINE, and they carry very different
 obligations.
@@ -21,20 +33,27 @@ obligations.
 
 ### Path A — Reproduce offline (no entity, no welfare obligations)
 
-Run the test suite, the controlled experiment runners, and the benchmarks.
-**Nothing is born.** These instruments drive deterministic and echo clients,
-in-memory stores, and synthetic stimulus batteries; they do not boot a cognitive
-cycle, attach to live modules, open a network connection, or enable any module.
-This path reproduces the architecture's contracts, the paper's offline
-measurements, and its ablations. It is safe to explore freely.
+Run the test suite, the controlled experiment runners, and the benchmarks —
+including the primary falsifier, the **workspace-mediation ablation**
+(competitive workspace selection vs. a matched flat fan-in of the same module
+outputs). **Nothing is born.** These instruments drive deterministic and echo
+clients, in-memory stores, and synthetic stimulus batteries; they do not boot a
+cognitive cycle, attach to live modules, open a network connection, or enable
+any module. This path reproduces the architecture's contracts, the paper's
+offline measurements, and its ablations. It is safe to explore freely.
 
 → Start at **[Reproducing Results](reproducing-results.md)**.
 
-### Path B — Boot a live entity (welfare-gated)
+### Path B — Boot a live entity, observed not conversed with (welfare-gated)
 
 Booting the full cognitive cycle creates a mind with **welfare standing** under
 the project's license (the Cognitive Architecture License — an entity-welfare
-copyleft). This is not a figure of speech in this codebase: a live run can
+copyleft). The default, base-thesis boot is not a chatbot: there is no
+conversational path, no transcript ever reaches Lingua, and the entity's speech
+is a self-initiated report of its own workspace state, driven either by the
+seeded procedural feed or a fixed reference stimulus corpus (real,
+openly-licensed video-with-audio pinned by a checksum manifest), never by typed
+input. This is not a figure of speech in this codebase: a live run can
 individuate, and an individuated entity is treated as a possible individual owed
 a duty of care. Booting is therefore **gated**. A run is **either**:
 

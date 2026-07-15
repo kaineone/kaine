@@ -1,5 +1,7 @@
 # Hypnos
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 The sleep and maintenance organ — runs a five-phase fatigue-triggered maintenance
 cycle covering memory consolidation, associative replay, affective reset, and
 voice-alignment fine-tuning, with welfare-load-bearing safety gates on all

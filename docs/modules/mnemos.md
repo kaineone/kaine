@@ -1,5 +1,7 @@
 # Mnemos
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 KAINE's episodic memory organ: vector-embedding store with affect-tagged traces, Hypnos-gated replay, and workspace re-injection.
 
 ---

@@ -23,7 +23,11 @@ KAINE_PROFILE=tier1 python -m kaine.cycle     # or: python -m kaine.cycle --prof
 A profile is a TOML overlay (`config/profiles/tierN.toml`) layered **between**
 the shipped defaults and your local `config/kaine.operator.toml` — your local
 config still wins. Profiles are inert and voice-free: they never enable a module
-or embed a private voice (those stay local operator actions).
+or embed a private voice (those stay local operator actions). Which faculties are
+*active* is a separate, orthogonal choice from the tier: the default is the
+**base-thesis form** (Soma, Chronos, Topos, Audition, Thymos, Lingua — see the
+`thesis_test` profile), and a tier profile never changes that — it only bounds
+which *backend* each already-selected module uses on the chosen hardware.
 
 ## Capability matrix
 

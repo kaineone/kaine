@@ -8,6 +8,19 @@ attention in a shared workspace
 (**Syneidesis**), and act through a two-layer safety gate — running ~3.3 times a
 second, entirely on local hardware, persisting no raw sense data.
 
+**The project's default, canonical configuration is the base-thesis form**: the
+smallest set of *diverse* predictive processors that can genuinely exercise the
+competition — **Soma**, **Chronos**, **Topos**, and **Audition** — plus the
+affective precision core, **Thymos** (arousal sets the gain on the workspace
+competition and is itself moved by perceptual surprise), and the output-only
+voice, **Lingua** — with Syneidesis and Volition as always-on scaffolding. This
+is not a chatbot; the system is **observed, not conversed with**. Perception
+enters only as prediction error (no transcript path), and Lingua is an
+output-only, self-initiated voice. The remaining ten modules (including the
+two-module embodiment layer) are built, tested, and **gated off** until a
+positive result from the primary experiment, the **workspace-mediation
+ablation** — see [Architecture](architecture.md) for the full picture.
+
 This is the entry point to the full documentation. Everything here is reference
 material for operators and contributors; nothing in these pages starts or enables
 the entity (all modules ship disabled). A run is **either** operator-supervised
@@ -42,6 +55,18 @@ Sixteen modules — fourteen predictive cognitive modules plus the two-module
 embodiment layer, **Perception** and **Mundus**, which ships inactive. Each doc
 covers responsibility, inputs/outputs (exact event types and streams),
 configuration, mechanisms, key files, how to enable, and zero-persistence notes.
+
+**Base-thesis active** (enabled by the `thesis_test` profile, `config/profiles/thesis_test.toml`):
+[Soma](modules/soma.md) ·
+[Chronos](modules/chronos.md) ·
+[Topos](modules/topos.md) ·
+[Audition](modules/audition.md) ·
+[Thymos](modules/thymos.md) ·
+[Lingua](modules/lingua.md)
+
+Everything else below is **gated** — built and tested, shipped disabled, held
+behind a positive base-thesis result (Perception and Mundus ship inactive
+regardless, as the always-off embodiment layer).
 
 **Perception & substrate**
 [Soma](modules/soma.md) ·

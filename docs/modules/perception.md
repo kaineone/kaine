@@ -1,5 +1,7 @@
 # Perception
 
+**Gated — embodiment layer, ships inactive** independent of the base-thesis gate.
+
 KAINE's perceptual-locus arbiter: enforces physical-XOR-virtual mutual exclusion and gates entity-initiated locus switching under a strict policy hierarchy.
 
 ---

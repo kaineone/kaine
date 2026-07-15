@@ -1,5 +1,7 @@
 # Empatheia
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 KAINE's social-cognition organ: per-agent theory-of-mind models, familiarity tracking, and social prediction-error salience.
 
 ---

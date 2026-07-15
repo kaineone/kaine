@@ -1,5 +1,7 @@
 # Soma
 
+**Base-thesis active** — enabled by default in the `thesis_test` profile (`config/profiles/thesis_test.toml`).
+
 KAINE's interoceptive organ: predictive substrate monitoring, fatigue accumulation, and homeostatic regulation.
 
 ---

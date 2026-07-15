@@ -1,5 +1,7 @@
 # Nous
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 KAINE's reasoning organ: active-inference belief updating and policy selection over a compact discrete generative model.
 
 ---

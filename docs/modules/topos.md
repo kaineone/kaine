@@ -1,5 +1,7 @@
 # Topos
 
+**Base-thesis active** — enabled by default in the `thesis_test` profile (`config/profiles/thesis_test.toml`).
+
 KAINE's visual-perception organ: encodes live camera frames with a frozen, temporally-native video encoder (InternVideo-Next), detects scene change and habituation, and optionally predicts the next visual latent.
 
 ---
@@ -19,6 +21,7 @@ Implemented. Ships **disabled** — `[modules].topos = false` in `config/kaine.t
 - The optional `LatentForwardModel` runs **CPU-only** regardless of the encoder device; its latent dimension follows the active encoder (768 for InternVideo-Next).
 - Encoder weights are **frozen** (`eval()`, `requires_grad_(False)`) — Topos never trains the encoder.
 - Forward-model adaptation is automatically suspended during Hypnos offline cycles.
+- Attention-driven foveation (`[topos].foveation`) is **off** in the shipped `config/kaine.toml` and **on** in the `thesis_test` profile — the arousal-sized fovea is the precision-weighted attention the base thesis names. It composes with either encoder backend (see [Attention-driven foveation](#attention-driven-foveation-topos-foveation) below).
 
 ### Encoder backend selector
 
@@ -32,7 +35,7 @@ protocol:
   the shipped `vision_sample_hz = 10`, `clip_stride = 3` emits ~3.33 Hz — the
   experiential / conscious-access rate. No Meta-owned model is loaded by default.
 - **`dinov2`** — a selectable Apache-2.0 per-frame fallback (`clip_len = 1`,
-  384-dim DINOv2-small CLS token). Required for the spatial-foveation path.
+  384-dim DINOv2-small CLS token).
 
 **Warmup.** No `topos.report` is published until the ring buffer first fills
 (16 frames ≈ 1.6 s at 10 Hz). This is expected; the first report follows the fill.
@@ -112,7 +115,7 @@ Section `[topos]` in `config/kaine.toml`. See also [../configuration.md](../conf
 | `forward_model_units` | `128` | Hidden size of the `LatentForwardModel` MLP |
 | `prediction_error_window` | `32` | Rolling window (frames) for normalising visual prediction-error salience |
 | `visual_buffer_size` | `16` | Number of recent latents kept in the recurrent visual buffer |
-| `foveation` | `false` | Enable attention-driven foveation (see the section below). Requires a per-frame encoder (`encoder_backend = "dinov2"`, `clip_len = 1`) — combining it with a multi-frame clip encoder is rejected at construction |
+| `foveation` | `false` (shipped); `true` in `thesis_test` | Enable attention-driven foveation (see the section below). Composes with either encoder backend: a per-frame encoder (`dinov2`, `clip_len = 1`) foveates each frame directly; the default clip encoder (`internvideo_next`, `clip_len = 16`) encodes each of the two views (peripheral/foveal) as a static clip through the same clip seam |
 | `foveation_grid` | `[12, 12]` | Saliency tiling `(rows, cols)` |
 | `foveation_hysteresis` | `0.15` | Dwell damping: a new tile must beat the held one by >15% to move the fovea (anti-thrash) |
 | `foveation_arousal_size_min` | `0.12` | Fovea half-extent at arousal = 1.0 (tightest — Easterbrook narrowing) |
@@ -193,13 +196,13 @@ probed from a dummy clip forward at load. Inference runs in a thread
 Selectable via `encoder_backend = "dinov2"`. Uses `transformers.AutoModel` +
 `AutoImageProcessor` for `facebook/dinov2-small`, frozen, extracting the 384-dim
 CLS token per frame (`clip_len = 1`). Retained as a proven Apache-2.0 per-frame
-encoder and the required backend for the spatial-foveation path.
+encoder; usable with or without foveation.
 
 Both encoders accept `PIL.Image`, `bytes`, or `numpy.ndarray`; BGR ndarrays from OpenCV are converted to RGB in the capture path before being handed to the encoder.
 
 ### Attention-driven foveation (topos-foveation)
 
-Off by default. When `[topos].foveation = true`, Topos does not encode the whole frame uniformly — it spends resolution where its own attention is, biologically-inspired foveation driven directly by cognition rather than by eye-tracking hardware. Each per-frame tick (`clip_len == 1`; the combination with a multi-frame clip encoder is rejected at construction), from a **single in-memory grab**:
+Off by default in the shipped `config/kaine.toml`; **on** in the `thesis_test` profile, where the arousal-sized fovea is the precision-weighted attention the base thesis names. When `[topos].foveation = true`, Topos does not encode the whole frame uniformly — it spends resolution where its own attention is, biologically-inspired foveation driven directly by cognition rather than by eye-tracking hardware. Foveation composes with either encoder backend: the peripheral and foveal views are each encoded through the encoder's clip seam (`_encode_clip`), so a per-frame encoder (`dinov2`, `clip_len == 1`) encodes the single view as before, and the default clip encoder (`internvideo_next`, `clip_len == 16`) encodes each view as a static repeated-frame clip — there is no construction-time restriction to a per-frame encoder. Each foveation-enabled tick, from a **single in-memory grab**:
 
 1. **Coarse spatial saliency** (`SpatialSaliency`, `kaine/modules/topos/foveation.py`) — the frame is reduced to a `foveation_grid` (default 12×12) of per-tile grayscale means and scored by absolute change against the previous tick's tiles. Memory-only; nothing touches disk.
 2. **Precision-weighted fovea selection** (`combine_saliency` + `select_fovea`) — the bottom-up saliency is combined with an optional **top-down bias** map (precision weighting), and the single fovea is the argmax tile centre, damped by `foveation_hysteresis` so comparable tiles do not thrash. The fovea **size** is set from the current Thymos arousal (`arousal_to_size`, Easterbrook narrowing default — higher arousal → tighter fovea; the sign is a tuning parameter, not an asserted result). This is a **distinct visual coupling**, not the Syneidesis salience-selection window.

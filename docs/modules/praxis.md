@@ -1,5 +1,7 @@
 # Praxis
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 The effector organ — KAINE's safety-gated "hands"; executes real-world actions
 only for whitelisted effectors in response to explicit `act` intents from the
 executive action-selection layer.

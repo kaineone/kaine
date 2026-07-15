@@ -8,6 +8,20 @@ module or process document where one exists.
 
 ## A
 
+### A/B divergence
+
+A secondary, supporting evaluation instrument (`kaine/evaluation/ab_divergence.py`)
+that pairs every Lingua external utterance with a second, unconditioned "bare LLM"
+completion from the same backing model and logs the cosine similarity between the
+two. It ships on by default as an evaluation-sidecar observer
+(`[evaluation].ab_divergence = true`) and is exercised as an offline
+instrument-runner control (`instrument_runners ab_divergence`, which validates its
+dynamic range). It measures whether Lingua's conditioning changes surface output —
+it is not the project's primary falsifiable test. That role belongs to the
+[workspace-mediation ablation](#workspace-mediation-ablation), which tests whether
+the competitive workspace itself does measurable work. See also:
+[workspace-mediation ablation](#workspace-mediation-ablation), [Lingua](#lingua).
+
 ### Abliteration
 
 The technique of removing a refusal direction from a language model's residual
@@ -36,14 +50,49 @@ request_maintenance) each cognitive tick. See also: [Expected Free Energy
 ### Audition
 
 The current module name for KAINE's hearing module (formerly `audio_in`). Audition
-opens a live microphone stream, applies voice-activity detection, transcribes
-utterances via Speaches (distil-Whisper medium.en on CPU), and classifies vocal
-emotion via emotion2vec+ (via FunASR, on CPU). A small forward model predicts
-expected auditory patterns; prediction errors weight the salience of transcription
-and emotion events. Raw audio lives in process memory only — it never touches
-disk (see [zero-raw-sense-data persistence](#zero-raw-sense-data-persistence)).
-Capture is disabled by default; requires the `[audio]` extra. See:
-`kaine/modules/audition/`.
+opens a live microphone stream and applies voice-activity detection, but
+transcription is deactivated by default (`[audition].transcription_enabled = false`,
+both in the shipped `config/kaine.toml` and in the [base-thesis](#base-thesis-form)
+form): sound enters the workspace only as [prediction error](#prediction-error),
+never as a transcript, so no text reaches the language organ from a live utterance.
+A general auditory-perception path (`[audition].general_audition`, on in the
+base-thesis form) turns every audio window into a general acoustic embedding —
+covering speech, music, and environmental sound alike — scored by novelty and
+forward-model prediction error; it is the auditory analog of
+[foveation](#foveation--foveated-perception). When transcription is enabled (a
+non-default configuration), Audition also transcribes utterances via Speaches
+(distil-Whisper medium.en on CPU) and classifies vocal emotion via emotion2vec+
+(via FunASR, on CPU). Raw audio lives in process memory only — it never touches
+disk. Capture is disabled by default; requires the `[audio]` extra. See:
+`kaine/modules/audition/`, `kaine/modules/audition/acoustic.py`.
+
+---
+
+## B
+
+### Base-thesis (form)
+
+The project's default, canonical configuration: the smallest set of diverse
+predictive processors — [Soma](#soma), [Chronos](#chronos), [Topos](#topos),
+and [Audition](#audition) — plus the affective precision core, [Thymos](#thymos)
+(arousal sets the gain on the workspace competition and is itself moved by
+perceptual surprise), and the output-only voice, [Lingua](#lingua) — competing
+through [Syneidesis](#syneidesis), with Volition (action selection) as always-on
+scaffolding. Applied deliberately with the `thesis_test` profile
+(`KAINE_PROFILE=thesis_test python -m kaine.cycle` or
+`python -m kaine.cycle --profile thesis_test`; `config/profiles/thesis_test.toml`).
+In this form the system is observed, not conversed with: perception enters only as
+[prediction error](#prediction-error), Audition's transcription path is off, Topos
+runs with [foveation](#foveation--foveated-perception) on, and Lingua speaks only
+via the [self-initiated report](#self-initiated-report-policy) policy. Everything
+richer — memory, self-model, world-model, social cognition,
+sleep/consolidation, effectors, embodiment, and a spoken TTS voice — is built,
+tested, and gated off until a positive result from the
+[workspace-mediation ablation](#workspace-mediation-ablation); it is held, never
+removed. The shipped `config/kaine.toml` itself still ships all modules disabled
+(a guard test enforces this) — the base-thesis form is an opt-in profile overlay
+layered on top of that all-off default, not a change to it. See also:
+[workspace-mediation ablation](#workspace-mediation-ablation).
 
 ---
 
@@ -160,7 +209,22 @@ Topos predicts visual latents, Audition predicts auditory patterns. The signal
 published to the workspace is the **prediction error** — the discrepancy between
 the predicted next state and the observed next state. Unexpected states are
 salient; expected states are not. This implements predictive processing at the
-module level. See also: [predictive processing](#predictive-processing).
+module level. See also: [predictive processing](#predictive-processing),
+[prediction error](#prediction-error).
+
+### Foveation / foveated perception
+
+Attention-driven spatial cropping in [Topos](#topos): a saliency map selects a
+sub-region of the raw video frame, and the size of that region (the "fovea") scales
+inversely with arousal — higher arousal narrows the fovea, tightening visual
+attention, which is the precision-weighting predictive processing predicts. Ships
+off by default in `config/kaine.toml` (`[topos].foveation = false`); the
+`thesis_test` profile turns it on (`[topos].foveation = true`), because the
+arousal-sized fovea IS the precision-weighted attention the
+[base-thesis](#base-thesis-form) form exercises. Composes with the
+temporally-native clip encoder — foveation crops the spatial region; the encoder
+still consumes a 16-frame clip. See: `kaine/modules/topos/foveation.py`. See also:
+[Topos](#topos), [prediction error](#prediction-error).
 
 ---
 
@@ -221,13 +285,22 @@ See: `kaine/modules/hypnos/`. See also: [abliteration](#abliteration),
 
 The language organ module. Lingua is conditioned on the conscious workspace —
 it speaks from a first-person persona (seeded from the Eidolon self-model) plus
-the current conscious coalition (rendered as a bounded context block) plus the
-triggering input. The same model given the same input without this conditioning
-is the bare-LLM control of the A/B divergence test. Lingua uses
-`/v1/chat/completions` on a local OpenAI-compatible model server with
+the current conscious coalition (rendered as a bounded context block). In the
+[base-thesis](#base-thesis-form) form (`[volition].policy = "self_initiated_report"`,
+the default profile) the organ is output-only: it verbalizes the workspace's own
+precision-weighted surprise crossing a report threshold, never an answer to a
+triggering user utterance — see
+[self-initiated report](#self-initiated-report-policy). A conversational trigger
+policy (a speak intent formed in response to input) remains available as a
+non-default configuration. Lingua uses `/v1/chat/completions` on a local
+OpenAI-compatible model server with
 `chat_template_kwargs: {"enable_thinking": false}` to suppress chain-of-thought
 output (reasoning lives in Nous). The backing model is an abliterated dense 4B
-Qwen3.5 GGUF. See: `kaine/modules/lingua/`.
+Qwen3.5 GGUF. The same model, run unconditioned on the same input, is the
+bare-LLM control of [A/B divergence](#ab-divergence) — a secondary, supporting
+instrument; the project's primary falsifiable test is the
+[workspace-mediation ablation](#workspace-mediation-ablation). See:
+`kaine/modules/lingua/`.
 
 ---
 
@@ -306,6 +379,19 @@ events by individual salience and by oscillatory coherence (PLV) between the
 modules that produced them. The layer ships disabled and requires the
 `[oscillator]` extra. See also: [PLV / phase-locking](#plv--phase-locking).
 
+### Output-is-provably-workspace-mediated
+
+The property the [workspace-mediation ablation](#workspace-mediation-ablation)
+establishes on a WIN verdict: that routing predictive processors through
+[Syneidesis](#syneidesis)'s competitive selection, rather than a matched flat
+fan-in of the same outputs, does measurable work on cross-module error coupling
+and downstream language-organ output. This is a **necessary-not-sufficient**
+property, not a full validation of the architecture: a WIN shows the workspace is
+not a scored prompt-assembler, but it does not by itself establish that the
+mediated output is "better" or "more coherent" than the flat-fan-in alternative,
+and it does not establish consciousness. See also:
+[workspace-mediation ablation](#workspace-mediation-ablation).
+
 ---
 
 ## P
@@ -349,6 +435,21 @@ commands use `asyncio.create_subprocess_exec` (no shell interpretation). A JSONL
 audit log records every action with content fields stripped. See:
 `kaine/modules/praxis/`.
 
+### Prediction error
+
+The discrepancy between a module's predicted next state and its observed next
+state — the only form in which perception enters KAINE's workspace. Every
+perception module (Soma, Chronos, Topos, Audition) maintains a small
+[forward model](#forward-model); the signal it publishes is not raw sensory data
+but the size of its own surprise. In the [base-thesis](#base-thesis-form) form,
+Audition hears the *sound* of speech and publishes an error over acoustic
+patterns, never a transcript (`[audition].transcription_enabled = false`); Topos
+publishes error over visual latents, cropped by an arousal-sized fovea when
+[foveation](#foveation--foveated-perception) is on. Unexpected states are
+salient; expected states are not — this is what makes perception-as-prediction-
+error rather than perception-as-transcript or perception-as-recording. See also:
+[forward model](#forward-model), [predictive processing](#predictive-processing).
+
 ### Predictive processing
 
 The theoretical framework (Friston 2010; Clark 2013; Seth 2013) proposing that
@@ -363,6 +464,19 @@ model](#forward-model), [active inference](#active-inference).
 
 ## R
 
+### Reference stimulus corpus
+
+The reproducible LIVE perceptual stimulus: real, openly-licensed video-with-audio,
+decoded directly (no screen-capture, no display/audio passthrough) and identified
+by a per-item sha256 manifest built with `tools/build_playlist_manifest.py`, so any
+operator with the same publicly-archived media reproduces the identical stimulus,
+played in the same order. Selected via `[perception_feed].mode = "playlist"` and a
+`playlist_manifest` path set in local operator config. Distinct from the
+offline/procedural [seeded stimulus](#seeded-stimulus), which is a synthetic
+in-repo generator with no research-grade claim; "seeded" is reserved for that
+offline path and for the deterministic offline experiment runners, never for this
+live corpus. See also: [seeded stimulus](#seeded-stimulus).
+
 ### RSSM (Recurrent State Space Model)
 
 The latent dynamics model at the core of DreamerV3 (used by Phantasia's
@@ -375,6 +489,31 @@ representation (stochastic part). Phantasia uses the RSSM as a world model only
 ---
 
 ## S
+
+### Seeded stimulus
+
+The offline, procedural audio-visual feed (`[perception_feed].mode = "seeded"`, a
+pure-numpy in-repo generator, no install needed) and, separately, the deterministic
+`--seed` flags on the offline experiment runners (`instrument_runners`,
+`oscillatory_ablation`, `workspace_mediation_ablation`, `suite.py`) that reproduce
+an exact verdict and metrics from the same seed. "Seeded" is reserved for these
+offline/synthetic contexts — the feed's own config comment calls it "not
+research-grade... procedural noise." It is never used to describe the live
+research stimulus, which is the [reference stimulus corpus](#reference-stimulus-corpus)
+instead. See also: [reference stimulus corpus](#reference-stimulus-corpus).
+
+### Self-initiated report (policy)
+
+Volition's `self_initiated_report` action-selection policy
+(`[volition].policy = "self_initiated_report"`, the
+[base-thesis](#base-thesis-form) default): [Lingua](#lingua) speaks from the
+workspace's own precision-weighted surprise crossing a report threshold —
+novelty- and refractory-gated — rather than from a triggering user utterance.
+There is no chatbot trigger: an utterance is emitted rarely, saved and observed,
+not spoken back to whoever or whatever prompted the salient event. Contrast with a
+conversational trigger policy, where a speak intent forms in direct response to
+input; that policy remains available as a non-default configuration. See:
+`kaine/modules/volition/`. See also: [Lingua](#lingua).
 
 ### Soma
 
@@ -432,10 +571,13 @@ encoder (InternVideo-Next base, MIT) to embed a 16-frame clip of live camera
 frames — buffered in a RAM-only ring — into one 768-dimensional motion-aware
 latent, produced on a strided sliding window (~3.33 Hz). A per-frame DINOv2-small
 (Apache-2.0, 384-dim) is a selectable fallback. A small forward model predicts
-the next clip latent; visual salience is driven by prediction error. Raw video
-frames live in process memory only — never on disk. Capture is disabled by
-default; requires the `[vision]` extra and `[topos].capture_enabled = true`. See:
-`kaine/modules/topos/`.
+the next clip latent; visual salience is driven by prediction error. Attention-driven
+[foveation](#foveation--foveated-perception) (`[topos].foveation`) composes with the
+clip encoder — off by default in `config/kaine.toml`, on in the
+[base-thesis](#base-thesis-form) form (`thesis_test` profile) — so the entity's
+arousal sizes the cropped region before encoding. Raw video frames live in process
+memory only — never on disk. Capture is disabled by default; requires the
+`[vision]` extra and `[topos].capture_enabled = true`. See: `kaine/modules/topos/`.
 
 ### Two-layer safety gate
 
@@ -480,3 +622,27 @@ human review. The welfare observer writes to
 `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl` (daily-rotated, under
 `paths.evaluation_logs`, default `data/evaluation`). Under the CAL, gray-zone events
 cannot be automatically dismissed. See also: [CAL](#cal-cognitive-architecture-license).
+
+### Workspace-mediation ablation
+
+The project's primary falsifiable test
+(`python -m kaine.evaluation.benchmarks.workspace_mediation_ablation`; code at
+`kaine/evaluation/benchmarks/workspace_mediation_ablation/`). It runs offline and
+deterministically over the real Soma, Chronos, and Lingua modules under the
+3-module `minimal_experiment` overlay (`config/profiles/minimal_experiment.toml`
+— distinct from the 5-module [base-thesis](#base-thesis-form) live profile). Two
+matched arms share the same seed and stimulus: **workspace-on** (competitive
+[Syneidesis](#syneidesis) selection feeds Lingua) versus **workspace-off** (a flat
+fan-in of the same module outputs feeds Lingua, at a matched rendering budget). The
+verdict — WIN, NULL, or NEGATIVE — is drawn from two primary measures (the
+cross-module error-coupling delta between Soma and Chronos, and coalition-selection
+entropy) plus a secondary output-divergence confirmation (see
+[A/B divergence](#ab-divergence)). A WIN establishes
+[output-is-provably-workspace-mediated](#output-is-provably-workspace-mediated) —
+that competitive workspace mediation does measurable work — but does not by itself
+establish the output is "better" or "more coherent," and does not establish
+consciousness. This replaces A/B divergence as the project's headline falsifiable
+test; A/B divergence remains a real secondary, supporting instrument, not removed
+from the codebase. See also: [base-thesis (form)](#base-thesis-form),
+[output-is-provably-workspace-mediated](#output-is-provably-workspace-mediated),
+[A/B divergence](#ab-divergence).

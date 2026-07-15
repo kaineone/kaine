@@ -1,5 +1,7 @@
 # Phantasia
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 KAINE's world-model and imagination organ: a DreamerV3-style RSSM that predicts, measures surprise, and generates imagined scenarios during sleep.
 
 ---

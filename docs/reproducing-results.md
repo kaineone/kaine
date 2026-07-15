@@ -85,6 +85,45 @@ attaches to the live bus, or opens a network connection.** A verdict is **WIN**,
 **NULL**, or **NEGATIVE**, and a NULL/NEGATIVE/unstable result is a first-class,
 reportable finding — never a harness failure.
 
+### Workspace-mediation ablation (the primary falsifier)
+
+The project's primary falsifiable test: the system **as built** (competitive
+Syneidesis selection) versus a matched **flat fan-in** of the same processors'
+outputs — same seed, same stimulus, same modules, differing ONLY in whether
+Lingua is conditioned by the workspace's competitively-selected coalition or by
+an unstructured concatenation of everything. It runs over the real Soma,
+Chronos, and Lingua modules (`config/profiles/minimal_experiment.toml`'s
+3-module set — a scoped, tractable overlay distinct from the 5-module live
+`thesis_test` profile), driven by hand over an in-memory bus; it does not boot
+an entity or open a network connection.
+
+```bash
+.venv/bin/python -m kaine.evaluation.benchmarks.workspace_mediation_ablation \
+    --seed 1234 --ticks 24 --top-k 2 --stimulus soma_salient \
+    --out workspace_mediation_ablation.jsonl
+```
+
+Primary measure: **coupling_delta**, the workspace-on-minus-workspace-off
+change in sliding-window Pearson correlation between Soma's and Chronos's error
+series (the thesis predicts a positive delta — competitive selection couples
+the two modules more than flat fan-in does). Secondary: coalition-selection
+entropy and a conditioning-divergence proxy for organ output divergence.
+`--top-k` deliberately holds workspace capacity below the per-tick candidate
+count so selection genuinely excludes (the shipped default `top_k = 5` does not
+compete on this small a module set). Verdict is **WIN** (positive delta above
+`--min-effect`), **NULL** (within the threshold — the fan-in prompt-assembler
+outcome), or **NEGATIVE** (delta at or below `-min-effect`, mediation adverse to
+the thesis); a run where Soma never enters the coalition is flagged
+**UNDERPOWERED** rather than reported as a clean NULL. A WIN establishes that
+routing through the competitive workspace does measurable work — the output is
+**provably workspace-mediated** — and nothing more: not that the output is
+"better," not consciousness (necessary, not sufficient).
+
+This test **replaces the retired A/B divergence comparison** as the current
+falsifiable claim about the architecture. A/B divergence (below) remains a real,
+default-on evaluation-sidecar instrument, but it is secondary — a live signal
+that the workspace context is shaping output, not the pre-registered ablation.
+
 ### Controlled instrument runners
 
 Promote the three passive measuring instruments to seeded offline experiments:
@@ -169,10 +208,14 @@ should help and an `exploitation` guard task where it should not). Useful flags:
 `--eval-episodes N`, `--out PATH`. See
 [Active-Inference Benchmark](processes/active-inference-benchmark.md).
 
-### All seven at once: the shared-seed suite orchestrator
+### All eight at once: the shared-seed suite orchestrator
 
-One entry point runs all seven experiments from a **single seed** and emits a
-combined report — the "seven experiments, one shared seed" the paper frames:
+One entry point runs all eight experiments from a **single seed** and emits a
+combined report — the "one shared seed" the paper frames — active-inference,
+oscillatory ablation, A/B divergence, memory coherence, self-model accuracy,
+multi-seed stability, enforcement red-team, and the **workspace-mediation
+ablation** (the primary experiment above; the suite's second p-value producer,
+via a sign test over per-seed coupling deltas):
 
 ```bash
 .venv/bin/python -m kaine.evaluation.benchmarks.suite --seed 1234 --out suite.jsonl
@@ -185,12 +228,12 @@ experiment — **including the active-inference benchmark**, whose env/RL rng is
 derived from the master seed (`BenchmarkConfig.master_seed`) rather than an
 independent `default_rng`. The combined report carries each experiment's raw
 verdict **and** a **Holm–Bonferroni** family-wise correction (FWER control) across
-the p-value-producing experiments (the active-inference Mann–Whitney per task, and
-an individuation permutation test when folded in): it reports raw p, Holm-corrected
-p, and the reject/no-reject decision under the stated `--alpha`. The offline
-deterministic path also opts into GPU/cuDNN determinism
-(`set_global_seed(seed, deterministic=True)`) so any seeded CUDA op is reproducible
-(a perf cost the live cycle does not pay).
+the p-value-producing experiments (the active-inference Mann–Whitney per task, the
+workspace-mediation sign test, and an individuation permutation test when folded
+in): it reports raw p, Holm-corrected p, and the reject/no-reject decision under
+the stated `--alpha`. The offline deterministic path also opts into GPU/cuDNN
+determinism (`set_global_seed(seed, deterministic=True)`) so any seeded CUDA op is
+reproducible (a perf cost the live cycle does not pay).
 
 ### Multi-seed stability (the longitudinal control's machinery)
 
@@ -258,9 +301,10 @@ claims are scoped to the right one:
 
 The offline path reproduces the architecture's **contracts** (the test suite),
 the meters' **controls and dynamic range** (the instrument runners), the
-**ablations** (oscillatory on-vs-off), and the **benchmark** comparison (Nous AIF
-vs RL) — all under seeded determinism so a result is a function of the experiment,
-not of the random universe it landed in.
+**ablations** (oscillatory on-vs-off; workspace-mediation on-vs-off — the
+primary falsifier), and the **benchmark** comparison (Nous AIF vs RL) — all
+under seeded determinism so a result is a function of the experiment, not of
+the random universe it landed in.
 
 It does **not** reproduce a live mind's behavior. The runners use echo /
 deterministic clients and synthetic stimulus batteries, not a live language organ

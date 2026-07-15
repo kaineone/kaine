@@ -1,5 +1,7 @@
 # Audition
 
+**Base-thesis active** — enabled by default in the `thesis_test` profile (`config/profiles/thesis_test.toml`).
+
 KAINE's hearing organ: a general acoustic front end (any sound → salience by change and prediction error), with speech-to-text transcription and vocal emotion classification as a triggered specialization, plus prosody extraction and auditory forward-model prediction.
 
 ---
@@ -13,19 +15,20 @@ Implemented. Ships **disabled** — `[modules].audition = false` in `config/kain
 - Live microphone capture requires the `[audio]` extras (adds `sounddevice`, `webrtcvad`).
 - Prosody extraction (`audition.prosody`) additionally requires `librosa` from the `[audio]` extras.
 - The `AuditoryForwardModel` is always active once the module is enabled (CPU-only, tiny MLP; no extra deps beyond `torch`).
-- **General auditory perception** (`general_audition`, off by default) turns Audition into a perceptual sense for *any* sound — not only speech. The default encoder is a download-free `SpectralAcousticEncoder` (numpy only); a stronger frozen self-supervised audio encoder plugs in through the `AcousticEncoder` protocol. See [General auditory perception](#general-auditory-perception) below. Phase 1 of the [`attention-driven-audition`](../../openspec/changes/attention-driven-audition/proposal.md) change; later phases (stream/source separation, an attention schema for sound, spatial localization) are deferred and gated on the lead's review and the host benchmark.
+- **General auditory perception** (`general_audition`, off by default in the shipped `config/kaine.toml`; **on** in the `thesis_test` profile) turns Audition into a perceptual sense for *any* sound — not only speech. The default encoder is a download-free `SpectralAcousticEncoder` (numpy only); a stronger frozen self-supervised audio encoder plugs in through the `AcousticEncoder` protocol. See [General auditory perception](#general-auditory-perception) below. Phase 1 of the [`attention-driven-audition`](../../openspec/changes/attention-driven-audition/proposal.md) change; later phases (stream/source separation, an attention schema for sound, spatial localization) are deferred and gated on the lead's review and the host benchmark.
+- **Speech-to-text is gated off by default** (`transcription_enabled = false`) — in both the shipped `config/kaine.toml` and the `thesis_test` profile. The STT client, model, and full pipeline remain built and functional; they simply are not invoked unless an operator sets `transcription_enabled = true` in a local override, beyond the base-thesis form. See [General auditory perception](#general-auditory-perception) and the config table below.
 - The module is named `audition` (the hearing organ, paired with `vox` for speech output).
 
 ---
 
 ## Responsibility
 
-In the PP+GWT framing, Audition is the entity's **acoustic channel**. In the shipped default it hears the operator's or interlocutor's voice, turns it into symbolic content (text + emotion) the global workspace can broadcast, and maintains a predictive model of conversational auditory patterns. With general auditory perception enabled it becomes a full perceptual sense — deliberately the auditory mirror of Topos foveation: represent *any* sound, score its salience by change and prediction error, attend it under an arousal-set window, and route detected speech to the STT+emotion specialization (see [General auditory perception](#general-auditory-perception)).
+In the PP+GWT framing, Audition is the entity's **acoustic channel**. Speech-to-text transcription is gated off by default (`transcription_enabled = false`, both in the shipped `config/kaine.toml` and in the `thesis_test` profile) — a spoken utterance never becomes a text transcript inside the workspace unless an operator explicitly re-enables it. In the base-thesis form (`general_audition = true`), Audition is a full perceptual sense — deliberately the auditory mirror of Topos foveation: it represents *any* sound, scores its salience by change and prediction error, attends it under an arousal-set window, and publishes a content-free `audition.perception` event, so the entity hears the *sound* of speech (and everything else) as prediction error, never as words. Vocal-emotion classification still runs on detected-speech windows (an affect signal, not a transcript); STT only runs, as a gated specialization, when `transcription_enabled = true` (see [General auditory perception](#general-auditory-perception)).
 
 On each utterance boundary (detected by the VAD in `LiveMicrophone`, or on a direct `process_audio()` call):
 
 0. **General acoustic perception (when `general_audition` is enabled)** — the window is first encoded to a general acoustic embedding and scored for salience over that embedding (`audition.perception`), so a non-speech sound reaches the workspace. A voice-activity heuristic then gates the speech path below; non-speech windows return without transcription. When disabled, this step is skipped and every window is treated as speech (the existing pipeline, byte-for-byte unchanged).
-1. **STT and emotion classification run in parallel** — `SpeachesClient.transcribe()` POSTs in-memory WAV bytes to the Speaches server; `Emotion2vecClassifier.classify()` runs `funasr` inference in a thread. Both tasks start together via `asyncio.gather()`.
+1. **Emotion classification always runs; STT runs only when `transcription_enabled = true`** — `Emotion2vecClassifier.classify()` runs `funasr` inference in a thread on every detected-speech window; `SpeachesClient.transcribe()` POSTs in-memory WAV bytes to the Speaches server only when the STT gate is on. When both run they start together via `asyncio.gather()`.
 2. **Auditory forward model steps** — `AuditoryForwardModel` receives a 9-dim feature vector built from the emotion-class distribution (7 dims), normalised utterance duration (1 dim), and mean RMS energy (1 dim). The L2 prediction error against the model's prior prediction weights the salience of the published events: an emotionally unexpected utterance is more salient than a predicted one.
 3. **Prosody extraction (optional)** — when `prosody_enabled = true`, a fire-and-forget task computes F0 statistics (via `librosa.pyin`), RMS energy, and speaking rate (via `librosa.feature.tempo`) from the in-memory float32 audio array, publishing them as `audition.prosody`. The NumPy array is released as soon as the function returns; nothing touches disk.
 4. **Self-hearing suppression** — a shared `SpeakingGate` (wired by `boot.build_registry`) prevents Audition from transcribing the entity's own voice during Vox playback.
@@ -70,6 +73,7 @@ Section `[audition]` in `config/kaine.toml`. See also [../configuration.md](../c
 | Key | Default | Meaning |
 |---|---|---|
 | `speaches_url` | `"http://127.0.0.1:8000"` | Base URL of the running Speaches STT server |
+| `transcription_enabled` | `false` | Speech-to-text gate. **Off by default** in both the shipped config and `thesis_test`: when false the STT model is never invoked and no `audition.transcription` event is published — only acoustic-perception prediction error and the affect signals (emotion/prosody) reach the workspace. The STT code is preserved, only bypassed. Set `true` in a local override (beyond the base-thesis form) to re-enable the full pipeline |
 | `stt_model` | `"Systran/faster-distil-whisper-medium.en"` | Speaches model ID for transcription — must match a model your Speaches instance has loaded, or transcription 404s (list with `curl -s http://127.0.0.1:8000/v1/models`) |
 | `emotion_model_id` | `"emotion2vec/emotion2vec_plus_base"` | funasr model for vocal emotion; resolved from HuggingFace |
 | `emotion_device` | `"cpu"` | Device for emotion2vec inference (CPU recommended; ~90 M params) |
@@ -223,7 +227,12 @@ general_audition = true                  # default SpectralAcousticEncoder (nump
 # acoustic_change_alert_threshold = 0.35 # cosine-change that raises audition.perception salience
 ```
 
-Off by default: the existing speech pipeline is the shipped behavior until the general path is benchmarked and enabled on the host.
+Off by default in the shipped `config/kaine.toml`: the existing speech pipeline (emotion classification only, STT gated) is the shipped behavior. The `thesis_test` profile turns `general_audition` on and leaves `transcription_enabled` off, so audio enters purely as prediction error — no text ever reaches Lingua. To re-enable STT beyond the base-thesis form:
+
+```toml
+[audition]
+transcription_enabled = true
+```
 
 ---
 

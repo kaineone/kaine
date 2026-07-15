@@ -140,7 +140,7 @@ decode playlist media (cv2 video + PyAV audio). Install it with
 
 ## Language organ: published KAINE abliterated Qwen3.5-4B via OpenAI-compatible server
 
-**Role.** Lingua is the language organ: conditioned text generation over a locally-served LLM. The model generates internal speech (think intents) and external speech (speak intents). Its output is conditioned on the assembled workspace context (Eidolon persona, current conscious coalition, triggering input), making the architecture's contribution measurable via A/B divergence.
+**Role.** Lingua is the language organ: conditioned text generation over a locally-served LLM. The model generates internal speech (think intents) and external speech (speak intents). Its output is conditioned on the assembled workspace context (Eidolon persona, current conscious coalition). In the base-thesis form (the default profile), a speak intent forms from the workspace's own precision-weighted surprise (the self-initiated report policy), not from a conversational trigger; a conversational trigger policy remains available as a non-default configuration. The architecture's primary falsifiable test — whether routing through the competitive workspace does measurable work — is the workspace-mediation ablation; A/B divergence (below) is a secondary, supporting instrument that measures whether Lingua's conditioning changes surface output.
 
 **Model choice: Qwen3.5-4B dense (abliterated, GGUF), published by KAINE.** The shipped organ is the published KAINE organ `kaineone/Qwen3.5-4B-abliterated-GGUF` (safetensors base `kaineone/Qwen3.5-4B-abliterated`), Apache-2.0 with an honest model card. The first-run wizard downloads it (a real `hf download`, consent-gated) and `scripts/model-server-bootstrap.sh` serves it under the exact `[lingua].model_id` alias — so "clone → install → run" resolves identical weights for every researcher. The 4B size fits a single small GPU with headroom for the A/B divergence double pass (the model runs twice per utterance) and for QLoRA training by Hypnos during voice alignment (model and adapter coexist on the same card).
 
@@ -270,7 +270,7 @@ modeling code: MIT. `facebook/dinov2-small` (fallback): Apache-2.0.
 
 ## Web / UI: FastAPI + SSE + uPlot (Nexus)
 
-**Role.** Nexus is the operator-facing web UI. It provides two surfaces: a conversation interface (chat history, input) and a diagnostics surface (module status, salience, affect dimensions, prediction error rates, oscillatory coherence).
+**Role.** Nexus is the operator-facing web UI. It provides two surfaces: a diagnostics surface (module status, salience, affect dimensions, prediction error rates, oscillatory coherence) and an optional conversation interface (chat history, input), off by default (`conversation_enabled = false`) since the base-thesis form is observed, not conversed with. A single-surface (diagnostics-only) deployment is supported.
 
 **Why FastAPI.** FastAPI is a modern async Python web framework with native Server-Sent Events support. SSE provides real-time streaming of workspace updates to the browser without WebSocket complexity. Jinja2 templates render the HTML. `uvicorn[standard]` serves the ASGI app.
 
