@@ -102,14 +102,15 @@ Supervision mode and, in research mode, the five-condition gate result are writt
 into `state/cycle/runtime.json` so [Nexus](../operations.md#nexus-dashboard-tour)
 can surface which boot mode is live and whether the gate is satisfied.
 
-## The seven controlled experiments
+## The eight controlled experiments
 
-The architectural thesis is tested by seven controlled experiments. Three are
-**standalone offline benchmarks**; three are **passive live instruments promoted
-to seeded offline runners**; one is the **enforcement red-team**. They share the
-run-identity seed primitive and the `Verdict` vocabulary (WIN / NULL / NEGATIVE
-for comparisons, PASS / FAIL for safety gates), and each is reproducible from its
-seed.
+The architectural thesis is tested by eight controlled experiments. Four are
+**standalone offline benchmarks** (including the **workspace-mediation
+ablation** — the primary falsifier); three are **passive live instruments
+promoted to seeded offline runners**; one is the **enforcement red-team**. They
+share the run-identity seed primitive and the `Verdict` vocabulary (WIN / NULL /
+NEGATIVE for comparisons, PASS / FAIL for safety gates), and each is
+reproducible from its seed.
 
 | Experiment | Doc | Verdict shape |
 | --- | --- | --- |
@@ -120,6 +121,7 @@ seed.
 | Self-model accuracy (fixed-threshold scorer arithmetic) | [controlled-experiment-runners.md](controlled-experiment-runners.md) | WIN / NULL |
 | Multi-seed stability (live longitudinal control) | [longitudinal-stability.md](longitudinal-stability.md) | stable / unstable |
 | Enforcement red-team (action gate) | [enforcement-red-team.md](../enforcement-red-team.md) | PASS / FAIL |
+| Workspace-mediation ablation (workspace-on vs. flat fan-in — the primary falsifier) | [reproducing-results.md](../reproducing-results.md#workspace-mediation-ablation-the-primary-falsifier) | WIN / NULL / NEGATIVE |
 
 The [testing-framework overview](testing-framework.md) explains how each
 experiment is itself validated (controls, determinism, data integrity).

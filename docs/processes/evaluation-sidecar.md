@@ -320,8 +320,17 @@ and output features.
 
 `kaine/evaluation/ab_divergence.py`
 
-This is the core architectural-thesis instrument: **does the conscious workspace
-add measurable signal to Lingua's outputs?**
+This is a real, default-on evaluation-sidecar instrument and offline
+instrument-runner control (see
+[controlled-experiment-runners.md](controlled-experiment-runners.md#ab-divergence-runner)):
+**does the conscious workspace add measurable signal to Lingua's outputs?** It
+observes the live entity continuously and is a supporting instrument for the
+architectural thesis. The primary falsifiable test of workspace mediation is
+the offline **workspace-mediation ablation**
+(`python -m kaine.evaluation.benchmarks.workspace_mediation_ablation`) —
+a matched workspace-on vs. workspace-off comparison over the real predictive
+modules feeding Lingua, at the same seed and rendering budget — which A/B
+divergence complements rather than substitutes for.
 
 ```mermaid
 sequenceDiagram
@@ -357,10 +366,12 @@ events but is stripped from diagnostics SSE by the Nexus privacy boundary.
 The JSONL files land in `data/evaluation/` — operator-accessible, not
 streamed to the diagnostics surface by default.
 
-**Thesis marker:** a divergence near zero over time means the conscious
+**Interpretation:** a divergence near zero over time means the conscious
 workspace is adding no signal to Lingua's outputs. Rising divergence — the
-entity's conditioned outputs diverging from the bare-LLM baseline — is the
-architectural thesis claim.
+entity's conditioned outputs diverging from the bare-LLM baseline — is
+consistent with workspace conditioning, though as a continuous observational
+measure (not a matched-arm controlled comparison) it does not by itself
+establish the workspace-mediation ablation's causal claim.
 
 ### Controls (instrument validation)
 

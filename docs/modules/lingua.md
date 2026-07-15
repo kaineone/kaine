@@ -1,5 +1,7 @@
 # Lingua
 
+**Base-thesis active** — enabled by default in the `thesis_test` profile (`config/profiles/thesis_test.toml`).
+
 The language organ — KAINE's voice generator; speaks *from* the conscious
 workspace (not from bare input) via an abliterated LLM served through a local
 OpenAI-compatible model server.
@@ -11,6 +13,11 @@ OpenAI-compatible model server (e.g. Unsloth Studio on CUDA, unsloth-core on
 ROCm, or any conforming llama.cpp server) serving an abliterated Qwen model. No
 Python training extras needed at inference time; the `[training]` extra is for
 Hypnos's voice-alignment phase only.
+
+Lingua is one of the three real modules (with Soma and Chronos) exercised by
+the primary falsifiable test, the workspace-mediation ablation
+(`python -m kaine.evaluation.benchmarks.workspace_mediation_ablation`) — see
+[Architecture](../architecture.md).
 
 ---
 
@@ -38,7 +45,27 @@ Generative Agents / GWA "Theater of Mind".
 
 Lingua is **intent-driven, not reflexive**: it never decides on its own to speak.
 The only trigger is a `speak` or `think` intent from the executive
-action-selection step (Nous → Volition), which is itself gated by inhibition.
+action-selection step (Volition), gated by inhibition and selected by
+`[volition].policy`.
+
+In the base-thesis form (`thesis_test`, `[volition].policy =
+"self_initiated_report"`), Lingua is an **output-only voice**: the
+`SelfInitiatedReportPolicy` never answers a user utterance — there is no
+conversational trigger, and no path lets a transcript reach Lingua. Instead it
+watches the current conscious coalition's own precision-weighted surprise and
+forms a `speak` intent only when that surprise crosses `report_threshold`
+(default 0.6, above the workspace publication/conscious threshold), or a
+lower-bar `think` intent at `think_threshold` (default 0.45) — each gated by
+its own refractory timer (`speak_refractory_s` / `think_refractory_s`) and a
+novelty check so the same coalition is not re-reported back to back. The
+`about` field passed to `speak()`/`think()` is then a description of the
+winning coalition and its surprise score (e.g. `"topos (surprise=0.812)"`),
+not a transcribed utterance — Lingua verbalizes the workspace's own state,
+and its output is saved and observed, never spoken back to a user. The
+default `DriveBiasedActionSelectionPolicy` (a non-default configuration
+beyond the base thesis) instead responds to a triggering user utterance and
+drive-initiated intents; see [`report_policy.py`](../../kaine/workspace/report_policy.py)
+and [`drive_policy.py`](../../kaine/workspace/drive_policy.py).
 
 ---
 
@@ -60,9 +87,14 @@ action-selection step (Nous → Volition), which is itself gated by inhibition.
 
 `_produce()` writes directly to the mode-specific stream (`lingua.external` or `lingua.internal`) via the bus client, bypassing the default `self.publish` / `<module>.out` routing. There is no aggregate `lingua.out` stream in practice — consumers must subscribe to `lingua.external` and/or `lingua.internal` explicitly.
 
-The `external_speech` event payload also carries `user_input` (the triggering
-text) so the A/B divergence sidecar can compare workspace-conditioned output to a
-bare-LLM baseline.
+The `external_speech` event payload also carries `user_input` — the intent's
+`about` field — so the A/B divergence sidecar can compare workspace-conditioned
+output to a bare-LLM baseline. Under the base-thesis default
+(`self_initiated_report`), this field is **not** a user's spoken words: it is
+the self-initiated policy's own description of the winning coalition and its
+surprise score (e.g. `"topos (surprise=0.812)"`). It only carries a
+transcribed utterance under the non-default, conversational action-selection
+policy.
 
 ---
 

@@ -1,5 +1,7 @@
 # Eidolon
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 KAINE's self-model organ: identity maintenance, workspace-source drift detection, and observation-driven self-inference.
 
 ---

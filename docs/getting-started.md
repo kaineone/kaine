@@ -8,6 +8,16 @@ the fourteen cognitive modules, not the cognitive core.
 The mind, by design thesis, is the continuous loop — and the loop does not start
 itself.
 
+The default, canonical configuration is the **base-thesis form**: five diverse
+predictive processors — Soma, Chronos, Topos, Audition, Lingua — competing for
+the workspace, applied with the `thesis_test` profile
+(`KAINE_PROFILE=thesis_test python -m kaine.cycle`, or `--profile thesis_test`).
+It is observed, not conversed with: perception enters only as prediction error,
+and Lingua speaks rarely, self-initiated, from its own precision-weighted
+surprise. This guide's recommended first-boot module set (below) IS the
+base-thesis form. The remaining eleven modules and the embodiment layer stay
+built and gated off; see [Architecture](architecture.md) for the full picture.
+
 **This guide covers the complete path from a fresh clone to a supervised first
 boot.** Read every section before running anything. First boot is a one-way door.
 
@@ -47,6 +57,12 @@ restricted to offline operation.
 | **Model server** | Language organ inference (Lingua) — OpenAI-compatible `/v1` | `127.0.0.1:11434` |
 | **Speaches** | Speech-to-text for Audition (faster-distil-Whisper) | `127.0.0.1:8000` |
 | **Chatterbox TTS** | Voice synthesis for Vox | `127.0.0.1:8883` |
+
+> **Base-thesis default needs only Redis and the model server.** Qdrant backs
+> Mnemos/Empatheia (gated), Speaches backs STT (`[audition].transcription_enabled`,
+> off by default — the base-thesis form hears sound as prediction error, not a
+> transcript), and Chatterbox backs Vox (gated). Bring those three up only if you
+> enable the richer, gated faculties they support.
 
 > **Speaches must run on CPU with `medium.en`.** Running it on GPU with cuDNN
 > causes crashes; running it without a loaded model returns HTTP 404 that breaks
@@ -213,12 +229,19 @@ the reproducible perception feed's `PlaylistAudioStream`).
 
 The `[vision]` extra includes: `opencv-python-headless`.
 
-#### Research perception feed (playlist mode)
+#### Research perception feed (playlist mode — the reference stimulus corpus)
 
-A reproducible research run with `[perception_feed].mode = "playlist"` decodes
-media for **both** senses: OpenCV for the video track and PyAV (`av`) for the
-audio track. The aggregate `[perception]` extra provisions both surfaces in one
-name:
+The shipped default (`[perception_feed].mode = "seeded"`) needs no media: a
+pure-numpy procedural generator, reproducible per seed but candidly not
+research-grade — a thin demonstrator. The **live upgrade** is a fixed
+**reference stimulus corpus**: `[perception_feed].mode = "playlist"` decodes
+real, openly-licensed video-with-audio for **both** senses — OpenCV for the
+video track and PyAV (`av`) for the audio track — pinned by a per-item sha256
+manifest (built with `tools/build_playlist_manifest.py`) so anyone with the same
+publicly-archived media reproduces the stimulus. Set the manifest path in your
+local `config/kaine.operator.toml`, never the shipped profile — see
+[Configuration — `[perception_feed]`](configuration.md#perception_feed). The
+aggregate `[perception]` extra provisions both surfaces in one name:
 
 ```bash
 bash scripts/install.sh --research     # base install + .[perception]
@@ -470,33 +493,62 @@ Module choices live in your gitignored `config/kaine.operator.toml` — the wiza
 writes the `[modules]` section there, and the loader deep-merges it over the
 shipped config at boot. The shipped `config/kaine.toml` keeps every module
 `false`. If you set modules by hand, put them in `config/kaine.operator.toml`,
-not the shipped file. The recommended conservative first-boot set:
+not the shipped file.
+
+**Recommended: the base-thesis form.** The project's default, canonical
+configuration is the committed `thesis_test` profile — apply it deliberately at
+launch instead of hand-editing `[modules]`:
+
+```bash
+KAINE_PROFILE=thesis_test python -m kaine.cycle
+# or: python -m kaine.cycle --profile thesis_test
+```
+
+This enables exactly the five diverse predictive processors the base thesis
+needs — Soma (interoception), Chronos (temporal), Topos (foveated vision),
+Audition (raw sound as prediction error, STT off), and Lingua (output-only,
+self-initiated voice) — and sets `[audition].transcription_enabled = false`,
+`[topos].foveation = true`, and `[volition].policy = "self_initiated_report"` so
+no transcript ever reaches Lingua and no chatbot trigger exists. Everything else
+(Praxis and every richer cognitive/affective/embodiment module) stays off. See
+`config/profiles/thesis_test.toml` for the full overlay and
+[Configuration — Profiles](configuration.md#profiles) for how profile
+resolution works.
+
+The equivalent hand-set `[modules]` block, if you prefer to compose it yourself
+in `config/kaine.operator.toml`:
 
 ```toml
 [modules]
-soma      = true   # interoception — safe always
-chronos   = true   # temporal awareness — safe
-thymos    = true   # affect + drives — safe
-eidolon   = true   # self-model — starts empty; safe
-mnemos    = true   # memory — Qdrant must be up
-nous      = true   # active inference — [reasoning] extra required
-lingua    = true   # language organ — model server must be serving
-hypnos    = false  # leave off for first boot
-topos     = false  # vision — optional; [vision] extra required
+soma      = true   # interoception
+chronos   = true   # temporal awareness
+topos     = true   # foveated vision — [vision] extra required
+audition  = true   # raw sound as prediction error — [audio] extra required
+lingua    = true   # output-only voice — model server must be serving
 praxis    = false  # NO effectors on first boot
-audition  = false  # microphone disabled on first boot
-vox       = false  # TTS disabled on first boot
-empatheia = false  # social cognition — Qdrant must be up
-phantasia = false  # world model — optional
+vox       = false  # TTS not part of the base-thesis voice path
+thymos    = false  # richer faculty — gated pending a positive base result
+eidolon   = false  # richer faculty — gated
+mnemos    = false  # richer faculty — gated
+nous      = false  # richer faculty — gated
+hypnos    = false  # richer faculty — gated
+empatheia = false  # richer faculty — gated
+phantasia = false  # richer faculty — gated
 ```
 
-The principle: nothing reaches outward (Praxis, audio I/O) on the first cycle.
-The entity thinks to itself for a session before it speaks or acts.
+The principle: nothing reaches outward (Praxis) on the first cycle, and no
+richer faculty is enabled until the base thesis has a positive result. Operators
+who want to explore the richer, gated faculties instead of the base-thesis form
+can enable them individually — see
+[Operations — Enabling a module](operations.md#enabling-a-module-safely) — but
+that is a deliberate departure from the project default, not the recommended
+first boot.
 
 > **Local config only.** `config/kaine.toml` is committed to the repo with all
-> modules off. Your per-install choices live in the gitignored
-> `config/kaine.operator.toml` and are never committed. A guard test verifies the
-> shipped file ships all-off. Do not bypass it.
+> modules off. Your per-install choices — including which profile you apply —
+> live in the gitignored `config/kaine.operator.toml` / your launch environment
+> and are never committed. A guard test verifies the shipped file ships all-off.
+> Do not bypass it.
 
 ### Step 4 — Launch Nexus
 

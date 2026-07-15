@@ -1,5 +1,7 @@
 # Mundus
 
+**Gated — embodiment layer, ships inactive** independent of the base-thesis gate.
+
 The **body-agnostic embodiment control plane**. Mundus routes the entity's
 perception and action to and from a *body* through a pluggable
 `EmbodimentAdapter`: incoming sensory frames from whatever body is attached become

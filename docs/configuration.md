@@ -25,6 +25,20 @@ This document is the authoritative reference for `config/kaine.toml` and the com
 
 ---
 
+## Profiles
+
+`config/profiles/*.toml` are named overlays layered BETWEEN the shipped `config/kaine.toml` and the operator's local `config/kaine.operator.toml` (which still wins — `load_kaine_config()`: shipped → profile → operator, each deep-merged over the last). Select one with `KAINE_PROFILE=<name>` or `--profile <name>` on `python -m kaine.cycle`; an explicit `--profile` wins over the env var. No profile selected (`None`) behaves exactly like the shipped config alone. A profile the operator explicitly selects but whose file is missing is a hard error (`ProfileError`), never a silent fall-through.
+
+| Profile | Purpose | Enables modules? |
+|---|---|---|
+| `thesis_test` | **The project's default, canonical configuration.** The base-thesis form: Soma, Chronos, Topos, Audition, Lingua active; `[audition].transcription_enabled = false`, `[topos].foveation = true`, `[volition].policy = "self_initiated_report"`. See `config/profiles/thesis_test.toml`. | Yes — the five base-thesis processors. |
+| `minimal_experiment` | The workspace-mediation ablation's minimal run configuration: only Soma, Chronos, Lingua; `[syneidesis].top_k = 2` (forces genuine competitive exclusion on the small candidate set), `[volition].drive_initiative = false`, `[lingua].temperature = 0.0` (greedy decoding). Distinct from `thesis_test` — a narrower, offline-experiment-scoped overlay, not the live default. See `config/profiles/minimal_experiment.toml`. | Yes — three modules. |
+| `tier0` / `tier1` / `tier2` / `tier3` | Deployment-tier hardware profiles (openspec `deployment-tiers`): device/cycle-rate/backend hints for a host class (workstation down to lightweight/SBC-class hardware). **INERT by contract — never enable a module.** A separate axis from `thesis_test`/`minimal_experiment`; combine a tier profile's hardware hints with an operator's own module choices in `config/kaine.operator.toml`. | No — hardware hints only. |
+
+Enabling modules via a profile does not birth an entity: the cognitive cycle still refuses to boot without `KAINE_CYCLE_OPERATOR_PRESENT=1` (or a verified research safety net). A profile only selects which modules construct and how they're configured; no work is lost by not selecting one — every module stays built.
+
+---
+
 ## `[redis]`
 
 Connection to the KAINE-owned Redis container (`compose/redis.yml`). KAINE uses a dedicated Redis on port 6479 so it never conflicts with a system Redis on 6379.
@@ -169,6 +183,23 @@ Global Workspace scoring parameters.
 | `top_k` | integer | `5` | Maximum coalition size: the top-*k* scoring events are broadcast each tick. |
 | `publication_threshold` | float | `0.35` | Minimum salience for an event to enter the coalition. Below this the tick publishes executive inhibition. |
 | `novelty_window` | integer | `32` | Sliding-window length (ticks) for the novelty detector. Events seen too frequently get a novelty penalty. |
+
+---
+
+## `[volition]`
+
+Executive action selection (`kaine/workspace/volition.py`). Absent entirely from the shipped `config/kaine.toml` — when the section is missing, Volition falls back to `DriveBiasedActionSelectionPolicy` (drive-initiated speak/think intents plus the conservative default user-response behavior). The `thesis_test` profile sets this section explicitly to select the base-thesis voice policy.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `policy` | string | `""` (unset → drive-biased default) | `"self_initiated_report"` selects `SelfInitiatedReportPolicy`: the entity speaks or thinks only from its OWN precision-weighted surprise (the winning coalition's top salience score), never from a user utterance — the base-thesis no-chatbot guarantee. The `thesis_test` profile sets this. Any other value (or omission) uses the drive-biased or plain default policy instead (see `drive_initiative` below). |
+| `drive_initiative` | boolean | `true` | Only consulted when `policy` is unset. `true` injects `DriveBiasedActionSelectionPolicy` (drive threshold-crossings — social_drive → speak, curiosity/boredom/restlessness → think — become intents, on top of the conservative default user-response behavior). `false` falls back to the plain `DefaultActionSelectionPolicy`. The `minimal_experiment` profile sets this `false` to remove a confound from the workspace-mediation ablation's observable. Ignored when `policy = "self_initiated_report"`. |
+| `report_threshold` | float | `0.6` | Only read by `SelfInitiatedReportPolicy`. Coalition surprise (top selected salience score) at or above this speaks aloud (`intent.speak`). Must be `>=` the workspace `publication_threshold` and `>= think_threshold`. |
+| `think_threshold` | float | `0.45` | Only read by `SelfInitiatedReportPolicy`. Coalition surprise at or above this (but below `report_threshold`) forms an internal `intent.think` — not spoken aloud. |
+| `speak_refractory_s` | float | `8.0` | Only read by `SelfInitiatedReportPolicy`. Minimum seconds between spoken reports, reusing the one-in-flight guard pattern; prevents queuing stale coalitions — the policy always reports the CURRENT coalition when the refractory clears. |
+| `think_refractory_s` | float | `3.0` | Only read by `SelfInitiatedReportPolicy`. Minimum seconds between internal think intents. |
+
+Regardless of policy, inhibition always gates first: if `snapshot.inhibited` is true (coalition score below `publication_threshold`), `Volition.select()` returns no intents — no policy sees an inhibited snapshot.
 
 ---
 
@@ -317,6 +348,20 @@ Vision module: a frozen, temporally-native video encoder (InternVideo-Next) embe
 | `forward_model_units` | integer | `256` | Hidden-layer width of the shallow MLP forward model (CPU). |
 | `prediction_error_window` | integer | `32` | Rolling-window size (frames) for normalizing the visual prediction error signal. |
 | `visual_buffer_size` | integer | `16` | Number of recent latents kept in the recurrent visual buffer for temporal integration. |
+
+### Attention-driven foveation
+
+Spatial attention over a frame: an arousal-modulated crop (the fovea) is derived and, per the base thesis, the fovea size itself IS the precision-weighted attention signal — high arousal narrows it, low arousal widens it. Ships disabled (`foveation = false`); the `thesis_test` profile turns it on (`foveation = true`). Requires `encoder_backend = "dinov2"` (the per-frame fallback — spatial foveation is incompatible with the temporally-native InternVideo-Next clip path).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `foveation` | boolean | `false` | Master gate. Ships disabled; `thesis_test` enables it. |
+| `foveation_grid` | list of int | `[12, 12]` | Saliency tiling (rows, cols) used to locate the most salient region before deriving the fovea. |
+| `foveation_hysteresis` | float | `0.15` | Dwell damping: a new candidate tile must beat the currently-held one by more than this margin before the fovea moves, preventing jitter. |
+| `foveation_arousal_size_min` | float | `0.12` | Fovea size (fraction of frame) at arousal = 1.0 (tightest — high arousal narrows attention). |
+| `foveation_arousal_size_max` | float | `0.5` | Fovea size (fraction of frame) at arousal = 0.0 (widest — low arousal widens attention). |
+| `peripheral_width` / `peripheral_height` | integer | module default | Resolution of the peripheral (whole-frame, low-detail) view alongside the foveal crop. |
+| `foveal_size` | integer | module default | Side length (pixels) of the square foveal crop encoded at full detail. |
 
 ---
 
@@ -522,11 +567,18 @@ Additional keys accepted by `make_lingua` (not in the shipped file but valid to 
 
 ## `[audition]`
 
-Hearing module: live microphone voice-activity detection, STT via Speaches (faster-Whisper), and vocal-emotion classification via emotion2vec+. Raw audio stays in memory; it is never written to disk. See [modules/audition.md](modules/audition.md).
+Hearing module: live microphone voice-activity detection, STT via Speaches (faster-Whisper), vocal-emotion classification via emotion2vec+, and general acoustic (non-speech) perception. Raw audio stays in memory; it is never written to disk. See [modules/audition.md](modules/audition.md).
+
+**Base-thesis form:** the `thesis_test` profile ships `transcription_enabled = false` (unchanged from the shipped default — see below) and `general_audition = true`, so Audition contributes acoustic prediction error to the workspace but no transcript ever reaches Lingua.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `speaches_url` | string | `"http://127.0.0.1:8000"` | URL of the Speaches STT service. Must be running with `--model medium.en` on CPU to avoid cuDNN crashes (see reference notes). |
+| `transcription_enabled` | boolean | `false` | Master gate on the STT (speech-to-text) path. Speech-to-text is built but DEACTIVATED BY DEFAULT: in the base-thesis form the entity hears sound as prediction error, never as a transcript, so no text reaches the language organ. Set `true` (in an override, beyond the base thesis) to re-enable the full STT pipeline below. Does not affect the acoustic-perception or affect paths. |
+| `general_audition` | boolean | `false` | Master gate on general auditory perception (non-speech acoustic prediction error). When enabled, every audio window is encoded and scored by change + forward-model prediction error, publishing `audition.perception` events that compete in the workspace independent of STT. The `thesis_test` profile enables this. |
+| `arousal_window_min` / `arousal_window_max` | float | `0.15` / (module default) | Only read when `general_audition = true`. Bounds of the arousal-modulated acoustic analysis window (seconds); mirrors Topos's arousal-sized fovea for hearing. |
+| `acoustic_change_alert_threshold` | float | `0.35` | Small absolute FLOOR guard on the acoustic change-alert. Self-calibrating: the primary criterion is `acoustic_change_alert_factor` below; this floor only stops a large ratio over a near-static stream (tiny mean) from firing on noise. |
+| `acoustic_change_alert_factor` | float | `2.0` | Relative alert multiplier: an acoustic change alerts when it reaches this factor times the rolling-window mean of change scores (mirrors Topos's `change_alert_factor`). |
+| `speaches_url` | string | `"http://127.0.0.1:8000"` | URL of the Speaches STT service. Must be running with `--model medium.en` on CPU to avoid cuDNN crashes (see reference notes). Only reached when `transcription_enabled = true`. |
 | `stt_model` | string | `"Systran/faster-distil-whisper-medium.en"` | STT model ID that Speaches has loaded. Must match a served model or transcription 404s; list with `curl -s http://127.0.0.1:8000/v1/models`. |
 | `emotion_model_id` | string | `"emotion2vec/emotion2vec_plus_base"` | HuggingFace hub ID for the emotion2vec+ vocal emotion model (~90M params). Must resolve from the HuggingFace hub (not ModelScope, which 404s). |
 | `emotion_device` | string | `"cpu"` | Compute device for emotion2vec+. Pinned to CPU per paper §3.1. |

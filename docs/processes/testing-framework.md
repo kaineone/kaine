@@ -1,6 +1,6 @@
 # Process: Research Testing Framework (Three Layers)
 
-The seven controlled experiments do not earn trust by running — they earn it by
+The eight controlled experiments do not earn trust by running — they earn it by
 being *validated*. KAINE's research-testing framework has three layers, each
 answering a different "why should I believe this number?" question:
 
@@ -63,6 +63,14 @@ with both controls is *falsifiable* rather than taken on faith.
   Syneidesis/Volition inhibition, audit log), so a PASS means the architectural
   layer actually blocked the action. See
   [enforcement-red-team.md](../enforcement-red-team.md).
+- **Workspace-mediation ablation (the primary experiment).** The off arm is a
+  fair null, not a crippled one: the rendering budget (max events, char budget)
+  is matched across arms, and the off arm's modules keep running their real
+  forward models and publishing real, non-degenerate prediction errors — a WIN
+  cannot come from starving the control. A neutral, non-engineered stimulus
+  battery and real non-zero minimum-effect thresholds keep NULL and NEGATIVE
+  genuinely reachable outcomes, so the runner is not a wiring test rigged to
+  always win. See `kaine/evaluation/benchmarks/workspace_mediation_ablation/`.
 
 ## Layer 2 — Experiment implementation (determinism + isolation)
 
@@ -76,9 +84,12 @@ of the random universe it happened to land in:
   [run-identity.md](run-identity.md#global-seed).
 - **Condition isolation.** Where two arms are compared, they differ in exactly one
   controlled variable and share everything else — the same model, persona, prompt
-  path, seed, and (for the ablation) `deterministic=True` with a logical clock and
-  canonical within-tick ordering, so the only difference is the variable under
-  test. See [run-identity.md](run-identity.md#deterministic-mode) and
+  path, seed, and (for the oscillatory and workspace-mediation ablations)
+  `deterministic=True` with a logical clock and canonical within-tick ordering, so
+  the only difference is the variable under test — for the workspace-mediation
+  ablation, whether the organ and Chronos are conditioned by the
+  competitively-selected coalition or by a matched-budget flat fan-in of the same
+  module outputs. See [run-identity.md](run-identity.md#deterministic-mode) and
   [oscillatory-ablation.md](oscillatory-ablation.md#the-determinism-guarantee-why-the-difference-is-the-layer).
 - **First-class null results.** A NULL / NEGATIVE / unstable outcome is a real,
   reportable finding, never a harness failure. The verdict is computed from raw
@@ -111,7 +122,7 @@ record itself:
   see that a run was interrupted and locate it by cycle position. See
   [../operations.md](../operations.md#durable-incident-log).
 
-## How the layers map to the seven experiments
+## How the layers map to the eight experiments
 
 | Experiment | Layer 1 control | Layer 2 | Layer 3 |
 | --- | --- | --- | --- |
@@ -122,3 +133,4 @@ record itself:
 | Self-model accuracy | known `(signal, claim, expected)` battery | seeded | run identity |
 | Multi-seed stability | (is itself the live control) | multi-seed CV + verdict unanimity | run identity |
 | Enforcement red-team | real enforcement components | deterministic offline cases | durable audit log |
+| Workspace-mediation ablation (primary) | matched rendering budget; non-degenerate off arm; neutral battery + real thresholds | `deterministic=True`, matched seed/stimulus/modules, single-variable (workspace on vs. off) | seed/manifest |

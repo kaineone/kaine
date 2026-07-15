@@ -1,5 +1,7 @@
 # Vox
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 The voice output organ — synthesizes KAINE's external speech via Chatterbox TTS,
 with Thymos affect modulating expressivity parameters and optional bounded
 prosodic mirroring of the interlocutor.

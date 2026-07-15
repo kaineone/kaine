@@ -1,5 +1,7 @@
 # Thymos
 
+**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+
 The affective organ — maintains KAINE's dimensional emotional state, drives,
 and goals; modulates bus salience; and implements familiarity-modulated affect
 coupling.

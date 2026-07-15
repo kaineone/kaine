@@ -14,6 +14,33 @@ This document is the navigation guide for the current codebase. The
 definitive theoretical treatment (the KAINE paper) is maintained in its own
 repository. Process details live in the `docs/processes/` tree.
 
+## The base-thesis default
+
+The project's default, canonical configuration is the **base-thesis form**
+(`config/profiles/thesis_test.toml`, applied with `KAINE_PROFILE=thesis_test` or
+`--profile thesis_test`): the smallest set of *diverse* predictive processors
+that can genuinely exercise the competition — **Soma** (interoception),
+**Chronos** (interval timing), **Topos** (foveated vision over raw video),
+**Audition** (raw sound as prediction error), and **Lingua** (an output-only,
+self-initiated voice) — with **Syneidesis** and **Volition** as always-on
+scaffolding. This is not a chatbot: the entity is **observed, not conversed
+with**. Perception enters only as prediction error — `[audition].
+transcription_enabled = false` by default, so no transcript ever reaches
+Lingua — and Lingua verbalizes the workspace's own state (the coalition's
+precision-weighted surprise crossing a report threshold), never a user
+utterance, via `[volition].policy = "self_initiated_report"`.
+
+The remaining eleven modules and the two-module embodiment layer are **built,
+tested, and gated off**, held behind a positive result on the primary
+falsifiable test: the **workspace-mediation ablation**
+(`kaine/evaluation/benchmarks/workspace_mediation_ablation/`) — the system as
+built (competitive Syneidesis selection) versus a matched flat fan-in of the
+same processors' outputs, over the real Soma/Chronos/Lingua. A WIN establishes
+that routing through the competitive workspace does measurable work — the
+output is **provably workspace-mediated** — not that the system is conscious;
+that remains necessary, not sufficient. See [Reproducing
+Results](reproducing-results.md) for how to run it.
+
 ---
 
 ## System Diagram
@@ -102,24 +129,33 @@ graph TD
 
 ## Module Roster
 
-| # | Name | Group | Code | Backing Technology |
-|---|------|-------|------|--------------------|
-| 1 | **Soma** | Prediction | `kaine/modules/soma/` | CfC forward model (ncps); pynvml + psutil; fatigue accumulator |
-| 2 | **Chronos** | Prediction | `kaine/modules/chronos/` | CfC (~32 units, ncps); event-rhythm forward model |
-| 3 | **Topos** | Prediction | `kaine/modules/topos/` | InternVideo-Next (frozen, temporally-native clip; DINOv2 fallback); online forward model |
-| 4 | **Audition** | Prediction | `kaine/modules/audition/` | Speaches distil-Whisper; emotion2vec+; auditory forward model |
-| 5 | **Nous** | Cognition | `kaine/modules/nous/` | pymdp (JAX); active inference — belief updating + EFE policy selection |
-| 6 | **Mnemos** | Cognition | `kaine/modules/mnemos/` | Qdrant; all-MiniLM-L6-v2 (384-dim, CPU); episodic / semantic / procedural |
-| 7 | **Eidolon** | Cognition | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
-| 8 | **Phantasia** | Cognition | `kaine/modules/phantasia/` | DreamerV3 RSSM (JAX, CPU; ships disabled); fake backend default |
-| 9 | **Empatheia** | Cognition | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
-| 10 | **Thymos** | Motivation | `kaine/modules/thymos/` | Scherer CPM appraisal; drive accumulators with hysteresis; affect coupling consumer |
-| 11 | **Lingua** | Expression | `kaine/modules/lingua/` | Abliterated Qwen 3.x via OpenAI-compatible server; ContextAssembler; A/B baseline |
-| 12 | **Vox** | Expression | `kaine/modules/vox/` | Chatterbox TTS; Thymos prosodic modulation; prosodic mirroring |
-| 13 | **Praxis** | Expression | `kaine/modules/praxis/` | File-write / notify / shell (empty whitelist by default) |
-| 14 | **Hypnos** | Maintenance | `kaine/modules/hypnos/` | Five-phase consolidation pipeline; DPO+QLoRA voice alignment (Unsloth) |
-| 15 | **Perception** | Embodiment (shipped inactive) | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
-| 16 | **Mundus** | Embodiment (shipped inactive) | `kaine/modules/mundus/` | Body-agnostic embodiment control plane; routes perception/action to a body through a pluggable adapter (transport-free `stub` reference body ships today; a virtual-world adapter is planned); a continuous embodiment control surface (off by default) is the entity's per-tick motor producer; double-gated (config + operator env var) |
+"Base-thesis" marks whether the module is in the `thesis_test` profile's active
+set (**Active**), a richer faculty held behind a positive base-thesis result
+(**Gated**), or part of the always-off embodiment layer (**Gated —
+embodiment**, off regardless of base-thesis status).
+
+| # | Name | Group | Base-thesis | Code | Backing Technology |
+|---|------|-------|-------------|------|--------------------|
+| 1 | **Soma** | Prediction | Active | `kaine/modules/soma/` | CfC forward model (ncps); pynvml + psutil; fatigue accumulator |
+| 2 | **Chronos** | Prediction | Active | `kaine/modules/chronos/` | CfC (~32 units, ncps); event-rhythm forward model |
+| 3 | **Topos** | Prediction | Active | `kaine/modules/topos/` | InternVideo-Next (frozen, temporally-native clip; DINOv2 fallback); online forward model |
+| 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | Speaches distil-Whisper (gated off by default); emotion2vec+; auditory forward model |
+| 5 | **Nous** | Cognition | Gated | `kaine/modules/nous/` | pymdp (JAX); active inference — belief updating + EFE policy selection |
+| 6 | **Mnemos** | Cognition | Gated | `kaine/modules/mnemos/` | Qdrant; all-MiniLM-L6-v2 (384-dim, CPU); episodic / semantic / procedural |
+| 7 | **Eidolon** | Cognition | Gated | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
+| 8 | **Phantasia** | Cognition | Gated | `kaine/modules/phantasia/` | DreamerV3 RSSM (JAX, CPU; ships disabled); fake backend default |
+| 9 | **Empatheia** | Cognition | Gated | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
+| 10 | **Thymos** | Motivation | Gated | `kaine/modules/thymos/` | Scherer CPM appraisal; drive accumulators with hysteresis; affect coupling consumer |
+| 11 | **Lingua** | Expression | Active | `kaine/modules/lingua/` | Abliterated Qwen 3.x via OpenAI-compatible server; ContextAssembler; self-initiated report policy; A/B baseline |
+| 12 | **Vox** | Expression | Gated | `kaine/modules/vox/` | Chatterbox TTS; Thymos prosodic modulation; prosodic mirroring |
+| 13 | **Praxis** | Expression | Gated | `kaine/modules/praxis/` | File-write / notify / shell (empty whitelist by default) |
+| 14 | **Hypnos** | Maintenance | Gated | `kaine/modules/hypnos/` | Five-phase consolidation pipeline; DPO+QLoRA voice alignment (Unsloth) |
+| 15 | **Perception** | Embodiment (shipped inactive) | Gated — embodiment | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
+| 16 | **Mundus** | Embodiment (shipped inactive) | Gated — embodiment | `kaine/modules/mundus/` | Body-agnostic embodiment control plane; routes perception/action to a body through a pluggable adapter (transport-free `stub` reference body ships today; a virtual-world adapter is planned); a continuous embodiment control surface (off by default) is the entity's per-tick motor producer; double-gated (config + operator env var) |
+
+A seventeenth module, **Echo** (`kaine/modules/echo/`), is permanent test
+infrastructure — it must stay disabled in production and is outside the
+active/gated framing above.
 
 Links to per-module detail pages: [modules/soma.md](modules/soma.md) ·
 [modules/chronos.md](modules/chronos.md) ·
@@ -466,11 +502,17 @@ Eight sidecar observers run as async tasks alongside the cycle:
 | `welfare_observer` | `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out` | Gray-Zone Event counts (also emits content-free `welfare.gray_zone` on `welfare.out`) |
 | `nous_policy_observer` | `nous.out` | EFE value, horizon, selected action |
 
-The A/B divergence test (`kaine/evaluation/ab_divergence.py`) pairs each
-Lingua external-speech event with a bare-LLM inference (no workspace
-context, no persona) and logs the cosine similarity. A divergence near
-zero means the conscious workspace is adding no signal. Rising divergence
-over time is the architectural thesis marker.
+The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each
+Lingua external-speech event with a bare-LLM inference (no workspace context,
+no persona) and logs the cosine similarity, as a live, secondary signal that
+the workspace context is shaping output. A divergence near zero means the
+conscious workspace is adding no signal at that moment. It is supporting
+evidence, not the primary test — the primary falsifiable claim is decided
+offline by the **workspace-mediation ablation** (see [The base-thesis
+default](#the-base-thesis-default) above and [Reproducing
+Results](reproducing-results.md)), which controls for information quantity and
+reports a pre-registered WIN/NULL/NEGATIVE verdict rather than an open-ended
+trend.
 
 The individuation boundary instrument (`kaine/evaluation/individuation.py`)
 runs a permutation test to produce statistical evidence about whether a fork
