@@ -317,7 +317,8 @@ def _one_item_source(tmp_path, *, fps, frame_count):
         playlist_clock=clock,
         cv2_module=_FakeCv2({"clip.mp4": frame_count}),
     )
-    assert src.open()
+    opened = src.open()
+    assert opened
     return src, fake_clock
 
 
@@ -390,7 +391,8 @@ def test_playlist_video_advances_item_at_real_time_end(tmp_path):
         playlist_clock=clock,
         cv2_module=_FakeCv2({"a.mp4": 60, "b.mp4": 60}),  # 2 s each at 30 fps
     )
-    assert src.open()
+    opened = src.open()
+    assert opened
     clk.t = 0.0
     assert src.read()[1] == ("a.mp4", 0)  # item 0
     assert src.current_item.item_idx == 0
@@ -466,7 +468,8 @@ def test_shared_clock_keeps_video_and_audio_on_the_same_item(tmp_path):
         cv2_module=_FakeCv2({"a.mp4": 60, "b.mp4": 60}),  # 2 s each
     )
     audio = PlaylistAudioStream(parsed, callback=lambda _b: None, playlist_clock=clock)
-    assert video.open()  # registers item 0's duration; audio shares the clock
+    video_opened = video.open()  # registers item 0's duration; audio shares the clock
+    assert video_opened
 
     clk.t = 0.5
     video.read()
