@@ -598,6 +598,16 @@ class Topos(BaseModule):
             # Attention schema: the content-free predicted next fovea location.
             if predicted_fovea is not None:
                 report["predicted_fovea"] = predicted_fovea.to_dict()
+        # Playlist provenance (playlist-realtime-av-sync): when the entity is
+        # watching a real-time playlist feed, stamp the CONTENT-FREE identity of
+        # the item on the bus (basename + manifest order), so "which show is it
+        # watching" is read off the bus rather than inferred from process file
+        # descriptors. Absent for the seeded feed and the real camera.
+        if self._live_camera is not None:
+            position = self._live_camera.current_item
+            if position is not None:
+                report["item"] = position.title
+                report["item_order"] = position.order
         return await self.publish(
             "topos.report",
             report,

@@ -16,13 +16,69 @@ import numpy as np
 import pytest
 
 from kaine.modules.topos.feed import (
+    PlaylistClock,
     PlaylistManifestError,
+    PlaylistPosition,
     PlaylistSource,
     PlaylistVerificationError,
     SeededProceduralSource,
     SeededSchedule,
     load_playlist_manifest,
 )
+
+
+# ---------------------------------------------------------------------------
+# Fake cv2 decoder for real-time playlist pacing tests (no OpenCV, no media).
+# Each fake frame is tagged (path, media_frame_index) so a test can assert
+# exactly which media frame the source returned at a given elapsed time.
+# ---------------------------------------------------------------------------
+
+
+class _FakeCap:
+    def __init__(self, path: str, frame_count: int) -> None:
+        self._path = path
+        self._n = frame_count
+        self._i = 0
+
+    def isOpened(self) -> bool:
+        return True
+
+    def get(self, prop) -> float:  # noqa: ANN001 — only FRAME_COUNT is queried
+        return float(self._n)
+
+    def read(self):
+        if self._i >= self._n:
+            return False, None
+        frame = (self._path, self._i)
+        self._i += 1
+        return True, frame
+
+    def release(self) -> None:
+        return None
+
+
+class _FakeCv2:
+    CAP_PROP_FRAME_COUNT = 7  # arbitrary sentinel; the source only reads .get()
+
+    def __init__(self, frame_counts: dict[str, int]) -> None:
+        # frame_counts keyed by basename (paths are resolved absolute at open).
+        self._frame_counts = frame_counts
+
+    def VideoCapture(self, path: str):  # noqa: N802 — mirrors cv2 API
+        import os
+
+        base = os.path.basename(path)
+        return _FakeCap(base, self._frame_counts[base])
+
+
+class _FakeClock:
+    """Manually advanced monotonic clock."""
+
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
 
 
 # ---------------------------------------------------------------------------
@@ -241,3 +297,188 @@ def test_missing_media_fails_closed(tmp_path):
     src = PlaylistSource(parsed)
     with pytest.raises(PlaylistVerificationError):
         src.verify()
+
+
+# ---------------------------------------------------------------------------
+# Real-time playlist pacing (playlist-realtime-av-sync)
+# ---------------------------------------------------------------------------
+
+
+def _one_item_source(tmp_path, *, fps, frame_count):
+    """A verified single-item PlaylistSource wired to a fake cv2 + fake clock."""
+    (tmp_path / "clip.mp4").write_bytes(b"clip-media-0")
+    sha = hashlib.sha256(b"clip-media-0").hexdigest()
+    manifest = _write_manifest(tmp_path, [{"path": "clip.mp4", "sha256": sha, "fps": fps}])
+    parsed = load_playlist_manifest(manifest)
+    clock = PlaylistClock(len(parsed.items), clock=_FakeClock())
+    fake_clock = clock._clock  # the _FakeClock instance
+    src = PlaylistSource(
+        parsed,
+        playlist_clock=clock,
+        cv2_module=_FakeCv2({"clip.mp4": frame_count}),
+    )
+    opened = src.open()
+    assert opened
+    return src, fake_clock
+
+
+def test_playlist_video_selects_frame_at_elapsed(tmp_path):
+    """A given elapsed wall-clock position selects the expected media frame
+    (elapsed x fps), NOT the next sequential frame — the real-time-pacing fix."""
+    src, clk = _one_item_source(tmp_path, fps=30, frame_count=600)
+    clk.t = 0.0
+    ok, frame = src.read()
+    assert ok and frame == ("clip.mp4", 0)
+    # 0.5 s in at 30 fps -> frame 15 (frames 1..14 dropped to track 1x).
+    clk.t = 0.5
+    ok, frame = src.read()
+    assert ok and frame == ("clip.mp4", 15)
+    # 2.0 s in -> frame 60.
+    clk.t = 2.0
+    ok, frame = src.read()
+    assert ok and frame == ("clip.mp4", 60)
+
+
+def test_playlist_video_holds_frame_when_tick_faster_than_fps(tmp_path):
+    """Ticking faster than the frame rate re-presents the current frame instead
+    of consuming the next media frame (so a 30 fps clip does not race ahead)."""
+    src, clk = _one_item_source(tmp_path, fps=30, frame_count=600)
+    clk.t = 0.0  # first read fixes the shared origin at t=0
+    assert src.read()[1] == ("clip.mp4", 0)
+    clk.t = 0.20  # 0.20 * 30 = 6 -> frame 6
+    ok, first = src.read()
+    assert ok and first == ("clip.mp4", 6)
+    # Only 10 ms later: 0.21 * 30 = 6.3 -> still frame 6. HELD.
+    clk.t = 0.21
+    ok, held = src.read()
+    assert ok and held == ("clip.mp4", 6)
+    # Cross into the next frame boundary: 0.24 * 30 = 7.2 -> frame 7.
+    clk.t = 0.24
+    ok, nxt = src.read()
+    assert ok and nxt == ("clip.mp4", 7)
+
+
+def test_playlist_video_drops_frames_when_tick_slower_than_fps(tmp_path):
+    """Ticking slower than the frame rate drops the intervening frames so the
+    video tracks 1x rather than playing back in slow motion."""
+    src, clk = _one_item_source(tmp_path, fps=30, frame_count=600)
+    clk.t = 0.0
+    assert src.read()[1] == ("clip.mp4", 0)
+    # One second later, at 30 fps, we must be at frame 30 (not frame 1).
+    clk.t = 1.0
+    assert src.read()[1] == ("clip.mp4", 30)
+
+
+def test_playlist_video_advances_item_at_real_time_end(tmp_path):
+    """The item advances when the real-time position passes the file's end —
+    driven by the shared clock's per-item durations, not by exhausting frames."""
+    (tmp_path / "a.mp4").write_bytes(b"aaa")
+    (tmp_path / "b.mp4").write_bytes(b"bbb")
+    sha_a = hashlib.sha256(b"aaa").hexdigest()
+    sha_b = hashlib.sha256(b"bbb").hexdigest()
+    manifest = _write_manifest(
+        tmp_path,
+        [
+            {"path": "a.mp4", "sha256": sha_a, "fps": 30, "order": 0},
+            {"path": "b.mp4", "sha256": sha_b, "fps": 30, "order": 1},
+        ],
+    )
+    parsed = load_playlist_manifest(manifest)
+    clock = PlaylistClock(len(parsed.items), clock=_FakeClock())
+    clk = clock._clock
+    src = PlaylistSource(
+        parsed,
+        playlist_clock=clock,
+        cv2_module=_FakeCv2({"a.mp4": 60, "b.mp4": 60}),  # 2 s each at 30 fps
+    )
+    opened = src.open()
+    assert opened
+    clk.t = 0.0
+    assert src.read()[1] == ("a.mp4", 0)  # item 0
+    assert src.current_item.item_idx == 0
+    # 2.5 s in: item 0 (2 s) is done -> item 1 at 0.5 s -> frame 15.
+    clk.t = 2.5
+    ok, frame = src.read()
+    assert ok and frame == ("b.mp4", 15)
+    assert src.current_item.item_idx == 1
+    assert src.current_item.title == "b.mp4"
+
+
+def test_playlist_video_exhausts_after_last_item(tmp_path):
+    """Past the end of the whole playlist, read() returns (False, None)."""
+    src, clk = _one_item_source(tmp_path, fps=30, frame_count=60)  # 2 s
+    clk.t = 0.0
+    assert src.read()[0] is True
+    clk.t = 5.0  # well past the single 2 s item
+    ok, frame = src.read()
+    assert ok is False and frame is None
+
+
+def test_playlist_current_item_is_none_before_start(tmp_path):
+    (tmp_path / "clip.mp4").write_bytes(b"clip-media-0")
+    sha = hashlib.sha256(b"clip-media-0").hexdigest()
+    manifest = _write_manifest(tmp_path, [{"path": "clip.mp4", "sha256": sha, "fps": 30}])
+    parsed = load_playlist_manifest(manifest)
+    src = PlaylistSource(parsed, playlist_clock=PlaylistClock(1, clock=_FakeClock()))
+    # Not opened / clock not started yet.
+    assert src.current_item is None
+
+
+def test_playlist_current_item_provenance_is_content_free(tmp_path):
+    """current_item carries only basename + manifest order + offset — never any
+    pixels, so the item is readable off the bus without leaking frame content."""
+    src, clk = _one_item_source(tmp_path, fps=30, frame_count=600)
+    clk.t = 1.0
+    src.read()
+    pos = src.current_item
+    assert isinstance(pos, PlaylistPosition)
+    assert pos.title == "clip.mp4"
+    assert pos.order == 0
+    assert isinstance(pos.title, str) and isinstance(pos.order, int)
+
+
+# ---------------------------------------------------------------------------
+# Shared start-clock: video and audio agree on the playing item
+# ---------------------------------------------------------------------------
+
+
+def test_shared_clock_keeps_video_and_audio_on_the_same_item(tmp_path):
+    """Video (PlaylistSource) and audio (PlaylistAudioStream) fed ONE shared
+    PlaylistClock report the same item across a simulated boundary — the fix for
+    seeing one show while hearing another."""
+    from kaine.modules.audition.feed import PlaylistAudioStream
+
+    (tmp_path / "a.mp4").write_bytes(b"aaa")
+    (tmp_path / "b.mp4").write_bytes(b"bbb")
+    sha_a = hashlib.sha256(b"aaa").hexdigest()
+    sha_b = hashlib.sha256(b"bbb").hexdigest()
+    manifest = _write_manifest(
+        tmp_path,
+        [
+            {"path": "a.mp4", "sha256": sha_a, "fps": 30, "order": 0},
+            {"path": "b.mp4", "sha256": sha_b, "fps": 30, "order": 1},
+        ],
+    )
+    parsed = load_playlist_manifest(manifest)
+    clock = PlaylistClock(len(parsed.items), clock=_FakeClock())
+    clk = clock._clock
+    video = PlaylistSource(
+        parsed,
+        playlist_clock=clock,
+        cv2_module=_FakeCv2({"a.mp4": 60, "b.mp4": 60}),  # 2 s each
+    )
+    audio = PlaylistAudioStream(parsed, callback=lambda _b: None, playlist_clock=clock)
+    video_opened = video.open()  # registers item 0's duration; audio shares the clock
+    assert video_opened
+
+    clk.t = 0.5
+    video.read()
+    assert video.current_item.item_idx == 0
+    assert audio.current_item.item_idx == 0
+    assert video.current_item.title == audio.current_item.title == "a.mp4"
+
+    clk.t = 2.5  # past item 0's 2 s boundary
+    video.read()
+    assert video.current_item.item_idx == 1
+    assert audio.current_item.item_idx == 1
+    assert video.current_item.title == audio.current_item.title == "b.mp4"

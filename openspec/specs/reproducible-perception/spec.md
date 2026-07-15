@@ -59,26 +59,34 @@ PRNG).
 - **THEN** their schedule is fixed by the seed (reproducible) and is not derivable
   from the observed stimulus without the seed
 
-### Requirement: The playlist source verifies media for reproducibility
+### Requirement: The playlist source verifies media and presents it in real time
 
 The playlist source SHALL read one operator-supplied manifest listing each media
 item's path, sha256 digest, frame rate, and order, and SHALL verify every digest
 before a run. The same manifest SHALL drive both the video and the audio surface,
 so picture and sound come from the same media. A digest mismatch SHALL fail the
-source for both surfaces (a changed file voids reproducibility). Item order and
-frame rate SHALL define a stable index across runs.
+source for both surfaces (a changed file voids reproducibility).
 
-#### Scenario: A verified manifest indexes deterministically
+The playlist feed is a **live / statistical-tier** source: it SHALL present each
+item's video and audio at **real wall-clock time (1x)** — the video advancing at
+the item's real frame rate, dropping or holding frames to track wall-clock time
+rather than one frame per cognitive tick. It is reproducible by **media identity
+(per-item sha256)**, NOT frame-for-frame: the exact frame selected at a given tick
+depends on wall-clock timing, so it deliberately trades bit-identical frame
+reproduction for real-time A/V fidelity. The seeded procedural source remains the
+bit-identical offline tier.
+
+#### Scenario: A verified manifest is reproducible by media identity
 
 - **WHEN** every item's sha256 matches the manifest
-- **THEN** the source opens and index i maps to the same media frame and audio
-  position across runs
+- **THEN** the source opens and both runs present the same media (verified by
+  per-item sha256), each paced to real wall-clock time
 
 #### Scenario: A changed file fails closed
 
 - **WHEN** any item's sha256 does not match the manifest
 - **THEN** neither the video nor the audio source opens and the run does not
-  proceed on unverified media
+  proceed on unverified media, before a single frame is decoded
 
 ### Requirement: Raw frames are never persisted by either source
 
@@ -141,12 +149,22 @@ hint and SHALL NOT substitute silence or synthetic audio.
 
 The shared `[perception_feed]` selection SHALL parameterize both surfaces from one
 source of truth. In `playlist` mode both surfaces SHALL walk the same ordered,
-checksummed manifest. In `seeded` mode both procedural streams SHALL derive from
-the same seed and a shared frame clock, and surprise events SHALL fire on shared
-cadence slots so a surprise is presented cross-modally (a visual blob and an audio
-burst together). The system SHALL document the synchronization guarantee honestly:
-coherence at the media/clip level (playlist) or via the shared seed and cadence
+checksummed manifest AND share one real-time start-clock (a single monotonic
+origin + per-item durations), so at any wall-clock moment picture and sound are on
+the same manifest item at the same media position and cross item boundaries
+together; residual sub-second decode skew is acceptable for the live tier. In
+`seeded` mode both procedural streams SHALL derive from the same seed and a shared
+frame clock, and surprise events SHALL fire on shared cadence slots so a surprise
+is presented cross-modally (a visual blob and an audio burst together). The system
+SHALL document the synchronization guarantee honestly: real-time item-level
+coherence via the shared start-clock (playlist) or via the shared seed and cadence
 (seeded), NOT frame-locked synchronization across the two module loops.
+
+#### Scenario: Video and audio stay on the same item
+
+- **WHEN** a playlist run crosses a manifest item boundary
+- **THEN** the video and audio surfaces advance to the next item together under the
+  shared clock, so the entity never sees one item while hearing another
 
 #### Scenario: Seeded surprises are cross-modal
 

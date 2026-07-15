@@ -109,6 +109,46 @@ async def test_fake_encoder_satisfies_protocol():
 
 
 @pytest.mark.asyncio
+async def test_playlist_item_provenance_is_stamped_on_report(bus: AsyncBus):
+    """When a playlist feed is active, topos.report carries the CONTENT-FREE item
+    identity (basename + manifest order) read off the shared clock, so the
+    playing show is legible on the bus rather than inferred from file descriptors
+    (playlist-realtime-av-sync task 3.2/3.3)."""
+    import types
+
+    from kaine.modules.topos.feed import PlaylistPosition
+
+    enc = FakeEncoder([[1.0, 0.0, 0.0, 0.0]])
+    topos = Topos(bus, encoder=enc)
+    # Stand in for the LiveCamera whose source exposes the current playlist item.
+    topos._live_camera = types.SimpleNamespace(
+        current_item=PlaylistPosition(title="episode-01.mkv", order=0, offset=1.5, item_idx=0)
+    )
+    await topos.process_frame(object())
+    _, event = (await bus.read("topos.out", last_id="0"))[0]
+    assert event.type == "topos.report"
+    assert event.payload["item"] == "episode-01.mkv"
+    assert event.payload["item_order"] == 0
+    # Content-free: only a basename str + an int order, never any pixels/bytes.
+    assert isinstance(event.payload["item"], str)
+    assert isinstance(event.payload["item_order"], int)
+    for v in event.payload.values():
+        assert not isinstance(v, (bytes, bytearray))
+
+
+@pytest.mark.asyncio
+async def test_report_has_no_item_keys_without_a_playlist(bus: AsyncBus):
+    """No playlist feed -> no item provenance keys (the real camera / seeded feed
+    path is unchanged)."""
+    enc = FakeEncoder([[1.0, 0.0, 0.0, 0.0]])
+    topos = Topos(bus, encoder=enc)  # no live camera wired
+    await topos.process_frame(object())
+    _, event = (await bus.read("topos.out", last_id="0"))[0]
+    assert "item" not in event.payload
+    assert "item_order" not in event.payload
+
+
+@pytest.mark.asyncio
 async def test_one_frame_produces_one_report(bus: AsyncBus):
     enc = FakeEncoder([[1.0, 0.0, 0.0, 0.0]])
     topos = Topos(bus, encoder=enc)

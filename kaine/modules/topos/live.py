@@ -203,6 +203,16 @@ class LiveCamera:
     def config(self) -> LiveCameraConfig:
         return self._cfg
 
+    @property
+    def current_item(self) -> Any:
+        """Content-free provenance of the item the underlying source is
+        presenting, or ``None``. Only the playlist source exposes this (via the
+        shared ``PlaylistClock``); the real camera and seeded feeds return
+        ``None``. Read by Topos to stamp the playing item onto ``topos.report``
+        so the media is legible off the bus rather than inferred from file
+        descriptors."""
+        return getattr(self._source, "current_item", None)
+
     def set_vision_sample_hz(self, vision_sample_hz: float) -> None:
         """Retune the subjective vision-sampling rate on a running camera.
 

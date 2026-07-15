@@ -473,19 +473,33 @@ class LiveMicrophone:
                 len(pcm),
                 len(wav_bytes),
             )
+            # Playlist provenance (playlist-realtime-av-sync): read the item the
+            # shared clock says is playing, so Audition can stamp it on
+            # audition.perception. None for the real mic and seeded feed.
+            item = getattr(self._stream, "current_item", None)
             try:
-                # AudioInput.process_audio takes source_label keyword-only.
-                # Some sinks (tests) accept it positionally; fall back below.
+                # AudioInput.process_audio takes source_label/item keyword-only.
+                # Some sinks (tests) accept fewer kwargs; fall back below.
                 await self._sink(
                     wav_bytes,
                     self._cfg.sample_rate,
                     source_label=self._cfg.source_label,
+                    item=item,
                 )
             except TypeError:
                 try:
                     await self._sink(
-                        wav_bytes, self._cfg.sample_rate, self._cfg.source_label
+                        wav_bytes,
+                        self._cfg.sample_rate,
+                        source_label=self._cfg.source_label,
                     )
+                except TypeError:
+                    try:
+                        await self._sink(
+                            wav_bytes, self._cfg.sample_rate, self._cfg.source_label
+                        )
+                    except Exception:
+                        log.exception("live mic sink raised (positional fallback)")
                 except Exception:
                     log.exception("live mic sink raised (fallback path)")
             except Exception:

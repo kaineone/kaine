@@ -238,7 +238,11 @@ class Audition(BaseModule):
             return 0.0
 
     async def _perceive_acoustic(
-        self, audio_bytes: bytes, sample_rate: int, source_label: str
+        self,
+        audio_bytes: bytes,
+        sample_rate: int,
+        source_label: str,
+        item: Any = None,
     ) -> None:
         """General acoustic perception: encode the window, score salience by change
         and forward-model prediction error over the embedding, and publish a
@@ -282,22 +286,30 @@ class Audition(BaseModule):
         window = arousal_to_window(
             self._read_arousal(), window_range=self._arousal_window_range
         )
+        payload: dict[str, Any] = {
+            "source_label": source_label,
+            "change_score": change,
+            "prediction_error": prediction_error,
+            # Normalised acoustic prediction error (rolling-window relative) —
+            # exposed so the affect layer can scale arousal by acoustic surprise
+            # (perception→arousal coupling).
+            "normalised_error": normalised,
+            "encoder_model_id": self._acoustic_encoder.model_id,
+            "attended_window": window,
+            # Alert-level flag (perception-drives-salience task 4.2): lets the
+            # Nexus perception panel count stimulus-driven acoustic events.
+            "alert": alert,
+        }
+        # Playlist provenance (playlist-realtime-av-sync): stamp the CONTENT-FREE
+        # identity of the item being heard (basename + manifest order) — the same
+        # keys Topos stamps on topos.report — so picture and sound are legibly on
+        # the same item off the bus. Absent for the real mic and seeded feed.
+        if item is not None:
+            payload["item"] = item.title
+            payload["item_order"] = item.order
         await self.publish(
             "audition.perception",
-            {
-                "source_label": source_label,
-                "change_score": change,
-                "prediction_error": prediction_error,
-                # Normalised acoustic prediction error (rolling-window relative) —
-                # exposed so the affect layer can scale arousal by acoustic surprise
-                # (perception→arousal coupling).
-                "normalised_error": normalised,
-                "encoder_model_id": self._acoustic_encoder.model_id,
-                "attended_window": window,
-                # Alert-level flag (perception-drives-salience task 4.2): lets the
-                # Nexus perception panel count stimulus-driven acoustic events.
-                "alert": alert,
-            },
+            payload,
             salience=salience,
         )
 
@@ -367,6 +379,7 @@ class Audition(BaseModule):
         sample_rate: int,
         *,
         source_label: str = "microphone",
+        item: Any = None,
     ) -> tuple[Optional[TranscriptionResult], Optional[EmotionResult]]:
         """Run STT and emotion classification in parallel. Publishes both
         events regardless of partial failure. Returns the results (or
@@ -384,7 +397,9 @@ class Audition(BaseModule):
         # detected as speech. When disabled, the whole window is treated as speech
         # so the existing pipeline is byte-for-byte unchanged.
         if self._general_audition:
-            await self._perceive_acoustic(audio_bytes, sample_rate, source_label)
+            await self._perceive_acoustic(
+                audio_bytes, sample_rate, source_label, item=item
+            )
             if not detect_speech(audio_bytes, sample_rate):
                 return None, None
 

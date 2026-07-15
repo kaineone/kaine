@@ -590,6 +590,32 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
+async def test_perception_stamps_playlist_item_provenance(bus: AsyncBus):
+    """When a playlist item is heard, audition.perception carries the SAME
+    content-free item keys Topos stamps (basename + manifest order), so picture
+    and sound are legibly on the same item off the bus (playlist-realtime-av-sync
+    task 3.2/3.3)."""
+    from kaine.modules.audition.feed import PlaylistPosition
+
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        item = PlaylistPosition(title="episode-01.mkv", order=0, offset=2.0, item_idx=0)
+        await audition.process_audio(_tone(7000), sample_rate=16000, item=item)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        perc = next(e for _, e in entries if e.type == "audition.perception")
+        assert perc.payload["item"] == "episode-01.mkv"
+        assert perc.payload["item_order"] == 0
+        assert isinstance(perc.payload["item"], str)
+        assert isinstance(perc.payload["item_order"], int)
+        # Still content-free: no audio bytes rode along with the provenance.
+        for v in perc.payload.values():
+            assert not isinstance(v, (bytes, bytearray))
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_arousal_provider_narrows_the_auditory_window(bus: AsyncBus):
     async def _window_at(arousal: float) -> float:
         b = pytest.importorskip("fakeredis.aioredis")
