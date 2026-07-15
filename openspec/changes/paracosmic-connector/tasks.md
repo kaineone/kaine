@@ -1,8 +1,8 @@
-# paracosm-connector tasks
+# paracosmic-connector tasks
 
-Implementation tasks for the Kosmos module on the KAINE side. Paracosm-side
-asks are tracked in `paracosm-counterpart-asks.md` and should be opened as
-issues against `kaineone/Paracosm`.
+Implementation tasks for the Kosmos module on the KAINE side. Paracosmic-side
+asks are tracked in `paracosmic-counterpart-asks.md` and should be opened as
+issues against `kaineone/Paracosmic`.
 
 This change is design-only until a branch picks it up; tasks below are the
 shape of the work, not yet in progress.
@@ -23,7 +23,7 @@ shape of the work, not yet in progress.
 - [ ] 2.2 Length-prefixed MessagePack reader (`read_exactly(4) → u32 BE → read_exactly(length) → msgpack.unpackb`)
 - [ ] 2.3 Reconnect loop honoring `reconnect_backoff_s` schedule, never raises
 - [ ] 2.4 `connect_timeout_s` enforcement
-- [ ] 2.5 `max_frame_bytes` guard (matches Paracosm's 8 MiB cap)
+- [ ] 2.5 `max_frame_bytes` guard (matches Paracosmic's 8 MiB cap)
 - [ ] 2.6 Graceful close on shutdown
 
 ## 3. Frame decoder
@@ -56,14 +56,14 @@ shape of the work, not yet in progress.
 
 ## 6. Eidolon body extension
 
-- [ ] 6.1 `kaine/modules/eidolon/document.py` — `ParacosmBody` dataclass + optional `paracosm_body` field
+- [ ] 6.1 `kaine/modules/eidolon/document.py` — `ParacosmicBody` dataclass + optional `paracosmic_body` field
 - [ ] 6.2 `kaine/modules/eidolon/module.py` — subscribe to `kosmos.proprio`, update body field
-- [ ] 6.3 Persist `paracosm_body` in `state/eidolon/self_model.json` (summary scalars only — no raw sense data)
+- [ ] 6.3 Persist `paracosmic_body` in `state/eidolon/self_model.json` (summary scalars only — no raw sense data)
 - [ ] 6.4 Emit `eidolon.body.dying` when `dying=true` is first seen, salience 0.9
 
 ## 7. Thymos appraisal extension
 
-- [ ] 7.1 `kaine/modules/thymos/paracosm_appraisal.py` (new file) — appraisal rules from §7.4
+- [ ] 7.1 `kaine/modules/thymos/paracosmic_appraisal.py` (new file) — appraisal rules from §7.4
 - [ ] 7.2 Wire as an optional appraisal source; gracefully no-op when Kosmos disabled
 - [ ] 7.3 Tests covering each rule (dying → arousal spike, eclipse → awe, pleasure → valence gain, etc.)
 
@@ -79,7 +79,7 @@ shape of the work, not yet in progress.
 
 - [ ] 9.1 `kaine/modules/kosmos/KOSMOS.md` — operator guide (two-layer gate, effector gating, mortality flow, rollback)
 - [ ] 9.2 `ARCHITECTURE.md` — new Kosmos row in the module table
-- [ ] 9.3 `SETUP.md` — Paracosm prereqs (world server + agent-client + bridge port), env var, opt-in steps
+- [ ] 9.3 `SETUP.md` — Paracosmic prereqs (world server + agent-client + bridge port), env var, opt-in steps
 - [ ] 9.4 `SECURITY.md` — new §10 on Kosmos: two-layer gate, default-off effectors, mortality preparation, zero-persistence on visual/audio bytes
 - [ ] 9.5 `FIRST_BOOT.md` — note Kosmos defaults off; document opt-in ceremony
 - [ ] 9.6 `DEPENDENCIES.md` — `msgpack` (already a likely dep; verify) and any new test fixtures
@@ -90,29 +90,33 @@ shape of the work, not yet in progress.
 - [ ] 10.2 `tests/test_kosmos_bridge_decoder.py` — each frame kind round-trips through `_on_*` correctly
 - [ ] 10.3 `tests/test_kosmos_intent_dispatch.py` — each intent translates to the right action frame; gated effectors drop
 - [ ] 10.4 `tests/test_kosmos_reconnect.py` — failure → backoff → recovery
-- [ ] 10.5 `tests/test_kosmos_eidolon_body.py` — proprio frame updates `paracosm_body`
+- [ ] 10.5 `tests/test_kosmos_eidolon_body.py` — proprio frame updates `paracosmic_body`
 - [ ] 10.6 `tests/test_kosmos_thymos_appraisal.py` — each appraisal rule fires
 - [ ] 10.7 `tests/test_kosmos_shutdown_final_state.py` — shutdown → final_state within grace
 - [ ] 10.8 `tests/test_kosmos_zero_persistence.py` — `kosmos.visual.raw` / `kosmos.audio.raw` payloads carry NO byte data; audit log carries no payload bytes
-- [ ] 10.9 `tests/test_kosmos_real_paracosm.py` (gated on `KAINE_HAS_PARACOSM=1`) — end-to-end against a live bridge
+- [ ] 10.9 `tests/test_kosmos_real_paracosmic.py` (gated on `KAINE_HAS_PARACOSMIC=1`) — end-to-end against a live bridge
 
 ## 11. Fake bridge fixture
 
-- [ ] 11.1 `tests/fixtures/fake_paracosm_bridge.py` — in-process TCP server speaking the bridge protocol
+- [ ] 11.1 `tests/fixtures/fake_paracosmic_bridge.py` — in-process TCP server speaking the bridge protocol
 - [ ] 11.2 Helpers to push specific frame kinds and assert what came back
 - [ ] 11.3 Used by 10.2 / 10.3 / 10.4 / 10.7
 
 ## 12. Spec deltas
 
-- [ ] 12.1 `specs/embodiment/kosmos.md` — capability spec for the new module
+- [ ] 12.1 `specs/kosmos/spec.md` — capability spec for the new module (see
+      this change's own `specs/kosmos/spec.md` delta for the starting shape)
 - [ ] 12.2 Cross-reference from `specs/bus/schema.md` if it lists known event prefixes
 
-## 13. Cross-project asks (Paracosm)
+## 13. Cross-project asks (Paracosmic)
 
-Tracked in `paracosm-counterpart-asks.md`. Each should be opened as a
-GitHub issue against `kaineone/Paracosm` when this change starts:
+Tracked in `paracosmic-counterpart-asks.md`. That file (and the items below)
+were written against the prior Rust+Bevy implementation and need re-scoping
+against the current Three.js/A-Frame codebase before being opened as issues
+against `kaineone/Paracosmic` — see the substrate note in `design.md` and at
+the top of `paracosmic-counterpart-asks.md`:
 
-- [ ] 13.1 P0: Real visual feed (render-to-texture)
+- [ ] 13.1 P0: Real visual feed (camera/render capture)
 - [ ] 13.2 P0: Widen `decode_action_frame`
 - [ ] 13.3 P0: Inventory + pleasure in proprio
 - [ ] 13.4 P0: Forward `ActionResult` to bridge (added 2026-05-31 from live test)
@@ -122,23 +126,24 @@ GitHub issue against `kaineone/Paracosm` when this change starts:
 - [ ] 13.8 P1: `t_world` in proprio
 - [ ] 13.9 P2: `Adopt` action via bridge
 - [ ] 13.10 P2: `world_facts` summary feed
-- [ ] 13.11 ~~P3: Headless agent-client mode~~ — `--headless` flag exists
-       (build `paracosm_26.05.01`) but **crashes on AssetServer not
-       registered**: separate ask = "fix --headless crash"
+- [ ] 13.11 ~~P3: Server-side agent-client mode~~ — historical Rust+Bevy
+       `--headless` flag crashed on an `AssetServer` panic (build
+       `paracosm_26.05.01`); needs re-scoping for the current substrate:
+       separate ask = "run the per-agent bridge process without a display"
 - [ ] 13.12 P3: `final_state` schema convention doc
-- [ ] 13.13 P0: Fix `--headless` AssetServer panic (see 13.11 note)
+- [ ] 13.13 P0: (historical Rust+Bevy bug, see 13.11 note — re-scope or drop)
 
 ## 14. Operator runbook checklist (post-implementation)
 
 Validate the full embodiment flow end-to-end:
 
-- [ ] 14.1 Launch Paracosm world server
-- [ ] 14.2 Launch Paracosm agent-client, confirm agent_id assigned
+- [ ] 14.1 Launch Paracosmic world server
+- [ ] 14.2 Launch Paracosmic agent-client, confirm agent_id assigned
 - [ ] 14.3 Edit `[kosmos].enabled = true` in local kaine.toml (do NOT commit per `[First-boot module toggles]`)
 - [ ] 14.4 Set `KAINE_KOSMOS_OPERATOR_APPROVED=1`
 - [ ] 14.5 Launch KAINE (`KAINE_CYCLE_OPERATOR_PRESENT=1`)
 - [ ] 14.6 Observe first `kosmos.proprio` event in Nexus diagnostics
-- [ ] 14.7 Observe `paracosm_body` field populated in Eidolon self-model
+- [ ] 14.7 Observe `paracosmic_body` field populated in Eidolon self-model
 - [ ] 14.8 Operator manually publishes an `intent.avatar.move` and observes position change in VR observer
 - [ ] 14.9 Trigger a controlled death (lifespan expiry or operator-issued teleport into fire), observe `kosmos.shutdown` → `final_state` flow
 - [ ] 14.10 Verify memory diamond placement carries the encoded state (size matches what we sent)
