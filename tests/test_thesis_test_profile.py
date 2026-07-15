@@ -16,9 +16,11 @@ def _cfg():
 def test_enables_exactly_the_thesis_processors():
     cfg = _cfg()
     enabled = sorted(k for k, v in cfg["modules"].items() if v)
-    assert enabled == ["audition", "chronos", "lingua", "soma", "topos"]
+    # The base thesis is the four externally-grounded processors plus Lingua and
+    # Thymos, the affective precision core whose arousal weights the competition.
+    assert enabled == ["audition", "chronos", "lingua", "soma", "thymos", "topos"]
     # Richer faculties stay off.
-    for off in ("mnemos", "eidolon", "thymos", "nous", "phantasia", "vox", "hypnos"):
+    for off in ("mnemos", "eidolon", "nous", "phantasia", "vox", "hypnos"):
         assert cfg["modules"][off] is False
 
 
