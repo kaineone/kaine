@@ -53,9 +53,13 @@ class SelfInitiatedReportPolicy:
 
     ``report_threshold`` / ``think_threshold`` are the two report bars; both should
     sit ABOVE the workspace publication threshold so report is rarer than
-    consciousness. ``*_refractory_s`` are minimum intervals between reports, read
-    off the injected ``clock`` (the entity's subjective clock in production;
-    default monotonic).
+    consciousness. ``interrupt_threshold`` (optional, strictly above the report
+    bar) is a third, higher bar: a coalition crossing it while a ``speak`` is in
+    flight — with different content from what is being said — emits a preempting,
+    interrupt-marked ``speak`` that redirects the utterance mid-stream. Absent, an
+    in-flight utterance always runs to completion (opt-in interruption).
+    ``*_refractory_s`` are minimum intervals between reports, read off the injected
+    ``clock`` (the entity's subjective clock in production; default monotonic).
     """
 
     def __init__(
@@ -63,6 +67,7 @@ class SelfInitiatedReportPolicy:
         *,
         report_threshold: float = 0.6,
         think_threshold: float = 0.45,
+        interrupt_threshold: Optional[float] = None,
         speak_refractory_s: float = 8.0,
         think_refractory_s: float = 3.0,
         clock: Optional[Callable[[], float]] = None,
@@ -72,10 +77,24 @@ class SelfInitiatedReportPolicy:
                 "require 0 <= think_threshold <= report_threshold <= 1, got "
                 f"think={think_threshold}, report={report_threshold}"
             )
+        # Interrupt is opt-in: absent → the current await-to-completion behavior
+        # (an in-flight utterance always finishes). When set it is a surprise bar
+        # strictly ABOVE the report bar — only a rarer, more urgent coalition
+        # preempts speech (interruptible-utterance D3).
+        if interrupt_threshold is not None and not (
+            report_threshold < interrupt_threshold <= 1.0
+        ):
+            raise ValueError(
+                "require report_threshold < interrupt_threshold <= 1, got "
+                f"report={report_threshold}, interrupt={interrupt_threshold}"
+            )
         if speak_refractory_s < 0 or think_refractory_s < 0:
             raise ValueError("refractory intervals must be >= 0")
         self._report_threshold = float(report_threshold)
         self._think_threshold = float(think_threshold)
+        self._interrupt_threshold = (
+            float(interrupt_threshold) if interrupt_threshold is not None else None
+        )
         self._speak_refractory_s = float(speak_refractory_s)
         self._think_refractory_s = float(think_refractory_s)
         self._clock = clock or time.monotonic
@@ -140,6 +159,32 @@ class SelfInitiatedReportPolicy:
         surprise = float(scores.get(top_entry_id, 0.0))
         signature = (top_event.source, top_event.type)
         now = float(self._clock())
+
+        # Interrupt: an urgent surprise preempts an in-flight utterance and
+        # redirects (interruptible-utterance D3). It bypasses the speak refractory
+        # (an interrupt is urgent by definition) but keeps the novelty guard
+        # (don't interrupt to say the same thing) and re-arms the in-flight guard
+        # for the redirected utterance. Only fires WHILE a speak is in flight —
+        # otherwise the ordinary report bar below already covers it. The emergent
+        # trigger is workspace competition: the flag is set only because a more
+        # salient coalition crossed a higher bar, not by any hardwired rule.
+        if (
+            self._interrupt_threshold is not None
+            and self._speak_in_flight
+            and surprise >= self._interrupt_threshold
+            and signature != self._last_report_sig
+        ):
+            # _speak_in_flight stays True (re-armed for the new utterance).
+            self._last_speak_at = now
+            self._last_report_sig = signature
+            return [
+                Intent(
+                    kind=SPEAK,
+                    about=f"{top_event.source} (surprise={surprise:.3f})",
+                    entry_id=top_entry_id or None,
+                    interrupt=True,
+                )
+            ]
 
         # External speak: the high, refractory, novelty-gated report bar.
         if (

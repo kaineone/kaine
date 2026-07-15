@@ -83,6 +83,13 @@ class Intent:
     intents and for non-``act`` kinds. ``sig`` is an HMAC over
     ``canonical(kind, effector, params, run_id, seq)`` that Praxis verifies
     before running any effector; ``(run_id, seq)`` is the replay guard.
+
+    ``interrupt`` marks a ``speak`` intent as *urgent redirect*: a sufficiently
+    surprising new coalition that should preempt an in-flight utterance rather
+    than wait behind it (see ``interruptible-utterance``). Only ``speak`` intents
+    carry it; Lingua honors it by cancelling the in-flight generation and
+    starting this one. Default ``False`` — the flag is emitted on the wire only
+    when set, so non-Lingua consumers (Praxis) simply never see an unknown field.
     """
 
     kind: str
@@ -93,11 +100,16 @@ class Intent:
     run_id: Optional[str] = None
     seq: Optional[int] = None
     sig: Optional[str] = None
+    interrupt: bool = False
 
     def to_event_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"kind": self.kind, "about": self.about}
         if self.entry_id is not None:
             payload["entry_id"] = self.entry_id
+        # Emitted only when set so the wire payload stays minimal and non-Lingua
+        # consumers never encounter the field on ordinary intents.
+        if self.interrupt:
+            payload["interrupt"] = True
         if self.effector is not None:
             payload["effector"] = self.effector
         if self.params:

@@ -43,7 +43,6 @@ class IntentExpressionLog:
         latency_ms: float = 0.0,
         extra: Optional[dict[str, Any]] = None,
     ) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         record: dict[str, Any] = {
             "timestamp": time.time(),
             "mode": mode,
@@ -60,6 +59,32 @@ class IntentExpressionLog:
             record["snapshot_summary"] = snapshot_summary
         if extra:
             record["extra"] = dict(extra)
+        self._write(record)
+
+    def record_preemption(
+        self, *, mode: str, tick: Optional[int] = None
+    ) -> None:
+        """Content-free note that an in-flight utterance was preempted.
+
+        Deliberately records NO prompt, generated text, or partial content —
+        only that a preemption occurred, on which channel, and (when known) at
+        which tick. This matches the zero-content policy of the other audit
+        trails (``interruptible-utterance`` D4): a redirect means the entity
+        changed its mind, and the unspoken remainder is discarded, not retained.
+        The ``event: "preempted"`` tag lets DPO-pair construction skip these
+        records (they carry no ``generated_text``/``faithful_rendering``).
+        """
+        record: dict[str, Any] = {
+            "timestamp": time.time(),
+            "event": "preempted",
+            "mode": mode,
+        }
+        if tick is not None:
+            record["tick"] = int(tick)
+        self._write(record)
+
+    def _write(self, record: dict[str, Any]) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(self._path, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, sort_keys=True) + "\n")

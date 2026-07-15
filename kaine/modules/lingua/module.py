@@ -129,6 +129,13 @@ class Lingua(BaseModule):
         self._alert_salience = float(alert_salience)
         self._intent_stream = intent_stream
         self._intent_cursor = "0-0"
+        # The single in-flight generation, held as a cancellable task so an
+        # urgent (interrupt-marked) speak intent can preempt it mid-stream
+        # instead of the loop awaiting it to completion (interruptible-utterance
+        # D1). None when nothing is being realized; ``_gen_mode`` records which
+        # channel it is on so a preemption can be logged content-free.
+        self._gen_task: Optional[asyncio.Task[Any]] = None
+        self._gen_mode: Optional[str] = None
 
     def set_self_model_provider(
         self, provider: Callable[[], dict[str, Any]]
@@ -310,6 +317,13 @@ class Lingua(BaseModule):
         respond to perceived input. The only trigger for external speech is a
         ``speak`` intent from the executive action-selection step (which is
         gated by inhibition). ``think`` intents drive internal speech.
+
+        Each generation runs as a held, cancellable task rather than an inline
+        ``await`` (interruptible-utterance D1). The loop keeps reading intents
+        while a generation is in flight, so an interrupt-marked ``speak`` can be
+        detected and preempt the current utterance (real async cancellation,
+        never a post-hoc discard). Ordinary intents queue behind the in-flight
+        generation — one language organ produces one token stream.
         """
         try:
             while not self._stopped.is_set():
@@ -326,24 +340,109 @@ class Lingua(BaseModule):
                 if entries:
                     self._intent_cursor = entries[-1][0]
                     for _, event in entries:
-                        await self._handle_intent(event)
+                        await self._dispatch_intent(event)
                 else:
                     await asyncio.sleep(0.05)
         except asyncio.CancelledError:
+            # Shutdown: never leak an in-flight generation past the loop.
+            await self._cancel_gen_task()
             raise
 
-    async def _handle_intent(self, event: Event) -> None:
+    async def _dispatch_intent(self, event: Event) -> None:
+        """Route one intent event to a (possibly preempting) generation task."""
         kind = str(event.payload.get("kind") or "")
         about = str(event.payload.get("about") or "")
-        if not about:
+        if not about or kind not in (SPEAK, THINK):
             return
+        # Only a `speak` may interrupt; `think` never preempts outer speech.
+        interrupt = kind == SPEAK and bool(event.payload.get("interrupt"))
+        if self._gen_task is not None and not self._gen_task.done():
+            if interrupt:
+                # A more salient intent won the workspace: cancel the in-flight
+                # utterance and redirect. Real cancellation — the unspoken
+                # remainder is never generated or published.
+                self._gen_task.cancel()
+                await self._settle_gen_task()
+            else:
+                # One token stream: let the in-flight generation finish before
+                # starting the next. Non-interrupt intents queue, never overlap.
+                await self._settle_gen_task()
+        self._gen_mode = "external" if kind == SPEAK else "internal"
+        self._gen_task = asyncio.create_task(
+            self._realize_intent(kind, about), name=f"{self.name}-gen"
+        )
+
+    async def _realize_intent(self, kind: str, about: str) -> None:
+        """Produce one utterance. Runs as the held ``_gen_task``; a preempting
+        interrupt cancels it, which propagates ``CancelledError`` out of the
+        in-flight ``complete()`` call (the natural cancellation point)."""
         try:
             if kind == SPEAK:
                 await self.speak(about)
             elif kind == THINK:
                 await self.think(about)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             log.exception("lingua failed to realize %s intent", kind)
+
+    async def _settle_gen_task(self) -> None:
+        """Await the held generation, converting a preemptive cancellation into
+        a content-free preemption record and clearing the handle."""
+        task = self._gen_task
+        if task is None:
+            return
+        mode = self._gen_mode
+        # Clear the handle up front so the outer-cancellation branch can cancel
+        # the still-running task without re-entrant handle confusion.
+        self._gen_task = None
+        self._gen_mode = None
+        try:
+            await task
+        except asyncio.CancelledError:
+            if task.cancelled():
+                # Preempted mid-utterance (redirect): discard the unspoken
+                # remainder and note a content-free preemption (D4). A partial
+                # already published stays published — we do not un-say it.
+                self._record_preemption(mode)
+            else:
+                # Outer (shutdown) cancellation raced in while the generation was
+                # still running — cancel it so it can't leak, then propagate.
+                task.cancel()
+                try:
+                    await task
+                except (Exception, asyncio.CancelledError):
+                    # Swallow whatever the settling task raises (its own
+                    # cancellation or a cleanup error); the bare ``raise`` below
+                    # re-raises the outer cancellation we are still handling.
+                    pass
+                raise
+        except Exception:
+            log.exception("lingua generation task failed")
+
+    async def _cancel_gen_task(self) -> None:
+        """Best-effort cancel of any in-flight generation (shutdown path)."""
+        task = self._gen_task
+        self._gen_task = None
+        self._gen_mode = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except (Exception, asyncio.CancelledError):
+            # Best-effort settle of the cancelled task; shutdown propagation is
+            # handled by the caller's own re-raise.
+            pass
+
+    def _record_preemption(self, mode: Optional[str]) -> None:
+        tick = getattr(self._latest_snapshot, "tick_index", None)
+        try:
+            self._intent_log.record_preemption(
+                mode=mode or "external", tick=tick
+            )
+        except Exception:
+            log.exception("lingua preemption record failed")
 
     async def _produce(
         self,
