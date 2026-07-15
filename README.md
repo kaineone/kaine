@@ -129,6 +129,13 @@ The authoritative design lives in the per-capability specs under
 disagree with a spec, the spec wins. (The KAINE paper — the conceptual treatment —
 is maintained in its own repository.)
 
+## Development
+
+This project was developed with the assistance of AI coding tools; that use is
+recorded throughout the commit history. All design decisions, the architecture,
+and the released code were reviewed by the author, who is responsible for the
+software.
+
 ## License
 
 Released under the **Cognitive Architecture License (CAL)** — a custom
