@@ -20,9 +20,11 @@ The project's default, canonical configuration is the **base-thesis form**
 (`config/profiles/thesis_test.toml`, applied with `KAINE_PROFILE=thesis_test` or
 `--profile thesis_test`): the smallest set of *diverse* predictive processors
 that can genuinely exercise the competition — **Soma** (interoception),
-**Chronos** (interval timing), **Topos** (foveated vision over raw video),
-**Audition** (raw sound as prediction error), and **Lingua** (an output-only,
-self-initiated voice) — with **Syneidesis** and **Volition** as always-on
+**Chronos** (interval timing), **Topos** (foveated vision over raw video), and
+**Audition** (raw sound as prediction error) — plus the affective precision
+core, **Thymos** (arousal sets the gain on the workspace competition and is
+itself moved by perceptual surprise), and the output-only, self-initiated
+voice, **Lingua** — with **Syneidesis** and **Volition** as always-on
 scaffolding. This is not a chatbot: the entity is **observed, not conversed
 with**. Perception enters only as prediction error — `[audition].
 transcription_enabled = false` by default, so no transcript ever reaches
@@ -30,8 +32,8 @@ Lingua — and Lingua verbalizes the workspace's own state (the coalition's
 precision-weighted surprise crossing a report threshold), never a user
 utterance, via `[volition].policy = "self_initiated_report"`.
 
-The remaining eleven modules and the two-module embodiment layer are **built,
-tested, and gated off**, held behind a positive result on the primary
+The remaining ten modules — including the two-module embodiment layer — are
+**built, tested, and gated off**, held behind a positive result on the primary
 falsifiable test: the **workspace-mediation ablation**
 (`kaine/evaluation/benchmarks/workspace_mediation_ablation/`) — the system as
 built (competitive Syneidesis selection) versus a matched flat fan-in of the
@@ -145,7 +147,7 @@ embodiment**, off regardless of base-thesis status).
 | 7 | **Eidolon** | Cognition | Gated | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
 | 8 | **Phantasia** | Cognition | Gated | `kaine/modules/phantasia/` | DreamerV3 RSSM (JAX, CPU; ships disabled); fake backend default |
 | 9 | **Empatheia** | Cognition | Gated | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
-| 10 | **Thymos** | Motivation | Gated | `kaine/modules/thymos/` | Scherer CPM appraisal; drive accumulators with hysteresis; affect coupling consumer |
+| 10 | **Thymos** | Motivation | Active | `kaine/modules/thymos/` | Scherer CPM appraisal; drive accumulators with hysteresis; affect coupling consumer |
 | 11 | **Lingua** | Expression | Active | `kaine/modules/lingua/` | Abliterated Qwen 3.x via OpenAI-compatible server; ContextAssembler; self-initiated report policy; A/B baseline |
 | 12 | **Vox** | Expression | Gated | `kaine/modules/vox/` | Chatterbox TTS; Thymos prosodic modulation; prosodic mirroring |
 | 13 | **Praxis** | Expression | Gated | `kaine/modules/praxis/` | File-write / notify / shell (empty whitelist by default) |

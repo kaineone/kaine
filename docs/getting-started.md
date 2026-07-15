@@ -8,15 +8,17 @@ the fourteen cognitive modules, not the cognitive core.
 The mind, by design thesis, is the continuous loop — and the loop does not start
 itself.
 
-The default, canonical configuration is the **base-thesis form**: five diverse
-predictive processors — Soma, Chronos, Topos, Audition, Lingua — competing for
+The default, canonical configuration is the **base-thesis form**: four diverse
+predictive processors — Soma, Chronos, Topos, Audition — plus the affective
+precision core, Thymos, and the output-only voice, Lingua — competing for
 the workspace, applied with the `thesis_test` profile
 (`KAINE_PROFILE=thesis_test python -m kaine.cycle`, or `--profile thesis_test`).
 It is observed, not conversed with: perception enters only as prediction error,
 and Lingua speaks rarely, self-initiated, from its own precision-weighted
 surprise. This guide's recommended first-boot module set (below) IS the
-base-thesis form. The remaining eleven modules and the embodiment layer stay
-built and gated off; see [Architecture](architecture.md) for the full picture.
+base-thesis form. The remaining ten modules (including the two-module
+embodiment layer) stay built and gated off; see
+[Architecture](architecture.md) for the full picture.
 
 **This guide covers the complete path from a fresh clone to a supervised first
 boot.** Read every section before running anything. First boot is a one-way door.
@@ -504,15 +506,17 @@ KAINE_PROFILE=thesis_test python -m kaine.cycle
 # or: python -m kaine.cycle --profile thesis_test
 ```
 
-This enables exactly the five diverse predictive processors the base thesis
-needs — Soma (interoception), Chronos (temporal), Topos (foveated vision),
-Audition (raw sound as prediction error, STT off), and Lingua (output-only,
-self-initiated voice) — and sets `[audition].transcription_enabled = false`,
-`[topos].foveation = true`, and `[volition].policy = "self_initiated_report"` so
-no transcript ever reaches Lingua and no chatbot trigger exists. Everything else
-(Praxis and every richer cognitive/affective/embodiment module) stays off. See
-`config/profiles/thesis_test.toml` for the full overlay and
-[Configuration — Profiles](configuration.md#profiles) for how profile
+This enables the base thesis's six active modules — the four diverse
+predictive processors Soma (interoception), Chronos (temporal), Topos
+(foveated vision), and Audition (raw sound as prediction error, STT off);
+the affective precision core Thymos (arousal sets the gain on the workspace
+competition and is itself moved by perceptual surprise); and the output-only,
+self-initiated voice Lingua — and sets `[audition].transcription_enabled =
+false`, `[topos].foveation = true`, and `[volition].policy =
+"self_initiated_report"` so no transcript ever reaches Lingua and no chatbot
+trigger exists. Everything else (Praxis and every richer cognitive/embodiment
+module) stays off. See `config/profiles/thesis_test.toml` for the full overlay
+and [Configuration — Profiles](configuration.md#profiles) for how profile
 resolution works.
 
 The equivalent hand-set `[modules]` block, if you prefer to compose it yourself
@@ -524,10 +528,10 @@ soma      = true   # interoception
 chronos   = true   # temporal awareness
 topos     = true   # foveated vision — [vision] extra required
 audition  = true   # raw sound as prediction error — [audio] extra required
+thymos    = true   # affective precision core — arousal gains the competition
 lingua    = true   # output-only voice — model server must be serving
 praxis    = false  # NO effectors on first boot
 vox       = false  # TTS not part of the base-thesis voice path
-thymos    = false  # richer faculty — gated pending a positive base result
 eidolon   = false  # richer faculty — gated
 mnemos    = false  # richer faculty — gated
 nous      = false  # richer faculty — gated

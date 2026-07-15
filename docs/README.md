@@ -10,14 +10,16 @@ second, entirely on local hardware, persisting no raw sense data.
 
 **The project's default, canonical configuration is the base-thesis form**: the
 smallest set of *diverse* predictive processors that can genuinely exercise the
-competition — **Soma**, **Chronos**, **Topos**, **Audition**, and **Lingua** —
-with Syneidesis and Volition as always-on scaffolding. This is not a chatbot;
-the system is **observed, not conversed with**. Perception enters only as
-prediction error (no transcript path), and Lingua is an output-only,
-self-initiated voice. The remaining eleven modules and the embodiment layer are
-built, tested, and **gated off** until a positive result from the primary
-experiment, the **workspace-mediation ablation** — see
-[Architecture](architecture.md) for the full picture.
+competition — **Soma**, **Chronos**, **Topos**, and **Audition** — plus the
+affective precision core, **Thymos** (arousal sets the gain on the workspace
+competition and is itself moved by perceptual surprise), and the output-only
+voice, **Lingua** — with Syneidesis and Volition as always-on scaffolding. This
+is not a chatbot; the system is **observed, not conversed with**. Perception
+enters only as prediction error (no transcript path), and Lingua is an
+output-only, self-initiated voice. The remaining ten modules (including the
+two-module embodiment layer) are built, tested, and **gated off** until a
+positive result from the primary experiment, the **workspace-mediation
+ablation** — see [Architecture](architecture.md) for the full picture.
 
 This is the entry point to the full documentation. Everything here is reference
 material for operators and contributors; nothing in these pages starts or enables
@@ -59,6 +61,7 @@ configuration, mechanisms, key files, how to enable, and zero-persistence notes.
 [Chronos](modules/chronos.md) ·
 [Topos](modules/topos.md) ·
 [Audition](modules/audition.md) ·
+[Thymos](modules/thymos.md) ·
 [Lingua](modules/lingua.md)
 
 Everything else below is **gated** — built and tested, shipped disabled, held

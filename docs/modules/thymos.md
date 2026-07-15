@@ -1,6 +1,6 @@
 # Thymos
 
-**Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
+**Base-thesis active** — enabled by default in the `thesis_test` profile (`config/profiles/thesis_test.toml`); the precision core that sets the gain on the workspace competition (see [Architecture](../architecture.md)).
 
 The affective organ — maintains KAINE's dimensional emotional state, drives,
 and goals; modulates bus salience; and implements familiarity-modulated affect
@@ -8,9 +8,12 @@ coupling.
 
 ## Status
 
-Implemented. Ships **disabled** (`[modules].thymos = false`). No extra
-dependencies beyond the core stack. Affect coupling requires the `[thymos.coupling]`
-sub-table and is also **disabled by default** pending per-install welfare review.
+Implemented. Ships **disabled** — `[modules].thymos = false` in `config/kaine.toml`;
+the `thesis_test` profile sets it to `true`. No extra dependencies beyond the
+core stack. Affect coupling requires the `[thymos.coupling]` sub-table and is
+also **disabled by default** pending per-install welfare review (the base-thesis
+profile leaves coupling off too — only the core affect/arousal state is part of
+the base thesis).
 
 ---
 

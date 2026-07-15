@@ -74,8 +74,10 @@ disk. Capture is disabled by default; requires the `[audio]` extra. See:
 
 The project's default, canonical configuration: the smallest set of diverse
 predictive processors — [Soma](#soma), [Chronos](#chronos), [Topos](#topos),
-[Audition](#audition), and [Lingua](#lingua) — competing through
-[Syneidesis](#syneidesis), with Volition (action selection) as always-on
+and [Audition](#audition) — plus the affective precision core, [Thymos](#thymos)
+(arousal sets the gain on the workspace competition and is itself moved by
+perceptual surprise), and the output-only voice, [Lingua](#lingua) — competing
+through [Syneidesis](#syneidesis), with Volition (action selection) as always-on
 scaffolding. Applied deliberately with the `thesis_test` profile
 (`KAINE_PROFILE=thesis_test python -m kaine.cycle` or
 `python -m kaine.cycle --profile thesis_test`; `config/profiles/thesis_test.toml`).
@@ -83,7 +85,7 @@ In this form the system is observed, not conversed with: perception enters only 
 [prediction error](#prediction-error), Audition's transcription path is off, Topos
 runs with [foveation](#foveation--foveated-perception) on, and Lingua speaks only
 via the [self-initiated report](#self-initiated-report-policy) policy. Everything
-richer — memory, self-model, affect, world-model, social cognition,
+richer — memory, self-model, world-model, social cognition,
 sleep/consolidation, effectors, embodiment, and a spoken TTS voice — is built,
 tested, and gated off until a positive result from the
 [workspace-mediation ablation](#workspace-mediation-ablation); it is held, never

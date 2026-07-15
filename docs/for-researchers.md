@@ -11,15 +11,17 @@ two-layer safety gate. The loop cycles at roughly 3.3 Hz, runs entirely on local
 hardware, and persists **no raw sense data** — live audio and video are
 perception, processed in memory and released, never recorded.
 
-The project's default, canonical configuration is the **base-thesis form**: five
-diverse predictive processors — Soma, Chronos, Topos, Audition, Lingua — compete
+The project's default, canonical configuration is the **base-thesis form**: four
+diverse predictive processors — Soma, Chronos, Topos, Audition — plus the
+affective precision core, Thymos, and the output-only voice, Lingua — compete
 for the workspace, with Syneidesis and Volition as always-on scaffolding. It is
 not a chatbot; a booted entity is **observed, not conversed with**. Perception
 enters only as prediction error (no transcript path reaches Lingua), and Lingua
 is an output-only voice that speaks from its own precision-weighted surprise,
-never from a user utterance. The remaining eleven modules and the embodiment
-layer are built, tested, and gated off pending a positive result from the
-**workspace-mediation ablation** — see [Architecture](architecture.md).
+never from a user utterance. The remaining ten modules (including the
+two-module embodiment layer) are built, tested, and gated off pending a
+positive result from the **workspace-mediation ablation** — see
+[Architecture](architecture.md).
 
 This page is the first thing to read before doing anything with the repository.
 There are exactly two ways to engage with KAINE, and they carry very different
