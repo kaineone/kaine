@@ -1,22 +1,37 @@
-# Paracosm ↔ KAINE Connector Design
+# Paracosmic ↔ KAINE Connector Design
 
-**Status:** Design draft. Implementation tasks tracked in `tasks.md`. Paracosm-side asks tracked in `paracosm-counterpart-asks.md`.
-**Authors:** Auto-generated 2026-05-31 from a side-by-side audit of `kaine@main` and `kaineone/Paracosm@main`.
-**Scope:** This document is a guiding artifact for both projects. Neither side is locked to using the other — Paracosm will accept other cognitive architectures, KAINE will accept other interfaces (physical robots, other virtual worlds).
+**Status:** Design draft. Implementation tasks tracked in `tasks.md`. Paracosmic-side asks tracked in `paracosmic-counterpart-asks.md`.
+**Authors:** Auto-generated 2026-05-31 from a side-by-side audit of `kaine@main` and `kaineone/Paracosmic@main`.
+**Scope:** This document is a guiding artifact for both projects. Neither side is locked to using the other — Paracosmic will accept other cognitive architectures, KAINE will accept other interfaces (physical robots, other virtual worlds).
+
+> **Substrate note (2026-07-15):** Paracosmic is built entirely in Three.js / A-Frame
+> (web/WebXR) — it is **not** a Rust + Bevy headless voxel sim. That stack was a
+> leftover from an old version of the project and no longer describes the
+> codebase. The connector *design intent* below (the embodiment bridge, the
+> five-feed sensory mapping into KAINE's modules, the `intent.avatar.*`
+> vocabulary, zero-persistence/perception-as-prediction-error framing, the
+> mortality/final-state flow, the safety gates) still holds. However, the
+> low-level technical audit in §2, §5.2, §6.1, §10, and Appendix A — including
+> every `agent-client/src/feeds.rs` / `shared/src/proto.rs` file:line citation,
+> the Bevy-specific bug reports, and the live-test findings — was reverse-engineered
+> from that prior Rust + Bevy implementation and does not describe the current
+> Three.js/A-Frame codebase. It is retained here for provenance only and needs
+> re-verification against the actual current implementation before being treated
+> as authoritative. `paracosmic-counterpart-asks.md` carries the same caveat.
 
 ---
 
 ## 1. Executive summary
 
-Paracosm is mature on the world side: a deterministic 30 Hz voxel sim with mortality, weather, fire, celestial mechanics, reproduction, and a clean five-feed bridge to an external cognitive process over length-prefixed MessagePack on raw TCP (default `7780`). 58 tests pass; CI is green.
+Paracosmic is mature on the world side: a deterministic 30 Hz web/WebXR world simulation (Three.js / A-Frame) with mortality, weather, fire, celestial mechanics, reproduction, and a clean five-feed bridge to an external cognitive process over length-prefixed MessagePack on raw TCP (default `7780`). Its own test suite is green in CI.
 
 KAINE is mature on the cognition side: a twelve-module composite architecture with a Redis Streams bus, a 3.3 Hz cognitive cycle, two-layer safety gates, intent-driven action, capability-loss vetoes on training, and zero-persistence invariants on raw sense data.
 
-The two are designed for each other but currently can't talk: there is no module on the KAINE side that speaks the Paracosm bridge protocol, and KAINE has no "avatar action" vocabulary in `volition` at all — only `intent.speak / think / act`, where `act` flows to local effectors (file_write, notify, shell).
+The two are designed for each other but currently can't talk: there is no module on the KAINE side that speaks the Paracosmic bridge protocol, and KAINE has no "avatar action" vocabulary in `volition` at all — only `intent.speak / think / act`, where `act` flows to local effectors (file_write, notify, shell).
 
-The fix is one new KAINE module — **Kosmos** — that owns the bridge socket and translates between the two contracts, plus small extensions to Eidolon, Thymos, and Volition. The Paracosm side needs a handful of targeted upgrades (real visual readback, widened action decoder, inventory + pleasure in proprio, event/entity_update feeds) but is otherwise ready.
+The fix is one new KAINE module — **Kosmos** — that owns the bridge socket and translates between the two contracts, plus small extensions to Eidolon, Thymos, and Volition. The Paracosmic side needs a handful of targeted upgrades (real visual readback, widened action decoder, inventory + pleasure in proprio, event/entity_update feeds) but is otherwise ready.
 
-Critically, several Paracosm features that look ready-to-consume on paper are actually **stubs**:
+Critically, several Paracosmic features that look ready-to-consume on paper are actually **stubs**:
 
 - **Visual feed** is a solid grey 256×256 RGB buffer — useless to DINOv2. Until render-to-texture lands, Kosmos must leave Topos on the real camera (if any) and consume the stub frame only as a heartbeat signal.
 - **Audio feed** is wind-noise synthesis at 48 kHz stereo, not other-agent speech. Speech from other agents is broadcast as `EventBroadcast{Speech, payload}` over the world-server WebSocket — *not* delivered through the audio feed. So if KAINE wants to "hear" other agents, the bridge needs a new `event` feed, **not** routing through Whisper STT.
@@ -27,14 +42,18 @@ This document covers (§2-§4) what each side actually has, (§5) the gaps both 
 
 ---
 
-## 2. Paracosm surface (what an embodied agent gets)
+## 2. Paracosmic surface (what an embodied agent gets)
+
+> *§2 is the Rust+Bevy technical audit flagged in the substrate note above —
+> read the wire shapes as historical/provenance, not as a description of the
+> current Three.js/A-Frame codebase.*
 
 ### 2.1 Wire transport
 
 - **World server**: `ws://<host>:7777` — WebSocket binary frames, MessagePack-encoded `ServerMsg` / `ClientMsg` enums per `shared/src/proto.rs`. This is the authoritative simulation.
 - **Cognitive bridge**: `tcp://<agent-host>:7780` — length-prefixed (`u32 BE`) MessagePack frames. Maintained by the per-agent **agent-client** process. Bridge is local to the agent-client; cognitive process can be on the same machine or on the LAN.
 
-The agent-client is the bevy renderer that holds the world snapshot for *one* agent and produces sensory feeds from its POV. There is one agent-client per embodied agent.
+The agent-client is the per-agent process that holds the world snapshot for *one* agent and produces sensory feeds from its POV. There is one agent-client per embodied agent.
 
 ### 2.2 Feed kinds (bridge → cognitive agent)
 
@@ -49,7 +68,7 @@ From `docs/cognitive-agent-integration.md` and verified against `agent-client/sr
 | `audio` | ~46 Hz | YES — wind synth, not other-agent speech | `{kind, t_world:f64, sample_rate:48000, channels:2, synthesis:"wind-noise", data: Binary (1024 × 2 × f32 LE = 8192 bytes)}` |
 | `shutdown` | one-shot | No | `{kind: "shutdown"}` — followed by ≤5s window where cognitive agent can POST `final_state` |
 
-The `ProprioState` enum in `shared/src/proto.rs:226-242` actually carries `inventory: Vec<InventorySlot>` and `pleasure: f32 (#[serde(default)])` — both are **silently dropped** by `proprio_to_frame` (file:line ~214-239). Asking Paracosm to add them is a one-line change.
+The `ProprioState` enum in `shared/src/proto.rs:226-242` actually carries `inventory: Vec<InventorySlot>` and `pleasure: f32 (#[serde(default)])` — both are **silently dropped** by `proprio_to_frame` (file:line ~214-239). Asking Paracosmic to add them is a one-line change.
 
 ### 2.3 Action vocabulary (cognitive agent → bridge → world server)
 
@@ -72,9 +91,9 @@ The `ProprioState` enum in `shared/src/proto.rs:226-242` actually carries `inven
 | `Mate {target}` | ✅ | ❌ | consent (both agents target each other), proximity, alive |
 | `Eat {target}` | ✅ | ❌ | Flesh-material only; triggers +0.3 pleasure pulse |
 
-A widening of `decode_action_frame` to cover all 14 is on Paracosm's TODO list (the file comment explicitly says so). Kosmos can be designed against the full set today and simply degrade gracefully on `ActionResult::Rejected{reason: "unknown action_type"}`.
+A widening of `decode_action_frame` to cover all 14 is on Paracosmic's TODO list (the file comment explicitly says so). Kosmos can be designed against the full set today and simply degrade gracefully on `ActionResult::Rejected{reason: "unknown action_type"}`.
 
-### 2.4 What Paracosm does *not* surface to the cognitive agent
+### 2.4 What Paracosmic does *not* surface to the cognitive agent
 
 These are visible in the world-server `ServerMsg` enum (`shared/src/proto.rs:50-66`) and arrive at the agent-client, but the bridge does **not** forward them:
 
@@ -85,7 +104,7 @@ These are visible in the world-server `ServerMsg` enum (`shared/src/proto.rs:50-
 - `DeathSequence` (other agents' death phases) — currently only the agent's *own* death triggers `shutdown`.
 - `ChunkData` — voxel-by-voxel terrain. This is firehose-scale; we don't want it. But a *summary* (nearby material counts, biome tag, structures within reach) would be useful and is a candidate for a new `world_facts` feed.
 
-The Kosmos design treats forwarding these as a Paracosm-side ask (§10) and works without them in v1.
+The Kosmos design treats forwarding these as a Paracosmic-side ask (§10) and works without them in v1.
 
 ### 2.5 Lifecycle (mortality, reproduction, incarnation)
 
@@ -172,22 +191,22 @@ The relevant invariant from auto-memory: live A/V is **perception, not recording
 
 ## 4. Two-side dictionary
 
-For implementers on either side, here is the round-trip mapping between the Paracosm bridge wire and the KAINE bus:
+For implementers on either side, here is the round-trip mapping between the Paracosmic bridge wire and the KAINE bus:
 
-### 4.1 Sensory: Paracosm → KAINE bus
+### 4.1 Sensory: Paracosmic → KAINE bus
 
-| Paracosm bridge frame | → KAINE bus event | Notes |
+| Paracosmic bridge frame | → KAINE bus event | Notes |
 |---|---|---|
-| `{kind:"proprio", agent_id, position, facing, velocity, underwater, near_fire, falling, dying, health, lifespan_remaining}` | `kosmos.proprio` (source=`kosmos`, salience=0.3 baseline, 0.8 when dying/near_fire/falling) | Drives Eidolon's `paracosm_body` field; drives Thymos arousal on `dying=true` |
+| `{kind:"proprio", agent_id, position, facing, velocity, underwater, near_fire, falling, dying, health, lifespan_remaining}` | `kosmos.proprio` (source=`kosmos`, salience=0.3 baseline, 0.8 when dying/near_fire/falling) | Drives Eidolon's `paracosmic_body` field; drives Thymos arousal on `dying=true` |
 | `{kind:"temporal", world_time, moon_phase, sun_altitude, has_eclipse, has_comet, shooting_star_count}` | `kosmos.temporal` (salience=0.2 baseline, 0.7 on eclipse/comet) | Drives Thymos "awe / novelty" on rare events; informs Mnemos with `world_time` for episodic anchoring |
 | `{kind:"intero", cpu_pct, mem_pct, uptime_sec, cycle_latency_ms}` | `kosmos.intero.bridge` (salience=0.1, 0.7 on latency spike) | Distinct from Soma — this is *the bridge's view of the host*. Soma reads the same machine but with full GPU detail. The two should agree on cpu_pct/mem_pct; cycle_latency_ms is unique to the bridge and represents felt cognitive slowdown |
-| `{kind:"visual", t_world, w, h, encoding, stub?, data}` | `kosmos.visual.raw` (salience=0.1; drop on `stub=true` unless `[kosmos].consume_stub_visual=true`) | Once Paracosm lands real render-to-texture, Topos's encoder consumes this byte stream instead of an OpenCV frame — same DINOv2-small path |
-| `{kind:"audio", t_world, sample_rate, channels, synthesis, data}` | `kosmos.audio.raw` (salience=0.05, drop by default; gate `[kosmos].forward_audio=false`) | Wind synthesis is not speech — *do not* route to STT. When Paracosm has Speech-event-driven mixed audio, revisit. |
+| `{kind:"visual", t_world, w, h, encoding, stub?, data}` | `kosmos.visual.raw` (salience=0.1; drop on `stub=true` unless `[kosmos].consume_stub_visual=true`) | Once Paracosmic lands real render-to-texture, Topos's encoder consumes this byte stream instead of an OpenCV frame — same DINOv2-small path |
+| `{kind:"audio", t_world, sample_rate, channels, synthesis, data}` | `kosmos.audio.raw` (salience=0.05, drop by default; gate `[kosmos].forward_audio=false`) | Wind synthesis is not speech — *do not* route to STT. When Paracosmic has Speech-event-driven mixed audio, revisit. |
 | `{kind:"shutdown"}` | `kosmos.shutdown` (salience=1.0, terminal) | Triggers `final_state` packaging (see §8) |
-| *(future)* `{kind:"event", event_type, location, world_time, payload}` | `kosmos.event` (salience varies; Speech → 0.6 if from another agent, 0.4 for ambient) | If `event_type=Speech` and `payload` is UTF-8 text, also synthesize a `audio.in.transcription` event with `source_label="paracosm:agent-{id}"` so the existing Audio_In consumers (Mnemos, Eidolon) see it through their normal path |
+| *(future)* `{kind:"event", event_type, location, world_time, payload}` | `kosmos.event` (salience varies; Speech → 0.6 if from another agent, 0.4 for ambient) | If `event_type=Speech` and `payload` is UTF-8 text, also synthesize a `audio.in.transcription` event with `source_label="paracosmic:agent-{id}"` so the existing Audio_In consumers (Mnemos, Eidolon) see it through their normal path |
 | *(future)* `{kind:"entity_update", id, position, facing, kind, removed}` | `kosmos.entity` (salience=0.15) | Populates the multi-agent awareness model — see §7.3 |
 
-### 4.2 Action: KAINE volition → Paracosm bridge
+### 4.2 Action: KAINE volition → Paracosmic bridge
 
 | KAINE volition intent | → Bridge action frame | Notes |
 |---|---|---|
@@ -200,7 +219,7 @@ For implementers on either side, here is the round-trip mapping between the Para
 | `intent.avatar.place {target, material}` | `{action_type:"place", target, material}` | inventory check |
 | `intent.avatar.break {target}` | `{action_type:"break", target}` | reach + hardness |
 | `intent.avatar.inscribe {target, text}` | `{action_type:"inscribe", target, text}` | ≤256 B UTF-8 |
-| `intent.avatar.pickup {entity_id}` | `{action_type:"pick_up", entity_id}` | rename — Paracosm uses `pick_up` with underscore |
+| `intent.avatar.pickup {entity_id}` | `{action_type:"pick_up", entity_id}` | rename — Paracosmic uses `pick_up` with underscore |
 | `intent.avatar.drop {inventory_slot}` | `{action_type:"drop", inventory_slot}` | non-empty slot |
 | `intent.avatar.interact {entity_id, verb}` | `{action_type:"interact", entity_id, verb}` | entity-specific |
 | `intent.avatar.eat {target}` | `{action_type:"eat", target}` | Flesh material only; +0.3 pleasure pulse |
@@ -220,19 +239,19 @@ A future bridge layer between `intent.speak` and `intent.avatar.say` may be usef
 
 ### 5.1 KAINE-side gaps (this change addresses, except where noted)
 
-1. **No bridge client.** No module speaks Paracosm's TCP MessagePack protocol today. → **Kosmos solves.**
+1. **No bridge client.** No module speaks Paracosmic's TCP MessagePack protocol today. → **Kosmos solves.**
 2. **No avatar action vocabulary in Volition.** `intent.act` is for local effectors only. → **New `intent.avatar.*` family solves.**
-3. **No body image.** Eidolon tracks speech counts and source-distribution drift; nothing tracks "I have a position, facing, velocity, health." → **`Eidolon.paracosm_body` extension solves.**
+3. **No body image.** Eidolon tracks speech counts and source-distribution drift; nothing tracks "I have a position, facing, velocity, health." → **`Eidolon.paracosmic_body` extension solves.**
 4. **Affect doesn't consume world signals.** Thymos has curiosity/boredom/social/restlessness drives but no input edges from "fire near me," "I'm dying," "I just saw an eclipse," "I felt pleasure from eating." → **Thymos appraisal-input extension; rules sketched in §7.3.**
 5. **No incarnation lifecycle.** `kaine/lifecycle/` is cognitive fork/merge only. → **Out of scope for v1.** The connector treats embodiment as a runtime concern (Kosmos is enabled or not, agent_id is in proprio); no "bind / unbind / migrate" ceremony yet.
-6. **No mortality preparation.** When Paracosm sends `shutdown`, KAINE must package a `final_state` blob in ≤5 s. Today nothing knows how to do this. → **Kosmos `_handle_shutdown` + a small Mnemos / Eidolon snapshot helper.**
-7. **No multi-entity awareness.** Other agents' positions, speech, deaths are not modeled anywhere. → **`kosmos.event` and `kosmos.entity` events solve, blocked on Paracosm-side asks (§10).**
-8. **STT pipeline expects raw mic audio.** Whisper STT expects speech-band 16 kHz mono; Paracosm audio is 48 kHz stereo wind noise. We must not route `kosmos.audio.raw` to Audio_In's STT. → **Hard `[kosmos].forward_audio = false` default; Audio_In's mic capture is independent.**
-9. **Topos expects raw camera frames.** The Paracosm visual feed is a 0x40-grey stub. Routing it to DINOv2 would generate meaningless 384-dim vectors that pollute the latent space. → **`[kosmos].forward_visual = false` default; revisit when Paracosm lands real readback (§10).**
-10. **No "world facts" summarizer.** If we never get `ChunkData`, the entity can't reason about its surroundings (nearby materials, biome, structures). → **Tracked but out of scope for v1.** Paracosm's `temporal` + future `entity_update` gets us a long way; structured world facts can wait.
+6. **No mortality preparation.** When Paracosmic sends `shutdown`, KAINE must package a `final_state` blob in ≤5 s. Today nothing knows how to do this. → **Kosmos `_handle_shutdown` + a small Mnemos / Eidolon snapshot helper.**
+7. **No multi-entity awareness.** Other agents' positions, speech, deaths are not modeled anywhere. → **`kosmos.event` and `kosmos.entity` events solve, blocked on Paracosmic-side asks (§10).**
+8. **STT pipeline expects raw mic audio.** Whisper STT expects speech-band 16 kHz mono; Paracosmic audio is 48 kHz stereo wind noise. We must not route `kosmos.audio.raw` to Audio_In's STT. → **Hard `[kosmos].forward_audio = false` default; Audio_In's mic capture is independent.**
+9. **Topos expects raw camera frames.** The Paracosmic visual feed is a 0x40-grey stub. Routing it to DINOv2 would generate meaningless 384-dim vectors that pollute the latent space. → **`[kosmos].forward_visual = false` default; revisit when Paracosmic lands real readback (§10).**
+10. **No "world facts" summarizer.** If we never get `ChunkData`, the entity can't reason about its surroundings (nearby materials, biome, structures). → **Tracked but out of scope for v1.** Paracosmic's `temporal` + future `entity_update` gets us a long way; structured world facts can wait.
 11. **Soma vs. bridge intero overlap.** Both report cpu/mem on the same host. → **Document that they overlap and that Soma is the authoritative source for local; bridge intero's unique contribution is `cycle_latency_ms`.**
 
-### 5.2 Paracosm-side gaps (cross-project asks; see §10 and `paracosm-counterpart-asks.md`)
+### 5.2 Paracosmic-side gaps (cross-project asks; see §10 and `paracosmic-counterpart-asks.md`)
 
 1. **Visual feed is a stub.** `agent-client/src/feeds.rs:289-321` writes a solid 0x40 grey buffer. Render-to-texture readback is the documented follow-up. **Highest-priority ask** — Topos cannot do anything useful without real pixels.
 2. **`decode_action_frame` covers 5 of 14 actions.** All other actions are silently dropped with a warn-log. Widening is mechanical work and unblocks `place / break / eat / mate / pickup / drop / interact / inscribe / whisper`.
@@ -249,20 +268,20 @@ A future bridge layer between `intent.speak` and `intent.avatar.say` may be usef
 ## 6. Connector architecture
 
 ```
-                ┌────────────────────────────┐
-                │  Paracosm world server     │
-                │  ws://host:7777            │
-                │  (Rust + Bevy, headless)   │
-                └──────────────┬─────────────┘
-                               │ WebSocket / MessagePack
-                               ▼
-                ┌────────────────────────────┐
-                │  Paracosm agent-client     │
-                │  (Rust + Bevy, per-agent)  │
-                │  bridge listens on :7780   │
-                └──────────────┬─────────────┘
-                               │ TCP / length-prefixed MessagePack
-                               ▼
+                ┌──────────────────────────────────────┐
+                │  Paracosmic world server             │
+                │  ws://host:7777                      │
+                │  (Three.js / A-Frame, web/WebXR)     │
+                └──────────────────┬───────────────────┘
+                                   │ WebSocket / MessagePack
+                                   ▼
+                ┌──────────────────────────────────────┐
+                │  Paracosmic agent-client             │
+                │  (Three.js / A-Frame, per-agent)     │
+                │  bridge listens on :7780             │
+                └──────────────────┬───────────────────┘
+                                   │ TCP / length-prefixed MessagePack
+                                   ▼
    ┌─────────────────────────────────────────────────────┐
    │   KAINE (this repo)                                  │
    │                                                       │
@@ -281,29 +300,29 @@ A future bridge layer between `intent.speak` and `intent.avatar.say` may be usef
 
 The dotted line "bus events ↔ intents" is the only seam. Kosmos doesn't reach into Eidolon or Thymos directly — those modules subscribe to `kosmos.*` events through their existing input-stream config, the way they subscribe to anything else.
 
-### 6.1 Why a KAINE-side adapter (not a Paracosm-side adapter)
+### 6.1 Why a KAINE-side adapter (not a Paracosmic-side adapter)
 
 We considered three architectures:
 
-| | KAINE-side `Kosmos` module | Paracosm-side adapter binary | Two-process gateway |
+| | KAINE-side `Kosmos` module | Paracosmic-side adapter binary | Two-process gateway |
 |---|---|---|---|
-| Where the bridge socket lives | Inside the KAINE entity process | New Rust binary | Standalone Python/Rust |
+| Where the bridge socket lives | Inside the KAINE entity process | New Paracosmic-side adapter process | Standalone process (Python/Node) |
 | How it joins the cognitive cycle | Native `BaseModule` — same shape as Topos/Soma | Pushes to Redis from outside | Pushes to Redis from outside |
 | Operator opt-in flow | Existing two-layer-gate pattern | New flag space | New flag space |
 | Operational complexity | One module to enable | Extra process to deploy | Extra process to deploy |
-| Coupling Paracosm to KAINE | None | High (Paracosm gains a Redis client) | None |
-| Coupling KAINE to Paracosm | Light — one module, removable | None on KAINE side | None on KAINE side |
+| Coupling Paracosmic to KAINE | None | High (Paracosmic gains a Redis client) | None |
+| Coupling KAINE to Paracosmic | Light — one module, removable | None on KAINE side | None on KAINE side |
 
-**Chosen: KAINE-side module.** It mirrors how every other perception/action edge is wired in KAINE (Topos owns the camera, Audio_In owns the mic, Praxis owns the local FS). Paracosm stays oblivious to KAINE specifically — Kosmos just speaks Paracosm's published cognitive-agent protocol, which is documented and stable. If another virtual world ships the same kind of bridge, a sibling module ("Halcyon" for an MMO, "Mundus" for another grid, etc.) can be written without disturbing Kosmos.
+**Chosen: KAINE-side module.** It mirrors how every other perception/action edge is wired in KAINE (Topos owns the camera, Audio_In owns the mic, Praxis owns the local FS). Paracosmic stays oblivious to KAINE specifically — Kosmos just speaks Paracosmic's published cognitive-agent protocol, which is documented and stable. If another virtual world ships the same kind of bridge, a sibling module ("Halcyon" for an MMO, "Mundus" for another grid, etc.) can be written without disturbing Kosmos.
 
 ### 6.2 Module skeleton
 
 ```python
 # kaine/modules/kosmos/module.py
 class KosmosModule(BaseModule):
-    """Bridge a KAINE entity to a Paracosm avatar.
+    """Bridge a KAINE entity to a Paracosmic avatar.
 
-    Opens the Paracosm cognitive-agent bridge (length-prefixed MessagePack
+    Opens the Paracosmic cognitive-agent bridge (length-prefixed MessagePack
     on TCP). Translates incoming sensory frames into kaine bus events
     (`kosmos.proprio`, `kosmos.temporal`, etc.) and forwards outgoing
     `intent.avatar.*` intents from volition as action frames.
@@ -381,7 +400,7 @@ On `kind: "shutdown"`:
 5. Sends `{kind: "final_state", encoding: "msgpack", data: <bytes>}` over the bridge.
 6. Closes the socket.
 
-Paracosm encodes this into the memory diamond at the death position. The bytes are opaque to the world — any future "diamond reader" would need to be its own project.
+Paracosmic encodes this into the memory diamond at the death position. The bytes are opaque to the world — any future "diamond reader" would need to be its own project.
 
 ---
 
@@ -391,7 +410,7 @@ Paracosm encodes this into the memory diamond at the death position. The bytes a
 
 | Event type | Source | Salience | Payload keys |
 |---|---|---|---|
-| `kosmos.proprio` | `kosmos` | 0.3 baseline; 0.8 on dying/falling/near_fire | `agent_id, position, facing, velocity, underwater, near_fire, falling, dying, health, lifespan_remaining` (+ `inventory`, `pleasure` when Paracosm ships) |
+| `kosmos.proprio` | `kosmos` | 0.3 baseline; 0.8 on dying/falling/near_fire | `agent_id, position, facing, velocity, underwater, near_fire, falling, dying, health, lifespan_remaining` (+ `inventory`, `pleasure` when Paracosmic ships) |
 | `kosmos.temporal` | `kosmos` | 0.2 baseline; 0.7 on eclipse/comet | `world_time, moon_phase, sun_altitude, has_eclipse, has_comet, shooting_star_count` |
 | `kosmos.intero.bridge` | `kosmos` | 0.1 baseline; 0.7 on `cycle_latency_ms ≥ 600` | `cpu_pct, mem_pct, uptime_sec, cycle_latency_ms` |
 | `kosmos.visual.raw` | `kosmos` | 0.05 (drop on `stub=true` by default) | `t_world, w, h, encoding, data_len` (raw bytes redacted from event payload — see §9.2) |
@@ -448,8 +467,8 @@ The executive-action-intent path treats these the same as `intent.act` — they'
 
 ```python
 @dataclass
-class ParacosmBody:
-    agent_id: int                  # opaque from Paracosm
+class ParacosmicBody:
+    agent_id: int                  # opaque from Paracosmic
     display_name: str | None
     position: tuple[float, float, float]
     facing: tuple[float, float]    # yaw, pitch
@@ -460,12 +479,12 @@ class ParacosmBody:
     near_fire: bool
     falling: bool
     dying: bool
-    pleasure: float                # 0..1, post-Paracosm-ask
+    pleasure: float                # 0..1, post-Paracosmic-ask
     last_world_time: float
     bound_at: datetime             # when this body first observed
 ```
 
-`Eidolon` subscribes to `kosmos.proprio`, updates the field every event. The self-model JSON file gains a `paracosm_body` key (nullable). When `dying=true` is first seen, push an `eidolon.body.dying` event so other modules can react in their own death sequences before the bridge closes.
+`Eidolon` subscribes to `kosmos.proprio`, updates the field every event. The self-model JSON file gains a `paracosmic_body` key (nullable). When `dying=true` is first seen, push an `eidolon.body.dying` event so other modules can react in their own death sequences before the bridge closes.
 
 **Privacy / zero-persistence:** position, velocity, health, etc. are summary scalars — not raw sense data — so it's fine for them to land in `state/eidolon/self_model.json`. We are *not* persisting the visual or audio frame payloads.
 
@@ -485,11 +504,11 @@ Thymos consumes new input edges:
 | `kosmos.event.Death` (other agent) | Negative valence; grief variant if recently observed |
 | `kosmos.event.Birth` | Positive valence + social drive |
 
-These are appraisal hints, not commands — Thymos's existing aggregation logic decides salience and drive deltas. Rules live in `kaine/modules/thymos/paracosm_appraisal.py` (new file) so they can be tuned without touching the core appraisal engine.
+These are appraisal hints, not commands — Thymos's existing aggregation logic decides salience and drive deltas. Rules live in `kaine/modules/thymos/paracosmic_appraisal.py` (new file) so they can be tuned without touching the core appraisal engine.
 
-### 7.5 Topos integration (deferred until Paracosm visual lands)
+### 7.5 Topos integration (deferred until Paracosmic visual lands)
 
-When the Paracosm visual feed is real, Topos gains an optional input-stream binding: instead of opening an OpenCV camera, it can subscribe to `kosmos.visual.raw` and run DINOv2 on the byte buffer. This requires:
+When the Paracosmic visual feed is real, Topos gains an optional input-stream binding: instead of opening an OpenCV camera, it can subscribe to `kosmos.visual.raw` and run DINOv2 on the byte buffer. This requires:
 
 - Topos config `input_source: "camera" | "kosmos"` (default `"camera"`).
 - The frame's `encoding: "rgb8"` matches what DINOv2-small expects; the dimensions (256×256 default) need a resize to 224×224 anyway, so the existing image pipeline handles both sources with one branch on `Image.frombytes(...)` vs OpenCV's `BGR -> PIL`.
@@ -523,21 +542,21 @@ reconnect_backoff_s = [1.0, 2.0, 5.0, 10.0, 30.0]   # capped retry schedule
 connect_timeout_s = 5.0
 
 # --- Identity ------------------------------------------------------------
-display_name = "kaine"                         # forwarded to Paracosm at handshake
+display_name = "kaine"                         # forwarded to Paracosmic at handshake
                                                # (when Hello is exposed; see §10)
 
 # --- Feed gating --------------------------------------------------------
 forward_proprio = true
 forward_temporal = true
 forward_intero = true
-forward_visual = false                         # stub until Paracosm ships readback
+forward_visual = false                         # stub until Paracosmic ships readback
 forward_audio = false                          # wind synth — never to STT
 forward_events = true                          # other-agent speech, etc. (future)
 forward_entities = true                        # other-agent positions (future)
 consume_stub_visual = false                    # if true, still emits 0.05-salience
                                                # heartbeat events on stub=true frames
 
-# --- Effector gating (KAINE → Paracosm action vocabulary) ---------------
+# --- Effector gating (KAINE → Paracosmic action vocabulary) ---------------
 expose_move = true
 expose_turn = true
 expose_say = true
@@ -562,7 +581,7 @@ final_state_include_recent_memories = 32       # top-K Mnemos entries
 # --- Limits & audit -----------------------------------------------------
 max_action_rate_hz = 10.0                      # bridge will clamp move anyway
 audit_path = "state/kosmos/audit.jsonl"        # per-action audit
-max_frame_bytes = 8388608                      # matches Paracosm bridge's 8 MiB cap
+max_frame_bytes = 8388608                      # matches Paracosmic bridge's 8 MiB cap
 ```
 
 The two-layer gate matches the pattern established by `voice-alignment-training` (`KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED`) and `adapter-ties-dare-merge` (PEFT extras). Per `[Safety over UX]` and `[First-boot module toggles]`, the shipped config is all-off; operators flip both the config flag and the env var to embody.
@@ -573,7 +592,7 @@ The two-layer gate matches the pattern established by `voice-alignment-training`
 
 ### 9.1 Cognitive cycle is the heartbeat
 
-Kosmos runs its bridge I/O in its own asyncio tasks but **never blocks the cycle**. Bus publishes are fire-and-forget; intent reads use `block_ms=100` so the consumer drains promptly without busy-spinning. Cycle latency that Paracosm measures via `intero.cycle_latency_ms` is the time between proprio-emit and action-receive on the bridge — a direct measure of KAINE's loop health, which Soma cross-checks locally.
+Kosmos runs its bridge I/O in its own asyncio tasks but **never blocks the cycle**. Bus publishes are fire-and-forget; intent reads use `block_ms=100` so the consumer drains promptly without busy-spinning. Cycle latency that Paracosmic measures via `intero.cycle_latency_ms` is the time between proprio-emit and action-receive on the bridge — a direct measure of KAINE's loop health, which Soma cross-checks locally.
 
 ### 9.2 Zero raw-sense-data persistence (load-bearing)
 
@@ -581,14 +600,14 @@ This invariant from `[Eyes-and-ears framing]` extends wholesale to virtual sense
 
 - `kosmos.visual.raw` and `kosmos.audio.raw` events MUST NOT carry the raw byte buffer in their payload. Kosmos receives the bytes off the wire, optionally hands them to a real-time consumer (e.g., a future Topos input adapter or a future audio classifier), and discards. The bus event carries only `t_world, w, h, encoding, data_len` for visual and `t_world, sample_rate, channels, synthesis, data_len` for audio.
 - The bridge `audit_path` MUST NOT log frame data — only action types and parameter summaries.
-- The `final_state` blob may contain Eidolon self-model + Mnemos summary — those are *cognitive products*, not raw sense data, and are explicitly opaque from Paracosm's perspective.
+- The `final_state` blob may contain Eidolon self-model + Mnemos summary — those are *cognitive products*, not raw sense data, and are explicitly opaque from Paracosmic's perspective.
 
 ### 9.3 Operator-supervised first boot
 
 Kosmos defaults off per `[Scope]`. The first boot ceremony for embodiment is:
 
-1. Operator launches Paracosm world server.
-2. Operator launches Paracosm agent-client targeting a fresh agent_id.
+1. Operator launches Paracosmic world server.
+2. Operator launches Paracosmic agent-client targeting a fresh agent_id.
 3. Operator confirms the agent-client is bound (logs show `agent_id` assignment).
 4. Operator sets `[kosmos].enabled = true` AND `KAINE_KOSMOS_OPERATOR_APPROVED=1`.
 5. Operator launches KAINE.
@@ -600,9 +619,9 @@ The entity does not auto-incarnate; the operator chooses to.
 
 The default effector exposure (move, turn, say, whisper, sleep, wake) is intentionally narrow:
 
-- **No `place / break / inscribe`** — these mutate the world voxel grid permanently (modulo erosion). Even though Paracosm validates reach + hardness, an entity in a runaway state could rapidly modify chunks.
+- **No `place / break / inscribe`** — these mutate the world voxel grid permanently (modulo erosion). Even though Paracosmic validates reach + hardness, an entity in a runaway state could rapidly modify chunks.
 - **No `eat`** — eats Flesh material, which is the corpse of another agent. Operator-only opt-in.
-- **No `mate`** — Paracosm's consent-based mating produces an offspring agent_id that needs its own cognitive process. Even though Paracosm requires mutual consent (both agents target each other), KAINE should not *initiate* this without the operator deciding when reproduction is appropriate.
+- **No `mate`** — Paracosmic's consent-based mating produces an offspring agent_id that needs its own cognitive process. Even though Paracosmic requires mutual consent (both agents target each other), KAINE should not *initiate* this without the operator deciding when reproduction is appropriate.
 - **No `interact`** — open-ended verb space; gate on understanding before opening.
 
 These follow `[Safety over UX]` and the [`autonomous engineering`] auto-memory: when in doubt, pick the safest default.
@@ -613,9 +632,17 @@ These follow `[Safety over UX]` and the [`autonomous engineering`] auto-memory: 
 
 ---
 
-## 10. Cross-project asks (for the Paracosm repo)
+## 10. Cross-project asks (for the Paracosmic repo)
 
-These are tracked in `paracosm-counterpart-asks.md` and should be opened as Paracosm issues. Each is small and clearly scoped.
+> This section and `paracosmic-counterpart-asks.md` were written against the
+> prior Rust+Bevy implementation (see the substrate note above) — the "files
+> touched" column names Rust source files that no longer exist. The *asks
+> themselves* (real visual feed, full action vocabulary, action-result
+> feedback, event/entity forwarding, etc.) are still legitimate needs; they
+> need to be re-scoped against the actual Three.js/A-Frame codebase before
+> being opened as issues.
+
+These are tracked in `paracosmic-counterpart-asks.md` and should be opened as Paracosmic issues. Each is small and clearly scoped.
 
 | Priority | Ask | Files touched | Effort |
 |---|---|---|---|
@@ -627,16 +654,16 @@ These are tracked in `paracosm-counterpart-asks.md` and should be opened as Para
 | P1 | **Add `t_world: f64` to proprio bridge frame.** Currently only visual + audio carry it. | `agent-client/src/feeds.rs:214-239` | XS |
 | P2 | **Expose `Adopt` action via the bridge** for reincarnation / offspring attachment. | `agent-client/src/feeds.rs` (new action_type), proto.rs already has it | S |
 | P2 | **`world_facts` summary feed** — biome at agent position, nearby material counts, structures in reach. Avoids streaming `ChunkData`. | `agent-client/src/feeds.rs` (new aggregator), `world-server` already has the data | M |
-| P3 | **Headless agent-client mode** — `--headless --no-render` so a KAINE entity can embody without a Bevy window. Bridge + world-net only. | `agent-client/src/main.rs`, `agent-client/src/args.rs` | M |
-| P3 | **Document `final_state` schema convention** — Paracosm doesn't interpret the blob, but a recommended top-level wrapper (`{schema: "...", version: ..., body: ...}`) helps multiple cognitive architectures interoperate on diamond contents. | `docs/cognitive-agent-integration.md` | XS |
+| P3 | **Server-side agent-client mode** — a way to run the per-agent bridge process without a rendered client, so a KAINE entity can embody without a display attached. Bridge + world-net only. | agent-client entry point / CLI args (paths TBD on the current Three.js/A-Frame codebase) | M |
+| P3 | **Document `final_state` schema convention** — Paracosmic doesn't interpret the blob, but a recommended top-level wrapper (`{schema: "...", version: ..., body: ...}`) helps multiple cognitive architectures interoperate on diamond contents. | `docs/cognitive-agent-integration.md` | XS |
 
-If the Paracosm side ships P0 + P1 by the time Kosmos lands, the connector is genuinely useful from day one. P2 + P3 are post-v1.
+If the Paracosmic side ships P0 + P1 by the time Kosmos lands, the connector is genuinely useful from day one. P2 + P3 are post-v1.
 
 ---
 
 ## 11. Test plan
 
-### 11.1 Unit (no live Paracosm)
+### 11.1 Unit (no live Paracosmic)
 
 - Frame decoder: each kind's payload shape round-trips through `_handle_frame` to the right `_on_*` method.
 - Intent dispatcher: each `intent.avatar.*` produces the correct `{kind, action_type, ...}` MessagePack frame; gated effectors drop with audit entry.
@@ -648,16 +675,16 @@ If the Paracosm side ships P0 + P1 by the time Kosmos lands, the connector is ge
 
 A small in-process TCP server that speaks the bridge protocol, used by tests:
 
-- KAINE entity boots with Kosmos enabled + env approved → Kosmos connects, fixture asserts a `Hello`-equivalent state, then pushes a proprio frame; Eidolon's self-model gains `paracosm_body`.
+- KAINE entity boots with Kosmos enabled + env approved → Kosmos connects, fixture asserts a `Hello`-equivalent state, then pushes a proprio frame; Eidolon's self-model gains `paracosmic_body`.
 - Fixture pushes `dying=true` proprio → Thymos emits high-arousal state.
 - Fixture pushes `shutdown` → Kosmos sends `final_state` within `shutdown_grace_s + 2`.
 - Fixture rejects an action with `unknown action_type` → Kosmos logs and continues.
 
-### 11.3 Real-Paracosm gated test
+### 11.3 Real-Paracosmic gated test
 
-`tests/test_kosmos_real_paracosm.py` (skip unless `KAINE_HAS_PARACOSM=1` and `KAINE_PARACOSM_URL` set):
+`tests/test_kosmos_real_paracosmic.py` (skip unless `KAINE_HAS_PARACOSMIC=1` and `KAINE_PARACOSMIC_URL` set):
 
-- Connects to a live Paracosm bridge.
+- Connects to a live Paracosmic bridge.
 - Reads ≥10 proprio frames.
 - Sends `intent.avatar.move{dx=0.1, dy=0, dz=0}` and observes position change.
 - Asserts shutdown sequence works if the test agent_id is configured short-lived.
@@ -668,22 +695,24 @@ A small in-process TCP server that speaks the bridge protocol, used by tests:
 
 These are noted for future resolution but not blocking v1.
 
-1. **Multiple bodies per mind?** Could a single KAINE entity simultaneously embody two Paracosm avatars (or one Paracosm avatar + one robot)? The current design assumes 1:1. Going to N:1 would mean Kosmos becomes a list of bridges and Eidolon's `paracosm_body` becomes `bodies: dict[bridge_id, ParacosmBody]`. Worth designing once we have a use case.
-2. **Multiple minds per body?** A Paracosm agent-client serves one cognitive process at a time. We could put a multiplexer in front of it (committee-of-minds, mixture-of-experts), but that's a layer above Kosmos.
-3. **Memory diamond round-trip.** When KAINE finds a diamond from another agent and `pick_up`s it, can the cognitive state inside ever be read into the cognitive layer? Paracosm has explicitly left this open; for KAINE specifically the question is whether to expose a "diamond.read" action that returns the raw blob to Mnemos as an episodic-memory candidate. Out of scope for v1.
-4. **Inhabited time vs cycle time.** Paracosm runs at 30 Hz; KAINE's cognitive cycle is 3.3 Hz. Proprio comes in at 10 Hz. KAINE may want to either (a) downsample to its cycle rate, (b) integrate over the cycle interval, or (c) react event-driven with cycle-windowed summaries published into workspace. Current design is (a) — Kosmos publishes whatever it gets and lets workspace's salience selection do the rest. Worth measuring once a real entity runs.
+1. **Multiple bodies per mind?** Could a single KAINE entity simultaneously embody two Paracosmic avatars (or one Paracosmic avatar + one robot)? The current design assumes 1:1. Going to N:1 would mean Kosmos becomes a list of bridges and Eidolon's `paracosmic_body` becomes `bodies: dict[bridge_id, ParacosmicBody]`. Worth designing once we have a use case.
+2. **Multiple minds per body?** A Paracosmic agent-client serves one cognitive process at a time. We could put a multiplexer in front of it (committee-of-minds, mixture-of-experts), but that's a layer above Kosmos.
+3. **Memory diamond round-trip.** When KAINE finds a diamond from another agent and `pick_up`s it, can the cognitive state inside ever be read into the cognitive layer? Paracosmic has explicitly left this open; for KAINE specifically the question is whether to expose a "diamond.read" action that returns the raw blob to Mnemos as an episodic-memory candidate. Out of scope for v1.
+4. **Inhabited time vs cycle time.** Paracosmic runs at 30 Hz; KAINE's cognitive cycle is 3.3 Hz. Proprio comes in at 10 Hz. KAINE may want to either (a) downsample to its cycle rate, (b) integrate over the cycle interval, or (c) react event-driven with cycle-windowed summaries published into workspace. Current design is (a) — Kosmos publishes whatever it gets and lets workspace's salience selection do the rest. Worth measuring once a real entity runs.
 5. **Eclipse / comet "novelty" replay.** Should rare events trigger a Mnemos-priority store? Probably yes (this is why §7.4 maps eclipse → novelty drive), but the consolidation policy is Mnemos's call, not Kosmos's.
 
 ---
 
 ## 13. References
 
-- Paracosm repo: https://github.com/kaineone/Paracosm
-- Paracosm cognitive-agent integration guide: `docs/cognitive-agent-integration.md`
-- Paracosm sensory interface spec: `docs/sensory-interface.md`
-- Paracosm reference Python client: `scripts/example_cognitive_agent.py`
-- Paracosm wire types: `shared/src/proto.rs`
-- Paracosm bridge implementation: `agent-client/src/feeds.rs`
+- Paracosmic repo: https://github.com/kaineone/Paracosmic
+- Paracosmic cognitive-agent integration guide: `docs/cognitive-agent-integration.md`
+- Paracosmic sensory interface spec: `docs/sensory-interface.md`
+- Paracosmic reference Python client: `scripts/example_cognitive_agent.py`
+- Paracosmic wire types and bridge implementation: paths TBD on the current
+  Three.js/A-Frame codebase — `shared/src/proto.rs` and `agent-client/src/feeds.rs`
+  were the Rust+Bevy locations audited in §2 and no longer apply (see the
+  substrate note above)
 - KAINE bus contract: `kaine/bus/schema.py`, `kaine/bus/client.py`
 - KAINE module pattern: `kaine/modules/base.py`
 - KAINE volition: `kaine/workspace/volition.py`
@@ -696,7 +725,14 @@ These are noted for future resolution but not blocking v1.
 
 ## Appendix A: Validated against live server (2026-05-31)
 
-After this design was drafted, the Paracosm world server at `<world-host>:7777`
+> **Historical — pertains to the prior Rust + Bevy implementation.** This
+> validation run pre-dates the rename and the move to Three.js/A-Frame
+> (web/WebXR); it exercised the Rust+Bevy agent-client binary described in §2.
+> Retained for provenance. It has not been re-run against the current
+> implementation — the findings below (protocol shape, spawn/movement bugs,
+> tick rate) need re-verification before anyone relies on them.
+
+After this design was drafted, the Paracosmic world server at `<world-host>:7777`
 was confirmed live and the agent-client binary (build `paracosm_26.05.01_amd64`)
 was downloaded from `<world-host>:8888`, launched against that server with
 `--display-name kaine-test-pilot`, and exercised by `/tmp/paracosm_pilot.py` (a
@@ -723,7 +759,7 @@ was downloaded from `<world-host>:8888`, launched against that server with
   dropped with a `WARN bridge action decode failed e="unknown action_type X"`
   to the agent-client log. **Nothing returns to the cognitive agent.**
 
-**New findings (added to `paracosm-counterpart-asks.md`):**
+**New findings (added to `paracosmic-counterpart-asks.md`):**
 
 - **P0-D**: `ActionResult` is never forwarded to the cognitive agent. The
   world server sends one per `ActionCommand`, but the bridge discards it.
@@ -746,7 +782,7 @@ was downloaded from `<world-host>:8888`, launched against that server with
   `--tick-rate` adjusted. Cycle latency in `intero` reads `0` consistently
   because the pilot was sending actions too fast relative to bridge
   measurement granularity. Not blocking, but Kosmos should not assume
-  Paracosm runs at exactly 30 Hz.
+  Paracosmic runs at exactly 30 Hz.
 - **Movement was blocked.** Sent `move {dx: 0.3}` repeatedly; velocity
   briefly showed `[3.0, 0, 0]` once then `[0, 0, 0]`. Position
   `[6.0, 60.0, 0.0]` never changed. Most likely cause: underwater drag

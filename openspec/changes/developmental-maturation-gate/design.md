@@ -55,7 +55,7 @@ While `stage == gestation` **and a womb feed is configured** (`[perception_feed]
 == "womb"`):
 - the perception locus is set to `virtual` with the womb feed active, and
   `DesiredState.locus_locked = true`, so the entity cannot self-switch out of the womb
-  (the `intent.perception.switch` path from `paracosm-connector` is refused while
+  (the `intent.perception.switch` path from `paracosmic-connector` is refused while
   gestating);
 - embodiment (Mundus) is not engaged regardless of its own gate;
 - the womb stimulus (Change A) is the entity's whole sensory world.

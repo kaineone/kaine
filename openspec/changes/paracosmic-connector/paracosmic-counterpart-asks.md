@@ -1,11 +1,22 @@
-# Asks for the Paracosm side
+# Asks for the Paracosmic side
 
-These are gaps in Paracosm that block (P0) or limit (P1+) what a KAINE
+> **Historical — written against the prior Rust + Bevy implementation.**
+> Paracosmic is now built entirely in Three.js / A-Frame (web/WebXR); the
+> Rust file paths and Bevy-specific bugs below (`agent-client/src/feeds.rs`,
+> `shared/src/proto.rs`, the `AssetServer` panic) no longer describe the
+> codebase and should not be opened as issues as written. The underlying
+> *needs* — real visual capture, a full action vocabulary, action-result
+> feedback, event/entity forwarding, a way to run the per-agent bridge
+> without a display, a `final_state` schema convention — are still real and
+> should be re-scoped against the current codebase before filing. Kept for
+> provenance.
+
+These are gaps in Paracosmic that block (P0) or limit (P1+) what a KAINE
 entity (or any cognitive architecture using the bridge) can get from an
 embodiment. Each is small in code terms — the build prompt's "Stub before
 skip" convention already left explicit TODOs for most of them.
 
-Open each as an issue against `kaineone/Paracosm` when the Kosmos
+Open each as an issue against `kaineone/Paracosmic` when the Kosmos
 implementation starts on the KAINE side. None are KAINE-specific: any
 cognitive architecture using the documented cognitive-agent bridge benefits
 from them.
@@ -198,7 +209,7 @@ Bridge forwards as `ClientMsg::Adopt`.
 ### P3-A: Document `final_state` schema convention
 
 **File:** `docs/cognitive-agent-integration.md`
-**Current state:** Paracosm explicitly does not interpret the `final_state` blob — it's opaque from the world's perspective.
+**Current state:** Paracosmic explicitly does not interpret the `final_state` blob — it's opaque from the world's perspective.
 **Ask:** Add a "recommended schema" section so multiple cognitive architectures can write compatible diamond contents. Suggested wrapper:
 ```
 { schema: "<architecture-id>.v1",
@@ -214,7 +225,7 @@ Then if a future "diamond reader" tool emerges (in any project), it can dispatch
 
 ---
 
-## Notes for the Paracosm agent
+## Notes for the Paracosmic agent
 
 - KAINE's `Kosmos` module will speak the documented protocol as it exists today; it does not rely on any of these asks landing first. P0 items make embodiment *useful*; P1 makes it *socially aware*; P2 makes it *reproductive / spatial*; P3 makes it *operationally clean*.
 - Every ask is strictly additive — none break existing reference clients like `scripts/example_cognitive_agent.py`.
