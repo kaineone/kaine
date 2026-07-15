@@ -21,8 +21,13 @@ CROSS-MODAL COHERENCE: the seeded audio source shares the seed and the
 fires both a visual blob and an audio burst — coherent and cross-modally bound by
 construction (NOT frame-locked across the two module loops; coherence is via the
 shared seed + cadence). The playlist audio source walks the SAME checksummed
-manifest as the playlist video source, so picture and sound come from the same
-media (clip-level synchronization).
+manifest as the playlist video source AND shares its ``PlaylistClock``: both
+surfaces derive the currently-playing item from one monotonic origin + per-item
+durations, so at any wall-clock moment picture and sound are on the same manifest
+item and cross item boundaries together (live / statistical tier; residual
+sub-second decode skew is acceptable). This is the fix for the dual-decoder
+desync where audio ran at 1x while video crawled at the tick rate and the two
+drifted onto different items (openspec/changes/playlist-realtime-av-sync).
 
 ZERO PERSISTENCE INVARIANT (eyes-and-ears): raw PCM lives only in process memory
 — a bounded producer thread emits blocks straight into the callback and never
@@ -44,11 +49,17 @@ from typing import Any, Callable
 from kaine.modules.audition.live import PerceptionUnavailableError
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
-from kaine.modules.topos.feed import PlaylistManifest
+from kaine.modules.topos.feed import (
+    PlaylistClock,
+    PlaylistManifest,
+    PlaylistPosition,
+)
 
 log = logging.getLogger(__name__)
 
 _INT16_MAX = 32767
+# PyAV reports ``container.duration`` in AV_TIME_BASE units (microseconds).
+_AV_TIME_BASE = 1_000_000.0
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +343,7 @@ class PlaylistAudioStream:
         channels: int = 1,
         frames_per_block: int = 480,
         media_root: str | Path | None = None,
+        playlist_clock: PlaylistClock | None = None,
     ) -> None:
         self._manifest = manifest
         self._callback = callback
@@ -343,12 +355,36 @@ class PlaylistAudioStream:
             if media_root is not None
             else Path(manifest.manifest_path).parent
         )
+        # Shared start-clock with the video source (injected at boot) so both
+        # surfaces report the same item at the same wall-clock moment. A private
+        # clock keeps a standalone audio stream working on its own.
+        self._clock = playlist_clock or PlaylistClock(len(manifest.items))
         self._thread: threading.Thread | None = None
         self._stopped = threading.Event()
 
     @property
     def manifest(self) -> PlaylistManifest:
         return self._manifest
+
+    @property
+    def clock(self) -> PlaylistClock:
+        return self._clock
+
+    @property
+    def current_item(self) -> PlaylistPosition | None:
+        """The item currently heard, from the SHARED clock — so it always agrees
+        with the video source's ``current_item``. ``None`` before playback starts
+        or once the playlist is exhausted. Content-free provenance."""
+        if not self._clock.started:
+            return None
+        idx, offset = self._clock.locate()
+        items = self._manifest.items
+        if idx >= len(items):
+            return None
+        it = items[idx]
+        return PlaylistPosition(
+            title=Path(it.path).name, order=it.order, offset=offset, item_idx=idx
+        )
 
     def _resolve(self, path: str) -> Path:
         p = Path(path)
@@ -414,13 +450,24 @@ class PlaylistAudioStream:
             else:
                 next_deadline = time.monotonic()
 
+        # Align to the shared playback origin (idempotent across both feeds) so
+        # audio and video start item 0 at the same wall-clock moment.
+        self._clock.start()
         try:
-            for item in self._manifest.items:
+            for idx, item in enumerate(self._manifest.items):
                 if self._stopped.is_set():
                     return
                 media = self._resolve(item.path)
                 container = av.open(str(media))
                 try:
+                    # Register this item's duration on the shared clock (first
+                    # writer wins — the video source's frame-count duration is
+                    # authoritative when it opened the item first). PyAV reports
+                    # container.duration in AV_TIME_BASE units (microseconds).
+                    if container.duration:
+                        self._clock.set_duration(
+                            idx, float(container.duration) / _AV_TIME_BASE
+                        )
                     if not container.streams.audio:
                         log.warning("playlist item has no audio track: %s", media)
                         continue
@@ -456,4 +503,5 @@ __all__ = [
     "SeededAudioSchedule",
     "SeededProceduralAudioStream",
     "PlaylistAudioStream",
+    "PlaylistPosition",
 ]

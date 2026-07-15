@@ -10,9 +10,21 @@ ndarrays exactly like the cv2 camera path, so the downstream
 BGR->RGB->PIL->``process_frame`` pipeline, habituation, and change-detection are
 unchanged.
 
-WHY DETERMINISTIC: a research run must present a bit-identical stimulus stream so
-results replicate, and the stream must be copyright-free. Live camera / live
-human input fail both. See openspec/changes/reproducible-perception-feed.
+TWO REPRODUCIBILITY TIERS:
+
+- The **seeded procedural source** is the OFFLINE / bit-identical tier: every
+  frame is a pure function of ``(seed, frame_index)``, so a run replicates
+  frame-for-frame. See openspec/changes/reproducible-perception-feed.
+- The **playlist source** is a LIVE / STATISTICAL tier: it presents each
+  manifest item's video at real wall-clock time (1x) — the way a media player
+  shows a file — so that picture and sound stay on the same item at the same
+  media position (see ``PlaylistClock``). It is reproducible by **media identity
+  (per-item sha256)**, NOT by frame-for-frame reproduction: two runs present the
+  same media, but the exact frame selected at a given cognitive tick depends on
+  wall-clock timing. This deliberately trades bit-identical frame reproduction
+  for real-time A/V fidelity (operator decision 2026-07-12,
+  openspec/changes/playlist-realtime-av-sync). Media-identity verification stays
+  fail-closed (a sha256 mismatch stops the run before a frame is decoded).
 
 ZERO PERSISTENCE INVARIANT (eyes-and-ears): raw frames live only in process
 memory. Neither source ever writes a frame to disk. The seeded source persists
@@ -24,10 +36,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
+import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
@@ -396,29 +410,167 @@ class PlaylistVerificationError(RuntimeError):
     """
 
 
-class PlaylistSource:
-    """A ``_VideoSource`` over an operator-supplied, checksummed manifest.
+@dataclass(frozen=True)
+class PlaylistPosition:
+    """The item a playlist feed is currently presenting, read off the shared
+    clock. Content-free provenance (basename + manifest order + media offset in
+    seconds) — never any pixels or PCM."""
 
-    ``open()`` verifies EVERY item's sha256 before the run; any mismatch raises
-    ``PlaylistVerificationError`` (fail-closed). Item order + per-item fps define
-    a stable frame index, so frame ``i`` maps to the same decoded media frame
-    across runs. Frames are decoded to in-memory ndarrays; nothing beyond the
-    manifest is persisted.
+    title: str          # media basename (e.g. "episode-01.mkv")
+    order: int          # the item's manifest order key
+    offset: float       # seconds elapsed into this item
+    item_idx: int       # index into the manifest's items tuple
+
+
+class PlaylistClock:
+    """Shared real-time position authority for the video and audio playlist
+    feeds — the single monotonic origin + per-item durations that BOTH surfaces
+    consult so they cross item boundaries together (no more seeing one show while
+    hearing another).
+
+    One instance is created per boot and injected into both ``PlaylistSource``
+    (video) and ``PlaylistAudioStream`` (audio). Each feed reports its
+    ``current_item`` from ``locate()``, so the two are guaranteed to agree on the
+    playing item at any wall-clock moment; residual sub-second decode skew is
+    acceptable for the live tier.
+
+    Per-item durations are registered by whichever feed opens an item first
+    (FIRST WRITER WINS): the video source registers ``frame_count / fps`` when it
+    opens an item, so the shared boundaries follow the true video-frame duration.
+    A monotonic clock function is injectable so the pacing is unit-testable
+    without real time.
     """
 
-    def __init__(self, manifest: PlaylistManifest, *, media_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        item_count: int,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._n = int(item_count)
+        self._clock = clock
+        self._origin: float | None = None
+        self._durations: list[float | None] = [None] * self._n
+        self._lock = threading.Lock()
+
+    def start(self, at: float | None = None) -> None:
+        """Set the playback origin ONCE (idempotent). Both feeds call this on
+        their first read/produce; whichever wins fixes the shared origin."""
+        with self._lock:
+            if self._origin is None:
+                self._origin = self._clock() if at is None else float(at)
+
+    @property
+    def started(self) -> bool:
+        with self._lock:
+            return self._origin is not None
+
+    def set_duration(self, idx: int, seconds: float) -> None:
+        """Register item ``idx``'s real duration (first writer wins)."""
+        with self._lock:
+            if 0 <= idx < self._n and self._durations[idx] is None and seconds > 0:
+                self._durations[idx] = float(seconds)
+
+    def duration(self, idx: int) -> float | None:
+        with self._lock:
+            return self._durations[idx] if 0 <= idx < self._n else None
+
+    def elapsed(self) -> float:
+        with self._lock:
+            return self._elapsed_locked()
+
+    def _elapsed_locked(self) -> float:
+        if self._origin is None:
+            return 0.0
+        return max(0.0, self._clock() - self._origin)
+
+    def locate(self, elapsed: float | None = None) -> tuple[int, float]:
+        """Map elapsed wall-clock seconds to ``(item_idx, offset_seconds)``.
+
+        Walks the known per-item durations. A boundary whose duration has not yet
+        been measured cannot be crossed, so the position clamps to that item
+        until the feed opening it registers its duration. Returns ``item_idx ==
+        item_count`` once the elapsed time passes every known item (playlist
+        exhausted)."""
+        with self._lock:
+            if elapsed is None:
+                elapsed = self._elapsed_locked()
+            acc = 0.0
+            for idx in range(self._n):
+                d = self._durations[idx]
+                if d is None:
+                    # Unmeasured boundary ahead — hold at this item.
+                    return idx, max(0.0, elapsed - acc)
+                if elapsed < acc + d:
+                    return idx, elapsed - acc
+                acc += d
+            return self._n, 0.0
+
+
+class PlaylistSource:
+    """A ``_VideoSource`` over an operator-supplied, checksummed manifest,
+    presented at REAL wall-clock time (1x) — the live / statistical tier.
+
+    ``open()`` verifies EVERY item's sha256 before the run; any mismatch raises
+    ``PlaylistVerificationError`` (fail-closed). ``read()`` then returns the frame
+    at the current elapsed wall-clock position (``elapsed x item.fps``), dropping
+    stale frames when the cognitive tick runs slower than the file's frame rate
+    and holding the current frame when it runs faster — so a 30 fps clip plays at
+    30 fps of wall time regardless of the tick rate. Item boundaries come from the
+    shared ``PlaylistClock`` so video and audio advance together.
+
+    Reproducible by media identity (per-item sha256), NOT frame-for-frame: the
+    frame selected at a given tick depends on wall-clock timing. Frames are
+    decoded to in-memory ndarrays; nothing beyond the manifest is persisted.
+    """
+
+    def __init__(
+        self,
+        manifest: PlaylistManifest,
+        *,
+        media_root: str | Path | None = None,
+        playlist_clock: PlaylistClock | None = None,
+        cv2_module: Any | None = None,
+    ) -> None:
         self._manifest = manifest
         # Relative item paths resolve against the manifest's own directory by
         # default, so a playlist is relocatable as a unit.
         self._root = Path(media_root) if media_root is not None else Path(manifest.manifest_path).parent
+        # Shared start-clock (injected at boot so audio and video align); a
+        # private clock keeps a standalone source working on its own.
+        self._clock = playlist_clock or PlaylistClock(len(manifest.items))
+        # Injectable cv2 for tests (fake decoder). None -> import the real cv2.
+        self._cv2: Any = cv2_module
         self._cap: Any = None
-        self._cv2: Any = None
         self._item_idx = 0
         self._verified = False
+        # Real-time pacing state (per item), reset on every item open.
+        self._frame_cursor = 0        # index of the NEXT media frame cap.read() yields
+        self._last_media_frame = -1   # media frame index last RETURNED for this item
+        self._last_frame: Any = None  # cached frame for the hold path
 
     @property
     def manifest(self) -> PlaylistManifest:
         return self._manifest
+
+    @property
+    def clock(self) -> PlaylistClock:
+        return self._clock
+
+    @property
+    def current_item(self) -> PlaylistPosition | None:
+        """The item currently presented, from the shared clock. ``None`` before
+        playback starts or once the playlist is exhausted. Content-free."""
+        if not self._clock.started:
+            return None
+        idx, offset = self._clock.locate()
+        items = self._manifest.items
+        if idx >= len(items):
+            return None
+        it = items[idx]
+        return PlaylistPosition(
+            title=Path(it.path).name, order=it.order, offset=offset, item_idx=idx
+        )
 
     def _resolve(self, item: PlaylistItem) -> Path:
         p = Path(item.path)
@@ -434,15 +586,16 @@ class PlaylistSource:
         # Verify BEFORE opening any decoder — a changed file must stop the run
         # before a single frame is read.
         self.verify()
-        try:
-            import cv2  # type: ignore[import-untyped]
-        except ImportError as exc:
-            from kaine.modules.topos.live import PerceptionUnavailableError
+        if self._cv2 is None:
+            try:
+                import cv2  # type: ignore[import-untyped]
+            except ImportError as exc:
+                from kaine.modules.topos.live import PerceptionUnavailableError
 
-            raise PerceptionUnavailableError(
-                "opencv-python-headless not installed — install with: pip install -e .[vision]"
-            ) from exc
-        self._cv2 = cv2
+                raise PerceptionUnavailableError(
+                    "opencv-python-headless not installed — install with: pip install -e .[vision]"
+                ) from exc
+            self._cv2 = cv2
         self._item_idx = 0
         return self._open_current_item()
 
@@ -456,22 +609,71 @@ class PlaylistSource:
             log.warning("playlist item could not be opened: %s", media)
             return False
         self._cap = cap
+        self._frame_cursor = 0
+        self._last_media_frame = -1
+        self._last_frame = None
+        # Register this item's real duration on the shared clock so the boundary
+        # is crossed at 1x (video is the authority for video-frame duration).
+        try:
+            frame_count = float(cap.get(self._cv2.CAP_PROP_FRAME_COUNT))
+        except Exception:
+            frame_count = 0.0
+        if frame_count > 0 and item.fps > 0:
+            self._clock.set_duration(self._item_idx, frame_count / float(item.fps))
         return True
 
-    def read(self) -> tuple[bool, Any]:
-        if self._cap is None or not self._verified:
-            return False, None
-        ok, frame = self._cap.read()
-        while not ok:
-            # Current clip exhausted — advance to the next in manifest order.
-            self._cap.release()
+    def _advance_item(self) -> bool:
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                log.debug("playlist VideoCapture.release raised", exc_info=True)
             self._cap = None
-            self._item_idx += 1
-            if self._item_idx >= len(self._manifest.items):
+        self._item_idx += 1
+        self._frame_cursor = 0
+        self._last_media_frame = -1
+        self._last_frame = None
+        if self._item_idx >= len(self._manifest.items):
+            return False
+        return self._open_current_item()
+
+    def read(self) -> tuple[bool, Any]:
+        if self._cap is None or not self._verified or self._cv2 is None:
+            return False, None
+        # First read fixes the shared playback origin (idempotent across feeds).
+        self._clock.start()
+        n = len(self._manifest.items)
+        target_idx, offset = self._clock.locate()
+        if target_idx >= n:
+            return False, None
+        # Walk whole items forward to the item the shared clock is on. We only
+        # ever move forward (the clock is monotonic); each open registers the new
+        # item's duration, so the clock can then reveal the next boundary.
+        while self._item_idx < target_idx:
+            if not self._advance_item():
                 return False, None
-            if not self._open_current_item():
+            target_idx, offset = self._clock.locate()
+            if target_idx >= n:
                 return False, None
-            ok, frame = self._cap.read()
+        item = self._manifest.items[self._item_idx]
+        target_media_frame = int(offset * float(item.fps))
+        # HOLD: the tick outran the frame rate — re-present the current frame.
+        if self._last_frame is not None and target_media_frame <= self._last_media_frame:
+            return True, self._last_frame
+        # DROP/read forward to the target frame (skip stale frames to track 1x).
+        frame = self._last_frame
+        while self._frame_cursor <= target_media_frame:
+            ok, f = self._cap.read()
+            if not ok:
+                # File ended earlier than its declared frame count — let the
+                # shared clock advance us to the next item on a later read.
+                break
+            frame = f
+            self._last_media_frame = self._frame_cursor
+            self._frame_cursor += 1
+        if frame is None:
+            return False, None
+        self._last_frame = frame
         return True, frame
 
     def release(self) -> None:
@@ -482,6 +684,7 @@ class PlaylistSource:
                 log.debug("playlist VideoCapture.release raised", exc_info=True)
             self._cap = None
         self._verified = False
+        self._last_frame = None
 
 
 __all__ = [
@@ -491,6 +694,8 @@ __all__ = [
     "PlaylistManifest",
     "PlaylistManifestError",
     "PlaylistVerificationError",
+    "PlaylistPosition",
+    "PlaylistClock",
     "load_playlist_manifest",
     "PlaylistSource",
 ]

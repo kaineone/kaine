@@ -358,9 +358,12 @@ def _build_perception_feed_video_factory(
             "[perception_feed].mode = 'playlist' requires playlist_manifest"
         )
     manifest = load_playlist_manifest(manifest_path)
+    # Shared start-clock injected by build_registry so video and audio stay on the
+    # same item (playlist-realtime-av-sync). None -> a private clock (standalone).
+    shared_clock = feed.get("_shared_playlist_clock")
 
     def _playlist_factory(device, *, width, height):  # noqa: ANN001
-        return PlaylistSource(manifest)
+        return PlaylistSource(manifest, playlist_clock=shared_clock)
 
     return _playlist_factory
 
@@ -521,6 +524,9 @@ def _build_perception_feed_audio_factory(
             "[perception_feed].mode = 'playlist' requires playlist_manifest"
         )
     manifest = load_playlist_manifest(manifest_path)
+    # SAME shared start-clock instance the video factory received, so both feeds
+    # cross item boundaries together (playlist-realtime-av-sync).
+    shared_clock = feed.get("_shared_playlist_clock")
 
     def _playlist_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
         return PlaylistAudioStream(
@@ -529,6 +535,7 @@ def _build_perception_feed_audio_factory(
             sample_rate=int(sample_rate),
             channels=int(channels),
             frames_per_block=int(frames_per_block),
+            playlist_clock=shared_clock,
         )
 
     return _playlist_factory
@@ -1707,6 +1714,34 @@ def build_registry(
     # nothing — the "awake but senseless" failure. mode off/live leave the
     # desired-state to the operator (live = real camera/mic, operator-toggled).
     _feed_mode = str(perception_feed.get("mode", "off")).lower()
+    # Playlist real-time A/V sync (playlist-realtime-av-sync): the video and audio
+    # playlist feeds must share ONE start-clock so they present the same manifest
+    # item at the same wall-clock moment and cross item boundaries together. Build
+    # it once here from the manifest's item count and inject the SAME instance
+    # into both the Topos (video) and Audition (audio) factory sections, so
+    # picture and sound cannot drift onto different items. Any manifest problem is
+    # left for the factories to surface with their existing errors.
+    if _feed_mode == "playlist" and (
+        bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
+    ):
+        try:
+            from kaine.modules.topos.feed import (
+                PlaylistClock,
+                load_playlist_manifest,
+            )
+
+            _manifest_path = str(perception_feed.get("playlist_manifest", "")).strip()
+            if _manifest_path:
+                _pl_manifest = load_playlist_manifest(_manifest_path)
+                perception_feed["_shared_playlist_clock"] = PlaylistClock(
+                    len(_pl_manifest.items)
+                )
+        except Exception:
+            log.warning(
+                "could not build the shared playlist clock; feeds fall back to "
+                "private clocks (video/audio may drift)",
+                exc_info=True,
+            )
     if _feed_mode in ("seeded", "playlist") and (
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
     ):
