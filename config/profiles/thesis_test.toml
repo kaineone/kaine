@@ -24,12 +24,16 @@ chronos = true
 topos = true
 audition = true
 lingua = true
+# Affect/arousal — the precision core: arousal sets the gain on the competition and
+# is itself moved by perceptual surprise. Part of the minimal base-thesis machinery
+# (without it the workspace shows no interest or arousal in stimuli), NOT one of the
+# richer faculties deferred with the rest.
+thymos = true
 # Richer faculties — gated OFF until a positive base result (never deleted).
 echo = false
 nous = false
 mnemos = false
 eidolon = false
-thymos = false
 praxis = false
 vox = false
 hypnos = false
