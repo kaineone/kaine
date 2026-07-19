@@ -77,7 +77,7 @@ vision = [
 internvideo = [
     "einops>=0.7",
     "timm>=0.9",
-    "easydict>=1.10",
+    "easydict>=1.13",
 ]
 # OPTIONAL fused-attention fast path for the InternVideo-Next encoder. Install
 # ONLY on a GPU host that wants the flash-attn kernels: flash-attn has NO
