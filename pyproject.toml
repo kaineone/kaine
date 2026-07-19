@@ -125,7 +125,7 @@ training = [
 # parity. Excludes any actor/critic/return heads — Phantasia is world-model only.
 worldmodel = [
     "jax[cpu]>=0.10.2",
-    "chex>=0.1",
+    "chex>=0.1.92",
     "einops>=0.7",
 ]
 # Oscillatory-binding layer for Syneidesis (oscillatory-layer / paper §3.2).
