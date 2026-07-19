@@ -47,7 +47,7 @@ test = [
 # Required only if [audition].capture_enabled = true. Lazy-imported.
 audio = [
     "sounddevice>=0.5.5,<1",
-    "webrtcvad>=2.0,<3",
+    "webrtcvad>=2.0.10,<3",
     # Vocal-emotion recognition (emotion2vec+ via funasr) for audition. funasr
     # pulls torchaudio, which must MATCH the host torch wheel (CUDA vs CPU) —
     # install it the same dynamic way as torch (see DEPENDENCIES.md / SETUP.md).
