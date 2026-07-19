@@ -35,7 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=8",
-    "pytest-asyncio>=0.23",
+    "pytest-asyncio>=1.4.0",
     "fakeredis>=2.21",
     # Structural import-boundary contracts (kaine/evaluation sidecar boundary +
     # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
