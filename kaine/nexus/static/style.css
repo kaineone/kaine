@@ -6,7 +6,7 @@
    carrying the Kaine brand (see the kaine-brand repo): an obsidian near-black
    field, raised obsidian-glass panels, gently rounded-rectangle controls,
    stacked rail segments, an illuminated GOLD structural accent, and a single
-   blood-RED signal reserved for alerts. Type is Oxanium (display) / Inter (UI)
+   blood-RED signal reserved for alerts. Type is Zen Dots (display) / Inter (UI)
    / JetBrains Mono (data). Tune the look from the CSS variables in :root —
    they are the intended knobs.
    ========================================================================== */
@@ -54,12 +54,12 @@
   --degraded: #C4963C;  --degraded-bg: #2c2210;
   --neutral: #8a7c62;   --neutral-bg: #17140d;
 
-  /* ---- Type — Kaine brand (Oxanium display / Inter body / JetBrains Mono) */
-  /* Vendored locally (no runtime download; no-cloud-runtime). Oxanium is the
+  /* ---- Type — Kaine brand (Zen Dots display / Inter body / JetBrains Mono) */
+  /* Vendored locally (no runtime download; no-cloud-runtime). Zen Dots is the
      display face for console headers and uppercase labels; Inter carries the UI
      and body; JetBrains Mono is the metadata/data face. */
   --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-display: "Oxanium", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Zen Dots", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Bumped up ~2pt across the interface for readability on a 4K console. */
   --fs-xs: 0.9rem;
@@ -88,27 +88,14 @@
 
 /* ---- Vendored web fonts (served locally from /static/fonts — no runtime
    download, no external font CDN; satisfies no-cloud-runtime). The Kaine brand
-   type system: Oxanium (display/headers/uppercase labels), Inter (UI/body),
+   type system: Zen Dots (display/headers/uppercase labels), Inter (UI/body),
    JetBrains Mono (metadata/data). ------------------------------------------ */
 @font-face {
-  font-family: "Oxanium";
-  font-style: normal; font-weight: 400; font-display: swap;
-  src: url("/static/fonts/oxanium-latin-400-normal.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Oxanium";
-  font-style: normal; font-weight: 500; font-display: swap;
-  src: url("/static/fonts/oxanium-latin-500-normal.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Oxanium";
-  font-style: normal; font-weight: 600; font-display: swap;
-  src: url("/static/fonts/oxanium-latin-600-normal.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Oxanium";
-  font-style: normal; font-weight: 700; font-display: swap;
-  src: url("/static/fonts/oxanium-latin-700-normal.woff2") format("woff2");
+  /* Zen Dots ships one weight. The 400 700 range makes the console's 600/700
+     display rules match this face instead of synthesizing fake bold over it. */
+  font-family: "Zen Dots";
+  font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url("/static/fonts/zen-dots-latin-400-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Inter";
@@ -218,7 +205,7 @@ body {
   text-decoration: none;
   font-family: var(--font-display);
   font-weight: 800;
-  letter-spacing: 0.08em; /* Oxanium is wide — keep the wordmark from overrunning */
+  letter-spacing: 0.08em; /* Zen Dots is wide — keep the wordmark from overrunning */
   text-transform: uppercase;
   color: var(--accent);          /* KAINE letters — always palette red */
   background: var(--panel);      /* blue-grey bar */
@@ -361,7 +348,7 @@ header h1 {
   font-family: var(--font-display);
   font-size: var(--fs-xl);
   margin: 0;
-  letter-spacing: 0.04em; /* Oxanium is wide — keep the title tight */
+  letter-spacing: 0.04em; /* Zen Dots is wide — keep the title tight */
   text-transform: uppercase;
   font-weight: 800;
 }
@@ -486,7 +473,7 @@ h3 {
   font-family: var(--font-display);
   font-size: var(--fs-sm);
   text-transform: uppercase;
-  letter-spacing: 0.08em; /* Oxanium is WIDE — pull spacing in so titles don't overrun */
+  letter-spacing: 0.08em; /* Zen Dots is WIDE — pull spacing in so titles don't overrun */
   font-weight: 700;
   color: var(--haze);
   margin: 0 0 0.9rem 0;
@@ -992,7 +979,7 @@ details.board { margin-bottom: 0.2rem; }
 /* ---- Buttons / forms (pills) ------------------------------------------- */
 
 button, .btn {
-  /* Inter (--font-ui), NOT Oxanium — Oxanium is a touch wide for pills and
+  /* Inter (--font-ui), NOT Zen Dots — the display face is too wide for pills and
      made the labels cramp/overflow. Tightened letter-spacing + nowrap + a touch
      more horizontal padding so the text always fits. */
   font-family: var(--font-ui);
