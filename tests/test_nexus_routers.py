@@ -926,9 +926,14 @@ def test_fonts_served_locally_no_external_font_url():
     assert referenced, "no @font-face woff2 references found in style.css"
     for fname in referenced:
         assert (fonts_dir / fname).exists(), fname
-    # The Kaine brand type system: Oxanium (display), Inter (UI), JetBrains Mono.
-    for family in ("oxanium", "inter", "jetbrains-mono"):
+    # The Kaine brand type system: Zen Dots (display), Inter (UI), JetBrains Mono.
+    for family in ("zen-dots", "inter", "jetbrains-mono"):
         assert any(family in f for f in referenced), family
+    # Zen Dots ships a single weight, declared as a 400 700 range so the
+    # console's 600/700 display rules match the face instead of being
+    # synthesized into fake bold. Losing the range silently degrades every
+    # header, so pin it.
+    assert "font-weight: 400 700" in css, "Zen Dots must declare a 400 700 weight range"
 
 
 # ---- Spot supervisor health block ----------------------------------------
