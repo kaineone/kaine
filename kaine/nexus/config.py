@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -36,25 +36,43 @@ class NexusConfig:
         )
 
 
+def _env_flag(name: str) -> bool | None:
+    """Parse a boolean deployment override from the environment.
+
+    Returns ``None`` when the variable is unset so the TOML value (or the
+    dataclass default) is kept untouched; otherwise maps the common truthy
+    spellings (``1``/``true``/``yes``/``on``, case-insensitive) to ``True`` and
+    everything else to ``False``.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_nexus_config(path: str | os.PathLike[str] | None = None) -> NexusConfig:
     target = Path(path or "config/kaine.toml")
     raw: dict[str, Any] = {}
     if target.exists():
         raw = tomllib.loads(target.read_text())
     config = NexusConfig.from_mapping(raw.get("nexus"))
-    # Deployment override: containers reach Nexus through a published port mapping,
-    # which cannot reach a server bound to the container's own 127.0.0.1 (the shipped
-    # default). KAINE_NEXUS_HOST / KAINE_NEXUS_PORT let the deployment bind all
-    # interfaces inside the container without editing the baked config. The compose
-    # publish rule keeps external exposure loopback-only.
+    # Deployment overrides. A container mounts the baked, always-current kaine.toml
+    # and expresses its handful of deployment-specific deltas through the environment
+    # rather than a hand-maintained parallel copy of the whole config (which silently
+    # drifts from the source of truth). KAINE_NEXUS_HOST / KAINE_NEXUS_PORT bind all
+    # interfaces inside the container — the shipped default 127.0.0.1 is unreachable
+    # via the published port mapping — while the compose publish rule keeps external
+    # exposure loopback-only. KAINE_NEXUS_CONVERSATION_ENABLED toggles the
+    # conversation surface (the only [nexus] delta with no other env knob).
     host = os.environ.get("KAINE_NEXUS_HOST")
     port = os.environ.get("KAINE_NEXUS_PORT")
     if host or port:
-        from dataclasses import replace
-
         config = replace(
             config,
             host=host or config.host,
             port=int(port) if port else config.port,
         )
+    conversation = _env_flag("KAINE_NEXUS_CONVERSATION_ENABLED")
+    if conversation is not None:
+        config = replace(config, conversation_enabled=conversation)
     return config
