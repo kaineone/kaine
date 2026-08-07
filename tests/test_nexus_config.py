@@ -91,3 +91,30 @@ def test_no_env_leaves_toml_host(tmp_path, monkeypatch):
     monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
     cfg = load_nexus_config(config_file)
     assert cfg.host == "127.0.0.1"
+
+
+def test_env_conversation_enables_over_toml(tmp_path, monkeypatch):
+    # A container mounts the baked kaine.toml (conversation off in the base-thesis
+    # form) and turns the surface on via the environment, so no parallel full-config
+    # copy has to be hand-maintained just to flip this one flag.
+    config_file = tmp_path / "kaine.toml"
+    config_file.write_text("[nexus]\nconversation_enabled = false\n")
+    monkeypatch.setenv("KAINE_NEXUS_CONVERSATION_ENABLED", "true")
+    cfg = load_nexus_config(config_file)
+    assert cfg.conversation_enabled is True
+
+
+def test_env_conversation_disables_over_toml(tmp_path, monkeypatch):
+    config_file = tmp_path / "kaine.toml"
+    config_file.write_text("[nexus]\nconversation_enabled = true\n")
+    monkeypatch.setenv("KAINE_NEXUS_CONVERSATION_ENABLED", "false")
+    cfg = load_nexus_config(config_file)
+    assert cfg.conversation_enabled is False
+
+
+def test_no_env_leaves_toml_conversation(tmp_path, monkeypatch):
+    config_file = tmp_path / "kaine.toml"
+    config_file.write_text("[nexus]\nconversation_enabled = true\n")
+    monkeypatch.delenv("KAINE_NEXUS_CONVERSATION_ENABLED", raising=False)
+    cfg = load_nexus_config(config_file)
+    assert cfg.conversation_enabled is True
