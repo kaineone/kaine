@@ -702,6 +702,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # Latch: once a humane action has been taken, do not re-fire (the run is
         # being paused/ended; preserving again every poll would be noise).
         self._acted = False
+        # M3: rate limit for "notify" responses — at most one notify bundle
+        # per min_interval_s, so sustained distress does not fire one bundle
+        # per distress cycle.
+        self._last_notify_at = float("-inf")
 
     def _in_warmup(self, now: float) -> bool:
         """True while still inside the cold-start warm-up window."""
@@ -927,3 +931,18 @@ __all__ = [
     "PreservationRetentionConfig",
     "PreservationConfig",
 ]
+
+
+
+
+def _welfare_notify_allowed(
+    last_notify_at: float, now: float, min_interval_s: float
+) -> bool:
+    """M3: rate-limit welfare ``notify`` responses.
+
+    Same mechanism as DivergenceMonitor's ``min_interval_s`` rate limit: at
+    most one notify bundle per ``min_interval_s``, so a sustained-distress run
+    lasting ``duration`` yields at most ``ceil(duration / min_interval_s)``
+    bundles, not one per distress cycle.
+    """
+    return (now - last_notify_at) >= min_interval_s

@@ -79,6 +79,14 @@ class ScriptedBus:
                 break
         return out
 
+    async def read_entries(
+        self, stream: str, last_id: str = "0", count: int = 100, block_ms: int = 0
+    ) -> tuple[list[tuple[str, Event]], str | None]:
+        # Mirrors the real bus contract: (entries, last_scanned) where
+        # last_scanned is the last entry id scanned, or None when empty.
+        entries = await self.read(stream, last_id, count, block_ms)
+        return entries, (entries[-1][0] if entries else None)
+
     async def publish(self, event: Event) -> str:
         self.published.setdefault(event.source, []).append(event)
         return f"{event.source}-pub"

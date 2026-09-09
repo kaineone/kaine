@@ -243,6 +243,11 @@ class _NullBus:
     async def read(self, *a, **k):
         return []
 
+    async def read_entries(self, *a, **k):
+        # Mirrors the real bus contract: (entries, last_scanned). No entries
+        # are ever produced, so last_scanned is None.
+        return [], None
+
     async def publish(self, event):
         return "x"
 
@@ -327,6 +332,12 @@ class _ReduceRateBus(_NullBus):
 
     def __init__(self) -> None:
         self._served = False
+
+    async def read_entries(self, stream, last_id="0", count=100, block_ms=0):
+        # Mirrors the real bus contract: (entries, last_scanned) where
+        # last_scanned is the last entry id scanned, or None when empty.
+        entries = await self.read(stream, last_id, count, block_ms)
+        return entries, (entries[-1][0] if entries else None)
 
     async def read(self, stream, last_id="0", count=100, block_ms=0):
         if stream == "soma.out" and not self._served:

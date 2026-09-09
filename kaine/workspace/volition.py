@@ -159,8 +159,18 @@ class DefaultActionSelectionPolicy:
     touching Volition's plumbing.
     """
 
-    def __init__(self) -> None:
+    # C3: refractory-scaled guard timeout (6x the report speak refractory of
+    # 8s ~= 48s) — a speak guard armed this long without the entity's own
+    # output becoming conscious is cleared, so a failed realization cannot
+    # permanently mute the entity.
+    _GUARD_TIMEOUT_S = 48.0
+
+    def __init__(self, *, clock: Optional[Any] = None) -> None:
+        import time
+
         self._speak_in_flight = False
+        self._speak_armed_at = float("-inf")
+        self._clock = clock or time.monotonic
 
     @property
     def speak_in_flight(self) -> bool:
@@ -214,12 +224,24 @@ class DefaultActionSelectionPolicy:
             for _, event in snapshot.selected_events
         ):
             self._speak_in_flight = False
+            self._speak_armed_at = float("-inf")
+        # C3 belt-and-suspenders: a guard armed longer than the timeout window
+        # without the entity's own speech becoming conscious is cleared, so a
+        # failed realization (LLM error, dead organ) can never permanently
+        # mute the entity. Uses the injected clock (subjective time in tests).
+        if (
+            self._speak_in_flight
+            and (self._clock() - self._speak_armed_at) >= self._GUARD_TIMEOUT_S
+        ):
+            self._speak_in_flight = False
+            self._speak_armed_at = float("-inf")
         if self._speak_in_flight:
             # A prior speak intent is still being realized; do not stack.
             return []
         intent = self._user_response_intent(snapshot)
         if intent is not None:
             self._speak_in_flight = True
+            self._speak_armed_at = self._clock()
             return [intent]
         return []
 

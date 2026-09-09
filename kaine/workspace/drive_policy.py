@@ -74,8 +74,10 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
     parallel ``think``-in-flight guard for drive-initiated internal speech.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, clock: Callable[[], float] | None = None) -> None:
+        # The parent policy owns the injected clock (used by both guard
+        # timeouts); pass it through rather than shadowing its _clock.
+        super().__init__(clock=clock)
         self._think_in_flight = False
 
     @property
@@ -94,13 +96,49 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
         than just the source so a private monologue does not spuriously clear
         the external-speech guard, and vice versa.
         """
+        # C3 belt-and-suspenders: refractory-scaled guard timeouts — a guard
+        # armed longer than the window without the entity's matching output
+        # becoming conscious is cleared, so a failed realization cannot
+        # permanently mute the entity through the drive policy.
+        self._apply_guard_timeouts()
         for _, event in snapshot.selected_events:
             if event.source != OWN_EXTERNAL_SPEECH_SOURCE:
                 continue
             if event.type == OWN_EXTERNAL_SPEECH_TYPE:
                 self._speak_in_flight = False
+                self._speak_armed_at = None
             elif event.type == OWN_INTERNAL_SPEECH_TYPE:
                 self._think_in_flight = False
+                self._think_armed_at = None
+
+    _GUARD_TIMEOUT_S = 48.0  # refractory-scaled (6x the speak refractory)
+
+    def _guard_now(self) -> float:
+        """Guard timestamps come from the injected policy clock when one is
+        present (the parent's ``clock`` kwarg), else the real monotonic
+        clock — so arming and timeout checks can never diverge."""
+        clock = getattr(self, "_clock", None)
+        if callable(clock):
+            return clock()
+        import time
+
+        return time.monotonic()
+
+    def _apply_guard_timeouts(self) -> None:
+        """Clear in-flight guards armed too long without matching output."""
+        now = self._guard_now()
+        if self._speak_in_flight:
+            if getattr(self, "_speak_armed_at", None) is None:
+                self._speak_armed_at = now
+            elif (now - self._speak_armed_at) >= self._GUARD_TIMEOUT_S:
+                self._speak_in_flight = False
+                self._speak_armed_at = None
+        if self._think_in_flight:
+            if getattr(self, "_think_armed_at", None) is None:
+                self._think_armed_at = now
+            elif (now - self._think_armed_at) >= self._GUARD_TIMEOUT_S:
+                self._think_in_flight = False
+                self._think_armed_at = None
 
     def _drive_name(self, event) -> Optional[str]:
         """Return the drive name on a ``thymos.drive`` crossing event, else None."""
@@ -126,6 +164,9 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
                 speak_intent = self._social_drive_speak(snapshot)
             if speak_intent is not None:
                 self._speak_in_flight = True
+                # Stamp at ARM time: a stale or zero-initialized armed_at
+                # must not time the guard out on the very next call.
+                self._speak_armed_at = self._guard_now()
                 intents.append(speak_intent)
 
         # --- think (separate one-in-flight guard) -------------------------
@@ -133,6 +174,7 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
             think_intent = self._deliberative_drive_think(snapshot)
             if think_intent is not None:
                 self._think_in_flight = True
+                self._think_armed_at = self._guard_now()
                 intents.append(think_intent)
 
         return intents
