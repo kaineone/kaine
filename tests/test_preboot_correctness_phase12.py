@@ -563,11 +563,10 @@ def test_m3_notify_rate_limit_is_enforced_in_respond():
     notify action through _welfare_notify_allowed (finding 10: the helper
     existed with no production caller)."""
     from kaine.cycle.preservation_monitor import WelfareResponseConfig
-    import kaine.cycle.preservation_monitor as pm
 
     cfg = WelfareResponseConfig.from_section({"min_interval_s": 60.0})
     assert cfg.min_interval_s == 60.0
-    src = Path(pm.__file__).read_text(encoding="utf-8")
+    src = Path(inspect.getfile(_welfare_notify_allowed)).read_text(encoding="utf-8")
     respond = src.split("async def _respond", 1)[1]
     assert "_welfare_notify_allowed" in respond
     assert "_last_notify_at = now" in respond
