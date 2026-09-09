@@ -8,7 +8,7 @@
 - [x] 1.2 Document the three-workload / four-target matrix in
       `docs/deployment-topologies.md` — added (workload × target matrix + three
       walls).
-- [ ] 1.3 Paper §10 (Future Work) updated with the honest distributed assessment
+- [ ] 1.3 Paper §10 (Future Work) updated with the honest distributed assessment *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
       — DEFERRED: the paper source is not present in this public repo (no
       `paper/`/`*paper*` file, no §10/Future-Work source found under `docs/`), so
       it cannot be edited here. The honest assessment is captured in

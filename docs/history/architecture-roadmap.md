@@ -1,5 +1,10 @@
 # KAINE Architecture Roadmap (Historical)
 
+> **Superseded.** Every change this roadmap sequences has been implemented and
+> archived (see `openspec/changes/archive/`). Current and planned work lives in
+> `openspec/changes/` — `openspec list` is the live view. Kept for provenance;
+> one factual correction below is bracketed.
+
 Generated: 2026-06-06. Reflects the change set after the Phase-4/5 proposal
 revision: `hypnos-restructure` replaced by two focused changes, two new changes
 added (`eidolon-self-inference`, `state-encryption`), and the JAX stack
@@ -11,10 +16,12 @@ backed and use CPU-only JAX by default; GPU acceleration is operator-configured.
 These are the only changes in this build plan that introduce JAX as a dependency.
 
 **Already-implemented branches:** `drives-to-behavior` (merged, ✓ Complete) and
-`condition-language-organ` (drafted, not yet in a feature branch) come from
-already-implemented or near-ready feature work. Both must be sequenced and
-carried forward into the phase plan — `drives-to-behavior` is already done;
-`condition-language-organ` needs its own OpenSpec change and branch.
+`condition-language-organ` come from already-implemented or near-ready feature
+work. *[Correction: `condition-language-organ` was in fact already implemented
+(commit `acadfa1`, 2026-06-03) when this roadmap was generated, and later gained
+its own change dir and merged acceptance PR (#41) — the "drafted, not yet in a
+feature branch" status this document originally recorded was stale at
+generation time.]*
 
 ---
 

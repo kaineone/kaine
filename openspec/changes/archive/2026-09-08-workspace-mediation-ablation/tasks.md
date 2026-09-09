@@ -67,13 +67,13 @@ is deliberately not committed by this change. -->
 
 ## 5. Paper reconciliation (review-gated, NOT committed by this change)
 
-- [ ] 5.1 Reconcile §1.2 / §3.2 / §6.3 / abstract to the competitive-mediation framing;
+- [ ] 5.1 Reconcile §1.2 / §3.2 / §6.3 / abstract to the competitive-mediation framing; *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
   audit the §4 sixteen-module count. (Largely already done in `paper-preprint-minimal_02.md`.)
-- [ ] 5.2 Add to §6.3 / §9 the two construct-validity caveats: (a) competition is only
+- [ ] 5.2 Add to §6.3 / §9 the two construct-validity caveats: (a) competition is only *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
   exercised when `top_k` < candidate count; (b) the faithful off-arm has Chronos predict
   the FLAT snapshot (Chronos only predicts snapshots), so the primary measure is
   cross-module correlation, not absolute error.
-- [ ] 5.3 Draft the pre-registration (controls, metrics, thresholds, window/significance
+- [ ] 5.3 Draft the pre-registration (controls, metrics, thresholds, window/significance *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
   params, `top_k`, Soma-salience coverage, coherence-vs-divergence limit) for Erik.
 
 ## 6. Verification
