@@ -51,3 +51,31 @@ adding to the registry propagates to all three consumers automatically.
 - Adding a payload field to a record requires a deliberate taxonomy edit —
   keys not in the allowlist are dropped, and event types not in the taxonomy
   produce no record at all.
+
+
+<!-- change sleep-ignition-audit -->
+
+## `hypnos.ignition_audit` — sleep-time ignition audit
+
+Content-free and export-eligible. Emitted unconditionally on every sleep on
+`hypnos.out` and merged into the PhaseResult metadata, riding
+`hypnos.sleep.completed` into the sleep_snapshots JSONL (carrying
+`sleep_index`).
+
+The audit classifies each realized speech/action in the window since the
+previous sleep into a three-way taxonomy: **input-triggered** (coalition
+member of type `audition.transcription` / `mundus.chat`, directly or elsewhere
+in the winning coalition), **drive-triggered** (`thymos.drive` in the coalition
+path), or **self-initiated** (neither). Realization markers are
+`external_speech`, `internal_speech`, `vox.synthesized`, `praxis.action`;
+`realization_failed` is excluded. `intent.act` on `nous.out` is reported as a
+distinct **unrealizable** count — no effector reads `nous.out`, so these are
+wiring signals, never executed actions.
+
+Research-log allowlist (numeric/categorical only): `sleep_index`,
+`realized_total`, `input_triggered`, `drive_triggered`, `self_initiated`,
+`unrealizable_nous_intents`, `realization_failed_count`. The per-category
+entry_id lists, event types, and salience values remain in the
+sleep_snapshots payload only. No text, transcripts, or latent vectors ever
+leave the audit. Registry note: new event types must be added to the
+observer's `_TAXONOMY`; unlisted types are dropped.
