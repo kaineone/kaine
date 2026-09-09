@@ -74,7 +74,7 @@ While the shared playlist clock is paused, the audio producer thread SHALL park 
 - **WHEN** the shared clock pauses and `read()` is called repeatedly
 - **THEN** the source re-presents the same held frame and never advances the item index or decoder cursor while paused
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Perception locus restore after sleep
 
