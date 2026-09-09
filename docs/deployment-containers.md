@@ -121,10 +121,24 @@ containerized — overlay `compose/kaine.organ-host.yml` and point
 ## State, secrets, and the env/gate-var matrix
 
 Persistent named volumes: `kaine-redis-data`, `kaine-qdrant-data`,
-`kaine-models` (read-mostly), and `kaine-state` (the entity's life — CAL-gated
+`kaine-models` (read-mostly), `kaine-state` (the entity's life — CAL-gated
 forks, preservation bundles, individuation, world/self models, control state,
-audit/incident logs). `kaine-state` keeps owner-only (0700/0600) permissions
-inside the container and survives `down`/`up`. Operator config, secrets, private
+audit/incident logs), `kaine-eval-data` (`/app/data/evaluation` on both the
+cycle and Nexus — the run manifests under `runs/` plus every evaluation
+observer's output), and `kaine-trajectory` (`/app/data/workspace_trajectory`).
+`kaine-state` keeps owner-only (0700/0600) permissions inside the container and
+survives `down`/`up`; research output survives it too — nothing the run
+produces lives on the ephemeral container layer.
+
+Redis runs with a 4 GB `--maxmemory` ceiling and `noeviction` (the bus fails
+loud rather than silently dropping events); every service logs through the
+shared `json-file` rotation anchor (50 MB × 3 files). `config/profiles/` is
+baked into the image, so `KAINE_PROFILE=thesis_test` resolves in-container
+without a bind mount. The image also bakes `ARG GIT_SHA` into
+`ENV KAINE_GIT_SHA`, which the run manifest's `git_sha` falls back to
+(containers carry no `.git`). The Nexus deployment deltas ride the
+environment: `KAINE_NEXUS_HOST`, `KAINE_NEXUS_PORT`, and
+`KAINE_NEXUS_CONVERSATION_ENABLED` override the baked TOML. Operator config, secrets, private
 voices, and adapters are **bind-mounted read-only**, never copied into the image.
 
 Enable encryption-at-rest by setting `[security.state_encryption].enabled = true`

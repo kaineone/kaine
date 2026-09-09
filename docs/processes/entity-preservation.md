@@ -99,6 +99,19 @@ Each preservation emits a `preservation.preserved` bus event and a durable recor
 under `[preservation].incident_path`, stamped with the run's `run_id`, so the
 trigger point is part of the recorded, reproducible trajectory.
 
+## The welfare-protective pause survives supervisor recovery
+
+When the welfare monitor pauses the entity (`action = "pause"`: preserve
+first, then freeze with `source = "welfare"`), that pause is load-bearing —
+it must hold until a person decides otherwise. Freeze sources therefore stack
+in `state/cycle/control.json`: a module fault during a welfare pause lets Spot
+push its own freeze on top, and Spot's recovery pops only Spot's entry — the
+welfare pause underneath stays in force and the cycle remains frozen. Only an
+operator stand-down or an explicit welfare stand-down lifts it. Under
+`action = "notify"` (preserve, record, continue) the response is rate-limited
+by `[preservation.welfare_response].min_interval_s` so sustained distress
+cannot fill the disk with one encrypted bundle per distress window.
+
 ## The preservation bundle
 
 `preserve_live` writes a self-contained bundle under the configured `out_root`,

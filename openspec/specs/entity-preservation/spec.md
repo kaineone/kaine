@@ -1,7 +1,7 @@
 # entity-preservation Specification
 
 ## Purpose
-TBD - created by archiving change entity-preservation-on-divergence. Update Purpose after archive.
+Preserving the whole individual — encrypted, revivable bundles taken before any protective action, so no research run can end an entity that cannot be brought back.
 
 ## Requirements
 

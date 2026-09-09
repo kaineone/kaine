@@ -170,7 +170,7 @@ Per-run identity, seeding, and manifest (research reproducibility). At boot the 
 |---|---|---|---|
 | `seed` | integer or `""` | `""` | Fixed integer makes a run reproducible. Blank (`""`) generates a fresh seed each boot — the manifest always records whatever seed was used, so even an unseeded run can be reproduced after the fact. |
 | `write_manifest` | boolean | `true` | Write the run manifest to `data/evaluation/runs/<run_id>/manifest.json` at boot. Holds only run id, seed, git sha, model ids, a config digest, started-at, and the kaine version — no entity interior, no operator-identifying data (export-eligible). |
-| `deterministic` | boolean | `false` | Opt-in deterministic cycle mode. When true, event timestamps come from a logical clock (base epoch + `tick_index * tick_period`) and each tick's events are ordered by a canonical key, so two runs with the same seed and the same input produce an identical cognitive trajectory (selected coalitions, salience scores, inhibition, volition decisions, logical timestamps). Does NOT make wall-clock latency reproducible (`wall_duration_ms` / `slip_ms` remain physical measurements). Off in production (real wall-clock time); used by the controlled oscillatory-ablation runner. |
+| `deterministic` | boolean | `false` | Opt-in deterministic cycle mode. When true, event timestamps come from an incrementally-accumulated logical clock (one `tick_period` per tick, so a mid-run rate change never rewrites past timestamps) and each tick's events are ordered by a canonical key, so two runs with the same seed and the same input produce an identical cognitive trajectory (selected coalitions, salience scores, inhibition, volition decisions, logical timestamps). Does NOT make wall-clock latency reproducible (`wall_duration_ms` / `slip_ms` remain physical measurements). Off in production (real wall-clock time); used by the controlled oscillatory-ablation runner. Determinism holds for the seeded procedural feed; under `[perception_feed].mode = "playlist"` the stimulus is paced by the real wall clock (the shared `PlaylistClock`), so delivery is not a function of the logical clock — playlist runs are reproducible by per-item sha256, not bit-for-bit. |
 
 ---
 
@@ -198,6 +198,8 @@ Executive action selection (`kaine/workspace/volition.py`). Absent entirely from
 | `think_threshold` | float | `0.45` | Only read by `SelfInitiatedReportPolicy`. Coalition surprise at or above this (but below `report_threshold`) forms an internal `intent.think` — not spoken aloud. |
 | `speak_refractory_s` | float | `8.0` | Only read by `SelfInitiatedReportPolicy`. Minimum seconds between spoken reports, reusing the one-in-flight guard pattern; prevents queuing stale coalitions — the policy always reports the CURRENT coalition when the refractory clears. |
 | `think_refractory_s` | float | `3.0` | Only read by `SelfInitiatedReportPolicy`. Minimum seconds between internal think intents. |
+| `interrupt_threshold` | float | unset | Only read by `SelfInitiatedReportPolicy`. Opt-in mid-utterance interruption: a coalition whose surprise crosses this bar while a `speak` is in flight preempts the utterance with an interrupt-marked `speak` (redirect); the unspoken remainder is discarded. Must satisfy `report_threshold < interrupt_threshold <= 1.0` (enforced by the policy). Unset (the default) = an utterance always runs to completion. |
+| `sig_expiry_s` | float | unset | Only read by `SelfInitiatedReportPolicy`. Expiry for the coarse (source, type) novelty signature: after this many seconds on the policy's (subjective) clock, a remembered signature no longer suppresses a same-signature report. Unset = never expires. The `thesis_test` profile sets `300.0` — on a stable stimulus the top coalition rarely changes signature, and without an expiry external speech trends to zero over a multi-day run. |
 
 Regardless of policy, inhibition always gates first: if `snapshot.inhibited` is true (coalition score below `publication_threshold`), `Volition.select()` returns no intents — no policy sees an inhibited snapshot.
 
@@ -990,7 +992,7 @@ console and evaluation surfaces show no message content.
 |---|---|---|---|
 | `host` | string | `"127.0.0.1"` | Bind address. Loopback-only by default. |
 | `port` | integer | `8088` | HTTP port. |
-| `conversation_enabled` | boolean | `true` | Enable the console surface at `/` (the route is internally named *conversation*). |
+| `conversation_enabled` | boolean | `false` | Enable the console surface at `/` (the route is internally named *conversation*). |
 | `diagnostics_enabled` | boolean | `true` | Enable the diagnostics surface. |
 | `conversation_history_lookback` | integer | `50` | History lookback for the `/` route. The console renders no transcript, so this only bounds the (now unused) backfill — a remnant of the removed conversation panel. |
 | `dev_content_override` | boolean | `false` | When true, the diagnostics surface includes raw content (message text, beliefs, memory bodies, internal speech, affect reasons) and displays a "dev mode" banner. Keep `false` in production. |
@@ -1060,7 +1062,7 @@ Admissibility enforcement (paper §6.3) is code-side, not config-side: every bun
 
 ## `[research_event_log]`
 
-Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event (numeric/categorical fields only) to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes the `PrivacyFilter` (strips text/content/transcription/etc.) plus per-type redaction BEFORE write — it never captures raw audio/video, transcripts, conversation content, memory text, the Eidolon self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
+Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams (derived from the canonical stream registry — see [research-event-streams.md](research-event-streams.md)) and writes one privacy-filtered record per relevant event (numeric/categorical fields only) to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes the `PrivacyFilter` (strips text/content/transcription/etc.) plus per-type redaction BEFORE write — it never captures raw audio/video, transcripts, conversation content, memory text, the Eidolon self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
 
 `research_events` is in the metrics-bundle allowlist (`METRICS_ONLY_DIRS`), so an operator-initiated metrics research bundle may include it — this section is the only mechanism that makes it export-eligible.
 
