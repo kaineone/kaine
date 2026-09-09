@@ -233,6 +233,44 @@ class AsyncBus:
                 out.append(decoded)
         return out
 
+    async def read_workspace_entries(
+        self, last_id: str = "0", count: int = 64
+    ) -> tuple[list[tuple[str, dict[str, Any]]], Optional[str]]:
+        """Cursor-based batch read of ``workspace.broadcast``, decode-safe.
+
+        Unlike :meth:`read_entries` this returns the raw broadcast snapshot
+        dicts (coalition members etc.), not Event envelopes — :meth:`range`
+        CANNOT decode broadcast entries (they carry a JSON ``snapshot`` field,
+        not the normal event envelope), so audit-style consumers (change
+        sleep-ignition-audit) must use this path. Returns
+        ``(entries, last_scanned)`` where ``last_scanned`` is the id of the
+        last entry scanned, decodable or not, so a poison batch cannot wedge a
+        cursor.
+        """
+        minimum = ("(" + last_id) if (last_id and last_id != "0") else (last_id or "-")
+        response = await self._client.xrange(
+            WORKSPACE_STREAM, min=minimum, count=count
+        )
+        if not response:
+            return [], None
+        out: list[tuple[str, dict[str, Any]]] = []
+        last_scanned: Optional[str] = None
+        for entry_id, fields in response:
+            if isinstance(entry_id, bytes):
+                entry_id = entry_id.decode()
+            last_scanned = entry_id
+            try:
+                decoded = _decode_workspace(fields)
+            except Exception:
+                log.warning(
+                    "skipping undecodable workspace.broadcast entry %s",
+                    entry_id,
+                    exc_info=True,
+                )
+                continue
+            out.append((entry_id, decoded))
+        return out, last_scanned
+
     async def subscribe_workspace(
         self,
         last_id: str = "$",

@@ -174,6 +174,22 @@ class Hypnos(BaseModule):
         # Fatigue trigger state
         self._soma_cursor: str = "0"
         self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
+        # Sleep-time ignition audit (change sleep-ignition-audit): per-stream
+        # cursors, seeded at initialize() to the CURRENT stream tails (the same
+        # persisted-cursor pattern as _soma_cursor) so the first sleep audits
+        # only the post-boot waking window, never history.
+        self._audit_cursors: dict[str, str] = {
+            stream: "0"
+            for stream in (
+                "volition.out",
+                "lingua.external",
+                "lingua.internal",
+                "praxis.out",
+                "nous.out",
+                "vox.out",
+            )
+        }
+        self._broadcast_cursor: str = "0"
 
     @property
     def scheduler(self) -> RestScheduler:
@@ -207,6 +223,30 @@ class Hypnos(BaseModule):
                 self._maintenance_poll_loop(), name="hypnos-maintenance-poll"
             )
         )
+        # Ignition-audit cursors: seed to the current stream tails (mirrors the
+        # _soma_cursor seeding below) — each sleep then reads everything new
+        # since its cursor, bounded to the window since _last_sleep_at.
+        for stream in self._audit_cursors:
+            try:
+                latest = await self._bus.client.xrevrange(stream, count=1)
+            except Exception:
+                latest = []
+            if latest:
+                tail = latest[0][0]
+                if isinstance(tail, bytes):
+                    tail = tail.decode()
+                self._audit_cursors[stream] = tail
+        try:
+            latest_ws = await self._bus.client.xrevrange(
+                "workspace.broadcast", count=1
+            )
+        except Exception:
+            latest_ws = []
+        if latest_ws:
+            tail = latest_ws[0][0]
+            if isinstance(tail, bytes):
+                tail = tail.decode()
+            self._broadcast_cursor = tail
         if self._fatigue_triggered:
             # Seed cursor so we only process new soma events from now on.
             try:
@@ -518,10 +558,147 @@ class Hypnos(BaseModule):
         salience = (
             self._baseline_salience if all_succeeded else self._alert_salience
         )
+        # Sleep-time ignition audit (change sleep-ignition-audit): runs
+        # unconditionally on EVERY sleep, before the completed publish, so the
+        # content-free payload is emitted on hypnos.out AND merged into the
+        # completed metadata — riding hypnos.sleep.completed into the
+        # sleep_snapshots JSONL, carrying sleep_index.
+        try:
+            summary["ignition_audit"] = await self._run_ignition_audit()
+        except Exception:
+            log.warning(
+                "hypnos: ignition audit step failed (continuing)", exc_info=True
+            )
         # Publishing hypnos.sleep.completed causes Soma to reset its
         # FatigueAccumulator (soma._hypnos_event_loop handles this event).
         await self.publish("hypnos.sleep.completed", summary, salience=salience)
         return summary
+
+    async def _drain_audit_stream(self, stream: str) -> list[tuple[str, Any]]:
+        """Read everything new on ``stream`` since its audit cursor.
+
+        Batch loop with ``block_ms=0`` until empty, advancing by the last
+        SCANNED id (decodable or not) exactly like ``_soma_consumer_loop`` so a
+        poison batch cannot wedge the cursor.
+        """
+        events: list[tuple[str, Any]] = []
+        cursor = self._audit_cursors.get(stream, "0")
+        while True:
+            entries, last_scanned = await self._bus.read_entries(
+                stream, last_id=cursor, count=64, block_ms=0
+            )
+            if last_scanned:
+                cursor = last_scanned
+            if not entries:
+                break
+            events.extend(entries)
+        self._audit_cursors[stream] = cursor
+        return events
+
+    async def _run_ignition_audit(self) -> dict[str, Any]:
+        """Sleep-time ignition audit (change sleep-ignition-audit) — pure data.
+
+        Unconditional on every sleep: collects intents/realizations from
+        ``volition.out`` / ``lingua.external`` / ``lingua.internal`` /
+        ``praxis.out`` since the per-stream cursors, plus
+        ``workspace.broadcast`` snapshots since the broadcast cursor (read via
+        the decode-safe workspace path — never ``bus.range``, which cannot
+        decode broadcast entries), bounded to the window since
+        ``_last_sleep_at``. Classification itself is the PURE
+        ``classify_realizations`` — no bus, no I/O. The payload is content-free
+        (counts, entry_ids, event types, salience values, sleep_index only);
+        ``intent.act`` on ``nous.out`` is counted separately as unrealizable
+        because no effector reads ``nous.out``. ANY exception degrades to a
+        logged warning + ``{"error": <ExcTypeName>}`` — the sleep must never
+        fail because auditing failed. Boundary: Hypnos never imports
+        ``kaine.evaluation``; only ``kaine.modules.hypnos.ignition_audit``.
+        """
+        from kaine.modules.hypnos.ignition_audit import classify_realizations
+
+        try:
+            since_ms: Optional[float] = None
+            if self._last_sleep_at is not None:
+                since_ms = self._last_sleep_at * 1000.0
+
+            def _in_window(entry_id: str) -> bool:
+                if since_ms is None:
+                    return True
+                try:
+                    return float(entry_id.split("-")[0]) >= since_ms
+                except Exception:
+                    return True  # honest default: keep, never guess
+
+            intents: list[dict[str, Any]] = []
+            realizations: list[dict[str, Any]] = []
+            for stream in (
+                "volition.out",
+                "lingua.external",
+                "lingua.internal",
+                "praxis.out",
+                "nous.out",
+                "vox.out",
+            ):
+                for entry_id, event in await self._drain_audit_stream(stream):
+                    if not _in_window(entry_id):
+                        continue
+                    record = {
+                        "stream": stream,
+                        "type": event.type,
+                        "payload": dict(getattr(event, "payload", None) or {}),
+                    }
+                    if event.type.startswith("intent."):
+                        intents.append(record)
+                    else:
+                        realizations.append(record)
+            broadcasts: list[dict[str, Any]] = []
+            cursor = self._broadcast_cursor
+            while True:
+                entries, last_scanned = await self._bus.read_workspace_entries(
+                    cursor, count=64
+                )
+                if last_scanned:
+                    cursor = last_scanned
+                if not entries:
+                    break
+                for entry_id, snap in entries:
+                    if _in_window(entry_id):
+                        broadcasts.append(snap)
+            self._broadcast_cursor = cursor
+            report = classify_realizations(
+                broadcasts,
+                intents,
+                realizations,
+                sleep_index=self._sleep_count,
+            )
+            payload = report.as_payload()
+        except Exception as exc:
+            log.warning(
+                "hypnos: ignition audit failed (continuing)", exc_info=True
+            )
+            payload = {
+                "sleep_index": self._sleep_count,
+                "realized_total": 0,
+                "unrealizable_nous_intents": 0,
+                "synthesized_realizations": 0,
+                "input": 0,
+                "drive": 0,
+                "self": 0,
+                "audit_error": type(exc).__name__,
+            }
+        # Content-free bus event on hypnos.out. An intermediate publish must
+        # never propagate (same catch-and-continue as the divergence metric).
+        try:
+            await self.publish(
+                "hypnos.ignition_audit",
+                dict(payload),
+                salience=self._baseline_salience,
+            )
+        except Exception:
+            log.warning(
+                "hypnos: ignition-audit publish failed (continuing)",
+                exc_info=True,
+            )
+        return payload
 
     async def _emit_consolidation_divergence(
         self,

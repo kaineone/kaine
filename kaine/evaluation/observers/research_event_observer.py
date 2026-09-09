@@ -171,6 +171,24 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "sleep_index",
         }
     ),
+    # sleep-ignition-audit: content-free numeric allowlist only. The entry_id
+    # lists, event types and salience values ride the sleep_snapshots payload
+    # (via the PhaseResult metadata on hypnos.sleep.completed); the research
+    # log keeps the lean numeric core. Registry note: new event types MUST be
+    # registered in this _TAXONOMY — unlisted event types are dropped by the
+    # observer.
+    "hypnos.ignition_audit": frozenset(
+        {
+            "sleep_index",
+            "audit_error",
+            "realized_total",
+            "input_triggered",
+            "drive_triggered",
+            "self_initiated",
+            "unrealizable_nous_intents",
+            "realization_failed_count",
+        }
+    ),
     "hypnos.fork": frozenset({"snapshot_id", "parent_ids", "strategy"}),
     "hypnos.merge": frozenset({"snapshot_id", "parent_ids", "strategy"}),
     # --- Self / social ---
