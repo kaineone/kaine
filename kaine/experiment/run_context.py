@@ -74,11 +74,22 @@ def compute_git_sha(*, timeout_s: float = 2.0) -> Optional[str]:
             timeout=timeout_s,
         )
     except Exception:
-        return None
-    if proc.returncode != 0:
-        return None
-    sha = proc.stdout.strip()
-    return sha or None
+        proc = None  # no git binary / not a repo — the env fallback below applies
+    if proc is not None and proc.returncode == 0:
+        sha = proc.stdout.strip()
+        if sha:
+            return sha
+    # Git lookup failed (or came back empty): fall back to the sha baked into
+    # the image (Dockerfile ARG GIT_SHA -> ENV KAINE_GIT_SHA). Still
+    # best-effort/never-raises: an unset or malformed value yields None.
+    import os
+
+    env_sha = os.environ.get("KAINE_GIT_SHA", "").strip()
+    if env_sha and 7 <= len(env_sha) <= 40 and all(
+        c in "0123456789abcdef" for c in env_sha
+    ):
+        return env_sha
+    return None
 
 
 def compute_config_digest(mapping: Mapping[str, Any]) -> str:
