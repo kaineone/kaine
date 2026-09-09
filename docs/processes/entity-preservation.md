@@ -99,6 +99,25 @@ Each preservation emits a `preservation.preserved` bus event and a durable recor
 under `[preservation].incident_path`, stamped with the run's `run_id`, so the
 trigger point is part of the recorded, reproducible trajectory.
 
+## The welfare net honors the interoceptive cold-start warm-up
+
+At a fresh boot Soma's interoceptive forward model has not learned the host
+baseline, so its prediction error runs high but means nothing — Soma flags this
+by publishing `warmup_active: true` on `soma.report` and withholds its own
+allostatic actions until the developmental warm-up completes. The welfare
+distress net honors that same signal: while the latest `soma.report` carries
+`warmup_active: true` it drains distress without counting it (no preserve, no
+pause), so cold-start noise cannot trip the net. This trust is bounded by
+`[preservation.welfare_response].warmup_ceiling_s` (default 1800 s, above Soma's
+own 1200 s warm-up): if the flag were ever stuck true, the net re-arms rather
+than staying blind. Genuine sustained distress after warm-up preserves and
+pauses unchanged.
+
+Spot honors the same principle from the other side: a frozen cycle's modules
+are silent by design, so Spot stands down its heartbeat-staleness liveness
+recovery for any freeze it does not itself own (operator or welfare) — it never
+mistakes a paused module for a crashed one.
+
 ## The welfare-protective pause survives supervisor recovery
 
 When the welfare monitor pauses the entity (`action = "pause"`: preserve

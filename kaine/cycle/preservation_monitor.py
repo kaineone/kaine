@@ -168,6 +168,13 @@ class WelfareResponseConfig:
     # mistaken for sustained welfare problems. Short relative to "sustained" —
     # genuine sustained distress re-accrues immediately once warm-up ends.
     warmup_s: float = 120.0
+    # Ceiling on how long ``soma.report.warmup_active`` may extend the gating
+    # past ``warmup_s`` — MUST exceed Soma's own developmental warm-up
+    # (``regulation_warmup_min_seconds`` = 1200s), with margin. Bounds trust in
+    # a single external flag: if it is ever stuck True (a Soma bug, or Soma
+    # going silent right after a True report), the distress net re-arms here
+    # rather than staying blind for the whole run.
+    warmup_ceiling_s: float = 1800.0
     # M3 — rate limit for the ``notify`` action only: notify continues the run,
     # so a sustained-distress loop would otherwise preserve a full encrypted
     # bundle per distress window until the disk fills. Same mechanism and
@@ -189,6 +196,7 @@ class WelfareResponseConfig:
             "repeat_window_s",
             "repeat_threshold",
             "warmup_s",
+            "warmup_ceiling_s",
             "min_interval_s",
             "out_root",
             "entity_name",
@@ -209,6 +217,7 @@ class WelfareResponseConfig:
             repeat_window_s=float(section.get("repeat_window_s", 300.0)),
             repeat_threshold=int(section.get("repeat_threshold", 3)),
             warmup_s=float(section.get("warmup_s", 120.0)),
+            warmup_ceiling_s=float(section.get("warmup_ceiling_s", 1800.0)),
             min_interval_s=float(section.get("min_interval_s", 1800.0)),
             out_root=str(section.get("out_root", "backups")),
             entity_name=str(section.get("entity_name", "kaine")),
@@ -698,6 +707,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._cursor = "0"
         # Separate cursor for the welfare.out gray-zone stream (repeat arm).
         self._welfare_cursor = "0"
+        # Soma-reported warm-up: the mind's own signal (warmup_active in the
+        # latest soma.report) that gating should continue even past the fixed
+        # cold-start window.
+        self._soma_warmup_active = False
         self._distress = SustainedThresholdTracker(
             threshold=config.distress_threshold,
             duration_s=config.distress_duration_s,
@@ -745,8 +758,14 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                     exc_info=True,
                 )
                 continue
-            for entry_id, _event in entries:
+            for entry_id, event in entries:
                 setattr(self, cursor_attr, entry_id)
+                if stream == _SOMA_STREAM and event.type == "soma.report":
+                    # Track the mind's own warm-up signal from every
+                    # soma.report observed during warm-up.
+                    self._soma_warmup_active = bool(
+                        (event.payload or {}).get("warmup_active", False)
+                    )
                 seen += 1
             if last_scanned is not None:
                 setattr(self, cursor_attr, last_scanned)
@@ -781,7 +800,14 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # count toward the repeat threshold or a sustained crossing. After the
         # window, both arms function unchanged; genuine sustained distress
         # re-accrues immediately.
-        if self._in_warmup(now):
+        # Honor Soma's own warm-up flag past the fixed floor, but only up to
+        # warmup_ceiling_s so a stuck/stale flag cannot blind the net forever.
+        soma_gate = (
+            self._soma_warmup_active
+            and self._started_at is not None
+            and (now - self._started_at) < self._config.warmup_ceiling_s
+        )
+        if self._in_warmup(now) or soma_gate:
             await self._drain_during_warmup(now)
             return
         # Drain soma.out, feeding the distress tracker.
@@ -798,6 +824,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if event.type != "soma.report":
                 continue
             magnitude = float((event.payload or {}).get("prediction_error", 0.0))
+            self._soma_warmup_active = bool(
+                (event.payload or {}).get("warmup_active", False)
+            )
             now = self._clock()
             if self._distress.observe(magnitude, now):
                 crossing_reason = "sustained_distress"
