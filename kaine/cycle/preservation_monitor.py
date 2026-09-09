@@ -168,6 +168,11 @@ class WelfareResponseConfig:
     # mistaken for sustained welfare problems. Short relative to "sustained" —
     # genuine sustained distress re-accrues immediately once warm-up ends.
     warmup_s: float = 120.0
+    # M3 — rate limit for the ``notify`` action only: notify continues the run,
+    # so a sustained-distress loop would otherwise preserve a full encrypted
+    # bundle per distress window until the disk fills. Same mechanism and
+    # default as the divergence monitor's ``min_interval_s``.
+    min_interval_s: float = 1800.0
     out_root: str = "backups"
     entity_name: str = "kaine"
 
@@ -184,6 +189,7 @@ class WelfareResponseConfig:
             "repeat_window_s",
             "repeat_threshold",
             "warmup_s",
+            "min_interval_s",
             "out_root",
             "entity_name",
         }
@@ -203,6 +209,7 @@ class WelfareResponseConfig:
             repeat_window_s=float(section.get("repeat_window_s", 300.0)),
             repeat_threshold=int(section.get("repeat_threshold", 3)),
             warmup_s=float(section.get("warmup_s", 120.0)),
+            min_interval_s=float(section.get("min_interval_s", 1800.0)),
             out_root=str(section.get("out_root", "backups")),
             entity_name=str(section.get("entity_name", "kaine")),
         )
@@ -849,6 +856,21 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         return crossing_reason
 
     async def _respond(self, crossing_reason: str) -> None:
+        # M3 — "notify" continues the run, so sustained distress re-fires the
+        # tracker every distress window; without a rate limit that is one full
+        # encrypted preservation bundle per window (retention never-delete)
+        # until the disk fills and preservation itself breaks. Pause/end act
+        # once by construction and are never rate-limited.
+        if self._config.action == "notify":
+            now = time.monotonic()
+            if not _welfare_notify_allowed(
+                self._last_notify_at, now, self._config.min_interval_s
+            ):
+                log.info(
+                    "welfare monitor: notify suppressed by min_interval_s rate limit"
+                )
+                return
+            self._last_notify_at = now
         incident_id = uuid.uuid4().hex[:16]
         # --- 1. Preserve FIRST (the individual is saved before any pause/end). ---
         preservation_id: str | None = None

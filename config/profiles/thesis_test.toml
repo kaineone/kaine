@@ -80,3 +80,10 @@ general_audition = true
 # refractory-gated), never from a user utterance. No chatbot trigger.
 policy = "self_initiated_report"
 drive_initiative = false
+# Novelty-signature expiry: the coarse (source, type) signature otherwise
+# suppresses same-signature reports forever — on a stable stimulus (one film
+# playing for ~90 min) the top coalition rarely changes signature, and external
+# speech would trend to zero over a multi-day run. Five minutes keeps the
+# no-chatter novelty gate while letting genuinely new surprise about the same
+# source report again.
+sig_expiry_s = 300.0
