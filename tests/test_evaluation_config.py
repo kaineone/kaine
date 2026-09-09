@@ -299,7 +299,8 @@ def test_cycle_main_wires_interrupt_threshold():
     # The cycle entrypoint must actually read [volition].interrupt_threshold
     # and hand it to the report policy (interruptible-utterance reachability).
     import kaine.cycle.__main__ as cycle_main
+    import pathlib
 
-    src = open(cycle_main.__file__, encoding="utf-8").read()
+    src = pathlib.Path(cycle_main.__file__).read_text(encoding="utf-8")
     assert "interrupt_threshold" in src
     assert 'volition_cfg.get("interrupt_threshold")' in src
