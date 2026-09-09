@@ -1,7 +1,7 @@
 # spot-supervisor Specification
 
 ## Purpose
-TBD - created by archiving change add-spot-watchdog. Update Purpose after archive.
+Module-level crash/hang recovery for unattended runs: freeze, restart, escalate after repeated failure — without ever lifting a freeze it does not own.
 ## Requirements
 ### Requirement: Always-on module supervisor
 The cycle entrypoint SHALL run a supervisor component (Spot) as a task alongside

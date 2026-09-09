@@ -84,6 +84,7 @@ and [`drive_policy.py`](../../kaine/workspace/drive_policy.py).
 |---|---|---|
 | `lingua.external` | `external_speech` | User-facing text; Vox subscribes here for TTS synthesis |
 | `lingua.internal` | `internal_speech` | Internal monologue; Mnemos and Eidolon subscribe; Vox NEVER reads this |
+| `lingua.internal` | `realization_failed` | Content-free audit event when an LLM realization fails (mode + reason class only — never text). The policies' guard timeouts, not this event, are what unstick speech; the event is the audit trail. |
 
 `_produce()` writes directly to the mode-specific stream (`lingua.external` or `lingua.internal`) via the bus client, bypassing the default `self.publish` / `<module>.out` routing. There is no aggregate `lingua.out` stream in practice — consumers must subscribe to `lingua.external` and/or `lingua.internal` explicitly.
 
@@ -248,3 +249,13 @@ module doc).
 - See also: Vox (subscribes to `lingua.external`), Mnemos and Eidolon (subscribe
   to `lingua.internal`), Hypnos (reads intent log for voice alignment), Nous /
   Volition (issues `speak` and `think` intents).
+
+### Interruptible, redirectable utterance
+
+When `[volition].interrupt_threshold` is set, a coalition whose surprise
+crosses that bar while a `speak` is in flight produces an interrupt-marked
+`speak` intent: Lingua cancels the in-flight generation mid-stream, discards
+the unspoken remainder, and realizes the new utterance instead. `think` never
+preempts. With the threshold unset (the default) an utterance always runs to
+completion. The preemption is recorded content-free in the intent-expression
+log (`{"event": "preempted", "mode", "tick"}`).

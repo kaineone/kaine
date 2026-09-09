@@ -47,7 +47,7 @@ Unsloth loads weights directly from `base_model_path`.
 |---|---|---|
 | `soma.out` | `soma.fatigue` | `crossed == true` fires an immediate maintenance cycle |
 | `soma.out` | `soma.regulation` | `action == "request_maintenance"` fires an immediate maintenance cycle (the homeostatic regulator escalating to request an earlier offline cycle) |
-| (interval) | — | `RestScheduler.is_due()` checked by the containing run loop |
+| (interval) | — | Hypnos's own `hypnos-maintenance-poll` task polls `RestScheduler.is_due()` (subjective-clock paced) and triggers a maintenance cycle when due — the safety net fires even if fatigue never crosses |
 
 ---
 
@@ -56,7 +56,7 @@ Unsloth loads weights directly from `base_model_path`.
 | Stream | Event type | Description |
 |---|---|---|
 | `hypnos.out` | `hypnos.sleep.started` | Emitted at the top of `_run_pipeline()` |
-| `hypnos.out` | `hypnos.sleep.completed` | Full summary dict: phases list, voice_alignment result, timing, `fatigue_triggered` flag |
+| `hypnos.out` | `hypnos.sleep.completed` | Full summary dict: phases list, voice_alignment result, timing, `fatigue_triggered` flag. Guaranteed even when the pipeline raises: the aborted variant carries `{"aborted": true, "reason": <ExceptionTypeName>}` (content-free) so Soma always exits `_in_hypnos` and faster decay stops |
 | `hypnos.out` | `hypnos.association` | Phase-3 cross-period associations re-injected into the workspace |
 
 ---
@@ -159,7 +159,7 @@ flowchart TD
     P1["Phase 1: Light Consolidation\n• mnemos.consolidate_now()\n• weak-trace pruning\n• oscillator set_frequency(0.5)"]
     P1 --> P2
 
-    P2["Phase 2: Deep Consolidation\n• mnemos.downscale_activations(0.9)\n• Perception locus → off\n• mnemos.replay_now()\n• Perception locus → physical"]
+    P2["Phase 2: Deep Consolidation\n• mnemos.downscale_activations(0.9)\n• Perception locus → off\n• mnemos.replay_now()\n• Perception locus → remembered pre-sleep locus"]
     P2 --> P3
 
     P3["Phase 3: Associative Replay\n(behind feature flag)\n• mnemos.select_cross_period_traces()\n• phantasia.generate_scenario()\n• re-inject as hypnos.association"]

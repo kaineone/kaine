@@ -620,3 +620,13 @@ output_dir = "data/evaluation/individuation"
 | `kaine/evaluation/registry.py` | `SidecarRegistry` — constructs and starts observers |
 | `kaine/evaluation/nexus_tab.py` | Nexus diagnostics surface for sidecar metrics |
 | `data/evaluation/` | Output directory for all sidecar JSONL |
+
+## ResearchEventObserver
+
+The curated research-event log (`[research_event_log]`) is written by its own
+observer, gated independently of `[evaluation].enabled`. Its stream set and
+per-event field allowlists derive from the canonical module-stream registry
+(`kaine/evaluation/stream_registry.py`) — see
+[../research-event-streams.md](../research-event-streams.md) for the registry
+contract, the documented exclusions (no Lingua/Vox content streams), and the
+drift tests that keep every consumer list anchored to it.

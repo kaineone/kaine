@@ -25,7 +25,9 @@ competition:
 - **Soma** (interoception — the compute substrate as a body),
 - **Chronos** (interval timing),
 - **Topos** (foveated vision over raw video),
-- **Audition** (raw sound as prediction error), and
+- **Audition** (raw sound as prediction error),
+- **Thymos** (affect/arousal — the precision core setting the gain on the
+  competition, itself moved by perceptual surprise), and
 - **Lingua** (the output-only voice),
 
 with **Syneidesis** (the workspace) and **Volition** (action selection) as
@@ -42,9 +44,9 @@ the processors through the competitive workspace does no measurable work, the
 architecture is a scored prompt-assembler and the thesis is falsified. That test is
 pre-registered and designed so a null result is reportable.
 
-Everything richer — **memory, self-model, affect, world-model, social cognition,
+Everything richer — **memory, self-model, world-model, social cognition,
 sleep/consolidation, effectors, embodiment, and a spoken voice** (the remaining
-eleven modules plus the oscillatory and embodiment layers) — is **built, tested,
+ten modules plus the oscillatory and embodiment layers) — is **built, tested,
 and gated off** until a positive base result. It is held, never removed.
 
 ## 📚 Documentation

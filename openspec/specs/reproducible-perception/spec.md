@@ -1,7 +1,7 @@
 # reproducible-perception Specification
 
 ## Purpose
-TBD - created by archiving change reproducible-perception-feed. Update Purpose after archive.
+Reproducible stimulus for research runs: a bit-identical seeded tier and a sha256-pinned real-media playlist tier, with zero raw-sense-data persistence in both.
 ## Requirements
 ### Requirement: A deterministic perceptual feed supplies reproducible stimulus
 

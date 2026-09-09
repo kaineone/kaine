@@ -40,7 +40,7 @@ has started (the library / unit-test default). It carries:
 - `seed` — the integer pinned by `set_global_seed`.
 - `started_at` — an ISO-8601 UTC timestamp.
 - `git_sha` — a best-effort short git revision (`None` when git is unavailable;
-  resolution never raises).
+  resolution never raises), falling back to the `KAINE_GIT_SHA` env var the container image bakes in at build time (`ARG GIT_SHA` → `ENV KAINE_GIT_SHA`) — so containerized manifests still carry provenance despite having no `.git`.
 - `model_ids` — the configured model ids from the documented model keys only
   (language organ, A/B baseline, topos encoder, mnemos embedder, audition STT and
   emotion). Never hostnames, paths, or voice names.
