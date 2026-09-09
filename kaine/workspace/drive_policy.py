@@ -75,12 +75,9 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
     """
 
     def __init__(self, clock: Callable[[], float] | None = None) -> None:
-        super().__init__()
-        if clock is None:
-            import time
-
-            clock = time.monotonic
-        self._clock = clock
+        # The parent policy owns the injected clock (used by both guard
+        # timeouts); pass it through rather than shadowing its _clock.
+        super().__init__(clock=clock)
         self._think_in_flight = False
 
     @property

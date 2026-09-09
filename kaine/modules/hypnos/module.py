@@ -804,6 +804,8 @@ class Hypnos(BaseModule):
         try:
             await self.enter_sleep()
         except HypnosBusyError:
+            # A sleep is already in progress — the interval net's job is done
+            # for this period; the running sleep covers the maintenance.
             pass
         except Exception:
             log.exception("hypnos: interval-triggered sleep failed")

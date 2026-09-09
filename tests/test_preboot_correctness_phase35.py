@@ -20,7 +20,6 @@ import threading
 import types
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
 
 import pytest
 
@@ -387,7 +386,7 @@ class _Resampler:
 
 def _install_fake_av(monkeypatch):
     fake_av = SimpleNamespace(
-        open=lambda path: _Container(path),
+        open=_Container,
         audio=SimpleNamespace(
             resampler=SimpleNamespace(AudioResampler=_Resampler)
         ),

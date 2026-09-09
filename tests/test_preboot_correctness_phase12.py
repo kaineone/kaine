@@ -22,16 +22,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from kaine.cycle import control_state
 from kaine.cycle.control_state import (
-    CycleControl,
-    freeze,
     pop_freeze,
     push_freeze,
     read_control,
