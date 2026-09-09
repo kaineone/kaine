@@ -11,7 +11,6 @@ import pytest
 from kaine.modules.topos.encoder import (
     DEFAULT_DINOV2_MODEL_ID,
     DINOv2Encoder,
-    Encoder,
 )
 
 

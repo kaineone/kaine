@@ -469,6 +469,7 @@ def load_evaluation_config(
     lingua_model_id: str | None = None,
     lingua_api_key: str | None = None,
     operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
+    profile: str | None = None,
 ) -> EvaluationConfig:
     # Read the shipped config deep-merged with the operator override (operator
     # values win), so SSD-redirected paths like [evaluation].trajectory_dir set
@@ -479,7 +480,9 @@ def load_evaluation_config(
         return EvaluationConfig.from_mapping(
             None, lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
         )
-    merged = load_kaine_config(target, operator_path)
+    # profile threads the SAME tier-profile selection the cycle uses, so an
+    # [evaluation] block in a profile applies identically to the gate.
+    merged = load_kaine_config(target, operator_path, profile=profile)
     return EvaluationConfig.from_mapping(
         merged.get("evaluation"),
         lingua_model_id=lingua_model_id,
@@ -491,6 +494,7 @@ def load_research_event_log_config(
     path: str | os.PathLike[str] | None = None,
     *,
     operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
+    profile: str | None = None,
 ) -> ResearchEventLogConfig:
     """Load ``[research_event_log]`` from the shipped config deep-merged with the
     operator override (operator values win).
@@ -504,5 +508,7 @@ def load_research_event_log_config(
     target = Path(path or SHIPPED_CONFIG_PATH)
     if not target.exists():
         return ResearchEventLogConfig.from_mapping(None)
-    merged = load_kaine_config(target, operator_path)
+    # profile threads the SAME tier-profile selection the cycle uses, so a
+    # [research_event_log] block in a profile applies identically to the gate.
+    merged = load_kaine_config(target, operator_path, profile=profile)
     return ResearchEventLogConfig.from_mapping(merged.get("research_event_log"))
