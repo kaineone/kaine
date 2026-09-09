@@ -29,26 +29,12 @@ from kaine.nexus.conversation import (
 )
 
 
-DEFAULT_DIAGNOSTICS_STREAMS = (
-    "cycle.tick",
-    "soma.out",
-    "thymos.out",
-    "chronos.out",
-    "topos.out",
-    "nous.out",
-    "mnemos.out",
-    "eidolon.out",
-    "hypnos.out",
-    "praxis.out",
-    "lingua.external",
-    "lingua.internal",
-    "audition.out",
-    "vox.out",
-    "empatheia.out",
-    "phantasia.out",
-    "workspace.broadcast",
-    "spot.out",
-)
+from kaine.evaluation.stream_registry import diagnostics_streams
+
+# Derived from the canonical registry so the monitor, the research-event
+# observer, and the raw archive never drift (see
+# kaine/evaluation/stream_registry.py for the documented exclusions/extras).
+DEFAULT_DIAGNOSTICS_STREAMS = diagnostics_streams()
 
 
 def make_metrics_snapshot(

@@ -89,13 +89,36 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "tick_count",
         }
     ),
-    # volition.intent.* handled by prefix match (see _allowed_fields).
-    "volition.intent": frozenset({"kind", "about_tag", "effector"}),
+    # Real Volition intent types (kaine/workspace/volition.py) — EXACT keys,
+    # no prefix matching: an unknown intent.* subtype is NOT logged.
+    "intent.speak": frozenset({"kind", "about_tag", "effector"}),
+    "intent.think": frozenset({"kind", "about_tag", "effector"}),
+    "intent.act": frozenset({"kind", "about_tag", "effector"}),
     # --- Prediction / precision ---
     "soma.report": frozenset(
         {"prediction_error", "wellness", "fatigue_value", "alerts"}
     ),
-    "topos.report": frozenset({"prediction_error", "horizon"}),
+    "topos.report": frozenset(
+        {
+            "prediction_error",
+            "normalised_error",
+            "change_score",
+            "habituation_score",
+            "alert",
+        }
+    ),
+    # Chronos report (kaine/modules/chronos/module.py) — content-free
+    # aggregates ONLY: `temporal_context` and `feature_vector` are latent
+    # content and are deliberately excluded.
+    "chronos.report": frozenset(
+        {
+            "anomaly_score",
+            "habituation_score",
+            "rumination_detected",
+            "temporal_prediction_error",
+            "time_since_last_interaction_s",
+        }
+    ),
     "phantasia.world_error": frozenset({"error"}),
     "nous.belief": frozenset(
         {"kind", "frequency", "confidence", "expected_free_energy", "elapsed_ms"}
@@ -114,16 +137,13 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance"}
     ),
     "thymos.emotion": frozenset(
-        {"category", "scores", "norm_compatibility_available"}
+        {"emotion", "scores", "norm_compatibility_available"}
     ),
     "thymos.drive": frozenset({"drive", "value"}),
     "thymos.goal": frozenset({"action", "goal_id"}),
     # --- Perception (derived only) ---
     "audition.emotion": frozenset({"category", "confidence", "scores"}),
-    "audition.prosody": frozenset(
-        {"f0_mean", "f0_std", "f0_voiced_frac", "rms_mean", "rms_std", "tempo_bpm"}
-    ),
-    "topos.scene_change": frozenset({"change_scalar"}),
+    "audition.prosody": frozenset({"f0_mean_hz", "f0_std_hz"}),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
     # --- Memory / sleep ---
     "mnemos.recall": frozenset(
@@ -132,7 +152,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "mnemos.replay": frozenset(
         {"memory_ids", "max_affect_intensity", "selection_scores", "count"}
     ),
-    "hypnos.sleep.started": frozenset({"trigger", "fatigue_at_trigger"}),
+    "hypnos.sleep.started": frozenset({"started_at"}),
     "hypnos.sleep.completed": frozenset(
         {"phases_completed", "replay_count", "consolidation_summary_counts"}
     ),
@@ -306,28 +326,15 @@ _WELFARE_NUMERIC_FIELDS = frozenset(
 )
 
 # Curated streams the observer follows (one cursor each). The specific
-# `event.type` strings ride on these `<module>.out` streams.
-_CURATED_STREAMS: tuple[str, ...] = (
-    "cycle.out",
-    "volition.out",
-    "soma.out",
-    "topos.out",
-    "phantasia.out",
-    "nous.out",
-    "thymos.out",
-    "audition.out",
-    "mnemos.out",
-    "hypnos.out",
-    "eidolon.out",
-    "empatheia.out",
-    "praxis.out",
-    "spot.out",
-    "perception.out",
-    "mundus.out",
-    "welfare.out",
-    "preservation.out",
-    "individuation.out",
-)
+# `event.type` strings ride on these `<module>.out` streams. Derived from the
+# canonical registry (kaine.evaluation.stream_registry) so the observer, the
+# raw archive, and the nexus monitor never drift. Curated exclusions
+# (vox.out — raw audio content; lingua.out — transcripts are never curated)
+# are documented in the registry and enforced by the drift test
+# (tests/test_stream_registry_drift.py).
+from kaine.evaluation.stream_registry import curated_module_streams
+
+_CURATED_STREAMS: tuple[str, ...] = curated_module_streams()
 
 
 def _opaque_position_hash(payload: dict[str, Any]) -> str | None:
@@ -475,23 +482,11 @@ class ResearchEventObserver(BaseObserver):
                 record["region_label"] = payload.get("region")
             return record
 
-        # 4) welfare gray-zone: keep the label + ONLY the exactly-allowlisted
-        # numeric scalar fields. Exact-match (not suffix-match) so a future
-        # payload field cannot smuggle content through.
-        if event.type == "welfare.gray_zone":
-            if "gray_zone_event" in payload:
-                record["gray_zone_event"] = payload.get("gray_zone_event")
-            for k in _WELFARE_NUMERIC_FIELDS:
-                v = payload.get(k)
-                if isinstance(v, (int, float)) and not isinstance(v, bool):
-                    record[k] = v
-            return record
-
-        # 5) Generic allowlist copy — ONLY named keys.
-        for key in allowed:
-            if key in payload:
-                record[key] = payload[key]
-        return record
+        # 4) & 5) Welfare gray-zone copy and the generic allowlist copy are
+        # delegated to the shared module-level helper, which resolves the
+        # taxonomy allowlist itself and applies the gray-zone special case
+        # (label + exact numeric scalar fields, no suffix-matching).
+        return _apply_taxonomy_fields(event.type, payload, record)
 
 
 def _allowed_fields(event_type: str) -> frozenset[str] | None:
@@ -499,9 +494,6 @@ def _allowed_fields(event_type: str) -> frozenset[str] | None:
     is not in the curated taxonomy (and so must not be logged at all)."""
     if event_type in _TAXONOMY:
         return _TAXONOMY[event_type]
-    # volition.intent.* family (forward-compatible; stream may not yet exist).
-    if event_type.startswith("volition.intent"):
-        return _TAXONOMY["volition.intent"]
     # spot.incident.* family (cross-linked by incident_id).
     if event_type.startswith("spot.incident"):
         return _TAXONOMY["spot.incident"]
@@ -530,31 +522,73 @@ class _WorkspaceMetadataObserver(WorkspaceSubscriberObserver):
         self._privacy = privacy
 
     async def handle(self, entry_id: str, payload: dict[str, Any]) -> None:
-        snapshot = payload or {}
-        record: dict[str, Any] = {
-            "ts": _iso_now(),
-            "event_type": "workspace.broadcast",
-            "source": "syneidesis",
-        }
-        if "tick_index" in snapshot:
-            record["tick_index"] = snapshot.get("tick_index")
-        if "inhibited" in snapshot:
-            record["inhibited"] = bool(snapshot.get("inhibited"))
-        if "salience_scores" in snapshot:
-            record["salience_scores"] = snapshot.get("salience_scores")
-
-        # Per-entry metadata ONLY — never the entry `payload`/content.
-        entries_meta: list[dict[str, Any]] = []
-        for entry in snapshot.get("selected_events", []) or []:
-            if not isinstance(entry, dict):
-                continue
-            meta: dict[str, Any] = {}
-            for k in ("source", "type", "salience", "causal_parent"):
-                if k in entry:
-                    meta[k] = entry[k]
-            if meta:
-                entries_meta.append(meta)
-        if entries_meta:
-            record["entries"] = entries_meta
-
+        record = _workspace_metadata_record(payload or {})
         await self._sink.write(record)
+
+
+# ---------------------------------------------------------------------------
+# Pure record-building helpers (module-level so regression tests exercise the
+# EXACT copy semantics without a live bus/sink).
+# ---------------------------------------------------------------------------
+
+
+def _apply_taxonomy_fields(
+    event_type: str, payload: dict[str, Any], record: dict[str, Any]
+) -> dict[str, Any]:
+    """Copy ONLY allowlisted payload fields onto `record`.
+
+    Welfare gray-zone is the one special case: the exact numeric-field
+    allowlist (`_WELFARE_NUMERIC_FIELDS`) instead of the taxonomy set, so a
+    payload field cannot smuggle content through. Anything not in the
+    taxonomy produces no additional fields at all.
+    """
+    allowed = _allowed_fields(event_type)
+    if allowed is None:
+        return record
+    if event_type == "welfare.gray_zone":
+        if "gray_zone_event" in payload:
+            record["gray_zone_event"] = payload.get("gray_zone_event")
+        for k in _WELFARE_NUMERIC_FIELDS:
+            v = payload.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                record[k] = v
+        return record
+    # Generic allowlist copy — ONLY named keys.
+    for key in allowed:
+        if key in payload:
+            record[key] = payload[key]
+    return record
+
+
+def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Build a `workspace.broadcast` metadata record from a snapshot.
+
+    Reads the `selected` key (written by kaine/cycle/engine.py) — per-entry
+    metadata ONLY ({source, type, salience, causal_parent}), never the entry
+    `payload`/content field.
+    """
+    record: dict[str, Any] = {
+        "ts": _iso_now(),
+        "event_type": "workspace.broadcast",
+        "source": "syneidesis",
+    }
+    if "tick_index" in snapshot:
+        record["tick_index"] = snapshot.get("tick_index")
+    if "inhibited" in snapshot:
+        record["inhibited"] = bool(snapshot.get("inhibited"))
+    if "salience_scores" in snapshot:
+        record["salience_scores"] = snapshot.get("salience_scores")
+
+    entries_meta: list[dict[str, Any]] = []
+    for entry in snapshot.get("selected", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        meta: dict[str, Any] = {}
+        for k in ("source", "type", "salience", "causal_parent"):
+            if k in entry:
+                meta[k] = entry[k]
+        if meta:
+            entries_meta.append(meta)
+    if entries_meta:
+        record["entries"] = entries_meta
+    return record

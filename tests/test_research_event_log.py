@@ -486,7 +486,7 @@ async def test_workspace_broadcast_metadata_only():
                 "tick_index": 7,
                 "inhibited": False,
                 "salience_scores": {"thymos": 0.6},
-                "selected_events": [
+                "selected": [
                     {
                         "source": "thymos",
                         "type": "thymos.state",
@@ -786,8 +786,8 @@ async def test_raw_archive_starts_and_writes_verbatim_with_full_attestation(tmp_
         tmp_path / "raw", name="raw_bus_archive", flush_interval_s=0.05
     )
     bus.push(
-        "lingua.out",
-        _event("lingua", "lingua.utterance", {"text": "VERBATIM conversation text"}),
+        "lingua.external",
+        _event("lingua", "external_speech", {"text": "VERBATIM conversation text"}),
     )
     consumer = RawBusArchiveConsumer(bus, sink, cfg)
     await sink.start()
@@ -1017,3 +1017,178 @@ def test_raw_archive_includes_welfare_and_preservation_streams():
     preservation.out."""
     assert "welfare.out" in _MODULE_OUT_STREAMS
     assert "preservation.out" in _MODULE_OUT_STREAMS
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for the fix-research-event-contracts change (OpenSpec).
+# Fixtures use the REAL producer payload shapes; the record copy is exercised
+# through the observer's own module-level helpers.
+# ---------------------------------------------------------------------------
+
+
+def _taxonomy_record(event_type, payload):
+    from kaine.evaluation.observers.research_event_observer import (
+        _allowed_fields,
+        _apply_taxonomy_fields,
+    )
+
+    allowed = _allowed_fields(event_type)
+    assert allowed is not None, f"{event_type} must be in the taxonomy"
+    return _apply_taxonomy_fields(
+        event_type,
+        payload,
+        {"ts": "now", "event_type": event_type, "source": "test"},
+    )
+
+
+def test_intent_speak_think_act_survive_taxonomy():
+    # Real Volition payload shape (kaine/workspace/volition.py).
+    for kind, event_type in (
+        ("speak", "intent.speak"),
+        ("think", "intent.think"),
+        ("act", "intent.act"),
+    ):
+        payload = {"kind": kind, "about_tag": "soma:report", "effector": "vox"}
+        record = _taxonomy_record(event_type, payload)
+        assert record["kind"] == kind
+        assert record["about_tag"] == "soma:report"
+    # The phantom prefix key is gone; unknown intent subtypes are not logged.
+    from kaine.evaluation.observers.research_event_observer import _allowed_fields
+
+    assert _allowed_fields("volition.intent") is None
+    assert _allowed_fields("intent.teleport") is None
+
+
+def test_workspace_selected_yields_coalition_metadata():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    # Snapshot shape per kaine/cycle/engine.py (key `selected`).
+    snapshot = {
+        "tick_index": 42,
+        "inhibited": False,
+        "salience_scores": {"soma:report": 0.7},
+        "selected": [
+            {
+                "source": "soma",
+                "type": "soma.report",
+                "salience": 0.7,
+                "causal_parent": None,
+                "payload": {"secret": "never-logged"},
+            }
+        ],
+    }
+    record = _workspace_metadata_record(snapshot)
+    assert record["tick_index"] == 42
+    assert record["entries"][0]["source"] == "soma"
+    assert record["entries"][0]["salience"] == 0.7
+    # Entry payload/content is NEVER copied.
+    assert "payload" not in record["entries"][0]
+    assert "secret" not in str(record)
+
+
+def test_workspace_selected_events_key_no_longer_used():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    record = _workspace_metadata_record({"selected_events": [{"source": "soma"}]})
+    assert "entries" not in record
+
+
+def test_hypnos_sleep_started_started_at():
+    # Real producer payload (kaine/modules/hypnos/module.py).
+    record = _taxonomy_record("hypnos.sleep.started", {"started_at": 1717.5})
+    assert record["started_at"] == 1717.5
+
+
+def test_thymos_emotion_emotion_field_retained():
+    # Real producer payload (kaine/modules/thymos/module.py).
+    payload = {
+        "emotion": "curiosity",
+        "scores": {"curiosity": 0.8, "distress": 0.1},
+        "norm_compatibility_available": True,
+    }
+    record = _taxonomy_record("thymos.emotion", payload)
+    assert record["emotion"] == "curiosity"
+    assert record["scores"]["curiosity"] == 0.8
+    assert record["norm_compatibility_available"] is True
+
+
+def test_topos_report_fields_and_no_scene_change():
+    # Real producer payload (kaine/modules/topos/module.py).
+    payload = {
+        "prediction_error": 0.21,
+        "normalised_error": 0.13,
+        "change_score": 0.04,
+        "habituation_score": 0.77,
+        "alert": False,
+    }
+    record = _taxonomy_record("topos.report", payload)
+    assert record["prediction_error"] == 0.21
+    assert record["normalised_error"] == 0.13
+    assert record["change_score"] == 0.04
+    assert record["habituation_score"] == 0.77
+    assert record["alert"] is False
+    # The producer-less topos.scene_change entry is gone entirely.
+    from kaine.evaluation.observers.research_event_observer import (
+        _TAXONOMY,
+        _allowed_fields,
+    )
+
+    assert "topos.scene_change" not in _TAXONOMY
+    assert _allowed_fields("topos.scene_change") is None
+
+
+def test_chronos_report_content_free_allowlist():
+    # Real Chronos payload shape (kaine/modules/chronos/module.py) plus the
+    # latent fields that must NEVER pass.
+    payload = {
+        "anomaly_score": 0.42,
+        "habituation_score": 0.66,
+        "rumination_detected": False,
+        "temporal_prediction_error": 0.11,
+        "time_since_last_interaction_s": 312.0,
+        "temporal_context": ["SECRET", "LATENT", "TEXT"],
+        "feature_vector": [0.1, 0.2, 0.3],
+    }
+    record = _taxonomy_record("chronos.report", payload)
+    assert record["anomaly_score"] == 0.42
+    assert record["rumination_detected"] is False
+    assert record["time_since_last_interaction_s"] == 312.0
+    assert "temporal_context" not in record
+    assert "feature_vector" not in record
+
+
+def test_chronos_out_in_curated_streams():
+    from kaine.evaluation.observers.research_event_observer import _CURATED_STREAMS
+
+    assert "chronos.out" in _CURATED_STREAMS
+
+
+def test_no_latent_field_in_any_taxonomy_allowlist():
+    from kaine.evaluation.observers.research_event_observer import _TAXONOMY
+
+    latent = {"temporal_context", "feature_vector", "latent", "transcript", "text"}
+    for event_type, fields in _TAXONOMY.items():
+        assert not (set(fields) & latent), f"{event_type} allows latent content"
+
+
+def test_audition_prosody_hz_fields():
+    # Real producer payload (kaine/modules/audition/prosody.py).
+    record = _taxonomy_record(
+        "audition.prosody", {"f0_mean_hz": 120.5, "f0_std_hz": 18.2}
+    )
+    assert record["f0_mean_hz"] == 120.5
+    assert record["f0_std_hz"] == 18.2
+
+
+def test_raw_bus_archive_lingua_split():
+    from kaine.evaluation.observers.raw_bus_archive_consumer import (
+        _MODULE_OUT_STREAMS,
+    )
+
+    assert "lingua.external" in _MODULE_OUT_STREAMS
+    assert "lingua.internal" in _MODULE_OUT_STREAMS
+    assert "lingua.out" not in _MODULE_OUT_STREAMS

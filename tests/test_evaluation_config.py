@@ -218,3 +218,89 @@ def test_chat_api_key_derives_from_lingua_and_explicit_overrides():
         == "sk-eval"
     )
     assert EvaluationConfig.from_mapping({}).chat_api_key is None
+
+
+# ---------------------------------------------------------------------------
+# fix-research-event-contracts: profile threading + interrupt threshold.
+# ---------------------------------------------------------------------------
+
+
+def test_evaluation_config_threads_profile(tmp_path, monkeypatch):
+    import kaine.evaluation.config as cfg_mod
+
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text("[evaluation]\n")
+    operator = tmp_path / "operator.toml"
+    operator.write_text("")
+
+    captured = {}
+
+    def fake_load(path, operator_path, profile=None):
+        captured["profile"] = profile
+        return {"evaluation": {"enabled": False}}
+
+    monkeypatch.setattr(cfg_mod, "load_kaine_config", fake_load)
+    result = cfg_mod.load_evaluation_config(
+        shipped, operator_path=operator, profile="tier1"
+    )
+    assert captured["profile"] == "tier1"
+    assert result.enabled is False
+
+
+def test_research_event_log_config_threads_profile(tmp_path, monkeypatch):
+    import kaine.evaluation.config as cfg_mod
+
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text("[research_event_log]\n")
+    operator = tmp_path / "operator.toml"
+    operator.write_text("")
+
+    captured = {}
+
+    def fake_load(path, operator_path, profile=None):
+        captured["profile"] = profile
+        return {"research_event_log": {"enabled": True}}
+
+    monkeypatch.setattr(cfg_mod, "load_kaine_config", fake_load)
+    result = cfg_mod.load_research_event_log_config(
+        shipped, operator_path=operator, profile="tier1"
+    )
+    assert captured["profile"] == "tier1"
+    assert result.enabled is True
+
+
+def test_volition_interrupt_threshold_reaches_report_policy():
+    # Same wiring the cycle applies (kaine/cycle/__main__.py): an absent
+    # [volition].interrupt_threshold stays None (opt-in); a configured value
+    # reaches the policy instance.
+    from kaine.workspace.report_policy import SelfInitiatedReportPolicy
+
+    volition_cfg = {"report_threshold": 0.5, "interrupt_threshold": 0.9}
+    raw = volition_cfg.get("interrupt_threshold")
+    policy = SelfInitiatedReportPolicy(
+        report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
+        interrupt_threshold=float(raw) if raw is not None else None,
+    )
+    # The policy stores the threshold privately and exposes no getter;
+    # adding one just for a test is not warranted, so read it directly.
+    assert policy._interrupt_threshold == 0.9
+
+    raw = {}
+    policy = SelfInitiatedReportPolicy(
+        report_threshold=0.6,
+        interrupt_threshold=float(raw["interrupt_threshold"])
+        if "interrupt_threshold" in raw
+        else None,
+    )
+    assert policy._interrupt_threshold is None
+
+
+def test_cycle_main_wires_interrupt_threshold():
+    # The cycle entrypoint must actually read [volition].interrupt_threshold
+    # and hand it to the report policy (interruptible-utterance reachability).
+    import kaine.cycle.__main__ as cycle_main
+    import pathlib
+
+    src = pathlib.Path(cycle_main.__file__).read_text(encoding="utf-8")
+    assert "interrupt_threshold" in src
+    assert 'volition_cfg.get("interrupt_threshold")' in src

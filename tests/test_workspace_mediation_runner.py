@@ -13,7 +13,6 @@ from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
     run_ablation,
 )
 from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (
-    DECOUPLED_STIMULUS,
     NEUTRAL_STIMULUS,
     SOMA_SALIENT_STIMULUS,
 )

@@ -48,7 +48,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from kaine.bus.schema import Event
-from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.evaluation.benchmarks import write_jsonl
 from kaine.evaluation.benchmarks.oscillatory_ablation.stimulus import ScriptedBus

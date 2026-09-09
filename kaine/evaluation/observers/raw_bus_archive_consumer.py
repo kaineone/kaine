@@ -50,30 +50,14 @@ class RawArchiveAttestationError(ValueError):
     """
 
 
-#: Every ``<module>.out`` stream the raw archive follows verbatim.
-_MODULE_OUT_STREAMS: tuple[str, ...] = (
-    "soma.out",
-    "chronos.out",
-    "topos.out",
-    "nous.out",
-    "mnemos.out",
-    "eidolon.out",
-    "thymos.out",
-    "praxis.out",
-    "lingua.out",
-    "audition.out",
-    "vox.out",
-    "mundus.out",
-    "perception.out",
-    "empatheia.out",
-    "phantasia.out",
-    "hypnos.out",
-    "volition.out",
-    "spot.out",
-    "cycle.out",
-    "welfare.out",
-    "preservation.out",
-)
+from kaine.evaluation.stream_registry import raw_archive_module_streams
+
+#: Every module stream the raw archive follows verbatim — derived from the
+#: canonical registry (kaine.evaluation.stream_registry) so the observer,
+#: archive, and nexus monitor never drift. Lingua's deliberate split into
+#: ``lingua.external``/``lingua.internal`` (there is no ``lingua.out``
+#: producer) is applied by the registry.
+_MODULE_OUT_STREAMS: tuple[str, ...] = raw_archive_module_streams()
 
 
 class _VerbatimStreamArchiver(StreamSubscriberObserver):

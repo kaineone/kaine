@@ -20,7 +20,6 @@ from kaine.modules.topos.encoder import (
     DEFAULT_ENCODER_BACKEND,
     DEFAULT_INTERNVIDEO_NEXT_MODEL_ID,
     DINOv2Encoder,
-    Encoder,
     InternVideoNextEncoder,
     make_encoder,
 )

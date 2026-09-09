@@ -799,10 +799,18 @@ async def _boot_and_run(
         _report_clock = (
             registry.entity_clock.now if registry.entity_clock is not None else None
         )
+        # Interruptible utterances (PR #81) are opt-in: an absent
+        # [volition].interrupt_threshold keeps await-to-completion; a set
+        # value must sit strictly above the report bar (enforced by the
+        # policy itself).
+        _interrupt_raw = volition_cfg.get("interrupt_threshold")
         volition = Volition(
             policy=SelfInitiatedReportPolicy(
                 report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
                 think_threshold=float(volition_cfg.get("think_threshold", 0.45)),
+                interrupt_threshold=(
+                    float(_interrupt_raw) if _interrupt_raw is not None else None
+                ),
                 speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
                 think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
                 clock=_report_clock,
