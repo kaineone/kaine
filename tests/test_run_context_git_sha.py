@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Tests for compute_git_sha's KAINE_GIT_SHA env fallback.
 
 Covers: (a) a successful git lookup ignores the env var, (b) a failed git
