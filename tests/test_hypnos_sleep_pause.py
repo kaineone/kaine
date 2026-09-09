@@ -126,11 +126,14 @@ def test_replay_crash_still_restores_clock_and_locus(tmp_path, monkeypatch):
 
     h._suspend_perception()
     assert clock.paused
-    with pytest.raises(RuntimeError):
+    def _replay_crash():
         try:
             raise RuntimeError("replay crashed mid-window")
         finally:
             h._restore_perception()
+
+    with pytest.raises(RuntimeError):
+        _replay_crash()
     assert not clock.paused
     assert written[-1] == "virtual"
 

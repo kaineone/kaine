@@ -599,7 +599,8 @@ def test_video_read_represents_held_frame_while_paused(tmp_path):
     video = PlaylistSource(
         parsed, playlist_clock=clock, cv2_module=_FakeCv2({"a.mp4": 60})
     )  # 60 frames @ 30 fps = 2 s
-    assert video.open()
+    opened = video.open()
+    assert opened
     clk.t = 0.5
     ok, f1 = video.read()
     assert ok
