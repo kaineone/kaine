@@ -828,6 +828,11 @@ async def _boot_and_run(
         # value must sit strictly above the report bar (enforced by the
         # policy itself).
         _interrupt_raw = volition_cfg.get("interrupt_threshold")
+        # H4 — without an expiry the coarse (source, type) novelty signature
+        # suppresses same-signature reports FOREVER; on a stable stimulus the
+        # top coalition rarely changes signature, so external speech trends to
+        # zero over a multi-day run. None (unset) preserves never-expire.
+        _sig_expiry_raw = volition_cfg.get("sig_expiry_s")
         volition = Volition(
             policy=SelfInitiatedReportPolicy(
                 report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
@@ -837,6 +842,9 @@ async def _boot_and_run(
                 ),
                 speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
                 think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
+                sig_expiry_s=(
+                    float(_sig_expiry_raw) if _sig_expiry_raw is not None else None
+                ),
                 clock=_report_clock,
             ),
             signer=intent_signer,

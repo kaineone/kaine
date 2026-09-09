@@ -532,3 +532,41 @@ def test_h4_no_sig_expiry_means_permanent_novelty_suppression():
     policy.mark_realized()
     clock.advance(10_000.0)
     assert all(i.kind != "speak" for i in policy(snap))
+
+
+# --------------------------------------------------------------------------
+# Wiring completions (docs-audit findings 9 & 10): the H4 expiry and the M3
+# rate limit must actually be REACHABLE from configuration on a real boot.
+# --------------------------------------------------------------------------
+
+
+def test_h4_sig_expiry_is_wired_from_volition_config():
+    """cycle __main__ threads [volition].sig_expiry_s into the report policy
+    (without it the expiry defaults to never and H4 is inert on a real boot)."""
+    import kaine.cycle.__main__ as cycle_main
+
+    src = Path(cycle_main.__file__).read_text(encoding="utf-8")
+    assert 'volition_cfg.get("sig_expiry_s")' in src
+    assert "sig_expiry_s=(" in src
+
+
+def test_thesis_test_profile_sets_sig_expiry():
+    import tomllib
+
+    profile = Path(__file__).parent.parent / "config" / "profiles" / "thesis_test.toml"
+    raw = tomllib.loads(profile.read_text())
+    assert float(raw["volition"]["sig_expiry_s"]) > 0
+
+
+def test_m3_notify_rate_limit_is_enforced_in_respond():
+    """WelfareResponseConfig carries min_interval_s and _respond gates the
+    notify action through _welfare_notify_allowed (finding 10: the helper
+    existed with no production caller)."""
+    from kaine.cycle.preservation_monitor import WelfareResponseConfig
+
+    cfg = WelfareResponseConfig.from_section({"min_interval_s": 60.0})
+    assert cfg.min_interval_s == 60.0
+    src = Path(inspect.getfile(_welfare_notify_allowed)).read_text(encoding="utf-8")
+    respond = src.split("async def _respond", 1)[1]
+    assert "_welfare_notify_allowed" in respond
+    assert "_last_notify_at = now" in respond

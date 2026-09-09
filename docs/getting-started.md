@@ -77,7 +77,7 @@ KAINE runs on CPU-only hosts. With two GPUs it uses a primary/secondary split:
 | Device | Role | Approximate VRAM needed |
 |---|---|---|
 | `cuda:0` (primary GPU) | Lingua inference via model server; Hypnos voice-alignment training | ~12 GB+ |
-| `cuda:1` (secondary GPU) | Topos DINOv2-small vision encoder; Chatterbox TTS | ~8 GB |
+| `cuda:1` (secondary GPU) | Topos InternVideo-Next vision encoder; Chatterbox TTS | ~8 GB |
 | CPU | Chronos CfC, Mnemos embedder, Audition emotion2vec+, Speaches STT, all control paths | — |
 
 These roles map to the `device` config keys in `config/kaine.toml` (see

@@ -236,8 +236,10 @@ Each tick:
 7. Publish each intent to the bus (`volition.out`).
 8. Publish latency telemetry to `cycle.out`.
 
-The cycle can be **frozen** by writing `state/cycle/control.json`
-(`CycleControl.frozen = true`). Freeze is a humane suspend: the entity's
+The cycle can be **frozen** by writing `state/cycle/control.json` — a stack
+of per-source freeze entries (`operator` / `spot` / `welfare`); each recovery
+pops only its own entry, so a welfare pause survives a Spot recovery, and the
+cycle resumes only when the stack empties. Freeze is a humane suspend: the entity's
 subjective clock stops while operators repair infrastructure. It is not a
 shutdown.
 

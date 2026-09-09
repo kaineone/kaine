@@ -1,7 +1,7 @@
 # research-event-log Specification
 
 ## Purpose
-TBD - created by archiving change research-event-log. Update Purpose after archive.
+The curated, content-free longitudinal record of a research run — the only stream export-eligible as a metrics bundle.
 ## Requirements
 ### Requirement: Opt-in durable research event log
 

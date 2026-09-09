@@ -119,6 +119,7 @@ How the modules combine into system-level behavior:
 - [Run Identity](processes/run-identity.md) — per-run seed, run id, manifest, deterministic mode, shared verdict schema
 - [Run Admissibility](processes/run-admissibility.md) — completeness gating + log range validation
 - [Evaluation Sidecar](processes/evaluation-sidecar.md) — the read-only observers, the content-free welfare emitter, and instruments
+- [Research Event Streams](research-event-streams.md) — the canonical module-stream registry and the curated, content-free research-log taxonomy
 - [Controlled Experiment Runners](processes/controlled-experiment-runners.md) — A/B divergence, memory coherence, self-model accuracy as seeded offline runners
 - [Oscillatory Ablation](processes/oscillatory-ablation.md) — coherence layer on vs off, controlled
 - [Active-Inference Benchmark](processes/active-inference-benchmark.md) — Nous AIF vs an RL baseline

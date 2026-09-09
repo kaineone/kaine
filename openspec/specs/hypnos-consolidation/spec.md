@@ -1,7 +1,7 @@
 # hypnos-consolidation Specification
 
 ## Purpose
-TBD - created by archiving change hypnos-consolidation. Update Purpose after archive.
+Sleep-time memory work: synaptic downscaling, offline replay behind a suspended perceptual locus, and the welfare-gated voice-alignment phase.
 ## Requirements
 ### Requirement: Phase-3 associative replay with Phantasia scenarios
 Hypnos phase 3 SHALL replay traces from different memory periods in novel

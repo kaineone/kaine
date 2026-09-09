@@ -1,7 +1,7 @@
 # interruptible-utterance Specification
 
 ## Purpose
-TBD - created by archiving change interruptible-utterance. Update Purpose after archive.
+Mid-utterance preemption: a sufficiently surprising coalition redirects the voice mid-stream instead of queuing behind a stale utterance.
 
 ## Requirements
 

@@ -136,9 +136,18 @@ and continues.
 
 `asyncio.gather` issues a concurrent `XREAD` for every stream returned by
 `registry.active_streams()`. Each stream is read with `block_ms=0`
-(non-blocking) and count=100 (configurable). The per-stream cursor advances to
-the last entry ID seen each tick. Read failures increment a per-stream error
-counter but do not stop the loop.
+(non-blocking) and count=100 (configurable), via the bus's
+`read_entries` — the per-stream cursor advances to the last entry ID
+*scanned* (decodable or not), so a batch of undecodable entries moves the
+cursor past itself instead of stalling the stream forever. Read failures
+increment a per-stream error counter but do not stop the loop.
+
+On a production boot the entrypoint constructs the cycle with
+`seed_cursors_to_tail=true`: every stream cursor (module streams, the control
+stream, and `soma.out`) is seeded to the stream tail before the first read, so
+an in-run process restart against a live Redis replays nothing that predates
+the boot — including stale soma rate advisories. Library/test construction
+defaults to reading from the beginning.
 
 ### Step 4: Syneidesis selection
 
@@ -200,19 +209,35 @@ The operator can freeze the cycle (suspend all experiential ticks) by writing
 {
   "frozen": true,
   "frozen_at": "2026-06-06T12:00:00+00:00",
-  "reason": "infrastructure maintenance"
+  "reason": "infrastructure maintenance",
+  "source": "operator",
+  "stack": [
+    {"source": "operator", "reason": "infrastructure maintenance",
+     "frozen_at": "2026-06-06T12:00:00+00:00"}
+  ]
 }
 ```
+
+The freeze is a **stack** of `{source, reason, frozen_at}` entries — the
+authoritative field is `stack`; the top-level `frozen`/`frozen_at`/`reason`/
+`source` fields are a legacy view mirroring the top of the stack (older
+single-slot files are promoted to a one-entry stack on read). Sources stack
+independently: a Spot recovery pops ONLY Spot's own entry, so a welfare
+pause underneath it survives supervisor recovery and is liftable only by an
+operator stand-down or an explicit welfare stand-down. The cycle resumes only
+when the stack is empty.
 
 A **freeze-watch task** in the cycle entrypoint polls this file and calls
 `cycle.pause()` / `cycle.resume()` to match the commanded state. `pause()`
 clears an `asyncio.Event`; `run_forever` blocks on `await self._paused.wait()`
-so no ticks fire while the event is clear.
+so no ticks fire while the event is clear. On freeze the watch snapshots the
+desired perception flags and suspends them; on resume it writes the snapshot
+back, so a freeze/resume cycle never leaves the entity deaf or blind.
 
 Freeze is a **humane suspend**: the entity's subjective clock stops while
 operators repair infrastructure. It is not a shutdown. The file contains
-ONLY operational fields — frozen flag, ISO timestamp, optional reason string.
-Never any sensory content.
+ONLY operational fields — freeze entries with ISO timestamps and optional
+reason strings. Never any sensory content.
 
 The Nexus `POST /diagnostics/cycle/freeze` endpoint writes this file. The
 `unfreeze` function atomically replaces it with `{"frozen": false}`.

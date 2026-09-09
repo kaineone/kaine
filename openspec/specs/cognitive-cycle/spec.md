@@ -1,7 +1,7 @@
 # cognitive-cycle Specification
 
 ## Purpose
-TBD - created by archiving change cognitive-cycle. Update Purpose after archive.
+The heartbeat that reads every module stream, runs workspace selection, broadcasts the winning coalition, and paces it all against the entity's subjective clock.
 ## Requirements
 ### Requirement: Cycle runner with pacing
 The cognitive cycle SHALL run as an async loop that targets a configurable

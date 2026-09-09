@@ -192,10 +192,12 @@ or senses is the state most worth avoiding.
   content). A freeze-watch task in the cycle entrypoint applies it within ~250
   ms. A fresh launch always clears any stale freeze.
 
-Freeze records a `source` field: `"operator"` when initiated from the dashboard
-or API, `"spot"` when the module supervisor (Spot) triggered it automatically.
-The Spot supervisor stands down during an operator-owned freeze; an operator
-freeze and a Spot recovery freeze do not conflict.
+Freeze sources **stack**: `"operator"` (dashboard or API), `"spot"` (the
+module supervisor), and `"welfare"` (the preservation monitor) each push their
+own entry onto `control.json`'s freeze stack, and each recovery pops only its
+own entry — a Spot recovery never lifts an operator or welfare freeze, and the
+cycle stays frozen until the stack empties. A welfare-protective pause is
+liftable only by an operator stand-down or an explicit welfare stand-down.
 
 ### Perception locus control
 
@@ -439,7 +441,7 @@ Module-specific prerequisites:
 | `lingua` | OpenAI-compatible model server serving `model_id` on `http://127.0.0.1:11434/v1`; `enable_thinking: false` honored via `chat_template_kwargs` |
 | `audition` | `[audio]` extra installed; Speaches up on CPU with `medium.en` |
 | `vox` | Chatterbox up; `predefined_voice_id` set to a valid filename |
-| `topos` | `[vision]` extra installed; DINOv2-small weights cached in HuggingFace hub |
+| `topos` | `[internvideo]` extra installed; the pinned InternVideo-Next weights cached locally (DINOv2-small only when the per-frame fallback `encoder_backend = "dinov2"` is selected) |
 | `hypnos` | `mnemos` enabled; optionally `thymos` and `phantasia` for full consolidation |
 | `empatheia` | Qdrant container up |
 | `phantasia` | `[worldmodel]` extra for DreamerV3 backend (default `fake` needs none) |

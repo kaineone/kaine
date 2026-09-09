@@ -1,7 +1,7 @@
 # self-initiated-report Specification
 
 ## Purpose
-TBD - created by archiving change thesis-test-configuration. Update Purpose after archive.
+The base-thesis voice: speech arises only from the entity's own precision-weighted surprise crossing a report bar above the conscious threshold — never from user input.
 
 ## Requirements
 

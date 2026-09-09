@@ -8,6 +8,51 @@ The public brand is **26.06.0a1**; pip normalizes this to `26.6.0a1` (expected).
 
 ---
 
+## [Unreleased]
+
+### The base-thesis reconfiguration (July 2026)
+- The default configuration became the base-thesis test (#71): six diverse
+  predictive processors (Soma, Chronos, Topos, Audition, Thymos #79/#84,
+  Lingua) competing through the workspace, everything richer gated off.
+- STT and the conversation surface deactivated by default (#77); Lingua's
+  prompt became a neutral state-verbalizer with no roleplay persona (#73);
+  interruptible, redirectable utterance landed (#81).
+- Perception drives the workspace: prediction-error salience with
+  self-calibrating alerts (#75); real-time A/V sync for the playlist feed via
+  one shared clock (#80); the containerized deployment boots end-to-end (#72).
+- Under pre-renumbering squashes: the on-device voice-alignment GPU window,
+  the unified seed-keyed audio-visual feed, perception-extras provisioning,
+  and biologically-grounded multi-rate timing with config time-dilation.
+- Docs reframed to the base-thesis form (#82); Paracosm renamed Paracosmic
+  (#83); Zen Dots replaced Oxanium as the console face (#91).
+
+### Research-run preparation (September 2026)
+- The nexus conversation surface gained an env override for containerized
+  deployments (#92).
+- Sleep pauses the stimulus playlist and resumes at the exact pause point;
+  wake restores the remembered pre-sleep perceptual locus (#93).
+- Dependency floors raised: pytest-asyncio 1.4, webrtcvad 2.0.10,
+  easydict 1.13, unsloth 2026.7.3, chex 0.1.92 (#94).
+- Eleven shipped OpenSpec changes archived; specs reconciled with shipped
+  reality under the openspec 1.12 validator (#95, #98).
+- Research-event contract drift fixed — intents, Chronos, the Thymos emotion
+  label, and the Topos discontinuity signal now reach the curated research
+  log; a canonical stream registry with reality-anchored drift tests replaced
+  three hand-maintained stream lists; [volition].interrupt_threshold wired
+  (#96).
+- The pre-boot correctness batch (#97): stacked freeze sources (a
+  welfare-protective pause survives Spot recovery), freeze/resume restores
+  the desired perception flags, speech-liveness guard timeouts and a
+  realization-failed audit event, novelty-signature expiry, playlist-audio
+  clock resync on producer start, poison-batch-proof cursors, tail-seeded
+  cursors on production boots, a guaranteed (aborted-flagged) sleep-completed
+  event, an interval maintenance net, and a welfare-notify rate limit — with
+  the sig-expiry and notify-rate-limit wiring completed in #100.
+- Research-run infra hardening (#99): config profiles baked into the image,
+  durable volumes for all research output, a 4 GB Redis ceiling, container
+  log rotation, git-sha provenance via a build-time env var, quadlet parity,
+  and the qdrant healthcheck fixed in committed compose.
+
 ## [26.06.0a1] — 2026-06-07
 
 **First public alpha.** The architecture is feature-complete and tested in-tree.
