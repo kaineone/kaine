@@ -52,7 +52,6 @@ def build_dependency_specs(
     # KAINE_REDIS_URL (redis://[:password@]host[:port][/db]); the health probe
     # must probe the same endpoint the runtime will actually use.
     redis_url = os.environ.get("KAINE_REDIS_URL")
-    redis_password = redis_password
     if redis_url:
         parsed = urlparse(redis_url)
         redis_host = parsed.hostname or redis_host

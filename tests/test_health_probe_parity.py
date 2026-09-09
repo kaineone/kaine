@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from kaine.nexus.health.config import build_dependency_specs
 from kaine.nexus.health.probes import NOT_CONFIGURED
 
@@ -43,9 +41,6 @@ def _spec_named(specs, name):
 def _capture_redis_probe(spec):
     """Intercept probe_redis's arguments by faking the redis client."""
     captured = {}
-
-    async def fake_ping(self):
-        return True
 
     class FakeRedis:
         def __init__(self, **kwargs):
@@ -129,7 +124,6 @@ class TestSpeachesTranscriptionGating:
         probed = []
         from kaine.nexus.health import probes as probes_mod
 
-        real = probes_mod.probe_speaches
         async def fake_speaches(**kwargs):
             probed.append(kwargs)
             return "up", "should not happen"
@@ -164,11 +158,11 @@ class TestSpeachesTranscriptionGating:
         specs = _specs(monkeypatch, audition_cfg={})
         spec = _spec_named(specs, "Speaches (STT)")
 
-        from kaine.nexus.health import probes as probes_mod
+        from kaine.nexus.health import config as config_mod
 
         async def fake_speaches(*, base_url):
             return "up", "ok"
 
-        monkeypatch.setattr(probes_mod, "probe_speaches", fake_speaches)
+        monkeypatch.setattr(config_mod, "probe_speaches", fake_speaches)
         status, _ = asyncio.run(spec.probe())
         assert status == "up"
