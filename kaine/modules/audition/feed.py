@@ -439,6 +439,14 @@ class PlaylistAudioStream:
 
         def _emit(pcm: bytes) -> None:
             nonlocal next_deadline
+            # Park while the shared clock is paused (Hypnos sleep): the clock
+            # is the one pause authority. next_deadline is NOT advanced while
+            # paused; on resume re-anchor it so pacing continues cleanly (no
+            # burst of back-to-back blocks). Stop wins over the park.
+            if self._clock.wait_if_paused(stop_check=self._stopped.is_set):
+                next_deadline = time.monotonic()
+            if self._stopped.is_set():
+                return
             try:
                 self._callback(pcm)
             except Exception:
@@ -478,6 +486,12 @@ class PlaylistAudioStream:
                     )
                     stream = container.streams.audio[0]
                     for frame in container.decode(stream):
+                        if self._stopped.is_set():
+                            return
+                        # Per-frame pause park (between frames, which covers
+                        # the first block of each item): no PyAV frame iteration
+                        # while asleep, so decoders truly idle. Stop wins.
+                        self._clock.wait_if_paused(stop_check=self._stopped.is_set)
                         if self._stopped.is_set():
                             return
                         for rframe in resampler.resample(frame):

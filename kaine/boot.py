@@ -1300,6 +1300,15 @@ def make_hypnos(
         kwargs["thymos"] = thymos
     if phantasia is not None:
         kwargs["phantasia"] = phantasia
+    # Shared playlist clock (playlist-sleep-pause): boot stashes the SAME
+    # instance used by both playlist feeds under the [perception_feed] section;
+    # pass it to Hypnos so sleep suspends/resumes playback at the same seam as
+    # the locus flip. Absent in non-playlist modes → honest no-op.
+    if kaine_config is not None:
+        _pf = kaine_config.get("perception_feed") or {}
+        _pclock = _pf.get("_shared_playlist_clock")
+        if _pclock is not None:
+            kwargs["playlist_clock"] = _pclock
     return Hypnos(bus, **kwargs)
 
 
@@ -1733,9 +1742,19 @@ def build_registry(
             _manifest_path = str(perception_feed.get("playlist_manifest", "")).strip()
             if _manifest_path:
                 _pl_manifest = load_playlist_manifest(_manifest_path)
-                perception_feed["_shared_playlist_clock"] = PlaylistClock(
-                    len(_pl_manifest.items)
-                )
+                _pl_clock = PlaylistClock(len(_pl_manifest.items))
+                perception_feed["_shared_playlist_clock"] = _pl_clock
+                # Also stash the clock in the config section itself so the
+                # Hypnos factory (which reads kaine_config, not this local
+                # copy) can inject the SAME instance — sleep pauses playback
+                # via the clock at the perception suspend/restore seam
+                # (playlist-sleep-pause). No new bus/event channel: the
+                # injected-clock pattern is the established mechanism.
+                if kaine_config is not None:
+                    kaine_config.setdefault("perception_feed", {})
+                    kaine_config["perception_feed"]["_shared_playlist_clock"] = (
+                        _pl_clock
+                    )
         except Exception:
             log.warning(
                 "could not build the shared playlist clock; feeds fall back to "

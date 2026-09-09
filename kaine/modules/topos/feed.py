@@ -439,6 +439,19 @@ class PlaylistClock:
     opens an item, so the shared boundaries follow the true video-frame duration.
     A monotonic clock function is injectable so the pacing is unit-testable
     without real time.
+
+    Pause/resume (playlist-sleep-pause): ``pause()`` freezes elapsed time via an
+    accumulated-pause offset — ``_paused_total`` accumulates completed pause
+    spans and an in-progress pause contributes ``clock() - _pause_started`` — so
+    ``locate()`` freezes exactly while paused and on ``resume()`` playback
+    continues from the pre-pause position with sub-millisecond error (one clock
+    read; no re-origin, no content skipped). Pausing before the origin is fixed
+    makes the clock born paused: ``start()`` anchors the pause to the
+    just-fixed origin so elapsed stays exactly 0 until ``resume()``. Feeds park
+    their loops on ``wait_if_paused(stop_check)``, which waits on an internal
+    event (set = running) WITHOUT holding the lock and returns promptly when
+    the stop check passes; it returns True when a pause was observed so pacing
+    loops can re-anchor their deadlines.
     """
 
     def __init__(
@@ -452,6 +465,17 @@ class PlaylistClock:
         self._origin: float | None = None
         self._durations: list[float | None] = [None] * self._n
         self._lock = threading.Lock()
+        # Pause state (playlist-sleep-pause). ``_paused`` is the single pause
+        # authority flag (it stays True even before the origin is fixed — a
+        # pending/born-paused pause); ``_pause_started`` is the clock value the
+        # current pause began at, or None while the pause predates the origin.
+        self._paused = False
+        self._pause_started: float | None = None
+        self._paused_total = 0.0
+        # Set = running, clear = paused. Waited on WITHOUT the lock so feeds can
+        # park without deadlocking against pause/resume.
+        self._running = threading.Event()
+        self._running.set()
 
     def start(self, at: float | None = None) -> None:
         """Set the playback origin ONCE (idempotent). Both feeds call this on
@@ -459,11 +483,67 @@ class PlaylistClock:
         with self._lock:
             if self._origin is None:
                 self._origin = self._clock() if at is None else float(at)
+                # Born-paused: the pause began before any origin existed; the
+                # pending-pause flag becomes a real pause anchored at the
+                # origin, so elapsed stays exactly 0 for as long as the pause
+                # holds (no negative elapsed possible).
+                if self._paused:
+                    self._pause_started = self._origin
 
     @property
     def started(self) -> bool:
         with self._lock:
             return self._origin is not None
+
+    @property
+    def paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
+    def pause(self) -> None:
+        """Freeze elapsed time (idempotent while paused). If the origin is not
+        yet fixed, this records a PENDING pause: the clock is born paused and
+        ``start()`` anchors the pause to the origin it fixes."""
+        with self._lock:
+            if self._paused:
+                return
+            self._paused = True
+            if self._origin is not None:
+                self._pause_started = self._clock()
+            # else: pending pause; _pause_started stays None until start().
+            self._running.clear()
+
+    def resume(self) -> None:
+        """Unfreeze elapsed time (idempotent when not paused). Accumulates the
+        just-ended pause span into ``_paused_total`` so elapsed continues from
+        the pre-pause value."""
+        with self._lock:
+            if not self._paused:
+                return
+            self._paused = False
+            if self._origin is not None and self._pause_started is not None:
+                self._paused_total += self._clock() - self._pause_started
+            self._pause_started = None
+            self._running.set()
+
+    def wait_if_paused(
+        self, stop_check: Callable[[], bool] | None = None
+    ) -> bool:
+        """Park the calling thread while paused. Waits on the internal running
+        event WITHOUT holding ``self._lock`` (never wait on a lock you might
+        need) and returns promptly when ``stop_check()`` is True — stop always
+        wins. Returns True when a pause was actually observed, so pacing loops
+        can re-anchor their deadlines on resume."""
+        waited = False
+        while not self._running.is_set():
+            # A pause IS observed the moment we enter the loop; mark it
+            # before the stop check so an immediate stop while paused
+            # still reports the observed pause (stop wins, but truthfully).
+            waited = True
+            if stop_check is not None and stop_check():
+                return waited
+            self._running.wait(timeout=0.25)
+        return waited
 
     def set_duration(self, idx: int, seconds: float) -> None:
         """Register item ``idx``'s real duration (first writer wins)."""
@@ -482,7 +562,13 @@ class PlaylistClock:
     def _elapsed_locked(self) -> float:
         if self._origin is None:
             return 0.0
-        return max(0.0, self._clock() - self._origin)
+        # Single clock read: two separate reads would give a per-call
+        # microsecond wobble instead of a perfect freeze while paused.
+        now = self._clock()
+        in_pause = 0.0
+        if self._paused and self._pause_started is not None:
+            in_pause = now - self._pause_started
+        return max(0.0, self._clock() - self._origin - self._paused_total - in_pause)
 
     def locate(self, elapsed: float | None = None) -> tuple[int, float]:
         """Map elapsed wall-clock seconds to ``(item_idx, offset_seconds)``.

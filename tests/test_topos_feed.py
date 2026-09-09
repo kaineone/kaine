@@ -482,3 +482,224 @@ def test_shared_clock_keeps_video_and_audio_on_the_same_item(tmp_path):
     assert video.current_item.item_idx == 1
     assert audio.current_item.item_idx == 1
     assert video.current_item.title == audio.current_item.title == "b.mp4"
+
+
+# ---------------------------------------------------------------------------
+# PlaylistClock pause/resume + feed parking (playlist-sleep-pause)
+# ---------------------------------------------------------------------------
+
+
+def test_clock_locate_freezes_while_paused_and_resumes_at_pause_point():
+    """Elapsed freezes exactly during a pause; on resume it continues from the
+    pre-pause value (accumulated-pause offset, no re-origin)."""
+    clock = PlaylistClock(1, clock=_FakeClock())
+    clk = clock._clock
+    clock.start()
+    clock.set_duration(0, 10.0)
+    clk.t = 2.0
+    assert clock.elapsed() == 2.0
+    clock.pause()
+    clk.t = 6.0  # manual clock advance inside the pause
+    assert clock.paused
+    assert clock.elapsed() == 2.0
+    assert clock.locate() == (0, 2.0)
+    clock.resume()
+    assert not clock.paused
+    clk.t = 7.0
+    assert clock.elapsed() == 3.0  # continuation from the pause point
+    assert clock.locate() == (0, 3.0)
+
+
+def test_pause_at_item_boundary_freezes_position():
+    """Pausing exactly at a boundary needs no special case: locate() returns
+    the same position it returned at pause time."""
+    clock = PlaylistClock(2, clock=_FakeClock())
+    clk = clock._clock
+    clock.start()
+    clock.set_duration(0, 2.0)
+    clock.set_duration(1, 2.0)
+    clk.t = 2.0
+    assert clock.locate() == (1, 0.0)
+    clock.pause()
+    clk.t = 5.0
+    assert clock.locate() == (1, 0.0)
+    clock.resume()
+    clk.t = 5.5
+    assert clock.locate() == (1, 0.5)
+
+
+def test_double_pause_and_double_resume_are_idempotent_noops():
+    clock = PlaylistClock(1, clock=_FakeClock())
+    clk = clock._clock
+    clock.start()
+    clock.pause()
+    clock.pause()  # no-op while already paused
+    clk.t = 1.0
+    clock.resume()
+    clock.resume()  # no-op while not paused
+    # The pause consumed the whole 0->1 interval, so nothing has accrued yet.
+    assert clock.elapsed() == 0.0
+    clk.t = 2.0
+    assert clock.elapsed() == 1.0
+
+
+def test_born_paused_clock_elapses_zero_until_resume():
+    """Pause before start(): the clock is born paused — origin fixed at the
+    pause, elapsed exactly 0 until resume, never negative."""
+    clock = PlaylistClock(1, clock=_FakeClock())
+    clock.pause()
+    clock.start()
+    clk = clock._clock
+    clk.t = 3.0
+    assert clock.started
+    assert clock.elapsed() == 0.0
+    clock.resume()
+    clk.t = 4.0
+    assert clock.elapsed() == 1.0
+
+
+def test_resume_before_start_is_noop():
+    clock = PlaylistClock(1, clock=_FakeClock())
+    clock.pause()
+    clock.resume()  # origin still unset: just clears the flag
+    clock.start()
+    assert clock.elapsed() == 0.0
+
+
+def test_wait_if_paused_returns_promptly_on_stop_check():
+    import threading
+    import time as _time
+
+    clock = PlaylistClock(1, clock=_FakeClock())
+    clock.start()
+    stopped = threading.Event()
+    stopped.set()
+    clock.pause()
+    # Stop wins over the park: returns promptly (no busy-wait, no hang).
+    t0 = _time.monotonic()
+    assert clock.wait_if_paused(stop_check=stopped.is_set) is True
+    assert _time.monotonic() - t0 < 1.0
+    clock.resume()
+    assert clock.wait_if_paused(stop_check=stopped.is_set) is False
+
+
+def test_video_read_represents_held_frame_while_paused(tmp_path):
+    """While the clock is frozen, read() re-presents the held frame via the
+    HOLD branch — no decoder cursor advance, no item advance."""
+    data = b"vp"
+    (tmp_path / "a.mp4").write_bytes(data)
+    manifest = _write_manifest(
+        tmp_path,
+        [{"path": "a.mp4", "sha256": hashlib.sha256(data).hexdigest(),
+          "fps": 30, "order": 0}],
+    )
+    parsed = load_playlist_manifest(manifest)
+    clock = PlaylistClock(1, clock=_FakeClock())
+    clk = clock._clock
+    video = PlaylistSource(
+        parsed, playlist_clock=clock, cv2_module=_FakeCv2({"a.mp4": 60})
+    )  # 60 frames @ 30 fps = 2 s
+    opened = video.open()
+    assert opened
+    clk.t = 0.5
+    ok, f1 = video.read()
+    assert ok
+    clock.pause()
+    clk.t = 5.0  # wall time moves, elapsed does not
+    ok, f2 = video.read()
+    assert ok
+    assert f2 is f1  # the held frame is re-presented, not re-decoded
+    assert video.current_item.item_idx == 0
+    clock.resume()
+
+
+def test_audio_producer_parks_while_clock_paused(tmp_path, monkeypatch):
+    """While the shared clock is paused the producer emits nothing; stop still
+    wins while parked (shutdown never hangs)."""
+    import sys
+    import time as _time
+
+    from kaine.modules.audition.feed import PlaylistAudioStream
+
+    data = b"aud"
+    (tmp_path / "a.mp4").write_bytes(data)
+    manifest = _write_manifest(
+        tmp_path,
+        [{"path": "a.mp4", "sha256": hashlib.sha256(data).hexdigest(),
+          "fps": 30, "order": 0}],
+    )
+    parsed = load_playlist_manifest(manifest)
+    clock = PlaylistClock(1, clock=_FakeClock())
+
+    class _Plane:
+        def __init__(self, d):
+            self._d = d
+
+        def __bytes__(self):
+            return bytes(self._d)
+
+    class _Frame:
+        def __init__(self, d):
+            self.planes = [_Plane(d)]
+
+    class _AudioResampler:
+        def __init__(self, **kwargs):
+            pass
+
+        def resample(self, frame):
+            yield frame
+
+    class _Stream:
+        pass
+
+    class _Streams:
+        audio = [_Stream()]
+
+    class _Container:
+        duration = 8_000_000  # AV_TIME_BASE microseconds
+        streams = _Streams()
+
+        def decode(self, stream):
+            for _ in range(8):
+                yield _Frame(b"\x01" * 32_000)
+
+        def close(self):
+            pass
+
+    class _ResamplerNS:
+        AudioResampler = _AudioResampler
+
+    class _AudioNS:
+        resampler = _ResamplerNS
+
+    class _FakeAv:
+        audio = _AudioNS
+
+        @staticmethod
+        def open(path):
+            return _Container()
+
+    monkeypatch.setitem(sys.modules, "av", _FakeAv)
+
+    emitted: list[bytes] = []
+    stream = PlaylistAudioStream(
+        parsed, callback=emitted.append, playlist_clock=clock
+    )
+    clock.start()
+    stream.start()
+    try:
+        for _ in range(300):
+            if len(emitted) >= 2:
+                break
+            _time.sleep(0.01)
+        assert emitted, "producer emitted nothing before the pause"
+        clock.pause()
+        n_at_pause = len(emitted)
+        _time.sleep(0.2)
+        # No blocks emitted during the pause (no drops, no duplicates).
+        assert len(emitted) == n_at_pause
+    finally:
+        # Stop still wins while parked: the producer exits promptly.
+        stream.stop()
+    assert stream._thread is None
+    clock.resume()
