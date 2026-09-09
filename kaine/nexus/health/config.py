@@ -9,11 +9,13 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from .prober import DependencySpec, HealthProber
 from .probes import (
     DEFAULT_CACHE_TTL_S,
     DEFAULT_PROBE_TIMEOUT_S,
+    NOT_CONFIGURED,
     nous_health_probe,
     probe_chat_llm,
     probe_chatterbox,
@@ -24,6 +26,11 @@ from .probes import (
 )
 
 log = logging.getLogger(__name__)
+
+
+async def _async_not_configured(reason: str) -> tuple[str, str]:
+    """Neutral skip result for a dependency the runtime will not use."""
+    return NOT_CONFIGURED, reason
 
 
 def build_dependency_specs(
@@ -41,6 +48,19 @@ def build_dependency_specs(
     redis_host = str(redis_cfg.get("host", "127.0.0.1"))
     redis_port = int(redis_cfg.get("port", 6379))
 
+    # Parity with load_bus_config: every containerized service connects via
+    # KAINE_REDIS_URL (redis://[:password@]host[:port][/db]); the health probe
+    # must probe the same endpoint the runtime will actually use.
+    redis_url = os.environ.get("KAINE_REDIS_URL")
+    if redis_url:
+        parsed = urlparse(redis_url)
+        redis_host = parsed.hostname or redis_host
+        if parsed.port is not None:
+            redis_port = int(parsed.port)
+        # URL password wins when present; otherwise the env/secrets password.
+        if parsed.password is not None:
+            redis_password = unquote(parsed.password)
+
     qdrant_host = str(qdrant_cfg.get("host", "127.0.0.1"))
     qdrant_port = int(qdrant_cfg.get("port", 6333))
 
@@ -51,6 +71,7 @@ def build_dependency_specs(
     )
 
     speaches_url = str(audition_cfg.get("speaches_url", "http://127.0.0.1:8000"))
+    transcription_enabled = bool(audition_cfg.get("transcription_enabled", True))
     chatterbox_url = str(vox_cfg.get("chatterbox_url", "http://127.0.0.1:8883"))
     # nous_cfg is retained in the signature for parity with other deps, but the
     # active-inference backend has no binary path — the probe imports pymdp/jax.
@@ -85,7 +106,13 @@ def build_dependency_specs(
             name="Speaches (STT)",
             role="Audition",
             module="audition",
-            probe=lambda: probe_speaches(base_url=speaches_url),
+            # STT-ectomy: with transcription disabled the run never calls
+            # Speaches, so the probe reports not-configured (SKIP), not down.
+            probe=(
+                (lambda: _async_not_configured("transcription disabled"))
+                if not transcription_enabled
+                else (lambda: probe_speaches(base_url=speaches_url))
+            ),
         ),
         DependencySpec(
             name="Chatterbox (TTS)",
