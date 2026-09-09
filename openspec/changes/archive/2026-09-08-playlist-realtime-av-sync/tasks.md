@@ -45,7 +45,7 @@
 
 ## 5. Paper alignment
 
-- [ ] 5.1 Ensure §6 (evaluation tiers) describes the playlist feed under the live
+- [ ] 5.1 Ensure §6 (evaluation tiers) describes the playlist feed under the live *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
   tier (statistical reproducibility by media identity), consistent with this change.
   NOTE: §6 lives in the SEPARATE paper repo (predictive-workspace-paper), outside
   this kaine worktree — no paper copy exists here — so this is a follow-up for the

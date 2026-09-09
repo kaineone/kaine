@@ -48,7 +48,7 @@ when modules become separate processes (see `distributed-substrate` /
       → mis-wired (provenance-disabled) Praxis factory in `kaine/evaluation/redteam/harness.py`.
 
 ## 4 — Paper + docs reconciliation (required either way)
-- [ ] 4.1 Edit §3.5 and §9.4 of `paper/paper.md` and the arXiv manuscript so
+- [ ] 4.1 Edit §3.5 and §9.4 of `paper/paper.md` and the arXiv manuscript so *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
       inhibition is a cognitive property + (now) verified provenance, with the
       whitelist+sandbox as the primary enforced gate.
       → **In-repo docs reconciled** (`docs/architecture.md` "Action Safety Model",

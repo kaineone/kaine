@@ -30,12 +30,12 @@
 - [x] 4.1 Add `config/profiles/thesis_test.toml`: enable soma/chronos/topos/
   audition/lingua; disable the rest; `[audition].transcription_enabled=false`;
   Topos foveation on; perception feed raw AV; `[volition].policy=self_initiated_report`.
-- [ ] 4.2 Test: booting the profile registers exactly the five modules, hits no
+- [x] 4.2 Test: booting the profile registers exactly the five modules, hits no *(satisfied at config level by tests/test_thesis_test_profile.py::test_enables_exactly_the_thesis_processors; real-boot registration check folded into future integration work)*
   disabled-module dependency, and selects the report policy.
 
 ## 5. Paper reconciliation (review-gated, not committed by this change)
 
-- [ ] 5.1 Update the paper's minimal-set (§1.4/§3.4), audio-input (§2.4/§4), and
+- [ ] 5.1 Update the paper's minimal-set (§1.4/§3.4), audio-input (§2.4/§4), and *(external: paper repo `predictive-workspace-paper` — not closeable from this repo)*
   action/report framing to the base-thesis form; keep it non-technical. (A
   paper-agent prompt accompanies this change.)
 

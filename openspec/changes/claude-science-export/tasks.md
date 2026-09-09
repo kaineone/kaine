@@ -1,7 +1,9 @@
 # Tasks — Export KAINE research metrics for Claude Science
 
-> **Design-of-record only.** The operator asked to **plan, not implement.** These
-> tasks are the future implementation roadmap; do not start them without a go.
+> **Implemented** (PR #48, `kaine/research/claude_science_export.py`) against the
+> design's recommended resolutions for §8 Q1–Q5. Held from archive on ONE gate:
+> operator sign-off on those resolutions (task 0.1); the Q4 audit-log sink stays
+> deferred pending that sign-off.
 > Phases map to `design.md`. **The allowlist, the raw bus archive, and the
 > deterministic verdict pipeline are OUT OF SCOPE and MUST NOT be touched** — see C1.
 

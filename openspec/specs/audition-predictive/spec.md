@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change audition-forward-model. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Auditory forward model drives salience
 Audition SHALL maintain a forward model over a compact auditory feature vector
 (emotion-class distribution plus utterance timing/energy features) that predicts
@@ -10,7 +12,7 @@ the next expected pattern from a recurrent auditory buffer, and SHALL weight the
 salience of `audition.transcription` and `audition.emotion` events by the
 prediction error. The model SHALL adapt online and skip non-finite updates.
 
-#### Scenario: Unexpected emotional tone raises salience
+#### Scenario: Unexpected emotional tone raises salience (speech path)
 - **WHEN** a detected vocal emotion strongly diverges from the forward model's
   prediction
 - **THEN** the published `audition.emotion` event has higher salience than an
@@ -33,3 +35,26 @@ reconstructed.
 - **THEN** the returned dict's buffer representation contains only numeric
   statistical summary fields and no `bytes` values
 
+### Requirement: Transcription is gateable
+
+Audition SHALL provide a configuration gate that, when transcription is disabled,
+skips the speech-to-text path entirely: no `audition.transcription` event is
+published and no STT model is invoked. The acoustic-perception path
+(`audition.perception` prediction error) and the affect signals
+(`audition.emotion`, `audition.prosody`) SHALL be unaffected. The STT code SHALL
+remain present (gated off), not removed.
+
+#### Scenario: Transcription disabled publishes no transcript
+
+- **WHEN** Audition runs with transcription disabled and processes audio
+- **THEN** it publishes no `audition.transcription` event and invokes no STT model
+
+#### Scenario: Perception path unaffected by the gate
+
+- **WHEN** Audition runs with transcription disabled and acoustic perception enabled
+- **THEN** it still publishes `audition.perception` prediction-error events
+
+#### Scenario: Default behavior preserved
+
+- **WHEN** Audition runs with transcription enabled (the default)
+- **THEN** it publishes `audition.transcription` exactly as before this change
