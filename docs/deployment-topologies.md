@@ -239,33 +239,29 @@ auto-restarts. Spot handles module-level recovery in-process; a dead cycle is
 an operator decision, never a supervisor's. Compose (compose/kaine.yml) and
 quadlet/kaine-cycle.container both carry this rationale as comments.
 
-## Run-readiness audit — resolved gaps
+## Durable research output and unattended-run provisions
 
-The seven verified gaps from the run-readiness audit are resolved:
-
-1. **Profiles in-image** — Dockerfile COPYs `config/profiles` so
-   `KAINE_PROFILE` / thesis_test auto-selection works in-container.
-2. **Durable evaluation + workspace-trajectory volumes** — compose mounts
-   `kaine-eval-data` at `/app/data/evaluation` (subsuming the old
-   `/app/data/evaluation/runs` mount) and `kaine-trajectory` at
-   `/app/data/workspace_trajectory`; quadlet/kaine-cycle.container mounts the
-   matching `.volume` units. Operators migrate old `kaine-runs` data by
-   copying it into `kaine-eval-data`; overlay references to `kaine-runs` are
-   updated by the operator.
-3. **Redis memory ceiling** — `--maxmemory` is 4gb with `noeviction`
-   retained: the bus fails loud rather than silently evicting.
-4. **Log rotation** — the `x-logging` anchor (json-file, `max-size: "50m"`,
-   `max-file: "3"`) applies to every service in compose/kaine.yml.
-5. **GIT_SHA provenance** — compose passes `GIT_SHA` (e.g. from
-   `git rev-parse --short HEAD`) through `build.args`; the Dockerfile bakes it
-   as `ENV KAINE_GIT_SHA`; `kaine/experiment/run_context.py` falls back to it
-   when the git subprocess lookup fails. Tests live in
-   tests/test_run_context_git_sha.py.
-6. **Qdrant healthcheck** — the compose healthcheck is
-   `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'` because qdrant:v1.18.0 ships
-   neither wget nor curl; a successful /dev/tcp connect is a sound readiness
-   signal since qdrant binds 6333 only once serving. No overlay workaround is
-   needed — any stale workaround in the operator overlay should be removed.
-7. **Restart-policy rationale documented** — see the section above.
+- **Profiles ship in the image** — the Dockerfile copies `config/profiles`, so
+  `KAINE_PROFILE` (and the thesis_test auto-selection) resolves in-container
+  with no bind mount.
+- **Research output is durable** — `kaine-eval-data` mounts at
+  `/app/data/evaluation` (run manifests under `runs/` plus every evaluation
+  observer's output; shared by the cycle and Nexus) and `kaine-trajectory` at
+  `/app/data/workspace_trajectory`. Nothing a run produces lives on the
+  ephemeral container layer. The quadlet units mount the matching `.volume`
+  units. *(Upgrade note: installs that used the retired `kaine-runs` volume
+  copy its contents into `kaine-eval-data` and drop overlay references.)*
+- **Redis** runs with a 4 GB `--maxmemory` ceiling and `noeviction` — the bus
+  fails loud rather than silently evicting events.
+- **Log rotation** — the `x-logging` anchor (json-file, `max-size: "50m"`,
+  `max-file: "3"`) applies to every service in compose/kaine.yml.
+- **Manifest provenance** — compose passes `GIT_SHA` (e.g. from
+  `git rev-parse --short HEAD`) through `build.args`; the Dockerfile bakes it
+  as `ENV KAINE_GIT_SHA`, and the run manifest's `git_sha` falls back to it
+  when the git subprocess lookup fails (containers carry no `.git`).
+- **Qdrant healthcheck** — `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'`:
+  qdrant:v1.18.0 ships neither wget nor curl, and a successful /dev/tcp
+  connect is a sound readiness signal since qdrant binds 6333 only once
+  serving.
 
 `.git` remains excluded by `.dockerignore`; no repo data leaks into the image.
