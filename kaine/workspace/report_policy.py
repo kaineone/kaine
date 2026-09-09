@@ -70,6 +70,7 @@ class SelfInitiatedReportPolicy:
         interrupt_threshold: Optional[float] = None,
         speak_refractory_s: float = 8.0,
         think_refractory_s: float = 3.0,
+        sig_expiry_s: Optional[float] = None,
         clock: Optional[Callable[[], float]] = None,
     ) -> None:
         if not 0.0 <= think_threshold <= report_threshold <= 1.0:
@@ -104,6 +105,21 @@ class SelfInitiatedReportPolicy:
         self._last_speak_at = float("-inf")
         self._last_think_at = float("-inf")
         self._last_report_sig: Optional[tuple[str, str]] = None
+        # H4 — the coarse (source, type) novelty signature must not suppress
+        # forever: on a stable feed the top coalition rarely changes signature,
+        # and a permanent block drives external speech to zero over days. When
+        # sig_expiry_s is set, a remembered signature older than the window no
+        # longer counts as "the same content"; None preserves the old behavior.
+        self._sig_expiry_s = float(sig_expiry_s) if sig_expiry_s is not None else None
+        self._sig_set_at = float("-inf")
+
+    def _sig_blocks(self, signature: tuple[str, str], now: float) -> bool:
+        """True while the remembered signature still suppresses ``signature``."""
+        if signature != self._last_report_sig:
+            return False
+        if self._sig_expiry_s is None:
+            return True
+        return (now - self._sig_set_at) < self._sig_expiry_s
 
     @property
     def speak_in_flight(self) -> bool:
@@ -172,11 +188,12 @@ class SelfInitiatedReportPolicy:
             self._interrupt_threshold is not None
             and self._speak_in_flight
             and surprise >= self._interrupt_threshold
-            and signature != self._last_report_sig
+            and not self._sig_blocks(signature, now)
         ):
             # _speak_in_flight stays True (re-armed for the new utterance).
             self._last_speak_at = now
             self._last_report_sig = signature
+            self._sig_set_at = now
             return [
                 Intent(
                     kind=SPEAK,
@@ -191,11 +208,12 @@ class SelfInitiatedReportPolicy:
             surprise >= self._report_threshold
             and not self._speak_in_flight
             and (now - self._last_speak_at) >= self._speak_refractory_s
-            and signature != self._last_report_sig
+            and not self._sig_blocks(signature, now)
         ):
             self._speak_in_flight = True
             self._last_speak_at = now
             self._last_report_sig = signature
+            self._sig_set_at = now
             return [
                 Intent(
                     kind=SPEAK,

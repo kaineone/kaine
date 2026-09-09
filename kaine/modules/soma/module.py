@@ -508,14 +508,18 @@ class Soma(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         self._cycle_stream,
                         last_id=self._cycle_cursor,
                         count=64,
                         block_ms=0,
                     )
+                    if last_scanned:
+                        # H2 — advance by the last SCANNED id (decodable or
+                        # not) so a fully-undecodable poison batch cannot
+                        # wedge the cursor on the same batch forever.
+                        self._cycle_cursor = last_scanned
                     if entries:
-                        self._cycle_cursor = entries[-1][0]
                         for _, event in entries:
                             if event.type == "cycle.tick":
                                 latency = event.payload.get("wall_duration_ms")

@@ -461,8 +461,28 @@ class PlaylistAudioStream:
         # Align to the shared playback origin (idempotent across both feeds) so
         # audio and video start item 0 at the same wall-clock moment.
         self._clock.start()
+        # H1 — resync to the shared clock on producer start: a restarted
+        # producer must resume at the clock's CURRENT position (the same
+        # position the video source is showing), not replay item 0.
+        # locate() -> (item_idx, offset_s). A not-yet-anchored clock degrades
+        # to a full replay (idx 0, offset 0), which is exactly the old
+        # behaviour on the very first start.
+        try:
+            start_idx, start_offset = self._clock.locate()
+        except Exception:
+            log.warning(
+                "playlist clock locate failed; replaying from start",
+                exc_info=True,
+            )
+            start_idx, start_offset = 0, 0.0
+        if start_idx is None:
+            start_idx, start_offset = 0, 0.0
+        if start_idx >= len(self._manifest.items):
+            return  # clock already exhausted past the last item
         try:
             for idx, item in enumerate(self._manifest.items):
+                if idx < start_idx:
+                    continue
                 if self._stopped.is_set():
                     return
                 media = self._resolve(item.path)
@@ -485,9 +505,35 @@ class PlaylistAudioStream:
                         rate=self._sample_rate,
                     )
                     stream = container.streams.audio[0]
+                    # H1 — seek within the located item up to the clock's
+                    # offset. Prefer a fast container seek; if PyAV refuses,
+                    # fall back to decode-and-drop (bounded by the offset;
+                    # dropped frames never reach _emit, so no pacing sleeps
+                    # occur while dropping).
+                    drop_until_s = start_offset if idx == start_idx else 0.0
+                    if drop_until_s > 0:
+                        try:
+                            container.seek(
+                                int(drop_until_s * 1_000_000), any_frame=False
+                            )
+                            drop_until_s = 0.0
+                        except Exception:
+                            log.warning(
+                                "playlist container seek failed; "
+                                "decode-and-dropping to offset %.3fs",
+                                drop_until_s,
+                                exc_info=True,
+                            )
                     for frame in container.decode(stream):
                         if self._stopped.is_set():
                             return
+                        if drop_until_s > 0:
+                            frame_t = float(frame.pts or 0) * float(
+                                frame.time_base or 0
+                            )
+                            if frame_t < drop_until_s:
+                                continue
+                            drop_until_s = 0.0
                         # Per-frame pause park (between frames, which covers
                         # the first block of each item): no PyAV frame iteration
                         # while asleep, so decoders truly idle. Stop wins.

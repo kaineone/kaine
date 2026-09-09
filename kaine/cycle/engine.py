@@ -97,6 +97,7 @@ class CognitiveCycle:
         ablation_recorder: Optional[
             Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]
         ] = None,
+        seed_cursors_to_tail: bool = False,
     ) -> None:
         if processing_rate_hz <= 0:
             raise ValueError("processing_rate_hz must be positive")
@@ -120,6 +121,12 @@ class CognitiveCycle:
         self._read_count = int(read_count)
         self._clock = clock
         self._sleep = sleep
+        # H3 — when True, seed every cursor to the stream TAIL on first
+        # consume (live-boot semantics: a restarted engine never replays
+        # stale pre-boot events). When False (the default) keep the
+        # historical read-from-start semantics the library and its tests
+        # have always relied on.
+        self._seed_cursors_to_tail = seed_cursors_to_tail
         # The shared subjective clock. The engine paces in subjective time: the
         # injectable `clock`/`_sleep` seam (the single global-pacing point) is
         # wired through the EntityClock so one `time_scale` dilates the whole
@@ -161,8 +168,18 @@ class CognitiveCycle:
         self._ablation_recorder = ablation_recorder
 
         self._tick_index = 0
+        # L1 — incremental deterministic logical time. The logical clock is
+        # an ACCUMULATOR advanced once per new tick by the subjective period
+        # in force when that tick is stamped; a rate change never recomputes
+        # past ticks' timestamps.
+        self._logical_dt = BASE_EPOCH
+        self._logical_last_tick: Optional[int] = None
         self._cursors: dict[str, str] = {}
         self._error_counts: dict[str, int] = {}
+        # L4 — rate-limit guards (monotonic ts of the last WARNING) for the
+        # control / soma consumer loops.
+        self._control_err_last_log = 0.0
+        self._soma_err_last_log = 0.0
         self._experience_acc = 0.0
         self._control_cursor: str = "0"
         self._paused = asyncio.Event()
@@ -224,10 +241,25 @@ class CognitiveCycle:
         return self._target_tick_period
 
     def _logical_now(self) -> datetime:
-        """Deterministic logical timestamp for the current tick."""
-        return BASE_EPOCH + timedelta(
-            seconds=self._tick_index * self._target_tick_period_s
-        )
+        """Deterministic logical timestamp for the current tick.
+
+        L1 — computed INCREMENTALLY: each new tick advances the accumulator
+        by the subjective period in force at that moment, so past ticks'
+        timestamps are never recomputed when the processing rate changes
+        (repeated calls within one tick return the same value). For a FIXED
+        rate the result is identical to the old BASE_EPOCH + k*period
+        formula, so determinism is preserved.
+        """
+        if self._logical_last_tick is None:
+            self._logical_last_tick = self._tick_index
+            self._logical_dt = BASE_EPOCH
+        elif self._tick_index != self._logical_last_tick:
+            steps = self._tick_index - self._logical_last_tick
+            self._logical_dt = self._logical_dt + timedelta(
+                seconds=steps * self._target_tick_period_s
+            )
+            self._logical_last_tick = self._tick_index
+        return self._logical_dt
 
     def _now(self) -> datetime:
         """Single source for event timestamps.
@@ -397,17 +429,30 @@ class CognitiveCycle:
 
         streams = list(self._registry.active_streams())
         if streams:
-            tasks = [
-                self._safe_read(stream, self._cursors.get(stream, "0"))
-                for stream in streams
-            ]
+            tasks = []
+            for stream in streams:
+                # H3 — when tail-seeding is enabled (live boot) the first
+                # consume after startup seeds the cursor to the stream TAIL
+                # so a restarted engine never replays stale pre-boot
+                # events. Tests and library callers keep the historical
+                # read-from-start semantics ("0" reads everything).
+                if stream not in self._cursors:
+                    if self._seed_cursors_to_tail:
+                        self._cursors[stream] = await self._tail_id(stream)
+                    else:
+                        self._cursors[stream] = "0"
+                tasks.append(self._safe_read(stream, self._cursors[stream]))
             results = await asyncio.gather(*tasks)
-            for stream, entries in zip(streams, results):
+            for stream, (entries, last_scanned) in zip(streams, results):
+                # H2 — advance to the last SCANNED id (not the last decoded
+                # entry) so a fully-undecodable batch cannot wedge the
+                # cursor on the same poison batch forever.
+                if last_scanned:
+                    self._cursors[stream] = last_scanned
                 if not entries:
                     continue
                 modules_seen += 1
                 events.extend(entries)
-                self._cursors[stream] = entries[-1][0]
 
         # Canonical within-tick event ordering. Sort the gathered events by a
         # total deterministic key (source, type, entry_id) before selection so
@@ -618,17 +663,31 @@ class CognitiveCycle:
         first-boot script will spawn a background task that calls this
         once per tick to keep the cycle responsive to rate changes.
         """
+        # H3 — "0" is the unseeded sentinel. With tail-seeding enabled the
+        # first call resolves the stream tail so a restarted engine skips
+        # stale pre-boot events; otherwise "0" reads from the start (the
+        # historical library semantics).
+        if self._control_cursor == "0" and self._seed_cursors_to_tail:
+            self._control_cursor = await self._tail_id(control_stream)
         cursor = self._control_cursor
         try:
-            entries = await self._bus.read(
+            entries, last_scanned = await self._bus.read_entries(
                 control_stream, last_id=cursor, count=32, block_ms=0
             )
-        except Exception:
+        except Exception as exc:
+            # L4 — visible, rate-limited (one WARNING per 60 s window).
+            now = time.monotonic()
+            if now - self._control_err_last_log >= 60.0:
+                self._control_err_last_log = now
+                log.warning("control consumer read failed: %s", exc)
             return
+        # H2 — advance by last_scanned so a poison batch cannot stall the
+        # cursor.
+        if last_scanned:
+            self._control_cursor = last_scanned
         if not entries:
             return
         for entry_id, event in entries:
-            self._control_cursor = entry_id
             if event.type == "cycle.set_rates":
                 await self.apply_rate_control_event(event.payload)
 
@@ -658,17 +717,31 @@ class CognitiveCycle:
             flag is retained purely as a latched advisory for diagnostics and
             introspection; nothing reads it to drive behaviour.
         """
+        # H3 — "0" is the unseeded sentinel. With tail-seeding enabled the
+        # first call resolves the stream tail so a restarted engine never
+        # replays historical reduce_rate advisories; otherwise "0" reads
+        # from the start (the historical library semantics).
+        if self._soma_out_cursor == "0" and self._seed_cursors_to_tail:
+            self._soma_out_cursor = await self._tail_id(soma_stream)
         cursor = self._soma_out_cursor
         try:
-            entries = await self._bus.read(
+            entries, last_scanned = await self._bus.read_entries(
                 soma_stream, last_id=cursor, count=32, block_ms=0
             )
-        except Exception:
+        except Exception as exc:
+            # L4 — visible, rate-limited (one WARNING per 60 s window).
+            now = time.monotonic()
+            if now - self._soma_err_last_log >= 60.0:
+                self._soma_err_last_log = now
+                log.warning("soma consumer read failed: %s", exc)
             return
+        # H2 — advance by last_scanned so a poison batch cannot stall the
+        # cursor.
+        if last_scanned:
+            self._soma_out_cursor = last_scanned
         if not entries:
             return
         for entry_id, event in entries:
-            self._soma_out_cursor = entry_id
             if event.type != "soma.regulation":
                 continue
             action = event.payload.get("action")
@@ -772,19 +845,44 @@ class CognitiveCycle:
             return {}
         return phases
 
-    async def _safe_read(self, stream: str, last_id: str) -> list[tuple[str, Event]]:
+    async def _tail_id(self, stream: str) -> str:
+        """Latest entry id of a stream ("0" when empty) — H3 cursor seeding."""
         try:
-            return await self._bus.read(
+            latest = await self._bus.client.xrevrange(stream, count=1)
+        except Exception:
+            log.warning("tail lookup failed for %s", stream, exc_info=True)
+            return "0"
+        if not latest:
+            return "0"
+        entry_id = latest[0][0]
+        if isinstance(entry_id, bytes):
+            entry_id = entry_id.decode()
+        return entry_id
+
+    async def _safe_read(
+        self, stream: str, last_id: str
+    ) -> tuple[list[tuple[str, Event]], Optional[str]]:
+        try:
+            # H2 — read_entries also returns the id of the last entry
+            # SCANNED (decodable or not); the caller advances the cursor to
+            # that, so a batch made entirely of undecodable entries cannot
+            # wedge the consumer on the same batch forever.
+            return await self._bus.read_entries(
                 stream, last_id=last_id, count=self._read_count, block_ms=0
             )
         except Exception as exc:
             self._error_counts[stream] = self._error_counts.get(stream, 0) + 1
             log.warning("read failed for %s: %s", stream, exc)
-            return []
+            return [], None
 
     def _advance_experiential(self) -> bool:
         ratio = self._experiential_rate / self._processing_rate
         self._experience_acc += ratio
+        # L2 — clamp the accumulator when throttled below the experiential
+        # rate (ratio > 1): it must never grow without bound across starved
+        # ticks.
+        if self._experience_acc > 1.0:
+            self._experience_acc = 1.0
         if self._experience_acc >= 1.0:
             self._experience_acc -= 1.0
             return True

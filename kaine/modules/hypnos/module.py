@@ -195,6 +195,18 @@ class Hypnos(BaseModule):
 
     async def initialize(self) -> None:
         await super().initialize()
+        self._sleep_pending = False
+        self._sleep_task = None
+        # M1 — interval-based maintenance poll: RestScheduler.is_due() is
+        # checked periodically and fires enter_sleep() when due, entirely
+        # independent of the soma.fatigue consumer (fulfilling the boot.py
+        # promise). Due-ness itself is judged on the scheduler's (subjective)
+        # clock; this loop only polls often enough to notice.
+        self._tasks.append(
+            asyncio.create_task(
+                self._maintenance_poll_loop(), name="hypnos-maintenance-poll"
+            )
+        )
         if self._fatigue_triggered:
             # Seed cursor so we only process new soma events from now on.
             try:
@@ -232,14 +244,17 @@ class Hypnos(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         "soma.out",
                         last_id=self._soma_cursor,
                         count=32,
                         block_ms=0,
                     )
+                    if last_scanned:
+                        # H2 — advance by the last SCANNED id (decodable or
+                        # not) so a poison batch cannot wedge the cursor.
+                        self._soma_cursor = last_scanned
                     if entries:
-                        self._soma_cursor = entries[-1][0]
                         for _, event in entries:
                             fatigue_trigger = (
                                 event.type == "soma.fatigue"
@@ -262,8 +277,17 @@ class Hypnos(BaseModule):
                                     "hypnos: soma.regulation request_maintenance "
                                     "— triggering regulation-driven maintenance"
                                 )
-                            if not self._sleep_lock.locked():
-                                asyncio.create_task(
+                            # L3 — hold the task reference (no GC mid-sleep)
+                            # and guard with a pending flag so a second
+                            # trigger while one sleep is starting cannot
+                            # double-fire and mis-annotate the running
+                            # sleep's summary via the loser branch.
+                            if (
+                                not self._sleep_lock.locked()
+                                and not self._sleep_pending
+                            ):
+                                self._sleep_pending = True
+                                self._sleep_task = asyncio.create_task(
                                     self._fatigue_triggered_enter_sleep(),
                                     name="hypnos-fatigue-sleep",
                                 )
@@ -277,7 +301,7 @@ class Hypnos(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _fatigue_triggered_enter_sleep(self) -> None:
+    async def _fatigue_triggered_enter_sleep_inner(self) -> None:
         """Fire a maintenance cycle in response to soma.fatigue threshold crossing."""
         try:
             self._fatigue_triggered_sleep = True
@@ -287,7 +311,12 @@ class Hypnos(BaseModule):
         except Exception:
             log.exception("hypnos: fatigue-triggered sleep failed")
         finally:
-            self._fatigue_triggered_sleep = False
+            # L3 — clear the trigger wrapper's in-flight annotation
+            # (_sleep_pending) once the sleep settles, so a later fatigue
+            # crossing may fire again; _fatigue_triggered_sleep stays a
+            # debug annotation only and is NOT cleared here (or by the
+            # loser/HypnosBusyError branch) — it records the last trigger.
+            self._sleep_pending = False
 
     async def enter_sleep(self) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Returns a summary dict."""
@@ -391,7 +420,7 @@ class Hypnos(BaseModule):
             salience=self._baseline_salience,
         )
 
-    async def _run_pipeline(self) -> dict[str, Any]:
+    async def _run_pipeline_inner(self) -> dict[str, Any]:
         # Pipeline latency + the started_at/last_sleep_at marks measure REAL
         # infrastructure wall-time (how long the sleep work actually took / when
         # it ran), like the cycle's slip measurement — never the subjective
@@ -545,12 +574,21 @@ class Hypnos(BaseModule):
         if self._consolidation_divergence_path is not None:
             kwargs["path"] = self._consolidation_divergence_path
         write_consolidation_divergence(metric, **kwargs)
-        # Content-free bus event (rides the existing metric path).
-        await self.publish(
-            "hypnos.consolidation_divergence",
-            dict(payload),
-            salience=self._baseline_salience,
-        )
+        # Content-free bus event (rides the existing metric path). An
+        # intermediate publish must never propagate: catch, log, continue —
+        # the metric is already persisted above, and the sleep pipeline must
+        # not wedge on a transient bus failure (M2).
+        try:
+            await self.publish(
+                "hypnos.consolidation_divergence",
+                dict(payload),
+                salience=self._baseline_salience,
+            )
+        except Exception:
+            log.warning(
+                "hypnos: consolidation-divergence publish failed (continuing)",
+                exc_info=True,
+            )
         return pairs, payload
 
     async def _run_voice_alignment(self) -> tuple[TrainingResult, PhaseResult]:
@@ -717,3 +755,89 @@ class Hypnos(BaseModule):
         if "last_sleep_at" in state:
             value = state["last_sleep_at"]
             self._last_sleep_at = None if value is None else float(value)
+
+
+    async def _run_pipeline(self) -> dict[str, Any]:
+        """M2 — guarantee ``hypnos.sleep.completed`` is published.
+
+        The pipeline body publishes the normal completed event on success.
+        If the body raises — including a transient failure of its own
+        completed publish — this wrapper publishes a completed event
+        carrying an ``"aborted": True`` flag (content-free: the reason field
+        carries only the exception class name). Soma treats it identically
+        to a normal completion, so ``_in_hypnos`` can never wedge and
+        faster_decay always stops.
+        """
+        try:
+            return await self._run_pipeline_inner()
+        except Exception as exc:
+            log.exception("hypnos: sleep pipeline aborted")
+            try:
+                await self.publish(
+                    "hypnos.sleep.completed",
+                    {"aborted": True, "reason": type(exc).__name__},
+                    salience=self._baseline_salience,
+                )
+            except Exception:
+                log.exception(
+                    "hypnos: aborted-sleep completed publish also failed"
+                )
+            raise
+
+    async def _fatigue_triggered_enter_sleep(self) -> None:
+        """L3 — wrapper owning the trigger bookkeeping.
+
+        Clears ONLY the pending guard here. The ``_fatigue_triggered_sleep``
+        annotation flag is owned by the inner method and is never cleared
+        by a losing (HypnosBusyError) branch, so the running sleep's
+        summary cannot be mis-annotated by a double trigger. The task
+        reference is held on ``self._sleep_task`` so the sleep is never
+        garbage-collected mid-run.
+        """
+        try:
+            await self._fatigue_triggered_enter_sleep_inner()
+        finally:
+            self._sleep_pending = False
+
+    async def _interval_triggered_enter_sleep(self) -> None:
+        """Interval-based maintenance cycle (M1) — no fatigue annotation."""
+        try:
+            await self.enter_sleep()
+        except HypnosBusyError:
+            pass
+        except Exception:
+            log.exception("hypnos: interval-triggered sleep failed")
+        finally:
+            self._sleep_pending = False
+
+    async def _maintenance_poll_loop(self) -> None:
+        """M1 — periodic RestScheduler.is_due()/enter_sleep() poll.
+
+        Satisfies the boot.py promise that interval-based rest fires
+        without any soma.fatigue consumer: the scheduler (whose clock is
+        the subjective clock) decides due-ness; this loop polls often
+        enough to notice and reuses the same non-interruptibility /
+        pending-guard path as the fatigue trigger.
+        """
+        while not self._stopped.is_set():
+            try:
+                if (
+                    self._scheduler.is_due()
+                    and not self._sleep_lock.locked()
+                    and not self._sleep_pending
+                ):
+                    log.info(
+                        "hypnos: rest scheduler reports sleep due — "
+                        "triggering interval-based maintenance"
+                    )
+                    self._sleep_pending = True
+                    self._sleep_task = asyncio.create_task(
+                        self._interval_triggered_enter_sleep(),
+                        name="hypnos-interval-sleep",
+                    )
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("hypnos maintenance poll iteration failed")
+                await asyncio.sleep(1.0)

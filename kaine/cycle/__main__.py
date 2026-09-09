@@ -51,7 +51,11 @@ from kaine.cycle.escalation_state import clear_escalation, read_escalation
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
 from kaine.lifecycle.manager import ForkManager
-from kaine.perception_state import write_desired_audio, write_desired_video
+from kaine.perception_state import (
+    read_desired,
+    write_desired_audio,
+    write_desired_video,
+)
 from kaine.state_io import write_json_atomic
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
@@ -371,6 +375,9 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
     cycle (a paused tick loop never reads its own resume). Freezing also pauses
     live perception so no sensory data accumulates while the entity is suspended.
     """
+    # C1: snapshot of the desired perception flags at freeze time, restored
+    # on resume so a freeze/resume cycle does not leave the entity deaf/blind.
+    desired_snapshot: tuple[bool, bool] | None = None
     while not stop_event.is_set():
         try:
             control = read_control()
@@ -381,6 +388,11 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
                 )
                 await cycle.pause()
                 try:
+                    desired = read_desired()
+                    desired_snapshot = (
+                        bool(desired.audio_live_desired),
+                        bool(desired.video_live_desired),
+                    )
                     write_desired_audio(False)
                     write_desired_video(False)
                 except Exception:
@@ -388,6 +400,18 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
             elif not control.frozen and cycle.is_paused:
                 log.info("resuming cycle (operator)")
                 await cycle.resume()
+                # C1 — restore the pre-freeze desired flags so a freeze/resume
+                # cycle (Spot recovery included) never leaves the entity
+                # deaf/blind for the rest of an unattended run.
+                if desired_snapshot is not None:
+                    try:
+                        write_desired_audio(desired_snapshot[0])
+                        write_desired_video(desired_snapshot[1])
+                    except Exception:
+                        log.warning(
+                            "perception restore on resume failed", exc_info=True
+                        )
+                    desired_snapshot = None
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -833,6 +857,9 @@ async def _boot_and_run(
         experiential_rate_hz=float(cycle_cfg.get("experiential_rate_hz", 3.333)),
         volition=volition,
         collect_phases=coherence_scorer is not None,
+        # H3: tail-seed all cursors so a restarted live entity never replays
+        # pre-boot bus events (tests keep the historical read-from-start).
+        seed_cursors_to_tail=True,
         # Global subjective-time dilation. 1.0 = real-time (the shipped default,
         # behavior-identical); 0 = frozen (reuses the existing freeze/suspend
         # path — the subjective clock stops); >1 = dilated-fast as an aspirational

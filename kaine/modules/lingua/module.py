@@ -383,8 +383,26 @@ class Lingua(BaseModule):
                 await self.think(about)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             log.exception("lingua failed to realize %s intent", kind)
+            # C3: content-free realization-failed audit event — mode and
+            # reason class ONLY; never the text, prompt, or any payload that
+            # was headed for generation. Guards are cleared by the
+            # refractory-scaled timeouts in the workspace policies; this
+            # event is the observability trail.
+            try:
+                await self._publish(
+                    "lingua.internal",
+                    {
+                        "type": "realization_failed",
+                        "mode": kind,
+                        "reason_class": type(exc).__name__,
+                    },
+                )
+            except Exception:
+                log.debug(
+                    "lingua: realization_failed publish failed", exc_info=True
+                )
 
     async def _settle_gen_task(self) -> None:
         """Await the held generation, converting a preemptive cancellation into

@@ -536,7 +536,10 @@ class Spot:
         self.poll_index += 1
         control = control_state.read_control()
         if control.frozen and control.source == "operator":
-            # The operator owns the freeze; Spot stands down this poll.
+            # The operator owns the freeze; Spot stands down this poll. Any
+            # other active freeze does NOT halt recovery: Spot may stack its
+            # own freeze on top, and on recovery pops only its own entry —
+            # it never lifts a welfare or operator freeze.
             return
         for module in list(self._registry.all_modules()):
             result = self.assess(module)
