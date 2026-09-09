@@ -200,12 +200,17 @@ During Hypnos Phase 2 (deep consolidation), external perception is suspended
 while memory traces are replayed into the workspace. This suspension uses the
 same locus machinery:
 
-- `suspend_perception()` — called at the start of the replay window
-- `restore_perception()` — always called in a `finally` block
+- `suspend_perception()` — called at the start of the replay window; remembers
+  the pre-sleep desired locus in memory and, on playlist runs, pauses the shared
+  playlist clock so the stimulus freezes at the same moment perception stops
+- `restore_perception()` — always called in a `finally` block; restores the
+  remembered pre-sleep locus (virtual runs return to the virtual feed, not a
+  hardcoded `physical`) and resumes the playlist clock at the exact pause point
 
 This ensures the entity cannot simultaneously be perceiving the room and
-re-processing memory traces, and that perception is never left suspended
-even if the replay phase raises.
+re-processing memory traces, that perception is never left suspended even if
+the replay phase raises, and that stimulus playback can never advance — or stay
+frozen — out of step with perception (clock paused ⇔ perception suspended).
 
 ---
 

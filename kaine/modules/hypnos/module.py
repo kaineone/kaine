@@ -87,6 +87,12 @@ class Hypnos(BaseModule):
         active_modules: Optional[list[Any]] = None,
         # Perception locus path (for suspension during replay window)
         perception_desired_path: Optional[Path] = None,
+        # Shared playlist clock (playlist-sleep-pause), injected by boot when a
+        # playlist feed runs — the SAME instance both feeds read. pause()/
+        # resume() are called at the perception suspend/restore seam so
+        # playback freezes for the whole sleep window and resumes at the pause
+        # point. None in non-playlist modes; the seam calls are honest no-ops.
+        playlist_clock: Optional[Any] = None,
         # Shared subjective clock (injected at boot). The rest scheduler's
         # sleep-due interval + deferral window model the ENTITY'S rest, so they
         # run in subjective time — at time_scale != 1.0 the entity's sleep
@@ -142,6 +148,13 @@ class Hypnos(BaseModule):
         self._active_modules: list[Any] = list(active_modules or [])
         # Perception locus path
         self._perception_desired_path = perception_desired_path
+        # Shared playlist clock (may be None in non-playlist modes).
+        self._playlist_clock = playlist_clock
+        # Pre-sleep desired locus, remembered in MEMORY only (survives one
+        # sleep window within one process; deliberately NOT persisted to
+        # disk — after a mid-sleep crash desired.json honestly still reads
+        # 'off', because perception was suspended).
+        self._pre_sleep_locus: Optional[str] = None
 
         self._sleep_lock = asyncio.Lock()
         self._builder = DPOPairBuilder()
@@ -291,7 +304,32 @@ class Hypnos(BaseModule):
         path used by PerceptionLocus and the Nexus operator toggle).  Zero
         raw-sense-data persistence is preserved: we only write the desired
         locus flag, never any sensory content.
+
+        The pre-sleep desired locus is remembered in memory (on this module) so
+        wake restores it instead of hardcoding 'physical'; unknown or unreadable
+        values coerce to the perception_state default. The shared playlist
+        clock is paused AFTER the locus flip so the stimulus can never advance
+        while the entity cannot perceive it; co-locating the pause with the
+        locus write means the pipeline's `finally` restore covers both.
         """
+        try:
+            from kaine.perception_state import _coerce_locus, read_desired
+
+            # First-write-wins within a window: only remember the locus on
+            # the first suspend. A second suspend would read the "off" we
+            # just wrote and clobber the true pre-sleep locus, causing
+            # restore to leave perception dark. _restore_perception clears
+            # this, re-arming the guard for the next window.
+            if self._pre_sleep_locus is None:
+                desired = read_desired(path=self._perception_desired_path)
+                self._pre_sleep_locus = _coerce_locus(
+                    getattr(desired, "locus", "physical")
+                )
+        except Exception:
+            # Honest degradation: nothing remembered → restore falls back to
+            # 'physical' (the old behavior).
+            self._pre_sleep_locus = None
+            log.debug("hypnos: could not read pre-sleep locus", exc_info=True)
         try:
             from kaine.perception_state import write_desired_locus
             write_desired_locus("off", path=self._perception_desired_path)
@@ -301,18 +339,42 @@ class Hypnos(BaseModule):
                 "hypnos: perception suspension (write_desired_locus) failed",
                 exc_info=True,
             )
+        # Pause the shared playlist clock. A missing clock (non-playlist
+        # modes) is an honest no-op, not a crash.
+        if self._playlist_clock is not None:
+            try:
+                self._playlist_clock.pause()
+            except Exception:
+                log.warning(
+                    "hypnos: playlist clock pause failed", exc_info=True
+                )
 
     def _restore_perception(self) -> None:
-        """Restore locus to 'physical' after the replay window ends."""
+        """Restore the remembered pre-sleep locus after the replay window ends
+        (falling back to 'physical' only when nothing was remembered, e.g.
+        suspend never ran), and resume the shared playlist clock so playback
+        continues from the pause point. Only the locus flag is written — never
+        any sensory content."""
+        locus = self._pre_sleep_locus or "physical"
+        self._pre_sleep_locus = None
         try:
             from kaine.perception_state import write_desired_locus
-            write_desired_locus("physical", path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> physical (replay window closed)")
+            write_desired_locus(locus, path=self._perception_desired_path)
+            log.debug("hypnos: perception locus -> %s (replay window closed)", locus)
         except Exception:
             log.warning(
                 "hypnos: perception restore (write_desired_locus) failed",
                 exc_info=True,
             )
+        # Resume the shared playlist clock so the stimulus resumes with
+        # perception (the invariant: clock paused ⇔ perception suspended).
+        if self._playlist_clock is not None:
+            try:
+                self._playlist_clock.resume()
+            except Exception:
+                log.warning(
+                    "hypnos: playlist clock resume failed", exc_info=True
+                )
 
     async def _reinject_association(self, scenario: dict[str, Any]) -> None:
         """Re-inject a phase-3 cross-period association into the workspace.

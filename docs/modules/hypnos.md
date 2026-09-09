@@ -189,9 +189,16 @@ no-op if the oscillatory layer is absent).
    (Tononi & Cirelli 2014): scale all in-memory activation weights by the factor,
    preserving relative ordering (cosine similarity unchanged; L2 norms shrink).
 2. Sets the perception locus to `off` via `write_desired_locus("off")`, suspending
-   external A/V perception for the replay window.
+   external A/V perception for the replay window. The pre-sleep desired locus is
+   remembered in memory first (first write within a window wins), and when a
+   shared playlist clock is injected the stimulus playback is paused at the same
+   seam — the movie freezes while the entity cannot perceive it.
 3. Calls `mnemos.replay_now()` — offline replay within the window.
-4. Restores locus to `physical` in a `finally` block (always, even on error).
+4. Restores the remembered pre-sleep locus (falling back to `physical` when
+   nothing was remembered) and resumes the playlist clock at the exact pause
+   point, in a `finally` block (always, even on error). The remembered locus
+   lives in memory only: after a mid-sleep crash `desired.json` honestly reads
+   `off`, and the next boot re-selects the correct locus for its feed mode.
 
 #### Phase 3: Associative Replay (feature-flagged)
 
