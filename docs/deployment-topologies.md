@@ -228,3 +228,44 @@ volunteers. It is:
   reconstruct state on a trusted host. *Sound.*
 - **Sharding one mind across volunteers** — the live loop or the stateful stores
   spread over untrusted nodes. *Disqualified*, per the three walls.
+
+
+
+## No restart policy on kaine-cycle (deliberate)
+
+`kaine-cycle` runs with NO restart policy, and the quadlet unit ships no
+`[Install]` section. This is deliberate: an entity process never
+auto-restarts. Spot handles module-level recovery in-process; a dead cycle is
+an operator decision, never a supervisor's. Compose (compose/kaine.yml) and
+quadlet/kaine-cycle.container both carry this rationale as comments.
+
+## Run-readiness audit — resolved gaps
+
+The seven verified gaps from the run-readiness audit are resolved:
+
+1. **Profiles in-image** — Dockerfile COPYs `config/profiles` so
+   `KAINE_PROFILE` / thesis_test auto-selection works in-container.
+2. **Durable evaluation + workspace-trajectory volumes** — compose mounts
+   `kaine-eval-data` at `/app/data/evaluation` (subsuming the old
+   `/app/data/evaluation/runs` mount) and `kaine-trajectory` at
+   `/app/data/workspace_trajectory`; quadlet/kaine-cycle.container mounts the
+   matching `.volume` units. Operators migrate old `kaine-runs` data by
+   copying it into `kaine-eval-data`; overlay references to `kaine-runs` are
+   updated by the operator.
+3. **Redis memory ceiling** — `--maxmemory` is 4gb with `noeviction`
+   retained: the bus fails loud rather than silently evicting.
+4. **Log rotation** — the `x-logging` anchor (json-file, `max-size: "50m"`,
+   `max-file: "3"`) applies to every service in compose/kaine.yml.
+5. **GIT_SHA provenance** — compose passes `GIT_SHA` (e.g. from
+   `git rev-parse --short HEAD`) through `build.args`; the Dockerfile bakes it
+   as `ENV KAINE_GIT_SHA`; `kaine/experiment/run_context.py` falls back to it
+   when the git subprocess lookup fails. Tests live in
+   tests/test_run_context_git_sha.py.
+6. **Qdrant healthcheck** — the compose healthcheck is
+   `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'` because qdrant:v1.18.0 ships
+   neither wget nor curl; a successful /dev/tcp connect is a sound readiness
+   signal since qdrant binds 6333 only once serving. No overlay workaround is
+   needed — any stale workaround in the operator overlay should be removed.
+7. **Restart-policy rationale documented** — see the section above.
+
+`.git` remains excluded by `.dockerignore`; no repo data leaks into the image.

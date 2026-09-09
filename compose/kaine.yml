@@ -26,6 +26,14 @@
 
 name: kaine
 
+# Shared log rotation for every service: json-file capped at 50m x 3 files so
+# a chatty cycle or nexus cannot fill the host disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 # --- reusable fragments ---------------------------------------------------
 x-kaine-image: &kaine-image
   build:
@@ -38,6 +46,9 @@ x-kaine-image: &kaine-image
       # [audio] (Audition + playlist decode: funasr/librosa/av), [vision]
       # (opencv). Override to a leaner/richer set for other deployments.
       KAINE_EXTRAS: ${KAINE_EXTRAS:-.[test,vision,audio,internvideo]}
+      # Bake the source revision into the image (e.g. from
+      # `git rev-parse --short HEAD`); compute_git_sha falls back to it.
+      GIT_SHA: "${KAINE_GIT_SHA:-}"
   image: ${KAINE_IMAGE:-kaine:${KAINE_FLAVOR:-cuda}}
 
 # NVIDIA device reservation fragments (design §4). Docker reads
@@ -79,8 +90,10 @@ services:
       - "yes"
       - --appendfsync
       - everysec
+      # 4gb ceiling; noeviction retained below — the bus fails loud rather
+      # than silently evicting events.
       - --maxmemory
-      - 1gb
+      - 4gb
       - --maxmemory-policy
       - noeviction
       - --save
@@ -98,6 +111,7 @@ services:
       start_period: 5s
     environment:
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+    logging: *default-logging
 
   kaine-qdrant:
     image: qdrant/qdrant:v1.18.0
@@ -121,6 +135,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging: *default-logging
 
   # ---- model server: OpenAI-compatible language organ (design §5) --------
   # Default image is a generic OpenAI-compatible GGUF server (llama.cpp). Set
@@ -232,9 +247,10 @@ services:
       # the durable state volume mounts at /app/state — NOT /state — or nothing
       # the entity writes would survive down/up.
       - kaine-state:/app/state
-      # Shared run-manifest volume (see kaine-cycle) — Nexus reads the admissibility
-      # manifest the cycle writes here.
-      - kaine-runs:/app/data/evaluation/runs
+      # Shared evaluation-data volume (see kaine-cycle) — Nexus reads the
+      # admissibility manifest under runs/ and the evaluation tab's observer
+      # output beside it.
+      - kaine-eval-data:/app/data/evaluation
     restart: unless-stopped
     depends_on:
       kaine-redis:
@@ -289,11 +305,15 @@ services:
       # Provisioned weights (InternVideo-Next encoder, MiniLM embedder, emotion2vec)
       # read-only from the shared model volume; HF_HOME=/models/hf is baked in.
       - kaine-models:/models:ro
-      # Evaluation run manifests on a SHARED volume so the Nexus admissibility probe
-      # (runs_manifest_root = data/evaluation/runs) sees the manifest the cycle
-      # writes — otherwise each container has its own ephemeral /app/data and Nexus
-      # reports "manifest absent". No raw sense data is written here (manifests only).
-      - kaine-runs:/app/data/evaluation/runs
+      # Evaluation outputs on a SHARED named volume so the Nexus admissibility probe
+      # (runs_manifest_root = data/evaluation/runs) sees what the cycle writes —
+      # otherwise each container has its own ephemeral /app/data and Nexus reports
+      # "manifest absent". kaine-eval-data subsumes the old kaine-runs mount at
+      # /app/data/evaluation/runs (the parent dir covers it). Manifests/metadata
+      # only — never raw sense data.
+      - kaine-eval-data:/app/data/evaluation
+      # Workspace-trajectory records, likewise durable and shared with Nexus.
+      - kaine-trajectory:/app/data/workspace_trajectory
       # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
       # raw-sense-data persistence, design §7). Long-form with mode 1777 because a
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
@@ -307,6 +327,10 @@ services:
         condition: service_healthy
       kaine-qdrant:
         condition: service_healthy
+    # DELIBERATELY no restart policy on kaine-cycle: an entity process never
+    # auto-restarts. Spot handles module-level recovery in-process; a dead
+    # cycle is an operator decision, never a supervisor's.
+    logging: *default-logging
 
   # ---- setup one-shot: provision images + ALL model weights (design §6) --
   # Downloads the abliterated organ, distil-Whisper, Chatterbox, emotion2vec+,
@@ -330,6 +354,7 @@ services:
       TRANSFORMERS_OFFLINE: "0"
     volumes:
       - kaine-models:/models
+    logging: *default-logging
 
 volumes:
   kaine-redis-data:
@@ -346,7 +371,13 @@ volumes:
   # on. Survives down/up. NO raw-sense-data path exists here.
   kaine-state:
     name: kaine-state
-  # Evaluation run manifests, shared read/write between the cycle (writer) and
-  # Nexus (admissibility reader). Metadata only — never raw sense data.
-  kaine-runs:
-    name: kaine-runs
+  # Evaluation outputs (run manifests + artifacts), shared read/write between
+  # the cycle (writer) and Nexus (admissibility reader). Subsumes the old
+  # kaine-runs volume that covered only /app/data/evaluation/runs — operators
+  # migrate by copying any existing runs data in. Metadata only — never raw
+  # sense data.
+  kaine-eval-data:
+    name: kaine-eval-data
+  # Workspace-trajectory records, durable across down/up, shared with Nexus.
+  kaine-trajectory:
+    name: kaine-trajectory

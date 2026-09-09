@@ -142,13 +142,18 @@ COPY --chown=kaine:kaine kaine /app/kaine
 # weights are excluded by .dockerignore and provisioned to the model volume, not
 # baked in. Without this the default encoder cannot load in the container.
 COPY --chown=kaine:kaine external/internvideo_next /app/external/internvideo_next
+ARG GIT_SHA=""
 COPY --chown=kaine:kaine config/kaine.toml /app/config/kaine.toml
+# Runtime profiles (incl. thesis_test auto-selection) must be in-image or
+# KAINE_PROFILE resolution fails inside the container.
+COPY --chown=kaine:kaine config/profiles /app/config/profiles
 COPY --chown=kaine:kaine pyproject.toml README.md /app/
 COPY --chown=kaine:kaine scripts /app/scripts
 COPY --chown=kaine:kaine docker/entrypoint.sh /usr/local/bin/kaine-entrypoint
 
 WORKDIR /app
-ENV PATH="/opt/venv/bin:${PATH}" \
+ENV KAINE_GIT_SHA=${GIT_SHA} \
+    PATH="/opt/venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/models/hf \
     HF_HUB_OFFLINE=1 \

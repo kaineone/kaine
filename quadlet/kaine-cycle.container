@@ -30,6 +30,13 @@ Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
 Volume=kaine-state.volume:/app/state
 # Provisioned weights (encoder + embedder) read-only from the shared model volume.
 Volume=kaine-models.volume:/models:ro
+# Evaluation outputs — shared with the Nexus reader, matching the compose
+# kaine-eval-data named volume (subsumes the old /app/data/evaluation/runs
+# mount). Requires sibling kaine-eval-data.volume / kaine-trajectory.volume
+# quadlet units. Host paths (%h/projects/kaine) mirror the compose binds so a
+# quadlet boot sees the same manifest/output state as compose.
+Volume=kaine-eval-data.volume:/app/data/evaluation
+Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
 # Perception scratch is RAM-backed and ephemeral — zero raw-sense-data
 # persistence (design §7).
 Tmpfs=/app/state/perception
