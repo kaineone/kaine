@@ -62,7 +62,7 @@ audio = [
 # Live camera (LiveCamera in kaine/modules/topos/live.py).
 # Required only if [topos].capture_enabled = true. Lazy-imported.
 vision = [
-    "opencv-python-headless>=4.8,<5",
+    "opencv-python-headless>=5.0.0.93,<6",
 ]
 # Temporally-native InternVideo-Next clip encoder for Topos
 # (topos-temporal-video-encoder). Required only when
