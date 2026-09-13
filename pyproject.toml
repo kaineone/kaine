@@ -36,7 +36,7 @@ dependencies = [
 test = [
     "pytest>=8",
     "pytest-asyncio>=1.4.0",
-    "fakeredis>=2.21",
+    "fakeredis>=2.38.0",
     # Structural import-boundary contracts (kaine/evaluation sidecar boundary +
     # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
     # Enforced by `lint-imports` (pre-commit, a dedicated CI job, and
