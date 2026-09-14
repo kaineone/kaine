@@ -101,7 +101,7 @@ perception = ["kaine[audio]", "kaine[vision]"]
 # PyPI name is an unrelated stub. JAX is pinned CPU-only — KAINE runs no cloud
 # or CUDA at runtime; jax[cpu] logs a one-line GPU-fallback notice (expected).
 reasoning = [
-    "inferactively-pymdp>=1.0",
+    "inferactively-pymdp>=1.0.4",
     "jax[cpu]>=0.10.2",
 ]
 # Voice-alignment DPO training stack (Hypnos sleep-cycle phase).
