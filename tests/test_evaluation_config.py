@@ -226,8 +226,6 @@ def test_chat_api_key_derives_from_lingua_and_explicit_overrides():
 
 
 def test_evaluation_config_threads_profile(tmp_path, monkeypatch):
-    import kaine.evaluation.config as cfg_mod
-
     shipped = tmp_path / "kaine.toml"
     shipped.write_text("[evaluation]\n")
     operator = tmp_path / "operator.toml"
@@ -239,8 +237,8 @@ def test_evaluation_config_threads_profile(tmp_path, monkeypatch):
         captured["profile"] = profile
         return {"evaluation": {"enabled": False}}
 
-    monkeypatch.setattr(cfg_mod, "load_kaine_config", fake_load)
-    result = cfg_mod.load_evaluation_config(
+    monkeypatch.setattr("kaine.evaluation.config.load_kaine_config", fake_load)
+    result = load_evaluation_config(
         shipped, operator_path=operator, profile="tier1"
     )
     assert captured["profile"] == "tier1"
@@ -248,7 +246,7 @@ def test_evaluation_config_threads_profile(tmp_path, monkeypatch):
 
 
 def test_research_event_log_config_threads_profile(tmp_path, monkeypatch):
-    import kaine.evaluation.config as cfg_mod
+    from kaine.evaluation.config import load_research_event_log_config
 
     shipped = tmp_path / "kaine.toml"
     shipped.write_text("[research_event_log]\n")
@@ -261,8 +259,8 @@ def test_research_event_log_config_threads_profile(tmp_path, monkeypatch):
         captured["profile"] = profile
         return {"research_event_log": {"enabled": True}}
 
-    monkeypatch.setattr(cfg_mod, "load_kaine_config", fake_load)
-    result = cfg_mod.load_research_event_log_config(
+    monkeypatch.setattr("kaine.evaluation.config.load_kaine_config", fake_load)
+    result = load_research_event_log_config(
         shipped, operator_path=operator, profile="tier1"
     )
     assert captured["profile"] == "tier1"
