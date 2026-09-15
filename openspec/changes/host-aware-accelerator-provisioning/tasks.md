@@ -48,6 +48,6 @@ This section documents the provisioning behavior for operators and keeps the doc
 
 This section locks in current behavior across all supported host classes with golden regression fixtures.
 
-- [ ] 6.1 Capture golden fixtures (describe_host JSON, resolver decision, preflight report) for x86_64 dual-GPU NVIDIA, ROCm, XPU, MPS, and CPU-only hosts, plus Jetson and AMD APU, from pre-change behavior where applicable.
-- [ ] 6.2 Add a cross-host regression module replaying the fixtures through `describe_host()`, the resolver, and `gpu-preflight`, asserting the five scenarios above.
-- [ ] 6.3 Run the full existing test suite and CI matrix, confirm zero regressions, and add the new regression module to CI.
+- [x] 6.1 Capture golden fixtures (describe_host JSON, resolver decision, preflight report) for x86_64 dual-GPU NVIDIA, ROCm, XPU, MPS, and CPU-only hosts, plus Jetson and AMD APU, from pre-change behavior where applicable.
+- [x] 6.2 Add a cross-host regression module replaying the fixtures through `describe_host()`, the resolver, and `gpu-preflight`, asserting the five scenarios above.
+- [x] 6.3 Run the full existing test suite and CI matrix, confirm zero regressions, and add the new regression module to CI.
