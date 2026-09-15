@@ -13,9 +13,9 @@
 | condition-language-organ | 21/24 (87%) | faithful-renderer, lingua | ADDED | KAINE's thesis is that the LLM is the **language organ, not the brain... |
 | docs-base-thesis-reframe | 13/15 (86%) | documentation-consistency | ADDED | The project has been reconfigured to its **base-thesis form** as the ... |
 | perception-drives-salience | 9/11 (81%) | topos-perception | MODIFIED | The base thesis is that perception enters the workspace **as predicti... |
+| host-aware-accelerator-provisioning | 19/24 (79%) | dynamic-hardware, first-run-wizard, gpu-preflight | ADDED, MODIFIED | Accelerator provisioning in KAINE currently assumes one host shape: x... |
 | portability-tiers | 19/24 (79%) | deployment-tiers, host-probe, runtime-backends | ADDED | KAINE today assumes one machine: a dual-GPU Linux workstation. The th... |
 | attention-driven-foveation | 13/18 (72%) | topos, topos-foveation | ADDED, MODIFIED | Screen perception currently scales the whole screen to Topos's fixed ... |
-| host-aware-accelerator-provisioning | 14/24 (58%) | dynamic-hardware, first-run-wizard, gpu-preflight | ADDED, MODIFIED | Accelerator provisioning in KAINE currently assumes one host shape: x... |
 | developmental-maturation-gate | 18/32 (56%) | developmental-stage | ADDED | `gestational-womb-stimulus` gives the entity a womb to gestate in and... |
 | headless-host-operations | 29/51 (56%) | headless-host-operations | ADDED | KAINE's docs cover installing the software and bringing up services. ... |
 | attention-driven-audition | 8/16 (50%) | audition, audition-predictive, auditory-perception | ADDED, MODIFIED | Hearing is currently **speech transcription for the language organ**,... |
