@@ -77,11 +77,9 @@ device assignments.
 
 ### Pre-boot GPU headroom check
 
-When `[gpu_preflight].enabled = true`, the cycle verifies VRAM headroom **before**
-opening the bus or any module, and refuses to boot (exit code `4`) on a starved
-host rather than OOM-killing a just-spawned entity mid-init. The pre-flight is
-report-only: it queries `/v1/models` on the model server to report what is
-resident, reports other GPU consumers, and never terminates a process.
+When `[gpu_preflight].enabled = true`, the cycle verifies accelerator memory headroom **before** opening the bus or any module, and refuses to boot (exit code `4`) on a starved host rather than OOM-killing a just-spawned entity mid-init. The pre-flight is report-only: it queries `/v1/models` on the model server to report what is resident, reports other GPU consumers, and never terminates a process.
+
+The gate classifies each host's accelerator memory as **known-discrete** (a dedicated VRAM pool, e.g. desktop NVIDIA cards), **known-unified** (memory shared with the system, e.g. NVIDIA Jetson, AMD APUs, Apple Silicon), or **unknown** (free capacity cannot be determined). On discrete hosts the `min_free_vram_gb` threshold is applied per device; on unified-memory hosts the same threshold is applied to available system memory. When memory state is unknown the gate always passes and annotates the report — unknowable memory alone never refuses boot.
 
 ---
 
