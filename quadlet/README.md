@@ -2,8 +2,10 @@
 
 Quadlet is the recommended **production** path for a continuously-running
 research instrument (design.md §10): each container becomes a rootless-Podman
-systemd service with native dependency ordering, logging, restart, and reboot
-survival.
+systemd service with native dependency ordering, logging, and restart. Reboot
+survival holds ONLY when lingering is enabled for the owning user — rootless
+systemd USER units do not start at boot otherwise, so after a power cut every
+service stays down until a human logs in.
 
 ## Install (rootless, per-user)
 
@@ -12,6 +14,8 @@ mkdir -p ~/.config/containers/systemd
 cp quadlet/*.container quadlet/*.network ~/.config/containers/systemd/
 # secrets + gate flags — never in a unit file:
 export KAINE_REDIS_PASSWORD=... KAINE_QDRANT_API_KEY=... KAINE_MODEL_SERVER_API_KEY=...
+sudo loginctl enable-linger $USER
+loginctl show-user $USER | grep Linger    # expect Linger=yes
 systemctl --user daemon-reload
 systemctl --user start kaine-redis kaine-qdrant kaine-model-server \
                        kaine-speaches kaine-chatterbox kaine-nexus
