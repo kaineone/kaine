@@ -1,0 +1,394 @@
+[
+  {
+    "name": "x86_64-dual-nvidia",
+    "describe_host": {
+      "device": "cuda",
+      "cuda_available": true,
+      "mps_available": false,
+      "gpu_count": 2,
+      "gpu_names": [
+        "NVIDIA GeForce RTX 4070 SUPER",
+        "NVIDIA GeForce RTX 3060"
+      ],
+      "backend": "cuda",
+      "hip_version": null,
+      "xpu_available": false,
+      "torch_version": "2.7.1+cu130",
+      "platform": "Linux-6.8.0-x86_64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [
+        {
+          "index": 0,
+          "device": "cuda:0",
+          "name": "NVIDIA GeForce RTX 4070 SUPER",
+          "total_vram_gb": 12.0,
+          "free_vram_gb": 10.5
+        },
+        {
+          "index": 1,
+          "device": "cuda:1",
+          "name": "NVIDIA GeForce RTX 3060",
+          "total_vram_gb": 12.0,
+          "free_vram_gb": 11.2
+        }
+      ],
+      "xpu_count": 0,
+      "xpu_names": [],
+      "xpu_devices": [],
+      "memory": {
+        "state": "discrete",
+        "pools": [
+          {
+            "type": "vram",
+            "device_index": 0,
+            "total_gb": 12.0,
+            "free_gb": 10.5,
+            "provenance": "nvml"
+          },
+          {
+            "type": "vram",
+            "device_index": 1,
+            "total_gb": 12.0,
+            "free_gb": 11.2,
+            "provenance": "nvml"
+          }
+        ],
+        "evidence": "nvml",
+        "unknown_reason": null
+      }
+    },
+    "probes": {
+      "arch": "x86_64",
+      "driver_cuda": [
+        13,
+        0
+      ],
+      "compute_caps": [
+        [
+          8,
+          9
+        ],
+        [
+          8,
+          6
+        ]
+      ],
+      "memory_state": "discrete",
+      "notes": {}
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cu130",
+      "warning": false
+    },
+    "expected_preflight_state": "known-discrete",
+    "expected_preflight_passes": true
+  },
+  {
+    "name": "rocm-7900xtx",
+    "describe_host": {
+      "device": "cuda",
+      "cuda_available": true,
+      "mps_available": false,
+      "gpu_count": 1,
+      "gpu_names": [
+        "AMD Radeon RX 7900 XTX"
+      ],
+      "backend": "rocm",
+      "hip_version": "6.2.41134",
+      "xpu_available": false,
+      "torch_version": "2.7.1+rocm6.2",
+      "platform": "Linux-6.8.0-x86_64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [
+        {
+          "index": 0,
+          "device": "cuda:0",
+          "name": "AMD Radeon RX 7900 XTX",
+          "total_vram_gb": 24.0,
+          "free_vram_gb": 22.1
+        }
+      ],
+      "xpu_count": 0,
+      "xpu_names": [],
+      "xpu_devices": [],
+      "memory": {
+        "state": "discrete",
+        "pools": [
+          {
+            "type": "vram",
+            "device_index": 0,
+            "total_gb": 24.0,
+            "free_gb": 22.1,
+            "provenance": "torch.cuda.mem_get_info"
+          }
+        ],
+        "evidence": "amdgpu_vram_total",
+        "unknown_reason": null
+      }
+    },
+    "probes": {
+      "arch": "x86_64",
+      "driver_cuda": null,
+      "compute_caps": [],
+      "memory_state": "discrete",
+      "notes": {
+        "no_nvidia": "ROCm host, no NVIDIA driver"
+      }
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cpu",
+      "warning": true
+    },
+    "expected_preflight_state": "known-discrete",
+    "expected_preflight_passes": true
+  },
+  {
+    "name": "intel-xpu-a770",
+    "describe_host": {
+      "device": "xpu",
+      "cuda_available": false,
+      "mps_available": false,
+      "gpu_count": 0,
+      "gpu_names": [],
+      "backend": "xpu",
+      "hip_version": null,
+      "xpu_available": true,
+      "torch_version": "2.7.1+xpu",
+      "platform": "Linux-6.8.0-x86_64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [],
+      "xpu_count": 1,
+      "xpu_names": [
+        "Intel Arc A770"
+      ],
+      "xpu_devices": [
+        {
+          "index": 0,
+          "device": "xpu:0",
+          "name": "Intel Arc A770"
+        }
+      ],
+      "memory": {
+        "state": "unknown",
+        "pools": [],
+        "evidence": "",
+        "unknown_reason": "no NVIDIA accelerator for NVML classification"
+      }
+    },
+    "probes": {
+      "arch": "x86_64",
+      "driver_cuda": null,
+      "compute_caps": [],
+      "memory_state": "unknown",
+      "notes": {}
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cpu",
+      "warning": true
+    },
+    "expected_preflight_state": "unknown",
+    "expected_preflight_passes": true
+  },
+  {
+    "name": "apple-mps-m3pro",
+    "describe_host": {
+      "device": "mps",
+      "cuda_available": false,
+      "mps_available": true,
+      "gpu_count": 0,
+      "gpu_names": [],
+      "backend": "mps",
+      "hip_version": null,
+      "xpu_available": false,
+      "torch_version": "2.7.1",
+      "platform": "macOS-15.1-arm64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [],
+      "xpu_count": 0,
+      "xpu_names": [],
+      "xpu_devices": [],
+      "memory": {
+        "state": "unified",
+        "pools": [
+          {
+            "type": "system",
+            "total_gb": 36.0,
+            "free_gb": 24.5,
+            "provenance": "psutil.virtual_memory"
+          }
+        ],
+        "evidence": "darwin_arm64",
+        "unknown_reason": null
+      }
+    },
+    "probes": {
+      "arch": "arm64",
+      "driver_cuda": null,
+      "compute_caps": [],
+      "memory_state": "unified",
+      "notes": {}
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cpu",
+      "warning": true
+    },
+    "expected_preflight_state": "known-unified",
+    "expected_preflight_passes": true
+  },
+  {
+    "name": "cpu-only-x86_64",
+    "describe_host": {
+      "device": "cpu",
+      "cuda_available": false,
+      "mps_available": false,
+      "gpu_count": 0,
+      "gpu_names": [],
+      "backend": "cpu",
+      "hip_version": null,
+      "xpu_available": false,
+      "torch_version": "2.7.1+cpu",
+      "platform": "Linux-6.8.0-x86_64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [],
+      "xpu_count": 0,
+      "xpu_names": [],
+      "xpu_devices": [],
+      "memory": {
+        "state": "unknown",
+        "pools": [],
+        "evidence": "",
+        "unknown_reason": "no accelerator present"
+      }
+    },
+    "probes": {
+      "arch": "x86_64",
+      "driver_cuda": null,
+      "compute_caps": [],
+      "memory_state": "unknown",
+      "notes": {}
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cpu",
+      "warning": true
+    },
+    "expected_preflight_state": "unknown",
+    "expected_preflight_passes": true
+  },
+  {
+    "name": "jetson-orin-nano",
+    "describe_host": {
+      "device": "cuda",
+      "cuda_available": true,
+      "mps_available": false,
+      "gpu_count": 1,
+      "gpu_names": [
+        "Orin (nvgpu)"
+      ],
+      "backend": "cuda",
+      "hip_version": null,
+      "xpu_available": false,
+      "torch_version": "2.7.0",
+      "platform": "Linux-6.8.12-tegra-aarch64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [
+        {
+          "index": 0,
+          "device": "cuda:0",
+          "name": "Orin (nvgpu)",
+          "total_vram_gb": 0.0,
+          "free_vram_gb": 0.0
+        }
+      ],
+      "xpu_count": 0,
+      "xpu_names": [],
+      "xpu_devices": [],
+      "memory": {
+        "state": "unified",
+        "pools": [
+          {
+            "type": "system",
+            "total_gb": 7.45,
+            "free_gb": 4.2,
+            "provenance": "psutil.virtual_memory"
+          }
+        ],
+        "evidence": "tegra-device-tree",
+        "unknown_reason": null
+      }
+    },
+    "probes": {
+      "arch": "aarch64",
+      "driver_cuda": [
+        13,
+        2
+      ],
+      "compute_caps": [
+        [
+          8,
+          7
+        ]
+      ],
+      "memory_state": "unified",
+      "notes": {}
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cpu",
+      "warning": true
+    },
+    "expected_preflight_state": "known-unified",
+    "expected_preflight_passes": true
+  },
+  {
+    "name": "amd-apu-5700g",
+    "describe_host": {
+      "device": "cuda",
+      "cuda_available": false,
+      "mps_available": false,
+      "gpu_count": 0,
+      "gpu_names": [],
+      "backend": "cpu",
+      "hip_version": null,
+      "xpu_available": false,
+      "torch_version": "2.7.1+cpu",
+      "platform": "Linux-6.8.0-x86_64",
+      "python_version": "3.12.4",
+      "torch_installed": true,
+      "cuda_devices": [],
+      "xpu_count": 0,
+      "xpu_names": [],
+      "xpu_devices": [],
+      "memory": {
+        "state": "unified",
+        "pools": [
+          {
+            "type": "system",
+            "total_gb": 15.5,
+            "free_gb": 12.3,
+            "provenance": "psutil.virtual_memory"
+          }
+        ],
+        "evidence": "amdgpu_vram_carveout",
+        "unknown_reason": null
+      }
+    },
+    "probes": {
+      "arch": "x86_64",
+      "driver_cuda": null,
+      "compute_caps": [],
+      "memory_state": "unified",
+      "notes": {}
+    },
+    "expected_resolver": {
+      "index_url": "https://download.pytorch.org/whl/cpu",
+      "warning": true
+    },
+    "expected_preflight_state": "known-unified",
+    "expected_preflight_passes": true
+  }
+]
