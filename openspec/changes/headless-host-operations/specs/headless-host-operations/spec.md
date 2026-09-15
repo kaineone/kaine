@@ -176,3 +176,165 @@ and SHALL NOT be regressed or complicated by this capability.
 - **WHEN** an operator follows the existing dual-GPU x86_64 workstation documentation
 - **THEN** that path is unchanged and remains the default, and the headless-host runbook is
   presented as an additional path for dedicating a host rather than a replacement
+
+### Requirement: Single script automates the host preparation runbook
+The capability SHALL provide a single script, alongside the dedication runbook, that performs
+the runbook's host-preparation steps so the operator does not execute them by hand: persisting
+the performance profile, enabling and verifying the SSH service, installing the Python tooling,
+creating and tuning swap, installing the container runtime, enabling lingering for the invoking
+user, changing the default systemd target, and optionally exposing the dashboard over the
+private network. The script SHALL be invoked as the invoking human user rather than via `sudo`,
+so the lingering target user is unambiguous; SHALL request elevation once at the start and keep
+the cached credentials alive for the whole run rather than prompting per step; SHALL let the
+operator choose the scope, with phase 1 (the safe preparation, runnable from a local console or
+a remote session) as the default, phase 2 (the headless switch) selectable alone, and both
+selectable together; and SHALL provide a dry-run mode that prints every action without
+performing any.
+
+#### Scenario: One elevation prompt for the whole run
+- **WHEN** the operator runs the script through a full preparation
+- **THEN** elevation is requested once up front and every privileged step runs under the cached
+  credentials without a further prompt
+
+#### Scenario: Lingering targets the invoking user
+- **WHEN** the script enables lingering for reboot survival
+- **THEN** the target user is the human who invoked the script and not root, and the script
+  verifies lingering is active for that user
+
+#### Scenario: Dry-run prints actions and changes nothing
+- **WHEN** the script is invoked with dry-run enabled
+- **THEN** every action it would take is printed, no system state is modified, and the host is
+  left exactly as it was
+
+#### Scenario: Phase selection bounds what runs
+- **WHEN** the operator selects phase 1, phase 2, or both
+- **THEN** only the selected steps run, phase 1 is the default, and the headless switch is never
+  performed without its remote-access preconditions being checked
+
+### Requirement: Script is idempotent and preserves existing state
+Every script step SHALL detect an already-completed state and report it rather than repeating
+the work, so the script is safe to re-run any number of times. The script SHALL preserve
+existing system state: it SHALL NOT create a second swapfile or deactivate, resize, or otherwise
+modify swap that is already active, and it SHALL NOT duplicate persisted configuration such as
+fstab entries or sysctl drop-in files. The size of a swapfile the script creates SHALL be
+configurable rather than fixed.
+
+#### Scenario: Re-running the whole script on an already-prepared host
+- **WHEN** the script is run again on a host where every preparation step is already complete
+- **THEN** each step reports its already-done state with the evidence for it (for example the
+  SSH service already enabled and active, lingering already on, swap already present, the
+  default target already non-graphical), no work is repeated, no configuration is duplicated,
+  and the run is not reported as failed
+
+#### Scenario: Running where swap already exists
+- **WHEN** the host already has swap active, whether a swapfile or another swap device
+- **THEN** the script reports swap as already present and skips creation, leaving the active
+  swap and its boot persistence untouched rather than creating a second swapfile or corrupting
+  the active one
+
+#### Scenario: Partially prepared host receives only the missing work
+- **WHEN** the script is run on a host where only some steps are complete
+- **THEN** the completed steps are reported as already done and only the missing work is
+  performed
+
+#### Scenario: Swapfile size is configurable
+- **WHEN** the script creates a swapfile on a host with no swap
+- **THEN** the size comes from the operator's configuration with the runbook's worked-example
+  size as the default, not from a hard-coded value
+
+### Requirement: Headless switch requires remote access proven by the invoking session
+The script SHALL NOT change the host's default systemd target to the non-graphical target
+unless both preconditions hold at the moment of the switch: the invoking session itself is a
+remote session, demonstrable from the session's own remote-connection evidence (for example
+`SSH_CONNECTION` being set), AND the SSH service is both enabled and active. A session that is
+connected over SSH is itself the proof that remote access works at that moment, which turns the
+runbook's human gate into a machine-checkable precondition; the script SHALL enforce both
+preconditions whenever it reaches the headless switch, whether phase 2 was selected directly or
+as part of a run of both phases.
+
+#### Scenario: Phase 2 invoked from a local console
+- **WHEN** the headless-switch phase is invoked from a local console session with no
+  remote-connection evidence, even though the operator believes remote access was verified
+  earlier
+- **THEN** the script refuses to change the default target, reports the step as failed with the
+  reason that remote access is not proven by the invoking session, leaves the default target
+  unchanged, and exits non-zero
+
+#### Scenario: Phase 2 invoked with the ssh service inactive
+- **WHEN** the invoking session is remote but the SSH service is not both enabled and active at
+  switch time
+- **THEN** the script refuses to change the default target, reports the step as failed with
+  that reason, and leaves the default target unchanged
+
+#### Scenario: Proven remote access authorizes the switch
+- **WHEN** the invoking session is remote and the SSH service is enabled and active
+- **THEN** the script changes the default target to the non-graphical target and reports that a
+  reboot is required to enter it
+
+#### Scenario: Full run enforces the same gate
+- **WHEN** the script is invoked to run both phases and the invoking session is local
+- **THEN** the safe-preparation steps run, the headless switch is refused under the same
+  preconditions, and the run exits non-zero because the switch step failed
+
+### Requirement: Script never reboots the host
+The script SHALL NOT reboot the host, including after changing the default target; where a
+change takes effect only at boot, the script SHALL report that a reboot is required and leave
+the decision and timing of the reboot to the operator.
+
+#### Scenario: Target switch reports the pending reboot
+- **WHEN** the script changes the default target to the non-graphical target
+- **THEN** it reports that a reboot is required and prints the post-reboot verification
+  commands, and it does not reboot the host
+
+#### Scenario: No step triggers a reboot
+- **WHEN** the script finishes any phase on any host, whether steps passed, were skipped, or
+  failed
+- **THEN** the script has issued no reboot, no scheduled reboot, and no reboot prompt
+
+### Requirement: Non-applicable steps are skipped with a reason
+A script step that does not apply to the host SHALL be reported as skipped with the reason
+stated and SHALL NOT be counted as a failure: performance-profile persistence on a host that is
+not a Jetson (detected from the platform's own indicators), package installation where the
+expected package manager or packages are unavailable, and dashboard exposure where the
+private-network proxy tool is absent or not connected. Skipped steps alone SHALL NOT make the
+run exit non-zero, and the script SHALL NOT state or imply that KAINE requires a Jetson or any
+other specific hardware.
+
+#### Scenario: Running on a host that is not a Jetson
+- **WHEN** the script runs on a host with no Jetson platform indicators
+- **THEN** the performance-profile step is reported as skipped because it does not apply to
+  this host, the run continues, and the outcome is not a failure
+
+#### Scenario: Package manager absent
+- **WHEN** the script runs on a host without the package manager the installation steps assume
+- **THEN** the affected installation steps are reported as skipped with that reason instead of
+  crashing the script
+
+#### Scenario: Private-network proxy absent or not connected
+- **WHEN** dashboard exposure is requested but the proxy tool is not installed or not connected
+- **THEN** the dashboard step is reported as skipped with the reason and the run continues
+
+#### Scenario: Dashboard exposure not requested
+- **WHEN** the operator does not opt in to dashboard exposure
+- **THEN** the step is reported as skipped because it was not requested, since exposure changes
+  what is reachable from the operator's other devices
+
+### Requirement: Every step reports an outcome and failures exit non-zero
+The script SHALL fail loudly rather than silently: every step SHALL report an outcome of
+succeeded, skipped, or failed, with the reason stated for every skip and every failure; the
+script SHALL print a final summary table listing every step and its outcome together with the
+runbook's post-run verification commands; and the script SHALL exit non-zero whenever any step
+failed.
+
+#### Scenario: Summary table with verification commands
+- **WHEN** the script finishes a run
+- **THEN** a final summary table lists every step with its outcome and, where applicable, the
+  reason, followed by the runbook's post-run verification commands
+
+#### Scenario: Failed step fails the run
+- **WHEN** one or more steps are reported as failed
+- **THEN** the script exits non-zero and the summary shows each failed step with its reason
+
+#### Scenario: Skips alone do not fail the run
+- **WHEN** steps are reported as skipped but no step failed
+- **THEN** the script exits zero with the skips and their reasons visible in the summary
