@@ -345,6 +345,8 @@ def describe_host() -> dict[str, Any]:
         xpu_count    — int
         xpu_names    — list[str]
         xpu_devices  — list of {index, device, name} dicts
+        memory       — {state, pools, evidence, unknown_reason}; state is
+                       "discrete", "unified", or "unknown"
     """
     torch = _try_torch()
     cuda_available = False
@@ -440,6 +442,30 @@ def describe_host() -> dict[str, Any]:
     else:
         backend = "cpu"
 
+    # --- accelerator memory classification (kaine.hostmem) ---
+    # Imported lazily here, never at module top level: kaine.hardware is
+    # imported very early, including by tooling that must tolerate a partial
+    # install, so its import surface must stay small. The whole block is
+    # guarded so describe_host() keeps its never-raises contract.
+    try:
+        from kaine import hostmem
+
+        if cuda_available or mps_available or xpu_available:
+            _accel_index = 0  # an accelerator is present: classify device 0
+        else:
+            _accel_index = None  # no accelerator: classify the host itself
+        memory = hostmem.to_dict(
+            hostmem.classify_accelerator_memory(_accel_index, torch=torch)
+        )
+    except Exception:
+        # Degrade to the documented to_dict() shape instead of raising.
+        memory = {
+            "state": "unknown",
+            "pools": [],
+            "evidence": "kaine.hostmem unavailable or classification failed",
+            "unknown_reason": "hostmem import or classification error",
+        }
+
     return {
         # --- original spec-contract keys (never removed) ---
         "device": detect_device(),
@@ -459,6 +485,7 @@ def describe_host() -> dict[str, Any]:
         "xpu_count": xpu_count,
         "xpu_names": xpu_names,
         "xpu_devices": xpu_devices,
+        "memory": memory,
     }
 
 
