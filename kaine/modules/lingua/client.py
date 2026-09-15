@@ -122,6 +122,7 @@ class OpenAIChatClient:
             # `think=False` → don't generate a chain-of-thought (the organ case);
             # `think=True` → allow it. Forwarded to the model's chat template.
             body["chat_template_kwargs"] = {_ENABLE_THINKING_KWARG: think}
+            body["reasoning_effort"] = "high" if think else "none"
         return body
 
     @staticmethod
