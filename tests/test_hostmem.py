@@ -76,15 +76,41 @@ DICT_KEYS = frozenset({"state", "pools", "evidence", "unknown_reason"})
 
 
 class _ExplodingTorch:
-    """A torch stand-in whose every attribute access raises.
+    """A torch stand-in whose every attribute access raises AttributeError.
 
-    RuntimeError, not AttributeError: a missing attribute may legitimately
-    mean "not available", while this simulates a probe that blows up
-    mid-flight.  The module must survive either without raising.
+    AttributeError, honouring the __getattr__ contract: this covers the
+    missing-attribute path, where a probe's attribute lookups fail cleanly
+    because the attribute does not exist.  The module must survive that
+    without raising.  The unexpected-exception path — an attribute that
+    exists but blows up mid-probe with RuntimeError — is covered separately
+    by _HostileTorch.
     """
 
     def __getattr__(self, name):
-        raise RuntimeError(f"simulated torch failure on attribute {name!r}")
+        raise AttributeError(f"simulated torch failure on attribute {name!r}")
+
+
+class _HostileTorch:
+    """A torch stand-in whose existing attributes raise RuntimeError.
+
+    Unlike _ExplodingTorch, nothing here relies on __getattr__: ``cuda``,
+    ``version`` and ``__version__`` are explicitly defined properties that
+    raise RuntimeError when accessed, simulating a probe that blows up
+    mid-flight on an attribute that does exist.  The module must survive
+    that without raising.
+    """
+
+    @property
+    def cuda(self):
+        raise RuntimeError("simulated torch failure on attribute 'cuda'")
+
+    @property
+    def version(self):
+        raise RuntimeError("simulated torch failure on attribute 'version'")
+
+    @property
+    def __version__(self):
+        raise RuntimeError("simulated torch failure on attribute '__version__'")
 
 
 class _FakeDeviceProps:
@@ -140,6 +166,7 @@ class _FakeCuda:
             raise RuntimeError(f"simulated CUDA: invalid device index {index!r}")
         if not 0 <= index < self._device_count:
             raise RuntimeError(f"simulated CUDA: invalid device index {index!r}")
+        return index
 
     def mem_get_info(self, *args, **kwargs):
         self._resolve(self._arg_index(args, kwargs))
@@ -589,16 +616,24 @@ def test_never_raises_when_nvml_library_cannot_be_loaded(fake_fs, monkeypatch):
     _round_trip(classification)
 
 
-def test_never_raises_when_torch_probes_explode(fake_fs, monkeypatch):
-    """Invariant: a torch stand-in whose every attribute access raises must
-    degrade to `unknown`, not crash and not guess.
+@pytest.mark.parametrize(
+    "torch_standin",
+    [_ExplodingTorch, _HostileTorch],
+    ids=["attribute-error-path", "runtime-error-path"],
+)
+def test_never_raises_when_torch_probes_explode(fake_fs, monkeypatch, torch_standin):
+    """Invariant: torch stand-ins whose attribute access fails must degrade
+    to `unknown`, not crash and not guess — on both failure paths:
+    _ExplodingTorch raises AttributeError from __getattr__ (the
+    missing-attribute contract), while _HostileTorch raises RuntimeError
+    from explicitly defined properties (an unexpected exception mid-probe).
 
     Why it matters: half-broken torch installs are the norm on mixed hosts;
-    a raising probe is one more failed rung, never a fatal error.
+    a failing probe is one more failed rung, never a fatal error.
     """
     _patch_linux_x86_64(monkeypatch)
     _break_external_probes(monkeypatch)
-    classification = hostmem.classify_accelerator_memory(0, torch=_ExplodingTorch())
+    classification = hostmem.classify_accelerator_memory(0, torch=torch_standin())
     assert classification.state == "unknown"
     assert classification.unknown_reason
     assert not classification.pools
