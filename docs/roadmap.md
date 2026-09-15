@@ -8,7 +8,6 @@
 
 | Change | Progress | Capabilities | Deltas | Summary |
 | --- | --- | --- | --- | --- |
-| host-aware-accelerator-provisioning | 24/24 (100%) | dynamic-hardware, first-run-wizard, gpu-preflight | ADDED, MODIFIED | Accelerator provisioning in KAINE currently assumes one host shape: x... |
 | claude-science-export | 25/26 (96%) | claude-science-export | ADDED | The companion empirical paper needs an exploratory-analysis and write... |
 | containerize-deployment | 18/19 (94%) | containerized-deployment | ADDED | The paper names this as planned future work and as a precondition for... |
 | condition-language-organ | 21/24 (87%) | faithful-renderer, lingua | ADDED | KAINE's thesis is that the LLM is the **language organ, not the brain... |
@@ -27,6 +26,7 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-15 | host-aware-accelerator-provisioning |
 | 2026-09-09 | coldstart-welfare-spot-honor-warmup |
 | 2026-09-09 | fix-preboot-probe-parity |
 | 2026-09-09 | fix-research-event-contracts |
@@ -41,9 +41,8 @@
 | 2026-09-08 | harden-security-boundaries |
 | 2026-09-08 | interruptible-utterance |
 | 2026-09-08 | nexus-realtime-polish |
-| 2026-09-08 | playlist-realtime-av-sync |
 
-_Showing the 15 most recent of 149 archived changes._
+_Showing the 15 most recent of 150 archived changes._
 
 ## Capabilities
 
@@ -78,7 +77,7 @@ _Showing the 15 most recent of 149 archived changes._
 | event-bus | 8 |
 | experiment-foundation | 8 |
 | faithful-renderer | 6 |
-| first-run-wizard | 5 |
+| first-run-wizard | 6 |
 | gpu-preflight | 2 |
 | hypnos | 8 |
 | hypnos-consolidation | 4 |
@@ -126,8 +125,8 @@ _Showing the 15 most recent of 149 archived changes._
 | welfare-monitoring | 4 |
 | workspace-mediation-ablation | 7 |
 
-_Total: 76 capabilities, 447 requirements._
+_Total: 76 capabilities, 448 requirements._
 
 ---
 
-14 changes in flight, 149 archived, 76 capabilities.
+13 changes in flight, 150 archived, 76 capabilities.
