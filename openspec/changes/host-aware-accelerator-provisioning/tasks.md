@@ -12,11 +12,11 @@ This section extends `describe_host()` to classify accelerator memory as discret
 
 This section makes `scripts/install.sh` resolve the CUDA wheel index at install time from an ordered fallback table keyed on host probes, with an operator override and unchanged force-flag behavior.
 
-- [ ] 2.1 Implement a probe collector (machine architecture via `uname`, driver CUDA version from the `nvidia-smi` header, compute capability via `nvidia-smi --query-gpu=compute_cap` with a torch fallback, unified-memory-ness via `kaine.hardware`) exposed as a JSON-emitting CLI entry point callable from `install.sh`; unit-test each probe against mocked command outputs including failure modes.
-- [ ] 2.2 Encode the ordered fallback table as a single source of truth (data, not scattered shell conditionals) with first-match-wins resolution and the terminal CPU row; unit-test every row plus the ordering property (an earlier row shadows an overlapping later row).
-- [ ] 2.3 Replace the hardcoded `NVIDIA_INDEX_URL` logic in `scripts/install.sh` with the resolver call; log probe values, matched row key, and resolved URL; add a pip-shim integration test (fake `pip`, `nvidia-smi`, and `uname` on PATH) asserting the `--index-url` actually passed to pip for each scenario above.
-- [ ] 2.4 Add `--index-url` parsing and precedence (override > table > terminal fallback) to `scripts/install.sh`, with log lines distinguishing operator-provided from resolved URLs; extend the pip-shim test to cover the override and ignore-with-notice paths.
-- [ ] 2.5 Add pip-shim regression tests asserting identical pip arguments for `--cpu`, `--rocm`, `--xpu`, and `--mps` before and after the change, and that `--cuda` resolves through the table (with the legacy-cu128 warning path when the probe is insufficient).
+- [x] 2.1 Implement a probe collector (machine architecture via `uname`, driver CUDA version from the `nvidia-smi` header, compute capability via `nvidia-smi --query-gpu=compute_cap` with a torch fallback, unified-memory-ness via `kaine.hardware`) exposed as a JSON-emitting CLI entry point callable from `install.sh`; unit-test each probe against mocked command outputs including failure modes.
+- [x] 2.2 Encode the ordered fallback table as a single source of truth (data, not scattered shell conditionals) with first-match-wins resolution and the terminal CPU row; unit-test every row plus the ordering property (an earlier row shadows an overlapping later row).
+- [x] 2.3 Replace the hardcoded `NVIDIA_INDEX_URL` logic in `scripts/install.sh` with the resolver call; log probe values, matched row key, and resolved URL; add a pip-shim integration test (fake `pip`, `nvidia-smi`, and `uname` on PATH) asserting the `--index-url` actually passed to pip for each scenario above.
+- [x] 2.4 Add `--index-url` parsing and precedence (override > table > terminal fallback) to `scripts/install.sh`, with log lines distinguishing operator-provided from resolved URLs; extend the pip-shim test to cover the override and ignore-with-notice paths.
+- [x] 2.5 Add pip-shim regression tests asserting identical pip arguments for `--cpu`, `--rocm`, `--xpu`, and `--mps` before and after the change, and that `--cuda` resolves through the table (with the legacy-cu128 warning path when the probe is insufficient).
 
 ## 3. `gpu-preflight` three-state memory gate
 

@@ -16,6 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Legacy hardcoded CUDA wheel index. Kept only as the documented
+# fallback for when the host-aware resolver (kaine.wheel_index) is
+# unavailable or fails; normal CUDA installs resolve per host instead.
 NVIDIA_INDEX_URL = "https://download.pytorch.org/whl/cu128"
 ROCM_INDEX_URL = "https://download.pytorch.org/whl/rocm6.2"
 XPU_INDEX_URL = "https://download.pytorch.org/whl/xpu"
@@ -32,17 +35,137 @@ _INDEX_BY_FLAVOR: dict[str, str | None] = {
 }
 
 
-def torch_index_url(flavor: str) -> str | None:
+def _argv_index_override(argv: list[str] | None = None) -> str | None:
+    """Return the ``--index-url`` value from the command line, if any.
+
+    ``argparse`` owns the flag (it is registered on the installer's parser);
+    this pre-scan only lets :func:`torch_index_url` honour the operator
+    override from every call site -- installer, wizard and ``--print-index``
+    -- without each of them having to thread it through. Returns ``None``
+    when the flag is absent.
+    """
+    if argv is None:
+        argv = sys.argv[1:]
+    override: str | None = None
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--index-url" and i + 1 < len(argv):
+            override = argv[i + 1]
+            i += 1
+        elif arg.startswith("--index-url="):
+            override = arg.split("=", 1)[1]
+        i += 1
+    return override
+
+
+def _resolve_cuda_index(override: str | None) -> str:
+    """Resolve the CUDA wheel index for this host via ``kaine.wheel_index``.
+
+    Mirrors ``scripts/install.sh``: probes the CPU architecture, the driver's
+    CUDA version, every NVIDIA device's compute capability and the
+    unified-memory classification, then applies the binding decision table
+    and fallback ladder. The import is lazy and guarded: if the resolver is
+    missing or fails, we degrade to the legacy ``NVIDIA_INDEX_URL`` so the
+    installer is never blocked.
+    """
+    try:
+        from kaine.wheel_index import collect_probes, resolve_index
+
+        result = resolve_index(collect_probes(), override=override)
+        index_url = result["index_url"]
+    except Exception as exc:  # resolver unavailable or failed: never block
+        print(
+            "warning: host-aware CUDA wheel-index resolver unavailable "
+            f"({exc!r}); falling back to legacy {NVIDIA_INDEX_URL}",
+            file=sys.stderr,
+        )
+        if override is not None:
+            print(
+                "warning: resolver failed; honouring operator override "
+                f"--index-url {override}",
+                file=sys.stderr,
+            )
+            return override
+        return NVIDIA_INDEX_URL
+    _report_cuda_resolution(result, override)
+    return index_url
+
+
+def _report_cuda_resolution(result: dict, override: str | None) -> None:
+    """Print probe values, resolved URL, table-vs-override source, warnings.
+
+    The report goes to stdout for normal installer runs; when the output is
+    consumed programmatically (``--print-index``, used by the container image
+    build) it is diverted to stderr so stdout stays machine-readable.
+    Resolver warnings always go to stderr.
+    """
+    stream = sys.stderr if "--print-index" in sys.argv[1:] else sys.stdout
+    variant = str(result.get("variant") or "")
+    if override is not None or "override" in variant.lower():
+        source = "operator override (--index-url)"
+    else:
+        source = "host-resolved decision table"
+    if variant:
+        source = f"{source} [variant: {variant}]"
+    print("CUDA wheel index resolution:", file=stream)
+    print(f"  index_url: {result.get('index_url')}", file=stream)
+    print(f"  source: {source}", file=stream)
+    probes = result.get("probes")
+    if isinstance(probes, dict):
+        for name in sorted(probes):
+            print(f"  probe {name}: {probes[name]}", file=stream)
+    else:
+        print(f"  probes: {probes}", file=stream)
+    reason = result.get("selected_reason")
+    if reason:
+        print(f"  selected_reason: {reason}", file=stream)
+    for entry in result.get("rejected") or []:
+        if isinstance(entry, dict):
+            print(
+                f"  rejected {entry.get('index')}: {entry.get('reason')}",
+                file=sys.stderr,
+            )
+        else:
+            print(f"  rejected: {entry}", file=sys.stderr)
+    for warning in result.get("warnings") or []:
+        print(f"warning: wheel_index: {warning}", file=sys.stderr)
+
+
+def torch_index_url(flavor: str, override: str | None = None) -> str | None:
     """Return the pip ``--index-url`` for ``flavor`` (``None`` for MPS/PyPI).
 
     Single source of truth for the accelerator→wheel-index mapping. The
     container image build reuses this verbatim (`install.py --print-index
     <flavor>`) instead of re-deriving the CUDA/ROCm/XPU/CPU index URLs, so the
     Dockerfile and the host installer can never drift.
+
+    For ``cuda`` the URL is host-resolved by ``kaine.wheel_index``: it
+    probes the CPU architecture, the driver's CUDA version, every NVIDIA
+    device's compute capability and the unified-memory classification, then
+    applies the binding decision table and fallback ladder (mirroring
+    ``scripts/install.sh``). ``override`` -- the ``--index-url`` CLI flag --
+    replaces the resolved URL for the cuda flavor only; with any other
+    flavor it is ignored with a notice on stderr. When no explicit
+    ``override`` is passed, the command line is pre-scanned for
+    ``--index-url`` so every call site (installer, wizard, ``--print-index``)
+    honours the flag. If the resolver cannot be imported or fails, we fall
+    back to the legacy ``NVIDIA_INDEX_URL`` with a warning on stderr; the
+    installer is never blocked.
     """
     if flavor not in _INDEX_BY_FLAVOR:
         raise KeyError(flavor)
-    return _INDEX_BY_FLAVOR[flavor]
+    if override is None:
+        override = _argv_index_override()
+    if flavor != "cuda":
+        if override is not None:
+            print(
+                f"notice: --index-url {override} applies only to the cuda "
+                f"flavor; ignored for {flavor!r}, proceeding unchanged",
+                file=sys.stderr,
+            )
+        return _INDEX_BY_FLAVOR[flavor]
+    return _resolve_cuda_index(override)
 
 
 def run(cmd: list[str], **kwargs) -> None:
