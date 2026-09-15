@@ -1,6 +1,6 @@
 # topos
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Report carries peripheral and foveal latents under foveation
 
