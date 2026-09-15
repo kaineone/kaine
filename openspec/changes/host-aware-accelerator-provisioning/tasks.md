@@ -41,8 +41,8 @@ This section adds accelerator/runtime mismatch detection to the first-run wizard
 
 This section documents the provisioning behavior for operators and keeps the docs in sync with the implementation via a cross-check test.
 
-- [ ] 5.1 Write the operator doc page covering the fallback table, `--index-url`, the three preflight memory states, unified-memory classification and provenance, and per-platform notes (Jetson, AMD APU, Apple Silicon); generate the table section from the implementation to prevent drift.
-- [ ] 5.2 Add the docs cross-check test and update the installer help text.
+- [x] 5.1 Write the operator doc page covering the fallback table, `--index-url`, the three preflight memory states, unified-memory classification and provenance, and per-platform notes (Jetson, AMD APU, Apple Silicon); generate the table section from the implementation to prevent drift.
+- [x] 5.2 Add the docs cross-check test and update the installer help text.
 
 ## 6. Cross-host regression suite
 

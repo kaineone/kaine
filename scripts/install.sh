@@ -6,6 +6,8 @@
 # Tegra/Jetson) resolve to the CPU index with a warning instead of receiving
 # a wheel that fails at the first kernel launch. --index-url <URL> overrides
 # the resolved CUDA index; it is ignored for --cpu/--rocm/--xpu/--mps.
+# GPU preflight memory states (known-discrete, known-unified, unknown):
+# see docs/accelerator-provisioning.md for details.
 # KAINE installer: detects host hardware and installs PyTorch from the
 # matching wheel index, then installs the rest of KAINE editable.
 #
@@ -13,14 +15,13 @@
 #
 #   bash scripts/install.sh           # auto-detect
 #   bash scripts/install.sh --cpu     # force CPU wheels
-#   bash scripts/install.sh --cuda    # force CUDA wheels (cu128)
+#   bash scripts/install.sh --cuda    # force CUDA wheels (resolved via kaine.wheel_index)
 #   bash scripts/install.sh --index-url URL  # force a specific CUDA wheel index
 #   bash scripts/install.sh --rocm    # force ROCm wheels (rocm6.2)
 #   bash scripts/install.sh --xpu     # force Intel XPU wheels
 #   bash scripts/install.sh --mps     # force macOS MPS (default PyPI wheel)
-#   bash scripts/install.sh --research # ALSO install the perception extras
-#                                       # (.[perception] = audio+vision incl.
-#                                       # PyAV) for reproducible-feed research runs
+#   bash scripts/install.sh --research # ALSO install the perception extras (.[perception])
+#   bash scripts/install.sh --no-wizard # skip the interactive wizard
 #
 # The default install stays lean (no cv2/av/funasr). The venv is created at
 # .venv/ if absent. Use --python /path/to/python to override the interpreter the
@@ -69,7 +70,7 @@ while [[ $# -gt 0 ]]; do
     --no-wizard) NO_WIZARD=1; shift ;;
     --research) RESEARCH=1; shift ;;
     --help|-h)
-      sed -n '2,24p' "$0"; exit 0 ;;
+      sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
