@@ -8,10 +8,10 @@
 
 | Change | Progress | Capabilities | Deltas | Summary |
 | --- | --- | --- | --- | --- |
+| host-aware-accelerator-provisioning | 24/24 (100%) | dynamic-hardware, first-run-wizard, gpu-preflight | ADDED, MODIFIED | Accelerator provisioning in KAINE currently assumes one host shape: x... |
 | claude-science-export | 25/26 (96%) | claude-science-export | ADDED | The companion empirical paper needs an exploratory-analysis and write... |
 | containerize-deployment | 18/19 (94%) | containerized-deployment | ADDED | The paper names this as planned future work and as a precondition for... |
 | condition-language-organ | 21/24 (87%) | faithful-renderer, lingua | ADDED | KAINE's thesis is that the LLM is the **language organ, not the brain... |
-| host-aware-accelerator-provisioning | 21/24 (87%) | dynamic-hardware, first-run-wizard, gpu-preflight | ADDED, MODIFIED | Accelerator provisioning in KAINE currently assumes one host shape: x... |
 | docs-base-thesis-reframe | 13/15 (86%) | documentation-consistency | ADDED | The project has been reconfigured to its **base-thesis form** as the ... |
 | perception-drives-salience | 9/11 (81%) | topos-perception | MODIFIED | The base thesis is that perception enters the workspace **as predicti... |
 | portability-tiers | 19/24 (79%) | deployment-tiers, host-probe, runtime-backends | ADDED | KAINE today assumes one machine: a dual-GPU Linux workstation. The th... |
