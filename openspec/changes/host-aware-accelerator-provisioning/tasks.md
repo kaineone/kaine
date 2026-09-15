@@ -31,11 +31,11 @@ This section reworks the `gpu-preflight` memory gate into three states — known
 
 This section adds accelerator/runtime mismatch detection to the first-run wizard and gates any corrective install behind explicit operator consent.
 
-- [ ] 4.1 Implement a pure mismatch evaluator `(driver_cuda_version, torch_cuda_version, compute_capability, arch_list) -> {compatible | ptx_jit | mismatch(reasons)}`; unit-test exact SASS match, same-major PTX, cross-major PTX, and hard-mismatch cases.
-- [ ] 4.2 Wire the evaluator into the first-run wizard: gather probes, render detected-versus-expected, and gate the corrective install behind an explicit consent prompt whose default is decline.
-- [ ] 4.3 Implement the consented corrective install (invoke the installer with the resolved index or appropriate flavor) followed by re-validation of `torch.version.cuda` and arch coverage; abort cleanly with guidance if re-validation still fails.
-- [ ] 4.4 Record the mismatch, consent decision, and outcome in wizard state and logs, including the continue-on-decline path with warning.
-- [ ] 4.5 Add an end-to-end wizard test with simulated probes covering all five scenarios, asserting the corrective install runs with the expected `--index-url` on consent and that nothing runs on decline.
+- [x] 4.1 Implement a pure mismatch evaluator `(driver_cuda_version, torch_cuda_version, compute_capability, arch_list) -> {compatible | ptx_jit | mismatch(reasons)}`; unit-test exact SASS match, same-major PTX, cross-major PTX, and hard-mismatch cases.
+- [x] 4.2 Wire the evaluator into the first-run wizard: gather probes, render detected-versus-expected, and gate the corrective install behind an explicit consent prompt whose default is decline.
+- [x] 4.3 Implement the consented corrective install (invoke the installer with the resolved index or appropriate flavor) followed by re-validation of `torch.version.cuda` and arch coverage; abort cleanly with guidance if re-validation still fails.
+- [x] 4.4 Record the mismatch, consent decision, and outcome in wizard state and logs, including the continue-on-decline path with warning.
+- [x] 4.5 Add an end-to-end wizard test with simulated probes covering all five scenarios, asserting the corrective install runs with the expected `--index-url` on consent and that nothing runs on decline.
 
 ## 5. Documentation and operator visibility
 

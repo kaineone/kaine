@@ -427,3 +427,111 @@ def test_defaults_subprocess_smoke(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     with op.open("rb") as fh:
         tomllib.load(fh)
+
+
+# --- accelerator/runtime mismatch detection --------------------------------
+
+
+def test_mismatch_detected_and_accepted():
+    host = {
+        "backend": "cuda", "device": "cuda", "gpu_count": 1, "cpu_count": 8,
+        "cuda_version": "13.2",
+        "cuda_devices": [{"index": 0, "device": "cuda:0", "name": "Orin",
+                          "total_vram_gb": 8.0, "free_vram_gb": 6.0,
+                          "compute_capability": (8, 7)}],
+    }
+    probes = {"torch_cuda_version": "12.8",
+              "arch_list": ["sm_90", "sm_100", "compute_90"]}
+    called = []
+
+    def fake_install(url):
+        called.append(url)
+        return True
+
+    answers = _Answers([ACK_PHRASE, "", "y"] + [""] * 25)
+    _, out_fn = _collect_out()
+    result = run_wizard(
+        input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
+        torch_cuda_probes=probes, corrective_install_fn=fake_install,
+        wheel_index_url="https://example.com/whl/cu132",
+    )
+    assert result.mismatch_verdict.status == "mismatch"
+    assert result.corrective_install_accepted is True
+    assert result.corrective_install_ran is True
+    assert result.corrective_install_ok is True
+    assert called == ["https://example.com/whl/cu132"]
+
+
+def test_mismatch_detected_and_declined():
+    host = {
+        "backend": "cuda", "device": "cuda", "gpu_count": 1, "cpu_count": 8,
+        "cuda_version": "13.2",
+        "cuda_devices": [{"index": 0, "device": "cuda:0", "name": "Orin",
+                          "total_vram_gb": 8.0, "free_vram_gb": 6.0,
+                          "compute_capability": (8, 7)}],
+    }
+    probes = {"torch_cuda_version": "12.8",
+              "arch_list": ["sm_90", "sm_100", "compute_90"]}
+    answers = _Answers([ACK_PHRASE, "", ""] + [""] * 25)
+    _, out_fn = _collect_out()
+    result = run_wizard(
+        input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
+        torch_cuda_probes=probes, corrective_install_fn=lambda url: True,
+        wheel_index_url="https://example.com/whl/cu132",
+    )
+    assert result.mismatch_verdict.status == "mismatch"
+    assert result.corrective_install_accepted is False
+    assert result.corrective_install_ran is False
+
+
+def test_ptx_compatible_no_mismatch():
+    host = {
+        "backend": "cuda", "device": "cuda", "gpu_count": 1, "cpu_count": 8,
+        "cuda_version": "13.2",
+        "cuda_devices": [{"index": 0, "device": "cuda:0", "name": "Blackwell",
+                          "total_vram_gb": 24.0, "free_vram_gb": 20.0,
+                          "compute_capability": (12, 0)}],
+    }
+    probes = {"torch_cuda_version": "13.2",
+              "arch_list": ["sm_90", "sm_100", "compute_90"]}
+    answers = _Answers([ACK_PHRASE, ""] + [""] * 25)
+    _, out_fn = _collect_out()
+    result = run_wizard(
+        input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
+        torch_cuda_probes=probes,
+    )
+    assert result.mismatch_verdict.status == "ptx_jit"
+    assert result.corrective_install_accepted is None
+
+
+def test_x86_compatible_no_mismatch():
+    host = {
+        "backend": "cuda", "device": "cuda", "gpu_count": 1, "cpu_count": 16,
+        "cuda_version": "13.2",
+        "cuda_devices": [{"index": 0, "device": "cuda:0", "name": "RTX 4070",
+                          "total_vram_gb": 12.0, "free_vram_gb": 10.0,
+                          "compute_capability": (8, 9)}],
+    }
+    probes = {"torch_cuda_version": "13.2",
+              "arch_list": ["sm_89", "compute_90"]}
+    answers = _Answers([ACK_PHRASE, ""] + [""] * 25)
+    _, out_fn = _collect_out()
+    result = run_wizard(
+        input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
+        torch_cuda_probes=probes,
+    )
+    assert result.mismatch_verdict.status == "compatible"
+    assert result.corrective_install_accepted is None
+
+
+def test_cpu_only_skips_mismatch():
+    host = {
+        "backend": "cpu", "device": "cpu", "gpu_count": 0, "cpu_count": 8,
+        "cuda_devices": [],
+    }
+    answers = _Answers([ACK_PHRASE, ""] + [""] * 25)
+    _, out_fn = _collect_out()
+    result = run_wizard(
+        input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
+    )
+    assert result.mismatch_verdict is None
