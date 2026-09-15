@@ -107,6 +107,11 @@ class PreflightResult:
     kaine_services_up: dict[str, bool] = field(default_factory=dict)
     message: str = ""
     checked_at: str = ""
+    memory_state: str = ""
+    memory_figure_gb: Optional[float] = None
+    memory_threshold_gb: Optional[float] = None
+    memory_provenance: str = ""
+    memory_annotation: str = ""
 
     @property
     def ok(self) -> bool:
@@ -130,6 +135,40 @@ def _device_free_vram() -> list[dict[str, Any]]:
     except Exception:
         return []
     return list(host.get("cuda_devices") or [])
+
+
+def _probe_memory_state() -> dict[str, Any]:
+    """Classify accelerator memory via describe_host() for the three-state gate."""
+    try:
+        from kaine.hardware import describe_host
+        host = describe_host()
+    except Exception:
+        return {"state": "unknown", "annotation": "describe_host() unavailable", "provenance": ""}
+    memory = host.get("memory") or {}
+    raw = memory.get("state", "unknown")
+    if raw == "discrete":
+        return {"state": "known-discrete", "provenance": memory.get("evidence", ""), "annotation": ""}
+    if raw == "unified":
+        pools = memory.get("pools") or []
+        sys_pool = next((p for p in pools if p.get("kind") == "system"), None)
+        if sys_pool and sys_pool.get("available_bytes") is not None:
+            return {
+                "state": "known-unified",
+                "figure_gb": sys_pool["available_bytes"] / (1024 ** 3),
+                "total_gb": (sys_pool.get("total_bytes") or 0) / (1024 ** 3),
+                "provenance": sys_pool.get("provenance", ""),
+                "annotation": "",
+            }
+        return {
+            "state": "unknown",
+            "annotation": "unified but no system pool figures",
+            "provenance": memory.get("evidence", ""),
+        }
+    return {
+        "state": "unknown",
+        "annotation": memory.get("unknown_reason") or "no recognizable accelerator",
+        "provenance": memory.get("evidence", ""),
+    }
 
 
 def _server_resident_models(url: str, timeout_s: float) -> list[str]:
@@ -203,11 +242,20 @@ def _format_block_message(
     services: dict[str, bool],
     unexpected_models: list[str],
     config: GpuPreflightConfig,
+    *,
+    memory_state: str = "known-discrete",
 ) -> str:
-    lines = [
-        "GPU headroom is below the configured minimum "
-        f"({config.min_free_vram_gb:.1f} GiB free per device):",
-    ]
+    if memory_state == "known-unified":
+        header = (
+            f"Available system memory is below the configured minimum "
+            f"({config.min_free_vram_gb:.1f} GiB):"
+        )
+    else:
+        header = (
+            "GPU headroom is below the configured minimum "
+            f"({config.min_free_vram_gb:.1f} GiB free per device):"
+        )
+    lines = [header]
     for d in short:
         lines.append(
             f"  - {d.get('device')} ({d.get('name')}): "
@@ -254,6 +302,10 @@ def run_preflight(
     preserves KAINE services, and NEVER kills a process. Writes a status snapshot
     for Nexus. The CALLER decides what a non-ok result means (the cycle refuses to
     boot); this function performs no process control.
+
+    Memory classification (from ``describe_host()``) splits the gate into three
+    states: known-discrete (per-device VRAM), known-unified (system pool), and
+    unknown (always passes with annotation).
     """
     keep = {m for m in (keep_models or []) if m}
 
@@ -261,11 +313,11 @@ def run_preflight(
         return PreflightResult(status="skipped", checked_at=_now_iso())
 
     devices = _device_free_vram()
+    mem_probe = _probe_memory_state()
+    memory_state = mem_probe.get("state", "unknown")
     consumers = _gpu_consumers(config.timeout_s)
     services = _kaine_services_up()
     resident = _server_resident_models(config.model_server_url, config.timeout_s)
-    # Resident models KAINE did not expect (anything the server holds beyond the
-    # organ's keep set) — surfaced for the operator, never evicted here.
     unexpected = [m for m in resident if m not in keep]
 
     def below_min(devs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -275,10 +327,45 @@ def run_preflight(
             if float(d.get("free_vram_gb", 0.0)) < config.min_free_vram_gb
         ]
 
-    short = below_min(devices)
+    if memory_state == "known-discrete":
+        short = below_min(devices)
+    elif memory_state == "known-unified":
+        figure = mem_probe.get("figure_gb", 0.0)
+        if figure < config.min_free_vram_gb:
+            total = mem_probe.get("total_gb")
+            short = [
+                {
+                    "device": "system-pool",
+                    "name": "unified system memory",
+                    "total_vram_gb": round(total, 2) if total else None,
+                    "free_vram_gb": round(figure, 2),
+                }
+            ]
+        else:
+            short = []
+    else:
+        short = []
+
+    mem_fields = dict(
+        memory_state=memory_state,
+        memory_figure_gb=mem_probe.get("figure_gb"),
+        memory_threshold_gb=(
+            config.min_free_vram_gb if memory_state != "unknown" else None
+        ),
+        memory_provenance=mem_probe.get("provenance", ""),
+        memory_annotation=mem_probe.get("annotation", ""),
+    )
     checked = _now_iso()
 
     if not short:
+        if memory_state == "unknown":
+            msg = (
+                "GPU headroom check: memory state unknown ("
+                + mem_probe.get("annotation", "")
+                + "); passing without measurement."
+            )
+        else:
+            msg = "GPU headroom OK."
         result = PreflightResult(
             status="pass",
             devices=devices,
@@ -286,13 +373,17 @@ def run_preflight(
             resident_models=resident,
             gpu_consumers=consumers,
             kaine_services_up=services,
-            message="GPU headroom OK.",
+            message=msg,
             checked_at=checked,
+            **mem_fields,
         )
         _write_state(result, state_path)
         return result
 
-    message = _format_block_message(short, consumers, services, unexpected, config)
+    message = _format_block_message(
+        short, consumers, services, unexpected, config,
+        memory_state=memory_state,
+    )
     overridden = os.environ.get(config.override_env) == "1"
     result = PreflightResult(
         status="overridden" if overridden else "blocked",
@@ -307,6 +398,7 @@ def run_preflight(
             else message
         ),
         checked_at=checked,
+        **mem_fields,
     )
     _write_state(result, state_path)
     return result

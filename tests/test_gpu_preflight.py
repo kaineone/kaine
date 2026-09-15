@@ -42,6 +42,7 @@ def _no_real_probes(monkeypatch):
     monkeypatch.setattr(pf, "_gpu_consumers", lambda *_a, **_k: [])
     monkeypatch.setattr(pf, "_kaine_services_up", lambda *_a, **_k: {})
     monkeypatch.setattr(pf, "_server_resident_models", lambda *_a, **_k: [])
+    monkeypatch.setattr(pf, "_probe_memory_state", lambda *_a, **_k: {"state": "known-discrete", "provenance": "stub", "annotation": ""})
 
 
 # --- config ------------------------------------------------------------------
@@ -279,3 +280,90 @@ def test_blocked_message_preserves_model_server(monkeypatch, tmp_path):
     assert "model_server" in result.message
     # The gate never kills a process — it only reports.
     assert "DO NOT close" in result.message
+
+
+# --- three-state memory gate ---------------------------------------------------
+
+
+def test_unified_ample_passes(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        pf,
+        "_probe_memory_state",
+        lambda *_a, **_k: {"state": "known-unified", "figure_gb": 6.0, "total_gb": 8.0, "provenance": "stub", "annotation": ""},
+    )
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [])
+    config = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
+    result = run_preflight(config, state_path=tmp_path / "state.json")
+    assert result.status == "pass"
+    assert result.ok is True
+    assert result.memory_state == "known-unified"
+    assert result.memory_figure_gb == 6.0
+
+
+def test_unified_short_blocks(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        pf,
+        "_probe_memory_state",
+        lambda *_a, **_k: {"state": "known-unified", "figure_gb": 1.0, "total_gb": 8.0, "provenance": "stub", "annotation": ""},
+    )
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [])
+    monkeypatch.delenv("KAINE_GPU_PREFLIGHT_APPROVED", raising=False)
+    config = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
+    result = run_preflight(config, state_path=tmp_path / "state.json")
+    assert result.status == "blocked"
+    assert result.ok is False
+    assert result.memory_state == "known-unified"
+    assert len(result.shortfall) == 1
+    assert result.shortfall[0]["device"] == "system-pool"
+    assert result.shortfall[0]["free_vram_gb"] == 1.0
+    assert "system memory" in result.message
+
+
+def test_unified_override_boots_anyway(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        pf,
+        "_probe_memory_state",
+        lambda *_a, **_k: {"state": "known-unified", "figure_gb": 1.0, "total_gb": 8.0, "provenance": "stub", "annotation": ""},
+    )
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [])
+    monkeypatch.setenv("KAINE_GPU_PREFLIGHT_APPROVED", "1")
+    config = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
+    result = run_preflight(config, state_path=tmp_path / "state.json")
+    assert result.status == "overridden"
+    assert result.ok is True
+
+
+def test_unknown_passes_with_annotation(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        pf,
+        "_probe_memory_state",
+        lambda *_a, **_k: {"state": "unknown", "annotation": "no recognizable accelerator", "provenance": ""},
+    )
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [])
+    config = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
+    result = run_preflight(config, state_path=tmp_path / "state.json")
+    assert result.status == "pass"
+    assert result.ok is True
+    assert result.memory_state == "unknown"
+    assert "passing without measurement" in result.message
+    assert result.memory_threshold_gb is None
+
+
+def test_discrete_short_blocks_despite_other_devices(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        pf,
+        "_probe_memory_state",
+        lambda *_a, **_k: {"state": "known-discrete", "provenance": "stub", "annotation": ""},
+    )
+    monkeypatch.setattr(
+        pf,
+        "_device_free_vram",
+        lambda *_a, **_k: [_dev("cuda:0", 0.5), _dev("cuda:1", 10.0)],
+    )
+    monkeypatch.delenv("KAINE_GPU_PREFLIGHT_APPROVED", raising=False)
+    config = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
+    result = run_preflight(config, state_path=tmp_path / "state.json")
+    assert result.status == "blocked"
+    assert result.ok is False
+    assert result.memory_state == "known-discrete"
+    assert [entry["device"] for entry in result.shortfall] == ["cuda:0"]

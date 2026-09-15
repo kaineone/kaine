@@ -22,10 +22,10 @@ This section makes `scripts/install.sh` resolve the CUDA wheel index at install 
 
 This section reworks the `gpu-preflight` memory gate into three states — known-discrete, known-unified, and unknown — so unknown memory never blocks boot by itself.
 
-- [ ] 3.1 Feed the gate from `describe_host()`'s memory classification instead of raw NVML figures, mapping discrete/unified/unknown to the three gate states.
-- [ ] 3.2 Implement the three-state decision logic and extend the gate report with `memory_state`, the figure and threshold applied, provenance, and annotation fields.
-- [ ] 3.3 Unit-test all five scenarios, including a snapshot regression proving the known-discrete path is identical to pre-change behavior.
-- [ ] 3.4 Update the gate's help text and docs to state the three states and the never-refuse-on-unknown rule.
+- [x] 3.1 Feed the gate from `describe_host()`'s memory classification instead of raw NVML figures, mapping discrete/unified/unknown to the three gate states.
+- [x] 3.2 Implement the three-state decision logic and extend the gate report with `memory_state`, the figure and threshold applied, provenance, and annotation fields.
+- [x] 3.3 Unit-test all five scenarios, including a snapshot regression proving the known-discrete path is identical to pre-change behavior.
+- [x] 3.4 Update the gate's help text and docs to state the three states and the never-refuse-on-unknown rule.
 
 ## 4. First-run wizard mismatch detection and consented corrective install
 
