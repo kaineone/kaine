@@ -364,11 +364,25 @@ def _run_install(
         if inherited_pythonpath
         else str(REPO_ROOT)
     )
+    # Shadow any system-installed torch so install.sh's idempotency check
+    # ("import torch" succeeds → "already installed" → skip pip install)
+    # always falls through to the pip install step.  Without this, CI
+    # runners that carry torch in their base environment never reach the
+    # `pip install --index-url …` command the tests assert on.
+    poison_dir = tmp_path / "poison"
+    poison_dir.mkdir()
+    (poison_dir / "torch").mkdir()
+    (poison_dir / "torch" / "__init__.py").write_text(
+        "raise ImportError('torch not installed (test shim)')\n",
+        encoding="utf-8",
+    )
+    env["PYTHONPATH"] = os.pathsep.join([str(poison_dir), env["PYTHONPATH"]])
 
     repo_venv = REPO_ROOT / ".venv"
     repo_venv_before = repo_venv.exists()
     repo_pycache = REPO_ROOT / "kaine" / "__pycache__"
     repo_pycache_before = repo_pycache.exists()
+    proc = None  # type: ignore[assignment]  # assigned inside try; pytest.fail always raises on timeout
     try:
         proc = subprocess.run(
             ["bash", "scripts/install.sh", *flags],

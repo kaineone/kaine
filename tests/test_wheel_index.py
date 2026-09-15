@@ -46,8 +46,9 @@ from kaine.wheel_index import (
 try:  # section-1 modules; imported only so hermetic tests can re-bind helpers
     import kaine.hardware  # noqa: F401
     import kaine.hostmem  # noqa: F401
+    _ = kaine.hardware, kaine.hostmem  # referenced to satisfy CodeQL py/unused-import
 except Exception:  # pragma: no cover - optional hedges, never a hard dependency
-    pass
+    pass  # optional modules; loaded so hermetic tests can monkeypatch.setattr helpers
 
 
 # Binding index URLs from decision-table rows 1-5 / 7-9, and the CPU fallback.
@@ -457,7 +458,7 @@ def _install_smi_fake(monkeypatch, mode="ok"):
             if isinstance(cmd, str) and "nvidia-smi" in cmd:
                 return sys.executable
         except Exception:
-            pass
+            pass  # str() or comparison may fail; fall through to real
         return real_which(cmd, *args, **kwargs)
 
     monkeypatch.setattr(shutil, "which", fake_which, raising=True)
@@ -471,7 +472,7 @@ def _install_smi_fake(monkeypatch, mode="ok"):
             if "nvidia-smi" in str(path):
                 return True
         except Exception:
-            pass
+            pass  # str() or comparison may fail; fall through to real
         return real_exists(path)
 
     monkeypatch.setattr(os.path, "exists", fake_exists, raising=True)
@@ -485,7 +486,7 @@ def _install_smi_fake(monkeypatch, mode="ok"):
             if "nvidia-smi" in str(self):
                 return True
         except Exception:
-            pass
+            pass  # str() or comparison may fail; fall through to real
         return real_path_exists(self, *args, **kwargs)
 
     monkeypatch.setattr(pathlib.Path, "exists", fake_path_exists, raising=True)

@@ -368,7 +368,7 @@ def _nvml_shutdown(lib) -> None:
     try:
         lib.nvmlShutdown()
     except Exception:
-        pass
+        pass  # shutdown failure is not actionable
 
 
 def _nvml_driver_cuda() -> tuple[tuple[int, int] | None, str]:
@@ -580,7 +580,7 @@ def _probe_memory_state(*, torch=None) -> tuple[str, str]:
         if evidence:
             note += f"; {len(evidence)} evidence item(s)"
     except Exception:
-        pass
+        pass  # evidence may be non-iterable
     return state, note
 
 
