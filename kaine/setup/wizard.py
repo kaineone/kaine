@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
+
 # The required CAL welfare acknowledgement phrase (mirrors kaine.lifecycle).
 ACK_PHRASE = "I acknowledge the CAL welfare terms"
 
@@ -95,6 +97,10 @@ class WizardResult:
     acknowledged: bool
     config: dict[str, Any] = field(default_factory=dict)
     extras: list[str] = field(default_factory=list)
+    mismatch_verdict: MismatchVerdict | None = None
+    corrective_install_accepted: bool | None = None
+    corrective_install_ran: bool = False
+    corrective_install_ok: bool | None = None
 
 
 def _set(cfg: dict[str, Any], table: str, key: str, value: Any) -> None:
@@ -290,6 +296,86 @@ def _ask(input_fn: Callable[[str], str], prompt: str, default: str = "") -> str:
     return raw or default
 
 
+def _accel_mismatch_step(
+    *,
+    input_fn: Callable[[str], str],
+    line: Callable[[str], None],
+    host: dict[str, Any],
+    torch_cuda_probes: dict[str, Any] | None,
+    corrective_install_fn: Callable[[str], bool] | None,
+    wheel_index_url: str | None,
+    defaults: bool,
+) -> dict[str, Any]:
+    line()
+    line("-" * 70)
+    line("Accelerator/runtime compatibility check")
+    line("-" * 70)
+    driver_cuda_version = host.get("cuda_version")
+    if driver_cuda_version is None:
+        line("No accelerator detected — skipping mismatch check.")
+        return {"verdict": None, "accepted": None, "install_ran": False, "install_ok": None}
+    devices = host.get("cuda_devices") or []
+    compute_capability = devices[0].get("compute_capability") if devices else None
+    if torch_cuda_probes is None:
+        line("Torch CUDA probes unavailable — skipping.")
+        return {"verdict": None, "accepted": None, "install_ran": False, "install_ok": None}
+    torch_cuda_version = torch_cuda_probes.get("torch_cuda_version")
+    arch_list = torch_cuda_probes.get("arch_list")
+    verdict = evaluate_mismatch(
+        driver_cuda_version, torch_cuda_version, compute_capability, arch_list,
+    )
+    sm_label = ""
+    if compute_capability:
+        sm_label = f"sm_{compute_capability[0] * 10 + compute_capability[1]}"
+    if verdict.status == "compatible":
+        line(f"Accelerator stack is compatible (SASS match for {sm_label}).")
+    elif verdict.status == "ptx_jit":
+        line(f"Accelerator stack is JIT-compatible (PTX from {verdict.ptx_arch} covers {sm_label}).")
+    elif verdict.status == "mismatch":
+        line("MISMATCH DETECTED:")
+        for reason in verdict.reasons:
+            line(f"  - {reason}")
+    else:
+        line(f"Status: {verdict.status}")
+        for reason in verdict.reasons:
+            line(f"  - {reason}")
+    accepted = None
+    install_ran = False
+    install_ok = None
+    if verdict.status == "mismatch" and not defaults:
+        line(
+            "The installed torch wheel cannot run kernels on this device. This\n"
+            "will cause 'no kernel image is available for execution on the device'\n"
+            "at runtime."
+        )
+        if corrective_install_fn is not None and wheel_index_url is not None:
+            accepted = _ask_yes_no(
+                input_fn,
+                "Reinstall the accelerator stack from the correct index for this host?",
+                default=False,
+            )
+            if accepted:
+                install_ran = True
+                install_ok = corrective_install_fn(wheel_index_url)
+                if install_ok:
+                    line("Corrective install completed successfully.")
+                else:
+                    line("Corrective install failed — check the output above.")
+            else:
+                line("Corrective install declined — continuing with existing stack.")
+        else:
+            line(
+                "Automatic corrective install not available — reinstall torch\n"
+                "manually from the correct wheel index."
+            )
+    return {
+        "verdict": verdict,
+        "accepted": accepted,
+        "install_ran": install_ran,
+        "install_ok": install_ok,
+    }
+
+
 def run_wizard(
     *,
     input_fn: Callable[[str], str],
@@ -298,6 +384,9 @@ def run_wizard(
     shipped_config: dict[str, Any],
     probe_services: Callable[[], dict[str, Any]] | None = None,
     probe_trainer: Callable[..., tuple[bool, str]] | None = None,
+    torch_cuda_probes: dict[str, Any] | None = None,
+    corrective_install_fn: Callable[[str], bool] | None = None,
+    wheel_index_url: str | None = None,
     defaults: bool = False,
 ) -> WizardResult:
     """Run the wizard's step logic and return the assembled operator-config.
@@ -405,6 +494,17 @@ def run_wizard(
             proposed[address] = answer
     for address, dev in proposed.items():
         _apply_device_address(cfg, address, dev)
+
+    # --- Step 3b: accelerator/runtime mismatch check -----------------------
+    mismatch_info = _accel_mismatch_step(
+        input_fn=input_fn,
+        line=line,
+        host=host,
+        torch_cuda_probes=torch_cuda_probes,
+        corrective_install_fn=corrective_install_fn,
+        wheel_index_url=wheel_index_url,
+        defaults=defaults,
+    )
 
     # --- Step 4: module selection -------------------------------------------
     line()
@@ -562,4 +662,12 @@ def run_wizard(
     else:
         line("State encryption left disabled (the default).")
 
-    return WizardResult(acknowledged=True, config=cfg, extras=extras)
+    return WizardResult(
+        acknowledged=True,
+        config=cfg,
+        extras=extras,
+        mismatch_verdict=mismatch_info.get("verdict"),
+        corrective_install_accepted=mismatch_info.get("accepted"),
+        corrective_install_ran=mismatch_info.get("install_ran", False),
+        corrective_install_ok=mismatch_info.get("install_ok"),
+    )
