@@ -9,17 +9,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from kaine.bus.schema import Event
 from kaine.lifecycle.manager import ForkManager
+from kaine.nexus.auth import require_operator_token
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import NexusConfig
 from kaine.nexus.conversation import (
     ConversationState,
     build_conversation_router,
 )
+from kaine.nexus.csrf import NexusCSRFMiddleware
 from kaine.nexus.cycle_control import build_cycle_control_router, control_snapshot
 from kaine.nexus.diagnostics import build_diagnostics_router, push_snapshots_periodically
 from kaine.nexus.health import HealthProber
@@ -76,10 +78,21 @@ def create_app(
             await bridge.stop()
 
     app = FastAPI(lifespan=lifespan)
+    app.state.config = config
 
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    # CSRF/Origin protection rejects cross-origin or rebinding requests with
+    # 403 before they reach route handlers.
+    app.add_middleware(NexusCSRFMiddleware, config=config)
+
+    # Auth dependency: required for state-changing endpoints and privileged
+    # read surfaces when conversation or dev content override is enabled.
+    privileged_read = config.conversation_enabled or config.dev_content_override
+    state_change_dep = [Depends(require_operator_token)]
+    read_dep = [Depends(require_operator_token)] if privileged_read else []
 
     if config.conversation_enabled:
         app.include_router(
@@ -96,7 +109,8 @@ def create_app(
                 health_prober=health_prober,
                 rate_control_publisher=rate_control_publisher,
                 evaluation_provider=evaluation_provider,
-            )
+            ),
+            dependencies=read_dep,
         )
     if config.diagnostics_enabled:
         app.include_router(
@@ -110,10 +124,11 @@ def create_app(
                 cycle_control_provider=control_snapshot,
                 health_prober=health_prober,
                 rate_control_publisher=rate_control_publisher,
-            )
+            ),
+            dependencies=read_dep,
         )
-        app.include_router(build_perception_router())
-        app.include_router(build_cycle_control_router())
+        app.include_router(build_perception_router(), dependencies=state_change_dep)
+        app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
     return app
 
 

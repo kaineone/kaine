@@ -45,10 +45,26 @@ async def _make_client(
     state: ConversationState | None = None,
     health_prober=None,
     rate_control_publisher=None,
+    token: str | None = "test-token",
 ):
     # Conversation is deactivated by default in the base-thesis form; these router
     # tests exercise both surfaces, so enable conversation unless a test overrides.
-    config = config or NexusConfig(conversation_enabled=True)
+    base = NexusConfig(
+        conversation_enabled=True,
+        # TestClient sends Host: test; allow it so CSRF validation passes.
+        host_allowlist=("127.0.0.1", "localhost", "test"),
+    )
+    if config is None:
+        config = base
+    else:
+        # Merge explicit overrides onto the test default.
+        from dataclasses import replace
+
+        config = replace(base, **config.__dict__)
+    if token is not None:
+        from dataclasses import replace
+
+        config = replace(config, operator_token=token)
     bus = StubBus()
     privacy = PrivacyFilter(dev_content_override=config.dev_content_override)
     bridge = BusBridge(bus, privacy, streams=[], poll_interval_s=0.01)
@@ -94,7 +110,7 @@ async def test_conversation_route_renders_entity_name():
     client, app = await _make_client(state=state)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/")
+            r = await client.get("/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         assert "Lyra" in r.text
 
@@ -112,10 +128,10 @@ async def test_console_does_not_render_transcript_text():
     client, app = await _make_client(history=history)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/")
+            r = await client.get("/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         assert "should not appear" not in r.text  # internal monologue never leaks
-        assert "hi there" not in r.text            # transcript panel removed
+        assert "hi there" not in r.text  # transcript panel removed
 
 
 @pytest.mark.asyncio
@@ -128,7 +144,7 @@ async def test_diagnostics_route_has_no_message_text(tmp_path):
     )
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/")
+            r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         # No text from any history event leaks into diagnostics.
         assert "secret message" not in r.text
@@ -142,7 +158,7 @@ async def test_diagnostics_returns_404_when_disabled():
     client, app = await _make_client(config=config)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/")
+            r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 404
 
 
@@ -152,7 +168,7 @@ async def test_conversation_returns_404_when_disabled():
     client, app = await _make_client(config=config)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/")
+            r = await client.get("/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 404
 
 
@@ -162,7 +178,7 @@ async def test_dev_override_shows_banner():
     client, app = await _make_client(config=config)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/")
+            r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         assert "dev mode" in r.text.lower()
 
@@ -188,7 +204,9 @@ async def test_forks_endpoint_lists_snapshots(tmp_path):
     client, app = await _make_client(fork_manager=fm)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/forks.json")
+            r = await client.get(
+                "/diagnostics/forks.json", headers={"Authorization": "Bearer test-token"}
+            )
         assert r.status_code == 200
         data = r.json()
         assert any(f["id"] == snap.id for f in data["forks"])
@@ -218,6 +236,7 @@ async def test_post_fork_creates_new_snapshot(tmp_path):
             r = await client.post(
                 "/diagnostics/forks",
                 json={"parent_id": parent.id, "label": "child", "shed": []},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 200, r.text
         body = r.json()
@@ -229,14 +248,14 @@ async def test_post_fork_creates_new_snapshot(tmp_path):
 @pytest.mark.parametrize(
     "bad_id",
     [
-        "/etc/passwd",              # absolute path
-        "../../../../etc/passwd",   # parent-dir traversal
-        "..",                       # bare parent ref
-        "abc/def",                  # embedded separator
-        "aaaaaaaaaaaaaaaZ",         # non-hex char
-        "aaaaaaaa",                 # too short
-        "aaaaaaaaaaaaaaaaaaaa",     # too long
-        "",                         # empty
+        "/etc/passwd",  # absolute path
+        "../../../../etc/passwd",  # parent-dir traversal
+        "..",  # bare parent ref
+        "abc/def",  # embedded separator
+        "aaaaaaaaaaaaaaaZ",  # non-hex char
+        "aaaaaaaa",  # too short
+        "aaaaaaaaaaaaaaaaaaaa",  # too long
+        "",  # empty
     ],
 )
 async def test_post_fork_rejects_traversal_and_malformed_ids(tmp_path, bad_id):
@@ -248,7 +267,9 @@ async def test_post_fork_rejects_traversal_and_malformed_ids(tmp_path, bad_id):
     async with client:
         async with app.router.lifespan_context(app):
             r = await client.post(
-                "/diagnostics/forks", json={"parent_id": bad_id, "label": "x"}
+                "/diagnostics/forks",
+                json={"parent_id": bad_id, "label": "x"},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 422, r.text
 
@@ -263,6 +284,7 @@ async def test_post_merge_rejects_traversal_ids(tmp_path):
             r = await client.post(
                 "/diagnostics/merges",
                 json={"snapshot_a_id": "0123456789abcdef", "snapshot_b_id": "../../etc/passwd"},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 422, r.text
 
@@ -282,6 +304,7 @@ async def test_post_merge_accepts_valid_merge_form_ids(tmp_path):
                     "snapshot_a_id": "0123456789abcdef",
                     "snapshot_b_id": "0123456789abcdef+fedcba9876543210",
                 },
+                headers={"Authorization": "Bearer test-token"},
             )
         # Not 422 (validation passed); 404 because the snapshots are absent.
         assert r.status_code == 404, r.text
@@ -316,6 +339,7 @@ async def test_post_fork_with_time_scale_stores_timing_profile(tmp_path):
                     "time_scale": 2.0,
                     "processing_rate_hz": 12.0,
                 },
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 200, r.text
         body = r.json()
@@ -351,6 +375,7 @@ async def test_post_fork_rejects_nonpositive_time_scale(tmp_path):
             r = await client.post(
                 "/diagnostics/forks",
                 json={"parent_id": parent.id, "time_scale": 0},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 422, r.text
 
@@ -379,6 +404,7 @@ async def test_post_fork_without_time_scale_has_no_timing(tmp_path):
             r = await client.post(
                 "/diagnostics/forks",
                 json={"parent_id": parent.id, "label": "plain"},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 200, r.text
         body = r.json()
@@ -415,7 +441,9 @@ async def test_forks_json_surfaces_timing_profile(tmp_path):
     client, app = await _make_client(fork_manager=fm)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/forks.json")
+            r = await client.get(
+                "/diagnostics/forks.json", headers={"Authorization": "Bearer test-token"}
+            )
         assert r.status_code == 200
         forks = {f["id"]: f for f in r.json()["forks"]}
         assert forks[child.id]["timing"]["time_scale"] == 2.0
@@ -428,7 +456,9 @@ async def test_metrics_json_returns_snapshot():
     client, app = await _make_client(metrics={"a": 1, "b": 2})
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/metrics.json")
+            r = await client.get(
+                "/diagnostics/metrics.json", headers={"Authorization": "Bearer test-token"}
+            )
         assert r.status_code == 200
         assert r.json() == {"a": 1, "b": 2}
 
@@ -466,7 +496,9 @@ async def test_health_endpoint_shape():
     client, app = await _make_client(health_prober=prober)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/health.json")
+            r = await client.get(
+                "/diagnostics/health.json", headers={"Authorization": "Bearer test-token"}
+            )
         assert r.status_code == 200
         data = r.json()
         assert "dependencies" in data and "modules" in data and "checked_at" in data
@@ -681,7 +713,7 @@ async def test_health_board_rendered_on_diagnostics_page():
     client, app = await _make_client(health_prober=prober)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/")
+            r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         assert "service" in r.text.lower() and "health" in r.text.lower()
         assert "Redis" in r.text
@@ -702,7 +734,7 @@ async def test_console_renders_health_in_sidebar():
     client, app = await _make_client(health_prober=prober)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/")
+            r = await client.get("/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         # The right sidebar carries the health board + its content.
         assert "rail--right" in r.text
@@ -718,7 +750,9 @@ async def test_health_json_when_no_prober_returns_empty():
     client, app = await _make_client(health_prober=None)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/health.json")
+            r = await client.get(
+                "/diagnostics/health.json", headers={"Authorization": "Bearer test-token"}
+            )
         assert r.status_code == 200
         assert r.json()["dependencies"] == []
 
@@ -739,6 +773,7 @@ async def test_cycle_rate_control_publishes_event():
             r = await client.post(
                 "/diagnostics/cycle/rates",
                 json={"processing_rate_hz": 5.0, "experiential_rate_hz": 2.0},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 200, r.text
         assert r.json()["published"] is True
@@ -754,7 +789,9 @@ async def test_cycle_rate_control_rejects_nonpositive():
     async with client:
         async with app.router.lifespan_context(app):
             r = await client.post(
-                "/diagnostics/cycle/rates", json={"processing_rate_hz": 0}
+                "/diagnostics/cycle/rates",
+                json={"processing_rate_hz": 0},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 422
 
@@ -765,7 +802,9 @@ async def test_cycle_rate_control_503_when_not_configured():
     async with client:
         async with app.router.lifespan_context(app):
             r = await client.post(
-                "/diagnostics/cycle/rates", json={"processing_rate_hz": 3.0}
+                "/diagnostics/cycle/rates",
+                json={"processing_rate_hz": 3.0},
+                headers={"Authorization": "Bearer test-token"},
             )
         assert r.status_code == 503
 
@@ -778,8 +817,8 @@ async def test_pages_share_dashboard_layout_marker():
     client, app = await _make_client(metrics={"cycle_status": "running"})
     async with client:
         async with app.router.lifespan_context(app):
-            conv = await client.get("/")
-            diag = await client.get("/diagnostics/")
+            conv = await client.get("/", headers={"Authorization": "Bearer test-token"})
+            diag = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         for resp in (conv, diag):
             assert resp.status_code == 200
             assert 'data-nexus-layout="dashboard"' in resp.text
@@ -850,8 +889,8 @@ def test_presence_viz_served_locally_no_cdn():
 
     # viz.js loads Three.js by relative path, not from any remote origin.
     viz_src = viz.read_text()
-    assert './vendor/three.module.js' in viz_src
-    assert './vendor/MarchingCubes.js' in viz_src
+    assert "./vendor/three.module.js" in viz_src
+    assert "./vendor/MarchingCubes.js" in viz_src
     # No remote ES-module import anywhere in the vendored viz/three sources.
     for src in (viz_src, three.read_text(), marching.read_text()):
         # `import ... from 'http(s)://...'` would be a runtime CDN fetch.
@@ -1018,7 +1057,9 @@ async def test_health_json_spot_via_endpoint(tmp_path):
     client, app = await _make_client(health_prober=prober)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/health.json")
+            r = await client.get(
+                "/diagnostics/health.json", headers={"Authorization": "Bearer test-token"}
+            )
         assert r.status_code == 200
         data = r.json()
         assert "spot" in data
@@ -1032,16 +1073,17 @@ async def test_diagnostics_page_has_spot_alert_overlay(tmp_path):
     client, app = await _make_client(health_prober=prober)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/")
+            r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         assert 'id="spot-alert"' in r.text
-        assert 'data-state' in r.text
+        assert "data-state" in r.text
         assert 'id="spot-console"' in r.text
 
 
 def test_spot_out_in_default_diagnostics_streams():
     """spot.out must be in DEFAULT_DIAGNOSTICS_STREAMS."""
     import kaine.nexus.__main__ as nexus_main
+
     assert "spot.out" in nexus_main.DEFAULT_DIAGNOSTICS_STREAMS
 
 
@@ -1070,7 +1112,7 @@ async def test_diagnostics_page_renders_entity_care_panel_readonly(tmp_path):
     client, app = await _make_client(health_prober=prober)
     async with client:
         async with app.router.lifespan_context(app):
-            r = await client.get("/diagnostics/")
+            r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
         text = r.text
         assert 'id="entity-care"' in text

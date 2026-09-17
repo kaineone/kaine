@@ -74,9 +74,7 @@ class IndividuationConfig:
             battery_path=str(data.get("battery_path", cls.battery_path)),
             output_dir=str(data.get("output_dir", cls.output_dir)),
             min_observations=int(data.get("min_observations", cls.min_observations)),
-            min_lived_time_s=float(
-                data.get("min_lived_time_s", cls.min_lived_time_s)
-            ),
+            min_lived_time_s=float(data.get("min_lived_time_s", cls.min_lived_time_s)),
         )
 
 
@@ -240,7 +238,7 @@ class ObserversConfig:
 
     coherence: bool = True
     replay: bool = True
-    replay_redact_content: bool = True   # privacy default: IDs only
+    replay_redact_content: bool = True  # privacy default: IDs only
     empatheia: bool = True
     voice_alignment_divergence: bool = True
     fatigue: bool = True
@@ -297,13 +295,9 @@ class WelfareConfig:
 
     def __post_init__(self) -> None:
         if self.interoceptive_distress_threshold < 0.0:
-            raise ValueError(
-                "interoceptive_distress_threshold must be non-negative"
-            )
+            raise ValueError("interoceptive_distress_threshold must be non-negative")
         if self.interoceptive_distress_duration_s <= 0.0:
-            raise ValueError(
-                "interoceptive_distress_duration_s must be positive"
-            )
+            raise ValueError("interoceptive_distress_duration_s must be positive")
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "WelfareConfig":
@@ -327,7 +321,7 @@ class WelfareConfig:
 @dataclass(frozen=True)
 class EvaluationConfig:
     enabled: bool = True
-    workspace_trajectory: bool = True
+    workspace_trajectory: bool = False
     ab_divergence: bool = True
     ab_sample_rate: float = 1.0
     voice_tracking: bool = True
@@ -410,23 +404,15 @@ class EvaluationConfig:
         chat_model_id = str(explicit_model or lingua_model_id or cls.chat_model_id)
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
-            workspace_trajectory=bool(
-                data.get("workspace_trajectory", cls.workspace_trajectory)
-            ),
+            workspace_trajectory=bool(data.get("workspace_trajectory", cls.workspace_trajectory)),
             ab_divergence=bool(data.get("ab_divergence", cls.ab_divergence)),
             ab_sample_rate=float(data.get("ab_sample_rate", cls.ab_sample_rate)),
             voice_tracking=bool(data.get("voice_tracking", cls.voice_tracking)),
-            module_attribution=bool(
-                data.get("module_attribution", cls.module_attribution)
-            ),
-            affect_correlation=bool(
-                data.get("affect_correlation", cls.affect_correlation)
-            ),
+            module_attribution=bool(data.get("module_attribution", cls.module_attribution)),
+            affect_correlation=bool(data.get("affect_correlation", cls.affect_correlation)),
             memory_probes=bool(data.get("memory_probes", cls.memory_probes)),
             memory_probe_interval_minutes=int(
-                data.get(
-                    "memory_probe_interval_minutes", cls.memory_probe_interval_minutes
-                )
+                data.get("memory_probe_interval_minutes", cls.memory_probe_interval_minutes)
             ),
             proactive_audit=bool(data.get("proactive_audit", cls.proactive_audit)),
             eidolon_accuracy=bool(data.get("eidolon_accuracy", cls.eidolon_accuracy)),
@@ -450,9 +436,7 @@ class EvaluationConfig:
             # explicit override. None for a keyless server.
             chat_api_key=(data.get("chat_api_key") or lingua_api_key),
             llm_context_window_seconds=int(
-                data.get(
-                    "llm_context_window_seconds", cls.llm_context_window_seconds
-                )
+                data.get("llm_context_window_seconds", cls.llm_context_window_seconds)
             ),
             require_semantic_embedder=bool(
                 data.get("require_semantic_embedder", cls.require_semantic_embedder)

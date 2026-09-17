@@ -4,6 +4,7 @@
 """Operator entrypoint: `python -m kaine.nexus` boots uvicorn against
 the configured Nexus app. NOT invoked by first-boot scripts.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,10 +25,10 @@ from kaine.lifecycle.manager import ForkManager, merger_from_name
 from kaine.nexus.app import create_app, make_default_privacy_filter
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import load_nexus_config
-from kaine.nexus.conversation import (
-    LINGUA_EXTERNAL_STREAM,
-)
+from kaine.nexus.conversation import LINGUA_EXTERNAL_STREAM
 from kaine.nexus.health import load_health_prober
+
+log = logging.getLogger(__name__)
 
 # Derived from the canonical registry so the monitor, the research-event
 # observer, and the raw archive never drift (see
@@ -146,12 +147,8 @@ async def _build():
     try:
         lifecycle_cfg = _load_lifecycle_config()
         adapter_merger_name = str(lifecycle_cfg.get("adapter_merger", "auto"))
-        adapter_merge_section = (
-            lifecycle_cfg.get("adapter_merge") or {}
-        )
-        adapter_merger = merger_from_name(
-            adapter_merger_name, config_section=adapter_merge_section
-        )
+        adapter_merge_section = lifecycle_cfg.get("adapter_merge") or {}
+        adapter_merger = merger_from_name(adapter_merger_name, config_section=adapter_merge_section)
         snapshots_path = str(lifecycle_cfg.get("snapshots_path", "state/forks"))
         max_retained = int(lifecycle_cfg.get("max_snapshots_retained", 64))
         fork_manager = ForkManager(
@@ -258,6 +255,18 @@ async def _build():
     return app, nexus_config
 
 
+def _is_loopback_host(host: str) -> bool:
+    import ipaddress
+
+    if host.lower() in {"127.0.0.1", "localhost", "::1"}:
+        return True
+    try:
+        addr = ipaddress.ip_address(host.split("%", 1)[0])
+        return addr.is_loopback
+    except ValueError:
+        return False
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO)
     loop = asyncio.new_event_loop()
@@ -265,6 +274,24 @@ def main() -> int:
         app, config = loop.run_until_complete(_build())
     finally:
         loop.close()
+
+    if not _is_loopback_host(config.host):
+        if not config.non_loopback_allowed:
+            log.error(
+                "nexus: refusing to bind non-loopback host %s without "
+                "[nexus].non_loopback_allowed = true",
+                config.host,
+            )
+            return 1
+        if not config.operator_token:
+            log.error(
+                "nexus: refusing to bind non-loopback host %s without a "
+                "configured operator_token (KAINE_NEXUS_TOKEN or "
+                "config/secrets.toml [nexus] operator_token)",
+                config.host,
+            )
+            return 1
+
     uvicorn.run(app, host=config.host, port=config.port)
     return 0
 

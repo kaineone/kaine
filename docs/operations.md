@@ -11,12 +11,18 @@ have read [Getting Started](getting-started.md) and [Security and Privacy](secur
 
 ```bash
 # Terminal 1 — Nexus dashboard
+export KAINE_NEXUS_TOKEN="$(cat ~/.kaine/nexus-token)"  # or config/secrets.toml
 python -m kaine.nexus
 
 # Terminal 2 — cognitive cycle (operator must be present)
 export KAINE_CYCLE_OPERATOR_PRESENT=1
 python -m kaine.cycle
 ```
+
+Nexus ships bound to loopback and requires `Authorization: Bearer <token>` for
+state-changing endpoints and privileged read surfaces. Set `KAINE_NEXUS_TOKEN`
+before starting, or place the token in `config/secrets.toml` under
+`[nexus] operator_token`.
 
 A fresh launch always clears any stale freeze left by a previous run; the
 entity always starts running.
@@ -241,7 +247,7 @@ While a remote camera/mic is connected (and `claim_senses` is true) the matching
 ### Security and privacy
 
 - **Bind to the tailnet.** Set `[remote_bridge].host` to the host's Tailscale address (100.x.y.z). Never `0.0.0.0` on a public NIC. The tailnet ACL is the security boundary.
-- **Token.** Set `[remote_bridge].token` for defense-in-depth; clients present it as `?token=…` or `Authorization: Bearer …`, otherwise the handshake is closed.
+- **Token.** Set `[remote_bridge].token` for defense-in-depth. Clients must present it as `Authorization: Bearer <token>`; query-string and `Sec-WebSocket-Protocol` tokens are rejected to keep the secret out of logs and browser history. Without a token, the bridge refuses to bind a non-loopback host.
 - **Zero-persistence holds.** Remote frames, PCM, and tapped speech exist only in memory; the bridge writes nothing to disk (guarded by `tests/test_remote_bridge.py`).
 - **Secure contexts for browser clients.** Browsers require HTTPS for camera/mic access. The simplest path is `tailscale serve`, which gives the host a real certificate on its `ts.net` name and reverse-proxies (including WebSocket upgrades) to the locally-bound bridge.
 

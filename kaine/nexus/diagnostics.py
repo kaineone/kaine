@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ from kaine.lifecycle.timing_profile import (
     build_timing_metadata,
     fork_timing_profile,
 )
+from kaine.nexus.auth import require_operator_token
 from kaine.nexus.bridge import BusBridge, event_to_sse_payload
 from kaine.nexus.health import HealthProber
 
@@ -35,7 +36,7 @@ def asset_url(path: str) -> str:
     back to the bare path if the file can't be stat'd."""
     rel = path.split("?", 1)[0]
     if rel.startswith("/static/"):
-        f = _STATIC_DIR / rel[len("/static/"):]
+        f = _STATIC_DIR / rel[len("/static/") :]
         try:
             return f"{rel}?v={int(f.stat().st_mtime)}"
         except OSError:
@@ -129,15 +130,9 @@ async def push_snapshots_periodically(
     logged and never kills the loop — the next tick tries again.
     """
     ttl = (
-        health_prober.cache_ttl_s
-        if health_prober is not None
-        else DEFAULT_SNAPSHOT_PUSH_INTERVAL_S
+        health_prober.cache_ttl_s if health_prober is not None else DEFAULT_SNAPSHOT_PUSH_INTERVAL_S
     )
-    wait_s = (
-        interval_s
-        if interval_s is not None
-        else max(DEFAULT_SNAPSHOT_PUSH_INTERVAL_S, ttl)
-    )
+    wait_s = interval_s if interval_s is not None else max(DEFAULT_SNAPSHOT_PUSH_INTERVAL_S, ttl)
     while True:
         try:
             metrics = metrics_snapshot()
@@ -268,12 +263,10 @@ def build_diagnostics_router(
     @router.get("/health.json")
     async def health_json():
         if health_prober is None:
-            return JSONResponse(
-                {"dependencies": [], "modules": [], "checked_at": None}
-            )
+            return JSONResponse({"dependencies": [], "modules": [], "checked_at": None})
         return JSONResponse(await health_prober.snapshot())
 
-    @router.post("/cycle/rates")
+    @router.post("/cycle/rates", dependencies=[Depends(require_operator_token)])
     async def set_cycle_rates(body: RateControlBody):
         if rate_control_publisher is None:
             raise HTTPException(503, "cycle rate control not configured")
@@ -323,7 +316,7 @@ def build_diagnostics_router(
                 continue
         return JSONResponse({"forks": out})
 
-    @router.post("/forks")
+    @router.post("/forks", dependencies=[Depends(require_operator_token)])
     async def create_fork(body: ForkRequestBody):
         if fork_manager is None:
             raise HTTPException(503, "fork manager not configured")
@@ -363,7 +356,7 @@ def build_diagnostics_router(
             out["timing"] = profile.to_metadata()
         return out
 
-    @router.post("/merges")
+    @router.post("/merges", dependencies=[Depends(require_operator_token)])
     async def create_merge(body: MergeRequestBody):
         if fork_manager is None:
             raise HTTPException(503, "fork manager not configured")
@@ -391,7 +384,7 @@ def build_diagnostics_router(
             raise HTTPException(409, str(exc))
         return {"id": snap.id, "parent_id": snap.parent_id, "label": snap.label}
 
-    @router.get("/stream")
+    @router.get("/stream", dependencies=[Depends(require_operator_token)])
     async def diagnostics_stream(request: Request):
         client = bridge.add_client("diagnostics")
 
@@ -401,9 +394,7 @@ def build_diagnostics_router(
                     if await request.is_disconnected():
                         break
                     try:
-                        entry_id, event = await asyncio.wait_for(
-                            client.queue.get(), timeout=15.0
-                        )
+                        entry_id, event = await asyncio.wait_for(client.queue.get(), timeout=15.0)
                     except asyncio.TimeoutError:
                         yield ": keepalive\n\n"
                         continue

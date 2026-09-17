@@ -20,6 +20,14 @@ from kaine.evaluation.ab_divergence import ABDivergenceObserver
 from kaine.evaluation.embeddings import HashEmbedder
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+
+@pytest.fixture(autouse=True)
+def _disable_state_encryption_for_records():
+    """These tests read raw JSONL sink output; ensure encryption is off."""
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    yield
 
 
 def _set_window(tmp_path, phase):

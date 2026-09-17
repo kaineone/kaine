@@ -20,6 +20,15 @@ class NexusConfig:
     # Privacy override. Default False. When True, diagnostics surface
     # receives full content payloads. Operators see a "dev mode" banner.
     dev_content_override: bool = False
+    # Operator authentication. Empty string means no token is configured;
+    # state-changing endpoints and privileged read surfaces return 401.
+    # Loaded from KAINE_NEXUS_TOKEN env or config/secrets.toml [nexus] operator_token.
+    operator_token: str = ""
+    # CSRF/Origin protection. Defaults cover loopback-only operation.
+    allowed_origins: tuple[str, ...] = ("http://127.0.0.1:8088", "http://localhost:8088")
+    host_allowlist: tuple[str, ...] = ("127.0.0.1", "localhost")
+    # Explicit opt-in required to bind a non-loopback interface.
+    non_loopback_allowed: bool = False
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "NexusConfig":
@@ -33,7 +42,21 @@ class NexusConfig:
                 data.get("conversation_history_lookback", cls.conversation_history_lookback)
             ),
             dev_content_override=bool(data.get("dev_content_override", cls.dev_content_override)),
+            operator_token=str(data.get("operator_token", cls.operator_token)),
+            allowed_origins=cls._parse_string_tuple(
+                data.get("allowed_origins", cls.allowed_origins)
+            ),
+            host_allowlist=cls._parse_string_tuple(data.get("host_allowlist", cls.host_allowlist)),
+            non_loopback_allowed=bool(data.get("non_loopback_allowed", cls.non_loopback_allowed)),
         )
+
+    @staticmethod
+    def _parse_string_tuple(value: Any) -> tuple[str, ...]:
+        if isinstance(value, str):
+            return tuple(v.strip() for v in value.split(",") if v.strip())
+        if isinstance(value, (list, tuple)):
+            return tuple(str(v).strip() for v in value if str(v).strip())
+        return ()
 
 
 def _env_flag(name: str) -> bool | None:
@@ -75,4 +98,7 @@ def load_nexus_config(path: str | os.PathLike[str] | None = None) -> NexusConfig
     conversation = _env_flag("KAINE_NEXUS_CONVERSATION_ENABLED")
     if conversation is not None:
         config = replace(config, conversation_enabled=conversation)
+    token = os.environ.get("KAINE_NEXUS_TOKEN")
+    if token is not None:
+        config = replace(config, operator_token=token)
     return config

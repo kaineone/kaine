@@ -15,16 +15,18 @@ poll that file and start/stop their own streams to match.
 The privacy boundary (PrivacyFilter at the BusBridge) is unchanged.
 Transcription text never reaches the diagnostics SSE.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
+from kaine.nexus.auth import require_operator_token
 from kaine.perception_state import (
     DESIRED_PATH,
     LOCI,
@@ -70,12 +72,14 @@ def _availability() -> dict[str, bool]:
     try:
         import sounddevice  # noqa: F401
         import webrtcvad  # noqa: F401
+
         out["audio_available"] = True
     except ImportError:
         # Optional [audio] extra not installed — leave audio_available False.
         pass
     try:
         import cv2  # noqa: F401
+
         out["video_available"] = True
     except ImportError:
         # Optional [vision] extra not installed — leave video_available False.
@@ -146,9 +150,7 @@ def build_perception_router(
             return None
         url = f"http://127.0.0.1:{_preview_port()}{path}"
         try:
-            async with httpx.AsyncClient(
-                timeout=_PREVIEW_PROXY_TIMEOUT_S
-            ) as client:
+            async with httpx.AsyncClient(timeout=_PREVIEW_PROXY_TIMEOUT_S) as client:
                 return await client.get(url)
         except (httpx.HTTPError, OSError):
             # Cycle down / preview server not listening → honest "no preview".
@@ -177,7 +179,7 @@ def build_perception_router(
         snap["preview_enabled"] = perception_preview.preview_enabled()
         return JSONResponse(snap)
 
-    @router.post("/toggle")
+    @router.post("/toggle", dependencies=[Depends(require_operator_token)])
     async def toggle(body: PerceptionToggleBody):
         if body.surface == "audio":
             new_desired = write_desired_audio(body.active, desired_path)
@@ -227,7 +229,7 @@ def build_perception_router(
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.post("/locus")
+    @router.post("/locus", dependencies=[Depends(require_operator_token)])
     async def set_locus(body: PerceptionLocusBody):
         new_desired = write_desired_locus(body.locus, body.locked, desired_path)
         log.info(

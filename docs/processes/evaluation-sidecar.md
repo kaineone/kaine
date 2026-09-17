@@ -245,12 +245,15 @@ engine's decision-making over time.
 `kaine/evaluation/trajectory.py`
 
 **Stream:** `workspace.broadcast`
-**Toggle:** `[evaluation].workspace_trajectory` (live by default)
+**Toggle:** `[evaluation].workspace_trajectory` (off by default; opt-in)
 **Output:** `data/workspace_trajectory/trajectory_<date>.jsonl`
 
 Writes every Syneidesis broadcast as JSONL, with tick index, salience scores,
 and Thymos state (when a `thymos_state_provider` is wired) alongside each
-selected-coalition entry.
+selected-coalition entry. Before persistence, each selected entry is scrubbed
+through the shared `PrivacyFilter` so raw message text, memory bodies, and other
+content-bearing payloads are redacted; only source, type, salience, and causal
+metadata remain.
 
 ### `AttributionRecorder`
 

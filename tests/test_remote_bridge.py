@@ -9,6 +9,7 @@ token auth, video → Topos, PCM → VAD → Audition (source_label="remote"),
 Vox speech tap broadcast, transcript forwarding, claim/restore of physical
 senses, and zero-persistence during a full exchange.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -156,8 +157,11 @@ async def test_token_rejects_and_accepts(bus):
             assert exc_info.value.rcvd.code == 4401
         assert topos.frames == []
 
-        # Correct token (query param) → frame accepted.
-        async with websockets.connect(f"{url}/ingest/video?token=s3cret") as ws:
+        # Correct token via Authorization header → frame accepted.
+        async with websockets.connect(
+            f"{url}/ingest/video",
+            additional_headers={"Authorization": "Bearer s3cret"},
+        ) as ws:
             await ws.send(_jpeg_bytes())
             await _wait_for(lambda: len(topos.frames) == 1)
     finally:
@@ -291,14 +295,17 @@ async def test_transcript_forwards_entity_and_heard_lines(bus):
     try:
         async with websockets.connect(f"{url}/transcript") as ws:
             await asyncio.sleep(0.15)  # consumer + cursor seeding
-            await _publish(bus, "lingua.external", "lingua", "external_speech",
-                           {"text": "hello operator"})
-            await _publish(bus, "audition.out", "audition", "audition.transcription",
-                           {"text": "hello kaine", "source_label": "remote"})
-            lines = [
-                json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
-                for _ in range(2)
-            ]
+            await _publish(
+                bus, "lingua.external", "lingua", "external_speech", {"text": "hello operator"}
+            )
+            await _publish(
+                bus,
+                "audition.out",
+                "audition",
+                "audition.transcription",
+                {"text": "hello kaine", "source_label": "remote"},
+            )
+            lines = [json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0)) for _ in range(2)]
         by_role = {line["role"]: line for line in lines}
         assert by_role["entity"]["text"] == "hello operator"
         assert by_role["heard"]["text"] == "hello kaine"
@@ -396,9 +403,7 @@ def test_affect_line_returns_none_for_unrelated_stream_and_type():
     assert RemoteBridge._affect_line(THYMOS_STREAM, _ev("thymos.state", {})) is None
     # Right type, state present but missing arousal → None.
     assert (
-        RemoteBridge._affect_line(
-            THYMOS_STREAM, _ev("thymos.state", {"state": {"valence": 0.1}})
-        )
+        RemoteBridge._affect_line(THYMOS_STREAM, _ev("thymos.state", {"state": {"valence": 0.1}}))
         is None
     )
     # No discrete label in payload → line omits "label" (only forwards what exists).
@@ -430,7 +435,7 @@ def test_affect_coalescing_throttle_drops_too_soon(bus):
 
     assert first_passed == 1
     assert after_too_soon == 1  # the too-soon line was coalesced away
-    assert after_later == 2     # the later line forwarded
+    assert after_later == 2  # the later line forwarded
 
 
 @pytest.mark.asyncio
@@ -445,16 +450,12 @@ async def test_affect_respects_origin_allowlist(bus):
     try:
         # Disallowed Origin → websockets refuses the handshake (403).
         with pytest.raises(websockets.exceptions.InvalidStatus) as exc_info:
-            async with websockets.connect(
-                f"{url}/affect", origin="https://evil.example"
-            ):
+            async with websockets.connect(f"{url}/affect", origin="https://evil.example"):
                 pass
         assert exc_info.value.response.status_code == 403
 
         # Allowed Origin → connects and receives a forwarded affect line.
-        async with websockets.connect(
-            f"{url}/affect", origin="http://127.0.0.1:17893"
-        ) as ws:
+        async with websockets.connect(f"{url}/affect", origin="http://127.0.0.1:17893") as ws:
             await asyncio.sleep(0.15)
             await _publish(
                 bus,
@@ -481,8 +482,11 @@ async def test_affect_respects_token_auth(bus):
                 await ws.recv()
             assert exc_info.value.rcvd.code == 4401
 
-        # Correct token (query param) → connects and receives an affect line.
-        async with websockets.connect(f"{url}/affect?token=s3cret") as ws:
+        # Correct token via Authorization header → connects and receives an affect line.
+        async with websockets.connect(
+            f"{url}/affect",
+            additional_headers={"Authorization": "Bearer s3cret"},
+        ) as ws:
             await asyncio.sleep(0.15)
             await _publish(
                 bus,
@@ -534,7 +538,19 @@ async def test_claim_senses_sets_and_restores_physical_video(bus, monkeypatch):
         await bridge.stop()
 
 
-BANNED_EXTENSIONS = (".pt", ".pkl", ".npy", ".arrow", ".jsonl", ".wav", ".jpg", ".jpeg", ".png", ".webm", ".mp4")
+BANNED_EXTENSIONS = (
+    ".pt",
+    ".pkl",
+    ".npy",
+    ".arrow",
+    ".jsonl",
+    ".wav",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webm",
+    ".mp4",
+)
 
 
 def _scan(root: Path) -> set[Path]:
@@ -638,32 +654,16 @@ def _oversized_png() -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_token_via_subprotocol_authenticates(bus):
-    """Browser clients offer the token as `kaine.bearer.<token>`; a matching
-    subprotocol authenticates. The server selects NO subprotocol in response."""
+async def test_subprotocol_token_is_rejected(bus):
+    """Subprotocol token channels are intentionally disabled: they leak the
+    secret into handshake logs and browser history. Only Authorization: Bearer
+    is accepted."""
     topos = _StubTopos()
     bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
     url = await _started(bridge)
     try:
         async with websockets.connect(
             f"{url}/ingest/video", subprotocols=["kaine.bearer.s3cret"]
-        ) as ws:
-            # RFC-compliant: server did not echo/select a subprotocol.
-            assert ws.subprotocol is None
-            await ws.send(_jpeg_bytes())
-            await _wait_for(lambda: len(topos.frames) == 1)
-    finally:
-        await bridge.stop()
-
-
-@pytest.mark.asyncio
-async def test_wrong_subprotocol_token_is_rejected(bus):
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
-    url = await _started(bridge)
-    try:
-        async with websockets.connect(
-            f"{url}/ingest/video", subprotocols=["kaine.bearer.WRONG"]
         ) as ws:
             with pytest.raises(websockets.exceptions.ConnectionClosed) as exc_info:
                 await ws.recv()
@@ -674,7 +674,24 @@ async def test_wrong_subprotocol_token_is_rejected(bus):
 
 
 @pytest.mark.asyncio
-async def test_bearer_header_path_still_works(bus):
+async def test_query_param_token_is_rejected(bus):
+    """Query-string tokens are intentionally disabled: they appear in proxy
+    and server logs. Only Authorization: Bearer is accepted."""
+    topos = _StubTopos()
+    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
+    url = await _started(bridge)
+    try:
+        async with websockets.connect(f"{url}/ingest/video?token=s3cret") as ws:
+            with pytest.raises(websockets.exceptions.ConnectionClosed) as exc_info:
+                await ws.recv()
+            assert exc_info.value.rcvd.code == 4401
+        assert topos.frames == []
+    finally:
+        await bridge.stop()
+
+
+@pytest.mark.asyncio
+async def test_bearer_header_path_works(bus):
     """The Authorization: Bearer path remains valid (constant-time compare)."""
     topos = _StubTopos()
     bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
@@ -724,16 +741,12 @@ async def test_origin_allowlist_refuses_and_accepts(bus):
     try:
         # Disallowed Origin → websockets refuses the handshake (403).
         with pytest.raises(websockets.exceptions.InvalidStatus) as exc_info:
-            async with websockets.connect(
-                f"{url}/ingest/video", origin="https://evil.example"
-            ):
+            async with websockets.connect(f"{url}/ingest/video", origin="https://evil.example"):
                 pass
         assert exc_info.value.response.status_code == 403
 
         # Allowed Origin → accepted, frame ingested.
-        async with websockets.connect(
-            f"{url}/ingest/video", origin="http://127.0.0.1:17893"
-        ) as ws:
+        async with websockets.connect(f"{url}/ingest/video", origin="http://127.0.0.1:17893") as ws:
             await ws.send(_jpeg_bytes())
             await _wait_for(lambda: len(topos.frames) == 1)
 
@@ -746,9 +759,7 @@ async def test_origin_allowlist_refuses_and_accepts(bus):
 
 
 def test_parse_origins_maps_null_and_empty_to_none():
-    cfg = RemoteBridgeConfig.from_section(
-        {"allowed_origins": ["null", "", "https://app.example"]}
-    )
+    cfg = RemoteBridgeConfig.from_section({"allowed_origins": ["null", "", "https://app.example"]})
     assert cfg.allowed_origins == (None, None, "https://app.example")
     # Omitted key keeps the secure default allowlist.
     from kaine.remote.bridge import DEFAULT_ALLOWED_ORIGINS
@@ -802,9 +813,7 @@ def test_ssl_context_built_only_when_cert_and_key_present(tmp_path):
     assert bridge_none._build_ssl_context() is None
 
     # Only one of the pair → still plain ws.
-    bridge_partial = RemoteBridge(
-        _config(ssl_certfile="/x/cert.pem"), bus=None, topos=_StubTopos()
-    )
+    bridge_partial = RemoteBridge(_config(ssl_certfile="/x/cert.pem"), bus=None, topos=_StubTopos())
     assert bridge_partial._build_ssl_context() is None
 
     # A real self-signed cert+key → a usable SSLContext.
@@ -837,6 +846,22 @@ def test_config_threads_new_security_fields():
     assert d.ssl_certfile == "" and d.ssl_keyfile == ""
 
 
+@pytest.mark.asyncio
+async def test_bridge_rejects_non_loopback_without_token(bus):
+    bridge = RemoteBridge(_config(host="0.0.0.0"), bus=bus)
+    with pytest.raises(RuntimeError, match="non-loopback remote bridge requires a token"):
+        await bridge.start()
+
+
+@pytest.mark.asyncio
+async def test_bridge_accepts_non_loopback_with_token(bus):
+    bridge = RemoteBridge(_config(host="0.0.0.0", token="s3cret"), bus=bus)
+    try:
+        await bridge.start()
+    finally:
+        await bridge.stop()
+
+
 def _make_self_signed(tmp_path):
     """Write a throwaway self-signed cert+key PEM pair, or skip if the host
     lacks a way to mint one. Used only to prove load_cert_chain succeeds."""
@@ -859,9 +884,7 @@ def _make_self_signed(tmp_path):
             .public_key(key.public_key())
             .serial_number(x509.random_serial_number())
             .not_valid_before(_dt.datetime.now(_dt.timezone.utc))
-            .not_valid_after(
-                _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=1)
-            )
+            .not_valid_after(_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=1))
             .sign(key, hashes.SHA256())
         )
         key_path.write_bytes(

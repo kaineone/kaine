@@ -41,6 +41,7 @@ matching physical sense is marked not-desired via the existing
 ``perception_state`` API so the physical camera/mic and the remote stream
 never fight; the prior desired state is restored on disconnect.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -343,7 +344,30 @@ class RemoteBridge:
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
+        import ipaddress
+
         import websockets
+
+        if not self._cfg.token:
+            try:
+                host = self._cfg.host.split("%", 1)[0]
+                addr = ipaddress.ip_address(host)
+                if not addr.is_loopback:
+                    log.error(
+                        "remote bridge: refusing to bind non-loopback host %s "
+                        "without a configured token",
+                        self._cfg.host,
+                    )
+                    raise RuntimeError("non-loopback remote bridge requires a token")
+            except ValueError:
+                # Host is a hostname (not an IP). Require a token unless it is
+                # a known loopback name.
+                if self._cfg.host.lower() not in {"127.0.0.1", "localhost", "::1"}:
+                    log.error(
+                        "remote bridge: refusing to bind host %s without a configured token",
+                        self._cfg.host,
+                    )
+                    raise RuntimeError("non-loopback remote bridge requires a token")
 
         if self._vox is not None and hasattr(self._vox, "add_playback_tap"):
             self._vox.add_playback_tap(self._speech_tap)
@@ -352,9 +376,7 @@ class RemoteBridge:
         self._tasks.append(
             asyncio.create_task(self._transcript_loop(), name="remote-bridge-transcript")
         )
-        self._tasks.append(
-            asyncio.create_task(self._affect_loop(), name="remote-bridge-affect")
-        )
+        self._tasks.append(asyncio.create_task(self._affect_loop(), name="remote-bridge-affect"))
         ssl_context = self._build_ssl_context()
         self._server = await websockets.serve(
             self._handle,
@@ -427,35 +449,20 @@ class RemoteBridge:
         one (timing-oracle hardening); empty presented never matches."""
         if not presented:
             return False
-        return hmac.compare_digest(
-            presented.encode("utf-8"), self._cfg.token.encode("utf-8")
-        )
+        return hmac.compare_digest(presented.encode("utf-8"), self._cfg.token.encode("utf-8"))
 
     def _authorized(self, connection: Any) -> bool:
         # No token configured → tailnet ACL is the boundary; allow (fast path).
         if not self._cfg.token:
             return True
         try:
-            # 1) ?token= query parameter.
-            query = urllib.parse.urlparse(connection.request.path).query
-            params = urllib.parse.parse_qs(query)
-            if self._token_ok(params.get("token", [""])[0]):
-                return True
-            # 2) Authorization: Bearer <token>.
+            # Authorization: Bearer <token> is the ONLY accepted channel.
+            # Query-string and Sec-WebSocket-Protocol token channels are
+            # intentionally rejected: they leak the token into logs, history,
+            # and referrers.
             auth = connection.request.headers.get("Authorization", "")
             if auth.startswith("Bearer ") and self._token_ok(auth[len("Bearer ") :]):
                 return True
-            # 3) Sec-WebSocket-Protocol: kaine.bearer.<token> (browser clients
-            #    can't set arbitrary WS headers; they offer the token as a
-            #    subprotocol). We authenticate but do NOT echo a selected
-            #    subprotocol — absent Sec-WebSocket-Protocol is RFC-compliant.
-            offered = connection.request.headers.get("Sec-WebSocket-Protocol", "")
-            for proto in offered.split(","):
-                proto = proto.strip()
-                if proto.startswith(BEARER_SUBPROTOCOL_PREFIX) and self._token_ok(
-                    proto[len(BEARER_SUBPROTOCOL_PREFIX) :]
-                ):
-                    return True
             return False
         except Exception:
             return False
@@ -600,9 +607,7 @@ class RemoteBridge:
         try:
             while True:
                 getter = asyncio.ensure_future(queue.get())
-                done, _ = await asyncio.wait(
-                    {getter, closed}, return_when=asyncio.FIRST_COMPLETED
-                )
+                done, _ = await asyncio.wait({getter, closed}, return_when=asyncio.FIRST_COMPLETED)
                 if closed in done:
                     getter.cancel()
                     return
@@ -686,8 +691,10 @@ class RemoteBridge:
             return None
         if not text:
             return None
-        ts = event.timestamp.isoformat() if hasattr(event.timestamp, "isoformat") else str(
-            event.timestamp
+        ts = (
+            event.timestamp.isoformat()
+            if hasattr(event.timestamp, "isoformat")
+            else str(event.timestamp)
         )
         return json.dumps(
             {
@@ -778,8 +785,10 @@ class RemoteBridge:
         arousal = dims.get("arousal")
         if not isinstance(valence, (int, float)) or not isinstance(arousal, (int, float)):
             return None
-        ts = event.timestamp.isoformat() if hasattr(event.timestamp, "isoformat") else str(
-            event.timestamp
+        ts = (
+            event.timestamp.isoformat()
+            if hasattr(event.timestamp, "isoformat")
+            else str(event.timestamp)
         )
         line: dict[str, Any] = {
             "valence": float(valence),
@@ -835,8 +844,6 @@ def build_remote_bridge(
     audition = _get("audition")
     vox = _get("vox")
     if topos is None and audition is None and vox is None:
-        log.warning(
-            "remote bridge enabled but none of topos/audition/vox are — not starting"
-        )
+        log.warning("remote bridge enabled but none of topos/audition/vox are — not starting")
         return None
     return RemoteBridge(cfg, bus=bus, topos=topos, audition=audition, vox=vox)
