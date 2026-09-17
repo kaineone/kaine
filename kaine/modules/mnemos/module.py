@@ -181,9 +181,7 @@ class Mnemos(BaseModule):
                 self._peer_cursors[stream] = "0-0"
         await super().initialize()
         self._tasks.append(
-            asyncio.create_task(
-                self._peer_consumer_loop(), name=f"{self.name}-affect-consumer"
-            )
+            asyncio.create_task(self._peer_consumer_loop(), name=f"{self.name}-affect-consumer")
         )
 
     async def shutdown(self) -> None:
@@ -203,8 +201,13 @@ class Mnemos(BaseModule):
         # identical snapshot we store this tick. It is throttled by a monotonic
         # cooldown and is NOT gated on snapshot.inhibited — recall is internal
         # cognition (like storing), not an outward effector action.
+        #
+        # Performance: the hot-path spontaneous recall searches short-term only,
+        # which uses cheap substring matching and produces zero embedder calls.
+        # Embedding is deferred to eviction/consolidation (short_term -> episodic)
+        # or to explicit episodic recall from other modules.
         if self._recall_on_workspace and self._recall_cooldown_due():
-            await self.recall(text)
+            await self.recall(text, collection="short_term")
             self._last_recall_monotonic = self._clock.now()
         payload = {
             "tick_index": snapshot.tick_index,
@@ -223,10 +226,7 @@ class Mnemos(BaseModule):
     def _recall_cooldown_due(self) -> bool:
         if self._last_recall_monotonic is None:
             return True
-        return (
-            self._clock.now() - self._last_recall_monotonic
-            >= self._recall_cooldown_s
-        )
+        return self._clock.now() - self._last_recall_monotonic >= self._recall_cooldown_s
 
     # ------------------------------------------------------------------
     # Affect subscription (thymos.state) + Hypnos window tracking
@@ -363,9 +363,7 @@ class Mnemos(BaseModule):
             )
             return []
         salience = (
-            self._alert_salience
-            if summary.max_affect_intensity >= 0.5
-            else self._baseline_salience
+            self._alert_salience if summary.max_affect_intensity >= 0.5 else self._baseline_salience
         )
         await self.publish(
             "mnemos.recall",
@@ -410,9 +408,7 @@ class Mnemos(BaseModule):
         if collections is None:
             # QdrantStorage or other remote backend — no in-memory vectors
             # to scale; downscaling is a no-op for remote backends.
-            log.debug(
-                "downscale_activations: storage has no in-memory _collections; skipped"
-            )
+            log.debug("downscale_activations: storage has no in-memory _collections; skipped")
             return 0
         total = 0
         for _name, points in collections.items():
@@ -421,9 +417,7 @@ class Mnemos(BaseModule):
                 if isinstance(vec, list) and vec:
                     point["vector"] = [v * factor for v in vec]
                     total += 1
-        log.info(
-            "downscale_activations: scaled %d vectors by factor %.4f", total, factor
-        )
+        log.info("downscale_activations: scaled %d vectors by factor %.4f", total, factor)
         return total
 
     async def select_cross_period_traces(
@@ -638,11 +632,7 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
         if event.type in _RAW_PERCEPTUAL_EVENT_TYPES:
             # Record that a raw-perceptual event was in the workspace, but never
             # its verbatim payload (raw sense data must not persist into memory).
-            pieces.append(
-                f"{event.source}:{event.type}@{entry_id}=<raw-perceptual omitted>"
-            )
+            pieces.append(f"{event.source}:{event.type}@{entry_id}=<raw-perceptual omitted>")
             continue
-        pieces.append(
-            f"{event.source}:{event.type}@{entry_id}={event.payload}"
-        )
+        pieces.append(f"{event.source}:{event.type}@{entry_id}={event.payload}")
     return " | ".join(pieces) if pieces else ""

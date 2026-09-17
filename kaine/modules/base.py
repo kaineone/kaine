@@ -108,9 +108,7 @@ class BaseModule(ABC):
     @classmethod
     def _enforce_name(cls) -> None:
         if not getattr(cls, "name", None):
-            raise TypeError(
-                f"{cls.__name__} must declare a class-level `name: ClassVar[str]`"
-            )
+            raise TypeError(f"{cls.__name__} must declare a class-level `name: ClassVar[str]`")
 
     @property
     def bus(self) -> AsyncBus:
@@ -221,9 +219,14 @@ class BaseModule(ABC):
 
     async def _workspace_loop(self) -> None:
         try:
-            async for entry_id, payload in self._bus.subscribe_workspace(
-                last_id=self._workspace_cursor
-            ):
+            # Prefer the blocking subscriber so idle modules do not poll Redis at
+            # 20 Hz when quiet. Fall back to the legacy polling subscriber for
+            # test doubles / older bus implementations.
+            if hasattr(self._bus, "subscribe_workspace_block"):
+                subscriber = self._bus.subscribe_workspace_block(last_id=self._workspace_cursor)
+            else:
+                subscriber = self._bus.subscribe_workspace(last_id=self._workspace_cursor)
+            async for entry_id, payload in subscriber:
                 if self._stopped.is_set():
                     break
                 self._workspace_cursor = entry_id
@@ -265,8 +268,7 @@ class BaseModule(ABC):
             inhibited=bool(payload.get("inhibited", False)),
             is_experiential=bool(payload.get("is_experiential", False)),
             salience_scores={
-                str(k): float(v)
-                for k, v in (payload.get("salience_scores") or {}).items()
+                str(k): float(v) for k, v in (payload.get("salience_scores") or {}).items()
             },
             metadata=dict(payload.get("metadata") or {}),
         )

@@ -36,9 +36,17 @@ from kaine.boot import (
     make_thymos,
     make_topos,
     make_vox,
+    rewire_module,
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.security.crypto import (
+    CryptoConfig,
+    CryptoConfigError,
+    StateEncryptor,
+    get_state_encryptor,
+    set_state_encryptor,
+)
 
 
 def _bus():
@@ -762,9 +770,7 @@ def test_committed_config_ships_all_modules_disabled():
     parsed = tomllib.loads(blob)
     modules = parsed.get("modules", {})
     enabled = sorted(name for name, on in modules.items() if on)
-    assert enabled == [], (
-        f"committed config must ship all modules off; enabled: {enabled}"
-    )
+    assert enabled == [], f"committed config must ship all modules off; enabled: {enabled}"
 
     # And building from an all-off config yields an empty registry.
     assert len(build_registry(_bus(), {"modules": {}})) == 0
@@ -801,8 +807,7 @@ def test_shipped_config_ships_spot_disabled():
     config = tomllib.loads((root / "config" / "kaine.toml").read_text())
     spot = config.get("spot", {})
     assert spot.get("enabled", False) is False, (
-        "shipped config must ship [spot].enabled = false (operator-supervised "
-        "first boot)"
+        "shipped config must ship [spot].enabled = false (operator-supervised first boot)"
     )
     # [spot.incident_log] ships enabled = true, but it is dormant because Spot
     # itself ships disabled — turning Spot on later gives the operator the
@@ -884,3 +889,175 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
 
     model = eidolon.self_inference.maintenance_cycle_end(SelfModel())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
+
+
+# ---------------------------------------------------------------------------
+# Spot recovery re-wiring (performance-test-coverage)
+# ---------------------------------------------------------------------------
+
+
+def test_rewire_module_restores_self_hearing_gate():
+    """After Spot rebuilds a module, rewire_module must re-inject the shared
+    SpeakingGate between vox and audition."""
+    from kaine.modules.registry import ModuleRegistry
+    from kaine.modules.vox.coordination import SpeakingGate
+
+    bus = _bus()
+    vox = make_vox(
+        bus,
+        {
+            "chatterbox_url": "http://127.0.0.1:8883",
+            "voice_mode": "predefined",
+            "output_format": "wav",
+            "sink_path": "/tmp/vox",
+        },
+    )
+    audition = make_audition(bus, {"speaches_url": "http://127.0.0.1:8000"})
+    registry = ModuleRegistry()
+    registry.register(vox)
+    registry.register(audition)
+
+    rewire_module(registry, "audition", {})
+    original_gate = audition._speaking_gate
+    assert isinstance(original_gate, SpeakingGate)
+    assert vox._speaking_gate is original_gate
+
+    # Simulate Spot rebuilding audition with a fresh instance.
+    new_audition = make_audition(bus, {"speaches_url": "http://127.0.0.1:8000"})
+    registry.replace("audition", new_audition)
+    rewire_module(registry, "audition", {})
+
+    assert new_audition._speaking_gate is original_gate
+    assert vox._speaking_gate is original_gate
+
+
+def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
+    """After Spot rebuilds eidolon, rewire_module must re-inject the Praxis
+    effector whitelist into the new self-inference engine."""
+    from kaine.modules.eidolon.document import SelfModel
+    from kaine.modules.registry import ModuleRegistry
+
+    bus = _bus()
+    praxis = make_praxis(
+        bus,
+        {
+            "sandbox_path": str(tmp_path / "praxis"),
+            "audit_log_path": str(tmp_path / "audit.log"),
+            "enabled_effectors": ["file_write", "notify"],
+            "shell_whitelist": {},
+        },
+    )
+    eidolon = make_eidolon(
+        bus,
+        {
+            "persistence_path": str(tmp_path / "self_model.json"),
+            "self_inference": {"enabled": True},
+        },
+    )
+    registry = ModuleRegistry()
+    registry.register(praxis)
+    registry.register(eidolon)
+
+    rewire_module(registry, "eidolon", {})
+    model = eidolon.self_inference.maintenance_cycle_end(SelfModel())
+    assert model.capability_map.get("effectors") == ["file_write", "notify"]
+
+    # Simulate Spot rebuilding eidolon.
+    new_eidolon = make_eidolon(
+        bus,
+        {
+            "persistence_path": str(tmp_path / "self_model2.json"),
+            "self_inference": {"enabled": True},
+        },
+    )
+    registry.replace("eidolon", new_eidolon)
+    rewire_module(registry, "eidolon", {})
+
+    new_model = new_eidolon.self_inference.maintenance_cycle_end(SelfModel())
+    assert new_model.capability_map.get("effectors") == ["file_write", "notify"]
+
+
+def test_rewire_module_restores_oscillator_wiring():
+    """After Spot rebuilds a module, rewire_module must attach a fresh oscillator
+    when the oscillatory layer is enabled."""
+    from kaine.modules.registry import ModuleRegistry
+
+    bus = _bus()
+    soma = make_soma(
+        bus,
+        {
+            "read_interval_s": 1.0,
+            "cycle_latency_target_ms": 300.0,
+        },
+    )
+    registry = ModuleRegistry()
+    registry.register(soma)
+
+    kaine_config = {
+        "oscillator": {
+            "enabled": True,
+            "population_size": 16,
+            "plv_window": 10,
+        }
+    }
+    rewire_module(registry, "soma", kaine_config)
+    assert soma.oscillator is not None
+
+    # Simulate Spot rebuilding soma.
+    new_soma = make_soma(
+        bus,
+        {
+            "read_interval_s": 1.0,
+            "cycle_latency_target_ms": 300.0,
+        },
+    )
+    assert new_soma.oscillator is None
+    registry.replace("soma", new_soma)
+    rewire_module(registry, "soma", kaine_config)
+    assert new_soma.oscillator is not None
+
+
+# ---------------------------------------------------------------------------
+# State-encryption boot wiring (performance-test-coverage)
+# ---------------------------------------------------------------------------
+
+
+def test_build_registry_encryption_enabled_fail_closed_without_key(
+    monkeypatch,
+):
+    """build_registry refuses to boot when state encryption is enabled but no
+    key is resolvable."""
+    monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
+    monkeypatch.setattr("kaine.security.crypto._load_key_from_keyring", lambda: None)
+    bus = _bus()
+    with pytest.raises(CryptoConfigError):
+        build_registry(
+            bus,
+            {
+                "modules": {},
+                "security": {"state_encryption": {"enabled": True}},
+            },
+        )
+
+
+def test_build_registry_encryption_enabled_installs_encryptor(monkeypatch, tmp_path):
+    """When a key is present and encryption is enabled, build_registry installs
+    an active encryptor as the process-global."""
+    import base64
+    import os
+
+    key = base64.b64encode(os.urandom(32)).decode("ascii")
+    monkeypatch.setenv("KAINE_STATE_KEY", key)
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    bus = _bus()
+    try:
+        build_registry(
+            bus,
+            {
+                "modules": {},
+                "security": {"state_encryption": {"enabled": True}},
+            },
+        )
+        assert get_state_encryptor().enabled is True
+    finally:
+        set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))

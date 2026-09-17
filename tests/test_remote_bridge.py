@@ -246,7 +246,7 @@ async def test_speech_tap_broadcasts_to_client(bus):
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/speech") as ws:
-            await asyncio.sleep(0.05)  # let the consumer subscribe
+            await _wait_for(lambda: len(bridge._speech_tap._queues) >= 1)
             await bridge._speech_tap.play(b"RIFFfakewav")
             clip = await asyncio.wait_for(ws.recv(), timeout=2.0)
         assert clip == b"RIFFfakewav"
@@ -294,7 +294,7 @@ async def test_transcript_forwards_entity_and_heard_lines(bus):
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/transcript") as ws:
-            await asyncio.sleep(0.15)  # consumer + cursor seeding
+            await _wait_for(lambda: len(bridge._transcript_queues) >= 1)
             await _publish(
                 bus, "lingua.external", "lingua", "external_speech", {"text": "hello operator"}
             )
@@ -327,7 +327,7 @@ async def test_affect_forwards_dimensional_state_line(bus):
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/affect") as ws:
-            await asyncio.sleep(0.15)  # consumer + cursor seeding
+            await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
                 "thymos.out",
@@ -356,7 +356,7 @@ async def test_affect_forwards_emotion_change_event(bus):
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/affect") as ws:
-            await asyncio.sleep(0.15)
+            await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
                 "thymos.out",
@@ -456,7 +456,7 @@ async def test_affect_respects_origin_allowlist(bus):
 
         # Allowed Origin → connects and receives a forwarded affect line.
         async with websockets.connect(f"{url}/affect", origin="http://127.0.0.1:17893") as ws:
-            await asyncio.sleep(0.15)
+            await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
                 "thymos.out",
@@ -487,7 +487,7 @@ async def test_affect_respects_token_auth(bus):
             f"{url}/affect",
             additional_headers={"Authorization": "Bearer s3cret"},
         ) as ws:
-            await asyncio.sleep(0.15)
+            await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
                 "thymos.out",
@@ -590,7 +590,7 @@ async def test_full_exchange_writes_nothing_to_disk(bus):
             await wsa.send(_pcm(900, loud=False))
             await _wait_for(lambda: audition.calls, timeout=5.0)
         async with websockets.connect(f"{url}/speech") as wss:
-            await asyncio.sleep(0.05)
+            await _wait_for(lambda: len(bridge._speech_tap._queues) >= 1)
             await bridge._speech_tap.play(b"RIFFfake")
             await asyncio.wait_for(wss.recv(), timeout=2.0)
     finally:

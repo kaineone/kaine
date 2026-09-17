@@ -55,6 +55,47 @@ def _pcm16_to_float(audio_bytes: bytes) -> np.ndarray:
     return samples / 32768.0
 
 
+def _decode_audio(audio_bytes: bytes) -> np.ndarray:
+    """Decode WAV or raw int16 bytes to mono float32 samples in [-1, 1].
+
+    Shared decode seam for the spectral encoder, VAD, and energy estimator so
+    each path does not repeat the WAV-header parsing / PCM conversion work.
+    """
+    if not audio_bytes:
+        return np.zeros(0, dtype=np.float32)
+    try:
+        import io
+        import wave
+
+        with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
+            pcm = wf.readframes(wf.getnframes())
+            if wf.getnchannels() > 1:
+                # Convert interleaved stereo to mono by averaging pairs.
+                samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
+                samples = samples.reshape(-1, wf.getnchannels()).mean(axis=1)
+                return samples / 32768.0
+            return np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+    except Exception:
+        pass
+    if len(audio_bytes) % 2:
+        audio_bytes = audio_bytes[:-1]
+    samples = np.frombuffer(audio_bytes, dtype="<i2").astype(np.float32)
+    return samples / 32768.0
+
+
+def _power_spectrum(samples: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return the magnitude spectrum and frequency bins for ``samples``.
+
+    The spectrum is computed once and reused by the VAD and energy helpers.
+    """
+    if samples.size == 0 or sample_rate <= 0:
+        return np.zeros(0, dtype=np.float32), np.zeros(0, dtype=np.float32)
+    window = np.hanning(samples.size).astype(np.float32)
+    mag = np.abs(np.fft.rfft(samples * window))
+    freqs = np.fft.rfftfreq(samples.size, d=1.0 / sample_rate)
+    return mag, freqs
+
+
 def _log_spaced_edges(n_bands: int, sample_rate: int, n_fft_bins: int) -> np.ndarray:
     """Band edges (indices into the rFFT bins) on a log-frequency scale, so low
     frequencies — where speech and most environmental structure live — get finer
@@ -72,9 +113,7 @@ class SpectralAcousticEncoder:
     ``2 * n_bands``-dimensional and represents the spectral profile of *any* sound,
     so cosine change over it tracks acoustic novelty (a new sound, not a new word)."""
 
-    def __init__(
-        self, *, n_bands: int = 32, frame_ms: float = 25.0, hop_ms: float = 10.0
-    ) -> None:
+    def __init__(self, *, n_bands: int = 32, frame_ms: float = 25.0, hop_ms: float = 10.0) -> None:
         self._n_bands = int(n_bands)
         self._frame_ms = float(frame_ms)
         self._hop_ms = float(hop_ms)
@@ -88,7 +127,7 @@ class SpectralAcousticEncoder:
         return f"spectral-logband-{self._n_bands}"
 
     def embed(self, audio_bytes: bytes, sample_rate: int) -> list[float]:
-        x = _pcm16_to_float(audio_bytes)
+        x = _decode_audio(audio_bytes)
         dim = self.embedding_dim
         if x.size == 0 or sample_rate <= 0:
             return [0.0] * dim
@@ -154,9 +193,7 @@ def cosine_change(embedding: list[float], previous: list[float] | None) -> float
     return float(1.0 - float(np.dot(a, b) / (na * nb)))
 
 
-def arousal_to_window(
-    arousal: float, *, window_range: tuple[float, float] = (0.15, 1.0)
-) -> float:
+def arousal_to_window(arousal: float, *, window_range: tuple[float, float] = (0.15, 1.0)) -> float:
     """Map arousal in [0, 1] to a normalized auditory attentional window.
     Easterbrook narrowing: higher arousal → tighter window (nearer the min). The
     sign is a tuning choice; flip ``window_range`` to widen under arousal."""
@@ -176,14 +213,15 @@ def detect_speech(
     band where speech concentrates. Routes windows to the speech (STT + vocal
     emotion) specialization; the general acoustic path perceives everything else.
     A heuristic, not a classifier — the sign/thresholds are tuning parameters."""
-    x = _pcm16_to_float(audio_bytes)
+    x = _decode_audio(audio_bytes)
     if x.size == 0 or sample_rate <= 0:
         return False
     energy = float(np.mean(x * x))
     if energy < energy_floor:
         return False
-    mag = np.abs(np.fft.rfft(x * np.hanning(x.size).astype(np.float32)))
-    freqs = np.fft.rfftfreq(x.size, d=1.0 / sample_rate)
+    mag, freqs = _power_spectrum(x, sample_rate)
+    if mag.size == 0:
+        return False
     total = float(mag.sum())
     if total <= 0:
         return False

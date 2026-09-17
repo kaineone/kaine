@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the eight passive + active sidecar observers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -40,6 +41,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.sleep_snapshots import SleepSnapshotRecorder
 from kaine.evaluation.trajectory import TrajectoryRecorder
 from kaine.evaluation.voice_tracking import VoiceTrackingObserver
+from tests._fakes import wait_for
 
 
 def _event(source: str, type_: str, payload: dict) -> Event:
@@ -76,9 +78,7 @@ class FakeBus:
         return entries[start : start + count]
 
     async def read_entries(self, stream, last_id="0", count=100, block_ms=0):
-        entries = await self.read(
-            stream, last_id=last_id, count=count, block_ms=block_ms
-        )
+        entries = await self.read(stream, last_id=last_id, count=count, block_ms=block_ms)
         last_scanned = entries[-1][0] if entries else None
         return entries, last_scanned
 
@@ -123,7 +123,7 @@ async def test_trajectory_writes_snapshot_entry(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: sink.wrote_count >= 1)
     finally:
         await obs.stop()
         await sink.stop()
@@ -157,7 +157,7 @@ async def test_attribution_counts_sources(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: obs.running_total.get("soma", 0) >= 2)
     finally:
         await obs.stop()
         await sink.stop()
@@ -194,7 +194,7 @@ async def test_proactive_audit_logs_when_no_recent_input(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: sink.wrote_count >= 1)
     finally:
         await obs.stop()
         await sink.stop()
@@ -219,7 +219,7 @@ async def test_proactive_audit_skips_when_recent_input(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: "lingua.external" in obs._cursors)
     finally:
         await obs.stop()
         await sink.stop()
@@ -241,7 +241,7 @@ async def test_sleep_snapshot_pairs_began_and_ended(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: sink.wrote_count >= 1)
     finally:
         await obs.stop()
         await sink.stop()
@@ -278,7 +278,7 @@ async def test_voice_tracking_records_cycle(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: sink.wrote_count >= 1)
     finally:
         await obs.stop()
         await sink.stop()
@@ -317,7 +317,7 @@ async def test_affect_correlation_writes_pair(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: sink.wrote_count >= 1)
     finally:
         await obs.stop()
         await sink.stop()
@@ -371,7 +371,7 @@ async def test_ab_divergence_writes_pair(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: len(fake_bare.calls) >= 1)
     finally:
         await obs.stop()
         await sink.stop()
@@ -398,7 +398,7 @@ async def test_ab_divergence_honors_zero_sample_rate(tmp_path):
     await sink.start()
     await obs.start()
     try:
-        await asyncio.sleep(0.3)
+        await wait_for(lambda: "lingua.external" in obs._cursors)
     finally:
         await obs.stop()
         await sink.stop()
@@ -447,16 +447,16 @@ class _EchoModelClient(AssemblerConditionedClient):
         async def _complete(system: str, prompt: str) -> str:
             return prompt
 
-        super().__init__(build_prompt=lambda u, c: ("persona", _prompt_for(u, c)),
-                          complete=_complete)
+        super().__init__(
+            build_prompt=lambda u, c: ("persona", _prompt_for(u, c)), complete=_complete
+        )
 
 
 @pytest.mark.asyncio
 async def test_divergence_for_identical_text_is_zero():
     """Pure metric: identical strings → cosine 1 → divergence 0, embedder-
     agnostic. This is the floor the negative control relies on."""
-    d = await divergence_for("the same words here", "the same words here",
-                             embedder=HashEmbedder())
+    d = await divergence_for("the same words here", "the same words here", embedder=HashEmbedder())
     assert d == pytest.approx(0.0, abs=1e-9)
 
 
@@ -471,7 +471,9 @@ async def test_ab_divergence_negative_control_empty_conditioning_is_zero():
     """
     client = _EchoModelClient()
     result = await divergence_control(
-        client, utterance="how are you feeling?", conditioning="",
+        client,
+        utterance="how are you feeling?",
+        conditioning="",
         embedder=HashEmbedder(),
     )
     # Empty conditioning ⇒ both arms produced the same text.
@@ -496,7 +498,9 @@ async def test_ab_divergence_positive_control_structural_hash():
         "keep replaying the argument in the kitchen over and over."
     )
     result = await divergence_control(
-        client, utterance="how are you feeling?", conditioning=heavy,
+        client,
+        utterance="how are you feeling?",
+        conditioning=heavy,
         embedder=HashEmbedder(),
     )
     assert result["conditioned_text"] != result["bare_text"]
@@ -528,7 +532,9 @@ async def test_ab_divergence_positive_control_semantic():
         "grief; the storm outside matches the wreckage I feel inside."
     )
     result = await divergence_control(
-        client, utterance="how are you feeling?", conditioning=heavy,
+        client,
+        utterance="how are you feeling?",
+        conditioning=heavy,
         embedder=embedder,
     )
     assert result["embedder"] == "sentence_transformers"
@@ -536,7 +542,9 @@ async def test_ab_divergence_positive_control_semantic():
 
     # And the negative control holds semantically too: empty ⇒ ~0.
     neg = await divergence_control(
-        client, utterance="how are you feeling?", conditioning="",
+        client,
+        utterance="how are you feeling?",
+        conditioning="",
         embedder=embedder,
     )
     assert neg["divergence"] < 1e-6
@@ -654,9 +662,7 @@ class RetrievalCognitiveClient:
         self._mnemos = mnemos
 
     async def query(self, user_text: str) -> str:
-        recalls, _ = await self._mnemos.recall(
-            user_text, k=5, collection="episodic"
-        )
+        recalls, _ = await self._mnemos.recall(user_text, k=5, collection="episodic")
         texts = [m.text for m in recalls if m.text]
         if not texts:
             return NON_RECALL_MARKER
@@ -860,9 +866,7 @@ class _FakeBareHTTP:
 async def test_bare_client_uses_openai_endpoint_and_suppression():
     from kaine.evaluation.ab_divergence import HTTPBareInferenceClient
 
-    c = HTTPBareInferenceClient(
-        base_url="http://127.0.0.1:11434", model_id="organ", think=False
-    )
+    c = HTTPBareInferenceClient(base_url="http://127.0.0.1:11434", model_id="organ", think=False)
     c._client = _FakeBareHTTP([_FakeBareResp()])
     out = await c.complete("hello")
     assert out == "bare"
@@ -876,9 +880,7 @@ async def test_bare_client_uses_openai_endpoint_and_suppression():
 async def test_bare_client_retries_without_kwarg_on_reject():
     from kaine.evaluation.ab_divergence import HTTPBareInferenceClient
 
-    c = HTTPBareInferenceClient(
-        base_url="http://127.0.0.1:11434/v1", model_id="organ", think=False
-    )
+    c = HTTPBareInferenceClient(base_url="http://127.0.0.1:11434/v1", model_id="organ", think=False)
     c._client = _FakeBareHTTP(
         [_FakeBareResp(status_code=400, text="bad enable_thinking"), _FakeBareResp()]
     )

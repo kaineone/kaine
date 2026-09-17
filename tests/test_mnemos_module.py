@@ -72,9 +72,7 @@ async def test_empty_snapshot_is_noop(bus: AsyncBus):
     try:
         # An inhibited empty snapshot still serializes to "tick=0 inhibited"
         # so it counts as a store; verify behavior with explicitly empty.
-        snap = WorkspaceSnapshot(
-            tick_index=0, selected_events=[], inhibited=False
-        )
+        snap = WorkspaceSnapshot(tick_index=0, selected_events=[], inhibited=False)
         await mnemos.on_workspace(snap)
         # The serialized text is non-empty (tick=0 active), so one entry stored.
         assert mnemos.core.short_term_size == 1
@@ -272,9 +270,7 @@ def test_serialize_snapshot_omits_raw_perceptual_payload():
     )
     # A non-perceptual event still has its payload serialized as before.
     ordinary = _event(source="soma", type_="soma.report", eid="e_soma")
-    text = mnemos_module._serialize_snapshot(
-        _snapshot([transcription, visual, ordinary])
-    )
+    text = mnemos_module._serialize_snapshot(_snapshot([transcription, visual, ordinary]))
     assert secret not in text
     assert "RAWPIXELS" not in text
     assert "<raw-perceptual omitted>" in text
@@ -316,9 +312,7 @@ async def test_recall_not_inhibition_gated(bus: AsyncBus):
     mnemos = await _new_mnemos(bus, recall_cooldown_s=0.0)
     await mnemos.initialize()
     try:
-        snap = WorkspaceSnapshot(
-            tick_index=0, selected_events=[_event()], inhibited=True
-        )
+        snap = WorkspaceSnapshot(tick_index=0, selected_events=[_event()], inhibited=True)
         await mnemos.on_workspace(snap)
         recalls = await _recall_events(bus)
         assert len(recalls) == 1
@@ -332,9 +326,7 @@ async def test_store_happens_every_tick_regardless_of_recall(bus: AsyncBus):
     # whether recall fired. With the subjective clock frozen, only the first
     # tick fires recall, yet every tick stores.
     frozen = EntityClock(monotonic=lambda: 1000.0)
-    mnemos = await _new_mnemos(
-        bus, capacity=8, recall_cooldown_s=5.0, entity_clock=frozen
-    )
+    mnemos = await _new_mnemos(bus, capacity=8, recall_cooldown_s=5.0, entity_clock=frozen)
     await mnemos.initialize()
     try:
         for i in range(3):
@@ -366,6 +358,61 @@ async def test_recall_on_workspace_false_is_store_only(bus: AsyncBus):
 async def test_recall_cooldown_negative_rejected(bus: AsyncBus):
     with pytest.raises(ValueError):
         Mnemos(bus, recall_cooldown_s=-1.0)
+
+
+# --- Deferred embedding (performance-test-coverage) -----------------------
+
+
+@pytest.mark.asyncio
+async def test_hot_path_recall_uses_short_term_no_embedder_calls(bus: AsyncBus):
+    """Spontaneous on_workspace recall searches short-term only, so the hot
+    path produces zero embedder invocations while no eviction happens."""
+    mnemos = await _new_mnemos(bus, capacity=128, recall_cooldown_s=0.0)
+    await mnemos.initialize()
+    try:
+        for i in range(100):
+            await mnemos.on_workspace(_snapshot([_event(eid=f"e{i}")]))
+        assert mnemos.core.short_term_size == 100
+        assert mnemos.core.embedder.encode_count == 0
+        recalls = await _recall_events(bus)
+        assert len(recalls) == 100
+        # Every spontaneous recall reports the short_term collection.
+        assert all(r.payload.get("collection") == "short_term" for r in recalls)
+    finally:
+        await mnemos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_embedding_deferred_to_eviction(bus: AsyncBus):
+    """Only when the short-term buffer overflows and a trace moves to episodic
+    does the embedder run."""
+    mnemos = await _new_mnemos(bus, capacity=4, recall_cooldown_s=0.0)
+    await mnemos.initialize()
+    try:
+        for i in range(6):
+            await mnemos.on_workspace(_snapshot([_event(eid=f"e{i}")]))
+        assert mnemos.core.short_term_size == 4
+        # Two entries were evicted to episodic; each required one embed call.
+        assert mnemos.core.embedder.encode_count == 2
+        episodic = mnemos.core.collection_name("episodic")
+        assert await mnemos.core.storage.count(episodic) == 2
+    finally:
+        await mnemos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_explicit_episodic_recall_still_embeds(bus: AsyncBus):
+    """Explicit recall against episodic (the non-hot path) still needs a vector
+    and therefore still invokes the embedder."""
+    mnemos = await _new_mnemos(bus, capacity=4)
+    await mnemos.initialize()
+    try:
+        await mnemos.core.store("the cat sat on the mat", collection="episodic")
+        before = mnemos.core.embedder.encode_count
+        await mnemos.recall("cat", collection="episodic")
+        assert mnemos.core.embedder.encode_count == before + 1
+    finally:
+        await mnemos.shutdown()
 
 
 # --- Affect tagging (task 1.1 / 1.2) ----------------------------------------
@@ -616,11 +663,7 @@ async def test_select_cross_period_episodic_included(bus: AsyncBus):
         episodic_texts=[("episodic trace", 1500.0)],
     )
     by_period = await mnemos.select_cross_period_traces(periods=2, per_period=5)
-    all_point_ids = [
-        t["point_id"]
-        for traces in by_period.values()
-        for t in traces
-    ]
+    all_point_ids = [t["point_id"] for traces in by_period.values() for t in traces]
     # At least one short_term: prefixed and at least one bare UUID (episodic).
     has_short_term = any(pid.startswith("short_term:") for pid in all_point_ids)
     has_episodic = any(not pid.startswith("short_term:") for pid in all_point_ids)

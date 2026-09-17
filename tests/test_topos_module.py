@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 
+import asyncio
+
 import numpy as np
 import pytest
 
@@ -40,6 +42,7 @@ class FakeEncoder:
 # ---------------------------------------------------------------------------
 # Fake forward model for controlled testing
 # ---------------------------------------------------------------------------
+
 
 class FakeForwardModel:
     """Test double: always returns a preset prediction error; records steps."""
@@ -248,7 +251,10 @@ async def test_custom_components_substitute(bus: AsyncBus):
 
     tc, th = TrackingChange(), TrackingHab()
     topos = Topos(
-        bus, encoder=enc, change_detector=tc, habituator=th,
+        bus,
+        encoder=enc,
+        change_detector=tc,
+        habituator=th,
         change_alert_threshold=200.0,  # 99.0 doesn't trigger
     )
     await topos.process_frame(None)
@@ -272,6 +278,7 @@ async def test_serialize_records_encoder_id(bus: AsyncBus):
 # ---------------------------------------------------------------------------
 # Forward-prediction integration tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_prediction_error_on_payload(bus: AsyncBus):
@@ -327,6 +334,7 @@ async def test_predictable_motion_lower_salience_than_surprise(bus: AsyncBus):
     topos_pred._forward_model = FakeForwardModel(latent_dim=4, preset_errors=low_errors)
     # Prime the pred_errors deque with many low values so mean stays low.
     from collections import deque
+
     topos_pred._pred_errors = deque([0.01] * 30, maxlen=32)
 
     # Feed a "predictable" frame with low error (the last preset).
@@ -352,9 +360,7 @@ async def test_predictable_motion_lower_salience_than_surprise(bus: AsyncBus):
         alert_salience=alert_sal,
     )
     # Pre-load rolling mean with small errors, then inject a huge error.
-    topos_surp._forward_model = FakeForwardModel(
-        latent_dim=4, preset_errors=[100.0]
-    )
+    topos_surp._forward_model = FakeForwardModel(latent_dim=4, preset_errors=[100.0])
     topos_surp._pred_errors = deque([0.01] * 31, maxlen=32)
 
     await topos_surp.process_frame(None)
@@ -543,9 +549,7 @@ async def test_arousal_provider_sizes_the_fovea(bus: AsyncBus):
     async def _size_at(arousal: float) -> float:
         b = pytest.importorskip("fakeredis.aioredis")
         client = b.FakeRedis(decode_responses=True)
-        local_bus = AsyncBus(
-            BusConfig(password="x", audit_required=False), client=client
-        )
+        local_bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
         enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]] * 2)
         topos = Topos(local_bus, encoder=enc, foveation_enabled=True)
         topos.set_arousal_provider(lambda: arousal)
@@ -594,9 +598,7 @@ async def test_serialized_buffer_no_raw_tensors(bus: AsyncBus):
 
     def _assert_no_tensors(obj, path="buffer_summary"):
         if isinstance(obj, torch.Tensor):
-            raise AssertionError(
-                f"Raw tensor found in serialized buffer at {path}: {obj.shape}"
-            )
+            raise AssertionError(f"Raw tensor found in serialized buffer at {path}: {obj.shape}")
         if isinstance(obj, dict):
             for k, v in obj.items():
                 _assert_no_tensors(v, f"{path}[{k!r}]")
@@ -651,14 +653,19 @@ async def test_change_alert_is_embedding_scale_agnostic(bus: AsyncBus):
     """The SAME step alerts whether the embedding scale is large or tiny — the
     criterion is relative to the module's own baseline, not an absolute constant.
     A fixed 0.005-style threshold would fire on one scale and never on the other."""
+
     async def _step_alerts(scale: float, local_bus: AsyncBus) -> bool:
         steady = [scale * v for v in _STEADY]
         step = [scale * v for v in _STEP]
         enc = FakeEncoder([steady, steady, steady, steady, step])
         topos = Topos(
-            local_bus, encoder=enc, forward_prediction=False,
-            change_alert_threshold=1e-6, change_alert_factor=2.0,
-            baseline_salience=0.2, alert_salience=0.7,
+            local_bus,
+            encoder=enc,
+            forward_prediction=False,
+            change_alert_threshold=1e-6,
+            change_alert_factor=2.0,
+            baseline_salience=0.2,
+            alert_salience=0.7,
         )
         for _ in range(5):
             await topos.process_frame(None)
@@ -686,7 +693,7 @@ async def test_change_step_alerts_with_foveation_on(bus: AsyncBus):
     vectors: list[list[float]] = []
     for peripheral in (_STEADY, _STEADY, _STEADY, _STEADY, _STEP):
         vectors.append(peripheral)  # 1st encode/tick → peripheral gist → salience
-        vectors.append(foveal)      # 2nd encode/tick → foveal detail
+        vectors.append(foveal)  # 2nd encode/tick → foveal detail
     enc = FakeEncoder(vectors)
     topos = Topos(
         bus,
@@ -714,8 +721,11 @@ async def test_perception_alert_stats_track_alert_rate(bus: AsyncBus):
     alert rate is legible (perception-drives-salience task 4.2)."""
     enc = FakeEncoder([_STEADY, _STEADY, _STEADY, _STEADY, _STEP])
     topos = Topos(
-        bus, encoder=enc, forward_prediction=False,
-        change_alert_threshold=1e-4, change_alert_factor=2.0,
+        bus,
+        encoder=enc,
+        forward_prediction=False,
+        change_alert_threshold=1e-4,
+        change_alert_factor=2.0,
     )
     for _ in range(5):
         await topos.process_frame(None)
@@ -748,3 +758,81 @@ async def test_foveation_accepts_pil_frames_from_the_live_feed(bus: AsyncBus):
     _, ev = entries[0]
     assert "peripheral" in ev.payload and "foveal" in ev.payload
     assert "fovea" in ev.payload
+
+
+# ---------------------------------------------------------------------------
+# Performance-test-coverage: strided window + offloaded forward model
+# ---------------------------------------------------------------------------
+
+
+class FakeClipEncoder:
+    """Clip-native test double: consumes exactly ``clip_len`` frames per call."""
+
+    model_id = "fake/clip-encoder"
+    latent_dim = 4
+    clip_len = 4
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.loaded = False
+        self.shutdown_called = False
+
+    async def load(self) -> None:
+        self.loaded = True
+
+    async def shutdown(self) -> None:
+        self.shutdown_called = True
+
+    async def encode(self, image):  # noqa: ARG002
+        raise NotImplementedError("clip encoder uses encode_clip")
+
+    async def encode_clip(self, frames):
+        self.calls += 1
+        return [1.0, 0.0, 0.0, 0.0]
+
+
+@pytest.mark.asyncio
+async def test_strided_window_reduces_encoder_calls(bus: AsyncBus):
+    """With clip_stride == clip_len, N frames produce N/clip_len clip encodes
+    instead of the N encodes a stride-1 window would require."""
+    enc = FakeClipEncoder()
+    topos = Topos(bus, encoder=enc, clip_stride=4)
+    for _ in range(12):
+        await topos.process_frame(None)
+    # Warmup fills 3 clips (frames 0..3, 4..7, 8..11), then stride=4 means one
+    # encode every 4 frames after the first fill: total 3 calls for 12 frames.
+    assert enc.calls == 3
+
+
+class SlowForwardModel(FakeForwardModel):
+    """Records whether its step ran while an asyncio task was pending."""
+
+    def __init__(self, *, delay_s: float = 0.05, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.delay_s = delay_s
+
+    def step(self, latent: list[float]) -> float:
+        import time
+
+        time.sleep(self.delay_s)
+        return super().step(latent)
+
+
+@pytest.mark.asyncio
+async def test_forward_model_step_runs_in_thread(bus: AsyncBus):
+    """When forward_prediction is on, process_frame offloads the MLP step so
+    the event loop can make progress while the step runs."""
+    enc = FakeEncoder([[0.5, 0.5, 0.5, 0.5]])
+    topos = Topos(bus, encoder=enc, forward_prediction=True)
+    topos._forward_model = SlowForwardModel(latent_dim=4, preset_errors=[0.0])
+
+    loop_progressed = False
+
+    async def _marker() -> None:
+        nonlocal loop_progressed
+        loop_progressed = True
+
+    marker = asyncio.create_task(_marker())
+    await topos.process_frame(None)
+    await marker
+    assert loop_progressed

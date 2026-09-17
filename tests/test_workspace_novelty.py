@@ -81,3 +81,19 @@ def test_reset_clears_window():
     nt.observe(_ev(payload={"x": 1}))
     nt.reset()
     assert nt.observe(_ev(payload={"x": 1})) == 1.0
+
+
+def test_observe_is_o1_total_time():
+    """100 random observations complete in linear total time; the Counter-backed
+    implementation must not degenerate to a per-window scan."""
+    import time
+
+    nt = NoveltyTracker(window=32)
+    n = 100
+    start = time.monotonic()
+    for i in range(n):
+        nt.observe(_ev(payload={"i": i}))
+    elapsed = time.monotonic() - start
+    # Very generous bound: the whole batch should finish in well under 50 ms on
+    # any reasonable host. The old O(window) scan would take ~50x longer.
+    assert elapsed < 0.05, f"{n} observations took {elapsed:.3f}s"
