@@ -65,9 +65,7 @@ def _decode_event(fields: dict[str, Any]) -> Event:
     )
 
 
-def _decode_entry(
-    entry_id: Any, fields: dict[str, Any]
-) -> Optional[tuple[str, Event]]:
+def _decode_entry(entry_id: Any, fields: dict[str, Any]) -> Optional[tuple[str, Event]]:
     """Decode one stream entry, tolerating malformed/legacy data.
 
     Returns ``None`` (with a logged warning) for an entry that cannot be
@@ -100,9 +98,7 @@ class AsyncBus:
         client: Optional[aioredis.Redis] = None,
     ) -> None:
         self._config = config
-        self._client = client or aioredis.from_url(
-            config.url, decode_responses=True
-        )
+        self._client = client or aioredis.from_url(config.url, decode_responses=True)
         self._audited = False
 
     @property
@@ -199,9 +195,7 @@ class AsyncBus:
         (legacy/malformed) entries returns no decoded events, the cursor never
         moves, and the consumer re-reads the same poison batch forever.
         """
-        response = await self._client.xread(
-            {stream: last_id}, count=count, block=block_ms or None
-        )
+        response = await self._client.xread({stream: last_id}, count=count, block=block_ms or None)
         if not response:
             return [], None
         _, entries = response[0]
@@ -221,6 +215,58 @@ class AsyncBus:
     ) -> list[tuple[str, Event]]:
         entries, _ = await self.read_entries(stream, last_id, count, block_ms)
         return entries
+
+    async def read_entries_block(
+        self,
+        streams: dict[str, str],
+        *,
+        count: int = 100,
+        block_ms: int = 0,
+    ) -> tuple[dict[str, list[tuple[str, Event]]], dict[str, Optional[str]]]:
+        """Single-round-trip blocking read across multiple streams.
+
+        Issues one ``XREAD ... BLOCK`` for all supplied cursors and returns
+        decoded entries plus the last-scanned id per stream. Streams with no
+        new entries are present in the returned dicts as empty lists / ``None``.
+        This is the consolidation point for the cognitive engine's per-tick fan-out
+        (performance-test-coverage).
+        """
+        if not streams:
+            return {}, {}
+        response = await self._client.xread(streams, count=count, block=block_ms or None)
+        entries_by_stream: dict[str, list[tuple[str, Event]]] = {stream: [] for stream in streams}
+        last_by_stream: dict[str, Optional[str]] = {stream: None for stream in streams}
+        if not response:
+            return entries_by_stream, last_by_stream
+        for stream_name, entries in response:
+            if isinstance(stream_name, bytes):
+                stream_name = stream_name.decode()
+            out: list[tuple[str, Event]] = []
+            last_scanned: Optional[str] = None
+            for entry_id, fields in entries:
+                if isinstance(entry_id, bytes):
+                    entry_id = entry_id.decode()
+                last_scanned = entry_id
+                decoded = _decode_entry(entry_id, fields)
+                if decoded is not None:
+                    out.append(decoded)
+            entries_by_stream[stream_name] = out
+            last_by_stream[stream_name] = last_scanned
+        return entries_by_stream, last_by_stream
+
+    async def read_block(
+        self,
+        streams: dict[str, str],
+        *,
+        count: int = 100,
+        block_ms: int = 0,
+    ) -> dict[str, list[tuple[str, Event]]]:
+        """Convenience wrapper for :meth:`read_entries_block` returning only the
+        decoded entries per stream."""
+        entries_by_stream, _ = await self.read_entries_block(
+            streams, count=count, block_ms=block_ms
+        )
+        return entries_by_stream
 
     async def range(
         self, stream: str, start: str = "-", end: str = "+", count: Optional[int] = None
@@ -248,9 +294,7 @@ class AsyncBus:
         cursor.
         """
         minimum = ("(" + last_id) if (last_id and last_id != "0") else (last_id or "-")
-        response = await self._client.xrange(
-            WORKSPACE_STREAM, min=minimum, count=count
-        )
+        response = await self._client.xrange(WORKSPACE_STREAM, min=minimum, count=count)
         if not response:
             return [], None
         out: list[tuple[str, dict[str, Any]]] = []
@@ -279,9 +323,7 @@ class AsyncBus:
     ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         cursor = await self._resolve_dollar(last_id)
         while True:
-            response = await self._client.xread(
-                {WORKSPACE_STREAM: cursor}, count=count
-            )
+            response = await self._client.xread({WORKSPACE_STREAM: cursor}, count=count)
             if not response:
                 await asyncio.sleep(poll_interval_s)
                 continue
@@ -299,7 +341,44 @@ class AsyncBus:
                 except Exception:
                     log.warning(
                         "skipping undecodable workspace.broadcast entry %s",
-                        entry_id, exc_info=True,
+                        entry_id,
+                        exc_info=True,
+                    )
+                    continue
+                yield entry_id, decoded
+
+    async def subscribe_workspace_block(
+        self,
+        last_id: str = "$",
+        count: int = 32,
+        block_ms: int = 100,
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Blocking variant of :meth:`subscribe_workspace`.
+
+        Uses a single ``XREAD ... BLOCK`` per batch instead of polling with
+        ``asyncio.sleep``. The bounded ``block_ms`` timeout ensures shutdown
+        never waits more than one block interval. Malformed entries are skipped
+        and the cursor advances past them, matching the non-blocking path.
+        """
+        cursor = await self._resolve_dollar(last_id)
+        while True:
+            response = await self._client.xread(
+                {WORKSPACE_STREAM: cursor}, count=count, block=block_ms or None
+            )
+            if not response:
+                continue
+            _, entries = response[0]
+            for entry_id, fields in entries:
+                if isinstance(entry_id, bytes):
+                    entry_id = entry_id.decode()
+                cursor = entry_id
+                try:
+                    decoded = _decode_workspace(fields)
+                except Exception:
+                    log.warning(
+                        "skipping undecodable workspace.broadcast entry %s",
+                        entry_id,
+                        exc_info=True,
                     )
                     continue
                 yield entry_id, decoded

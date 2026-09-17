@@ -66,7 +66,7 @@ class CycleHooks:
 
 class CognitiveCycle:
     # Tick-rate bounds for soma.regulation reduce_rate advisory.
-    _MIN_PROCESSING_RATE_HZ: float = 0.5   # floor: never slower than 0.5 Hz
+    _MIN_PROCESSING_RATE_HZ: float = 0.5  # floor: never slower than 0.5 Hz
     _MAX_PROCESSING_RATE_HZ: float = 20.0  # ceiling: never faster than 20 Hz
     # Factor by which reduce_rate lowers the current processing rate.
     _REDUCE_RATE_FACTOR: float = 0.8
@@ -91,12 +91,8 @@ class CognitiveCycle:
         deterministic: bool = False,
         time_scale: float = 1.0,
         entity_clock: Optional[EntityClock] = None,
-        affect_observer: Optional[
-            Callable[[list[tuple[str, Event]]], None]
-        ] = None,
-        ablation_recorder: Optional[
-            Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]
-        ] = None,
+        affect_observer: Optional[Callable[[list[tuple[str, Event]]], None]] = None,
+        ablation_recorder: Optional[Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]] = None,
         seed_cursors_to_tail: bool = False,
     ) -> None:
         if processing_rate_hz <= 0:
@@ -334,16 +330,14 @@ class CognitiveCycle:
         # Achieved rate: a tick really takes max(wall, target) real seconds (the
         # cycle sleeps the remaining budget when under, and overruns when over),
         # so the sustainable rate is 1 / mean(max(wall, target)).
-        eff_period_ms = sum(
-            max(w, t) for w, t in zip(self._recent_wall_ms, self._recent_target_ms)
-        ) / n
+        eff_period_ms = (
+            sum(max(w, t) for w, t in zip(self._recent_wall_ms, self._recent_target_ms)) / n
+        )
         achieved_rate = 1000.0 / eff_period_ms if eff_period_ms > 0 else None
         # Overrunning when the average tick slipped past its budget — i.e. the
         # achieved rate is materially below the target (1% tolerance for noise).
         overrunning = (
-            achieved_rate is not None
-            and target_rate > 0
-            and achieved_rate < target_rate * 0.99
+            achieved_rate is not None and target_rate > 0 and achieved_rate < target_rate * 0.99
         )
         return {
             "target_rate_hz": target_rate,
@@ -429,7 +423,6 @@ class CognitiveCycle:
 
         streams = list(self._registry.active_streams())
         if streams:
-            tasks = []
             for stream in streams:
                 # H3 — when tail-seeding is enabled (live boot) the first
                 # consume after startup seeds the cursor to the stream TAIL
@@ -441,8 +434,14 @@ class CognitiveCycle:
                         self._cursors[stream] = await self._tail_id(stream)
                     else:
                         self._cursors[stream] = "0"
-                tasks.append(self._safe_read(stream, self._cursors[stream]))
-            results = await asyncio.gather(*tasks)
+            # Consolidated single-round-trip read across all active streams.
+            # Falls back to per-stream gather when the bus lacks the block API
+            # (test doubles) or the consolidated read raises.
+            if hasattr(self._bus, "read_entries_block"):
+                results = await self._safe_read_block(streams)
+            else:
+                tasks = [self._safe_read(stream, self._cursors[stream]) for stream in streams]
+                results = await asyncio.gather(*tasks)
             for stream, (entries, last_scanned) in zip(streams, results):
                 # H2 — advance to the last SCANNED id (not the last decoded
                 # entry) so a fully-undecodable batch cannot wedge the
@@ -778,9 +777,7 @@ class CognitiveCycle:
                     try:
                         self._registry.request_shed_low_priority()
                     except Exception:
-                        log.warning(
-                            "registry.request_shed_low_priority raised", exc_info=True
-                        )
+                        log.warning("registry.request_shed_low_priority raised", exc_info=True)
             elif action == "request_maintenance":
                 log.info(
                     "soma.regulation advisory request_maintenance "
@@ -790,9 +787,7 @@ class CognitiveCycle:
                 )
                 self.maintenance_requested = True
             elif action is None:
-                log.warning(
-                    "soma.regulation event missing 'action' field; ignoring"
-                )
+                log.warning("soma.regulation event missing 'action' field; ignoring")
             else:
                 log.debug(
                     "soma.regulation: unknown action %r; ignoring gracefully",
@@ -874,6 +869,29 @@ class CognitiveCycle:
             self._error_counts[stream] = self._error_counts.get(stream, 0) + 1
             log.warning("read failed for %s: %s", stream, exc)
             return [], None
+
+    async def _safe_read_block(
+        self, streams: list[str]
+    ) -> list[tuple[list[tuple[str, Event]], Optional[str]]]:
+        """Single-round-trip read across ``streams``; falls back to per-stream
+        gather on any failure so one bad stream does not stall the whole tick."""
+        cursors = {stream: self._cursors[stream] for stream in streams}
+        try:
+            entries_by_stream, last_by_stream = await self._bus.read_entries_block(
+                cursors, count=self._read_count, block_ms=0
+            )
+        except Exception as exc:
+            self._error_counts["__consolidated__"] = (
+                self._error_counts.get("__consolidated__", 0) + 1
+            )
+            log.warning("consolidated stream read failed: %s; falling back", exc)
+            tasks = [self._safe_read(stream, self._cursors[stream]) for stream in streams]
+            return await asyncio.gather(*tasks)
+
+        results: list[tuple[list[tuple[str, Event]], Optional[str]]] = []
+        for stream in streams:
+            results.append((entries_by_stream.get(stream, []), last_by_stream.get(stream)))
+        return results
 
     def _advance_experiential(self) -> bool:
         ratio = self._experiential_rate / self._processing_rate

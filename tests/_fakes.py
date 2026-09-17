@@ -7,9 +7,11 @@ These are intentionally minimal — full Syneidesis and ModuleRegistry land in
 their own Phase 1 changes. Tests for the cycle treat both as collaborators
 that match the protocols in kaine.cycle.protocols.
 """
+
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from typing import Any, Callable
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
@@ -32,17 +34,12 @@ class FakeSyneidesis:
                 "tick_index": context.get("tick_index"),
             }
         )
-        if (
-            self.raise_on_tick is not None
-            and context.get("tick_index") == self.raise_on_tick
-        ):
+        if self.raise_on_tick is not None and context.get("tick_index") == self.raise_on_tick:
             raise RuntimeError(f"forced failure on tick {self.raise_on_tick}")
         return WorkspaceSnapshot(
             tick_index=context.get("tick_index", 0),
             selected_events=list(events[:5]),
-            salience_scores={
-                entry_id: ev.salience for entry_id, ev in events[:5]
-            },
+            salience_scores={entry_id: ev.salience for entry_id, ev in events[:5]},
         )
 
 
@@ -114,3 +111,22 @@ class FailingReadBus:
 
     async def close(self):
         return await self._real.close()
+
+
+async def wait_for(
+    predicate: Callable[[], bool],
+    *,
+    timeout_s: float = 2.0,
+    poll_interval_s: float = 0.02,
+) -> None:
+    """Poll a synchronous predicate until it returns True or the timeout expires.
+
+    Replaces fixed ``asyncio.sleep`` windows in tests with a bounded wait, so
+    fast machines finish early and slow machines still get a reasonable budget.
+    Raises AssertionError on timeout.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    while not predicate():
+        if asyncio.get_event_loop().time() > deadline:
+            raise AssertionError(f"condition not met within {timeout_s}s")
+        await asyncio.sleep(poll_interval_s)

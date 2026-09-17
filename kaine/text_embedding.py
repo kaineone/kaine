@@ -22,6 +22,7 @@ which need ``encode`` / ``encode_batch`` / ``latent_dim`` / ``model_id`` /
 same model and the same cosine scale. ``kaine.modules.mnemos.embeddings``
 re-exports these names for back-compat without a second implementation.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -230,6 +231,7 @@ class FakeEmbedder:
         self._model_id = model_id
         self.loaded = False
         self.shutdown_called = False
+        self.encode_count = 0
 
     @property
     def latent_dim(self) -> int:
@@ -245,6 +247,7 @@ class FakeEmbedder:
     async def encode(self, text: str) -> list[float]:
         if not self.loaded:
             await self.load()
+        self.encode_count += 1
         digest = hashlib.blake2b(text.encode("utf-8"), digest_size=self._latent_dim).digest()
         # Map each byte to a float in [-1, 1]
         return [((b / 255.0) * 2.0 - 1.0) for b in digest]

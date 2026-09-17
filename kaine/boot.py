@@ -2010,14 +2010,28 @@ def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
     not transcribe its own spoken output. No-op unless both modules are
     enabled. Whether the gate is ever *opened* is controlled by vox's
     `suppress_self_hearing` flag, so an isolated-headset operator can stay
-    full-duplex by setting it false."""
+    full-duplex by setting it false.
+
+    Reuses an existing gate already installed on either side so a Spot rebuild
+    of one module does not replace the live gate and leave the old instance
+    wired to the other side.
+    """
     if "vox" not in registry or "audition" not in registry:
         return
     from kaine.modules.vox.coordination import SpeakingGate
 
-    gate = SpeakingGate()
     vox = registry.get("vox")
     audition = registry.get("audition")
+    # Reuse an existing gate if one side already has one; otherwise create a
+    # fresh shared gate. This makes rewire_module idempotent and preserves the
+    # gate object across Spot rebuilds.
+    gate: Optional[Any] = None
+    if hasattr(vox, "_speaking_gate") and vox._speaking_gate is not None:
+        gate = vox._speaking_gate
+    elif hasattr(audition, "_speaking_gate") and audition._speaking_gate is not None:
+        gate = audition._speaking_gate
+    if gate is None:
+        gate = SpeakingGate()
     if hasattr(vox, "set_speaking_gate"):
         vox.set_speaking_gate(gate)
     if hasattr(audition, "set_speaking_gate"):

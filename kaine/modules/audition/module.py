@@ -145,9 +145,7 @@ class Audition(BaseModule):
         self._stream_factory = stream_factory
         self._live_mic: Optional[LiveMicrophone] = None
         if self._capture_enabled or live_microphone is not None:
-            self._live_mic = live_microphone or self._build_default_live_mic(
-                live_mic_config
-            )
+            self._live_mic = live_microphone or self._build_default_live_mic(live_mic_config)
 
         # Forward model — always instantiated (cheap, CPU-only MLP). Unlike
         # Chronos/Topos there is deliberately no `forward_prediction` toggle:
@@ -159,9 +157,7 @@ class Audition(BaseModule):
             auditory_buffer_size=int(auditory_buffer_size),
         )
         self._prediction_error_window_size = max(1, int(prediction_error_window))
-        self._prediction_errors: deque[float] = deque(
-            maxlen=self._prediction_error_window_size
-        )
+        self._prediction_errors: deque[float] = deque(maxlen=self._prediction_error_window_size)
 
         # Prosody flag.
         self._prosody_enabled = bool(prosody_enabled)
@@ -187,9 +183,7 @@ class Audition(BaseModule):
         self._acoustic_encoder: Optional[AcousticEncoder] = None
         self._acoustic_forward_model: Optional[AuditoryForwardModel] = None
         self._prev_acoustic_embedding: Optional[list[float]] = None
-        self._acoustic_errors: deque[float] = deque(
-            maxlen=self._prediction_error_window_size
-        )
+        self._acoustic_errors: deque[float] = deque(maxlen=self._prediction_error_window_size)
         if self._general_audition:
             self._acoustic_encoder = acoustic_encoder or SpectralAcousticEncoder()
             self._acoustic_forward_model = AuditoryForwardModel(
@@ -250,7 +244,9 @@ class Audition(BaseModule):
         reaches the workspace. Memory-only; never writes audio."""
         assert self._acoustic_encoder is not None
         assert self._acoustic_forward_model is not None
-        embedding = self._acoustic_encoder.embed(audio_bytes, sample_rate)
+        # Offload the spectral encoder to a thread so the audio loop does not
+        # block the event loop (performance-test-coverage).
+        embedding = await asyncio.to_thread(self._acoustic_encoder.embed, audio_bytes, sample_rate)
         change = cosine_change(embedding, self._prev_acoustic_embedding)
         self._prev_acoustic_embedding = embedding
         prediction_error = self._acoustic_forward_model.step(embedding)
@@ -283,9 +279,7 @@ class Audition(BaseModule):
         self._acoustic_report_count += 1
         if alert:
             self._acoustic_alert_count += 1
-        window = arousal_to_window(
-            self._read_arousal(), window_range=self._arousal_window_range
-        )
+        window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
         payload: dict[str, Any] = {
             "source_label": source_label,
             "change_score": change,
@@ -342,9 +336,7 @@ class Audition(BaseModule):
             except Exception:
                 log.warning("audition collaborator shutdown failed", exc_info=True)
 
-    def _build_default_live_mic(
-        self, mic_config: Optional[LiveMicConfig]
-    ) -> LiveMicrophone:
+    def _build_default_live_mic(self, mic_config: Optional[LiveMicConfig]) -> LiveMicrophone:
         from kaine import perception_state
 
         # Locus gate selection mirrors Topos: a wired deterministic stream_factory
@@ -397,10 +389,9 @@ class Audition(BaseModule):
         # detected as speech. When disabled, the whole window is treated as speech
         # so the existing pipeline is byte-for-byte unchanged.
         if self._general_audition:
-            await self._perceive_acoustic(
-                audio_bytes, sample_rate, source_label, item=item
-            )
-            if not detect_speech(audio_bytes, sample_rate):
+            await self._perceive_acoustic(audio_bytes, sample_rate, source_label, item=item)
+            is_speech = await asyncio.to_thread(detect_speech, audio_bytes, sample_rate)
+            if not is_speech:
                 return None, None
 
         start_time = time.monotonic()
@@ -422,9 +413,7 @@ class Audition(BaseModule):
             )
         else:
             stt_result_or_exc = None
-            (emo_result_or_exc,) = await asyncio.gather(
-                emo_task, return_exceptions=True
-            )
+            (emo_result_or_exc,) = await asyncio.gather(emo_task, return_exceptions=True)
 
         duration_s = time.monotonic() - start_time
 
@@ -433,14 +422,12 @@ class Audition(BaseModule):
         # ------------------------------------------------------------------
         if isinstance(emo_result_or_exc, BaseException):
             # On error use a neutral distribution.
-            emo_scores_for_fm = {
-                c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES
-            }
+            emo_scores_for_fm = {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES}
         else:
             emo_scores_for_fm = emo_result_or_exc.scores
 
         # Compute a simple mean energy from the audio bytes (in-memory only).
-        mean_energy = _estimate_energy(audio_bytes)
+        mean_energy = await asyncio.to_thread(_estimate_energy, audio_bytes)
 
         feature_vec = build_feature_vector(
             emo_scores_for_fm,
@@ -458,9 +445,7 @@ class Audition(BaseModule):
         # ------------------------------------------------------------------
         if self._prosody_enabled:
             asyncio.create_task(
-                self._extract_and_publish_prosody(
-                    audio_bytes, sample_rate, source_label
-                )
+                self._extract_and_publish_prosody(audio_bytes, sample_rate, source_label)
             )
 
         # ------------------------------------------------------------------
@@ -628,9 +613,7 @@ class Audition(BaseModule):
     ) -> None:
         # Base salience: alert for non-neutral emotions (existing behaviour).
         base_salience = (
-            self._baseline_salience
-            if result.category == "neutral"
-            else self._alert_salience
+            self._baseline_salience if result.category == "neutral" else self._alert_salience
         )
         salience = self._error_weighted_salience(
             base_salience,
@@ -657,9 +640,7 @@ class Audition(BaseModule):
             salience=salience,
         )
 
-    async def _publish_emotion_error(
-        self, *, source_label: str, exc: BaseException
-    ) -> None:
+    async def _publish_emotion_error(self, *, source_label: str, exc: BaseException) -> None:
         await self.publish(
             "audition.emotion",
             {
@@ -687,32 +668,23 @@ class Audition(BaseModule):
             try:
                 self._forward_model.load_state_dict(state["forward_model"])
             except Exception:
-                log.warning(
-                    "audition: failed to restore forward model weights", exc_info=True
-                )
+                log.warning("audition: failed to restore forward model weights", exc_info=True)
 
 
 def _estimate_energy(audio_bytes: bytes) -> float:
     """Estimate mean RMS energy from raw bytes — purely in memory.
 
-    Interprets the bytes as raw int16 PCM after skipping any WAV header.
-    Returns a float in [0, 1].  Zero-persistence: no disk I/O.
+    Reuses the shared audio decode seam so the energy estimate does not repeat
+    WAV-header parsing. Returns a float in [0, 1]. Zero-persistence: no disk I/O.
     """
-    import io
-    import wave
-
     try:
         import numpy as np
 
-        try:
-            with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
-                pcm = wf.readframes(wf.getnframes())
-        except Exception:
-            pcm = audio_bytes
+        from kaine.modules.audition.acoustic import _decode_audio
 
-        if len(pcm) < 2:
+        samples = _decode_audio(audio_bytes)
+        if samples.size == 0:
             return 0.0
-        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(samples**2)))
         return min(rms, 1.0)
     except Exception:

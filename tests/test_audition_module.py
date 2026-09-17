@@ -21,9 +21,7 @@ from kaine.modules.audition import (
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
 
 
-def _tone(
-    freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000
-) -> bytes:
+def _tone(freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000) -> bytes:
     t = np.arange(int(seconds * sr)) / sr
     return (amp * np.sin(2 * np.pi * freq * t) * 32767).astype("<i2").tobytes()
 
@@ -115,9 +113,7 @@ async def test_transcription_payload_shape(bus: AsyncBus):
     audition = _make_audition(bus)
     await audition.initialize()
     try:
-        await audition.process_audio(
-            b"\x00" * 4096, sample_rate=24000, source_label="mic1"
-        )
+        await audition.process_audio(b"\x00" * 4096, sample_rate=24000, source_label="mic1")
         entries = await bus.read("audition.out", last_id="0", count=10)
         trans = next(e for _, e in entries if e.type == "audition.transcription")
         for key in (
@@ -162,9 +158,7 @@ async def test_emotion_payload_shape(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_stt_failure_still_publishes_emotion(bus: AsyncBus):
     class FailingSTT(FakeSTTClient):
-        async def transcribe(
-            self, audio_bytes, *, sample_rate, model, filename="audio.wav"
-        ):
+        async def transcribe(self, audio_bytes, *, sample_rate, model, filename="audio.wav"):
             raise RuntimeError("boom")
 
     audition = Audition(
@@ -334,9 +328,7 @@ def _fake_extract_prosody(audio, *, sample_rate: int = 16000):
 
 async def test_prosody_published_when_enabled(bus: AsyncBus, monkeypatch):
     """When prosody_enabled=True, an audition.prosody event is published."""
-    monkeypatch.setattr(
-        "kaine.modules.audition.prosody.extract_prosody", _fake_extract_prosody
-    )
+    monkeypatch.setattr("kaine.modules.audition.prosody.extract_prosody", _fake_extract_prosody)
     audition = Audition(
         bus,
         stt_client=FakeSTTClient(responses=["hi"]),
@@ -359,9 +351,7 @@ async def test_prosody_published_when_enabled(bus: AsyncBus, monkeypatch):
         else:
             entries = await bus.read("audition.out", last_id="0", count=20)
             types = [e.type for _, e in entries]
-        assert "audition.prosody" in types, (
-            f"Expected audition.prosody in bus events; got {types}"
-        )
+        assert "audition.prosody" in types, f"Expected audition.prosody in bus events; got {types}"
     finally:
         await audition.shutdown()
 
@@ -369,9 +359,7 @@ async def test_prosody_published_when_enabled(bus: AsyncBus, monkeypatch):
 @pytest.mark.asyncio
 async def test_prosody_payload_no_bytes(bus: AsyncBus, monkeypatch):
     """audition.prosody payload must contain no bytes values."""
-    monkeypatch.setattr(
-        "kaine.modules.audition.prosody.extract_prosody", _fake_extract_prosody
-    )
+    monkeypatch.setattr("kaine.modules.audition.prosody.extract_prosody", _fake_extract_prosody)
     audition = Audition(
         bus,
         stt_client=FakeSTTClient(responses=["hi"]),
@@ -470,9 +458,7 @@ async def test_real_speaches_transcribes(bus: AsyncBus):
 
     from kaine.modules.audition.stt_client import SpeachesClient
 
-    async with httpx.AsyncClient(
-        base_url="http://127.0.0.1:8000", timeout=15.0
-    ) as probe:
+    async with httpx.AsyncClient(base_url="http://127.0.0.1:8000", timeout=15.0) as probe:
         resp = await probe.get("/v1/models")
         resp.raise_for_status()
         served = [m.get("id", "") for m in resp.json().get("data", [])]
@@ -683,5 +669,49 @@ async def test_acoustic_change_alert_stats(bus: AsyncBus):
         await audition.process_audio(_tone(6000), sample_rate=16000)
         assert audition._acoustic_report_count == 4
         assert audition._acoustic_alert_count == 1
+    finally:
+        await audition.shutdown()
+
+
+class _SlowAcousticEncoder(FakeAcousticEncoder):
+    """Sleeps inside embed() so we can prove the thread offload yields the loop."""
+
+    def __init__(self, *, delay_s: float = 0.05, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.delay_s = delay_s
+
+    def embed(self, audio_bytes: bytes, sample_rate: int) -> list[float]:  # noqa: ARG002
+        import time
+
+        time.sleep(self.delay_s)
+        return super().embed(audio_bytes, sample_rate)
+
+
+@pytest.mark.asyncio
+async def test_acoustic_processing_yields_event_loop(bus: AsyncBus):
+    """The spectral encoder runs in a thread so a slow encode does not block the
+    event loop (performance-test-coverage)."""
+    audition = Audition(
+        bus,
+        stt_client=FakeSTTClient(responses=["hello world"]),
+        emotion_classifier=FakeEmotionClassifier(),
+        stt_model="fake-stt",
+        transcription_enabled=False,
+        general_audition=True,
+        acoustic_encoder=_SlowAcousticEncoder(embedding_dim=8, delay_s=0.05),
+    )
+    audition._acoustic_forward_model = _ConstErrorForwardModel()
+    await audition.initialize()
+    try:
+        loop_progressed = False
+
+        async def _marker() -> None:
+            nonlocal loop_progressed
+            loop_progressed = True
+
+        marker = asyncio.create_task(_marker())
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        await marker
+        assert loop_progressed
     finally:
         await audition.shutdown()

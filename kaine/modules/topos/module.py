@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, ClassVar, Optional
 
@@ -144,9 +145,7 @@ class Topos(BaseModule):
             pooling=encoder_pooling,
             clip_resolution=encoder_clip_resolution,
         )
-        self._change_detector: ChangeDetector = (
-            change_detector or CosineChangeDetector()
-        )
+        self._change_detector: ChangeDetector = change_detector or CosineChangeDetector()
         self._habituator: SceneHabituator = habituator or RollingMeanHabituator()
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
@@ -157,9 +156,7 @@ class Topos(BaseModule):
         self._clock = entity_clock or EntityClock()
         self._live_camera: Optional[LiveCamera] = None
         if self._capture_enabled or live_camera is not None:
-            self._live_camera = live_camera or self._build_default_live_camera(
-                live_camera_config
-            )
+            self._live_camera = live_camera or self._build_default_live_camera(live_camera_config)
 
         # Forward prediction — disabled by default; behaviour is unchanged
         # when forward_prediction=False (the legacy change_score/habituation
@@ -175,9 +172,7 @@ class Topos(BaseModule):
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
         # Rolling window of change scores, for the self-calibrating change alert
         # (perception-drives-salience). Same window as the prediction-error path.
-        self._change_history: deque[float] = deque(
-            maxlen=self._prediction_error_window
-        )
+        self._change_history: deque[float] = deque(maxlen=self._prediction_error_window)
         # Perceptual-alert visibility (perception-drives-salience task 4.2):
         # cumulative counts so a run's "perception actually fired N times" is
         # observable off the module (and via the `alert` field on each report).
@@ -270,9 +265,7 @@ class Topos(BaseModule):
 
         await super().initialize()
         self._tasks.append(
-            asyncio.create_task(
-                self._hypnos_loop(), name=f"{self.name}-hypnos-consumer"
-            )
+            asyncio.create_task(self._hypnos_loop(), name=f"{self.name}-hypnos-consumer")
         )
         if self._live_camera is not None:
             try:
@@ -307,9 +300,7 @@ class Topos(BaseModule):
             # shutdown steps above for consistency.
             log.debug("clearing perception preview failed", exc_info=True)
 
-    def _build_default_live_camera(
-        self, config: Optional[LiveCameraConfig]
-    ) -> LiveCamera:
+    def _build_default_live_camera(self, config: Optional[LiveCameraConfig]) -> LiveCamera:
         from kaine import perception_state
 
         # Locus gate selection: a wired deterministic source_factory IS the
@@ -440,9 +431,7 @@ class Topos(BaseModule):
         if isinstance(image, (bytes, bytearray)):
             import io
 
-            return np.asarray(
-                _PILImage.open(io.BytesIO(bytes(image))).convert("RGB")
-            )
+            return np.asarray(_PILImage.open(io.BytesIO(bytes(image))).convert("RGB"))
         # Last resort: let numpy try (e.g. a torch tensor exposes __array__).
         return np.asarray(image)
 
@@ -494,9 +483,7 @@ class Topos(BaseModule):
             # a per-frame encoder (clip_len == 1) encodes the single view; the
             # InternVideo-Next clip encoder (clip_len == 16) encodes the view as a
             # static clip (perception-drives-salience task 3).
-            peripheral_latent = await self._encode_clip(
-                [peripheral_view] * self._clip_len
-            )
+            peripheral_latent = await self._encode_clip([peripheral_view] * self._clip_len)
             foveal_latent = await self._encode_clip([foveal_view] * self._clip_len)
             embedding = peripheral_latent
         else:
@@ -514,9 +501,7 @@ class Topos(BaseModule):
         # stream (tiny mean) cannot fire on noise.
         self._change_history.append(change)
         mean_change = (
-            sum(self._change_history) / len(self._change_history)
-            if self._change_history
-            else 0.0
+            sum(self._change_history) / len(self._change_history) if self._change_history else 0.0
         )
         normalised_change = change / mean_change if mean_change > 0 else 0.0
         change_alert = (
@@ -529,7 +514,9 @@ class Topos(BaseModule):
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
         if self._forward_prediction and self._forward_model is not None:
             self._forward_model.suspended = self._in_hypnos
-            prediction_error = self._forward_model.step(embedding)
+            # Offload the MLP forward/backward step to a thread so the event loop
+            # stays responsive during vision processing (performance-test-coverage).
+            prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
             self._pred_errors.append(prediction_error)
 
             # Normalise error against the rolling window mean so a steady,
@@ -634,16 +621,12 @@ class Topos(BaseModule):
                                 self._in_hypnos = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
-                                log.debug(
-                                    "topos: adaptation suspended (hypnos sleep started)"
-                                )
+                                log.debug("topos: adaptation suspended (hypnos sleep started)")
                             elif event.type == "hypnos.sleep.completed":
                                 self._in_hypnos = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
-                                log.debug(
-                                    "topos: adaptation resumed (hypnos sleep completed)"
-                                )
+                                log.debug("topos: adaptation resumed (hypnos sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
