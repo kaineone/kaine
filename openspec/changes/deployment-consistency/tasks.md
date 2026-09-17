@@ -1,4 +1,4 @@
-:## 1. Quadlet volume units
+## 1. Quadlet volume units
 
 - [x] 1.1 Create `quadlet/kaine-state.volume` with a `[Volume]` section and verify it parses with `podman systemd generate`.
 - [x] 1.2 Create `quadlet/kaine-models.volume`, `quadlet/kaine-eval-data.volume`, `quadlet/kaine-trajectory.volume`, `quadlet/kaine-redis-data.volume`, and `quadlet/kaine-qdrant-data.volume` and verify all referenced volumes have matching files.

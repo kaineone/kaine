@@ -336,10 +336,12 @@ def test_quadlet_referenced_volumes_have_unit_files():
 
 
 def test_quadlet_qdrant_healthcheck_avoids_curl():
-    text = (_QUADLET / "kaine-qdrant.container").read_text()
-    assert "HealthCmd" in text
-    assert "curl" not in text
-    assert "wget" not in text
+    lines = (_QUADLET / "kaine-qdrant.container").read_text().splitlines()
+    health_lines = [ln for ln in lines if ln.startswith("HealthCmd")]
+    assert health_lines
+    health_cmd = health_lines[0]
+    assert "curl" not in health_cmd
+    assert "wget" not in health_cmd
 
 
 def test_quadlet_redis_maxmemory_matches_compose_topology():
@@ -348,6 +350,23 @@ def test_quadlet_redis_maxmemory_matches_compose_topology():
     compose_cmd = compose_doc["services"]["kaine-redis"]["command"]
     compose_maxmemory = compose_cmd[compose_cmd.index("--maxmemory") + 1]
     assert f"--maxmemory {compose_maxmemory}" in quadlet_text
+
+
+def test_compose_redis_maxmemory_matches_kaine_topology():
+    compose_doc = _load_compose()
+    kaine_cmd = compose_doc["services"]["kaine-redis"]["command"]
+    kaine_maxmemory = kaine_cmd[kaine_cmd.index("--maxmemory") + 1]
+    redis_path = _REPO_ROOT / "compose" / "redis.yml"
+    redis_doc = yaml.safe_load(redis_path.read_text())
+    redis_cmd = redis_doc["services"]["kaine-redis"]["command"]
+    redis_maxmemory = redis_cmd[redis_cmd.index("--maxmemory") + 1]
+    assert kaine_maxmemory == redis_maxmemory
+
+
+def test_quadlet_cycle_and_nexus_have_redis_url():
+    url = "Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0"
+    assert url in (_QUADLET / "kaine-cycle.container").read_text()
+    assert url in (_QUADLET / "kaine-nexus.container").read_text()
 
 
 # --------------------------------------------------------------------------

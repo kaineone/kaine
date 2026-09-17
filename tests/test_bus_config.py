@@ -150,6 +150,36 @@ def test_committed_config_ships_latent_stream_maxlen_caps():
         kaine_toml=root / "config" / "kaine.toml",
         secrets_toml=root / "config" / "secrets.toml",
         env={"KAINE_REDIS_PASSWORD": "x"},
+        operator_toml=root / "config" / "kaine.operator.toml.missing",
+    )
+    assert cfg.per_stream_maxlen.get("topos.out") == 2000
+    assert cfg.per_stream_maxlen.get("audition.out") == 2000
+
+
+def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):
+    kaine = tmp_path / "kaine.toml"
+    operator = tmp_path / "operator.toml"
+    secrets = tmp_path / "secrets.toml"
+    _write(
+        kaine,
+        """
+        [redis]
+        host = "127.0.0.1"
+        port = 6379
+        [bus]
+        default_maxlen = 100000
+        [bus.per_stream_maxlen]
+        "topos.out" = 2000
+        "audition.out" = 2000
+        """,
+    )
+    operator.write_text("this is not valid TOML\n", encoding="utf-8")
+    _write(secrets, '[redis]\npassword = "x"\n')
+    cfg = load_bus_config(
+        kaine_toml=kaine,
+        secrets_toml=secrets,
+        env={},
+        operator_toml=operator,
     )
     assert cfg.per_stream_maxlen.get("topos.out") == 2000
     assert cfg.per_stream_maxlen.get("audition.out") == 2000

@@ -92,7 +92,12 @@ def load_bus_config(
     op_path = (
         operator_toml if operator_toml is not None else root / OPERATOR_CONFIG_PATH
     )
-    op_doc = _read_toml(op_path)
+    try:
+        op_doc = _read_toml(op_path)
+    except (OSError, tomllib.TOMLDecodeError):
+        # A malformed or unreadable operator file must never break boot; fall
+        # back to the shipped configuration, matching load_kaine_config.
+        op_doc = {}
     if op_doc:
         kaine_doc = deep_merge(kaine_doc, op_doc)
 
