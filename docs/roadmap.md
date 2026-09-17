@@ -57,7 +57,7 @@ _Showing the 15 most recent of 150 archived changes._
 | action-selection | 4 |
 | active-inference-benchmark | 5 |
 | adapter-ties-dare-merge | 10 |
-| architecture-boundaries | 3 |
+| architecture-boundaries | 2 |
 | audio-input | 7 |
 | audio-output | 8 |
 | audition | 4 |
@@ -79,7 +79,7 @@ _Showing the 15 most recent of 150 archived changes._
 | entity-time | 5 |
 | evaluation-observers | 12 |
 | evaluation-sidecar | 14 |
-| event-bus | 11 |
+| event-bus | 10 |
 | experiment-foundation | 8 |
 | faithful-renderer | 6 |
 | first-run-wizard | 6 |
@@ -120,7 +120,7 @@ _Showing the 15 most recent of 150 archived changes._
 | soma | 7 |
 | soma-predictive | 5 |
 | spot-supervisor | 15 |
-| state-encryption | 4 |
+| state-encryption | 5 |
 | stream-contract | 2 |
 | syneidesis | 8 |
 | thesis-test-configuration | 3 |
@@ -135,7 +135,7 @@ _Showing the 15 most recent of 150 archived changes._
 | welfare-monitoring | 4 |
 | workspace-mediation-ablation | 7 |
 
-_Total: 81 capabilities, 487 requirements._
+_Total: 81 capabilities, 486 requirements._
 
 ---
 
