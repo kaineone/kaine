@@ -8,6 +8,7 @@ raw bus archive consumer (never export-eligible), config gating independent of
 [evaluation].enabled, the privacy transforms, and structural isolation of the
 raw archive from the metrics bundle.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -216,12 +217,8 @@ async def test_research_log_runs_when_evaluation_disabled(tmp_path):
     """Independence: [evaluation].enabled=false AND research enabled=true →
     the research observer is constructed and started."""
     eval_cfg = EvaluationConfig.from_mapping({"enabled": False})
-    rcfg = ResearchEventLogConfig(
-        enabled=True, log_dir=str(tmp_path / "research_events")
-    )
-    sidecar = SidecarRegistry(
-        bus=FakeBus(), config=eval_cfg, research_event_log_config=rcfg
-    )
+    rcfg = ResearchEventLogConfig(enabled=True, log_dir=str(tmp_path / "research_events"))
+    sidecar = SidecarRegistry(bus=FakeBus(), config=eval_cfg, research_event_log_config=rcfg)
     sidecar.build()
     names = [getattr(o, "name", "") for o in sidecar.observers]
     assert "research_event_log" in names
@@ -589,9 +586,7 @@ async def test_spot_incident_record_stamped_with_run_id(tmp_path):
     # 1) No run context -> record has no run_id.
     assert get_run_context() is None
     bus = FakeBus()
-    sink = AsyncJsonlSink(
-        tmp_path / "no_run", name="research_events", flush_interval_s=0.05
-    )
+    sink = AsyncJsonlSink(tmp_path / "no_run", name="research_events", flush_interval_s=0.05)
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
         "spot.out",
@@ -623,9 +618,7 @@ async def test_spot_incident_record_stamped_with_run_id(tmp_path):
     set_run_context(ctx)
     try:
         bus2 = FakeBus()
-        sink2 = AsyncJsonlSink(
-            tmp_path / "with_run", name="research_events", flush_interval_s=0.05
-        )
+        sink2 = AsyncJsonlSink(tmp_path / "with_run", name="research_events", flush_interval_s=0.05)
         obs2 = ResearchEventObserver(bus2, sink2, poll_interval_s=0.02)
         bus2.push(
             "spot.out",
@@ -642,11 +635,7 @@ async def test_spot_incident_record_stamped_with_run_id(tmp_path):
         await sink2.stop()
         files2 = list((tmp_path / "with_run").glob("research_events-*.jsonl"))
         assert files2
-        rows2 = [
-            json.loads(ln)
-            for ln in files2[0].read_text().splitlines()
-            if ln.strip()
-        ]
+        rows2 = [json.loads(ln) for ln in files2[0].read_text().splitlines() if ln.strip()]
         inc2 = next(r for r in rows2 if r.get("event_type") == "spot.incident")
         assert inc2["incident_id"] == "inc-B"
         assert inc2["run_id"] == "runX"
@@ -781,11 +770,9 @@ async def test_raw_archive_starts_and_writes_verbatim_with_full_attestation(tmp_
         archive_dir=str(tmp_path / "raw"),
     )
     bus = FakeBus()
-    sink = AsyncJsonlSink(
-        tmp_path / "raw", name="raw_bus_archive", flush_interval_s=0.05
-    )
+    sink = AsyncJsonlSink(tmp_path / "raw", name="raw_bus_archive", flush_interval_s=0.05)
     bus.push(
-        "lingua.external",
+        "lingua.out",
         _event("lingua", "external_speech", {"text": "VERBATIM conversation text"}),
     )
     consumer = RawBusArchiveConsumer(bus, sink, cfg)
@@ -797,9 +784,9 @@ async def test_raw_archive_starts_and_writes_verbatim_with_full_attestation(tmp_
     files = list((tmp_path / "raw").glob("raw_bus_archive-*.jsonl"))
     assert files, "raw archive should have written a file"
     rows = [json.loads(ln) for ln in files[0].read_text().splitlines() if ln.strip()]
-    assert any(
-        r.get("payload", {}).get("text") == "VERBATIM conversation text" for r in rows
-    ), "raw archive must capture verbatim content (that is its purpose)"
+    assert any(r.get("payload", {}).get("text") == "VERBATIM conversation text" for r in rows), (
+        "raw archive must capture verbatim content (that is its purpose)"
+    )
 
 
 def test_raw_archive_path_outside_data_evaluation():
@@ -812,14 +799,10 @@ def test_raw_archive_path_outside_data_evaluation():
 def test_raw_archive_under_export_allowlist_rejected_at_config_load():
     """S1 — an archive_dir under data/evaluation/ fails closed at config load."""
     with pytest.raises(RawArchiveConfinementError):
-        RawArchiveConfig.from_mapping(
-            {"archive_dir": "data/evaluation/raw_bus_archive"}
-        )
+        RawArchiveConfig.from_mapping({"archive_dir": "data/evaluation/raw_bus_archive"})
     # A nested path under the allowlist is also rejected.
     with pytest.raises(RawArchiveConfinementError):
-        RawArchiveConfig.from_mapping(
-            {"archive_dir": "data/evaluation/research_events/../raw"}
-        )
+        RawArchiveConfig.from_mapping({"archive_dir": "data/evaluation/research_events/../raw"})
     # The shipped default (outside the allowlist) is accepted.
     cfg = RawArchiveConfig.from_mapping({})
     assert cfg.archive_dir == "state/research/raw_bus_archive"
@@ -859,9 +842,7 @@ async def test_raw_archive_never_in_metrics_bundle(tmp_path):
     )
 
     out_dir = tmp_path / "out"
-    bundle = build_research_bundle(
-        eval_root=eval_root, tier="metrics", out_dir=out_dir
-    )
+    bundle = build_research_bundle(eval_root=eval_root, tier="metrics", out_dir=out_dir)
     for bf in bundle.files:
         assert "raw_bus_archive" not in bf.rel_path
         assert "raw_bus_archive" not in bf.source_path
@@ -881,9 +862,7 @@ async def test_curated_log_export_eligible_via_bundle(tmp_path):
         json.dumps({"ts": "t", "event_type": "cycle.tick", "source": "cycle"}) + "\n"
     )
     out_dir = tmp_path / "out"
-    bundle = build_research_bundle(
-        eval_root=eval_root, tier="metrics", out_dir=out_dir
-    )
+    bundle = build_research_bundle(eval_root=eval_root, tier="metrics", out_dir=out_dir)
     rels = [bf.rel_path for bf in bundle.files]
     assert any("research_events" in r for r in rels)
 
@@ -1176,18 +1155,18 @@ def test_no_latent_field_in_any_taxonomy_allowlist():
 
 def test_audition_prosody_hz_fields():
     # Real producer payload (kaine/modules/audition/prosody.py).
-    record = _taxonomy_record(
-        "audition.prosody", {"f0_mean_hz": 120.5, "f0_std_hz": 18.2}
-    )
+    record = _taxonomy_record("audition.prosody", {"f0_mean_hz": 120.5, "f0_std_hz": 18.2})
     assert record["f0_mean_hz"] == 120.5
     assert record["f0_std_hz"] == 18.2
 
 
-def test_raw_bus_archive_lingua_split():
+def test_raw_bus_archive_lingua_aggregate():
+    """Lingua now publishes an aggregate lingua.out stream; the raw archive
+    follows the canonical module stream set, not the mode-specific split."""
     from kaine.evaluation.observers.raw_bus_archive_consumer import (
         _MODULE_OUT_STREAMS,
     )
 
-    assert "lingua.external" in _MODULE_OUT_STREAMS
-    assert "lingua.internal" in _MODULE_OUT_STREAMS
-    assert "lingua.out" not in _MODULE_OUT_STREAMS
+    assert "lingua.out" in _MODULE_OUT_STREAMS
+    assert "lingua.external" not in _MODULE_OUT_STREAMS
+    assert "lingua.internal" not in _MODULE_OUT_STREAMS
