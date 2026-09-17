@@ -14,12 +14,10 @@ Verifies that:
 """
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.modules.base import BaseModule
 from kaine.modules.hypnos.phases import light_consolidation
-
 
 # ---------------------------------------------------------------------------
 # Minimal concrete BaseModule for testing (no bus needed for hook tests)

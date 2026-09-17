@@ -54,11 +54,11 @@ class Lingua(BaseModule):
     internal-monologue channel that Mnemos consumes and Eidolon counts but
     Chatterbox NEVER reads.
 
-    `_produce()` writes directly to the mode-specific stream via the bus
-    client, bypassing the default BaseModule `<module>.out` routing
-    (`self.publish` is never called) — there is no aggregate `lingua.out`
-    stream; consumers must subscribe to `lingua.external` and/or
-    `lingua.internal` explicitly.
+    `_produce()` writes to the mode-specific stream via the bus client,
+    then mirrors the same event to the canonical aggregate `lingua.out`
+    stream through `self.publish`. Consumers that need to distinguish
+    external from internal speech subscribe to the split streams; generic
+    observers and the nexus diagnostics tail can follow `lingua.out`.
     """
 
     name: ClassVar[str] = "lingua"
@@ -137,9 +137,7 @@ class Lingua(BaseModule):
         self._gen_task: Optional[asyncio.Task[Any]] = None
         self._gen_mode: Optional[str] = None
 
-    def set_self_model_provider(
-        self, provider: Callable[[], dict[str, Any]]
-    ) -> None:
+    def set_self_model_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
         """Inject a read-only accessor for the Eidolon self-model (wired in
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
@@ -192,9 +190,7 @@ class Lingua(BaseModule):
                         self._bus_self_model = {
                             "name": ev.payload.get("name"),
                             "values": list(ev.payload.get("values", []) or []),
-                            "behavioral_norms": list(
-                                ev.payload.get("behavioral_norms", []) or []
-                            ),
+                            "behavioral_norms": list(ev.payload.get("behavioral_norms", []) or []),
                             "personality_baseline": dict(
                                 ev.payload.get("personality_baseline", {}) or {}
                             ),
@@ -263,18 +259,12 @@ class Lingua(BaseModule):
                 entry_id = entry_id.decode()
             self._intent_cursor = entry_id
         await super().initialize()
+        self._tasks.append(asyncio.create_task(self._intent_loop(), name=f"{self.name}-intent"))
         self._tasks.append(
-            asyncio.create_task(self._intent_loop(), name=f"{self.name}-intent")
+            asyncio.create_task(self._snapshot_cache_loop(), name=f"{self.name}-snapshot-cache")
         )
         self._tasks.append(
-            asyncio.create_task(
-                self._snapshot_cache_loop(), name=f"{self.name}-snapshot-cache"
-            )
-        )
-        self._tasks.append(
-            asyncio.create_task(
-                self._self_model_cache_loop(), name=f"{self.name}-self-model-cache"
-            )
+            asyncio.create_task(self._self_model_cache_loop(), name=f"{self.name}-self-model-cache")
         )
 
     async def shutdown(self) -> None:
@@ -400,9 +390,7 @@ class Lingua(BaseModule):
                     },
                 )
             except Exception:
-                log.debug(
-                    "lingua: realization_failed publish failed", exc_info=True
-                )
+                log.debug("lingua: realization_failed publish failed", exc_info=True)
 
     async def _settle_gen_task(self) -> None:
         """Await the held generation, converting a preemptive cancellation into
@@ -456,9 +444,7 @@ class Lingua(BaseModule):
     def _record_preemption(self, mode: Optional[str]) -> None:
         tick = getattr(self._latest_snapshot, "tick_index", None)
         try:
-            self._intent_log.record_preemption(
-                mode=mode or "external", tick=tick
-            )
+            self._intent_log.record_preemption(mode=mode or "external", tick=tick)
         except Exception:
             log.exception("lingua preemption record failed")
 
@@ -535,6 +521,14 @@ class Lingua(BaseModule):
             },
             maxlen=self._bus.config.default_maxlen,
             approximate=True,
+        )
+        # Also publish to the aggregate lingua.out stream so consumers that
+        # expect the canonical <module>.out routing (nexus diagnostics, raw
+        # archive, generic observers) see every utterance in one place.
+        await self.publish(
+            f"{mode}_speech",
+            payload,
+            salience=self._baseline_salience,
         )
         return response.text
 

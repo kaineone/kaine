@@ -3,9 +3,9 @@
 
 from kaine.modules.audition.emotion import (
     CATEGORIES,
+    Emotion2vecClassifier,
     EmotionClassifier,
     EmotionResult,
-    Emotion2vecClassifier,
     FakeEmotionClassifier,
 )
 from kaine.modules.audition.module import Audition

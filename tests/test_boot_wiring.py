@@ -16,14 +16,13 @@ config path. Phase 9's integration tests used `StreamProducerFake`.
 
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.boot import (
     SIMPLE_FACTORIES,
+    MetricsCollector,
     build_registry,
     make_audition,
-    make_vox,
     make_chronos,
     make_eidolon,
     make_empatheia,
@@ -36,7 +35,7 @@ from kaine.boot import (
     make_soma,
     make_thymos,
     make_topos,
-    MetricsCollector,
+    make_vox,
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
@@ -855,8 +854,8 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
     Eidolon's self-inference engine, so the self-model's capability_map reflects
     what the entity can execute (eidolon-self-inference spec)."""
     from kaine.boot import _wire_eidolon_capabilities
-    from kaine.modules.registry import ModuleRegistry
     from kaine.modules.eidolon.document import SelfModel
+    from kaine.modules.registry import ModuleRegistry
 
     bus = _bus()
     praxis = make_praxis(

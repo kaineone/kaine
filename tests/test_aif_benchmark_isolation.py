@@ -18,7 +18,6 @@ build.
 """
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.evaluation.benchmarks.active_inference.envs import (

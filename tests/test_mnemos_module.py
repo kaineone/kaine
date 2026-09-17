@@ -380,8 +380,9 @@ async def test_stored_traces_carry_affect_tag_from_thymos_state(bus: AsyncBus):
         # Simulate a thymos.state arriving on the bus by directly calling the
         # internal handler (unit-style — avoids spinning up Thymos and a real bus
         # while still exercising the tagging path through the actual handler).
-        from kaine.bus.schema import Event as BusEvent
         from datetime import datetime, timezone
+
+        from kaine.bus.schema import Event as BusEvent
 
         fake_event = BusEvent(
             source="thymos",
@@ -432,8 +433,9 @@ async def test_affect_tag_updates_on_new_thymos_state(bus: AsyncBus):
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:
-        from kaine.bus.schema import Event as BusEvent
         from datetime import datetime, timezone
+
+        from kaine.bus.schema import Event as BusEvent
 
         def _thymos_event(arousal: float, valence: float) -> BusEvent:
             return BusEvent(
@@ -484,8 +486,9 @@ async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:
-        from kaine.bus.schema import Event as BusEvent
         from datetime import datetime, timezone
+
+        from kaine.bus.schema import Event as BusEvent
 
         assert not mnemos.replay_engine.window_active
 

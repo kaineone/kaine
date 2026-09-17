@@ -256,8 +256,8 @@ async def test_singleton_returns_same_instance(monkeypatch, tmp_path):
 
     import fakeredis.aioredis
 
-    from kaine.bus.client import _BUS_LOCK  # noqa: F401  (assert lock exists)
     from kaine.bus import client as client_mod
+    from kaine.bus.client import _BUS_LOCK  # noqa: F401  (assert lock exists)
 
     secrets = tmp_path / "secrets.toml"
     secrets.write_text(

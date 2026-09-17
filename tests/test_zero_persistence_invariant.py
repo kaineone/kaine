@@ -31,7 +31,6 @@ from kaine import perception_state
 from kaine.modules.audition.live import LiveMicConfig, LiveMicrophone
 from kaine.modules.topos.live import LiveCamera, LiveCameraConfig
 
-
 RAW_SENSE_EXTENSIONS = (
     # audio
     ".wav", ".pcm", ".raw", ".flac", ".opus", ".mp3", ".ogg", ".m4a",

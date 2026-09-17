@@ -299,7 +299,7 @@ def main(
             "\nOffer to email the guardians a request to safekeep this backup until\n"
             "a new guardian can run the entity? The email contains ONLY the request,\n"
             "the situation, and the LOCAL backup path — never any entity data\n"
-            f"(CAL 4.3). [y/N]: "
+            "(CAL 4.3). [y/N]: "
         ).strip().lower()
         if offer in ("y", "yes"):
             transfer_cfg = config.get("transfer") or {}

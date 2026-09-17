@@ -16,7 +16,6 @@ import pytest
 
 from kaine.modules.topos.forward import LatentForwardModel
 
-
 # ---------------------------------------------------------------------------
 # Construction and shape
 # ---------------------------------------------------------------------------

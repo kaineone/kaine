@@ -21,7 +21,6 @@ from typing import Any, Iterable
 
 from kaine.bus.schema import Event
 
-
 # ---------------------------------------------------------------------------
 # Denylist vs. allowlist — a deliberate, documented choice for THIS surface.
 #

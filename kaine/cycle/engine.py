@@ -12,13 +12,13 @@ from typing import Any, Callable, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
-from kaine.entity_clock import EntityClock
 from kaine.cycle.protocols import (
     CycleHook,
     ModuleRegistryProtocol,
     SyneidesisProtocol,
 )
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
+from kaine.entity_clock import EntityClock
 from kaine.workspace.volition import Volition
 
 log = logging.getLogger(__name__)

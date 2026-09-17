@@ -7,6 +7,7 @@ Each observer is an async task. The SidecarRegistry constructs all
 enabled observers, calls `start()` on each, and `stop()` on shutdown.
 Observers never publish to the bus (read-only on the cognitive loop).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -74,55 +75,78 @@ class BaseObserver(ABC):
 
 
 class StreamSubscriberObserver(BaseObserver):
-    """Observer that follows one bus stream and dispatches events."""
+    """Observer that follows one or more bus streams and dispatches events.
 
-    stream: str = ""
+    Subclasses declare the stream(s) to follow via :attr:`streams` (a tuple).
+    Each stream keeps its own cursor in ``self._cursors`` so a read failure on
+    one stream does not advance the others. The default cursor is ``"0"`` so
+    observers see the backlog on first read.
+    """
+
+    streams: tuple[str, ...] = ()
 
     def __init__(self, bus: BusReader, *, poll_interval_s: float = 0.5) -> None:
         super().__init__()
         self._bus = bus
         self._poll_interval_s = float(poll_interval_s)
-        self._cursor = "0"  # default: pick up backlog on first read
+        self._cursors: dict[str, str] = {}
 
     async def _run(self) -> None:
+        self._cursors = await self._initial_cursors()
         try:
-            self._cursor = await self._initial_cursor()
-        except Exception:
-            self._cursor = "0"
-        while not self._stopped.is_set():
-            last_scanned: str | None = None
-            try:
-                entries, last_scanned = await self._bus.read_entries(
-                    self.stream, last_id=self._cursor, count=64, block_ms=0
-                )
-            except Exception:
-                entries = []
-                log.warning("observer %s read failed", self.name, exc_info=True)
-            for entry_id, event in entries:
-                self._cursor = entry_id
+            while not self._stopped.is_set():
+                for stream in self.streams:
+                    last_scanned: str | None = None
+                    try:
+                        entries, last_scanned = await self._bus.read_entries(
+                            stream,
+                            last_id=self._cursors.get(stream, "0"),
+                            count=64,
+                            block_ms=0,
+                        )
+                    except Exception:
+                        entries = []
+                        log.warning(
+                            "observer %s read failed for %s", self.name, stream, exc_info=True
+                        )
+                    for entry_id, event in entries:
+                        self._cursors[stream] = entry_id
+                        try:
+                            await self.handle(stream, entry_id, event)
+                        except Exception:
+                            log.warning(
+                                "observer %s handler raised on %s / %s",
+                                self.name,
+                                stream,
+                                entry_id,
+                                exc_info=True,
+                            )
+                    # Advance past entries that were scanned but skipped as
+                    # undecodable, so a batch of all-malformed legacy entries can't
+                    # wedge the cursor.
+                    if last_scanned is not None:
+                        self._cursors[stream] = last_scanned
+                await self._tick()
                 try:
-                    await self.handle(entry_id, event)
-                except Exception:
-                    log.warning(
-                        "observer %s handler raised on %s", self.name, entry_id,
-                        exc_info=True,
-                    )
-            # Advance past entries that were scanned but skipped as undecodable,
-            # so a batch of all-malformed legacy entries can't wedge the cursor.
-            if last_scanned is not None:
-                self._cursor = last_scanned
-            try:
-                await asyncio.wait_for(self._stopped.wait(), timeout=self._poll_interval_s)
-            except asyncio.TimeoutError:
-                continue
+                    await asyncio.wait_for(self._stopped.wait(), timeout=self._poll_interval_s)
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            await self._cleanup()
 
-    async def _initial_cursor(self) -> str:
-        # Default: start from "0" so observers see the backlog. Subclasses
-        # that want to skip backlog can override.
-        return "0"
+    async def _initial_cursors(self) -> dict[str, str]:
+        # Default: start every stream from "0" so observers see the backlog.
+        # Subclasses that want to skip backlog can override.
+        return {stream: "0" for stream in self.streams}
+
+    async def _tick(self) -> None:
+        """Hook called once per poll cycle. Subclasses override for periodic work."""
+
+    async def _cleanup(self) -> None:
+        """Hook called once when the observer loop exits. Subclasses override for final flushes."""
 
     @abstractmethod
-    async def handle(self, entry_id: str, event: Event) -> None: ...
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None: ...
 
 
 class WorkspaceSubscriberObserver(BaseObserver):
@@ -156,9 +180,7 @@ class WorkspaceSubscriberObserver(BaseObserver):
         try:
             while not self._stopped.is_set():
                 nxt = asyncio.ensure_future(agen.__anext__())
-                done, _ = await asyncio.wait(
-                    {nxt, stop_wait}, return_when=asyncio.FIRST_COMPLETED
-                )
+                done, _ = await asyncio.wait({nxt, stop_wait}, return_when=asyncio.FIRST_COMPLETED)
                 if nxt not in done:
                     nxt.cancel()
                     with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
@@ -175,7 +197,9 @@ class WorkspaceSubscriberObserver(BaseObserver):
                     await self.handle(entry_id, payload)
                 except Exception:
                     log.warning(
-                        "observer %s handler raised on %s", self.name, entry_id,
+                        "observer %s handler raised on %s",
+                        self.name,
+                        entry_id,
                         exc_info=True,
                     )
         finally:

@@ -4,12 +4,11 @@
 import json
 from pathlib import Path
 
-
 from kaine.modules.lingua.intent_log import IntentExpressionLog
 
 
 def _records(path: Path) -> list[dict]:
-    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def test_append_creates_jsonl_record(tmp_path: Path):
@@ -91,8 +90,13 @@ def test_token_counts_recorded(tmp_path: Path):
     p = tmp_path / "log.jsonl"
     log = IntentExpressionLog(p)
     log.append(
-        mode="external", prompt="x", generated_text="y", model="m",
-        prompt_tokens=12, completion_tokens=8, latency_ms=120.5,
+        mode="external",
+        prompt="x",
+        generated_text="y",
+        model="m",
+        prompt_tokens=12,
+        completion_tokens=8,
+        latency_ms=120.5,
     )
     rec = _records(p)[0]
     assert rec["prompt_tokens"] == 12

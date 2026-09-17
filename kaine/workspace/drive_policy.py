@@ -38,9 +38,10 @@ Guards (all inherited from the executive design, never bypassing it):
 Injectable like the default policy, so a future change can parameterize the
 drive→kind mapping without touching Volition's plumbing.
 """
+
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace.volition import (
@@ -193,9 +194,7 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
                 )
         return None
 
-    def _deliberative_drive_think(
-        self, snapshot: WorkspaceSnapshot
-    ) -> Optional[Intent]:
+    def _deliberative_drive_think(self, snapshot: WorkspaceSnapshot) -> Optional[Intent]:
         """A ``think`` intent from a curiosity/boredom/restlessness crossing."""
         for entry_id, event in snapshot.selected_events:
             if self._is_own_speech(event):

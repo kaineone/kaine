@@ -20,18 +20,24 @@ from __future__ import annotations
 
 from kaine.evaluation.benchmarks.instrument_runners.ab_divergence_runner import (
     ABDivergenceConfig,
-    format_summary as format_ab_summary,
     run_ab_divergence,
+)
+from kaine.evaluation.benchmarks.instrument_runners.ab_divergence_runner import (
+    format_summary as format_ab_summary,
 )
 from kaine.evaluation.benchmarks.instrument_runners.memory_coherence_runner import (
     MemoryCoherenceConfig,
-    format_summary as format_memory_summary,
     run_memory_coherence,
+)
+from kaine.evaluation.benchmarks.instrument_runners.memory_coherence_runner import (
+    format_summary as format_memory_summary,
 )
 from kaine.evaluation.benchmarks.instrument_runners.self_model_runner import (
     SelfModelConfig,
-    format_summary as format_self_model_summary,
     run_self_model,
+)
+from kaine.evaluation.benchmarks.instrument_runners.self_model_runner import (
+    format_summary as format_self_model_summary,
 )
 from kaine.evaluation.benchmarks.instrument_runners.shared import write_jsonl
 

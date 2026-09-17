@@ -16,7 +16,6 @@ from urllib.parse import urlparse
 
 import pytest
 
-
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 ALLOWED_URL_KEYS = {
     ("lingua", "chat_url"),

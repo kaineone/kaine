@@ -7,6 +7,7 @@ with a second 'bare LLM' inference and the cosine similarity logged.
 The bare output never reaches the user or Mnemos. We use the same
 chat endpoint as Lingua via httpx so behavior matches the real one.
 """
+
 from __future__ import annotations
 
 import logging
@@ -88,9 +89,7 @@ class HTTPBareInferenceClient:
             return False
         text = resp.text.lower()
         return (
-            _ENABLE_THINKING_KWARG in text
-            or "chat_template_kwargs" in text
-            or "template" in text
+            _ENABLE_THINKING_KWARG in text or "chat_template_kwargs" in text or "template" in text
         )
 
     async def complete(self, user_text: str) -> str:
@@ -242,7 +241,7 @@ class AssemblerConditionedClient:
 
 class ABDivergenceObserver(StreamSubscriberObserver):
     name = "ab_divergence"
-    stream = LINGUA_EXTERNAL_STREAM
+    streams = (LINGUA_EXTERNAL_STREAM,)
 
     def __init__(
         self,
@@ -278,7 +277,7 @@ class ABDivergenceObserver(StreamSubscriberObserver):
         except Exception:
             log.warning("bare inference client close failed", exc_info=True)
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "external_speech":
             return
         # Organ-absent graceful degradation: during the sleep-cycle voice-

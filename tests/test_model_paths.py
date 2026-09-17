@@ -41,8 +41,8 @@ def test_weight_paths_default_under_local_state_models(monkeypatch):
     # orphaned by the containerization split.
     monkeypatch.delenv(MODELS_DIR_ENV_VAR, raising=False)
 
-    from kaine.setup import abliteration_gate, organ
     from kaine.modules.topos import internvideo_next_loader
+    from kaine.setup import abliteration_gate, organ
 
     assert organ.ORGAN_GGUF_DIR == Path("state/models/Qwen3.5-4B-abliterated-GGUF")
     assert (

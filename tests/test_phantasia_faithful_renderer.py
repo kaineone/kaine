@@ -10,7 +10,6 @@ from kaine.bus.schema import Event
 from kaine.faithful.renderer import FaithfulRenderer
 from kaine.faithful.templates import fallback_template
 
-
 _BANNED_PHRASES = (
     "i think",
     "as an ai",

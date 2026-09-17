@@ -28,7 +28,6 @@ from kaine.workspace import (
     StaticThymosModulator,
     Syneidesis,
 )
-
 from tests._module_shedding import CANONICAL_MODULE_NAMES, build_fakes
 
 

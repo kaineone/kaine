@@ -17,7 +17,6 @@ from typing import Any, ClassVar
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 
-
 CANONICAL_MODULE_NAMES = (
     "soma",
     "chronos",

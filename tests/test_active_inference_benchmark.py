@@ -39,7 +39,6 @@ from kaine.evaluation.benchmarks.active_inference.rl_baseline import (
 )
 from kaine.evaluation.benchmarks.active_inference.runner import derive_seed
 
-
 # ---------------------------------------------------------------------------
 # Environments
 # ---------------------------------------------------------------------------
@@ -278,6 +277,7 @@ def test_benchmark_source_does_not_reference_live_system_apis():
     """
     import inspect
 
+    from kaine.evaluation.benchmarks.active_inference import __main__ as cli
     from kaine.evaluation.benchmarks.active_inference import (
         aif_agent,
         envs,
@@ -285,7 +285,6 @@ def test_benchmark_source_does_not_reference_live_system_apis():
         rl_baseline,
         runner,
     )
-    from kaine.evaluation.benchmarks.active_inference import __main__ as cli
 
     forbidden = (
         "EventBus",

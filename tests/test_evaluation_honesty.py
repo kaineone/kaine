@@ -32,7 +32,6 @@ from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
 from kaine.evaluation.registry import SidecarRegistry
 from kaine.nexus.health import DEGRADED, DOWN, UP, nous_health_probe
 
-
 # ---------------------------------------------------------------------------
 # Shared test helpers
 # ---------------------------------------------------------------------------

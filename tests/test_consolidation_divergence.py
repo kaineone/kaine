@@ -28,6 +28,7 @@ from kaine.lifecycle.divergence import (
 )
 from kaine.modules.hypnos.module import Hypnos
 from kaine.modules.hypnos.voice_alignment import (
+    OPERATOR_APPROVED_ENV,
     ConsolidationDivergence,
     DPOPair,
     DPOPairBuilder,
@@ -37,9 +38,7 @@ from kaine.modules.hypnos.voice_alignment import (
     read_consolidation_divergence,
     write_consolidation_divergence,
 )
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
 from kaine.text_embedding import HashEmbedder
-
 
 # --------------------------------------------------------------------------- #
 # Helpers

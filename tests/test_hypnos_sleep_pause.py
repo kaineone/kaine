@@ -8,9 +8,9 @@ real state files are touched (except the flags-only audit, which writes a
 throwaway tmp_path file)."""
 
 
-import pytest
-
 from types import SimpleNamespace
+
+import pytest
 
 
 class _FakeClock:

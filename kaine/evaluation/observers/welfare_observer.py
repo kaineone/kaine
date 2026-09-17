@@ -39,9 +39,9 @@ It NEVER copies any field from a source event payload into the emitted (or
 sink-written) gray-zone dict. The published payload is byte-for-byte the same
 content-free dict written to the sink.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from collections import deque
@@ -49,7 +49,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event, validate_event
-from kaine.evaluation._base import BaseObserver, BusReader
+from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 # The sustained-distress detection logic is shared core-side so the autonomous
@@ -79,19 +79,20 @@ _GRAY_ZONE_SALIENCE = 0.5
 # ever copied from a source event payload.
 _GRAY_ZONE_LABEL_KEY = "gray_zone_event"
 
-_DEFAULT_MAINTENANCE_WINDOW_S = 900.0      # 15 minutes
-_DEFAULT_EXTREME_VAD_THRESHOLD = 0.7       # |valence| or arousal magnitude
-_DEFAULT_EXTREME_VAD_DURATION_S = 60.0     # sustained duration
-_DEFAULT_CONSOLIDATION_WINDOW_S = 5.0      # sliding window for replay rate
-_DEFAULT_REPLAY_RATE_THRESHOLD = 10        # events per consolidation window
-_DEFAULT_INTEROCEPTIVE_DISTRESS_THRESHOLD = 0.8   # prediction_error magnitude
+_DEFAULT_MAINTENANCE_WINDOW_S = 900.0  # 15 minutes
+_DEFAULT_EXTREME_VAD_THRESHOLD = 0.7  # |valence| or arousal magnitude
+_DEFAULT_EXTREME_VAD_DURATION_S = 60.0  # sustained duration
+_DEFAULT_CONSOLIDATION_WINDOW_S = 5.0  # sliding window for replay rate
+_DEFAULT_REPLAY_RATE_THRESHOLD = 10  # events per consolidation window
+_DEFAULT_INTEROCEPTIVE_DISTRESS_THRESHOLD = 0.8  # prediction_error magnitude
 _DEFAULT_INTEROCEPTIVE_DISTRESS_DURATION_S = 30.0  # sustained-high duration
 
 
-class WelfareObserver(BaseObserver):
+class WelfareObserver(StreamSubscriberObserver):
     """Detects §5.5 Gray-Zone welfare events across multiple streams."""
 
     name = "welfare"
+    streams = (_SOMA_STREAM, _HYPNOS_STREAM, _THYMOS_STREAM, _MNEMOS_STREAM)
 
     def __init__(
         self,
@@ -107,8 +108,7 @@ class WelfareObserver(BaseObserver):
         interoceptive_distress_duration_s: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_DURATION_S,
         poll_interval_s: float = 0.5,
     ) -> None:
-        super().__init__()
-        self._bus = bus
+        super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
         self._maintenance_window_s = float(maintenance_window_s)
         self._extreme_vad_threshold = float(extreme_vad_threshold)
@@ -117,15 +117,6 @@ class WelfareObserver(BaseObserver):
         self._replay_rate_threshold = int(replay_rate_threshold)
         self._interoceptive_distress_threshold = float(interoceptive_distress_threshold)
         self._interoceptive_distress_duration_s = float(interoceptive_distress_duration_s)
-        self._poll_interval_s = float(poll_interval_s)
-
-        # Cursors per stream.
-        self._cursors: dict[str, str] = {
-            _SOMA_STREAM: "0",
-            _HYPNOS_STREAM: "0",
-            _THYMOS_STREAM: "0",
-            _MNEMOS_STREAM: "0",
-        }
 
         # --- Gray-zone counters (Nexus diagnostics). ---
         self._unmaintained_fatigue_count: int = 0
@@ -173,51 +164,24 @@ class WelfareObserver(BaseObserver):
 
     # --- Main loop -------------------------------------------------------
 
-    async def _run(self) -> None:
-        streams = [
-            (_SOMA_STREAM, self._handle_soma),
-            (_HYPNOS_STREAM, self._handle_hypnos),
-            (_THYMOS_STREAM, self._handle_thymos),
-            (_MNEMOS_STREAM, self._handle_mnemos),
-        ]
-        while not self._stopped.is_set():
-            for stream, handler in streams:
-                try:
-                    entries, last_scanned = await self._bus.read_entries(
-                        stream,
-                        last_id=self._cursors[stream],
-                        count=64,
-                        block_ms=0,
-                    )
-                except Exception:
-                    log.warning(
-                        "welfare_observer read failed for %s", stream, exc_info=True
-                    )
-                    entries = []
-                    last_scanned = None
-                for entry_id, event in entries:
-                    self._cursors[stream] = entry_id
-                    try:
-                        await handler(entry_id, event)
-                    except Exception:
-                        log.warning(
-                            "welfare_observer handler raised on %s / %s",
-                            stream,
-                            entry_id,
-                            exc_info=True,
-                        )
-                if last_scanned is not None:
-                    self._cursors[stream] = last_scanned
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
+        handler = self._stream_handlers.get(stream)
+        if handler is None:
+            return
+        await handler(entry_id, event)
 
-            # Check time-based conditions on every poll.
-            await self._check_timed_conditions()
+    async def _tick(self) -> None:
+        # Check time-based conditions on every poll cycle.
+        await self._check_timed_conditions()
 
-            try:
-                await asyncio.wait_for(
-                    self._stopped.wait(), timeout=self._poll_interval_s
-                )
-            except asyncio.TimeoutError:
-                continue
+    @property
+    def _stream_handlers(self) -> dict[str, Any]:
+        return {
+            _SOMA_STREAM: self._handle_soma,
+            _HYPNOS_STREAM: self._handle_hypnos,
+            _THYMOS_STREAM: self._handle_thymos,
+            _MNEMOS_STREAM: self._handle_mnemos,
+        }
 
     # --- Content-free gray-zone emitter ----------------------------------
 
@@ -277,9 +241,7 @@ class WelfareObserver(BaseObserver):
         if event.type == "soma.fatigue":
             # Record fatigue threshold crossing time.
             self._fatigue_crossed_at = time.monotonic()
-            log.debug(
-                "welfare_observer: soma.fatigue crossing recorded at %s", entry_id
-            )
+            log.debug("welfare_observer: soma.fatigue crossing recorded at %s", entry_id)
         elif event.type == "soma.report":
             # (d) Track interoceptive prediction-error magnitude through the
             # shared sustained-threshold tracker. ``prediction_error`` is a
@@ -314,8 +276,7 @@ class WelfareObserver(BaseObserver):
         arousal = float(state.get("arousal", 0.0))
         # Extreme zone: high arousal AND extreme valence (either direction).
         in_extreme = (
-            abs(valence) >= self._extreme_vad_threshold
-            and arousal >= self._extreme_vad_threshold
+            abs(valence) >= self._extreme_vad_threshold and arousal >= self._extreme_vad_threshold
         )
         now = time.monotonic()
         if in_extreme:

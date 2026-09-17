@@ -241,8 +241,8 @@ async def test_verdict_artifact_is_content_free(tmp_path: Path, monkeypatch):
 
 
 def test_gate_result_summary_reads_clearly():
-    from kaine.setup.abliteration_gate import SurfaceOutcome
     from kaine.modules.hypnos.capability_eval import AbliterationVerdict
+    from kaine.setup.abliteration_gate import SurfaceOutcome
 
     result = AbliterationGateResult(
         safetensors=SurfaceOutcome(

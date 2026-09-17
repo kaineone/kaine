@@ -15,7 +15,6 @@ from kaine.modules.audition.module import Audition
 from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.modules.mnemos.module import Mnemos
 from kaine.modules.topos.module import Topos
-
 from tests.systems._harness import SubsystemHarness
 
 
@@ -93,10 +92,10 @@ def test_voice_alignment_config_default_training_device():
 
 def test_topos_factory_rejects_unknown_device_key():
     """Unknown TOML keys still trip the allowlist."""
+    import fakeredis.aioredis
+
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
-
-    import fakeredis.aioredis
 
     client = fakeredis.aioredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)

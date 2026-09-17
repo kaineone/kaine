@@ -17,8 +17,7 @@ from pathlib import Path
 import pytest
 
 from kaine.modules.eidolon.document import SelfModel
-from kaine.modules.eidolon.self_inference import SelfInferenceEngine, _NORM_PREFIX
-
+from kaine.modules.eidolon.self_inference import _NORM_PREFIX, SelfInferenceEngine
 
 # ---------------------------------------------------------------------------
 # Helpers

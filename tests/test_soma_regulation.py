@@ -8,7 +8,6 @@ import pytest
 
 from kaine.modules.soma.regulation import RegulationDetector
 
-
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------

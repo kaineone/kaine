@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 from kaine.setup import dependencies as deps
+from kaine.setup.__main__ import _provision_dependencies
 from kaine.setup.dependencies import (
     detect_dependencies,
     implied_external_deps,
 )
-from kaine.setup.__main__ import _provision_dependencies
 
 
 class _Answers:

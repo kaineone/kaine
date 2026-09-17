@@ -56,6 +56,8 @@ from kaine.modules.base import BaseModule
 from kaine.modules.phantasia.checkpoint import load_checkpoint, save_checkpoint
 from kaine.modules.phantasia.encoder import (
     VERSION as ENCODER_VERSION,
+)
+from kaine.modules.phantasia.encoder import (
     encode_snapshot,
     observation_dim,
 )

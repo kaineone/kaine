@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from kaine.modules.mnemos.module import Mnemos
 from kaine.modules.mnemos.embeddings import FakeEmbedder
-
+from kaine.modules.mnemos.module import Mnemos
 from tests.systems._harness import SubsystemHarness
 
 

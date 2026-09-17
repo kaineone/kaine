@@ -7,19 +7,12 @@ import asyncio
 import logging
 import time
 from collections import deque
-from typing import Any, Callable, ClassVar, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
 
 if TYPE_CHECKING:
     from kaine.modules.vox.coordination import SpeakingGate
-from kaine.modules.audition.emotion import (
-    CATEGORIES,
-    EmotionClassifier,
-    Emotion2vecClassifier,
-    EmotionResult,
-    NullEmotionClassifier,
-)
 from kaine.modules.audition.acoustic import (
     AcousticEncoder,
     SpectralAcousticEncoder,
@@ -27,9 +20,16 @@ from kaine.modules.audition.acoustic import (
     cosine_change,
     detect_speech,
 )
+from kaine.modules.audition.emotion import (
+    CATEGORIES,
+    Emotion2vecClassifier,
+    EmotionClassifier,
+    EmotionResult,
+    NullEmotionClassifier,
+)
 from kaine.modules.audition.forward import (
-    AuditoryForwardModel,
     FEATURE_DIM,
+    AuditoryForwardModel,
     build_feature_vector,
 )
 from kaine.modules.audition.live import (

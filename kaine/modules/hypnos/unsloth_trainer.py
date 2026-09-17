@@ -34,13 +34,13 @@ from kaine.modules.hypnos.capability_eval import (
     CapabilityEval,
     LocalProbeSetCapabilityEval,
 )
-from kaine.modules.hypnos.voice_audit import append_voice_audit
 from kaine.modules.hypnos.hot_swap import dispatch as dispatch_hot_swap
 from kaine.modules.hypnos.voice_alignment import (
     DPOPair,
     TrainingResult,
     VoiceAlignmentConfig,
 )
+from kaine.modules.hypnos.voice_audit import append_voice_audit
 
 log = logging.getLogger(__name__)
 

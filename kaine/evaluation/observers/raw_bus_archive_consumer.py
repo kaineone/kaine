@@ -26,6 +26,7 @@ The archive is encrypted at rest via the same ``AsyncJsonlSink`` +
 (no privacy transform) — that is the entire point, and the reason it is locked
 behind the double gate and structural path isolation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,6 +40,7 @@ from kaine.evaluation.config import (
     assert_raw_archive_outside_export_allowlist,
 )
 from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.evaluation.stream_registry import raw_archive_module_streams
 
 log = logging.getLogger(__name__)
 
@@ -49,8 +51,6 @@ class RawArchiveAttestationError(ValueError):
     Mirrors ``BundleTierError`` in ``kaine/research/submission.py``.
     """
 
-
-from kaine.evaluation.stream_registry import raw_archive_module_streams
 
 #: Every module stream the raw archive follows verbatim — derived from the
 #: canonical registry (kaine.evaluation.stream_registry) so the observer,
@@ -72,17 +72,17 @@ class _VerbatimStreamArchiver(StreamSubscriberObserver):
         name: str,
     ) -> None:
         super().__init__(bus, poll_interval_s=0.5)
-        self.stream = source_stream
+        self.streams = (source_stream,)
         self.name = name
         self._sink = sink
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         # Verbatim — NO privacy transform. This is the local-only raw archive.
         await self._sink.write(
             {
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "entry_id": entry_id,
-                "stream": self.stream,
+                "stream": stream,
                 "source": event.source,
                 "type": event.type,
                 "salience": event.salience,
@@ -122,10 +122,7 @@ class RawBusArchiveConsumer:
         ]
 
     def _assert_attested(self) -> None:
-        if not (
-            self._config.entity_privacy_attested
-            and self._config.bystander_consent_attested
-        ):
+        if not (self._config.entity_privacy_attested and self._config.bystander_consent_attested):
             msg = (
                 "raw bus archive is enabled but requires BOTH "
                 "entity_privacy_attested=true AND bystander_consent_attested=true "
@@ -155,6 +152,4 @@ class RawBusArchiveConsumer:
             try:
                 await archiver.stop()
             except Exception:
-                log.warning(
-                    "raw archive stream %s stop failed", archiver.name, exc_info=True
-                )
+                log.warning("raw archive stream %s stop failed", archiver.name, exc_info=True)

@@ -13,7 +13,6 @@ from typing import Optional
 from kaine.bus.errors import BusConfigError
 from kaine.config import OPERATOR_CONFIG_PATH, deep_merge
 
-
 DEFAULT_KAINE_TOML = "config/kaine.toml"
 DEFAULT_SECRETS_TOML = "config/secrets.toml"
 

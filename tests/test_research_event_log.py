@@ -24,10 +24,10 @@ from kaine.evaluation.config import (
     ResearchEventLogConfig,
 )
 from kaine.evaluation.observers.raw_bus_archive_consumer import (
+    _MODULE_OUT_STREAMS,
     RawArchiveAttestationError,
     RawBusArchiveConsumer,
 )
-from kaine.evaluation.observers.raw_bus_archive_consumer import _MODULE_OUT_STREAMS
 from kaine.evaluation.observers.research_event_observer import (
     _CURATED_STREAMS,
     ResearchEventObserver,
@@ -40,7 +40,6 @@ from kaine.research.submission import (
     METRICS_ONLY_DIRS,
     build_research_bundle,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

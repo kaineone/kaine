@@ -16,10 +16,10 @@ import importlib.util
 import pytest
 
 from kaine.modules.audition.feed import (
+    _SALT_SHARED_ONSET,
     PlaylistAudioStream,
     SeededAudioSchedule,
     SeededProceduralAudioStream,
-    _SALT_SHARED_ONSET,
 )
 from kaine.modules.audition.live import PerceptionUnavailableError
 from kaine.modules.topos.feed import (

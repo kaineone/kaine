@@ -4,7 +4,6 @@
 """Lifecycle subsystem: snapshot/restore round-trip + fork + merge."""
 from __future__ import annotations
 
-
 from kaine.lifecycle.manager import ForkManager
 
 

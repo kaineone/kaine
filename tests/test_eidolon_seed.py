@@ -14,9 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 from kaine.modules.eidolon.document import SelfModel
-from kaine.modules.eidolon.self_inference import SelfInferenceEngine, _NORM_PREFIX
+from kaine.modules.eidolon.self_inference import _NORM_PREFIX, SelfInferenceEngine
 
 
 def _write_seed(tmp_path: Path, *records: dict) -> Path:

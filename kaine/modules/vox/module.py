@@ -35,6 +35,8 @@ from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
+from kaine.modules.base import BaseModule
+from kaine.modules.thymos.state import DimensionalState
 from kaine.modules.vox.client import (
     ChatterboxClient,
     SynthesisResult,
@@ -53,8 +55,6 @@ from kaine.modules.vox.playback import (
     build_player,
     wav_duration_s,
 )
-from kaine.modules.base import BaseModule
-from kaine.modules.thymos.state import DimensionalState
 
 log = logging.getLogger(__name__)
 

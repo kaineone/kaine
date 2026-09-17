@@ -5,7 +5,6 @@ import pytest
 
 from kaine.faithful.templates import TEMPLATES, fallback_template
 
-
 _BANNED_PHRASES = (
     "i think",
     "as an ai",

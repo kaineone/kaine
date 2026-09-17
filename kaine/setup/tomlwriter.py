@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
+
 # Bare keys that need no quoting per the TOML spec (A-Za-z0-9_-).
 def _format_key(key: str) -> str:
     if key and all(c.isalnum() or c in "_-" for c in key):

@@ -176,8 +176,8 @@ async def nous_health_probe() -> tuple[str, str]:
 
     def _check() -> tuple[str, str]:
         try:
-            import pymdp  # noqa: F401
             import jax  # noqa: F401
+            import pymdp  # noqa: F401
         except Exception as exc:  # ImportError or backend init failure
             return DOWN, f"pymdp/jax import failed: {exc}"
         try:

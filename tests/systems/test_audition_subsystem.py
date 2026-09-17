@@ -8,10 +8,9 @@ import os
 
 import pytest
 
+from kaine.modules.audition.emotion import FakeEmotionClassifier
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import FakeSTTClient
-from kaine.modules.audition.emotion import FakeEmotionClassifier
-
 from tests.systems._harness import SubsystemHarness
 
 

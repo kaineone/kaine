@@ -25,10 +25,10 @@ import pytest
 from kaine.cycle.engine import CognitiveCycle
 from kaine.evaluation.benchmarks.oscillatory_ablation.runner import (
     AblationConfig,
-    _MonotonicClock,
     _async_noop,
     _build_syneidesis,
     _classify,
+    _MonotonicClock,
     _normalize_broadcast,
     _run_arm,
     format_summary,
@@ -45,7 +45,6 @@ from kaine.evaluation.benchmarks.oscillatory_ablation.stimulus import (
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome
 from kaine.workspace.volition import Volition
-
 
 # --------------------------------------------------------------------------
 # Reproducibility: same seed → same verdict + metrics

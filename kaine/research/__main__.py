@@ -36,7 +36,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Callable, IO
+from typing import IO, Callable
 
 log = logging.getLogger(__name__)
 
@@ -104,9 +104,9 @@ def _run_claude_science_export(
     (EOF/interrupt/decline), mirroring the --send exit-code convention.
     """
     from kaine.research.claude_science_export import (
+        EXTERNAL_DISCLOSURE_NOTICE,
         ClaudeScienceExportError,
         DisclosureAttestation,
-        EXTERNAL_DISCLOSURE_NOTICE,
         export_project,
         plan_project,
         preview_project,
@@ -317,9 +317,9 @@ def main(
     from kaine.research.submission import (
         AdmissibilityError,
         AdmissibilityOverrideError,
+        BundleTierError,
         build_research_bundle,
         preview,
-        BundleTierError,
     )
 
     eval_root = Path(args.eval_root)

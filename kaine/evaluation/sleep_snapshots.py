@@ -7,6 +7,7 @@ Watches hypnos.out for the sleep lifecycle events. On hypnos.sleep.started,
 captures the current registry state via the provided `state_provider`. On
 hypnos.sleep.completed, captures again and writes the pair.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,7 +26,7 @@ HYPNOS_STREAM = "hypnos.out"
 
 class SleepSnapshotRecorder(StreamSubscriberObserver):
     name = "sleep_snapshots"
-    stream = HYPNOS_STREAM
+    streams = (HYPNOS_STREAM,)
 
     def __init__(
         self,
@@ -40,7 +41,7 @@ class SleepSnapshotRecorder(StreamSubscriberObserver):
         self._pending_before: dict[str, Any] | None = None
         self._pending_started_ts: str | None = None
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type == "hypnos.sleep.started":
             self._pending_before = self._capture_state()
             self._pending_started_ts = datetime.now(timezone.utc).isoformat()

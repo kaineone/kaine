@@ -392,8 +392,10 @@ async def test_anomaly_salience_tracks_prediction_error(bus: AsyncBus):
     await chronos.on_workspace(_empty_snapshot(tick=0))
     # Second tick: error computed; with a constant zero predictor and non-trivial
     # feature vector the error should be > 0, normalised to 1.0 ≥ 0.5 → alert
+    from datetime import datetime
+    from datetime import timezone as tz
+
     from kaine.bus import Event as BusEvent
-    from datetime import datetime, timezone as tz
     # Use a snapshot with a salient event so feature_vec is not all zeros
     ev = BusEvent(
         source="soma",

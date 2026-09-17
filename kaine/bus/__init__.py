@@ -9,7 +9,7 @@ from kaine.bus.errors import (
     EventValidationError,
     ReservedStreamError,
 )
-from kaine.bus.schema import Event, WORKSPACE_STREAM, module_stream
+from kaine.bus.schema import WORKSPACE_STREAM, Event, module_stream
 
 __all__ = [
     "AsyncBus",

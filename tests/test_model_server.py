@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from kaine.setup import model_server as ms
 from kaine.setup.model_server import (
     SERVER_BIN_ENV,
@@ -25,7 +24,6 @@ from kaine.setup.model_server import (
     render_systemd_unit,
 )
 from kaine.setup.organ import ServedAliasResult
-
 
 # --- binary discovery --------------------------------------------------------
 

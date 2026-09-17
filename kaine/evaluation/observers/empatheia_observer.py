@@ -26,15 +26,15 @@ sink (with ``confidence_present: true``) and the pending prediction is cleared.
 Source streams: ``empatheia.out`` and ``audition.out``.  When either is
 absent the observer runs silently.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event
-from kaine.evaluation._base import BaseObserver, BusReader
+from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
@@ -43,10 +43,11 @@ _EMPATHEIA_STREAM = "empatheia.out"
 _AUDITION_STREAM = "audition.out"
 
 
-class EmpatheiaObserver(BaseObserver):
+class EmpatheiaObserver(StreamSubscriberObserver):
     """Tracks empatheia.agent_model predictions vs. subsequent audition events."""
 
     name = "empatheia"
+    streams = (_EMPATHEIA_STREAM, _AUDITION_STREAM)
 
     def __init__(
         self,
@@ -55,56 +56,12 @@ class EmpatheiaObserver(BaseObserver):
         *,
         poll_interval_s: float = 0.5,
     ) -> None:
-        super().__init__()
-        self._bus = bus
+        super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
-        self._poll_interval_s = float(poll_interval_s)
         # Pending predictions keyed by agent_id.
         self._pending: dict[str, dict[str, Any]] = {}
-        self._cursors: dict[str, str] = {
-            _EMPATHEIA_STREAM: "0",
-            _AUDITION_STREAM: "0",
-        }
 
-    async def _run(self) -> None:
-        while not self._stopped.is_set():
-            progressed = False
-            for stream in (_EMPATHEIA_STREAM, _AUDITION_STREAM):
-                try:
-                    entries, last_scanned = await self._bus.read_entries(
-                        stream,
-                        last_id=self._cursors[stream],
-                        count=64,
-                        block_ms=0,
-                    )
-                except Exception:
-                    log.warning(
-                        "empatheia_observer read failed for %s", stream, exc_info=True
-                    )
-                    entries = []
-                    last_scanned = None
-                for entry_id, event in entries:
-                    self._cursors[stream] = entry_id
-                    try:
-                        await self._dispatch(stream, entry_id, event)
-                    except Exception:
-                        log.warning(
-                            "empatheia_observer handler raised on %s / %s",
-                            stream,
-                            entry_id,
-                            exc_info=True,
-                        )
-                    progressed = True
-                if last_scanned is not None:
-                    self._cursors[stream] = last_scanned
-            try:
-                await asyncio.wait_for(
-                    self._stopped.wait(), timeout=self._poll_interval_s
-                )
-            except asyncio.TimeoutError:
-                continue
-
-    async def _dispatch(self, stream: str, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if stream == _EMPATHEIA_STREAM and event.type == "empatheia.agent_model":
             payload = event.payload or {}
             agent_id = str(payload.get("agent_id") or "unknown")

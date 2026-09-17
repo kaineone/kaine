@@ -10,7 +10,6 @@ import pytest
 
 from kaine.cycle import control_state as cs
 
-
 # ---- control state ----------------------------------------------------------
 
 def test_control_round_trip(tmp_path):

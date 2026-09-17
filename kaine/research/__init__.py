@@ -7,9 +7,9 @@ Default tier: numeric metrics only. See kaine/research/submission.py.
 """
 
 from kaine.research.submission import (
-    Bundle,
-    METRICS_ONLY_GLOBS,
     DENY_PATTERNS,
+    METRICS_ONLY_GLOBS,
+    Bundle,
     build_research_bundle,
     preview,
 )

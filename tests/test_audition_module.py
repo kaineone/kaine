@@ -12,8 +12,8 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.audition import (
-    Audition,
     CATEGORIES,
+    Audition,
     EmotionResult,
     FakeEmotionClassifier,
     FakeSTTClient,

@@ -20,7 +20,6 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.phantasia.module import Phantasia
 
-
 BANNED_EXTENSIONS = (".pt", ".pkl", ".npy", ".arrow", ".jsonl")
 
 

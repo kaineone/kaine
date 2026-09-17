@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 

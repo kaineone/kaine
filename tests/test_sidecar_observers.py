@@ -34,7 +34,6 @@ from kaine.evaluation.observers.voice_alignment_divergence_observer import (
 from kaine.evaluation.observers.welfare_observer import WelfareObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
-
 # ---------------------------------------------------------------------------
 # Test helpers
 # ---------------------------------------------------------------------------

@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 import pytest
 
 from kaine.bus.schema import EventValidationError, validate_event
-
 from tests.systems._harness import SubsystemHarness
 
 

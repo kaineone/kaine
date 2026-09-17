@@ -51,7 +51,6 @@ from typing import Any
 from kaine.bus.schema import Event
 from kaine.cycle.engine import BASE_EPOCH
 
-
 # ---------------------------------------------------------------------------
 # Source specification: one scripted stream + its phase schedule.
 # ---------------------------------------------------------------------------

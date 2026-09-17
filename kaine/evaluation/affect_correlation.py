@@ -8,6 +8,7 @@ external speech event. The batch correlator runs during Hypnos sleep
 (or on-demand via the Nexus tab) and produces a correlation matrix
 across the Thymos dimensions and output features.
 """
+
 from __future__ import annotations
 
 import json
@@ -54,9 +55,7 @@ def output_characteristics(text: str, *, latency_ms: float | None = None) -> dic
     length_chars = len(text)
     length_tokens = len(tokens)
     distinct_tokens = len(set(tokens))
-    lexical_diversity = (
-        distinct_tokens / length_tokens if length_tokens > 0 else 0.0
-    )
+    lexical_diversity = distinct_tokens / length_tokens if length_tokens > 0 else 0.0
     lowered = text.lower()
     hedge_count = sum(1 for w in HEDGE_WORDS if w in lowered)
     return {
@@ -84,7 +83,7 @@ def pearson(xs: list[float], ys: list[float]) -> float:
 
 class AffectCorrelationRecorder(StreamSubscriberObserver):
     name = "affect_correlation"
-    stream = LINGUA_EXTERNAL_STREAM
+    streams = (LINGUA_EXTERNAL_STREAM,)
 
     def __init__(
         self,
@@ -97,7 +96,7 @@ class AffectCorrelationRecorder(StreamSubscriberObserver):
         self._sink = sink
         self._thymos = thymos_state_provider
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "external_speech":
             return
         payload = event.payload or {}
@@ -138,10 +137,12 @@ def correlate_from_log(log_path: Path) -> dict[str, dict[str, float]]:
             chars = entry.get("characteristics") or {}
             if not isinstance(thymos, dict) or not chars:
                 continue
-            paired.append((
-                {k: float(v) for k, v in thymos.items() if isinstance(v, (int, float))},
-                {k: float(v) for k, v in chars.items() if isinstance(v, (int, float))},
-            ))
+            paired.append(
+                (
+                    {k: float(v) for k, v in thymos.items() if isinstance(v, (int, float))},
+                    {k: float(v) for k, v in chars.items() if isinstance(v, (int, float))},
+                )
+            )
     if not paired:
         return {}
     thymos_keys = sorted({k for t, _ in paired for k in t})

@@ -35,7 +35,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from kaine.experiment.manifest import write_manifest
-from kaine.experiment.run_records import RunRecords, load_run_records
 from kaine.experiment.run_context import (
     RunContext,
     compute_config_digest,
@@ -44,6 +43,7 @@ from kaine.experiment.run_context import (
     mint_run_context,
     set_run_context,
 )
+from kaine.experiment.run_records import RunRecords, load_run_records
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.stability import (
     StabilityError,

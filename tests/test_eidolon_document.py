@@ -123,6 +123,7 @@ def test_personality_baseline_floats_preserved():
 
 def test_generate_launch_name_is_kaine_plus_surname():
     import random
+
     from kaine.modules.eidolon.document import generate_launch_name
     name = generate_launch_name(rng=random.Random(0))
     parts = name.split()

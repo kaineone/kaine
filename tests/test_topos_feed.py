@@ -26,7 +26,6 @@ from kaine.modules.topos.feed import (
     load_playlist_manifest,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fake cv2 decoder for real-time playlist pacing tests (no OpenCV, no media).
 # Each fake frame is tagged (path, media_frame_index) so a test can assert

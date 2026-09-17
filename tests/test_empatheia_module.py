@@ -15,7 +15,6 @@ from kaine.modules.empatheia.agent import EMOTION_CATEGORIES
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import InMemoryAgentStore
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

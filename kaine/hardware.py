@@ -34,7 +34,6 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-
 _BASE_DEVICES = ("cuda", "xpu", "mps", "cpu")
 _ENV_OVERRIDE = "KAINE_FORCE_DEVICE"
 _CUDA_INDEXED_RE = re.compile(r"^cuda:(\d+)$")

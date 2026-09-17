@@ -13,7 +13,6 @@ from kaine.evaluation.ab_divergence import FakeBareInferenceClient
 from kaine.evaluation.config import EvaluationConfig
 from kaine.evaluation.embeddings import HashEmbedder
 from kaine.evaluation.registry import SidecarRegistry
-
 from tests.systems._harness import SubsystemHarness
 
 

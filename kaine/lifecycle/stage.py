@@ -29,11 +29,11 @@ wired anywhere without an import cycle.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import json
 
 from kaine.state_io import write_json_atomic
 

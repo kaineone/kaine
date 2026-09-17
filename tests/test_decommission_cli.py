@@ -7,7 +7,6 @@ import io
 import json
 from pathlib import Path
 
-
 from kaine.lifecycle.__main__ import main
 
 

@@ -4,7 +4,6 @@
 """Spot restart ladder — light recreate vs heavy rebuild/replace/restore."""
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.bus.client import AsyncBus

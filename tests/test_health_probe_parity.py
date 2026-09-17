@@ -52,8 +52,8 @@ def _capture_redis_probe(spec):
         async def aclose(self):
             return None
 
+
     import redis.asyncio as aioredis
-    import sys
 
     real_redis = aioredis.Redis
     aioredis.Redis = FakeRedis

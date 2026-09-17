@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 
 from kaine.evaluation.config import EvaluationConfig
-from kaine.evaluation.nexus_tab import build_evaluation_router, _scrub
+from kaine.evaluation.nexus_tab import _scrub, build_evaluation_router
 
 
 def _config(tmp_path, enabled=True) -> EvaluationConfig:

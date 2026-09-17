@@ -20,6 +20,7 @@ All values are numeric/boolean metadata only; no raw text content is logged.
 When voice alignment is disabled or the phase is skipped, the event's
 ``voice_alignment`` dict is absent and the observer silently skips it.
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,13 +39,13 @@ class VoiceAlignmentDivergenceObserver(StreamSubscriberObserver):
     """Captures per-sleep voice-alignment divergence metrics."""
 
     name = "voice_alignment_divergence"
-    stream = _HYPNOS_STREAM
+    streams = (_HYPNOS_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)
         self._sink = sink
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "hypnos.sleep.completed":
             return
         payload = event.payload or {}
@@ -62,11 +63,7 @@ class VoiceAlignmentDivergenceObserver(StreamSubscriberObserver):
                 "adapter_accepted": va.get("adapter_accepted"),
                 "capability_score_before": va.get("capability_score_before"),
                 "capability_score_after": va.get("capability_score_after"),
-                "mean_similarity_before": va.get(
-                    "mean_intent_expression_similarity_before"
-                ),
-                "mean_similarity_after": va.get(
-                    "mean_intent_expression_similarity_after"
-                ),
+                "mean_similarity_before": va.get("mean_intent_expression_similarity_before"),
+                "mean_similarity_after": va.get("mean_intent_expression_similarity_after"),
             }
         )

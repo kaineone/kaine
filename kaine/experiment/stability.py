@@ -38,7 +38,6 @@ from typing import Any, Callable, Sequence
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome, Verdict
 
-
 # --------------------------------------------------------------------------- #
 # Pure summary statistics (stdlib only). These are the single canonical
 # definitions; kaine.evaluation.individuation imports them from here so the two

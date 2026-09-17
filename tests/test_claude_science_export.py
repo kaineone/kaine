@@ -34,7 +34,6 @@ from kaine.research.submission import (
     build_research_bundle,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures — an eval root seeded with EVERY allowlisted family plus the standard
 # decoy sensitive files (mirrors test_research_submission._make_eval_root).

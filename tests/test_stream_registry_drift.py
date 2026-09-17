@@ -42,9 +42,7 @@ def test_canonical_names_match_module_packages():
     on_disk = {
         p.name
         for p in modules_dir.iterdir()
-        if p.is_dir()
-        and not p.name.startswith("__")
-        and not p.name.startswith(".")
+        if p.is_dir() and not p.name.startswith("__") and not p.name.startswith(".")
     } - test_only_excluded_packages
 
     assert set(CANONICAL_MODULE_NAMES) - non_package_names == on_disk
@@ -54,7 +52,6 @@ def test_effective_memberships_are_golden():
     """Golden drift guard: any registry edit changes these derived sets and
     must consciously update the golden sets below."""
     from kaine.evaluation.stream_registry import (
-        canonical_module_streams,
         curated_module_streams,
         diagnostics_streams,
         raw_archive_module_streams,
@@ -86,14 +83,11 @@ def test_effective_memberships_are_golden():
         }
     )
 
-    # Raw archive: full canonical set with Lingua split.
-    golden_raw_archive = frozenset(
-        golden_curated
-        | {"lingua.external", "lingua.internal", "vox.out"}
-    )
+    # Raw archive: full canonical set (Lingua now publishes aggregate lingua.out).
+    golden_raw_archive = frozenset(golden_curated | {"lingua.out", "vox.out"})
 
-    # Diagnostics: cycle.tick + high-signal module streams (Lingua split,
-    # no cycle.out) + workspace.broadcast.
+    # Diagnostics: cycle.tick + high-signal module streams (no cycle.out) +
+    # workspace.broadcast.
     golden_diagnostics = frozenset(
         {
             "cycle.tick",
@@ -104,8 +98,7 @@ def test_effective_memberships_are_golden():
             "nous.out",
             "thymos.out",
             "audition.out",
-            "lingua.external",
-            "lingua.internal",
+            "lingua.out",
             "vox.out",
             "mnemos.out",
             "hypnos.out",
@@ -131,8 +124,7 @@ def test_registry_invariants():
 
     names = list(CANONICAL_MODULE_NAMES)
     assert len(names) == len(set(names)), "duplicate module names in registry"
-    assert canonical_module_streams() == tuple(
-        module_stream(n) for n in names
-    )
-    # lingua.out IS in the canonical (unsplit) set; consumers split it.
+    assert canonical_module_streams() == tuple(module_stream(n) for n in names)
+    # lingua.out IS in the canonical set; Lingua publishes an aggregate there
+    # in addition to the mode-specific lingua.external / lingua.internal streams.
     assert "lingua.out" in canonical_module_streams()

@@ -11,7 +11,6 @@ import importlib.util
 import pathlib
 import sys
 
-
 # ---------------------------------------------------------------------------
 # Import check_license_headers from scripts/ without requiring it to be an
 # installed package.  We locate it relative to the repo root.

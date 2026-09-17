@@ -2,7 +2,6 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from kaine.modules.audition import Audition
-from kaine.modules.vox import Vox
 from kaine.modules.base import BaseModule
 from kaine.modules.chronos import Chronos
 from kaine.modules.echo import EchoModule
@@ -18,6 +17,7 @@ from kaine.modules.registry import ModuleRegistry
 from kaine.modules.soma import Soma
 from kaine.modules.thymos import Thymos
 from kaine.modules.topos import Topos
+from kaine.modules.vox import Vox
 
 __all__ = [
     "Audition",
