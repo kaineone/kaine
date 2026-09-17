@@ -22,7 +22,7 @@
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |
 | paracosmic-connector | 0/87 (0%) | kosmos | ADDED | > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper's ... |
 | unattended-boot-via-safety-net | 0/27 (0%) | entity-preservation, spot-supervisor, unattended-boot | ADDED, MODIFIED, RENAMED | The operator-present gate was designed for the first run. At that tim... |
-| nexus-privacy-hardening | 0/19 (0%) | nexus-auth, nexus-csrf-protection, nexus-dashboard, nexus-observability, evaluation-sidecar, state-encryption, remote-bridge | ADDED, MODIFIED | Add authentication, CSRF protection, and privacy-safe defaults to Nexus and evaluation outputs. |
+| nexus-privacy-hardening | 0/23 (0%) | nexus-auth, nexus-csrf-protection, nexus-dashboard, nexus-observability, evaluation-sidecar, state-encryption, remote-bridge | ADDED, MODIFIED | Add authentication, CSRF protection, and privacy-safe defaults to Nexus and evaluation outputs. |
 | deployment-consistency | 0/16 (0%) | quadlet-volumes, distributed-deployment, event-bus, redis-bootstrap | ADDED, MODIFIED | Fix Quadlet production deployment, Redis memory limits, and latent-vector stream caps. |
 | stream-wiring-quality | 0/20 (0%) | stream-contract, lingua, event-bus, architecture-boundaries, evaluation-observers | ADDED, MODIFIED | Fix Lingua stream wiring, canonicalize stream names, and enforce code-quality gates. |
 | performance-test-coverage | 0/26 (0%) | performance-hot-path, event-bus, mnemos, topos, audition, syneidesis, spot-supervisor, state-encryption | ADDED, MODIFIED | Address performance hot paths and close test coverage gaps. |
@@ -135,7 +135,7 @@ _Showing the 15 most recent of 150 archived changes._
 | welfare-monitoring | 4 |
 | workspace-mediation-ablation | 7 |
 
-_Total: 81 capabilities, 486 requirements._
+_Total: 81 capabilities, 488 requirements._
 
 ---
 
