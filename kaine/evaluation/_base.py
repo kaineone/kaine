@@ -92,7 +92,13 @@ class StreamSubscriberObserver(BaseObserver):
         self._cursors: dict[str, str] = {}
 
     async def _run(self) -> None:
-        self._cursors = await self._initial_cursors()
+        try:
+            self._cursors = await self._initial_cursors()
+        except Exception:
+            log.warning(
+                "observer %s initial cursor failed; falling back to 0", self.name, exc_info=True
+            )
+            self._cursors = {stream: "0" for stream in self.streams}
         try:
             while not self._stopped.is_set():
                 for stream in self.streams:

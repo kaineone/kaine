@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
 
@@ -525,10 +526,19 @@ class Lingua(BaseModule):
         # Also publish to the aggregate lingua.out stream so consumers that
         # expect the canonical <module>.out routing (nexus diagnostics, raw
         # archive, generic observers) see every utterance in one place.
-        await self.publish(
-            f"{mode}_speech",
-            payload,
-            salience=self._baseline_salience,
+        # Bypass `self.publish` to avoid driving the oscillator; Lingua's
+        # mode-specific xadd above is the activity signal the oscillatory layer
+        # already observes.
+        from kaine.bus.schema import validate_event
+
+        await self._bus.publish(
+            validate_event(
+                source=self.name,
+                type=f"{mode}_speech",
+                payload=payload,
+                salience=self._baseline_salience,
+                timestamp=datetime.now(timezone.utc),
+            )
         )
         return response.text
 

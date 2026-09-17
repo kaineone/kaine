@@ -171,6 +171,27 @@ async def test_bus_event_payload_shape(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_aggregate_lingua_out_mirrors_mode_specific_stream(bus: AsyncBus, tmp_path: Path):
+    """Every utterance is also published to the canonical lingua.out stream."""
+    lingua = _make_lingua(bus, tmp_path, responses=["spoken"])
+    await lingua.speak("hi", snapshot=_snapshot([_event()]))
+    await lingua.think("quiet", snapshot=_snapshot([_event()]))
+
+    external = await bus.client.xrange(EXTERNAL_STREAM)
+    internal = await bus.client.xrange(INTERNAL_STREAM)
+    aggregate = await bus.client.xrange("lingua.out")
+    assert len(aggregate) == 2
+    assert (
+        json.loads(external[0][1]["payload"])["text"]
+        == json.loads(aggregate[0][1]["payload"])["text"]
+    )
+    assert (
+        json.loads(internal[0][1]["payload"])["text"]
+        == json.loads(aggregate[1][1]["payload"])["text"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_custom_client_used(bus: AsyncBus, tmp_path: Path):
     client = FakeChatClient(responses=["custom"])
     lingua = Lingua(
