@@ -35,7 +35,7 @@ services:
       - --appendfsync
       - everysec
       - --maxmemory
-      - 1gb
+      - 4gb
       - --maxmemory-policy
       - noeviction
       - --save

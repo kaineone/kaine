@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from kaine.bus.errors import BusConfigError
+from kaine.config import OPERATOR_CONFIG_PATH, deep_merge
 
 
 DEFAULT_KAINE_TOML = "config/kaine.toml"
@@ -79,6 +80,7 @@ def load_bus_config(
     kaine_toml: Optional[Path] = None,
     secrets_toml: Optional[Path] = None,
     env: Optional[dict[str, str]] = None,
+    operator_toml: Optional[Path] = None,
 ) -> BusConfig:
     env = env if env is not None else os.environ
     root = _project_root()
@@ -86,11 +88,19 @@ def load_bus_config(
     secrets_toml = secrets_toml or root / DEFAULT_SECRETS_TOML
 
     kaine_doc = _read_toml(kaine_toml)
+
+    op_path = (
+        operator_toml if operator_toml is not None else root / OPERATOR_CONFIG_PATH
+    )
+    op_doc = _read_toml(op_path)
+    if op_doc:
+        kaine_doc = deep_merge(kaine_doc, op_doc)
+
     secrets_doc = load_secrets_doc(secrets_toml)
 
-    redis_doc = (kaine_doc.get("redis") or {})
-    bus_doc = (kaine_doc.get("bus") or {})
-    redis_secrets = (secrets_doc.get("redis") or {})
+    redis_doc = kaine_doc.get("redis") or {}
+    bus_doc = kaine_doc.get("bus") or {}
+    redis_secrets = secrets_doc.get("redis") or {}
 
     url_override = env.get("KAINE_REDIS_URL") or redis_secrets.get("url")
 
@@ -113,8 +123,7 @@ def load_bus_config(
         password=password,
         default_maxlen=int(bus_doc.get("default_maxlen", 100_000)),
         per_stream_maxlen={
-            str(k): int(v)
-            for k, v in (bus_doc.get("per_stream_maxlen") or {}).items()
+            str(k): int(v) for k, v in (bus_doc.get("per_stream_maxlen") or {}).items()
         },
         url_override=url_override,
         audit_required=bool(bus_doc.get("audit_required", True)),

@@ -16,15 +16,18 @@ db = 0
 # publish.
 default_maxlen = 100000
 
-# Per-stream overrides. The key is the full stream name
-# (`<module>.out` or `workspace.broadcast`).
-[bus.per_stream_maxlen]
-"workspace.broadcast" = 50000
-
 # Turn off only for local development with no Redis hardening. The default
 # `true` causes the bus to refuse to start against an unauthenticated or
 # externally-bound Redis.
 audit_required = true
+
+# Per-stream overrides. The key is the full stream name
+# (`<module>.out` or `workspace.broadcast`). Latent-vector streams (topos,
+# audition) are capped low — each entry is ~40 KB.
+[bus.per_stream_maxlen]
+"workspace.broadcast" = 50000
+"topos.out" = 2000
+"audition.out" = 2000
 
 [cycle]
 # Default cycle pacing. Benchmarked on this host (RTX 4070 SUPER): ~17 Hz tick

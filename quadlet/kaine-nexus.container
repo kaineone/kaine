@@ -16,6 +16,7 @@ Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
 # Durable entity state mounts at /app/state (the app writes state CWD-relative).
 Volume=kaine-state.volume:/app/state
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
+Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
 HealthCmd=curl -fsS http://127.0.0.1:8088/diagnostics/health.json
 HealthInterval=15s

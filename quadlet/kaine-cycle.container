@@ -41,6 +41,7 @@ Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
 # persistence (design §7).
 Tmpfs=/app/state/perception
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
+Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
 Environment=KAINE_STATE_KEY=${KAINE_STATE_KEY}
 Environment=KAINE_MODELS_DIR=/models
