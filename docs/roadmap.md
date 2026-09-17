@@ -3,6 +3,7 @@
 > **This file is generated - do not edit by hand.**
 > Regenerate with `~/.claude/bin/openspec-roadmap.sh` from the project root.
 > Generated on 2026-09-15 (UTC).
+> **Note:** The generator script is missing on this host, so this update was applied manually to reflect the new review-fix proposals.
 
 ## In flight
 
@@ -21,6 +22,10 @@
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |
 | paracosmic-connector | 0/87 (0%) | kosmos | ADDED | > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper's ... |
 | unattended-boot-via-safety-net | 0/27 (0%) | entity-preservation, spot-supervisor, unattended-boot | ADDED, MODIFIED, RENAMED | The operator-present gate was designed for the first run. At that tim... |
+| nexus-privacy-hardening | 0/19 (0%) | nexus-auth, nexus-csrf-protection, nexus-dashboard, nexus-observability, evaluation-sidecar, state-encryption, remote-bridge | ADDED, MODIFIED | Add authentication, CSRF protection, and privacy-safe defaults to Nexus and evaluation outputs. |
+| deployment-consistency | 0/16 (0%) | quadlet-volumes, distributed-deployment, event-bus, redis-bootstrap | ADDED, MODIFIED | Fix Quadlet production deployment, Redis memory limits, and latent-vector stream caps. |
+| stream-wiring-quality | 0/20 (0%) | stream-contract, lingua, event-bus, architecture-boundaries, evaluation-observers | ADDED, MODIFIED | Fix Lingua stream wiring, canonicalize stream names, and enforce code-quality gates. |
+| performance-test-coverage | 0/26 (0%) | performance-hot-path, event-bus, mnemos, topos, audition, syneidesis, spot-supervisor, state-encryption | ADDED, MODIFIED | Address performance hot paths and close test coverage gaps. |
 
 ## Recently landed
 
@@ -52,17 +57,17 @@ _Showing the 15 most recent of 150 archived changes._
 | action-selection | 4 |
 | active-inference-benchmark | 5 |
 | adapter-ties-dare-merge | 10 |
-| architecture-boundaries | 2 |
+| architecture-boundaries | 3 |
 | audio-input | 7 |
 | audio-output | 8 |
-| audition | 3 |
+| audition | 4 |
 | audition-predictive | 3 |
 | audition-prosody | 1 |
 | batch-offload | 5 |
 | chronos | 8 |
 | chronos-predictive | 1 |
 | cognitive-cycle | 14 |
-| distributed-deployment | 3 |
+| distributed-deployment | 6 |
 | divergence-assessment | 3 |
 | dynamic-hardware | 6 |
 | eidolon | 8 |
@@ -72,9 +77,9 @@ _Showing the 15 most recent of 150 archived changes._
 | entity-decommission | 7 |
 | entity-preservation | 15 |
 | entity-time | 5 |
-| evaluation-observers | 10 |
-| evaluation-sidecar | 12 |
-| event-bus | 8 |
+| evaluation-observers | 12 |
+| evaluation-sidecar | 14 |
+| event-bus | 11 |
 | experiment-foundation | 8 |
 | faithful-renderer | 6 |
 | first-run-wizard | 6 |
@@ -86,23 +91,27 @@ _Showing the 15 most recent of 150 archived changes._
 | inference-backend | 4 |
 | interruptible-utterance | 4 |
 | license-compliance | 3 |
-| lingua | 9 |
+| lingua | 11 |
 | log-validation | 1 |
 | minimal-run-configuration | 4 |
-| mnemos | 10 |
+| mnemos | 11 |
 | mnemos-replay | 4 |
 | module-pattern | 7 |
-| nexus-dashboard | 5 |
-| nexus-observability | 19 |
+| nexus-auth | 3 |
+| nexus-csrf-protection | 3 |
+| nexus-dashboard | 7 |
+| nexus-observability | 21 |
 | nous-active-inference | 7 |
 | organ-provisioning | 7 |
 | oscillatory-binding | 8 |
+| performance-hot-path | 6 |
 | perception-feed | 1 |
 | perception-locus | 3 |
 | phantasia | 8 |
 | praxis | 10 |
-| redis-bootstrap | 1 |
-| remote-bridge | 2 |
+| quadlet-volumes | 1 |
+| redis-bootstrap | 2 |
+| remote-bridge | 4 |
 | reproducible-perception | 7 |
 | research-event-log | 4 |
 | research-submission | 4 |
@@ -110,13 +119,14 @@ _Showing the 15 most recent of 150 archived changes._
 | self-initiated-report | 4 |
 | soma | 7 |
 | soma-predictive | 5 |
-| spot-supervisor | 14 |
+| spot-supervisor | 15 |
 | state-encryption | 4 |
-| syneidesis | 7 |
+| stream-contract | 2 |
+| syneidesis | 8 |
 | thesis-test-configuration | 3 |
 | thymos | 11 |
 | thymos-affect-coupling | 3 |
-| topos | 10 |
+| topos | 12 |
 | topos-predictive | 3 |
 | voice-alignment | 3 |
 | voice-alignment-training | 13 |
@@ -125,8 +135,8 @@ _Showing the 15 most recent of 150 archived changes._
 | welfare-monitoring | 4 |
 | workspace-mediation-ablation | 7 |
 
-_Total: 76 capabilities, 448 requirements._
+_Total: 81 capabilities, 487 requirements._
 
 ---
 
-13 changes in flight, 150 archived, 76 capabilities.
+17 changes in flight, 150 archived, 81 capabilities.
