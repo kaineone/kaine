@@ -6,6 +6,7 @@
 Renders the banner partial when state shows active. Privacy filter
 covered separately in tests/test_nexus_privacy.py — restated here:
 transcription text never reaches the diagnostics SSE."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from fastapi import FastAPI
 
 from kaine import perception_state
 from kaine.bus.schema import Event
+from kaine.nexus.config import NexusConfig
 from kaine.nexus.perception import (
     build_perception_router,
     perception_snapshot,
@@ -27,9 +29,11 @@ def _isolated_router(tmp_path):
     runtime = tmp_path / "runtime.json"
     desired = tmp_path / "desired.json"
     app = FastAPI()
-    app.include_router(
-        build_perception_router(runtime_path=runtime, desired_path=desired)
+    app.state.config = NexusConfig(
+        operator_token="test-token",
+        host_allowlist=("127.0.0.1", "localhost", "t"),
     )
+    app.include_router(build_perception_router(runtime_path=runtime, desired_path=desired))
     return app, runtime, desired
 
 
@@ -55,6 +59,7 @@ async def test_toggle_audio_writes_desired_file(tmp_path):
         r = await c.post(
             "/diagnostics/perception/toggle",
             json={"surface": "audio", "active": True},
+            headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 200
     body = r.json()
@@ -72,6 +77,7 @@ async def test_toggle_rejects_unknown_surface(tmp_path):
         r = await c.post(
             "/diagnostics/perception/toggle",
             json={"surface": "olfactory", "active": True},
+            headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 422  # FastAPI validation error
 
@@ -119,8 +125,10 @@ def test_banner_partial_renders_when_audio_active(tmp_path):
 def test_banner_partial_absent_when_nothing_active():
     from kaine.nexus.conversation import _templates as conv_templates
 
-    out = conv_templates().get_template("_perception_banner.html").render(
-        perception={"audio_live_active": False, "video_live_active": False}
+    out = (
+        conv_templates()
+        .get_template("_perception_banner.html")
+        .render(perception={"audio_live_active": False, "video_live_active": False})
     )
     assert "microphone on" not in out
     assert "camera on" not in out
@@ -144,6 +152,7 @@ async def test_set_locus_writes_desired_and_validates(tmp_path):
         r = await c.post(
             "/diagnostics/perception/locus",
             json={"locus": "virtual", "locked": True},
+            headers={"Authorization": "Bearer test-token"},
         )
         assert r.status_code == 200
         assert r.json() == {"locus": "virtual", "locus_locked": True}
@@ -152,5 +161,9 @@ async def test_set_locus_writes_desired_and_validates(tmp_path):
         assert g["locus"] == "virtual" and g["locus_locked"] is True
         assert perception_state.read_desired(desired).locus == "virtual"
         # invalid locus rejected
-        bad = await c.post("/diagnostics/perception/locus", json={"locus": "narnia"})
+        bad = await c.post(
+            "/diagnostics/perception/locus",
+            json={"locus": "narnia"},
+            headers={"Authorization": "Bearer test-token"},
+        )
         assert bad.status_code == 422

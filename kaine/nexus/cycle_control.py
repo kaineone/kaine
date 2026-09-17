@@ -13,17 +13,19 @@ freeze-watch task polls that file and pauses/resumes the experiential loop.
 Freezing is a humane suspend (subjective-time-stop), not a shutdown. The control
 carries only operational fields — never sensory content.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from kaine.cycle.control_state import CONTROL_PATH, freeze, read_control, unfreeze
+from kaine.nexus.auth import require_operator_token
 from kaine.nexus.log_safety import sanitize_log_value
 
 log = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ def build_cycle_control_router(*, control_path: Path | None = None) -> APIRouter
     async def cycle_control_json():
         return JSONResponse(control_snapshot(path))
 
-    @router.post("/freeze")
+    @router.post("/freeze", dependencies=[Depends(require_operator_token)])
     async def cycle_freeze(body: FreezeBody):
         if body.frozen:
             c = freeze(reason=body.reason, path=path)

@@ -8,6 +8,7 @@ via the standard Event decode, which rejects the broadcast's `{snapshot: <json>}
 shape, so they silently recorded nothing. They must consume the broadcast via
 the canonical `subscribe_workspace` decoded-snapshot path.
 """
+
 import asyncio
 
 import pytest
@@ -44,8 +45,10 @@ def _snapshot(tick, sources, salience=None):
         "is_experiential": True,
         "inhibited": False,
         "salience_scores": salience or {s: 0.5 for s in sources},
-        "selected": [{"source": s, "type": f"{s}.report", "entry_id": f"{tick}-{i}"}
-                     for i, s in enumerate(sources)],
+        "selected": [
+            {"source": s, "type": f"{s}.report", "entry_id": f"{tick}-{i}"}
+            for i, s in enumerate(sources)
+        ],
         "metadata": {},
     }
 
@@ -60,6 +63,7 @@ async def _drain(observer, sink, n_expected, timeout=2.0):
 
 
 # ---- trajectory -------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_trajectory_writes_one_row_per_broadcast():
@@ -92,6 +96,7 @@ async def test_trajectory_includes_thymos_state_when_provided():
 
 # ---- attribution ------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_attribution_tallies_sources_and_flushes_on_stop():
     broadcasts = [
@@ -114,6 +119,7 @@ async def test_attribution_tallies_sources_and_flushes_on_stop():
 
 
 # ---- integration: real bus, the exact broadcast shape -----------------------
+
 
 @pytest.fixture
 async def bus():
@@ -189,6 +195,7 @@ async def test_subscribe_workspace_skips_a_corrupt_broadcast(bus):
 
 # ---- additional coverage (from review) --------------------------------------
 
+
 class IdleWorkspaceBus:
     """subscribe_workspace that never yields and never ends — exercises the
     stop-while-idle race in WorkspaceSubscriberObserver._run."""
@@ -216,6 +223,39 @@ async def test_trajectory_records_row_when_thymos_provider_raises():
     assert len(sink.rows) == 1
     assert sink.rows[0]["thymos_state"] is None
     assert sink.rows[0]["tick_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trajectory_filters_content_from_selected_entries():
+    """Selected entries are scrubbed through PrivacyFilter before persistence.
+    Source/type/salience/causal_parent remain; content-bearing payload fields
+    are removed or emptied."""
+    snapshot = {
+        "tick_index": 1,
+        "is_experiential": True,
+        "inhibited": False,
+        "salience_scores": {"lingua": 0.9},
+        "selected": [
+            {
+                "source": "lingua",
+                "type": "lingua.external_speech",
+                "salience": 0.9,
+                "payload": {"text": "secret user message"},
+                "causal_parent": "0-0",
+            }
+        ],
+        "metadata": {},
+    }
+    sink = FakeSink()
+    rec = TrajectoryRecorder(FakeWorkspaceBus([("1-0", snapshot)]), sink)
+    await _drain(rec, sink, n_expected=1)
+    selected = sink.rows[0]["selected"]
+    assert len(selected) == 1
+    assert selected[0]["source"] == "lingua"
+    assert selected[0]["type"] == "lingua.external_speech"
+    assert selected[0]["causal_parent"] == "0-0"
+    # The raw message text must not survive into the persisted trajectory.
+    assert "secret user message" not in str(selected[0].get("payload", {}))
 
 
 @pytest.mark.asyncio

@@ -39,6 +39,7 @@ Key management beyond loading (rotation, backup, out-of-band transfer for
 cross-host fork/merge) is the operator's responsibility and is documented in
 ``SECURITY.md``.
 """
+
 from __future__ import annotations
 
 import base64
@@ -79,11 +80,26 @@ class CryptoConfig:
     @classmethod
     def from_section(cls, section: Optional[dict]) -> "CryptoConfig":
         section = section or {}
+        explicit_enabled = section.get("enabled")
+        if explicit_enabled is None:
+            # Auto-enable when a key is resolvable; otherwise stay disabled with
+            # a warning logged by the caller.
+            enabled = cls._key_resolvable(str(section.get("key_env_var", _DEFAULT_KEY_ENV_VAR)))
+        else:
+            enabled = bool(explicit_enabled)
         return cls(
-            enabled=bool(section.get("enabled", False)),
+            enabled=enabled,
             key_env_var=str(section.get("key_env_var", _DEFAULT_KEY_ENV_VAR)),
             algorithm=str(section.get("algorithm", _DEFAULT_ALGORITHM)),
         )
+
+    @staticmethod
+    def _key_resolvable(key_env_var: str) -> bool:
+        import os
+
+        if os.environ.get(key_env_var):
+            return True
+        return _load_key_from_keyring() is not None
 
 
 def _decode_key(raw: str | bytes) -> bytes:
@@ -315,7 +331,23 @@ def install_from_section(section: Optional[dict]) -> StateEncryptor:
     install it as the process-global. Returns the installed encryptor.
 
     Raises CryptoConfigError at startup if enabled and no key is available.
+    Logs a warning when encryption is explicitly disabled.
     """
-    encryptor = StateEncryptor(CryptoConfig.from_section(section))
+    raw_section = dict(section or {})
+    explicit_enabled = raw_section.get("enabled")
+    encryptor = StateEncryptor(CryptoConfig.from_section(raw_section))
+    if explicit_enabled is False:
+        log.warning(
+            "state encryption is EXPLICITLY DISABLED; persisted cognitive state "
+            "will be written in plaintext at rest. Set "
+            "[security.state_encryption].enabled = true and provide a key, or "
+            "accept this risk explicitly."
+        )
+    elif not encryptor.enabled:
+        log.warning(
+            "state encryption is disabled: no AES-256 key was resolvable from "
+            "$%s or the kernel keyring. Persisted state will be plaintext.",
+            encryptor.config.key_env_var,
+        )
     set_state_encryptor(encryptor)
     return encryptor

@@ -22,13 +22,13 @@
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |
 | paracosmic-connector | 0/87 (0%) | kosmos | ADDED | > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper's ... |
 | unattended-boot-via-safety-net | 0/27 (0%) | entity-preservation, spot-supervisor, unattended-boot | ADDED, MODIFIED, RENAMED | The operator-present gate was designed for the first run. At that tim... |
-| nexus-privacy-hardening | 0/23 (0%) | nexus-auth, nexus-csrf-protection, nexus-dashboard, nexus-observability, evaluation-sidecar, state-encryption, remote-bridge | ADDED, MODIFIED | Add authentication, CSRF protection, and privacy-safe defaults to Nexus and evaluation outputs. |
 | performance-test-coverage | 0/26 (0%) | performance-hot-path, event-bus, mnemos, topos, audition, syneidesis, spot-supervisor, state-encryption | ADDED, MODIFIED | Address performance hot paths and close test coverage gaps. |
 
 ## Recently landed
 
 | Date | Change |
 | --- | --- |
+| 2026-09-17 | nexus-privacy-hardening |
 | 2026-09-17 | stream-wiring-quality |
 | 2026-09-17 | deployment-consistency |
 | 2026-09-15 | host-aware-accelerator-provisioning |

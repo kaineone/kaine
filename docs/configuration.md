@@ -134,14 +134,14 @@ Ships disabled — first boot is operator-supervised.
 
 Remote perception bridge — a cycle-layer WebSocket server (like Spot, not a registry module) that lets the operator stream a remote camera into the entity's vision (`Topos.process_frame`), a remote microphone into its hearing (through the same `LiveMicrophone` VAD/utterance pipeline as the physical mic, attributed `source_label = "remote"`), and receive generated speech (a composed Vox playback tap) plus the conversation transcript (`lingua.external` / `audition.out`) — over the operator's Tailscale tailnet. Ships disabled. Remote payloads are decoded in memory and never written to disk (zero-raw-sense-data persistence holds). Path-routed channels on one port: `/ingest/video`, `/ingest/audio`, `/speech`, `/transcript`.
 
-Security: the tailnet ACL is the boundary — set `host` to the host's Tailscale interface address, never `0.0.0.0` on a public NIC. `token`, when set, must be presented by clients (`?token=…` or `Authorization: Bearer …`) or the connection is closed at handshake.
+Security: the tailnet ACL is the boundary — set `host` to the host's Tailscale interface address, never `0.0.0.0` on a public NIC. `token`, when set, must be presented by clients as `Authorization: Bearer <token>`; query-string and `Sec-WebSocket-Protocol` tokens are rejected. A non-loopback bind without a token is refused at startup.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. Ships disabled; the cycle starts no bridge when false. |
 | `host` | string | `"127.0.0.1"` | Bind address. Point at the tailnet interface for remote operation. |
 | `port` | integer | `8089` | WebSocket port for all four channels. |
-| `token` | string | `""` | Optional shared secret. Empty = tailnet ACL only. |
+| `token` | string | `""` | Optional shared secret. Empty = tailnet ACL only; non-loopback binds require a token. |
 | `video_max_fps` | float | `4.0` | Latest-wins ceiling for remote frames handed to Topos; excess frames are dropped and counted. |
 | `audio_sample_rate` | integer | `16000` | Remote PCM format (int16 mono). |
 | `audio_vad_backend` | string | `"webrtcvad"` | Utterance segmentation for remote audio — same pipeline as the physical mic. `"rms"` is the dependency-free fallback. |
@@ -834,7 +834,7 @@ Architecture-thesis instrumentation sidecar. Observes the bus read-only; adds no
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Master gate for the sidecar. When false, all observers below are also disabled. |
-| `workspace_trajectory` | boolean | `true` | Record every workspace broadcast to `trajectory_dir`. |
+| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir`. Off by default for privacy; enable only after reviewing the privacy implications. Records are filtered through `PrivacyFilter` before persistence. |
 | `ab_divergence` | boolean | `true` | Run the A/B divergence test (conditioned vs. unconditioned generation) to measure the architecture's contribution. |
 | `ab_sample_rate` | float | `1.0` | Fraction of workspace broadcasts sampled for A/B comparison. `1.0` = every broadcast. |
 | `voice_tracking` | boolean | `true` | Track voice alignment preference pair evolution. |
@@ -996,20 +996,24 @@ console and evaluation surfaces show no message content.
 | `diagnostics_enabled` | boolean | `true` | Enable the diagnostics surface. |
 | `conversation_history_lookback` | integer | `50` | History lookback for the `/` route. The console renders no transcript, so this only bounds the (now unused) backfill — a remnant of the removed conversation panel. |
 | `dev_content_override` | boolean | `false` | When true, the diagnostics surface includes raw content (message text, beliefs, memory bodies, internal speech, affect reasons) and displays a "dev mode" banner. Keep `false` in production. |
+| `operator_token` | string | `""` | Bearer token for state-changing endpoints and privileged read surfaces. Set via `KAINE_NEXUS_TOKEN` or `config/secrets.toml`. Empty = all authenticated requests are rejected (fail-closed). |
+| `allowed_origins` | list of strings | `["http://127.0.0.1:8088", "http://localhost:8088"]` | Allowed `Origin` values for state-changing requests. |
+| `host_allowlist` | list of strings | `["127.0.0.1", "localhost"]` | Allowed `Host` header values for state-changing requests when no `Origin` header is sent. |
+| `non_loopback_allowed` | boolean | `false` | Explicit opt-in required to bind a non-loopback address. Without this and a configured `operator_token`, `python -m kaine.nexus` exits. |
 
 ---
 
 ## `[security.state_encryption]`
 
-Application-layer AES-256-GCM encryption-at-rest for persisted cognitive state (Eidolon self-model, fork/merge snapshot bundles, sidecar observer JSONL, Phantasia world-model checkpoints when the real backend writes them). Ships disabled.
+Application-layer AES-256-GCM encryption-at-rest for persisted cognitive state (Eidolon self-model, fork/merge snapshot bundles, sidecar observer JSONL, Phantasia world-model checkpoints when the real backend writes them).
 
-**Two-layer gate:** `enabled = true` *and* a 32-byte key must be available (fail-closed). With `enabled = true` but no key, the entity refuses to boot.
+**Default behavior:** when `enabled` is omitted, encryption is **on if a key is resolvable** and **off with a warning** if no key is present. Explicit `enabled = true` still requires a 32-byte key (fail-closed: the entity refuses to boot without one). Explicit `enabled = false` logs a warning that persisted state will be plaintext.
 
 **Key resolution order:**
 1. Environment variable named by `key_env_var` (default `KAINE_STATE_KEY`).
 2. Linux kernel keyring (`user` keyring, description `kaine:state_key`).
 
-The key is never hardcoded, logged, or persisted. Supply 32 raw bytes, or base64/hex encoding of 32 bytes.
+The key is never hardcoded, logged, or persisted. Supply 32 raw bytes, or base64/hex encoding of 32 bytes. The repository ships `secrets/state_key.example` as a placeholder; generate a real key out of band.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

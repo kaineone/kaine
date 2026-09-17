@@ -162,8 +162,9 @@ timeout_s = 5.0
 # attributed source_label="remote", never impersonating the physical mic.
 # SECURITY: bind `host` to your tailnet interface (e.g. the host's 100.x
 # Tailscale IP), NOT 0.0.0.0 on a public NIC. The tailnet ACL is the
-# boundary; set `token` for cheap defense-in-depth (clients send it as
-# ?token=... or an Authorization: Bearer header).
+# boundary; set `token` for cheap defense-in-depth (clients send it as an
+# Authorization: Bearer header only — query-string and subprotocol tokens are
+# rejected).
 enabled = false
 host = "127.0.0.1"
 port = 8089
@@ -1072,7 +1073,11 @@ return_to_baseline_seconds_ceiling = 30
 # thesis is validated. Adds NO core-module dependencies; observes the
 # bus only.
 enabled = true
-workspace_trajectory = true
+# Persistent workspace trajectory is OPT-IN. When false, no per-tick
+# workspace snapshot is written to disk (the default). Enable only after
+# reviewing the privacy implications; records are filtered through the
+# shared PrivacyFilter before persistence.
+workspace_trajectory = false
 ab_divergence = true
 ab_sample_rate = 1.0
 voice_tracking = true
@@ -1306,6 +1311,18 @@ conversation_history_lookback = 50
 # bodies, internal speech, affect reasons) and the page banner says "dev
 # mode" so operators know they are seeing privileged content.
 dev_content_override = false
+# Operator authentication. Set via KAINE_NEXUS_TOKEN env or
+# config/secrets.toml [nexus] operator_token. State-changing endpoints and
+# privileged read surfaces (conversation, diagnostics SSE when dev_content_override
+# or conversation_enabled is true) require Authorization: Bearer <token>.
+operator_token = ""
+# CSRF/Origin protection. State-changing requests must either originate from
+# one of these origins or use a Host header in host_allowlist.
+allowed_origins = ["http://127.0.0.1:8088", "http://localhost:8088"]
+host_allowlist = ["127.0.0.1", "localhost"]
+# Explicit opt-in required to bind a non-loopback interface. When false,
+# `python -m kaine.nexus` exits if host is not loopback.
+non_loopback_allowed = false
 
 [security.state_encryption]
 # Application-layer AES-256-GCM encryption-at-rest for persisted cognitive
@@ -1313,11 +1330,12 @@ dev_content_override = false
 # JSONL, and Phantasia world-model checkpoints when the real backend writes
 # them). See SECURITY.md for the full at-rest state-file inventory.
 #
-# SHIPS DISABLED. Enabling is an operator decision and REQUIRES a key: with
-# enabled = true the entity refuses to boot unless a 32-byte AES-256 key is
-# available (fail-closed). When disabled, every persistence path writes
-# plaintext exactly as before.
-enabled = false
+# DEFAULT: when `enabled` is omitted, encryption is ON if a key is
+# resolvable (KAINE_STATE_KEY env or kernel keyring "kaine:state_key"), and
+# OFF with a warning if no key is present. Explicit `enabled = false` still
+# works and logs a warning. With `enabled = true` and no key, the entity
+# refuses to boot (fail-closed).
+enabled = true
 # Environment variable holding the key. Supply 32 raw bytes, or base64/hex of
 # 32 bytes. NEVER commit the key. If the env var is unset, the kernel keyring
 # ("kaine:state_key" in the user keyring) is tried next.

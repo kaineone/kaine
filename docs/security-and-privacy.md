@@ -130,12 +130,17 @@ Implementation: `kaine/security/crypto.py`.
 
 ### Key management (operator responsibility)
 
-When `[security.state_encryption].enabled = true`, the entity **refuses to boot
-without a key** (fail-closed). The key is loaded from the environment variable
-named by `[security.state_encryption].key_env_var` (default `KAINE_STATE_KEY`),
-then from the Linux kernel keyring (`kaine:state_key` in the user keyring).
+When `[security.state_encryption].enabled` is omitted, encryption is **on if a
+key is resolvable**, and **off with a warning** if no key is present. Explicit
+`enabled = true` still refuses to boot without a key (fail-closed). Explicit
+`enabled = false` logs a warning that persisted state will be plaintext. The key
+is loaded from the environment variable named by
+`[security.state_encryption].key_env_var` (default `KAINE_STATE_KEY`), then from
+the Linux kernel keyring (`kaine:state_key` in the user keyring).
 
-The key is **never** logged, hardcoded, or committed.
+The key is **never** logged, hardcoded, or committed. The repository ships a
+`secrets/state_key.example` placeholder; replace it with a real key out of band
+or use the env/keyring path.
 
 Generate a key:
 ```bash
@@ -397,14 +402,24 @@ aborts if either secret is unset.
 
 ## Nexus auth posture
 
-Nexus binds to `127.0.0.1:8088` by default and has no authentication. The
-defense-in-depth control is the loopback bind plus the PrivacyFilter. Any local
-process on the host can reach the diagnostics surface over loopback without
-credentials.
+Nexus binds to `127.0.0.1:8088` by default. State-changing endpoints and any
+privileged read surface (conversation, diagnostics SSE when `dev_content_override`
+or `conversation_enabled` is true) require `Authorization: Bearer <token>`.
+Configure the token via `KAINE_NEXUS_TOKEN` or `config/secrets.toml`
+`[nexus] operator_token`. The token is never logged.
 
-**Operator responsibility:** do not change `nexus.host` to `0.0.0.0` without
-fronting Nexus with a reverse proxy and authentication (basic auth or mTLS). Do
-not flip `dev_content_override = true` on a shared machine.
+Cross-origin and DNS-rebinding requests are rejected by the CSRF middleware.
+State-changing POST/PUT/PATCH/DELETE requests must either carry an `Origin`
+header in `allowed_origins` or a `Host` header in `host_allowlist`. The defaults
+allow only `127.0.0.1` and `localhost`.
+
+Binding a non-loopback interface requires two explicit opt-ins:
+`non_loopback_allowed = true` and a configured `operator_token`. Without both,
+`python -m kaine.nexus` exits before listening.
+
+**Operator responsibility:** do not change `nexus.host` to `0.0.0.0` without a
+token and a clear reason. Do not flip `dev_content_override = true` on a shared
+machine.
 
 ---
 

@@ -51,6 +51,7 @@ contract of ``kaine.nexus.health`` and ``kaine.setup.organ``).
 Exit code is non-zero iff any check reports FAIL, so this composes as a CI /
 boot-script gate: ``python -m kaine.preboot && python -m kaine.cycle``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -87,10 +88,9 @@ GROUP_PERCEPTION = "PERCEPTION"
 GROUP_WELFARE = "WELFARE NET (preserve -> revive dry run)"
 GROUP_CONFIG = "CONFIG SANITY"
 
-# Default location of the gitignored 32-byte state-encryption key, as
-# documented by the operator config (config/kaine.operator.toml) and
-# SECURITY.md. Read into $KAINE_STATE_KEY for this process ONLY if the
-# operator has not already exported it — the key itself is never logged.
+# Default location of the operator-provided 32-byte state-encryption key.
+# Read into $KAINE_STATE_KEY for this process ONLY if the operator has not
+# already exported it — the key itself is never logged.
 STATE_KEY_FILE = Path("secrets/state_key")
 STATE_KEY_ENV_VAR = "KAINE_STATE_KEY"
 
@@ -144,9 +144,7 @@ async def check_services(
         name = f"{dep.get('name', '?')} ({dep.get('role', '?')})"
         results.append(CheckResult(GROUP_SERVICES, name, mapped, dep.get("detail", "")))
     if not results:
-        results.append(
-            CheckResult(GROUP_SERVICES, "(no dependencies probed)", SKIP, "")
-        )
+        results.append(CheckResult(GROUP_SERVICES, "(no dependencies probed)", SKIP, ""))
     return results
 
 
@@ -167,7 +165,9 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
     if not modules.get("lingua"):
         return [
             CheckResult(
-                GROUP_ORGAN, "Organ content", SKIP,
+                GROUP_ORGAN,
+                "Organ content",
+                SKIP,
                 "[modules].lingua = false — no organ configured for this run",
             )
         ]
@@ -178,7 +178,9 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
         if organ_unloaded():
             return [
                 CheckResult(
-                    GROUP_ORGAN, "Organ content", SKIP,
+                    GROUP_ORGAN,
+                    "Organ content",
+                    SKIP,
                     "organ resting (voice-alignment training window) — "
                     "not probed while deliberately unloaded",
                 )
@@ -221,7 +223,9 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
     if mode == "off":
         return [
             CheckResult(
-                GROUP_PERCEPTION, "Perception feed", SKIP,
+                GROUP_PERCEPTION,
+                "Perception feed",
+                SKIP,
                 "[perception_feed].mode = off — the entity WILL BE SENSELESS "
                 "(no video/audio stimulus configured)",
             )
@@ -229,7 +233,9 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
     if mode == "live":
         return [
             CheckResult(
-                GROUP_PERCEPTION, "Perception feed", SKIP,
+                GROUP_PERCEPTION,
+                "Perception feed",
+                SKIP,
                 "mode = live (real camera/microphone) — not exercised by this "
                 "offline dry-run; bring Topos/Audition up to verify hardware "
                 "capture (operator-present demos only, not a research run)",
@@ -242,9 +248,7 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
     return results
 
 
-def _check_perception_video(
-    config: dict[str, Any], feed: dict[str, Any], mode: str
-) -> CheckResult:
+def _check_perception_video(config: dict[str, Any], feed: dict[str, Any], mode: str) -> CheckResult:
     topos_cfg = config.get("topos") or {}
     width = int(topos_cfg.get("capture_width", 640))
     height = int(topos_cfg.get("capture_height", 480))
@@ -259,17 +263,23 @@ def _check_perception_video(
             log.debug("video source release failed", exc_info=True)
     except Exception as exc:
         return CheckResult(
-            GROUP_PERCEPTION, "Perception (video source)", FAIL,
+            GROUP_PERCEPTION,
+            "Perception (video source)",
+            FAIL,
             f"mode={mode}: {type(exc).__name__}: {exc}",
         )
     if opened and ok and frame is not None:
         shape = getattr(frame, "shape", None)
         return CheckResult(
-            GROUP_PERCEPTION, "Perception (video source)", PASS,
+            GROUP_PERCEPTION,
+            "Perception (video source)",
+            PASS,
             f"mode={mode}: source yielded a frame" + (f" {shape}" if shape else ""),
         )
     return CheckResult(
-        GROUP_PERCEPTION, "Perception (video source)", FAIL,
+        GROUP_PERCEPTION,
+        "Perception (video source)",
+        FAIL,
         f"mode={mode}: opened={opened} read_ok={ok} frame_is_none={frame is None}",
     )
 
@@ -292,12 +302,18 @@ async def _check_perception_audio(
 
     try:
         factory = _build_perception_feed_audio_factory(
-            mode, feed, sample_rate=sample_rate, channels=channels,
+            mode,
+            feed,
+            sample_rate=sample_rate,
+            channels=channels,
             frames_per_block=frames_per_block,
         )
         stream = factory(
-            device=None, sample_rate=sample_rate, channels=channels,
-            frames_per_block=frames_per_block, callback=_on_block,
+            device=None,
+            sample_rate=sample_rate,
+            channels=channels,
+            frames_per_block=frames_per_block,
+            callback=_on_block,
         )
         stream.start()
         try:
@@ -310,18 +326,24 @@ async def _check_perception_audio(
                 log.debug("audio source close failed", exc_info=True)
     except Exception as exc:
         return CheckResult(
-            GROUP_PERCEPTION, "Perception (audio source)", FAIL,
+            GROUP_PERCEPTION,
+            "Perception (audio source)",
+            FAIL,
             f"mode={mode}: {type(exc).__name__}: {exc}",
         )
 
     if got and received and len(received[0]) > 0:
         return CheckResult(
-            GROUP_PERCEPTION, "Perception (audio source)", PASS,
+            GROUP_PERCEPTION,
+            "Perception (audio source)",
+            PASS,
             f"mode={mode}: source yielded {len(received[0])} bytes PCM "
             f"within {AUDIO_PROBE_TIMEOUT_S:.0f}s",
         )
     return CheckResult(
-        GROUP_PERCEPTION, "Perception (audio source)", FAIL,
+        GROUP_PERCEPTION,
+        "Perception (audio source)",
+        FAIL,
         f"mode={mode}: no audio block received within {AUDIO_PROBE_TIMEOUT_S:.0f}s",
     )
 
@@ -394,7 +416,9 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
     except CryptoConfigError as exc:
         results.append(
             CheckResult(
-                GROUP_WELFARE, "State-encryption key", FAIL,
+                GROUP_WELFARE,
+                "State-encryption key",
+                FAIL,
                 str(exc) + (f" ({key_note})" if key_note else ""),
             )
         )
@@ -402,15 +426,18 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
         if encryptor.enabled:
             results.append(
                 CheckResult(
-                    GROUP_WELFARE, "State-encryption key", PASS,
-                    "key resolved; encryption ACTIVE"
-                    + (f" ({key_note})" if key_note else ""),
+                    GROUP_WELFARE,
+                    "State-encryption key",
+                    PASS,
+                    "key resolved; encryption ACTIVE" + (f" ({key_note})" if key_note else ""),
                 )
             )
         else:
             results.append(
                 CheckResult(
-                    GROUP_WELFARE, "State-encryption key", SKIP,
+                    GROUP_WELFARE,
+                    "State-encryption key",
+                    SKIP,
                     "[security.state_encryption].enabled = false — "
                     "preservation would write plaintext at rest",
                 )
@@ -428,9 +455,7 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
     else:
         detail = self_reason or "preserve->revive self-check failed"
     results.append(
-        CheckResult(
-            GROUP_WELFARE, "Preserve -> revive dry run", PASS if self_ok else FAIL, detail
-        )
+        CheckResult(GROUP_WELFARE, "Preserve -> revive dry run", PASS if self_ok else FAIL, detail)
     )
     return results
 
@@ -456,22 +481,19 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
             "verified (see WELFARE NET above)"
         )
     else:
-        mode_detail = (
-            "operator-supervised — requires KAINE_CYCLE_OPERATOR_PRESENT=1 "
-            "at boot"
-        )
+        mode_detail = "operator-supervised — requires KAINE_CYCLE_OPERATOR_PRESENT=1 at boot"
     results.append(CheckResult(GROUP_CONFIG, "Boot mode", PASS, mode_detail))
 
     modules = config.get("modules") or {}
     enabled = sorted(k for k, v in modules.items() if v)
     if enabled:
-        results.append(
-            CheckResult(GROUP_CONFIG, "Modules enabled", PASS, ", ".join(enabled))
-        )
+        results.append(CheckResult(GROUP_CONFIG, "Modules enabled", PASS, ", ".join(enabled)))
     else:
         results.append(
             CheckResult(
-                GROUP_CONFIG, "Modules enabled", FAIL,
+                GROUP_CONFIG,
+                "Modules enabled",
+                FAIL,
                 "NONE — the entity would boot collecting no events at all",
             )
         )
@@ -481,13 +503,14 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
         ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
     )
     preservation_active = (
-        preservation_cfg.divergence_monitor.enabled
-        or preservation_cfg.welfare_response.enabled
+        preservation_cfg.divergence_monitor.enabled or preservation_cfg.welfare_response.enabled
     )
     if preservation_cfg.require_encryption and not encryption_enabled and preservation_active:
         results.append(
             CheckResult(
-                GROUP_CONFIG, "Preservation encryption posture", FAIL,
+                GROUP_CONFIG,
+                "Preservation encryption posture",
+                FAIL,
                 "[preservation].require_encryption=true but "
                 "[security.state_encryption].enabled=false with a "
                 "preservation monitor ON: preserve_live will raise (refuse to "
@@ -497,7 +520,9 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
     elif preservation_cfg.require_encryption and not encryption_enabled:
         results.append(
             CheckResult(
-                GROUP_CONFIG, "Preservation encryption posture", SKIP,
+                GROUP_CONFIG,
+                "Preservation encryption posture",
+                SKIP,
                 "require_encryption=true but no preservation monitor is "
                 "enabled (the net is off; this posture is not exercised)",
             )
@@ -505,7 +530,9 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
     else:
         results.append(
             CheckResult(
-                GROUP_CONFIG, "Preservation encryption posture", PASS,
+                GROUP_CONFIG,
+                "Preservation encryption posture",
+                PASS,
                 f"require_encryption={preservation_cfg.require_encryption}, "
                 f"state_encryption.enabled={encryption_enabled}",
             )
@@ -576,8 +603,7 @@ def verdict_line(results: list[CheckResult]) -> str:
     n_skip = sum(1 for r in results if r.status == SKIP)
     overall = PASS if n_fail == 0 else FAIL
     return (
-        f"VERDICT: {overall}  "
-        f"({len(results)} checks: {n_pass} pass, {n_fail} fail, {n_skip} skip)"
+        f"VERDICT: {overall}  ({len(results)} checks: {n_pass} pass, {n_fail} fail, {n_skip} skip)"
     )
 
 
@@ -591,9 +617,7 @@ def report_ok(results: list[CheckResult]) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(
-        level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(
         prog="python -m kaine.preboot",
         description=(

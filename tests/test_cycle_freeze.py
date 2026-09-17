@@ -3,6 +3,7 @@
 
 """Operator freeze: control state, the freeze-watch loop (resume-while-paused),
 and the Nexus freeze router."""
+
 import asyncio
 
 import httpx
@@ -12,9 +13,10 @@ from kaine.cycle import control_state as cs
 
 # ---- control state ----------------------------------------------------------
 
+
 def test_control_round_trip(tmp_path):
     p = tmp_path / "control.json"
-    assert cs.read_control(p).frozen is False           # missing → unfrozen
+    assert cs.read_control(p).frozen is False  # missing → unfrozen
     c = cs.freeze("gpu maintenance", path=p)
     assert c.frozen and c.reason == "gpu maintenance" and c.frozen_at
     assert cs.read_control(p).frozen is True
@@ -30,6 +32,7 @@ def test_control_corrupt_file_defaults_unfrozen(tmp_path):
 
 
 # ---- freeze-watch loop ------------------------------------------------------
+
 
 class _FakeCycle:
     def __init__(self):
@@ -82,28 +85,40 @@ async def test_freeze_watch_pauses_and_resumes(tmp_path, monkeypatch):
 
 # ---- Nexus router -----------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_cycle_control_router(tmp_path):
     from fastapi import FastAPI
 
+    from kaine.nexus.config import NexusConfig
     from kaine.nexus.cycle_control import build_cycle_control_router
 
     ctrl = tmp_path / "control.json"
     app = FastAPI()
+    app.state.config = NexusConfig(
+        operator_token="test-token",
+        host_allowlist=("127.0.0.1", "localhost", "t"),
+    )
     app.include_router(build_cycle_control_router(control_path=ctrl))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
         assert (await client.get("/diagnostics/cycle/control.json")).json()["frozen"] is False
         r = await client.post(
-            "/diagnostics/cycle/freeze", json={"frozen": True, "reason": "gpu work"}
+            "/diagnostics/cycle/freeze",
+            json={"frozen": True, "reason": "gpu work"},
+            headers={"Authorization": "Bearer test-token"},
         )
         assert r.status_code == 200 and r.json()["frozen"] is True
         snap = (await client.get("/diagnostics/cycle/control.json")).json()
         assert snap["reason"] == "gpu work"
         # carries only operational fields — no sensory content keys
         assert set(snap.keys()) <= {"frozen", "frozen_at", "reason"}
-        r = await client.post("/diagnostics/cycle/freeze", json={"frozen": False})
+        r = await client.post(
+            "/diagnostics/cycle/freeze",
+            json={"frozen": False},
+            headers={"Authorization": "Bearer test-token"},
+        )
         assert r.json()["frozen"] is False
 
 
@@ -114,10 +129,15 @@ async def test_freeze_reason_is_sanitized_in_log(tmp_path, caplog):
 
     from fastapi import FastAPI
 
+    from kaine.nexus.config import NexusConfig
     from kaine.nexus.cycle_control import build_cycle_control_router
 
     ctrl = tmp_path / "control.json"
     app = FastAPI()
+    app.state.config = NexusConfig(
+        operator_token="test-token",
+        host_allowlist=("127.0.0.1", "localhost", "t"),
+    )
     app.include_router(build_cycle_control_router(control_path=ctrl))
 
     transport = httpx.ASGITransport(app=app)
@@ -126,6 +146,7 @@ async def test_freeze_reason_is_sanitized_in_log(tmp_path, caplog):
             await client.post(
                 "/diagnostics/cycle/freeze",
                 json={"frozen": True, "reason": "ok\nINFO forged log line"},
+                headers={"Authorization": "Bearer test-token"},
             )
     freeze_records = [
         rec for rec in caplog.records if "operator freeze requested" in rec.getMessage()

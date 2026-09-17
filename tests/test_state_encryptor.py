@@ -7,6 +7,7 @@ Covers: encrypt/decrypt round-trip, transparent no-op when disabled,
 fail-closed CryptoConfigError on a missing key, authenticated-encryption
 tamper detection, and per-message nonce uniqueness.
 """
+
 from __future__ import annotations
 
 import base64
@@ -82,20 +83,52 @@ def test_disabled_does_not_import_cryptography():
 def test_missing_key_raises_at_construction(monkeypatch):
     monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
     # Force the keyring fallback to yield nothing.
-    monkeypatch.setattr(
-        "kaine.security.crypto._load_key_from_keyring", lambda: None
-    )
+    monkeypatch.setattr("kaine.security.crypto._load_key_from_keyring", lambda: None)
     with pytest.raises(CryptoConfigError):
         StateEncryptor(CryptoConfig(enabled=True))
 
 
 def test_install_from_section_fail_closed(monkeypatch):
     monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
-    monkeypatch.setattr(
-        "kaine.security.crypto._load_key_from_keyring", lambda: None
-    )
+    monkeypatch.setattr("kaine.security.crypto._load_key_from_keyring", lambda: None)
     with pytest.raises(CryptoConfigError):
         install_from_section({"enabled": True})
+
+
+def test_config_auto_enables_when_key_present(monkeypatch):
+    monkeypatch.setenv("KAINE_STATE_KEY", KEY_B64)
+    cfg = CryptoConfig.from_section({})
+    assert cfg.enabled is True
+
+
+def test_config_auto_disables_when_key_missing(monkeypatch):
+    monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
+    monkeypatch.setattr("kaine.security.crypto._load_key_from_keyring", lambda: None)
+    cfg = CryptoConfig.from_section({})
+    assert cfg.enabled is False
+
+
+def test_explicit_disabled_overrides_key_presence(monkeypatch):
+    monkeypatch.setenv("KAINE_STATE_KEY", KEY_B64)
+    cfg = CryptoConfig.from_section({"enabled": False})
+    assert cfg.enabled is False
+
+
+def test_install_from_section_logs_warning_when_explicitly_disabled(monkeypatch, caplog):
+    monkeypatch.setenv("KAINE_STATE_KEY", KEY_B64)
+    monkeypatch.setattr("kaine.security.crypto.set_state_encryptor", lambda _enc: None)
+    with caplog.at_level("WARNING", logger="kaine.security.crypto"):
+        install_from_section({"enabled": False})
+    assert any("EXPLICITLY DISABLED" in r.message for r in caplog.records)
+
+
+def test_install_from_section_logs_warning_when_key_missing(monkeypatch, caplog):
+    monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
+    monkeypatch.setattr("kaine.security.crypto._load_key_from_keyring", lambda: None)
+    monkeypatch.setattr("kaine.security.crypto.set_state_encryptor", lambda _enc: None)
+    with caplog.at_level("WARNING", logger="kaine.security.crypto"):
+        install_from_section({})
+    assert any("no AES-256 key" in r.message for r in caplog.records)
 
 
 def test_bad_key_length_raises(monkeypatch):

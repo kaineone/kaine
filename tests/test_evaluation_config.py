@@ -9,7 +9,8 @@ from kaine.evaluation.config import EvaluationConfig, load_evaluation_config
 def test_defaults_enable_everything():
     c = EvaluationConfig()
     assert c.enabled is True
-    assert c.workspace_trajectory is True
+    # Workspace trajectory is OPT-IN for privacy; default is False.
+    assert c.workspace_trajectory is False
     assert c.ab_divergence is True
     assert c.ab_sample_rate == 1.0
     assert c.voice_tracking is True
@@ -80,16 +81,12 @@ def test_eval_baseline_derives_from_lingua_when_unset():
 
 
 def test_eval_baseline_derives_via_loader_no_file(tmp_path):
-    c = load_evaluation_config(
-        tmp_path / "nope.toml", lingua_model_id="some-org/some-model:99b"
-    )
+    c = load_evaluation_config(tmp_path / "nope.toml", lingua_model_id="some-org/some-model:99b")
     assert c.chat_model_id == "some-org/some-model:99b"
 
 
 def test_eval_baseline_explicit_match_ok():
-    c = EvaluationConfig.from_mapping(
-        {"chat_model_id": "X:1"}, lingua_model_id="X:1"
-    )
+    c = EvaluationConfig.from_mapping({"chat_model_id": "X:1"}, lingua_model_id="X:1")
     assert c.chat_model_id == "X:1"
 
 
@@ -170,15 +167,14 @@ def test_evaluation_config_threads_welfare_config():
     """EvaluationConfig.from_mapping passes [evaluation.welfare] through."""
     from kaine.evaluation.config import EvaluationConfig
 
-    cfg = EvaluationConfig.from_mapping(
-        {"welfare": {"interoceptive_distress_threshold": 0.65}}
-    )
+    cfg = EvaluationConfig.from_mapping({"welfare": {"interoceptive_distress_threshold": 0.65}})
     assert cfg.welfare.interoceptive_distress_threshold == pytest.approx(0.65)
     # Other keys stay at defaults.
     assert cfg.welfare.interoceptive_distress_duration_s == pytest.approx(30.0)
 
 
 # --- operator-override merge in the loaders (#5) + chat_api_key derivation -----
+
 
 def test_loaders_apply_operator_override(tmp_path):
     """The eval + research-log loaders must deep-merge the operator override so
@@ -238,9 +234,7 @@ def test_evaluation_config_threads_profile(tmp_path, monkeypatch):
         return {"evaluation": {"enabled": False}}
 
     monkeypatch.setattr("kaine.evaluation.config.load_kaine_config", fake_load)
-    result = load_evaluation_config(
-        shipped, operator_path=operator, profile="tier1"
-    )
+    result = load_evaluation_config(shipped, operator_path=operator, profile="tier1")
     assert captured["profile"] == "tier1"
     assert result.enabled is False
 
@@ -260,9 +254,7 @@ def test_research_event_log_config_threads_profile(tmp_path, monkeypatch):
         return {"research_event_log": {"enabled": True}}
 
     monkeypatch.setattr("kaine.evaluation.config.load_kaine_config", fake_load)
-    result = load_research_event_log_config(
-        shipped, operator_path=operator, profile="tier1"
-    )
+    result = load_research_event_log_config(shipped, operator_path=operator, profile="tier1")
     assert captured["profile"] == "tier1"
     assert result.enabled is True
 

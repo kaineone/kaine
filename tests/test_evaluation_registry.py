@@ -50,7 +50,7 @@ def _config(tmp_path, **overrides) -> EvaluationConfig:
 
 @pytest.mark.asyncio
 async def test_registry_builds_passive_observers(tmp_path):
-    cfg = _config(tmp_path)
+    cfg = _config(tmp_path, workspace_trajectory=True)
     bus = FakeBus()
     sidecar = SidecarRegistry(
         bus=bus,
@@ -84,7 +84,7 @@ async def test_registry_disabled_when_master_off(tmp_path):
 
 @pytest.mark.asyncio
 async def test_registry_per_component_opt_out(tmp_path):
-    cfg = _config(tmp_path, ab_divergence=False)
+    cfg = _config(tmp_path, ab_divergence=False, workspace_trajectory=True)
     sidecar = SidecarRegistry(
         bus=FakeBus(),
         config=cfg,
@@ -129,9 +129,7 @@ def test_no_core_module_imports_kaine_evaluation():
         capture_output=True,
         text=True,
     )
-    matches = [
-        line for line in proc.stdout.strip().splitlines() if line
-    ]
+    matches = [line for line in proc.stdout.strip().splitlines() if line]
     # The cycle entrypoint and nexus entrypoint are the allowed coupling points.
     # nexus/__main__.py uses a lazy/optional import to mount the tab when enabled.
     allowed = {
