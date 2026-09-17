@@ -62,7 +62,7 @@ def test_secrets_file_password_used_when_env_unset(tmp_path: Path):
 def test_loopback_host_without_password_fails_fast(tmp_path: Path):
     kaine = tmp_path / "kaine.toml"
     secrets = tmp_path / "secrets.toml"
-    _write(kaine, "[redis]\nhost = \"127.0.0.1\"\n")
+    _write(kaine, '[redis]\nhost = "127.0.0.1"\n')
     _write(secrets, "")
     with pytest.raises(BusConfigError):
         load_bus_config(kaine_toml=kaine, secrets_toml=secrets, env={})
@@ -71,7 +71,7 @@ def test_loopback_host_without_password_fails_fast(tmp_path: Path):
 def test_localhost_without_password_fails_fast(tmp_path: Path):
     kaine = tmp_path / "kaine.toml"
     secrets = tmp_path / "secrets.toml"
-    _write(kaine, "[redis]\nhost = \"localhost\"\n")
+    _write(kaine, '[redis]\nhost = "localhost"\n')
     _write(secrets, "")
     with pytest.raises(BusConfigError):
         load_bus_config(kaine_toml=kaine, secrets_toml=secrets, env={})
@@ -80,7 +80,7 @@ def test_localhost_without_password_fails_fast(tmp_path: Path):
 def test_non_loopback_host_without_password_fails_fast(tmp_path: Path):
     kaine = tmp_path / "kaine.toml"
     secrets = tmp_path / "secrets.toml"
-    _write(kaine, "[redis]\nhost = \"10.0.0.5\"\n")
+    _write(kaine, '[redis]\nhost = "10.0.0.5"\n')
     _write(secrets, "")
     with pytest.raises(BusConfigError):
         load_bus_config(kaine_toml=kaine, secrets_toml=secrets, env={})
@@ -105,3 +105,81 @@ def test_bus_config_url_builds_with_password():
 def test_bus_config_url_builds_with_username_and_password():
     cfg = BusConfig(username="default", password="abc")
     assert cfg.url == "redis://default:abc@127.0.0.1:6379/0"
+
+
+def test_operator_overlay_merges_per_stream_maxlen(tmp_path: Path):
+    kaine = tmp_path / "kaine.toml"
+    operator = tmp_path / "operator.toml"
+    secrets = tmp_path / "secrets.toml"
+    _write(
+        kaine,
+        """
+        [redis]
+        host = "127.0.0.1"
+        port = 6379
+        [bus]
+        default_maxlen = 100000
+        [bus.per_stream_maxlen]
+        "workspace.broadcast" = 50000
+        """,
+    )
+    _write(
+        operator,
+        """
+        [bus.per_stream_maxlen]
+        "topos.out" = 2000
+        "audition.out" = 2000
+        """,
+    )
+    _write(secrets, '[redis]\npassword = "x"\n')
+    cfg = load_bus_config(
+        kaine_toml=kaine,
+        secrets_toml=secrets,
+        env={},
+        operator_toml=operator,
+    )
+    assert cfg.per_stream_maxlen["workspace.broadcast"] == 50000
+    assert cfg.per_stream_maxlen["topos.out"] == 2000
+    assert cfg.per_stream_maxlen["audition.out"] == 2000
+    assert cfg.default_maxlen == 100000
+
+
+def test_committed_config_ships_latent_stream_maxlen_caps():
+    root = Path(__file__).resolve().parents[1]
+    cfg = load_bus_config(
+        kaine_toml=root / "config" / "kaine.toml",
+        secrets_toml=root / "config" / "secrets.toml",
+        env={"KAINE_REDIS_PASSWORD": "x"},
+        operator_toml=root / "config" / "kaine.operator.toml.missing",
+    )
+    assert cfg.per_stream_maxlen.get("topos.out") == 2000
+    assert cfg.per_stream_maxlen.get("audition.out") == 2000
+
+
+def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):
+    kaine = tmp_path / "kaine.toml"
+    operator = tmp_path / "operator.toml"
+    secrets = tmp_path / "secrets.toml"
+    _write(
+        kaine,
+        """
+        [redis]
+        host = "127.0.0.1"
+        port = 6379
+        [bus]
+        default_maxlen = 100000
+        [bus.per_stream_maxlen]
+        "topos.out" = 2000
+        "audition.out" = 2000
+        """,
+    )
+    operator.write_text("this is not valid TOML\n", encoding="utf-8")
+    _write(secrets, '[redis]\npassword = "x"\n')
+    cfg = load_bus_config(
+        kaine_toml=kaine,
+        secrets_toml=secrets,
+        env={},
+        operator_toml=operator,
+    )
+    assert cfg.per_stream_maxlen.get("topos.out") == 2000
+    assert cfg.per_stream_maxlen.get("audition.out") == 2000

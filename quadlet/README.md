@@ -11,7 +11,7 @@ service stays down until a human logs in.
 
 ```bash
 mkdir -p ~/.config/containers/systemd
-cp quadlet/*.container quadlet/*.network ~/.config/containers/systemd/
+cp quadlet/*.container quadlet/*.network quadlet/*.volume ~/.config/containers/systemd/
 # secrets + gate flags — never in a unit file:
 export KAINE_REDIS_PASSWORD=... KAINE_QDRANT_API_KEY=... KAINE_MODEL_SERVER_API_KEY=...
 sudo loginctl enable-linger $USER

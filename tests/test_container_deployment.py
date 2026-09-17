@@ -17,6 +17,7 @@ entity. They enforce the load-bearing invariants of the design:
     truth);
   - the setup provisioner plans every model weight.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -71,7 +72,10 @@ def test_print_index_cli_accessor():
     py = shutil.which("python3") or "python3"
     script = str(_REPO_ROOT / "scripts" / "install.py")
     cuda = subprocess.run(
-        [py, script, "--print-index", "cuda"], capture_output=True, text=True, check=True
+        [py, script, "--print-index", "cuda"],
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert cuda.stdout.strip().startswith("https://download.pytorch.org/whl/")
     mps = subprocess.run(
@@ -108,8 +112,7 @@ def test_dockerfile_never_copies_secrets_or_state():
     # Inspect actual COPY directives (not comments): none may reference
     # operator config, secrets, or state.
     copy_lines = [
-        ln for ln in text.splitlines()
-        if ln.strip().upper().startswith("COPY")
+        ln for ln in text.splitlines() if ln.strip().upper().startswith("COPY")
     ]
     for ln in copy_lines:
         assert "secrets.toml" not in ln, ln
@@ -230,10 +233,12 @@ def test_provisioned_weights_land_where_the_services_read_them():
     # Provision writes to kaine-models; the cycle reads it (encoder + embedder)
     # read-only.
     assert any(
-        "kaine-models:/models" in v for v in doc["services"]["kaine-provision"]["volumes"]
+        "kaine-models:/models" in v
+        for v in doc["services"]["kaine-provision"]["volumes"]
     )
     assert any(
-        v == "kaine-models:/models:ro" for v in doc["services"]["kaine-cycle"]["volumes"]
+        v == "kaine-models:/models:ro"
+        for v in doc["services"]["kaine-cycle"]["volumes"]
     )
 
     # The llama.cpp server's -m path is EXACTLY where the organ provisioner writes
@@ -316,6 +321,54 @@ def test_quadlet_cycle_has_no_install_section():
     assert _has_section((_QUADLET / "kaine-redis.container").read_text(), "[Install]")
 
 
+def test_quadlet_referenced_volumes_have_unit_files():
+    """Every Volume=... line in a .container unit must name a .volume file."""
+    referenced: set[str] = set()
+    for container in _QUADLET.glob("*.container"):
+        for line in container.read_text().splitlines():
+            if line.startswith("Volume="):
+                # Volume=NAME.volume:/path or Volume=%h/...:/path
+                name = line.split("=", 1)[1].split(":", 1)[0]
+                if name.endswith(".volume"):
+                    referenced.add(name)
+    for name in referenced:
+        assert (_QUADLET / name).exists(), f"missing quadlet volume unit: {name}"
+
+
+def test_quadlet_qdrant_healthcheck_avoids_curl():
+    lines = (_QUADLET / "kaine-qdrant.container").read_text().splitlines()
+    health_lines = [ln for ln in lines if ln.startswith("HealthCmd")]
+    assert health_lines
+    health_cmd = health_lines[0]
+    assert "curl" not in health_cmd
+    assert "wget" not in health_cmd
+
+
+def test_quadlet_redis_maxmemory_matches_compose_topology():
+    quadlet_text = (_QUADLET / "kaine-redis.container").read_text()
+    compose_doc = _load_compose()
+    compose_cmd = compose_doc["services"]["kaine-redis"]["command"]
+    compose_maxmemory = compose_cmd[compose_cmd.index("--maxmemory") + 1]
+    assert f"--maxmemory {compose_maxmemory}" in quadlet_text
+
+
+def test_compose_redis_maxmemory_matches_kaine_topology():
+    compose_doc = _load_compose()
+    kaine_cmd = compose_doc["services"]["kaine-redis"]["command"]
+    kaine_maxmemory = kaine_cmd[kaine_cmd.index("--maxmemory") + 1]
+    redis_path = _REPO_ROOT / "compose" / "redis.yml"
+    redis_doc = yaml.safe_load(redis_path.read_text())
+    redis_cmd = redis_doc["services"]["kaine-redis"]["command"]
+    redis_maxmemory = redis_cmd[redis_cmd.index("--maxmemory") + 1]
+    assert kaine_maxmemory == redis_maxmemory
+
+
+def test_quadlet_cycle_and_nexus_have_redis_url():
+    url = "Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0"
+    assert url in (_QUADLET / "kaine-cycle.container").read_text()
+    assert url in (_QUADLET / "kaine-nexus.container").read_text()
+
+
 # --------------------------------------------------------------------------
 # 3.1 — setup provisioner plans every model weight (no network in the test)
 # --------------------------------------------------------------------------
@@ -333,9 +386,7 @@ def test_provision_plans_all_models_without_network():
     assert "facebook/dinov2-small" not in repos
 
     # Selecting the DINOv2 backend swaps in DINOv2 as a plain aux download.
-    dino_repos = {
-        m.repo for m in aux_models({"topos": {"encoder_backend": "dinov2"}})
-    }
+    dino_repos = {m.repo for m in aux_models({"topos": {"encoder_backend": "dinov2"}})}
     assert "facebook/dinov2-small" in dino_repos
 
     # Inject a fake runner so NOTHING hits the network.
