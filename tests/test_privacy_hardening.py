@@ -64,6 +64,7 @@ def test_dinov2_encoder_sets_hf_telemetry_flag(monkeypatch):
 def test_dinov2_encoder_source_sets_env(monkeypatch):
     """Inspect the actual encoder source to verify os.environ.setdefault call."""
     import inspect
+
     from kaine.modules.topos.encoder import DINOv2Encoder
 
     src = inspect.getsource(DINOv2Encoder.load)

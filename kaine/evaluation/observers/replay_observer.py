@@ -17,6 +17,7 @@ Source streams: ``mnemos.out`` (type ``mnemos.replay``) and
 ``phantasia.out`` (type ``phantasia.scenario``).  When either stream
 produces no events the observer runs silently — it never errors.
 """
+
 from __future__ import annotations
 
 import logging
@@ -47,13 +48,13 @@ class _SingleStreamReplayObserver(StreamSubscriberObserver):
         name: str,
     ) -> None:
         super().__init__(bus, poll_interval_s=0.5)
-        self.stream = source_stream
+        self.streams = (source_stream,)
         self.name = name
         self._sink = sink
         self._accepted_types = accepted_types
         self._redact = redact_content
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type not in self._accepted_types:
             return
         payload = dict(event.payload or {})
@@ -64,7 +65,7 @@ class _SingleStreamReplayObserver(StreamSubscriberObserver):
             {
                 "entry_id": entry_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "stream": self.stream,
+                "stream": stream,
                 "type": event.type,
                 "redacted": self._redact,
                 "payload": payload,

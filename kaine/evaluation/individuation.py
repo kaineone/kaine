@@ -116,10 +116,11 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime, timezone
-from typing import Callable, Awaitable, Optional, Protocol, Sequence, runtime_checkable
+from typing import Awaitable, Callable, Optional, Protocol, Sequence, runtime_checkable
 
 from kaine.evaluation.embeddings import TextEmbedder, cosine_similarity
 from kaine.evaluation.preference_battery import load_battery, validate_battery
+
 # ``_mean``/``_std`` live in the boundary-neutral stability harness (which
 # documents that it mirrors these exactly); import them here so the two never
 # drift. kaine.evaluation may depend on kaine.experiment; not the reverse.

@@ -43,7 +43,6 @@ from kaine.modules.thymos.goals import GoalLedger
 from kaine.modules.thymos.regulation import PassiveDecay
 from kaine.modules.thymos.state import DimensionalState
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

@@ -27,7 +27,6 @@ from kaine.modules.hypnos import (
 )
 from kaine.modules.hypnos.module import HypnosBusyError
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -106,6 +105,7 @@ async def test_soma_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
 
     # Publish soma.fatigue with crossed=true
     from datetime import datetime, timezone
+
     from kaine.bus.schema import validate_event
 
     event = validate_event(
@@ -142,6 +142,7 @@ async def test_soma_regulation_request_maintenance_triggers(bus: AsyncBus, tmp_p
     hypnos._run_pipeline = _mock_run
 
     from datetime import datetime, timezone
+
     from kaine.bus.schema import validate_event
 
     event = validate_event(
@@ -179,6 +180,7 @@ async def test_soma_regulation_other_action_does_not_trigger(bus: AsyncBus, tmp_
     hypnos._run_pipeline = _mock_run
 
     from datetime import datetime, timezone
+
     from kaine.bus.schema import validate_event
 
     event = validate_event(
@@ -211,6 +213,7 @@ async def test_soma_fatigue_not_crossed_does_not_trigger(bus: AsyncBus, tmp_path
     hypnos._run_pipeline = _mock_run
 
     from datetime import datetime, timezone
+
     from kaine.bus.schema import validate_event
 
     event = validate_event(

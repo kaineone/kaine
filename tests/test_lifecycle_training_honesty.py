@@ -24,7 +24,6 @@ from unittest import mock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # H6 — Adapter merge refuses on unmerged adapters
 # ---------------------------------------------------------------------------
@@ -132,6 +131,7 @@ def test_h8_raises_when_enabled_approved_extras_missing(tmp_path, monkeypatch):
     return None / install FakeTrainer — when voice_alignment is enabled,
     operator-approved, and [training] extras are missing."""
     import sys
+
     from kaine.boot import VoiceAlignmentConfigError, _resolve_trainer
 
     monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")
@@ -454,7 +454,7 @@ def test_l4_get_collections_failure_records_error_and_skips_delete(tmp_path):
 def test_l4_get_collections_success_deletes_normally(tmp_path):
     """Positive control: when get_collections() succeeds, matching collections
     are deleted and no spurious error is recorded."""
-    from kaine.lifecycle.decommission import delete_entity_state, _mnemos_collection_names
+    from kaine.lifecycle.decommission import _mnemos_collection_names, delete_entity_state
 
     deleted: list[str] = []
     expected_collections = _mnemos_collection_names(None)

@@ -53,6 +53,7 @@ Two task families are provided (design.md task suite):
 All tasks are parameterised over noise / horizon / info-cost so sensitivity runs
 are possible.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -220,7 +221,7 @@ class TMazeEpistemicPOMDP:
         return [a_loc, a_rew, a_cue]
 
     def _valid_connections(self) -> set[tuple[int, int]]:
-        c, l, r, cue, m = (
+        c, left, r, cue, m = (
             self.CENTRE,
             self.LEFT,
             self.RIGHT,
@@ -232,8 +233,8 @@ class TMazeEpistemicPOMDP:
             (cue, c),
             (c, m),
             (m, c),
-            (m, l),
-            (l, m),
+            (m, left),
+            (left, m),
             (m, r),
             (r, m),
         }
@@ -301,7 +302,9 @@ class TMazeEpistemicPOMDP:
         misleads (``1 - cue_validity``) times the win/lose swing, minus step
         cost for the (>=2) moves it takes.
         """
-        hit = self.cue_validity * self.reward_correct + (1.0 - self.cue_validity) * self.reward_wrong
+        hit = (
+            self.cue_validity * self.reward_correct + (1.0 - self.cue_validity) * self.reward_wrong
+        )
         return hit - 2.0 * self.step_cost
 
     # -- dynamics ------------------------------------------------------------

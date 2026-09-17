@@ -33,7 +33,6 @@ from kaine.modules.thymos.coupling import (
 )
 from kaine.modules.thymos.state import DimensionalState
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------

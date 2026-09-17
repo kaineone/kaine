@@ -20,9 +20,9 @@ from kaine.nexus.conversation import (
     ConversationState,
     build_conversation_router,
 )
+from kaine.nexus.cycle_control import build_cycle_control_router, control_snapshot
 from kaine.nexus.diagnostics import build_diagnostics_router, push_snapshots_periodically
 from kaine.nexus.health import HealthProber
-from kaine.nexus.cycle_control import build_cycle_control_router, control_snapshot
 from kaine.nexus.perception import build_perception_router, perception_snapshot
 from kaine.nexus.privacy import PrivacyFilter
 

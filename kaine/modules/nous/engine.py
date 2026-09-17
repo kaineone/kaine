@@ -31,7 +31,8 @@ import logging
 import math
 import time
 import warnings
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import time
 
-
 from kaine.modules.mnemos.replay import (
     ReplayEngine,
     ReplayEntry,

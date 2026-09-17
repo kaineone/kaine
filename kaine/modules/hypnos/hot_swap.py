@@ -22,14 +22,13 @@ source of truth; hot-swap is best-effort notification only.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
-
-import asyncio
 
 log = logging.getLogger(__name__)
 

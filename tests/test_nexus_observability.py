@@ -179,7 +179,7 @@ def test_chronos_report_template_includes_temporal_prediction_error():
 
 @pytest.mark.asyncio
 async def test_encryption_probe_disabled():
-    from kaine.nexus.health import probe_state_encryption, UP
+    from kaine.nexus.health import UP, probe_state_encryption
 
     status, detail = await probe_state_encryption(section={"enabled": False})
     assert status == UP
@@ -188,7 +188,7 @@ async def test_encryption_probe_disabled():
 
 @pytest.mark.asyncio
 async def test_encryption_probe_enabled_with_env_key(monkeypatch):
-    from kaine.nexus.health import probe_state_encryption, UP
+    from kaine.nexus.health import UP, probe_state_encryption
 
     monkeypatch.setenv("KAINE_STATE_KEY", "x" * 32)
     status, detail = await probe_state_encryption(
@@ -200,7 +200,7 @@ async def test_encryption_probe_enabled_with_env_key(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_encryption_probe_enabled_no_key(monkeypatch):
-    from kaine.nexus.health import probe_state_encryption, DEGRADED
+    from kaine.nexus.health import DEGRADED, probe_state_encryption
 
     monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
     monkeypatch.delenv("KAINE_TEST_MISSING_KEY_9999", raising=False)
@@ -400,8 +400,8 @@ def test_individuation_section_absent(tmp_path):
 
 
 def test_individuation_section_from_jsonl(tmp_path):
-    from kaine.evaluation.nexus_tab import _aggregate
     from kaine.evaluation.config import EvaluationConfig
+    from kaine.evaluation.nexus_tab import _aggregate
 
     ind_dir = tmp_path / "individuation"
     ind_dir.mkdir()
@@ -448,6 +448,7 @@ async def test_evaluation_router_accepts_registry_param(tmp_path):
     """build_evaluation_router must accept registry= without error."""
     import httpx
     from fastapi import FastAPI
+
     from kaine.evaluation.nexus_tab import build_evaluation_router
 
     cfg = _eval_config(tmp_path)
@@ -469,6 +470,7 @@ async def test_evaluation_summary_welfare_no_data_field(tmp_path):
     """welfare section must always be present in JSON, even with no data."""
     import httpx
     from fastapi import FastAPI
+
     from kaine.evaluation.nexus_tab import build_evaluation_router
 
     cfg = _eval_config(tmp_path)
@@ -918,6 +920,7 @@ async def test_diagnostics_context_flattens_all_blocks(tmp_path):
     new panel's context key and the page renders without error."""
     import httpx
     from fastapi import FastAPI
+
     from kaine.nexus.bridge import BusBridge
     from kaine.nexus.diagnostics import build_diagnostics_router
     from kaine.nexus.privacy import PrivacyFilter

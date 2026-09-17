@@ -343,7 +343,7 @@ class TiesDareAdapterMerger:
             merged_score = asyncio.run(
                 self._capability_eval.eval(merged_model, merged_tokenizer)
             )
-        except Exception as exc:
+        except Exception:
             log.exception(
                 "TiesDareAdapterMerger: capability veto eval failed; "
                 "accepting merge"

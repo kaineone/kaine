@@ -42,7 +42,6 @@ from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
-
 # --------------------------------------------------------------------------- #
 # Fixtures + helpers
 # --------------------------------------------------------------------------- #

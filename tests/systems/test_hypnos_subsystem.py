@@ -11,7 +11,6 @@ from kaine.modules.hypnos.phases import (
     consolidate_memory,
     reset_affect,
 )
-
 from tests.systems._harness import SubsystemHarness
 
 

@@ -27,7 +27,6 @@ from kaine.cycle.engine import BASE_EPOCH, CognitiveCycle
 from kaine.entity_clock import EntityClock
 from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
 
-
 # ----------------------------------------------------------------------------
 # A controllable real-clock/real-sleep pair (real seconds, deterministic).
 # ----------------------------------------------------------------------------

@@ -3,6 +3,8 @@
 
 from kaine.modules.phantasia.encoder import (
     VERSION as ENCODER_VERSION,
+)
+from kaine.modules.phantasia.encoder import (
     encode_snapshot,
     observation_dim,
 )

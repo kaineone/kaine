@@ -39,6 +39,7 @@ Every record carries ``ts`` (ISO-8601 UTC), ``event_type``, ``source``, and
 
 READ-ONLY: never publishes to the bus.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -47,8 +48,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event
-from kaine.evaluation._base import BaseObserver, BusReader, WorkspaceSubscriberObserver
+from kaine.evaluation._base import BusReader, StreamSubscriberObserver, WorkspaceSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.evaluation.stream_registry import curated_module_streams
 from kaine.modules.praxis.audit_log import _sanitize as _praxis_sanitize
 from kaine.privacy_filter import PrivacyFilter
 
@@ -95,9 +97,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "intent.think": frozenset({"kind", "about_tag", "effector"}),
     "intent.act": frozenset({"kind", "about_tag", "effector"}),
     # --- Prediction / precision ---
-    "soma.report": frozenset(
-        {"prediction_error", "wellness", "fatigue_value", "alerts"}
-    ),
+    "soma.report": frozenset({"prediction_error", "wellness", "fatigue_value", "alerts"}),
     "topos.report": frozenset(
         {
             "prediction_error",
@@ -136,9 +136,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "thymos.state": frozenset(
         {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance"}
     ),
-    "thymos.emotion": frozenset(
-        {"emotion", "scores", "norm_compatibility_available"}
-    ),
+    "thymos.emotion": frozenset({"emotion", "scores", "norm_compatibility_available"}),
     "thymos.drive": frozenset({"drive", "value"}),
     "thymos.goal": frozenset({"action", "goal_id"}),
     # --- Perception (derived only) ---
@@ -149,9 +147,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "mnemos.recall": frozenset(
         {"memory_ids", "max_affect_intensity", "selection_scores", "count", "collection"}
     ),
-    "mnemos.replay": frozenset(
-        {"memory_ids", "max_affect_intensity", "selection_scores", "count"}
-    ),
+    "mnemos.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
     "hypnos.sleep.started": frozenset({"started_at"}),
     "hypnos.sleep.completed": frozenset(
         {"phases_completed", "replay_count", "consolidation_summary_counts"}
@@ -350,7 +346,6 @@ _WELFARE_NUMERIC_FIELDS = frozenset(
 # (vox.out — raw audio content; lingua.out — transcripts are never curated)
 # are documented in the registry and enforced by the drift test
 # (tests/test_stream_registry_drift.py).
-from kaine.evaluation.stream_registry import curated_module_streams
 
 _CURATED_STREAMS: tuple[str, ...] = curated_module_streams()
 
@@ -380,15 +375,16 @@ def _opaque_position_hash(payload: dict[str, Any]) -> str | None:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-class ResearchEventObserver(BaseObserver):
+class ResearchEventObserver(StreamSubscriberObserver):
     """Curated, privacy-filtered research event recorder.
 
-    Multi-cursor poll loop over the curated streams (mirrors
-    ``WelfareObserver._run``) plus an inner ``WorkspaceSubscriberObserver`` for
-    ``workspace.broadcast`` metadata. Writes to a single ``AsyncJsonlSink``.
+    Multi-cursor poll loop over the curated streams via
+    ``StreamSubscriberObserver`` plus an inner ``WorkspaceSubscriberObserver``
+    for ``workspace.broadcast`` metadata. Writes to a single ``AsyncJsonlSink``.
     """
 
     name = "research_event_log"
+    streams = _CURATED_STREAMS
 
     def __init__(
         self,
@@ -398,12 +394,9 @@ class ResearchEventObserver(BaseObserver):
         poll_interval_s: float = 0.5,
         privacy_filter: PrivacyFilter | None = None,
     ) -> None:
-        super().__init__()
-        self._bus = bus
+        super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
-        self._poll_interval_s = float(poll_interval_s)
         self._privacy = privacy_filter or PrivacyFilter()
-        self._cursors: dict[str, str] = {s: "0" for s in _CURATED_STREAMS}
         self._workspace = _WorkspaceMetadataObserver(bus, sink, self._privacy)
 
     # --- Lifecycle (also drives the inner workspace observer) ------------
@@ -416,46 +409,9 @@ class ResearchEventObserver(BaseObserver):
         await self._workspace.stop()
         await super().stop()
 
-    # --- Main loop -------------------------------------------------------
-
-    async def _run(self) -> None:
-        import asyncio
-
-        while not self._stopped.is_set():
-            for stream in _CURATED_STREAMS:
-                try:
-                    entries, last_scanned = await self._bus.read_entries(
-                        stream, last_id=self._cursors[stream], count=64, block_ms=0
-                    )
-                except Exception:
-                    log.warning(
-                        "research_event_log read failed for %s", stream, exc_info=True
-                    )
-                    entries = []
-                    last_scanned = None
-                for entry_id, event in entries:
-                    self._cursors[stream] = entry_id
-                    try:
-                        await self._handle(event)
-                    except Exception:
-                        log.warning(
-                            "research_event_log handler raised on %s / %s",
-                            stream,
-                            entry_id,
-                            exc_info=True,
-                        )
-                if last_scanned is not None:
-                    self._cursors[stream] = last_scanned
-            try:
-                await asyncio.wait_for(
-                    self._stopped.wait(), timeout=self._poll_interval_s
-                )
-            except asyncio.TimeoutError:
-                continue
-
     # --- Record construction --------------------------------------------
 
-    async def _handle(self, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         record = self._build_record(event)
         if record is None:
             return
@@ -532,9 +488,7 @@ class _WorkspaceMetadataObserver(WorkspaceSubscriberObserver):
 
     name = "research_event_log_workspace"
 
-    def __init__(
-        self, bus: BusReader, sink: AsyncJsonlSink, privacy: PrivacyFilter
-    ) -> None:
+    def __init__(self, bus: BusReader, sink: AsyncJsonlSink, privacy: PrivacyFilter) -> None:
         super().__init__(bus, start_id="$")
         self._sink = sink
         self._privacy = privacy

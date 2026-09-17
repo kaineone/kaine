@@ -329,8 +329,8 @@ def test_defaults_full_run_does_not_download_organ(tmp_path: Path, monkeypatch):
 def test_provision_organ_declined_prints_guide():
     """Declining the organ download prints acquisition guidance and downloads
     nothing (mirrors _install_extras decline)."""
-    from kaine.setup.__main__ import _provision_organ
     from kaine.setup import organ as organ_mod
+    from kaine.setup.__main__ import _provision_organ
 
     out: list[str] = []
     shipped = _shipped()
@@ -367,8 +367,8 @@ def test_provision_organ_skipped_when_lingua_disabled():
 def test_provision_organ_consent_downloads_then_offers_launch(monkeypatch, tmp_path):
     """On consent the REAL downloader runs (mocked here), provenance is recorded,
     and the wizard offers the turnkey launch then verifies the served alias."""
-    from kaine.setup.__main__ import _provision_organ
     from kaine.setup import organ as organ_mod
+    from kaine.setup.__main__ import _provision_organ
 
     sha = "d" * 40
     # Redirect the provenance state file out of the repo working tree.

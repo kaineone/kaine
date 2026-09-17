@@ -17,14 +17,13 @@ import math
 
 import pytest
 
+from kaine.modules.audition.emotion import CATEGORIES
 from kaine.modules.audition.forward import (
-    AuditoryForwardModel,
     FEATURE_DIM,
     N_EMOTION_CATEGORIES,
+    AuditoryForwardModel,
     build_feature_vector,
 )
-from kaine.modules.audition.emotion import CATEGORIES
-
 
 # ---------------------------------------------------------------------------
 # Feature vector builder

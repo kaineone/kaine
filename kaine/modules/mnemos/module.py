@@ -12,11 +12,6 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
-from kaine.text_embedding import (
-    DEFAULT_LATENT_DIM,
-    Embedder,
-    SentenceTransformerTextEmbedder,
-)
 from kaine.modules.mnemos.memory import (
     EmotionalRetriggerHook,
     MnemosCore,
@@ -29,6 +24,11 @@ from kaine.modules.mnemos.storage import (
     RecalledMemory,
     SqliteVecStorage,
     StorageError,
+)
+from kaine.text_embedding import (
+    DEFAULT_LATENT_DIM,
+    Embedder,
+    SentenceTransformerTextEmbedder,
 )
 
 log = logging.getLogger(__name__)

@@ -18,7 +18,10 @@ import logging
 import os
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 
 from kaine.bus.client import AsyncBus
 from kaine.config import require_known_keys
@@ -279,8 +282,7 @@ def make_topos(
     mode = str(feed_section.get("mode", "off")).lower()
     if mode not in ("off", "seeded", "playlist", "live", "screen"):
         raise ValueError(
-            "[perception_feed].mode must be off/seeded/playlist/live/screen, "
-            f"got {mode!r}"
+            f"[perception_feed].mode must be off/seeded/playlist/live/screen, got {mode!r}"
         )
     width = int(section.get("capture_width", 640))
     height = int(section.get("capture_height", 480))
@@ -354,9 +356,7 @@ def _build_perception_feed_video_factory(
     # playlist
     manifest_path = str(feed.get("playlist_manifest", "")).strip()
     if not manifest_path:
-        raise ValueError(
-            "[perception_feed].mode = 'playlist' requires playlist_manifest"
-        )
+        raise ValueError("[perception_feed].mode = 'playlist' requires playlist_manifest")
     manifest = load_playlist_manifest(manifest_path)
     # Shared start-clock injected by build_registry so video and audio stay on the
     # same item (playlist-realtime-av-sync). None -> a private clock (standalone).
@@ -427,9 +427,7 @@ def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
                 native=True,
                 ffmpeg_path=ffmpeg_path,
             )
-        return ScreenCaptureSource(
-            spec, width=width, height=height, ffmpeg_path=ffmpeg_path
-        )
+        return ScreenCaptureSource(spec, width=width, height=height, ffmpeg_path=ffmpeg_path)
 
     return _screen_factory
 
@@ -510,9 +508,7 @@ def _build_perception_feed_audio_factory(
             surprise_strength=float(audio.get("surprise_strength", 1.0)),
         )
 
-        def _seeded_factory(
-            *, device, sample_rate, channels, frames_per_block, callback
-        ):  # noqa: ANN001
+        def _seeded_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
             return SeededProceduralAudioStream(schedule, callback=callback)
 
         return _seeded_factory
@@ -520,9 +516,7 @@ def _build_perception_feed_audio_factory(
     # playlist
     manifest_path = str(feed.get("playlist_manifest", "")).strip()
     if not manifest_path:
-        raise ValueError(
-            "[perception_feed].mode = 'playlist' requires playlist_manifest"
-        )
+        raise ValueError("[perception_feed].mode = 'playlist' requires playlist_manifest")
     manifest = load_playlist_manifest(manifest_path)
     # SAME shared start-clock instance the video factory received, so both feeds
     # cross item boundaries together (playlist-realtime-av-sync).
@@ -577,9 +571,7 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
             surprise_interval=surprise_interval,
             surprise_strength=float(video.get("surprise_strength", 1.0)),
         ).as_descriptor()
-        sample_rate = int(
-            audio.get("sample_rate", audition.get("capture_sample_rate", 16000))
-        )
+        sample_rate = int(audio.get("sample_rate", audition.get("capture_sample_rate", 16000)))
         channels = int(audio.get("channels", audition.get("capture_channels", 1)))
         vad_frame_ms = int(audition.get("vad_frame_ms", 30))
         descriptor["audio"] = SeededAudioSchedule(
@@ -613,9 +605,7 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
         scr = dict(feed.get("screen") or {})
         src: dict[str, Any] = {"target": str(scr.get("target", "fullscreen")).lower()}
         if scr.get("window_title"):
-            src["window"] = hashlib.sha256(
-                str(scr["window_title"]).encode()
-            ).hexdigest()[:16]
+            src["window"] = hashlib.sha256(str(scr["window_title"]).encode()).hexdigest()[:16]
         descriptor["screen"] = src
     # Stimulus-regime label for cross-record stratification (field-tier analysis).
     descriptor["regime"] = {
@@ -761,9 +751,7 @@ def make_eidolon(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     if "vad_window_cycles" in si_section:
         si_kwargs["vad_window_cycles"] = int(si_section["vad_window_cycles"])
     if "speech_pattern_min_count" in si_section:
-        si_kwargs["speech_pattern_min_count"] = int(
-            si_section["speech_pattern_min_count"]
-        )
+        si_kwargs["speech_pattern_min_count"] = int(si_section["speech_pattern_min_count"])
     if "seed_path" in si_section:
         seed_raw = str(si_section["seed_path"]).strip()
         if seed_raw:
@@ -1021,16 +1009,13 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     mode = str(feed_section.get("mode", "off")).lower()
     if mode not in ("off", "seeded", "playlist", "live", "screen"):
         raise ValueError(
-            "[perception_feed].mode must be off/seeded/playlist/live/screen, "
-            f"got {mode!r}"
+            f"[perception_feed].mode must be off/seeded/playlist/live/screen, got {mode!r}"
         )
     # 'screen' hears the desktop audio monitor (what is playing on screen), so it
     # takes a stream_factory like seeded/playlist; the deterministic feeds and the
     # monitor all satisfy the same LiveMicrophone seam.
     audio_cfg = dict(feed_section.get("audio") or {})
-    sample_rate = int(
-        audio_cfg.get("sample_rate", section.get("capture_sample_rate", 16000))
-    )
+    sample_rate = int(audio_cfg.get("sample_rate", section.get("capture_sample_rate", 16000)))
     channels = int(audio_cfg.get("channels", section.get("capture_channels", 1)))
     if mode == "live":
         kwargs["capture_enabled"] = True
@@ -1087,13 +1072,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
                 section["acoustic_change_alert_threshold"]
             )
         if "acoustic_change_alert_factor" in section:
-            kwargs["acoustic_change_alert_factor"] = float(
-                section["acoustic_change_alert_factor"]
-            )
+            kwargs["acoustic_change_alert_factor"] = float(section["acoustic_change_alert_factor"])
         if isinstance(kwargs.get("live_mic_config"), LiveMicConfig):
-            kwargs["live_mic_config"] = replace(
-                kwargs["live_mic_config"], continuous_capture=True
-            )
+            kwargs["live_mic_config"] = replace(kwargs["live_mic_config"], continuous_capture=True)
     # STT gate (default true = unchanged). When false, no transcript path.
     if "transcription_enabled" in section:
         kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
@@ -1127,9 +1108,7 @@ def make_vox(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     # Pop all top-level keys; handle mirroring sub-table separately.
     _require_keys(section, allowed)
-    kw: dict[str, Any] = {
-        k: section[k] for k in allowed - {"mirroring"} if k in section
-    }
+    kw: dict[str, Any] = {k: section[k] for k in allowed - {"mirroring"} if k in section}
     # [vox.mirroring] sub-table.
     mirroring_section = section.get("mirroring") or {}
     mirroring_allowed = {"enabled", "mirror_strength", "mirror_ceiling", "decay_s"}
@@ -1176,37 +1155,23 @@ def make_hypnos(
         base_model_path_raw = voice_cfg_section.get("base_model_path", "")
         base_model_path: Optional[str] = str(base_model_path_raw).strip() or None
         reload_endpoint_url_raw = voice_cfg_section.get("reload_endpoint_url", "")
-        reload_endpoint_url: Optional[str] = (
-            str(reload_endpoint_url_raw).strip() or None
-        )
+        reload_endpoint_url: Optional[str] = str(reload_endpoint_url_raw).strip() or None
         restart_service_unit_raw = voice_cfg_section.get("restart_service_unit", "")
-        restart_service_unit: Optional[str] = (
-            str(restart_service_unit_raw).strip() or None
-        )
+        restart_service_unit: Optional[str] = str(restart_service_unit_raw).strip() or None
         capability_probe_path_raw = voice_cfg_section.get("capability_probe_path", "")
-        capability_probe_path: Optional[str] = (
-            str(capability_probe_path_raw).strip() or None
-        )
-        abliteration_probe_path_raw = voice_cfg_section.get(
-            "abliteration_probe_path", ""
-        )
-        abliteration_probe_path: Optional[str] = (
-            str(abliteration_probe_path_raw).strip() or None
-        )
+        capability_probe_path: Optional[str] = str(capability_probe_path_raw).strip() or None
+        abliteration_probe_path_raw = voice_cfg_section.get("abliteration_probe_path", "")
+        abliteration_probe_path: Optional[str] = str(abliteration_probe_path_raw).strip() or None
         voice_config = VoiceAlignmentConfig(
             intent_log_path=Path(
-                voice_cfg_section.get(
-                    "intent_log_path", "state/lingua/intent_expression.jsonl"
-                )
+                voice_cfg_section.get("intent_log_path", "state/lingua/intent_expression.jsonl")
             ),
             adapter_output_dir=Path(
                 voice_cfg_section.get("adapter_output_dir", "state/hypnos/adapters")
             ),
             enabled=bool(voice_cfg_section.get("enabled", False)),
             base_model_path=base_model_path,
-            model_id=str(
-                voice_cfg_section.get("model_id", "kaineone/Qwen3.5-4B-abliterated")
-            ),
+            model_id=str(voice_cfg_section.get("model_id", "kaineone/Qwen3.5-4B-abliterated")),
             max_samples=int(voice_cfg_section.get("max_samples", 200)),
             lora_rank=int(voice_cfg_section.get("lora_rank", 8)),
             learning_rate=float(voice_cfg_section.get("learning_rate", 5e-5)),
@@ -1222,15 +1187,11 @@ def make_hypnos(
             restart_service_unit=restart_service_unit,
             capability_probe_path=capability_probe_path,
             abliteration_probe_path=abliteration_probe_path,
-            trainer_backend=str(
-                voice_cfg_section.get("trainer_backend", "in_process")
-            ).strip()
+            trainer_backend=str(voice_cfg_section.get("trainer_backend", "in_process")).strip()
             or "in_process",
             trainer_python=str(voice_cfg_section.get("trainer_python", "")).strip(),
             trainer_workdir=str(
-                voice_cfg_section.get(
-                    "trainer_workdir", "state/hypnos/voice_align_jobs"
-                )
+                voice_cfg_section.get("trainer_workdir", "state/hypnos/voice_align_jobs")
             ).strip()
             or "state/hypnos/voice_align_jobs",
         )
@@ -1349,10 +1310,10 @@ def _resolve_trainer(
         return _resolve_subprocess_trainer(voice_config)
 
     try:
-        import unsloth  # noqa: F401  # type: ignore[import-untyped]
-        import trl  # noqa: F401  # type: ignore[import-untyped]
-        import peft  # noqa: F401  # type: ignore[import-untyped]
         import datasets  # noqa: F401  # type: ignore[import-untyped]
+        import peft  # noqa: F401  # type: ignore[import-untyped]
+        import trl  # noqa: F401  # type: ignore[import-untyped]
+        import unsloth  # noqa: F401  # type: ignore[import-untyped]
     except Exception as exc:
         # voice_alignment.enabled=True + operator_approved=True + missing extras
         # is a configuration error, not an acceptable silent fallback.  Installing
@@ -1582,9 +1543,7 @@ def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
-    kwargs: dict[str, Any] = {
-        k: section[k] for k in allowed - {"qdrant"} if k in section
-    }
+    kwargs: dict[str, Any] = {k: section[k] for k in allowed - {"qdrant"} if k in section}
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
     if "port" in qdrant:
@@ -1674,9 +1633,7 @@ def install_state_encryption(kaine_config: dict[str, Any]) -> None:
 # clock dilates their integrals/cadences coherently with the cycle's tick
 # pacing. Every other module is purely event-driven (paces off the subjective
 # cycle already) or times only infrastructure, so it gets no clock.
-_CLOCKED_FACTORIES: frozenset[str] = frozenset(
-    {"soma", "topos", "mnemos", "thymos", "perception"}
-)
+_CLOCKED_FACTORIES: frozenset[str] = frozenset({"soma", "topos", "mnemos", "thymos", "perception"})
 
 
 def build_registry(
@@ -1752,9 +1709,7 @@ def build_registry(
                 # injected-clock pattern is the established mechanism.
                 if kaine_config is not None:
                     kaine_config.setdefault("perception_feed", {})
-                    kaine_config["perception_feed"]["_shared_playlist_clock"] = (
-                        _pl_clock
-                    )
+                    kaine_config["perception_feed"]["_shared_playlist_clock"] = _pl_clock
         except Exception:
             log.warning(
                 "could not build the shared playlist clock; feeds fall back to "
@@ -1825,9 +1780,7 @@ def build_registry(
     return registry
 
 
-def rewire_module(
-    registry: ModuleRegistry, name: str, kaine_config: dict[str, Any]
-) -> None:
+def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, Any]) -> None:
     """Re-run the post-registration wiring after Spot rebuilds ``name``.
 
     Spot's heavy restart path constructs a fresh module and swaps it into the
@@ -1882,9 +1835,7 @@ def make_coherence_scorer(kaine_config: dict[str, Any]):
             f"[oscillator].population_size must be >= {_OSCILLATOR_MIN_POPULATION}"
         )
     if plv_window < _OSCILLATOR_MIN_PLV_WINDOW:
-        raise ConfigurationError(
-            f"[oscillator].plv_window must be >= {_OSCILLATOR_MIN_PLV_WINDOW}"
-        )
+        raise ConfigurationError(f"[oscillator].plv_window must be >= {_OSCILLATOR_MIN_PLV_WINDOW}")
     floor = float(section.get("coherence_floor", 0.8))
     ceiling = float(section.get("coherence_ceiling", 1.25))
     return CoherenceScorer(
@@ -1936,12 +1887,8 @@ def make_salience_factors(kaine_config: dict[str, Any], affect_provider: Any):
     section = dict(kaine_config.get("syneidesis") or {})
     _require_keys(section, _SYNEIDESIS_ALLOWED_KEYS)
 
-    thymos_factor = str(
-        section.get("salience_thymos_factor", _SALIENCE_THYMOS_FACTOR_DEFAULT)
-    )
-    goal_factor = str(
-        section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT)
-    )
+    thymos_factor = str(section.get("salience_thymos_factor", _SALIENCE_THYMOS_FACTOR_DEFAULT))
+    goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
 
     if thymos_factor == "state_modulator":
         thymos_modulator = StateModulator(affect_provider.dimensional_state)
@@ -2055,9 +2002,7 @@ def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
         return
     effectors = sorted(getattr(praxis, "enabled_effectors", ()) or ())
     engine.set_whitelist_commands(effectors)
-    log.info(
-        "wired eidolon capability whitelist from praxis (%d effectors)", len(effectors)
-    )
+    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
@@ -2080,9 +2025,7 @@ def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
     log.info("wired self-hearing gate between vox and audition")
 
 
-def _log_device_assignments(
-    registry: ModuleRegistry, kaine_config: dict[str, Any]
-) -> None:
+def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
     """One-line-per-module log of which compute device each pinned
     module landed on. Reads the resolved config rather than reaching
     into the constructed modules so this stays cheap and never raises.
@@ -2113,9 +2056,7 @@ def _log_device_assignments(
         rows.append(("chronos.network", "cpu (pinned)"))
     if "hypnos" in registry:
         va = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
-        rows.append(
-            ("hypnos.voice_alignment", str(va.get("training_device", "cuda:0")))
-        )
+        rows.append(("hypnos.voice_alignment", str(va.get("training_device", "cuda:0"))))
         rows.append(
             (
                 "hypnos.voice_alignment.hot_swap",

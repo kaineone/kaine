@@ -58,6 +58,8 @@ from kaine.evaluation.benchmarks.active_inference import envs as envs_mod
 from kaine.evaluation.benchmarks.active_inference.metrics import VerdictConfig
 from kaine.evaluation.benchmarks.active_inference.runner import (
     BenchmarkConfig,
+)
+from kaine.evaluation.benchmarks.active_inference.runner import (
     run_suite as run_active_inference,
 )
 from kaine.evaluation.benchmarks.instrument_runners import (
@@ -80,6 +82,8 @@ from kaine.evaluation.benchmarks.workspace_mediation_ablation.measures import (
 )
 from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
     MediationConfig,
+)
+from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
     run_ablation as run_workspace_mediation,
 )
 from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (

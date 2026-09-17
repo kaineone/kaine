@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 
-
 from kaine import perception_state
 
 

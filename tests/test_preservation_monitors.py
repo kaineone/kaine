@@ -46,7 +46,6 @@ from kaine.modules.eidolon import Eidolon, SelfModel
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

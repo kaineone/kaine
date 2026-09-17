@@ -4,11 +4,9 @@
 """Soma subsystem: reads system metrics + cycle latency, publishes wellness."""
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.modules.soma.module import Soma
-
 from tests.systems._harness import SubsystemHarness
 
 

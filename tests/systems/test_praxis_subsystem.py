@@ -4,12 +4,10 @@
 """Praxis subsystem: file write + notify + shell whitelist, with audit."""
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.modules.praxis.module import Praxis
 from kaine.modules.praxis.whitelist import CommandWhitelist, WhitelistEntry
-
 from tests.systems._harness import SubsystemHarness
 
 

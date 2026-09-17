@@ -7,6 +7,7 @@ Lingua's chat client DEFERS (resting no-op, no raise) and the A/B-divergence eva
 arm SKIPS (logged as skipped, not failed) while the organ is unloaded. Both resume
 once the window flips back to idle.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -120,7 +121,9 @@ async def test_ab_eval_skips_while_organ_unloaded(tmp_path, monkeypatch):
     )
     await sink.start()
     try:
-        await obs.handle("1-0", _ext_event({"text": "hello", "user_input": "hi"}))
+        await obs.handle(
+            "lingua.external", "1-0", _ext_event({"text": "hello", "user_input": "hi"})
+        )
     finally:
         await sink.stop()
 
@@ -128,11 +131,7 @@ async def test_ab_eval_skips_while_organ_unloaded(tmp_path, monkeypatch):
 
     files = list(tmp_path.glob("ab_divergence-*.jsonl"))
     assert len(files) == 1
-    records = [
-        _json.loads(line)
-        for line in files[0].read_text().splitlines()
-        if line.strip()
-    ]
+    records = [_json.loads(line) for line in files[0].read_text().splitlines() if line.strip()]
     assert len(records) == 1
     rec = records[0]
     # Logged as a SKIP, not a divergence failure (no cosine/divergence fields).
@@ -156,7 +155,9 @@ async def test_ab_eval_resumes_when_window_idle(tmp_path, monkeypatch):
     )
     await sink.start()
     try:
-        await obs.handle("1-0", _ext_event({"text": "conditioned", "user_input": "hi"}))
+        await obs.handle(
+            "lingua.external", "1-0", _ext_event({"text": "conditioned", "user_input": "hi"})
+        )
     finally:
         await sink.stop()
 
@@ -164,11 +165,7 @@ async def test_ab_eval_resumes_when_window_idle(tmp_path, monkeypatch):
 
     files = list(tmp_path.glob("ab_divergence-*.jsonl"))
     assert len(files) == 1
-    records = [
-        _json.loads(line)
-        for line in files[0].read_text().splitlines()
-        if line.strip()
-    ]
+    records = [_json.loads(line) for line in files[0].read_text().splitlines() if line.strip()]
     assert len(records) == 1
     # A real divergence sample (not a skip).
     assert "divergence" in records[0]

@@ -19,17 +19,15 @@ import uvicorn
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config
 from kaine.bus.schema import Event
+from kaine.evaluation.stream_registry import diagnostics_streams
 from kaine.lifecycle.manager import ForkManager, merger_from_name
 from kaine.nexus.app import create_app, make_default_privacy_filter
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import load_nexus_config
-from kaine.nexus.health import load_health_prober
 from kaine.nexus.conversation import (
     LINGUA_EXTERNAL_STREAM,
 )
-
-
-from kaine.evaluation.stream_registry import diagnostics_streams
+from kaine.nexus.health import load_health_prober
 
 # Derived from the canonical registry so the monitor, the research-event
 # observer, and the raw archive never drift (see

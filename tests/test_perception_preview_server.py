@@ -23,8 +23,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from kaine import perception_preview
-from kaine import perception_preview_server
+from kaine import perception_preview, perception_preview_server
 from kaine.perception_preview_server import (
     DEFAULT_PREVIEW_PORT,
     PreviewServer,

@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Voice alignment tracker: captures Hypnos cycle stats per sleep."""
+
 from __future__ import annotations
 
 import logging
@@ -17,13 +18,13 @@ log = logging.getLogger(__name__)
 
 class VoiceTrackingObserver(StreamSubscriberObserver):
     name = "voice_tracking"
-    stream = HYPNOS_STREAM
+    streams = (HYPNOS_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)
         self._sink = sink
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "hypnos.sleep.completed":
             return
         payload = event.payload or {}
@@ -37,11 +38,7 @@ class VoiceTrackingObserver(StreamSubscriberObserver):
                 "adapter_accepted": payload.get("adapter_accepted"),
                 "capability_score_before": payload.get("capability_score_before"),
                 "capability_score_after": payload.get("capability_score_after"),
-                "mean_similarity_before": payload.get(
-                    "mean_intent_expression_similarity_before"
-                ),
-                "mean_similarity_after": payload.get(
-                    "mean_intent_expression_similarity_after"
-                ),
+                "mean_similarity_before": payload.get("mean_intent_expression_similarity_before"),
+                "mean_similarity_after": payload.get("mean_intent_expression_similarity_after"),
             }
         )

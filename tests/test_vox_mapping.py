@@ -2,10 +2,10 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 
+from kaine.modules.thymos.state import DimensionalState
 from kaine.modules.vox.mapping import (
     affect_to_chatterbox,
 )
-from kaine.modules.thymos.state import DimensionalState
 
 
 def test_baseline_returns_baseline_params():

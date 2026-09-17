@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 
 from kaine.lifecycle.adapter_merge import (
+    VALID_COMBINATION_TYPES,
     TiesDareAdapterMerger,
     TiesDareMergeConfig,
-    VALID_COMBINATION_TYPES,
 )
 
 

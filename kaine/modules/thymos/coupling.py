@@ -32,7 +32,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Tuple
 
-
 # ---------------------------------------------------------------------------
 # Perceived-emotion VAD reference per audition emotion category
 # Keys mirror kaine/modules/audition/emotion.py CATEGORIES.

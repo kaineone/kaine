@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 
 from kaine.modules.thymos.module import Thymos
-
 from tests.systems._harness import SubsystemHarness
 
 

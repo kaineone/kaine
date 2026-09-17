@@ -11,6 +11,7 @@ Load-bearing invariants exercised here:
   * The Nexus routes 404 when the flag is off or the slot is empty, and serve
     the in-memory bytes / level when populated.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -162,8 +163,9 @@ async def test_topos_shutdown_drops_preview(bus, monkeypatch):
 
 def test_audio_level_tap_off_is_noop(monkeypatch):
     _disable(monkeypatch)
-    from kaine.modules.audition.live import _tap_audio_level
     import struct
+
+    from kaine.modules.audition.live import _tap_audio_level
 
     loud = struct.pack("<480h", *([12000] * 480))
     _tap_audio_level(loud, 16000)
@@ -172,8 +174,9 @@ def test_audio_level_tap_off_is_noop(monkeypatch):
 
 def test_audio_level_tap_on_reports_normalised_rms(monkeypatch):
     _enable(monkeypatch)
-    from kaine.modules.audition.live import _tap_audio_level
     import struct
+
+    from kaine.modules.audition.live import _tap_audio_level
 
     silent = struct.pack("<480h", *([0] * 480))
     _tap_audio_level(silent, 16000)
@@ -195,7 +198,7 @@ def test_audio_level_tap_on_reports_normalised_rms(monkeypatch):
 # to end — not a bypass.
 # ---------------------------------------------------------------------------
 
-from kaine.perception_preview_server import PreviewServer
+from kaine.perception_preview_server import PreviewServer  # noqa: E402,I001 — section-local import kept adjacent to the nexus preview route tests
 
 
 @pytest.fixture
@@ -295,9 +298,7 @@ def test_preview_module_opens_no_file_for_writing():
     a path, or invoke any disk/frame writer. The only encode path is BytesIO."""
     import re
 
-    src = (
-        Path(__file__).resolve().parents[1] / "kaine" / "perception_preview.py"
-    ).read_text()
+    src = (Path(__file__).resolve().parents[1] / "kaine" / "perception_preview.py").read_text()
     # No file opens in any write/append/update mode.
     assert not re.search(r"open\([^)]*['\"][waxr]?b?\+?['\"]", src) or "BytesIO" in src
     # No frame/image/audio persisting calls.

@@ -46,6 +46,7 @@ from kaine.wheel_index import (
 try:  # section-1 modules; imported only so hermetic tests can re-bind helpers
     import kaine.hardware  # noqa: F401
     import kaine.hostmem  # noqa: F401
+
     _ = kaine.hardware, kaine.hostmem  # referenced to satisfy CodeQL py/unused-import
 except Exception:  # pragma: no cover - optional hedges, never a hard dependency
     pass  # optional modules; loaded so hermetic tests can monkeypatch.setattr helpers
@@ -65,8 +66,8 @@ _KAINE_MODULES = ("kaine.wheel_index", "kaine.hostmem", "kaine.hardware")
 # Probe construction (pure; never touches hardware)
 # ---------------------------------------------------------------------------
 
-def _probes(arch="x86_64", driver=(12, 8), caps=((9, 0),), memory="discrete",
-            notes=()):
+
+def _probes(arch="x86_64", driver=(12, 8), caps=((9, 0),), memory="discrete", notes=()):
     """Build a Probes instance with the contract's field names and types."""
     return Probes(
         arch=arch,
@@ -81,9 +82,7 @@ def _probe_snapshot(probes):
     """Value snapshot of a Probes instance, independent of its internals."""
     return {
         "arch": probes.arch,
-        "driver_cuda": (
-            None if probes.driver_cuda is None else tuple(probes.driver_cuda)
-        ),
+        "driver_cuda": (None if probes.driver_cuda is None else tuple(probes.driver_cuda)),
         "compute_caps": tuple(tuple(cap) for cap in probes.compute_caps),
         "memory_state": probes.memory_state,
         "notes": list(getattr(probes, "notes", ()) or ()),
@@ -174,11 +173,7 @@ def _ptx_scenarios():
     is pinned to the index's own version so no newer candidate can shadow it.
     """
     try:
-        mapping = (
-            INDEX_ARCH_MAP
-            if isinstance(INDEX_ARCH_MAP, dict)
-            else dict(INDEX_ARCH_MAP)
-        )
+        mapping = INDEX_ARCH_MAP if isinstance(INDEX_ARCH_MAP, dict) else dict(INDEX_ARCH_MAP)
     except Exception:
         return []
     found = []
@@ -212,9 +207,7 @@ def _ptx_scenarios():
         scenarios.append((arch, version, (device,), token, index_name))
     scenarios.sort(key=lambda item: (item[0], -item[1][0], -item[1][1]))
     scenarios.sort(
-        key=lambda item: 0
-        if any(token in item[4].lower() for token in _TABLE_INDEX_TOKENS)
-        else 1
+        key=lambda item: 0 if any(token in item[4].lower() for token in _TABLE_INDEX_TOKENS) else 1
     )
     deduped, seen = [], set()
     for item in scenarios:
@@ -240,41 +233,46 @@ def _scenario_results():
         ("driver-bounds-12-6", _probes(driver=(12, 6), caps=((8, 0),)), None),
         ("driver-bounds-12-4", _probes(driver=(12, 4), caps=((8, 0),)), None),
         ("driver-bounds-12-0", _probes(driver=(12, 0), caps=((8, 0),)), None),
-        ("jetson-trap",
-         _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),),
-                 memory="unified"), None),
+        (
+            "jetson-trap",
+            _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),), memory="unified"),
+            None,
+        ),
         ("sbsa", _probes(arch="aarch64", driver=(12, 8), caps=((9, 0),)), None),
         ("memory-discrete", _probes(memory="discrete"), None),
         ("memory-unknown", _probes(memory="unknown"), None),
         ("memory-nonsense", _probes(memory="nonsense"), None),
         ("dual-identical-devices", _probes(caps=((9, 0), (9, 0))), None),
-        ("aarch64-two-covered-devices",
-         _probes(arch="aarch64", driver=(12, 9), caps=((10, 0), (9, 0))), None),
-        ("aarch64-second-device-uncovered",
-         _probes(arch="aarch64", driver=(12, 6), caps=((9, 0), (10, 0))), None),
-        ("aarch64-cc-exhaustion",
-         _probes(arch="aarch64", driver=(12, 6), caps=((10, 0),)), None),
-        ("rows-10-11-overlap",
-         _probes(arch="aarch64", driver=(12, 0), caps=((8, 7),),
-                 memory="unified"), None),
+        (
+            "aarch64-two-covered-devices",
+            _probes(arch="aarch64", driver=(12, 9), caps=((10, 0), (9, 0))),
+            None,
+        ),
+        (
+            "aarch64-second-device-uncovered",
+            _probes(arch="aarch64", driver=(12, 6), caps=((9, 0), (10, 0))),
+            None,
+        ),
+        ("aarch64-cc-exhaustion", _probes(arch="aarch64", driver=(12, 6), caps=((10, 0),)), None),
+        (
+            "rows-10-11-overlap",
+            _probes(arch="aarch64", driver=(12, 0), caps=((8, 7),), memory="unified"),
+            None,
+        ),
         ("no-driver-probe", _probes(driver=None), None),
         ("no-devices-probed", _probes(caps=()), None),
         ("other-arch", _probes(arch="other"), None),
-        ("driver-below-all-indexes", _probes(driver=(11, 5), caps=((8, 0),)),
-         None),
-        ("operator-override", _probes(),
-         "https://download.pytorch.org/whl/cu129"),
+        ("driver-below-all-indexes", _probes(driver=(11, 5), caps=((8, 0),)), None),
+        ("operator-override", _probes(), "https://download.pytorch.org/whl/cu129"),
     ]
     results = [
-        (name, resolve_index(probes, override=override))
-        for name, probes, override in scenarios
+        (name, resolve_index(probes, override=override)) for name, probes, override in scenarios
     ]
     scenario = _pick_ptx_scenario()
     if scenario is not None:
         arch, driver, caps, _token = scenario
         results.append(
-            ("jit-from-ptx",
-             resolve_index(_probes(arch=arch, driver=driver, caps=caps)))
+            ("jit-from-ptx", resolve_index(_probes(arch=arch, driver=driver, caps=caps)))
         )
     return results
 
@@ -293,11 +291,7 @@ _NVIDIA_SMI_HEADER = (
 
 def _smi_payload(kwargs, text):
     """Render the fake header in the flavour the caller asked for."""
-    texty = (
-        kwargs.get("text")
-        or kwargs.get("encoding")
-        or kwargs.get("universal_newlines")
-    )
+    texty = kwargs.get("text") or kwargs.get("encoding") or kwargs.get("universal_newlines")
     if texty:
         return text
     return text.encode("utf-8")
@@ -354,11 +348,9 @@ def _make_smi_fakes(mode):
         if mode == "timeout":
             error = subprocess.TimeoutExpired(cmd="nvidia-smi", timeout=5)
         elif mode == "missing":
-            error = FileNotFoundError(2, "No such file or directory",
-                                      "nvidia-smi")
+            error = FileNotFoundError(2, "No such file or directory", "nvidia-smi")
         else:
-            error = subprocess.CalledProcessError(returncode=1,
-                                                  cmd="nvidia-smi")
+            error = subprocess.CalledProcessError(returncode=1, cmd="nvidia-smi")
 
         def raise_error(*args, **kwargs):
             raise error
@@ -462,8 +454,7 @@ def _install_smi_fake(monkeypatch, mode="ok"):
         return real_which(cmd, *args, **kwargs)
 
     monkeypatch.setattr(shutil, "which", fake_which, raising=True)
-    _rebind_kaine_attrs(monkeypatch, {"which": fake_which},
-                        {"which": real_which})
+    _rebind_kaine_attrs(monkeypatch, {"which": fake_which}, {"which": real_which})
 
     real_exists = os.path.exists
 
@@ -476,8 +467,7 @@ def _install_smi_fake(monkeypatch, mode="ok"):
         return real_exists(path)
 
     monkeypatch.setattr(os.path, "exists", fake_exists, raising=True)
-    _rebind_kaine_attrs(monkeypatch, {"exists": fake_exists},
-                        {"exists": real_exists})
+    _rebind_kaine_attrs(monkeypatch, {"exists": fake_exists}, {"exists": real_exists})
 
     real_path_exists = pathlib.Path.exists
 
@@ -504,12 +494,9 @@ def _block_nvml(monkeypatch):
         return None
 
     monkeypatch.setattr(ctypes, "CDLL", refuse, raising=True)
-    monkeypatch.setattr(ctypes.LibraryLoader, "LoadLibrary", refuse,
-                        raising=True)
-    monkeypatch.setattr(ctypes.LibraryLoader, "__getitem__", refuse,
-                        raising=False)
-    monkeypatch.setattr(ctypes.util, "find_library", no_find_library,
-                        raising=True)
+    monkeypatch.setattr(ctypes.LibraryLoader, "LoadLibrary", refuse, raising=True)
+    monkeypatch.setattr(ctypes.LibraryLoader, "__getitem__", refuse, raising=False)
+    monkeypatch.setattr(ctypes.util, "find_library", no_find_library, raising=True)
     for name in ("pynvml", "nvml", "py3nvml"):
         monkeypatch.setitem(sys.modules, name, None)
     for module_name in _KAINE_MODULES:
@@ -519,8 +506,7 @@ def _block_nvml(monkeypatch):
         if getattr(module, "CDLL", None) is original_cdll:
             monkeypatch.setattr(module, "CDLL", refuse, raising=False)
         if getattr(module, "find_library", None) is original_find_library:
-            monkeypatch.setattr(module, "find_library", no_find_library,
-                                raising=False)
+            monkeypatch.setattr(module, "find_library", no_find_library, raising=False)
 
 
 def _patch_machine(monkeypatch, value):
@@ -530,13 +516,13 @@ def _patch_machine(monkeypatch, value):
         return value
 
     monkeypatch.setattr(platform, "machine", fake_machine, raising=True)
-    _rebind_kaine_attrs(monkeypatch, {"machine": fake_machine},
-                        {"machine": original})
+    _rebind_kaine_attrs(monkeypatch, {"machine": fake_machine}, {"machine": original})
 
 
 # ---------------------------------------------------------------------------
 # Decision table / fallback ladder (pure resolve_index)
 # ---------------------------------------------------------------------------
+
 
 def test_binding_constants_are_public():
     """Invariant: the decision table, the authoritative arch→sm map and the
@@ -562,8 +548,7 @@ def test_x86_64_workstation_default_resolves_cu128():
     assert result["index_url"] != CPU_INDEX
 
 
-@pytest.mark.parametrize("driver", [(13, 0), (13, 2)],
-                         ids=["cuda-13-0-driver", "cuda-13-2-driver"])
+@pytest.mark.parametrize("driver", [(13, 0), (13, 2)], ids=["cuda-13-0-driver", "cuda-13-2-driver"])
 def test_cuda_13_driver_never_receives_cu128(driver):
     """Invariant: a CUDA 13.x driver is served a CUDA-13-compatible index and
     never the cu128 one.
@@ -603,8 +588,7 @@ def test_jetson_unified_host_gets_cpu_index_with_jetpack_remediation():
     then dies at the first kernel launch with 'no kernel image is available
     for execution on the device'.
     """
-    probes = _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),),
-                     memory="unified")
+    probes = _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),), memory="unified")
     result = resolve_index(probes)
     assert result["index_url"] == CPU_INDEX
     assert result["rejected"], "rejection list must explain the exclusion"
@@ -623,8 +607,7 @@ def test_aarch64_sbsa_host_still_gets_cuda_index():
     Cost prevented: over-correcting the Tegra fix into CPU-only installs on
     GH200-class SBSA hardware.
     """
-    result = resolve_index(_probes(arch="aarch64", driver=(12, 8),
-                                   caps=((9, 0),)))
+    result = resolve_index(_probes(arch="aarch64", driver=(12, 8), caps=((9, 0),)))
     assert result["index_url"] == CU128
     assert result["index_url"] != CPU_INDEX
 
@@ -653,9 +636,7 @@ def test_every_device_must_be_covered():
     identical = resolve_index(_probes(caps=((9, 0), (9, 0))))
     assert identical["index_url"] == CU128
 
-    both_covered = resolve_index(
-        _probes(arch="aarch64", driver=(12, 9), caps=((10, 0), (9, 0)))
-    )
+    both_covered = resolve_index(_probes(arch="aarch64", driver=(12, 9), caps=((10, 0), (9, 0))))
     assert both_covered["index_url"] == CU128
 
     # cu126's aarch64 line serves sm_90 but not sm_100, so the second device
@@ -664,8 +645,7 @@ def test_every_device_must_be_covered():
         _probes(arch="aarch64", driver=(12, 6), caps=((9, 0), (10, 0)))
     )
     assert second_uncovered["index_url"] == CPU_INDEX
-    assert any("126" in str(entry.get("index", ""))
-               for entry in second_uncovered["rejected"])
+    assert any("126" in str(entry.get("index", "")) for entry in second_uncovered["rejected"])
 
 
 def test_ptx_counts_as_coverage_and_is_annotated():
@@ -682,9 +662,7 @@ def test_ptx_counts_as_coverage_and_is_annotated():
     result = resolve_index(_probes(arch=arch, driver=driver, caps=caps))
     assert result["index_url"] != CPU_INDEX
     assert token in result["index_url"]
-    annotation = " ".join(
-        [result["selected_reason"], *result["warnings"]]
-    ).lower()
+    annotation = " ".join([result["selected_reason"], *result["warnings"]]).lower()
     assert "ptx" in annotation
 
 
@@ -709,8 +687,7 @@ def test_exhaustion_warning_names_probes_and_rejection_reasons():
     Cost prevented: an unexplained CPU fallback an operator cannot debug.
     """
     result = resolve_index(
-        _probes(arch="aarch64", driver=(12, 6), caps=((10, 0),),
-                memory="discrete")
+        _probes(arch="aarch64", driver=(12, 6), caps=((10, 0),), memory="discrete")
     )
     assert result["index_url"] == CPU_INDEX
     joined = " ".join(result["warnings"])
@@ -733,8 +710,7 @@ def test_earlier_table_row_shadows_overlapping_later_row():
     # Rows 10 and 11 both hold for aarch64 + unified + driver < 12.5; the
     # earlier row 10 carries the JetPack remediation and must win.
     overlap = resolve_index(
-        _probes(arch="aarch64", driver=(12, 0), caps=((8, 7),),
-                memory="unified")
+        _probes(arch="aarch64", driver=(12, 0), caps=((8, 7),), memory="unified")
     )
     assert overlap["index_url"] == CPU_INDEX
     joined = " ".join(overlap["warnings"]).lower()
@@ -781,9 +757,7 @@ def test_degenerate_probes_return_normally():
         assert isinstance(result, dict)
     assert resolve_index(_probes(driver=None))["index_url"] == CPU_INDEX
     assert resolve_index(_probes(arch="other"))["index_url"] == CPU_INDEX
-    assert resolve_index(
-        _probes(driver=(11, 5), caps=((8, 0),))
-    )["index_url"] == CPU_INDEX
+    assert resolve_index(_probes(driver=(11, 5), caps=((8, 0),)))["index_url"] == CPU_INDEX
     # Garbage is not a positive unified verdict, so it must not exclude.
     assert resolve_index(_probes(memory="nonsense"))["index_url"] == CU128
 
@@ -798,8 +772,12 @@ def test_results_are_json_round_trippable():
     for name, result in _scenario_results():
         assert json.loads(json.dumps(result)) == result, name
         assert {
-            "variant", "index_url", "probes",
-            "selected_reason", "rejected", "warnings",
+            "variant",
+            "index_url",
+            "probes",
+            "selected_reason",
+            "rejected",
+            "warnings",
         } <= set(result), name
         assert isinstance(result["variant"], str) and result["variant"], name
         assert isinstance(result["index_url"], str) and result["index_url"], name
@@ -818,6 +796,7 @@ def test_results_are_json_round_trippable():
 # ---------------------------------------------------------------------------
 # collect_probes — injection only; the real nvidia-smi never runs
 # ---------------------------------------------------------------------------
+
 
 def test_collect_probes_reads_driver_cuda_from_nvidia_smi(monkeypatch):
     """Invariant: the driver-CUDA probe parses the `CUDA Version` field of
@@ -853,8 +832,7 @@ def test_collect_probes_survives_nvidia_smi_failure(monkeypatch, mode):
     [("x86_64", "x86_64"), ("aarch64", "aarch64"), ("ppc64le", "other")],
     ids=["x86_64", "aarch64", "other"],
 )
-def test_collect_probes_normalizes_platform_machine(monkeypatch, machine_value,
-                                                    expected):
+def test_collect_probes_normalizes_platform_machine(monkeypatch, machine_value, expected):
     """Invariant: platform.machine() is normalized to x86_64 / aarch64 / other
     before it reaches the decision table.
 
@@ -867,6 +845,7 @@ def test_collect_probes_normalizes_platform_machine(monkeypatch, machine_value,
     probes = collect_probes()
     assert probes.arch == expected
 
+
 # _kaine_operator_override_patch_tests_ : regression tests for the
 # authoritative operator --index-url override.  The override must win on an
 # EXHAUSTED ladder (Jetson/Tegra -- the exact case the override exists for,
@@ -875,21 +854,29 @@ def test_collect_probes_normalizes_platform_machine(monkeypatch, machine_value,
 # cases; and the old "override was not applied" refusal must never fire when
 # an override is given.
 
-from kaine.wheel_index import Probes as _OverridePatchProbes
-from kaine.wheel_index import resolve_index as _OverridePatchResolveIndex
+from kaine.wheel_index import (  # noqa: E402,I001 — section-local imports kept adjacent to the override patch tests
+    Probes as _OverridePatchProbes,
+    resolve_index as _OverridePatchResolveIndex,
+)
 
 
 def _override_patch_jetson_probes():
     return _OverridePatchProbes(
-        arch='aarch64', driver_cuda=(13, 2), compute_caps=((8, 7),),
-        memory_state='unified', notes={},
+        arch="aarch64",
+        driver_cuda=(13, 2),
+        compute_caps=((8, 7),),
+        memory_state="unified",
+        notes={},
     )
 
 
 def _override_patch_x86_probes():
     return _OverridePatchProbes(
-        arch='x86_64', driver_cuda=(12, 8), compute_caps=((9, 0),),
-        memory_state='discrete', notes={},
+        arch="x86_64",
+        driver_cuda=(12, 8),
+        compute_caps=((9, 0),),
+        memory_state="discrete",
+        notes={},
     )
 
 
@@ -906,18 +893,18 @@ def _override_patch_all_strings(result):
 def test_override_applied_on_exhausted_ladder():
     result = _OverridePatchResolveIndex(
         _override_patch_jetson_probes(),
-        override='https://jetpack.example/cu132',
+        override="https://jetpack.example/cu132",
     )
-    assert result['index_url'] == 'https://jetpack.example/cu132'
-    assert result['variant'] == 'cuda'
+    assert result["index_url"] == "https://jetpack.example/cu132"
+    assert result["variant"] == "cuda"
 
 
 def test_override_still_applied_on_succeeding_ladder():
     result = _OverridePatchResolveIndex(
-        _override_patch_x86_probes(), override='https://custom.example/x'
+        _override_patch_x86_probes(), override="https://custom.example/x"
     )
-    assert result['index_url'] == 'https://custom.example/x'
-    assert result['variant'] == 'cuda'
+    assert result["index_url"] == "https://custom.example/x"
+    assert result["variant"] == "cuda"
 
 
 def test_override_preserves_ladder_audit_trail():
@@ -942,41 +929,38 @@ def test_override_preserves_ladder_audit_trail():
     """
     exhausted = _OverridePatchResolveIndex(
         _override_patch_jetson_probes(),
-        override='https://jetpack.example/cu132',
+        override="https://jetpack.example/cu132",
     )
-    assert isinstance(exhausted['rejected'], list)
-    assert exhausted['rejected'], (
-        'exhausted ladder under override must still explain every rejection'
+    assert isinstance(exhausted["rejected"], list)
+    assert exhausted["rejected"], (
+        "exhausted ladder under override must still explain every rejection"
     )
-    for warning in exhausted['warnings']:
-        assert 'was not applied' not in warning
+    for warning in exhausted["warnings"]:
+        assert "was not applied" not in warning
 
     succeeding = _OverridePatchResolveIndex(
-        _override_patch_x86_probes(), override='https://custom.example/x'
+        _override_patch_x86_probes(), override="https://custom.example/x"
     )
-    assert isinstance(succeeding['rejected'], list)
+    assert isinstance(succeeding["rejected"], list)
     # No truthiness/length assertion on `rejected` here: an empty list is
     # the truthful result when the first candidate (cu128) wins at once.
     ladder_alone = _OverridePatchResolveIndex(_override_patch_x86_probes())
-    ladder_token = ladder_alone['index_url'].rstrip('/').rsplit('/', 1)[-1]
-    reason = succeeding['selected_reason'].lower()
-    assert 'operator' in reason, (
-        'selected_reason must record that the URL is operator-provided'
-    )
+    ladder_token = ladder_alone["index_url"].rstrip("/").rsplit("/", 1)[-1]
+    reason = succeeding["selected_reason"].lower()
+    assert "operator" in reason, "selected_reason must record that the URL is operator-provided"
     assert ladder_token in reason, (
-        'selected_reason must also record the ladder choice the override '
-        'replaced: ' + ladder_token
+        "selected_reason must also record the ladder choice the override replaced: " + ladder_token
     )
-    for warning in succeeding['warnings']:
-        assert 'was not applied' not in warning
+    for warning in succeeding["warnings"]:
+        assert "was not applied" not in warning
 
 
 def test_no_override_refusal_warning_when_override_given():
     cases = (
-        (_override_patch_jetson_probes(), 'https://jetpack.example/cu132'),
-        (_override_patch_x86_probes(), 'https://custom.example/x'),
+        (_override_patch_jetson_probes(), "https://jetpack.example/cu132"),
+        (_override_patch_x86_probes(), "https://custom.example/x"),
     )
     for probes, url in cases:
         result = _OverridePatchResolveIndex(probes, override=url)
         for text in _override_patch_all_strings(result):
-            assert 'was not applied' not in text
+            assert "was not applied" not in text

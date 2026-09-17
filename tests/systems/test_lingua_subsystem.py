@@ -9,9 +9,8 @@ import os
 
 import pytest
 
-from kaine.modules.lingua.module import Lingua
 from kaine.modules.lingua.client import FakeChatClient
-
+from kaine.modules.lingua.module import Lingua
 from tests.systems._harness import SubsystemHarness
 
 

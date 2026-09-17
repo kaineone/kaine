@@ -11,7 +11,6 @@ import pytest
 from kaine.modules.topos.change import CosineChangeDetector
 from kaine.modules.topos.habituation import RollingMeanHabituator
 from kaine.modules.topos.module import Topos
-
 from tests.systems._harness import SubsystemHarness
 
 

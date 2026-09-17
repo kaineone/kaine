@@ -14,8 +14,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kaine.bus.client import _decode_workspace
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, _decode_workspace
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import WORKSPACE_STREAM, validate_event
 from kaine.cycle import CognitiveCycle

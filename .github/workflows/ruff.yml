@@ -1,0 +1,35 @@
+# Dedicated, lightweight ruff lint + import-sort check.
+#
+# A pure static check, deliberately separate from the full pytest suite: it
+# installs only ruff (no torch/redis/services, no entity boot, no secrets) and
+# runs `ruff check kaine tests` against the configuration in pyproject.toml
+# [tool.ruff]. Style and import-order regressions fail this job in seconds,
+# long before the heavy suite runs.
+name: ruff
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: python -m pip install "ruff>=0.15,<0.16"
+
+      - name: Run ruff
+        run: ruff check kaine tests

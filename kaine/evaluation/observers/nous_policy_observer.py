@@ -15,6 +15,7 @@ observer runs silently.
 
 READ-ONLY: never publishes to the bus.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,13 +34,13 @@ class NousPolicyObserver(StreamSubscriberObserver):
     """Records Nous policy events (EFE, horizon, action) to JSONL."""
 
     name = "nous_policy"
-    stream = _NOUS_STREAM
+    streams = (_NOUS_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)
         self._sink = sink
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "nous.policy":
             return
         payload = event.payload or {}

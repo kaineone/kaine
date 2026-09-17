@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from kaine.wheel_index import Probes, resolve_index
 from kaine.cycle import preflight as pf
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
+from kaine.wheel_index import Probes, resolve_index
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "cross_host" / "hosts.json"
 FIXTURES = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))

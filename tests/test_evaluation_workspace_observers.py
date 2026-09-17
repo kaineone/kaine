@@ -246,8 +246,9 @@ async def test_attribution_skips_non_dict_selected_items():
 
 @pytest.mark.asyncio
 async def test_attribution_flushes_non_partial_row_on_hour_boundary(monkeypatch):
-    import kaine.evaluation.attribution as attr_mod
     from datetime import datetime, timezone
+
+    import kaine.evaluation.attribution as attr_mod
 
     times = [
         datetime(2026, 6, 3, 10, 30, tzinfo=timezone.utc),

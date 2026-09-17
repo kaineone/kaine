@@ -4,6 +4,7 @@
 """Proactive output audit: log every Lingua external speech whose
 causal chain doesn't include a recent user input event.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,7 +23,7 @@ USER_INPUT_STREAMS = frozenset({"audition.out"})
 
 class ProactiveAuditObserver(StreamSubscriberObserver):
     name = "proactive_audit"
-    stream = LINGUA_EXTERNAL_STREAM
+    streams = (LINGUA_EXTERNAL_STREAM,)
 
     def __init__(
         self,
@@ -39,7 +40,7 @@ class ProactiveAuditObserver(StreamSubscriberObserver):
         self._last_input = last_user_input_provider
         self._threshold = float(proactive_threshold_seconds)
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "external_speech":
             return
         now = datetime.now(timezone.utc)
@@ -52,9 +53,7 @@ class ProactiveAuditObserver(StreamSubscriberObserver):
         seconds_since_input = None
         if last_input_ts is not None:
             seconds_since_input = (now - last_input_ts).total_seconds()
-        is_proactive = (
-            seconds_since_input is None or seconds_since_input > self._threshold
-        )
+        is_proactive = seconds_since_input is None or seconds_since_input > self._threshold
         if not is_proactive:
             return
         payload = event.payload or {}

@@ -10,6 +10,7 @@ FIX 2 — Spot stands down its heartbeat-staleness liveness recovery for ANY
 freeze it does not itself own (operator OR welfare), because a frozen cycle's
 modules are silent by design.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -52,30 +53,43 @@ class _StubFM:
     def __init__(self):
         self.calls: list[dict] = []
 
-    async def preserve_live(self, registry, *, reason, label, out_root,
-                            entity_name, require_encryption=False):
+    async def preserve_live(
+        self, registry, *, reason, label, out_root, entity_name, require_encryption=False
+    ):
         self.calls.append({"reason": reason})
         from kaine.lifecycle.preservation import PreservationResult
 
         return PreservationResult(
-            ok=True, preservation_id=f"pid{len(self.calls)}",
-            snapshot_id=f"snap{len(self.calls)}", reason=reason, label=label,
-            run_id="coldstart000001", encrypted=True, path=None,
+            ok=True,
+            preservation_id=f"pid{len(self.calls)}",
+            snapshot_id=f"snap{len(self.calls)}",
+            reason=reason,
+            label=label,
+            run_id="coldstart000001",
+            encrypted=True,
+            path=None,
         )
 
 
 async def _push_soma(bus: AsyncBus, prediction_error: float, warmup_active: bool):
-    await bus.publish(validate_event(
-        source="soma", type="soma.report",
-        payload={"prediction_error": prediction_error, "warmup_active": warmup_active},
-        salience=0.5, timestamp=datetime.now(timezone.utc),
-    ))
+    await bus.publish(
+        validate_event(
+            source="soma",
+            type="soma.report",
+            payload={"prediction_error": prediction_error, "warmup_active": warmup_active},
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
 
 
 def _monitor(bus, cfg, clock):
     cfg.warmup_s = 0.0  # disable the fixed floor so the soma flag is the gate under test
     mon = WelfareProtectiveMonitor(
-        registry=ModuleRegistry(), fork_manager=_StubFM(), config=cfg, bus=bus,
+        registry=ModuleRegistry(),
+        fork_manager=_StubFM(),
+        config=cfg,
+        bus=bus,
         incident_log=IncidentLog(enabled=False, path="unused"),
     )
     mon._clock = clock
@@ -86,8 +100,13 @@ def _monitor(bus, cfg, clock):
 async def test_warmup_active_gates_then_releases(bus):
     """Sustained distress while warmup_active=true does NOT preserve+pause;
     once Soma reports warmup_active=false, genuine sustained distress fires."""
-    cfg = WelfareResponseConfig(enabled=True, action="pause", distress_threshold=0.5,
-                                distress_duration_s=1.0, warmup_ceiling_s=1800.0)
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=1.0,
+        warmup_ceiling_s=1800.0,
+    )
     t = {"v": 0.0}
     mon = _monitor(bus, cfg, lambda: t["v"])
     stop = asyncio.Event()
@@ -116,8 +135,13 @@ async def test_warmup_active_gates_then_releases(bus):
 @pytest.mark.asyncio
 async def test_warmup_ceiling_rearms_on_stuck_flag(bus):
     """A stuck warmup_active=true must not blind the net past warmup_ceiling_s."""
-    cfg = WelfareResponseConfig(enabled=True, action="pause", distress_threshold=0.5,
-                                distress_duration_s=1.0, warmup_ceiling_s=100.0)
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=1.0,
+        warmup_ceiling_s=100.0,
+    )
     t = {"v": 0.0}
     mon = _monitor(bus, cfg, lambda: t["v"])
     stop = asyncio.Event()
@@ -158,20 +182,29 @@ async def _crashed_module(bus):
 
 
 def _spot(registry, fm, bus):
-    return Spot(registry=registry, fork_manager=fm, kaine_config={},
-                config=SpotConfig(enabled=True, restart_backoff_s=0.0),
-                rebuild_module=lambda name: None, bus=bus)
+    return Spot(
+        registry=registry,
+        fork_manager=fm,
+        kaine_config={},
+        config=SpotConfig(enabled=True, restart_backoff_s=0.0),
+        rebuild_module=lambda name: None,
+        bus=bus,
+    )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source,should_act", [
-    ("welfare", False),   # FIX 2: a welfare freeze silences modules by design
-    ("operator", False),  # unchanged: operator freeze already stood down
-    ("spot", True),       # Spot's OWN recovery freeze keeps working
-])
+@pytest.mark.parametrize(
+    "source,should_act",
+    [
+        ("welfare", False),  # FIX 2: a welfare freeze silences modules by design
+        ("operator", False),  # unchanged: operator freeze already stood down
+        ("spot", True),  # Spot's OWN recovery freeze keeps working
+    ],
+)
 async def test_spot_stands_down_for_non_spot_freeze(bus, tmp_path, source, should_act):
     mod = await _crashed_module(bus)
-    reg = ModuleRegistry(); reg.register(mod)
+    reg = ModuleRegistry()
+    reg.register(mod)
     spot = _spot(reg, ForkManager(tmp_path / "forks"), bus)
     control_state.freeze(reason=f"{source} freeze", source=source)
 

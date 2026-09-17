@@ -7,15 +7,13 @@ import types
 
 import pytest
 
+import kaine.hardware as _hw
 from kaine.hardware import (
     describe_host,
     detect_device,
     resolve_device,
     select_device,
 )
-
-import kaine.hardware as _hw
-
 
 _DEVICES = {"cuda", "xpu", "mps", "cpu"}
 

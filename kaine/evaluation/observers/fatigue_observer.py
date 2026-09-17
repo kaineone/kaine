@@ -12,6 +12,7 @@ Subscribes to ``soma.out`` and logs:
 This provides a continuous fatigue trajectory plus explicit threshold
 crossings for the welfare assessment pipeline.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,13 +31,13 @@ class FatigueObserver(StreamSubscriberObserver):
     """Logs soma.fatigue threshold crossings and periodic fatigue reports."""
 
     name = "fatigue"
-    stream = _SOMA_STREAM
+    streams = (_SOMA_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)
         self._sink = sink
 
-    async def handle(self, entry_id: str, event: Event) -> None:
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type == "soma.fatigue":
             payload = event.payload or {}
             await self._sink.write(

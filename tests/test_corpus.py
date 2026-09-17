@@ -12,14 +12,11 @@ import pytest
 
 from kaine.experiment.corpus import (
     RunMetric,
+    _norm_cdf,
+    _norm_ppf,
     load_corpus,
     run_multi_record,
 )
-from kaine.experiment.corpus import (
-    _norm_cdf,
-    _norm_ppf,
-)
-
 
 # --------------------------------------------------------------------------- #
 # closed-form helpers

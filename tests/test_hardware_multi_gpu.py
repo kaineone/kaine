@@ -8,7 +8,6 @@ any host regardless of actual GPU count.
 """
 from __future__ import annotations
 
-
 import pytest
 
 from kaine import hardware

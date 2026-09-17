@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import fields
+from datetime import datetime, timezone
 
 import pytest
 
@@ -25,17 +26,15 @@ from kaine.modules.mundus import (
     ContinuousMotorSurface,
     ControlCommand,
     EfferenceLoop,
-    Mundus,
     MotorCurriculum,
     MotorFeedback,
+    Mundus,
     QuiescentMotorPolicy,
     StubAdapter,
     clamp_channel,
 )
 from kaine.modules.mundus import control_surface as cs
 from kaine.modules.soma.forward import SubstrateForwardModel
-
-from datetime import datetime, timezone
 
 
 @pytest.fixture

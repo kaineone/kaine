@@ -9,9 +9,8 @@ import os
 
 import pytest
 
-from kaine.modules.vox.module import Vox
 from kaine.modules.vox.client import FakeTTSClient
-
+from kaine.modules.vox.module import Vox
 from tests.systems._harness import SubsystemHarness
 
 

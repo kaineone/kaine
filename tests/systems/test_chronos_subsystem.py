@@ -4,11 +4,9 @@
 """Chronos subsystem: workspace broadcasts → temporal-context events."""
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.modules.chronos.module import Chronos
-
 from tests.systems._harness import SubsystemHarness
 
 

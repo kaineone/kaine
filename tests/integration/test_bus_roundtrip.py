@@ -16,7 +16,6 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config
 from kaine.bus.schema import module_stream
 
-
 pytestmark = pytest.mark.integration
 
 

@@ -4,7 +4,6 @@
 """Cycle subsystem: tick collects events, calls syneidesis, broadcasts."""
 from __future__ import annotations
 
-
 import pytest
 
 from kaine.cycle.engine import CognitiveCycle
@@ -16,7 +15,6 @@ from kaine.workspace import (
     StaticThymosModulator,
     Syneidesis,
 )
-
 from tests.systems._harness import SubsystemHarness
 
 

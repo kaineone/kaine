@@ -126,8 +126,8 @@ def test_reserved_slot_23_is_always_zero():
     ]:
         vec = feat.featurize(snap)
         assert vec[23] == 0.0, (
-            f"slot [23] must be permanently 0.0 — introducing a real feature "
-            f"here requires a model-weight reset (see featurizer.py comment)"
+            "slot [23] must be permanently 0.0 — introducing a real feature "
+            "here requires a model-weight reset (see featurizer.py comment)"
         )
 
 

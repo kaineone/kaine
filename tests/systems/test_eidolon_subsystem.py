@@ -9,7 +9,6 @@ import json
 import pytest
 
 from kaine.modules.eidolon.module import Eidolon
-
 from tests.systems._harness import SubsystemHarness
 
 

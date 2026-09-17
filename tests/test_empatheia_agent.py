@@ -4,11 +4,9 @@
 """Tests for AgentModel — familiarity, histogram updates, and update rules."""
 from __future__ import annotations
 
-
 import pytest
 
-from kaine.modules.empatheia.agent import AgentModel, EMOTION_CATEGORIES
-
+from kaine.modules.empatheia.agent import EMOTION_CATEGORIES, AgentModel
 
 # ---------------------------------------------------------------------------
 # Familiarity

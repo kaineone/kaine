@@ -21,16 +21,18 @@ that do exist.
 
 READ-ONLY: never publishes to the bus.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import statistics
+import time as _time
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
-from kaine.evaluation._base import BaseObserver, BusReader
+from kaine.bus.schema import Event
+from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
@@ -64,6 +66,9 @@ _SOURCES: list[tuple[str, frozenset[str], str]] = [
         "world_error",
     ),
 ]
+_SOURCE_MAP: dict[str, tuple[frozenset[str], str]] = {
+    stream: (accepted, field) for stream, accepted, field in _SOURCES
+}
 
 _DEFAULT_WINDOW_SIZE = 64
 _DEFAULT_FLUSH_INTERVAL_S = 30.0
@@ -84,10 +89,11 @@ def _percentile(values: list[float], pct: float) -> float:
     return sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac
 
 
-class PredictionErrorObserver(BaseObserver):
+class PredictionErrorObserver(StreamSubscriberObserver):
     """Multi-stream prediction-error statistics observer."""
 
     name = "prediction_error"
+    streams = tuple(stream for stream, _, _ in _SOURCES)
 
     def __init__(
         self,
@@ -98,18 +104,14 @@ class PredictionErrorObserver(BaseObserver):
         flush_interval_s: float = _DEFAULT_FLUSH_INTERVAL_S,
         poll_interval_s: float = 0.5,
     ) -> None:
-        super().__init__()
-        self._bus = bus
+        super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
         self._window_size = max(2, int(window_size))
         self._flush_interval_s = float(flush_interval_s)
-        self._poll_interval_s = float(poll_interval_s)
         # Per-source windows.
         self._windows: dict[str, deque[float]] = {
-            stream: deque(maxlen=self._window_size)
-            for stream, _, _ in _SOURCES
+            stream: deque(maxlen=self._window_size) for stream, _, _ in _SOURCES
         }
-        self._cursors: dict[str, str] = {stream: "0" for stream, _, _ in _SOURCES}
         # In-memory diagnostics counters (total events ingested per source).
         self._event_counts: dict[str, int] = {stream: 0 for stream, _, _ in _SOURCES}
         self._last_flush_at: float = 0.0
@@ -129,63 +131,30 @@ class PredictionErrorObserver(BaseObserver):
             "p99": round(_percentile(window, 99), 6),
         }
 
-    async def _run(self) -> None:
-        import time as _time
-
+    async def _initial_cursors(self) -> dict[str, str]:
         self._last_flush_at = _time.monotonic()
-        source_map: dict[str, tuple[frozenset[str], str]] = {
-            stream: (accepted, field)
-            for stream, accepted, field in _SOURCES
-        }
+        return await super()._initial_cursors()
 
-        while not self._stopped.is_set():
-            for stream, accepted_types, error_field in _SOURCES:
-                try:
-                    entries, last_scanned = await self._bus.read_entries(
-                        stream,
-                        last_id=self._cursors[stream],
-                        count=64,
-                        block_ms=0,
-                    )
-                except Exception:
-                    log.warning(
-                        "prediction_error_observer read failed for %s",
-                        stream,
-                        exc_info=True,
-                    )
-                    entries = []
-                    last_scanned = None
-                for entry_id, event in entries:
-                    self._cursors[stream] = entry_id
-                    if event.type in accepted_types:
-                        payload = event.payload or {}
-                        val = payload.get(error_field)
-                        if isinstance(val, (int, float)):
-                            self._windows[stream].append(float(val))
-                            self._event_counts[stream] += 1
-                if last_scanned is not None:
-                    self._cursors[stream] = last_scanned
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
+        accepted_types, error_field = _SOURCE_MAP[stream]
+        if event.type in accepted_types:
+            payload = event.payload or {}
+            val = payload.get(error_field)
+            if isinstance(val, (int, float)):
+                self._windows[stream].append(float(val))
+                self._event_counts[stream] += 1
 
-            now = _time.monotonic()
-            if now - self._last_flush_at >= self._flush_interval_s:
-                await self._flush()
-                self._last_flush_at = now
+    async def _tick(self) -> None:
+        now = _time.monotonic()
+        if now - self._last_flush_at >= self._flush_interval_s:
+            await self._flush()
+            self._last_flush_at = now
 
-            try:
-                await asyncio.wait_for(
-                    self._stopped.wait(), timeout=self._poll_interval_s
-                )
-            except asyncio.TimeoutError:
-                continue
-
-        # Final flush on stop.
+    async def _cleanup(self) -> None:
         await self._flush()
 
     async def _flush(self) -> None:
-        stats = {
-            stream: self._stats_for_source(stream)
-            for stream, _, _ in _SOURCES
-        }
+        stats = {stream: self._stats_for_source(stream) for stream, _, _ in _SOURCES}
         # Only write if at least one source has data.
         if all(s["n"] == 0 for s in stats.values()):
             return

@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -72,7 +71,7 @@ def _make_eval_root(tmp_path: Path) -> Path:
 
 def test_default_bundle_is_metrics_only(tmp_path: Path):
     """Build with default tier and assert NO deny-pattern paths appear."""
-    from kaine.research.submission import build_research_bundle, DENY_PATTERNS
+    from kaine.research.submission import DENY_PATTERNS, build_research_bundle
 
     eval_root = _make_eval_root(tmp_path)
     out_dir = tmp_path / "out"
@@ -123,7 +122,7 @@ def test_decoy_files_are_excluded(tmp_path: Path):
 
 def test_metric_dirs_are_included(tmp_path: Path):
     """All allowlisted metric directories that have files should be included."""
-    from kaine.research.submission import build_research_bundle, METRICS_ONLY_DIRS
+    from kaine.research.submission import METRICS_ONLY_DIRS, build_research_bundle
 
     eval_root = _make_eval_root(tmp_path)
     out_dir = tmp_path / "out"
@@ -215,7 +214,7 @@ def test_preview_never_sends(tmp_path: Path, monkeypatch):
 
 def test_full_tier_without_optin_raises(tmp_path: Path):
     """Requesting tier='full' without attestation must raise BundleTierError."""
-    from kaine.research.submission import build_research_bundle, BundleTierError
+    from kaine.research.submission import BundleTierError, build_research_bundle
 
     eval_root = _make_eval_root(tmp_path)
     with pytest.raises(BundleTierError):
@@ -229,7 +228,7 @@ def test_full_tier_without_optin_raises(tmp_path: Path):
 
 def test_full_tier_partial_optin_raises(tmp_path: Path):
     """Partial attestation is still refused."""
-    from kaine.research.submission import build_research_bundle, BundleTierError
+    from kaine.research.submission import BundleTierError, build_research_bundle
 
     eval_root = _make_eval_root(tmp_path)
     with pytest.raises(BundleTierError):
@@ -338,9 +337,10 @@ def test_cli_send_eof_fails_safe(tmp_path: Path):
 
 def test_cli_send_decline_fails_safe(tmp_path: Path):
     """Answering 'n' at the recipient-confirm prompt must not send."""
+    import unittest.mock as mock
+
     from kaine.research.__main__ import main
     from kaine.transfer import email_request as email_mod
-    import unittest.mock as mock
 
     send_called = []
     eval_root = _make_eval_root(tmp_path)
@@ -375,10 +375,11 @@ def test_cli_send_decline_fails_safe(tmp_path: Path):
 
 def test_cli_send_confirm_calls_send_or_write(tmp_path: Path):
     """Answering 'y' at both prompts should call send_or_write."""
+    import unittest.mock as mock
+
     from kaine.research.__main__ import main
     from kaine.transfer import email_request as email_mod
     from kaine.transfer.email_request import SendResult
-    import unittest.mock as mock
 
     send_called = []
     eval_root = _make_eval_root(tmp_path)

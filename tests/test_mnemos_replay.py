@@ -14,6 +14,8 @@ import time
 
 import pytest
 
+from kaine.bus.client import AsyncBus
+from kaine.bus.config import BusConfig
 from kaine.modules.mnemos import (
     FakeEmbedder,
     InMemoryStorage,
@@ -21,14 +23,10 @@ from kaine.modules.mnemos import (
     MnemosCore,
     ReplayWindowError,
 )
-from kaine.bus.client import AsyncBus
-from kaine.bus.config import BusConfig
-
 
 # ---------------------------------------------------------------------------
 # Pure unit tests — no bus needed
 # ---------------------------------------------------------------------------
-
 from kaine.modules.mnemos.replay import ReplayEngine, ReplayEntry, select_traces
 
 
@@ -240,8 +238,9 @@ async def test_replay_selection_ranks_high_affect_first(bus: AsyncBus):
     await mnemos.initialize()
     try:
         # Manually plant two entries in short-term with controlled timestamps.
-        from kaine.modules.mnemos.memory import StoredMemory
         from collections import deque
+
+        from kaine.modules.mnemos.memory import StoredMemory
 
         mnemos.core._short_term = deque()
         mnemos.core._short_term.append(

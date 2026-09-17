@@ -30,7 +30,6 @@ from kaine.experiment.stability import (
 )
 from kaine.experiment.verdict import Outcome, Verdict
 
-
 # --------------------------------------------------------------------------- #
 # Summary statistics + stable case
 # --------------------------------------------------------------------------- #

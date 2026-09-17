@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import subprocess
 
-
 from kaine.setup import organ
 from kaine.setup.organ import (
     ORGAN_GGUF_REPO,
@@ -24,7 +23,6 @@ from kaine.setup.organ import (
     run_organ_download,
     verify_served_alias,
 )
-
 
 # --- backend detection -------------------------------------------------------
 

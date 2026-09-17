@@ -10,10 +10,10 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.modules.audition.emotion import FakeEmotionClassifier
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import FakeSTTClient
-from kaine.modules.audition.emotion import FakeEmotionClassifier
-from kaine.modules.vox import Vox, FakePlayer, FakeTTSClient, SpeakingGate
+from kaine.modules.vox import FakePlayer, FakeTTSClient, SpeakingGate, Vox
 
 
 @pytest.fixture

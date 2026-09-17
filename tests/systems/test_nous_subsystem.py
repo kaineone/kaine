@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 import pytest
 
 from kaine.modules.nous import FakeEngine, Nous
-
 from tests.systems._harness import SubsystemHarness
 
 

@@ -16,15 +16,13 @@ import struct
 
 import pytest
 
+from kaine.modules.audition.emotion import FakeEmotionClassifier
 from kaine.modules.audition.live import LiveMicConfig, LiveMicrophone
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import FakeSTTClient
-from kaine.modules.audition.emotion import FakeEmotionClassifier
 from kaine.modules.topos.live import LiveCamera, LiveCameraConfig
 from kaine.modules.topos.module import Topos
-
 from tests.systems._harness import SubsystemHarness
-
 
 # --- audio path ------------------------------------------------------
 

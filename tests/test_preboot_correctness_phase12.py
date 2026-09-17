@@ -38,7 +38,6 @@ from kaine.cycle.preservation_monitor import _welfare_notify_allowed
 from kaine.workspace import report_policy as rp
 from kaine.workspace import volition as vt
 
-
 # --------------------------------------------------------------------------
 # Shared test doubles
 # --------------------------------------------------------------------------

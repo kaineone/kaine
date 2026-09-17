@@ -697,7 +697,7 @@ def preview(bundle: Bundle) -> str:
     """
     lines: list[str] = [
         "=" * 70,
-        f"KAINE Research Bundle Preview",
+        "KAINE Research Bundle Preview",
         f"  tier:         {bundle.tier}",
         f"  generated_at: {bundle.generated_at}",
         f"  bundle_dir:   {bundle.bundle_dir}",

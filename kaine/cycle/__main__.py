@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from kaine.boot import _CLOCKED_FACTORIES as CLOCKED_FACTORIES
 from kaine.boot import (
     SIMPLE_FACTORIES,
     MetricsCollector,
@@ -41,7 +42,6 @@ from kaine.boot import (
     make_hypnos,
     make_salience_factors,
 )
-from kaine.boot import _CLOCKED_FACTORIES as CLOCKED_FACTORIES
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.cycle.affect_state import AffectStateProvider
@@ -50,13 +50,6 @@ from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
-from kaine.lifecycle.manager import ForkManager
-from kaine.perception_state import (
-    read_desired,
-    write_desired_audio,
-    write_desired_video,
-)
-from kaine.state_io import write_json_atomic
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
 from kaine.experiment import (
@@ -66,7 +59,15 @@ from kaine.experiment import (
     write_manifest,
 )
 from kaine.hardware import tune_cpu_threads
+from kaine.lifecycle.manager import ForkManager
 from kaine.modules.thymos.modulator import StateModulator
+from kaine.perception_state import (
+    read_desired,
+    write_desired_audio,
+    write_desired_video,
+)
+from kaine.security.intent_signing import IntentSigner, generate_intent_secret
+from kaine.state_io import write_json_atomic
 from kaine.workspace import (
     DriveRelevanceGoalScorer,
     NoveltyTracker,
@@ -74,7 +75,6 @@ from kaine.workspace import (
     Syneidesis,
 )
 from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
-from kaine.security.intent_signing import IntentSigner, generate_intent_secret
 from kaine.workspace.volition import Volition
 
 log = logging.getLogger("kaine.cycle")

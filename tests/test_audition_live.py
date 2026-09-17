@@ -6,6 +6,7 @@
 No real audio hardware. No disk writes. Verifies the utterance
 segmenter respects min/max/hangover thresholds and never writes a WAV
 file (only in-memory BytesIO via wave.open)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,10 +19,10 @@ from typing import Any, Callable
 import pytest
 
 from kaine.modules.audition.live import (
+    _RMSVAD,
     LiveMicConfig,
     LiveMicrophone,
     encode_wav,
-    _RMSVAD,
 )
 
 
@@ -225,7 +226,7 @@ async def test_live_mic_calls_state_writer_on_start_and_stop():
 
     states: list[bool] = []
     mic = LiveMicrophone(
-        sink=lambda w, s, l: asyncio.sleep(0),
+        sink=lambda _w, _s, _level: asyncio.sleep(0),
         config=LiveMicConfig(
             sample_rate=sample_rate,
             vad_frame_ms=frame_ms,
@@ -259,7 +260,7 @@ async def test_live_mic_respects_desired_state_off():
         return FakeMicrophoneStream([], callback=kw["callback"])
 
     mic = LiveMicrophone(
-        sink=lambda w, s, l: asyncio.sleep(0),
+        sink=lambda _w, _s, _level: asyncio.sleep(0),
         config=LiveMicConfig(desired_state_poll_ms=20),
         state_writer=lambda active: None,
         desired_state_reader=lambda: False,

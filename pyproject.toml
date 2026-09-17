@@ -146,6 +146,36 @@ packages = ["kaine", "kaine.bus", "kaine.cycle", "kaine.evaluation", "kaine.fait
 "kaine.modules.hypnos" = ["eval_probes/*.jsonl"]
 "kaine.modules.eidolon" = ["surnames.txt"]
 
+# ---------------------------------------------------------------------------
+# Ruff lint/format configuration.
+#
+# Enforced in pre-commit and CI. The rule set starts conservative (E/W/F
+# plus the errors already present in the tree) and can be expanded once the
+# baseline is clean.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+include = ["kaine/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort (import order)
+]
+ignore = [
+    "E501",  # line too long — project already allows long lines in places
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
@@ -183,13 +213,24 @@ root_packages = ["kaine"]
 name = "Core must not import the evaluation sidecar (only the two __main__ seams)"
 type = "forbidden"
 source_modules = [
+    "kaine.backend_state",
     "kaine.boot",
     "kaine.config",
     "kaine.entity_clock",
     "kaine.hardware",
+    "kaine.hostmem",
+    "kaine.memory_kinds",
+    "kaine.model_paths",
+    "kaine.net",
+    "kaine.organ_window_state",
+    "kaine.perception_preview",
+    "kaine.perception_preview_server",
     "kaine.perception_state",
+    "kaine.preboot",
     "kaine.privacy_filter",
+    "kaine.state_io",
     "kaine.text_embedding",
+    "kaine.wheel_index",
     "kaine.bus",
     "kaine.cycle",
     "kaine.distributed",

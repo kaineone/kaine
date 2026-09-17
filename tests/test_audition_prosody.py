@@ -9,18 +9,17 @@ Covers:
 - audio_bytes_to_float32 in-memory conversion (WAV + raw PCM fallback)
 - Zero-duration / too-short audio returns zeroed features without raising
 """
-import wave
 import io
 import math
+import wave
 
 import numpy as np
 
 from kaine.modules.audition.prosody import (
-    extract_prosody,
-    audio_bytes_to_float32,
     _zeroed_features,
+    audio_bytes_to_float32,
+    extract_prosody,
 )
-
 
 # ---------------------------------------------------------------------------
 # Synthetic waveform helpers

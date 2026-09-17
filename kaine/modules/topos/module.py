@@ -18,10 +18,6 @@ from kaine.modules.topos.encoder import (
     Encoder,
     make_encoder,
 )
-from kaine.modules.topos.habituation import (
-    RollingMeanHabituator,
-    SceneHabituator,
-)
 from kaine.modules.topos.foveation import (
     FoveaPredictor,
     FoveaTarget,
@@ -29,6 +25,10 @@ from kaine.modules.topos.foveation import (
     combine_saliency,
     foveate,
     select_fovea,
+)
+from kaine.modules.topos.habituation import (
+    RollingMeanHabituator,
+    SceneHabituator,
 )
 from kaine.modules.topos.live import (
     LiveCamera,

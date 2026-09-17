@@ -12,7 +12,6 @@ from kaine.lifecycle.strategies import (
     default_strategies,
 )
 
-
 # ---- Union (default) ----
 
 
