@@ -13,7 +13,6 @@
 | containerize-deployment | 18/19 (94%) | containerized-deployment | ADDED | The paper names this as planned future work and as a precondition for... |
 | docs-base-thesis-reframe | 13/15 (86%) | documentation-consistency | ADDED | The project has been reconfigured to its **base-thesis form** as the ... |
 | perception-drives-salience | 9/11 (81%) | topos-perception | MODIFIED | The base thesis is that perception enters the workspace **as predicti... |
-| portability-tiers | 19/24 (79%) | deployment-tiers, host-probe, runtime-backends | ADDED | KAINE today assumes one machine: a dual-GPU Linux workstation. The th... |
 | attention-driven-foveation | 13/18 (72%) | topos, topos-foveation | ADDED | Screen perception currently scales the whole screen to Topos's fixed ... |
 | developmental-maturation-gate | 18/32 (56%) | developmental-stage | ADDED | `gestational-womb-stimulus` gives the entity a womb to gestate in and... |
 | headless-host-operations | 47/51 (92%) | headless-host-operations | ADDED | KAINE's docs cover installing the software and bringing up services. ... |
@@ -26,6 +25,7 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-17 | portability-tiers |
 | 2026-09-17 | condition-language-organ |
 | 2026-09-17 | performance-test-coverage |
 | 2026-09-17 | nexus-privacy-hardening |
