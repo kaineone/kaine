@@ -130,6 +130,8 @@ write_root_line() {
     printf '%s\n' "$2" | sudo tee "$1" >/dev/null
 }
 
+# shellcheck disable=SC2317
+# Invoked indirectly via EXIT trap; shellcheck's reachability heuristic misses it.
 cleanup() {
     if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
         kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true

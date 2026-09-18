@@ -61,6 +61,14 @@ docker compose -f compose/redis.yml down -v
 docker compose -f compose/qdrant.yml down -v
 ```
 
+### Dedicated headless host
+
+For turning a Linux machine into an unattended 24/7 appliance — persistent
+performance profile, verified remote access before the headless switch, swap +
+Podman + linger reboot survival, and tailnet dashboard reachability without
+widening binds — see [Dedicated headless host](deployment-headless-host.md).
+The procedure is host-generic; a Jetson Orin Nano Super worked example is included.
+
 ---
 
 ## Nexus dashboard tour
