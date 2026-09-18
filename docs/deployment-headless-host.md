@@ -17,6 +17,13 @@ clearly-labelled **worked example** callouts, and everything else is general.
 before step 6 (switching to a headless boot target). That is the one mistake in this
 runbook that can cost you physical access to the machine.
 
+**Automation.** `scripts/prepare-headless-host.sh` automates steps 1–7 below with a
+single sudo prompt. It is idempotent, reports every step as OK / SKIPPED / FAILED, and
+refuses phase 2 unless the session is over SSH and the ssh unit is both enabled and
+active. Use `--dry-run` to preview every action, `--phase1` for the safe preparation
+steps, `--phase2` for the headless switch, `--all` for both, and `--serve-nexus` to
+opt in to `tailscale serve --bg 8088` for dashboard reachability.
+
 You need before starting:
 
 - sudo on the host, with the KAINE repo present (`scripts/install.sh`, `quadlet/`,

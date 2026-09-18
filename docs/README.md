@@ -41,6 +41,7 @@ safety net before it starts — never neither.
 | [Architecture](architecture.md) | The whole system: PP + GWT, the cognitive cycle, the bus, Syneidesis, the safety model, the JAX stack, the module roster |
 | [Getting Started](getting-started.md) | Prerequisites, install, optional extras, supporting services, supervised first boot |
 | [Operations](operations.md) | Running it day-2: the Nexus dashboard, [Spot supervisor](operations.md#module-supervisor-spot), [entity decommission](operations.md#entity-decommission), [research participation](operations.md#research-participation), enabling modules, monitoring predictive signals, troubleshooting |
+| [Dedicated headless host](deployment-headless-host.md) | Turning a Linux machine into a 24/7 appliance: persistent performance profile, verified SSH before the headless switch, swap + Podman + linger reboot survival, and tailnet dashboard reachability without widening binds |
 | [Configuration Reference](configuration.md) | Every `config/kaine.toml` section and key, defaults, and the dependency extras |
 | [Tech Choices](tech-choices.md) | Every major dependency/decision and why (pymdp, DreamerV3, snnTorch, Qdrant, abliterated Qwen, …) and the licensing stance |
 | [Security & Privacy](security-and-privacy.md) | Zero-raw-persistence, encryption at rest, the safety gates, the abliteration welfare veto |
