@@ -27,6 +27,7 @@ This module is deliberately pure: stdlib + the shared atomic JSON writer only.
 It imports nothing from ``kaine.cycle`` or ``kaine.modules`` so the gate can be
 wired anywhere without an import cycle.
 """
+
 from __future__ import annotations
 
 import json
@@ -48,6 +49,55 @@ STAGES = (GESTATION, EMBODIED)
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def has_prior_lived_history(
+    state_root: Path | str = "state",
+    stage_path: Path | None = None,
+) -> bool:
+    """Detect whether a being has already lived on this fork.
+
+    A genuinely fresh entity has no stage file and no other durable lived-state
+    or preservation artifact. A being with any of the following is treated as
+    already-lived and defaults to ``embodied`` (never regressed into a womb):
+
+      - any fork snapshot under ``state/forks/``,
+      - any preservation bundle under ``state/preservation/``,
+      - a Phantasia world-model checkpoint,
+      - a Hypnos consolidation-divergence record,
+      - an operator-commanded perception desired-state.
+
+    The stage file itself is excluded: its absence is the signal that lets
+    :func:`resolve_boot_stage` apply the preserved-being invariant.
+    """
+    root = Path(state_root)
+    if not root.exists():
+        return False
+
+    def _any_child(path: Path) -> bool:
+        try:
+            return any(path.iterdir())
+        except OSError:
+            return False
+
+    indicators = [
+        root / "forks",
+        root / "preservation",
+        root / "phantasia" / "world_model.ckpt",
+        root / "hypnos" / "consolidation_divergence.json",
+        root / "perception" / "desired.json",
+    ]
+    stage_target = Path(stage_path) if stage_path else STAGE_PATH
+    excluded = {stage_target.resolve()}
+    for indicator in indicators:
+        try:
+            if indicator.is_dir() and _any_child(indicator):
+                return True
+            if indicator.is_file() and indicator.resolve() not in excluded:
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _coerce_stage(value: Any) -> str:
@@ -139,9 +189,7 @@ def resolve_boot_stage(
     return StageState(stage=GESTATION, gestation_started_at=now_iso or _now_iso())
 
 
-def advance_to_embodied(
-    state: StageState, *, now_iso: str | None = None
-) -> StageState:
+def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> StageState:
     """Return the state transitioned to ``embodied`` (the birth transition).
 
     Monotonic and one-shot: an already-``embodied`` state is returned UNCHANGED

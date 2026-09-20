@@ -152,7 +152,8 @@ class StreamSubscriberObserver(BaseObserver):
         """Hook called once when the observer loop exits. Subclasses override for final flushes."""
 
     @abstractmethod
-    async def handle(self, stream: str, entry_id: str, event: Event) -> None: ...
+    async def handle(self, stream: str, entry_id: str, event: Event) -> None:
+        """Process one event from a subscribed stream."""
 
 
 class WorkspaceSubscriberObserver(BaseObserver):

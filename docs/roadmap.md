@@ -14,7 +14,7 @@
 | docs-base-thesis-reframe | 13/15 (86%) | documentation-consistency | ADDED | The project has been reconfigured to its **base-thesis form** as the ... |
 | perception-drives-salience | 9/11 (81%) | topos-perception | MODIFIED | The base thesis is that perception enters the workspace **as predicti... |
 | attention-driven-foveation | 13/18 (72%) | topos, topos-foveation | ADDED | Screen perception currently scales the whole screen to Topos's fixed ... |
-| developmental-maturation-gate | 18/32 (56%) | developmental-stage | ADDED | `gestational-womb-stimulus` gives the entity a womb to gestate in and... |
+| developmental-maturation-gate | 32/32 (100%) | developmental-stage | ADDED | `gestational-womb-stimulus` gives the entity a womb to gestate in and... |
 | headless-host-operations | 47/51 (92%) | headless-host-operations | ADDED | KAINE's docs cover installing the software and bringing up services. ... |
 | attention-driven-audition | 8/16 (50%) | audition, audition-predictive, auditory-perception | ADDED, MODIFIED | Hearing is currently **speech transcription for the language organ**,... |
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |

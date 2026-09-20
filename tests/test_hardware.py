@@ -7,7 +7,6 @@ import types
 
 import pytest
 
-import kaine.hardware as _hw
 from kaine.hardware import (
     describe_host,
     detect_device,
@@ -21,6 +20,7 @@ _DEVICES = {"cuda", "xpu", "mps", "cpu"}
 # ---------------------------------------------------------------------------
 # Existing tests (unchanged)
 # ---------------------------------------------------------------------------
+
 
 def test_detect_device_returns_known_value():
     assert detect_device() in _DEVICES
@@ -99,6 +99,7 @@ def test_describe_host_consistency_with_detect_device():
 def _has_cuda() -> bool:
     try:
         import torch
+
         return bool(torch.cuda.is_available())
     except Exception:
         return False
@@ -107,6 +108,7 @@ def _has_cuda() -> bool:
 # ---------------------------------------------------------------------------
 # Fake-torch helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_torch(
     *,
@@ -165,13 +167,14 @@ def _make_fake_torch(
 # XPU tests
 # ---------------------------------------------------------------------------
 
+
 class TestXpuPresent:
     """XPU available, CUDA unavailable."""
 
     @pytest.fixture(autouse=True)
     def patch_torch(self, monkeypatch):
         fake = _make_fake_torch(xpu_available=True, xpu_count=2)
-        monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+        monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
         monkeypatch.delenv("KAINE_FORCE_DEVICE", raising=False)
 
     def test_detect_device_is_xpu(self):
@@ -226,7 +229,7 @@ class TestXpuNotPresent:
     @pytest.fixture(autouse=True)
     def patch_torch(self, monkeypatch):
         fake = _make_fake_torch(xpu_available=False, xpu_count=0)
-        monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+        monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
         monkeypatch.delenv("KAINE_FORCE_DEVICE", raising=False)
 
     def test_detect_device_is_cpu(self):
@@ -256,11 +259,12 @@ class TestXpuRaisesGracefully:
             raise RuntimeError("simulated XPU driver error")
 
         fake.xpu.is_available = _raise
-        monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+        monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
         monkeypatch.delenv("KAINE_FORCE_DEVICE", raising=False)
 
     def test_xpu_device_count_is_zero(self):
         from kaine.hardware import _xpu_device_count
+
         assert _xpu_device_count() == 0
 
     def test_detect_device_does_not_crash(self):
@@ -277,6 +281,7 @@ class TestXpuRaisesGracefully:
 # ROCm tests
 # ---------------------------------------------------------------------------
 
+
 class TestRocmPresent:
     """AMD ROCm: cuda_available True, hip_version set, device strings still 'cuda'."""
 
@@ -288,7 +293,7 @@ class TestRocmPresent:
             cuda_names=["AMD Radeon RX 7900 XTX"],
             hip_version="6.2.41134",
         )
-        monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+        monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
         monkeypatch.delenv("KAINE_FORCE_DEVICE", raising=False)
 
     def test_detect_device_is_cuda_for_rocm(self):
@@ -367,7 +372,7 @@ class TestDescribeHostAllKeys:
         self, monkeypatch, fake_kwargs, expected_backend
     ):
         fake = _make_fake_torch(**fake_kwargs)
-        monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+        monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
         monkeypatch.delenv("KAINE_FORCE_DEVICE", raising=False)
 
         info = describe_host()
@@ -384,7 +389,7 @@ class TestDescribeHostAllKeys:
         json.dumps(info, default=str)
 
     def test_no_torch_still_has_all_keys(self, monkeypatch):
-        monkeypatch.setattr(_hw, "_try_torch", lambda: None)
+        monkeypatch.setattr("kaine.hardware._try_torch", lambda: None)
         monkeypatch.delenv("KAINE_FORCE_DEVICE", raising=False)
 
         info = describe_host()
@@ -403,15 +408,18 @@ class TestDescribeHostAllKeys:
 # available_xpu_devices helper
 # ---------------------------------------------------------------------------
 
+
 def test_available_xpu_devices_empty_when_no_xpu(monkeypatch):
     from kaine.hardware import available_xpu_devices
+
     fake = _make_fake_torch(xpu_available=False, xpu_count=0)
-    monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+    monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
     assert available_xpu_devices() == []
 
 
 def test_available_xpu_devices_returns_indexed_strings(monkeypatch):
     from kaine.hardware import available_xpu_devices
+
     fake = _make_fake_torch(xpu_available=True, xpu_count=3)
-    monkeypatch.setattr(_hw, "_try_torch", lambda: fake)
+    monkeypatch.setattr("kaine.hardware._try_torch", lambda: fake)
     assert available_xpu_devices() == ["xpu:0", "xpu:1", "xpu:2"]

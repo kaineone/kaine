@@ -116,12 +116,9 @@ class Hypnos(BaseModule):
         self._chronos_resetters = list(chronos_resetters or [])
         self._trainer: Trainer = trainer or FakeTrainer()
         self._organ_window_runner = organ_window_runner
-        self._voice_config: VoiceAlignmentConfig = (
-            voice_alignment_config
-            or VoiceAlignmentConfig(
-                intent_log_path=Path("state/lingua/intent_expression.jsonl"),
-                adapter_output_dir=Path("state/hypnos/adapters"),
-            )
+        self._voice_config: VoiceAlignmentConfig = voice_alignment_config or VoiceAlignmentConfig(
+            intent_log_path=Path("state/lingua/intent_expression.jsonl"),
+            adapter_output_dir=Path("state/hypnos/adapters"),
         )
         self._clock = entity_clock or EntityClock()
         self._scheduler = scheduler or RestScheduler(
@@ -196,6 +193,12 @@ class Hypnos(BaseModule):
         return self._scheduler
 
     @property
+    def sleep_count(self) -> int:
+        """Read-only seam for the maturation gate: number of completed sleep
+        cycles since boot. The gate only reads this value; it never writes it."""
+        return self._sleep_count
+
+    @property
     def trainer(self) -> Trainer:
         return self._trainer
 
@@ -219,9 +222,7 @@ class Hypnos(BaseModule):
         # promise). Due-ness itself is judged on the scheduler's (subjective)
         # clock; this loop only polls often enough to notice.
         self._tasks.append(
-            asyncio.create_task(
-                self._maintenance_poll_loop(), name="hypnos-maintenance-poll"
-            )
+            asyncio.create_task(self._maintenance_poll_loop(), name="hypnos-maintenance-poll")
         )
         # Ignition-audit cursors: seed to the current stream tails (mirrors the
         # _soma_cursor seeding below) — each sleep then reads everything new
@@ -237,9 +238,7 @@ class Hypnos(BaseModule):
                     tail = tail.decode()
                 self._audit_cursors[stream] = tail
         try:
-            latest_ws = await self._bus.client.xrevrange(
-                "workspace.broadcast", count=1
-            )
+            latest_ws = await self._bus.client.xrevrange("workspace.broadcast", count=1)
         except Exception:
             latest_ws = []
         if latest_ws:
@@ -259,9 +258,7 @@ class Hypnos(BaseModule):
                     entry_id = entry_id.decode()
                 self._soma_cursor = entry_id
             self._tasks.append(
-                asyncio.create_task(
-                    self._soma_consumer_loop(), name="hypnos-soma-consumer"
-                )
+                asyncio.create_task(self._soma_consumer_loop(), name="hypnos-soma-consumer")
             )
 
     async def _soma_consumer_loop(self) -> None:
@@ -296,14 +293,12 @@ class Hypnos(BaseModule):
                         self._soma_cursor = last_scanned
                     if entries:
                         for _, event in entries:
-                            fatigue_trigger = (
-                                event.type == "soma.fatigue"
-                                and event.payload.get("crossed", False)
+                            fatigue_trigger = event.type == "soma.fatigue" and event.payload.get(
+                                "crossed", False
                             )
                             regulation_trigger = (
                                 event.type == "soma.regulation"
-                                and event.payload.get("action")
-                                == "request_maintenance"
+                                and event.payload.get("action") == "request_maintenance"
                             )
                             if not (fatigue_trigger or regulation_trigger):
                                 continue
@@ -322,10 +317,7 @@ class Hypnos(BaseModule):
                             # trigger while one sleep is starting cannot
                             # double-fire and mis-annotate the running
                             # sleep's summary via the loser branch.
-                            if (
-                                not self._sleep_lock.locked()
-                                and not self._sleep_pending
-                            ):
+                            if not self._sleep_lock.locked() and not self._sleep_pending:
                                 self._sleep_pending = True
                                 self._sleep_task = asyncio.create_task(
                                     self._fatigue_triggered_enter_sleep(),
@@ -391,9 +383,7 @@ class Hypnos(BaseModule):
             # this, re-arming the guard for the next window.
             if self._pre_sleep_locus is None:
                 desired = read_desired(path=self._perception_desired_path)
-                self._pre_sleep_locus = _coerce_locus(
-                    getattr(desired, "locus", "physical")
-                )
+                self._pre_sleep_locus = _coerce_locus(getattr(desired, "locus", "physical"))
         except Exception:
             # Honest degradation: nothing remembered → restore falls back to
             # 'physical' (the old behavior).
@@ -401,6 +391,7 @@ class Hypnos(BaseModule):
             log.debug("hypnos: could not read pre-sleep locus", exc_info=True)
         try:
             from kaine.perception_state import write_desired_locus
+
             write_desired_locus("off", path=self._perception_desired_path)
             log.debug("hypnos: perception locus -> off (replay window)")
         except Exception:
@@ -414,9 +405,7 @@ class Hypnos(BaseModule):
             try:
                 self._playlist_clock.pause()
             except Exception:
-                log.warning(
-                    "hypnos: playlist clock pause failed", exc_info=True
-                )
+                log.warning("hypnos: playlist clock pause failed", exc_info=True)
 
     def _restore_perception(self) -> None:
         """Restore the remembered pre-sleep locus after the replay window ends
@@ -428,6 +417,7 @@ class Hypnos(BaseModule):
         self._pre_sleep_locus = None
         try:
             from kaine.perception_state import write_desired_locus
+
             write_desired_locus(locus, path=self._perception_desired_path)
             log.debug("hypnos: perception locus -> %s (replay window closed)", locus)
         except Exception:
@@ -441,9 +431,7 @@ class Hypnos(BaseModule):
             try:
                 self._playlist_clock.resume()
             except Exception:
-                log.warning(
-                    "hypnos: playlist clock resume failed", exc_info=True
-                )
+                log.warning("hypnos: playlist clock resume failed", exc_info=True)
 
     async def _reinject_association(self, scenario: dict[str, Any]) -> None:
         """Re-inject a phase-3 cross-period association into the workspace.
@@ -530,7 +518,9 @@ class Hypnos(BaseModule):
             "phases": [asdict(r) for r in phase_results],
             "voice_alignment": {
                 "accepted": voice_result.accepted,
-                "adapter_path": str(voice_result.adapter_path) if voice_result.adapter_path else None,
+                "adapter_path": str(voice_result.adapter_path)
+                if voice_result.adapter_path
+                else None,
                 "capability_loss": voice_result.capability_loss,
                 "reason": voice_result.reason,
                 "samples_used": voice_result.samples_used,
@@ -555,9 +545,7 @@ class Hypnos(BaseModule):
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
         all_succeeded = all(r.success for r in phase_results)
-        salience = (
-            self._baseline_salience if all_succeeded else self._alert_salience
-        )
+        salience = self._baseline_salience if all_succeeded else self._alert_salience
         # Sleep-time ignition audit (change sleep-ignition-audit): runs
         # unconditionally on EVERY sleep, before the completed publish, so the
         # content-free payload is emitted on hypnos.out AND merged into the
@@ -566,9 +554,7 @@ class Hypnos(BaseModule):
         try:
             summary["ignition_audit"] = await self._run_ignition_audit()
         except Exception:
-            log.warning(
-                "hypnos: ignition audit step failed (continuing)", exc_info=True
-            )
+            log.warning("hypnos: ignition audit step failed (continuing)", exc_info=True)
         # Publishing hypnos.sleep.completed causes Soma to reset its
         # FatigueAccumulator (soma._hypnos_event_loop handles this event).
         await self.publish("hypnos.sleep.completed", summary, salience=salience)
@@ -653,9 +639,7 @@ class Hypnos(BaseModule):
             broadcasts: list[dict[str, Any]] = []
             cursor = self._broadcast_cursor
             while True:
-                entries, last_scanned = await self._bus.read_workspace_entries(
-                    cursor, count=64
-                )
+                entries, last_scanned = await self._bus.read_workspace_entries(cursor, count=64)
                 if last_scanned:
                     cursor = last_scanned
                 if not entries:
@@ -672,9 +656,7 @@ class Hypnos(BaseModule):
             )
             payload = report.as_payload()
         except Exception as exc:
-            log.warning(
-                "hypnos: ignition audit failed (continuing)", exc_info=True
-            )
+            log.warning("hypnos: ignition audit failed (continuing)", exc_info=True)
             payload = {
                 "sleep_index": self._sleep_count,
                 "realized_total": 0,
@@ -728,9 +710,7 @@ class Hypnos(BaseModule):
                 max_pairs=self._voice_config.max_samples,
             )
         except Exception:
-            log.warning(
-                "consolidation divergence: pair build failed", exc_info=True
-            )
+            log.warning("consolidation divergence: pair build failed", exc_info=True)
             pairs, scanned, usable = [], 0, 0
         rate = usable / max(1, scanned)
         magnitude, embedder_kind = await consolidation_magnitude(
@@ -801,8 +781,7 @@ class Hypnos(BaseModule):
             )
         if not operator_approved():
             skip_reason = (
-                "operator approval not granted "
-                "(set KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1)"
+                "operator approval not granted (set KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1)"
             )
             log.warning("voice_alignment skipped: %s", skip_reason)
             voice_result = TrainingResult(
@@ -933,7 +912,6 @@ class Hypnos(BaseModule):
             value = state["last_sleep_at"]
             self._last_sleep_at = None if value is None else float(value)
 
-
     async def _run_pipeline(self) -> dict[str, Any]:
         """M2 — guarantee ``hypnos.sleep.completed`` is published.
 
@@ -956,9 +934,7 @@ class Hypnos(BaseModule):
                     salience=self._baseline_salience,
                 )
             except Exception:
-                log.exception(
-                    "hypnos: aborted-sleep completed publish also failed"
-                )
+                log.exception("hypnos: aborted-sleep completed publish also failed")
             raise
 
     async def _fatigue_triggered_enter_sleep(self) -> None:

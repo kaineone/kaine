@@ -13,9 +13,9 @@ import asyncio
 
 import pytest
 
+import kaine.evaluation.attribution as attr_mod
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.evaluation.attribution import AttributionRecorder
 from kaine.evaluation.trajectory import TrajectoryRecorder
 
 
@@ -105,7 +105,7 @@ async def test_attribution_tallies_sources_and_flushes_on_stop():
         ("3-0", _snapshot(3, ["soma", "nous"])),
     ]
     sink = FakeSink()
-    rec = AttributionRecorder(FakeWorkspaceBus(broadcasts), sink)
+    rec = attr_mod.AttributionRecorder(FakeWorkspaceBus(broadcasts), sink)
     await rec.start()
     for _ in range(200):
         await asyncio.sleep(0.01)
@@ -261,7 +261,7 @@ async def test_trajectory_filters_content_from_selected_entries():
 @pytest.mark.asyncio
 async def test_attribution_stop_while_idle_is_prompt_and_flushless():
     sink = FakeSink()
-    rec = AttributionRecorder(IdleWorkspaceBus(), sink)
+    rec = attr_mod.AttributionRecorder(IdleWorkspaceBus(), sink)
     await rec.start()
     await asyncio.sleep(0.02)
     # Must stop promptly (guards the 5s-cancel regression) and flush nothing.
@@ -274,7 +274,7 @@ async def test_attribution_stop_while_idle_is_prompt_and_flushless():
 async def test_attribution_skips_non_dict_selected_items():
     broadcasts = [("1-0", {"selected": [None, "not-a-dict", {"source": "soma"}]})]
     sink = FakeSink()
-    rec = AttributionRecorder(FakeWorkspaceBus(broadcasts), sink)
+    rec = attr_mod.AttributionRecorder(FakeWorkspaceBus(broadcasts), sink)
     await rec.start()
     for _ in range(200):
         await asyncio.sleep(0.01)
@@ -288,8 +288,6 @@ async def test_attribution_skips_non_dict_selected_items():
 async def test_attribution_flushes_non_partial_row_on_hour_boundary(monkeypatch):
     from datetime import datetime, timezone
 
-    import kaine.evaluation.attribution as attr_mod
-
     times = [
         datetime(2026, 6, 3, 10, 30, tzinfo=timezone.utc),
         datetime(2026, 6, 3, 11, 5, tzinfo=timezone.utc),
@@ -301,9 +299,9 @@ async def test_attribution_flushes_non_partial_row_on_hour_boundary(monkeypatch)
         def now(tz=None):
             return times[idx[0]]
 
-    monkeypatch.setattr(attr_mod, "datetime", FakeDateTime)
+    monkeypatch.setattr("kaine.evaluation.attribution.datetime", FakeDateTime)
     sink = FakeSink()
-    rec = AttributionRecorder(FakeWorkspaceBus([]), sink)
+    rec = attr_mod.AttributionRecorder(FakeWorkspaceBus([]), sink)
 
     await rec.handle("1-0", {"selected": [{"source": "soma"}]})  # hour A
     assert rec.current_hour_counts == {"soma": 1}
