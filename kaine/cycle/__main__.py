@@ -695,6 +695,8 @@ async def _boot_and_run(
             from kaine import perception_state as _ps
 
             _ps.write_desired_locus("virtual", locked=True, locked_by="gestation")
+            _ps.write_desired_audio(True)
+            _ps.write_desired_video(True)
             log.info("gestation: pinned locus to virtual womb (locked by gestation)")
         else:
             log.warning(
