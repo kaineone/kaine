@@ -250,8 +250,6 @@ class Topos(BaseModule):
         self._preview_jpeg: Optional[bytes] = None
 
     async def initialize(self) -> None:
-        import asyncio
-
         await self._encoder.load()
 
         if self._forward_prediction and self._forward_model is None:
@@ -603,8 +601,6 @@ class Topos(BaseModule):
 
     async def _hypnos_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""
-        import asyncio
-
         try:
             while not self._stopped.is_set():
                 try:

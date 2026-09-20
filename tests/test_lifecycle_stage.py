@@ -5,6 +5,7 @@
 
 Pure file-backed state; no entity is booted.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -80,3 +81,41 @@ def test_no_path_returns_embodied_to_gestation() -> None:
 def test_roundtrip_dict() -> None:
     s = st.StageState(stage=st.GESTATION, gestation_started_at="t0", born_at=None)
     assert st.StageState.from_dict(s.to_dict()) == s
+
+
+# --- prior-lived-history detection (W1, boot invariant) ---------------------
+
+
+def test_has_prior_lived_history_false_for_fresh_state(tmp_path: Path) -> None:
+    assert st.has_prior_lived_history(state_root=tmp_path) is False
+
+
+def test_has_prior_lived_history_true_for_fork(tmp_path: Path) -> None:
+    (tmp_path / "forks" / "abc123").mkdir(parents=True)
+    (tmp_path / "forks" / "abc123" / "snapshot.json").write_text("{}")
+    assert st.has_prior_lived_history(state_root=tmp_path) is True
+
+
+def test_has_prior_lived_history_true_for_preservation(tmp_path: Path) -> None:
+    (tmp_path / "preservation").mkdir(parents=True)
+    (tmp_path / "preservation" / "bundle.json").write_text("{}")
+    assert st.has_prior_lived_history(state_root=tmp_path) is True
+
+
+def test_has_prior_lived_history_true_for_phantasia_checkpoint(tmp_path: Path) -> None:
+    (tmp_path / "phantasia").mkdir(parents=True)
+    (tmp_path / "phantasia" / "world_model.ckpt").write_text("data")
+    assert st.has_prior_lived_history(state_root=tmp_path) is True
+
+
+def test_has_prior_lived_history_true_for_perception_desired(tmp_path: Path) -> None:
+    (tmp_path / "perception").mkdir(parents=True)
+    (tmp_path / "perception" / "desired.json").write_text("{}")
+    assert st.has_prior_lived_history(state_root=tmp_path) is True
+
+
+def test_has_prior_lived_history_excludes_stage_file(tmp_path: Path) -> None:
+    stage = tmp_path / "lifecycle" / "stage.json"
+    stage.parent.mkdir(parents=True)
+    stage.write_text('{"stage": "gestation"}')
+    assert st.has_prior_lived_history(state_root=tmp_path, stage_path=stage) is False
