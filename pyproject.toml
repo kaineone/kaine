@@ -41,7 +41,7 @@ test = [
     # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
     # Enforced by `lint-imports` (pre-commit, a dedicated CI job, and
     # tests/test_import_boundary_contracts.py). See docs/architecture-boundaries.md.
-    "import-linter>=2",
+    "import-linter>=2.15",
 ]
 # Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
 # Required only if [audition].capture_enabled = true. Lazy-imported.
