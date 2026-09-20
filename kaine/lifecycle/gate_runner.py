@@ -313,7 +313,7 @@ class MaturationGateRunner:
                 await asyncio.wait_for(stop_event.wait(), timeout=cadence)
             except asyncio.TimeoutError:
                 # Expected: cadence elapsed, evaluate again.
-                pass
+                continue
 
     async def shutdown(self) -> None:
         if self._task is not None and not self._task.done():
@@ -322,4 +322,4 @@ class MaturationGateRunner:
                 await self._task
             except asyncio.CancelledError:
                 # Expected: we just cancelled the task.
-                pass
+                return
