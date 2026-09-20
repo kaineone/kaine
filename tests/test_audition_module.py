@@ -711,7 +711,7 @@ async def test_acoustic_processing_yields_event_loop(bus: AsyncBus):
 
         marker = asyncio.create_task(_marker())
         await audition.process_audio(_tone(300), sample_rate=16000)
-        await marker
+        _ = await marker
         assert loop_progressed
     finally:
         await audition.shutdown()
