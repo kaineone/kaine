@@ -41,6 +41,7 @@ a fake up as learned state. An incompatible checkpoint fails closed at
 initialize (never a silent discard-and-reinit). The trajectory buffer is
 excluded regardless.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -116,9 +117,7 @@ class Phantasia(BaseModule):
         if world_model is not None:
             self._wm = world_model
         else:
-            self._wm = load_world_model(
-                backend, self._obs_dim, **(world_model_kwargs or {})
-            )
+            self._wm = load_world_model(backend, self._obs_dim, **(world_model_kwargs or {}))
 
         # Opt-in learned-weight persistence. Honesty guard: requires a world
         # model with REAL learned parameters to export — the fake EMA stub
@@ -130,7 +129,7 @@ class Phantasia(BaseModule):
         ):
             raise ValueError(
                 "persist_weights=true requires a world model with real learned "
-                "parameters (backend = \"dreamerv3\"); the "
+                'parameters (backend = "dreamerv3"); the '
                 f"{self._backend!r} backend has nothing honest to persist."
             )
 
@@ -150,6 +149,11 @@ class Phantasia(BaseModule):
             str(checkpoint_path) if self._persist_weights else None
         )
 
+        # Successful sleep-training passes. Read-only seam for the maturation
+        # gate; incremented only by _maybe_train when a real, non-aborted pass
+        # completes. The gate reads this; it never writes it.
+        self._successful_training_passes: int = 0
+
     # ------------------------------------------------------------------
     # Accessors (tests / orchestration)
     # ------------------------------------------------------------------
@@ -165,6 +169,12 @@ class Phantasia(BaseModule):
     @property
     def window_active(self) -> bool:
         return self._window_active
+
+    @property
+    def successful_training_passes(self) -> int:
+        """Read-only seam for the maturation gate: count of completed, non-aborted
+        sleep-training passes. The gate only reads this value; it never writes it."""
+        return self._successful_training_passes
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -190,9 +200,7 @@ class Phantasia(BaseModule):
                 self._peer_cursors[stream] = "0-0"
         await super().initialize()
         self._tasks.append(
-            asyncio.create_task(
-                self._peer_consumer_loop(), name=f"{self.name}-peer-consumer"
-            )
+            asyncio.create_task(self._peer_consumer_loop(), name=f"{self.name}-peer-consumer")
         )
 
     async def shutdown(self) -> None:
@@ -357,7 +365,7 @@ class Phantasia(BaseModule):
         # Seed the recurrent state from the recent trajectory so the imagined
         # rollout is grounded in lived experience rather than the zero state.
         self._wm.reset_state()
-        for obs in list(self._buffer)[-self._rollout_horizon:]:
+        for obs in list(self._buffer)[-self._rollout_horizon :]:
             self._wm.observe(obs)
 
         rollout = self._wm.imagine(self._rollout_horizon)
@@ -367,17 +375,16 @@ class Phantasia(BaseModule):
         # Summarise the imagined trajectory into compact numeric descriptors —
         # NOT raw sense data: per-step activation magnitude + overall drift.
         step_magnitudes = [
-            round(sum(abs(v) for v in step) / max(1, len(step)), 6)
-            for step in rollout
+            round(sum(abs(v) for v in step) / max(1, len(step)), 6) for step in rollout
         ]
-        drift = round(
-            sum(
-                abs(a - b)
-                for a, b in zip(rollout[0], rollout[-1])
+        drift = (
+            round(
+                sum(abs(a - b) for a, b in zip(rollout[0], rollout[-1])) / max(1, len(rollout[0])),
+                6,
             )
-            / max(1, len(rollout[0])),
-            6,
-        ) if len(rollout) > 1 else 0.0
+            if len(rollout) > 1
+            else 0.0
+        )
         peak = max(step_magnitudes) if step_magnitudes else 0.0
         salience = self._baseline_salience + min(1.0, peak) * (
             self._alert_salience - self._baseline_salience
@@ -412,6 +419,7 @@ class Phantasia(BaseModule):
         # Persist only after a real, successful pass — an aborted pass leaves
         # the previous checkpoint untouched (last-known-good).
         if outcome.steps > 0 and not outcome.aborted:
+            self._successful_training_passes += 1
             self._save_weights(reason="post-train")
         return outcome
 
@@ -511,9 +519,7 @@ class Phantasia(BaseModule):
         reloads the revived weights). Fails closed on an incompatible
         checkpoint — never silently discards or produces a mismatched model.
         """
-        if not (
-            hasattr(self._wm, "import_params") and hasattr(self._wm, "export_params")
-        ):
+        if not (hasattr(self._wm, "import_params") and hasattr(self._wm, "export_params")):
             raise RuntimeError(
                 "phantasia: revive carries world-model weights but the running "
                 f"backend {self._backend!r} has no learned parameters to load "

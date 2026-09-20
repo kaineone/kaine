@@ -834,5 +834,5 @@ async def test_forward_model_step_runs_in_thread(bus: AsyncBus):
 
     marker = asyncio.create_task(_marker())
     await topos.process_frame(None)
-    await marker
+    _ = await marker
     assert loop_progressed
