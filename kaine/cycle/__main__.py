@@ -30,6 +30,7 @@ import logging
 import os
 import signal
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ from kaine.boot import (
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
+from kaine.bus.schema import Event
 from kaine.cycle.affect_state import AffectStateProvider
 from kaine.cycle.control_state import read_control, unfreeze
 from kaine.cycle.engine import CognitiveCycle
@@ -59,7 +61,15 @@ from kaine.experiment import (
     write_manifest,
 )
 from kaine.hardware import tune_cpu_threads
+from kaine.lifecycle import stage as lifecycle_stage
+from kaine.lifecycle.gate_runner import MaturationGateRunner
 from kaine.lifecycle.manager import ForkManager
+from kaine.lifecycle.maturation_gate import (
+    LIFECYCLE_SOURCE,
+    STAGE_GESTATION_STARTED,
+    MaturationConfig,
+    gestation_started_payload,
+)
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
@@ -201,9 +211,7 @@ def _memory_source_factory(registry):
 
             cutoff = time.time() - float(older_than_seconds)
             try:
-                recalls = await mnemos.recall(
-                    "what happened earlier", k=20, collection="episodic"
-                )
+                recalls = await mnemos.recall("what happened earlier", k=20, collection="episodic")
             except Exception:
                 return None
             oldest = None
@@ -235,9 +243,7 @@ def _cognitive_query_client_factory(registry, eval_cfg):
     from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 
     mnemos = registry.get("mnemos")
-    client = OpenAIChatClient(
-        base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s
-    )
+    client = OpenAIChatClient(base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s)
     model = eval_cfg.chat_model_id
 
     class _StackQueryClient:
@@ -358,9 +364,7 @@ def _merge_qdrant_secret(
     if not targets:
         return
     secrets_doc = load_secrets_doc(Path(secrets_path) if secrets_path else None)
-    resolved = env.get("KAINE_QDRANT_API_KEY") or (
-        (secrets_doc.get("qdrant") or {}).get("api_key")
-    )
+    resolved = env.get("KAINE_QDRANT_API_KEY") or ((secrets_doc.get("qdrant") or {}).get("api_key"))
     if not resolved:
         return  # no empty injection — each module surfaces its own error
     for section, qdrant_cfg in targets:
@@ -408,9 +412,7 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
                         write_desired_audio(desired_snapshot[0])
                         write_desired_video(desired_snapshot[1])
                     except Exception:
-                        log.warning(
-                            "perception restore on resume failed", exc_info=True
-                        )
+                        log.warning("perception restore on resume failed", exc_info=True)
                     desired_snapshot = None
         except asyncio.CancelledError:
             raise
@@ -458,9 +460,7 @@ def _load_kaine_config(
 
         if profile_path("thesis_test").exists():
             resolved_profile = "thesis_test"
-    config = load_kaine_config(
-        target, OPERATOR_CONFIG_PATH, profile=resolved_profile
-    )
+    config = load_kaine_config(target, OPERATOR_CONFIG_PATH, profile=resolved_profile)
     _merge_qdrant_secret(config, secrets_path=secrets_path, env=env)
     return config
 
@@ -471,6 +471,8 @@ async def _write_runtime_state(
     *,
     supervision_mode: str | None = None,
     gate_checks: dict[str, bool] | None = None,
+    stage_state: lifecycle_stage.StageState | None = None,
+    staging_enabled: bool = False,
 ) -> None:
     RUNTIME_PATH.parent.mkdir(parents=True, exist_ok=True)
     control = read_control()
@@ -517,6 +519,14 @@ async def _write_runtime_state(
     }
     if gate_checks is not None:
         payload["gate_checks"] = dict(gate_checks)
+    # Developmental stage surface for Nexus left rail. Non-content operational
+    # metadata; omitted when staging is disabled so an ordinary boot is unchanged.
+    if staging_enabled and stage_state is not None:
+        payload["developmental_stage"] = {
+            "stage": stage_state.stage,
+            "gestation_started_at": stage_state.gestation_started_at,
+            "born_at": stage_state.born_at,
+        }
     # Per-run identity (RunContext) — non-content run metadata. Read via the
     # process-global accessor; inert (no fields added) when no run is set.
     try:
@@ -543,9 +553,7 @@ def _clear_runtime_state() -> None:
             log.warning("could not remove %s", RUNTIME_PATH, exc_info=True)
 
 
-def _gather_model_ids(
-    config: dict[str, Any], *, eval_chat_model_id: str | None
-) -> dict[str, str]:
+def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None) -> dict[str, str]:
     """Collect the run's model ids from the resolved config's DOCUMENTED model
     keys only.
 
@@ -597,12 +605,103 @@ def _resolve_seed(config: dict[str, Any]) -> int:
     return secrets.randbits(32)
 
 
+def _resolve_boot_stage(
+    config: dict[str, Any],
+) -> tuple[lifecycle_stage.StageState, bool, bool]:
+    """Resolve the developmental stage at boot.
+
+    Returns ``(stage_state, staging_enabled, is_fresh_gestation)``. When staging
+    is disabled the entity runs un-staged exactly as today and the stage file is
+    left untouched. When enabled, a fresh entity with no prior lived history
+    begins in ``gestation``; a being with prior lived history (or an existing
+    stage file) defaults to ``embodied`` and is never regressed into the womb.
+    ``is_fresh_gestation`` is true only when staging is enabled, no stage file
+    existed, and the resolved stage is ``gestation`` — the moment the womb first
+    begins.
+    """
+    ds_config = MaturationConfig.from_dict(config.get("developmental_stage"))
+    if not ds_config.enabled:
+        # Ship-inert: read any existing stage file so forks inherit, but do not
+        # create one and do not gate behaviour.
+        existing = lifecycle_stage.read_stage()
+        if existing is not None:
+            return existing, False, False
+        return lifecycle_stage.StageState(stage=lifecycle_stage.EMBODIED), False, False
+
+    existing = lifecycle_stage.read_stage()
+    if existing is not None:
+        return existing, True, False
+    prior = lifecycle_stage.has_prior_lived_history()
+    resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
+    # Persist the resolved stage so the gestation clock is anchored and forks
+    # inherit it verbatim.
+    lifecycle_stage.write_stage(resolved)
+    fresh = resolved.is_gestating
+    return resolved, True, fresh
+
+
+def _is_womb_feed_configured(config: dict[str, Any]) -> bool:
+    """True when the operator has configured a womb perception feed.
+
+    The womb feed mode is owned by ``gestational-womb-stimulus``; the
+    maturation gate only checks the configured mode and refuses to pin a
+    senseless locked locus when it is absent.
+    """
+    feed = config.get("perception_feed") or {}
+    return str(feed.get("mode", "off")).lower() == "womb"
+
+
+def _lifecycle_event(
+    type: str,
+    payload: dict[str, Any],
+    *,
+    salience: float = 0.5,
+) -> Event:
+    """Build a lifecycle-owned stage event (lands on ``lifecycle.out``)."""
+    return Event(
+        source=LIFECYCLE_SOURCE,
+        type=type,
+        payload=payload,
+        salience=salience,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
     gate_checks: dict[str, bool] | None = None,
 ) -> int:
     kaine_config = _load_kaine_config()
+
+    # Developmental stage resolution. Done early so gestation can gate locus and
+    # embodiment before any module opens. Ship-inert by default: a normal boot
+    # is completely unaffected.
+    stage_state, staging_enabled, fresh_gestation = _resolve_boot_stage(kaine_config)
+    if staging_enabled:
+        log.info(
+            "developmental stage: %s (staging enabled)",
+            stage_state.stage,
+        )
+    else:
+        log.debug("developmental staging disabled; running un-staged")
+
+    # Gestation locus pinning / no-stimulus safety. If a womb feed is configured,
+    # the entity is confined to the virtual womb with an honest gestation lock. If
+    # no womb feed is configured, we do NOT silently pin a senseless locked locus;
+    # instead we warn loudly and repeatedly (the gate loop will re-emit).
+    if staging_enabled and stage_state.is_gestating:
+        if _is_womb_feed_configured(kaine_config):
+            from kaine import perception_state as _ps
+
+            _ps.write_desired_locus("virtual", locked=True, locked_by="gestation")
+            log.info("gestation: pinned locus to virtual womb (locked by gestation)")
+        else:
+            log.warning(
+                "stage.gestation.no_stimulus: staging enabled but no womb feed "
+                "configured; the entity will not be confined to a senseless locus"
+            )
+
     # supervision_mode + (research-mode) gate_checks are evaluated ONCE in
     # main() — the authoritative, pre-event-loop gate — and threaded in here for
     # runtime.json (so Nexus can surface the boot mode and the four-condition
@@ -619,9 +718,9 @@ async def _boot_and_run(
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = (kaine_config.get("lingua") or {}).get(
-        "api_key"
-    ) or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    lingua_api_key = (kaine_config.get("lingua") or {}).get("api_key") or os.environ.get(
+        "KAINE_MODEL_SERVER_API_KEY"
+    )
     try:
         eval_cfg = load_evaluation_config(
             lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
@@ -653,9 +752,7 @@ async def _boot_and_run(
         seed=seed,
         started_at=datetime.now(timezone.utc).isoformat(),
         config=kaine_config,
-        model_ids=_gather_model_ids(
-            kaine_config, eval_chat_model_id=eval_cfg.chat_model_id
-        ),
+        model_ids=_gather_model_ids(kaine_config, eval_chat_model_id=eval_cfg.chat_model_id),
         version=_kaine_version,
         # Reproducible perception-feed covariate — gathered at the boot layer
         # (allowed to touch kaine.modules) and passed in as data.
@@ -690,9 +787,7 @@ async def _boot_and_run(
             log.info("gpu-preflight: %s", line)
         if not pf.ok:
             sys.stderr.write(
-                "Refusing to boot KAINE cycle: insufficient GPU headroom.\n"
-                + pf.message
-                + "\n"
+                "Refusing to boot KAINE cycle: insufficient GPU headroom.\n" + pf.message + "\n"
             )
             return 4
 
@@ -714,8 +809,7 @@ async def _boot_and_run(
             gate = await verify_organ_generates(
                 lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1"),
                 str(lingua_cfg.get("model_id") or ""),
-                api_key=lingua_cfg.get("api_key")
-                or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+                api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
             )
             log.info("organ-gate: %s", gate.detail)
             if not gate.ok:
@@ -737,6 +831,23 @@ async def _boot_and_run(
     bus = AsyncBus(bus_config)
     await bus.audit()
 
+    # Emit the first-gestation event now that the bus exists. This is the only
+    # lifecycle event that fires at boot; the gate loop emits the rest on a
+    # cadence once modules are up.
+    if fresh_gestation:
+        try:
+            await bus.publish(
+                _lifecycle_event(
+                    STAGE_GESTATION_STARTED,
+                    gestation_started_payload(
+                        gestation_started_at=stage_state.gestation_started_at
+                    ),
+                    salience=0.6,
+                )
+            )
+        except Exception:
+            log.warning("could not publish stage.gestation.started", exc_info=True)
+
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
     # in this function's scope: it is never published to the bus, written to
@@ -747,12 +858,24 @@ async def _boot_and_run(
 
     registry = build_registry(bus, kaine_config, intent_secret=intent_secret)
     if not len(registry):
-        log.warning(
-            "no modules enabled in [modules]; cycle will run but never collect events"
-        )
+        log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
     for module in list(registry.all_modules()):
         await module.initialize()
+
+    # Developmental maturation gate. Constructed after modules exist so it can
+    # read Hypnos/Phantasia/Mundus signals; started as a background task once
+    # the runtime loop is about to run. Ship-inert when staging is disabled.
+    ds_config = MaturationConfig.from_dict(kaine_config.get("developmental_stage"))
+    gate_runner = MaturationGateRunner(
+        bus=bus,
+        config=ds_config,
+        registry=registry,
+        entity_clock=getattr(registry, "entity_clock", None),
+        stage_state=stage_state,
+        staging_enabled=staging_enabled,
+        womb_feed_configured=_is_womb_feed_configured(kaine_config),
+    )
 
     cycle_cfg = kaine_config.get("cycle") or {}
     syn_cfg = kaine_config.get("syneidesis") or {}
@@ -820,9 +943,7 @@ async def _boot_and_run(
         # Refractory timing reads the shared subjective clock.
         from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
-        _report_clock = (
-            registry.entity_clock.now if registry.entity_clock is not None else None
-        )
+        _report_clock = registry.entity_clock.now if registry.entity_clock is not None else None
         # Interruptible utterances (PR #81) are opt-in: an absent
         # [volition].interrupt_threshold keeps await-to-completion; a set
         # value must sit strictly above the report bar (enforced by the
@@ -837,22 +958,16 @@ async def _boot_and_run(
             policy=SelfInitiatedReportPolicy(
                 report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
                 think_threshold=float(volition_cfg.get("think_threshold", 0.45)),
-                interrupt_threshold=(
-                    float(_interrupt_raw) if _interrupt_raw is not None else None
-                ),
+                interrupt_threshold=(float(_interrupt_raw) if _interrupt_raw is not None else None),
                 speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
                 think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
-                sig_expiry_s=(
-                    float(_sig_expiry_raw) if _sig_expiry_raw is not None else None
-                ),
+                sig_expiry_s=(float(_sig_expiry_raw) if _sig_expiry_raw is not None else None),
                 clock=_report_clock,
             ),
             signer=intent_signer,
         )
     elif drive_initiative:
-        volition = Volition(
-            policy=DriveBiasedActionSelectionPolicy(), signer=intent_signer
-        )
+        volition = Volition(policy=DriveBiasedActionSelectionPolicy(), signer=intent_signer)
     else:
         volition = Volition(signer=intent_signer)
     cycle = CognitiveCycle(
@@ -934,16 +1049,19 @@ async def _boot_and_run(
         return SIMPLE_FACTORIES[name](bus, section)
 
     await _write_runtime_state(
-        cycle, registry, supervision_mode=supervision_mode, gate_checks=gate_checks
+        cycle,
+        registry,
+        supervision_mode=supervision_mode,
+        gate_checks=gate_checks,
+        stage_state=stage_state,
+        staging_enabled=staging_enabled,
     )
 
     # Optional evaluation sidecar. NO core module imports kaine.evaluation;
     # the cycle entrypoint is the single coupling point. eval_cfg was loaded at
     # the top of _boot_and_run (fail-closed before any resource opened).
     sidecar: SidecarRegistry | None = None
-    research_active = (
-        research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
-    )
+    research_active = research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
     if eval_cfg.enabled or research_active:
         sidecar = SidecarRegistry(
             bus=bus,
@@ -1055,9 +1173,7 @@ async def _boot_and_run(
         WelfareProtectiveMonitor,
     )
 
-    preservation_cfg = PreservationConfig.from_section(
-        kaine_config.get("preservation") or {}
-    )
+    preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
     divergence_monitor = None
     welfare_monitor = None
     if preservation_cfg.divergence_monitor.enabled:
@@ -1098,22 +1214,21 @@ async def _boot_and_run(
         _freeze_watch_loop(cycle, stop_event), name="cycle.freeze_watch"
     )
     spot_task = (
-        asyncio.create_task(spot.run(stop_event), name="cycle.spot")
-        if spot_cfg.enabled
-        else None
+        asyncio.create_task(spot.run(stop_event), name="cycle.spot") if spot_cfg.enabled else None
     )
     divergence_task = (
-        asyncio.create_task(
-            divergence_monitor.run(stop_event), name="cycle.divergence_monitor"
-        )
+        asyncio.create_task(divergence_monitor.run(stop_event), name="cycle.divergence_monitor")
         if divergence_monitor is not None
         else None
     )
     welfare_task = (
-        asyncio.create_task(
-            welfare_monitor.run(stop_event), name="cycle.welfare_monitor"
-        )
+        asyncio.create_task(welfare_monitor.run(stop_event), name="cycle.welfare_monitor")
         if welfare_monitor is not None
+        else None
+    )
+    gate_task = (
+        asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
+        if staging_enabled and stage_state.is_gestating
         else None
     )
     try:
@@ -1125,6 +1240,8 @@ async def _boot_and_run(
                 registry,
                 supervision_mode=supervision_mode,
                 gate_checks=gate_checks,
+                stage_state=gate_runner.stage if staging_enabled else None,
+                staging_enabled=staging_enabled,
             )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=1.0)
@@ -1148,7 +1265,7 @@ async def _boot_and_run(
                 pass  # expected: we just cancelled it
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
-        for monitor_task in (divergence_task, welfare_task):
+        for monitor_task in (divergence_task, welfare_task, gate_task):
             if monitor_task is None:
                 continue
             if not monitor_task.done():
@@ -1158,9 +1275,7 @@ async def _boot_and_run(
             except asyncio.CancelledError:
                 pass  # expected: we just cancelled it
             except Exception:
-                log.warning(
-                    "%s raised during shutdown", monitor_task.get_name(), exc_info=True
-                )
+                log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
         if preview_server is not None:
             try:
                 await preview_server.stop()
@@ -1240,13 +1355,9 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
     # never starts with a net that cannot persist. The key-present half is
     # enforced separately by install_state_encryption (fail-closed at boot).
     encryption_enabled = bool(
-        ((config.get("security") or {}).get("state_encryption") or {}).get(
-            "enabled", False
-        )
+        ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
     )
-    encryption_satisfied = (
-        not preservation_cfg.require_encryption
-    ) or encryption_enabled
+    encryption_satisfied = (not preservation_cfg.require_encryption) or encryption_enabled
     return evaluate_research_gate(
         preservation_enabled=preservation_cfg.divergence_monitor.enabled,
         welfare_response_wired=preservation_cfg.welfare_response.enabled,
@@ -1285,9 +1396,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             config = _load_kaine_config(profile=known.profile)
     except Exception as exc:
-        sys.stderr.write(
-            f"Refusing to boot KAINE cycle: could not load config: {exc}\n"
-        )
+        sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
         return 1
 
     # The gate is evaluated EXACTLY ONCE here (sync, before the event loop, so
