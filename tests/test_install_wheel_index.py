@@ -318,7 +318,9 @@ __version__ = "2.14.0+cpu"
 
 
 class version:
+    cuda = None
     hip = None
+    xpu = None
 
 
 class cuda:
@@ -328,6 +330,44 @@ class cuda:
 
 
 class _mps:
+    @staticmethod
+    def is_built():
+        return False
+
+    @staticmethod
+    def is_available():
+        return False
+
+
+class backends:
+    mps = _mps()
+
+
+__all__ = ["__version__", "version", "cuda", "backends"]
+'''
+
+
+_FAKE_TORCH_CUDA = '''\
+__version__ = "2.14.0+cu126"
+
+
+class version:
+    cuda = "12.6"
+    hip = None
+    xpu = None
+
+
+class cuda:
+    @staticmethod
+    def is_available():
+        return False
+
+
+class _mps:
+    @staticmethod
+    def is_built():
+        return False
+
     @staticmethod
     def is_available():
         return False
@@ -406,6 +446,7 @@ def _run_install(
     xpu: bool = False,
     fake_torch: str | None = None,
     fake_torchaudio: str | None = None,
+    marker: dict | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess, str]:
     """Run ``bash scripts/install.sh <flags>`` or ``python scripts/install.py
@@ -434,8 +475,14 @@ def _run_install(
     * ``xpu=True`` writes succeeding sycl-ls and xpu-smi shims.
     * ``fake_torch="cpu"`` puts a fake CPU-flavor torch package at the front of
       PYTHONPATH so the installer's flavor probe reports a CPU wheel installed.
+    * ``fake_torch="cuda"`` puts a fake CUDA-build torch package at the front of
+      PYTHONPATH (``torch.cuda.is_available()`` is False, but ``torch.version.cuda``
+      is set) so the probe classifies by build, not runtime availability.
     * ``fake_torchaudio="<version>"`` puts a fake torchaudio distribution at the
       front of PYTHONPATH so the installer sees a stale torchaudio.
+    * ``marker`` is an optional dict written to
+      ``<venv>/kaine-accel-fallback.json`` before the installer runs, so the
+      GPU self-test fallback path can be exercised.
     * ``extra_env`` is merged into the test environment after the base copy,
       so callers can set ``KAINE_ROCM_VERSION``/``KAINE_ROCM_GFX`` etc.
 
@@ -504,6 +551,10 @@ def _run_install(
     _write_shim(venv_dir / "bin" / "pip3", pip_body)
     (venv_dir / "bin" / "activate").write_text("# no-op activate (test shim)\n", encoding="utf-8")
 
+    if marker is not None:
+        marker_file = venv_dir / "kaine-accel-fallback.json"
+        marker_file.write_text(json.dumps(marker), encoding="utf-8")
+
     env = os.environ.copy()
     if extra_env is not None:
         env.update(extra_env)
@@ -528,6 +579,8 @@ def _run_install(
     torch_dir.mkdir()
     if fake_torch == "cpu":
         (torch_dir / "__init__.py").write_text(_FAKE_TORCH_CPU, encoding="utf-8")
+    elif fake_torch == "cuda":
+        (torch_dir / "__init__.py").write_text(_FAKE_TORCH_CUDA, encoding="utf-8")
     else:
         (torch_dir / "__init__.py").write_text(
             "raise ImportError('torch not installed (test shim)')\n",

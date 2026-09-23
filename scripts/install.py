@@ -387,7 +387,7 @@ def _resolve_cuda_index(
     override: str | None,
     venv_python: Path | None = None,
     quiet: bool = False,
-) -> tuple[str, str | None, str | None, str | None, bool]:
+) -> tuple[str, str | None, str | None, str | None, bool, bool]:
     """Resolve the CUDA wheel index for this host via ``kaine.wheel_index``.
 
     Mirrors ``scripts/install.sh``: probes the host and applies the binding
@@ -398,6 +398,9 @@ def _resolve_cuda_index(
 
     When ``quiet`` is set, only warnings/errors are emitted (used by
     ``--print-index`` so stdout stays machine-readable).
+
+    Returns ``(index_url, torch_pin, torchvision_pin, torchaudio_pin,
+    selftest_required, torchaudio_unavailable)``.
     """
     resolver_args: list[str] = []
     if override is not None:
@@ -422,7 +425,7 @@ def _resolve_cuda_index(
                     "because the resolver failed; continuing with the legacy default.",
                     file=sys.stderr,
                 )
-        return NVIDIA_INDEX_URL, None, None, None, False
+        return NVIDIA_INDEX_URL, None, None, None, False, False
 
     url = data.get("index_url")
     if not url:
@@ -438,7 +441,7 @@ def _resolve_cuda_index(
                     "because the resolver returned no index_url; continuing with the legacy default.",
                     file=sys.stderr,
                 )
-        return NVIDIA_INDEX_URL, None, None, None, False
+        return NVIDIA_INDEX_URL, None, None, None, False, False
 
     variant = data.get("variant")
     if variant == "cpu":
@@ -448,14 +451,7 @@ def _resolve_cuda_index(
         )
 
     torch_pin, tv_pin, ta_pin, selftest = _extract_pins(data)
-
-    if research and data.get("torchaudio_unavailable"):
-        print(
-            f"install: --research needs torchaudio, but {url} publishes no "
-            f"torchaudio for torch {torch_pin}; choose a different --index-url or drop --research",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
+    ta_unavailable = bool(data.get("torchaudio_unavailable"))
 
     if not quiet:
         probes = data.get("probes") or {}
@@ -489,7 +485,7 @@ def _resolve_cuda_index(
             print(f"==> resolved torch {torch_pin} / torchvision {tv_pin} from {url}")
         print(json.dumps(data))
 
-    return url, torch_pin, tv_pin, ta_pin, selftest
+    return url, torch_pin, tv_pin, ta_pin, selftest, ta_unavailable
 
 
 def _rocm_version_from_file(path: Path) -> str | None:
@@ -616,7 +612,7 @@ def _resolve_rocm_index(
     venv_python: Path | None = None,
     quiet: bool = False,
     research: bool = False,
-) -> tuple[str, str | None, str | None, str | None, bool]:
+) -> tuple[str, str | None, str | None, str | None, bool, bool]:
     """Resolve the ROCm wheel index for this host via ``kaine.wheel_index``.
 
     Unlike CUDA, ROCm never falls back to a hardcoded index: if the version
@@ -656,6 +652,7 @@ def _resolve_rocm_index(
         raise SystemExit(1)
 
     torch_pin, tv_pin, ta_pin, selftest = _extract_pins(data)
+    ta_unavailable = bool(data.get("torchaudio_unavailable"))
     if not quiet:
         gfx_display = gfx if gfx is not None else "none detected"
         print(
@@ -668,7 +665,7 @@ def _resolve_rocm_index(
         if torch_pin:
             print(f"==> resolved torch {torch_pin} / torchvision {tv_pin} from {url}")
 
-    return url, torch_pin, tv_pin, ta_pin, selftest
+    return url, torch_pin, tv_pin, ta_pin, selftest, ta_unavailable
 
 
 def torch_index_url(
@@ -755,28 +752,24 @@ try:
     import torch
 except ImportError:
     print("absent"); sys.exit(0)
-try:
-    hip = getattr(getattr(torch, "version", None), "hip", None)
-    if hip is not None:
+ver = getattr(torch, "version", None)
+if ver is not None:
+    if getattr(ver, "hip", None) is not None:
         print("rocm"); sys.exit(0)
-except Exception:
-    pass
-try:
-    if torch.cuda.is_available():
+    if getattr(ver, "cuda", None) is not None:
         print("cuda"); sys.exit(0)
-except Exception:
-    pass
-try:
-    xpu = getattr(torch, "xpu", None)
-    if xpu is not None and xpu.is_available():
+    if getattr(ver, "xpu", None) is not None:
         print("xpu"); sys.exit(0)
-except Exception:
-    pass
-try:
-    if torch.backends.mps.is_available():
-        print("mps"); sys.exit(0)
-except Exception:
-    pass
+xpu_mod = getattr(torch, "xpu", None)
+if xpu_mod is not None and hasattr(xpu_mod, "_is_compiled") and xpu_mod._is_compiled():
+    print("xpu"); sys.exit(0)
+import platform
+if platform.system() == "Darwin" and platform.machine() == "arm64":
+    try:
+        if torch.backends.mps.is_built():
+            print("mps"); sys.exit(0)
+    except Exception:
+        pass
 print("cpu")
 """
 
@@ -791,6 +784,41 @@ def torch_installed_flavor(py: Path) -> str:
     except subprocess.CalledProcessError:
         return "absent"
     return out or "absent"
+
+
+def _install_torchaudio(
+    pip: Path,
+    index_url: str | None,
+    ta_pin: str | None,
+    constraints: Path,
+    *,
+    research: bool = False,
+    force_reinstall: bool = False,
+) -> None:
+    """Install torchaudio the same way for --research and for coherence.
+
+    The pip command is identical in both modes; only the operator-facing
+    message changes.
+    """
+    label = "[--research] " if research else ""
+    extra = "" if research else " (audio-stack coherence)"
+    cmd = [str(pip), "install"]
+    if force_reinstall:
+        cmd.append("--force-reinstall")
+    if ta_pin is not None and index_url is not None:
+        print(f"==> {label}installing torchaudio=={ta_pin} from {index_url}{extra}")
+        cmd.extend(
+            ["--index-url", index_url, "-c", str(constraints), f"torchaudio=={ta_pin}"]
+        )
+    elif index_url is None:
+        print(
+            f"==> {label}installing torchaudio (default PyPI wheel for MPS){extra}"
+        )
+        cmd.extend(["-c", str(constraints), "torchaudio"])
+    else:
+        print(f"==> {label}installing torchaudio from {index_url}{extra}")
+        cmd.extend(["--index-url", index_url, "-c", str(constraints), "torchaudio"])
+    run(cmd)
 
 
 def main() -> None:
@@ -883,14 +911,9 @@ def main() -> None:
     flavor = detect_flavor(args.force)
 
     # Audio-stack coherence: if torchaudio is already installed and this is
-    # not a --research run, resolve CUDA/ROCm indices as if --research was set
-    # so the chosen wheel index carries a matching torchaudio.
+    # not a --research run, keep the audio stack coherent on every flavor.
     installed_ta = _installed_package_version(py, "torchaudio")
-    need_torchaudio_coherent = (
-        not args.research
-        and flavor in ("cuda", "rocm")
-        and installed_ta is not None
-    )
+    need_torchaudio_coherent = not args.research and installed_ta is not None
     if need_torchaudio_coherent:
         print(
             "==> torchaudio is installed; keeping the audio stack coherent "
@@ -899,9 +922,17 @@ def main() -> None:
 
     gpu_index_url: str | None = None
     resolve_research = args.research or need_torchaudio_coherent
+    ta_unavailable = False
 
     if flavor == "cuda":
-        gpu_index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_cuda_index(
+        (
+            gpu_index_url,
+            torch_pin,
+            tv_pin,
+            ta_pin,
+            selftest,
+            ta_unavailable,
+        ) = _resolve_cuda_index(
             resolve_research, override=args.index_url, venv_python=py
         )
         index_url = gpu_index_url
@@ -928,15 +959,44 @@ def main() -> None:
                 f"flavor accepts an operator index override).",
                 file=sys.stderr,
             )
-        index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_rocm_index(
-            venv_python=py, research=resolve_research
-        )
+        (
+            index_url,
+            torch_pin,
+            tv_pin,
+            ta_pin,
+            selftest,
+            ta_unavailable,
+        ) = _resolve_rocm_index(venv_python=py, research=resolve_research)
     else:
         index_url = torch_index_url(flavor, override=args.index_url)
         torch_pin = tv_pin = ta_pin = None
         selftest = False
 
     torch_spec_value = torch_spec(repo_root)
+
+    # The effective target flavor is the flavor of the index that will actually
+    # be installed from.  When the resolver or a GPU self-test fallback marker
+    # routes a cuda request to the CPU index, the target flavor becomes cpu.
+    effective_target_flavor = flavor
+    if index_url == CPU_INDEX_URL:
+        effective_target_flavor = "cpu"
+
+    # Refusals for indices that cannot satisfy the torchaudio requirement.
+    if args.research and ta_unavailable:
+        print(
+            f"install: --research needs torchaudio, but {index_url} publishes no "
+            f"torchaudio for torch {torch_pin}; choose a different --index-url or drop --research",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    if need_torchaudio_coherent and ta_unavailable:
+        print(
+            f"install: torchaudio is installed, but {index_url} publishes no "
+            f"torchaudio for torch {torch_pin}; choose a different --index-url, or "
+            "uninstall torchaudio first to drop the audio stack",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     # Idempotent torch install: only skip when a torch-2.x with the right
     # flavor and, when pinned, the right base version is already present.
@@ -960,7 +1020,7 @@ def main() -> None:
         pass
     else:
         installed_flavor = torch_installed_flavor(py)
-        if installed_flavor == flavor:
+        if installed_flavor == effective_target_flavor:
             if torch_pin is not None and installed_base != torch_pin:
                 print(
                     f"==> torch installed with base version {installed_base} but want "
@@ -974,8 +1034,8 @@ def main() -> None:
                 need_install = False
         else:
             print(
-                f"==> torch installed with flavor {installed_flavor!r} but want {flavor!r}; "
-                "reinstalling"
+                f"==> torch installed with flavor {installed_flavor!r} but want "
+                f"{effective_target_flavor!r}; reinstalling"
             )
             force_reinstall = True
             need_install = True
@@ -1125,33 +1185,13 @@ def main() -> None:
         ]
     )
 
-    # Audio-stack coherence for a pre-existing torchaudio on CUDA/ROCm: make
-    # the installed torchaudio follow the resolved torch stack even when
+    # Audio-stack coherence for a pre-existing torchaudio on any flavor:
+    # make the installed torchaudio follow the selected torch stack even when
     # --research was not requested.
-    if need_torchaudio_coherent and ta_pin is not None and index_url is not None:
-        if installed_ta and not _torchaudio_should_uninstall(
-            installed_ta, ta_pin, index_url
-        ):
-            print(
-                f"==> installed torchaudio {installed_ta} already matches the "
-                f"resolved pin; keeping it"
-            )
-        else:
-            print(
-                f"==> installing torchaudio=={ta_pin} from {index_url} "
-                f"(audio-stack coherence)"
-            )
-            run(
-                [
-                    str(pip),
-                    "install",
-                    "--index-url",
-                    index_url,
-                    "-c",
-                    str(constraints),
-                    f"torchaudio=={ta_pin}",
-                ]
-            )
+    if need_torchaudio_coherent:
+        _install_torchaudio(
+            pip, index_url, ta_pin, constraints, research=False, force_reinstall=force_reinstall
+        )
         pinned = write_torch_constraints(py, constraints)
         print(f"==> pinned torch stack: {pinned}")
 
@@ -1159,40 +1199,9 @@ def main() -> None:
     # so the reproducible perception feed can decode playlist media (cv2 video +
     # av audio) on a fresh research machine. The default install stays lean.
     if args.research:
-        ta_install_cmd = [str(pip), "install"]
-        if force_reinstall:
-            ta_install_cmd.append("--force-reinstall")
-        if ta_pin is not None and index_url is not None:
-            print(
-                f"==> [--research] installing torchaudio=={ta_pin} from {index_url}"
-            )
-            run(
-                [
-                    *ta_install_cmd,
-                    "--index-url",
-                    index_url,
-                    "-c",
-                    str(constraints),
-                    f"torchaudio=={ta_pin}",
-                ]
-            )
-        elif index_url is None:
-            print(
-                "==> [--research] installing torchaudio (default PyPI wheel for MPS)"
-            )
-            run([*ta_install_cmd, "-c", str(constraints), "torchaudio"])
-        else:
-            print(f"==> [--research] installing torchaudio from {index_url}")
-            run(
-                [
-                    *ta_install_cmd,
-                    "--index-url",
-                    index_url,
-                    "-c",
-                    str(constraints),
-                    "torchaudio",
-                ]
-            )
+        _install_torchaudio(
+            pip, index_url, ta_pin, constraints, research=True, force_reinstall=force_reinstall
+        )
         pinned = write_torch_constraints(py, constraints)
         print(f"==> pinned torch stack: {pinned}")
         print(

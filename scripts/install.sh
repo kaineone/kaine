@@ -73,6 +73,7 @@ TORCH_PIN=""
 TV_PIN=""
 TA_PIN=""
 SELFTEST=""
+TA_UNAVAILABLE="false"
 # Legacy fallback: used only when the host-resolved wheel-index probe
 # (kaine.wheel_index) fails; the cuda flavor branch below normally overrides it.
 # cu126 is the CUDA index with the widest driver compatibility that carries
@@ -252,6 +253,33 @@ _write_accel_fallback_marker() {
   "$PY" -c 'import json,sys,datetime; d={"reason":sys.argv[4],"index_url":sys.argv[2],"torch":sys.argv[3],"date":datetime.datetime.now(datetime.timezone.utc).isoformat()}; json.dump(d,open(sys.argv[1],"w"))' "$file" "$url" "$torch" "$reason"
 }
 
+# Shared implementation for torchaudio install paths used by audio-stack
+# coherence and by --research.
+_install_torchaudio() {
+  local mode="$1"
+  local idx="$2"
+  local pin="$3"
+  local cfile="$4"
+  local force="$5"
+  local label=""
+  local extra=""
+  if [[ "$mode" == "research" ]]; then
+    label="[--research] "
+  else
+    extra=" (audio-stack coherence)"
+  fi
+  if [[ -n "$pin" ]]; then
+    echo "==> ${label}installing torchaudio==${pin} from ${idx}${extra}"
+    "$PIP" install $force --index-url "$idx" -c "$cfile" "torchaudio==${pin}"
+  elif [[ -z "$idx" ]]; then
+    echo "==> ${label}installing torchaudio (default PyPI wheel for MPS)${extra}"
+    "$PIP" install $force -c "$cfile" torchaudio
+  else
+    echo "==> ${label}installing torchaudio from ${idx}${extra}"
+    "$PIP" install $force --index-url "$idx" -c "$cfile" torchaudio
+  fi
+}
+
 echo "==> upgrading pip"
 "$PIP" install --quiet --upgrade pip
 
@@ -278,11 +306,10 @@ else
 fi
 
 # Audio-stack coherence: if torchaudio is already installed and this is not a
-# --research run, resolve CUDA/ROCm indices as if --research was requested so
-# the chosen wheel index carries a matching torchaudio. The matching install
-# is performed later with the same path used by --research.
+# --research run, keep the audio stack coherent on every flavor. The resolver
+# is asked for a torchaudio pin whenever one is needed.
 NEED_TORCHAUDIO=0
-if [[ "$RESEARCH" -eq 0 ]] && [[ "$flavor" == "cuda" || "$flavor" == "rocm" ]] && _package_installed torchaudio; then
+if [[ "$RESEARCH" -eq 0 ]] && _package_installed torchaudio; then
   NEED_TORCHAUDIO=1
   echo "==> torchaudio is installed; keeping the audio stack coherent (resolving with --need-torchaudio)"
 fi
@@ -320,7 +347,6 @@ case "$flavor" in
     fi
     RESOLVER_VARIANT=""
     RESOLVER_URL=""
-    TA_UNAVAILABLE="false"
     if [ -n "$RESOLVER_JSON" ] && [ -n "$RESOLVER_PY" ]; then
       RESOLVER_VARIANT="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("variant"); print("" if v is None else v)' 2>/dev/null || true)"
       RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("index_url"); print("" if v is None else v)' 2>/dev/null || true)"
@@ -463,6 +489,7 @@ else:
       TV_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchvision_version"); print("" if v is None else v)' 2>/dev/null || true)"
       TA_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchaudio_version"); print("" if v is None else v)' 2>/dev/null || true)"
       SELFTEST="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print("true" if json.load(sys.stdin).get("selftest_required") else "false")' 2>/dev/null || true)"
+      TA_UNAVAILABLE="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print("true" if json.load(sys.stdin).get("torchaudio_unavailable") else "false")' 2>/dev/null || true)"
     fi
 
     if [ -z "$RESOLVER_URL" ]; then
@@ -499,6 +526,21 @@ if [ -n "${INDEX_URL_OVERRIDE:-}" ] && [ "$flavor" != "cuda" ]; then
   echo "NOTICE: ignoring --index-url for flavor '$flavor' (only the cuda flavor accepts an operator index override)." >&2
 fi
 
+# The effective target flavor is the flavor of the index that will actually
+# be installed from.  When the resolver or a GPU self-test fallback marker
+# routes a cuda request to the CPU index, the target flavor becomes cpu.
+EFFECTIVE_TARGET_FLAVOR="$flavor"
+if [[ -n "$INDEX_URL" ]] && [[ "$INDEX_URL" == "$CPU_INDEX_URL" ]]; then
+  EFFECTIVE_TARGET_FLAVOR="cpu"
+fi
+
+# If torchaudio must stay coherent and the chosen index cannot provide one,
+# stop before touching torch.
+if [[ "$NEED_TORCHAUDIO" -eq 1 ]] && [[ "$TA_UNAVAILABLE" == "true" ]]; then
+  echo "install: torchaudio is installed, but $INDEX_URL publishes no torchaudio for torch ${TORCH_PIN}; choose a different --index-url, or uninstall torchaudio first to drop the audio stack" >&2
+  exit 1
+fi
+
 # Idempotent torch install: probe which flavor is currently installed.
 _FLAVOR_PROBE='
 import sys
@@ -506,28 +548,24 @@ try:
     import torch
 except ImportError:
     print("absent"); sys.exit(0)
-try:
-    hip = getattr(getattr(torch, "version", None), "hip", None)
-    if hip is not None:
+ver = getattr(torch, "version", None)
+if ver is not None:
+    if getattr(ver, "hip", None) is not None:
         print("rocm"); sys.exit(0)
-except Exception:
-    pass
-try:
-    if torch.cuda.is_available():
+    if getattr(ver, "cuda", None) is not None:
         print("cuda"); sys.exit(0)
-except Exception:
-    pass
-try:
-    xpu = getattr(torch, "xpu", None)
-    if xpu is not None and xpu.is_available():
+    if getattr(ver, "xpu", None) is not None:
         print("xpu"); sys.exit(0)
-except Exception:
-    pass
-try:
-    if torch.backends.mps.is_available():
-        print("mps"); sys.exit(0)
-except Exception:
-    pass
+xpu_mod = getattr(torch, "xpu", None)
+if xpu_mod is not None and hasattr(xpu_mod, "_is_compiled") and xpu_mod._is_compiled():
+    print("xpu"); sys.exit(0)
+import platform
+if platform.system() == "Darwin" and platform.machine() == "arm64":
+    try:
+        if torch.backends.mps.is_built():
+            print("mps"); sys.exit(0)
+    except Exception:
+        pass
 print("cpu")
 '
 
@@ -537,7 +575,7 @@ FORCE_REINSTALL_FLAG=""
 if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswith('2.') else 1)" 2>/dev/null; then
   installed_flavor=$("$PY" -c "$_FLAVOR_PROBE" 2>/dev/null || echo "unknown")
   installed_torch_base=$("$PY" -c "import torch; print(torch.__version__.split('+',1)[0])" 2>/dev/null || true)
-  if [[ "$installed_flavor" == "$flavor" ]]; then
+  if [[ "$installed_flavor" == "$EFFECTIVE_TARGET_FLAVOR" ]]; then
     if [[ -n "$TORCH_PIN" ]] && [[ "$installed_torch_base" != "$TORCH_PIN" ]]; then
       echo "==> torch installed with base version $installed_torch_base but want $TORCH_PIN; reinstalling"
     else
@@ -545,7 +583,7 @@ if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswit
       need_install=0
     fi
   else
-    echo "==> torch installed with flavor '$installed_flavor' but want '$flavor'; reinstalling"
+    echo "==> torch installed with flavor '$installed_flavor' but want '$EFFECTIVE_TARGET_FLAVOR'; reinstalling"
     FORCE_REINSTALL_FLAG="--force-reinstall"
   fi
   if _is_pytorch_whl_url "$INDEX_URL"; then
@@ -629,23 +667,10 @@ echo "==> pinned torch stack: $pinned"
 echo "==> installing the rest of KAINE (editable, with test deps)"
 "$PIP" install --quiet -c "$TORCH_CONSTRAINTS" -e ".[test]"
 
-# Audio-stack coherence: a pre-existing torchaudio on CUDA/ROCm must follow
-# the resolved torch stack even when --research is not set. Install a matching
-# torchaudio from the resolved index, or keep it when it already matches.
-if [[ "$NEED_TORCHAUDIO" -eq 1 ]] && [[ -n "$TA_PIN" ]]; then
-  installed_ta=$(_package_version torchaudio || true)
-  installed_ta_base=${installed_ta%%+*}
-  installed_ta_tag=${installed_ta#*+}
-  if [[ "$installed_ta" == "$installed_ta_base" ]]; then
-    installed_ta_tag=""
-  fi
-  target_tag=$(_index_tag "$INDEX_URL")
-  if [[ -n "$installed_ta" ]] && [[ "$installed_ta_base" == "$TA_PIN" ]] && _tags_match "$installed_ta_tag" "$target_tag" "$INDEX_URL"; then
-    echo "==> installed torchaudio $installed_ta already matches the resolved pin; keeping it"
-  else
-    echo "==> installing torchaudio==$TA_PIN from $INDEX_URL (audio-stack coherence)"
-    "$PIP" install --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" "torchaudio==$TA_PIN"
-  fi
+# Audio-stack coherence: a pre-existing torchaudio on any flavor must follow
+# the selected torch stack when --research is not set.
+if [[ "$NEED_TORCHAUDIO" -eq 1 ]]; then
+  _install_torchaudio coherence "$INDEX_URL" "$TA_PIN" "$TORCH_CONSTRAINTS" ""
   pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
   echo "==> pinned torch stack: $pinned"
 fi
@@ -654,16 +679,7 @@ fi
 # the reproducible perception feed can decode playlist media (cv2 video + av
 # audio) on a fresh research machine. The default install stays lean.
 if [[ "$RESEARCH" -eq 1 ]]; then
-  if [[ -n "$TA_PIN" ]]; then
-    echo "==> [--research] installing torchaudio==$TA_PIN from $INDEX_URL"
-    "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" "torchaudio==$TA_PIN"
-  elif [[ "$flavor" == "mps" ]]; then
-    echo "==> [--research] installing torchaudio (default PyPI wheel for MPS)"
-    "$PIP" install $FORCE_REINSTALL_FLAG -c "$TORCH_CONSTRAINTS" torchaudio
-  else
-    echo "==> [--research] installing torchaudio from $INDEX_URL"
-    "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" torchaudio
-  fi
+  _install_torchaudio research "$INDEX_URL" "$TA_PIN" "$TORCH_CONSTRAINTS" "$FORCE_REINSTALL_FLAG"
   pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
   echo "==> pinned torch stack: $pinned"
   echo "==> [--research] installing perception extras: pip install -c $TORCH_CONSTRAINTS -e .[perception]"

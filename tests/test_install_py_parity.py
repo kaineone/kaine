@@ -573,3 +573,307 @@ def test_parity_cuda_coherent_torchaudio(tmp_path_factory: pytest.TempPathFactor
         f"sh:\n{log_sh}\npy:\n{log_py}\n"
         f"sh exit={proc_sh.returncode}, py exit={proc_py.returncode}"
     )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_build_based_flavor_probe_ignores_runtime_availability(
+    tmp_path_factory: pytest.TempPathFactory, installer: str
+) -> None:
+    """A CUDA-build wheel is classified as CUDA even when GPUs are unavailable.
+
+    Invariant: the flavor probe looks at build metadata (``torch.version.cuda``)
+    rather than runtime availability. A fake CUDA-flavor torch whose
+    ``cuda.is_available()`` is False still reads as ``cuda``, so a request for
+    CPU wheels forces a reinstall.
+    """
+    twi = _load_twi_helpers()
+    flags = ["--cpu", "--no-wizard"]
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp, flags, installer="install.sh", fake_torch="cuda"
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp, flags, installer="install.py", fake_torch="cuda"
+    )
+
+    sh_lines = [
+        line
+        for line in _torch_install_lines(log_sh)
+        if twi.CPU_INDEX in line
+    ]
+    py_lines = [
+        line
+        for line in _torch_install_lines(log_py)
+        if twi.CPU_INDEX in line
+    ]
+
+    assert sh_lines and all("--force-reinstall" in line for line in sh_lines), (
+        f"install.sh did not force-reinstall CPU torch over fake CUDA wheel\n"
+        f"exit={proc_sh.returncode}\n{log_sh}"
+    )
+    assert py_lines and all("--force-reinstall" in line for line in py_lines), (
+        f"install.py did not force-reinstall CPU torch over fake CUDA wheel\n"
+        f"exit={proc_py.returncode}\n{log_py}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_matching_cuda_build_without_visible_gpu_is_not_reinstalled(
+    tmp_path: Path, installer: str
+) -> None:
+    """A CUDA build that already matches the resolved pins is kept even when
+    no GPU is visible at install time (e.g. a container build).
+
+    Invariant: the installed flavor is read from the build (``torch.version.cuda``),
+    not from ``torch.cuda.is_available()``. The fake torch is 2.14.0+cu126 with
+    ``is_available() == False``; at driver CUDA 12.6 the resolver selects cu126
+    torch 2.14.0, so no torch install may happen. A runtime-availability probe
+    would read "cpu" and force-reinstall on every run.
+    """
+    twi = _load_twi_helpers()
+    proc, log = twi._run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard"],
+        installer=installer,
+        nvidia_cuda="12.6",
+        fake_torch="cuda",
+    )
+    assert "https://download.pytorch.org/whl/cu126" in proc.stdout, (
+        f"{installer} did not resolve cu126\n{proc.stdout}\n{proc.stderr}"
+    )
+    torch_lines = [line for line in _torch_install_lines(log) if "torch" in line]
+    assert torch_lines == [], (
+        f"{installer} reinstalled a matching CUDA build\n{log}\n{proc.stdout}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_effective_target_flavor_skips_reinstall_when_fallback_marker_matches(
+    tmp_path_factory: pytest.TempPathFactory, installer: str
+) -> None:
+    """A matching GPU fallback marker makes the installer keep CPU wheels.
+
+    Invariant: when the effective target flavor is cpu because a GPU self-test
+    fallback marker routed the CUDA request to the CPU index, a re-run with a
+    fake CPU torch installed skips the torch install entirely and never passes
+    ``--force-reinstall``.
+    """
+    twi = _load_twi_helpers()
+    flags = ["--cuda", "--no-wizard"]
+    env = {"KAINE_WHEEL_PROBE_NVML": "0"}
+    marker = {
+        "index_url": twi.CUDA132_INDEX,
+        "torch": "2.14.0",
+        "reason": "GPU numerical self-test failed",
+        "date": "2026-01-01T00:00:00+00:00",
+    }
+
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        nvidia_cuda="13.2",
+        fake_torch="cpu",
+        marker=marker,
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        nvidia_cuda="13.2",
+        fake_torch="cpu",
+        marker=marker,
+        extra_env=env,
+    )
+
+    sh_lines = _torch_install_lines(log_sh)
+    py_lines = _torch_install_lines(log_py)
+
+    assert not sh_lines, (
+        f"install.sh reinstalled torch despite matching CPU fallback marker\n"
+        f"exit={proc_sh.returncode}\n{log_sh}"
+    )
+    assert not py_lines, (
+        f"install.py reinstalled torch despite matching CPU fallback marker\n"
+        f"exit={proc_py.returncode}\n{log_py}"
+    )
+    assert not any("--force-reinstall" in line for line in log_sh.splitlines()), (
+        f"install.sh passed --force-reinstall unexpectedly\n{log_sh}"
+    )
+    assert not any("--force-reinstall" in line for line in log_py.splitlines()), (
+        f"install.py passed --force-reinstall unexpectedly\n{log_py}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_cpu_torchaudio_coherence_reinstalls_after_uninstall(
+    tmp_path_factory: pytest.TempPathFactory, installer: str
+) -> None:
+    """CPU flavor keeps the audio stack coherent even without --research.
+
+    Invariant: when torchaudio is already installed and --research is not given,
+    the installer uninstalls the stale torchaudio and then installs a coherent
+    torchaudio from the CPU index.
+    """
+    twi = _load_twi_helpers()
+    flags = ["--cpu", "--no-wizard"]
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp, flags, installer="install.sh", fake_torchaudio="2.10.0"
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp, flags, installer="install.py", fake_torchaudio="2.10.0"
+    )
+
+    sh_lines = log_sh.splitlines()
+    py_lines = log_py.splitlines()
+
+    sh_uninstall = [i for i, line in enumerate(sh_lines) if "uninstall -y torchaudio" in line]
+    sh_audio = [
+        i
+        for i, line in enumerate(sh_lines)
+        if "torchaudio" in line and twi.CPU_INDEX in line
+    ]
+    py_uninstall = [i for i, line in enumerate(py_lines) if "uninstall -y torchaudio" in line]
+    py_audio = [
+        i
+        for i, line in enumerate(py_lines)
+        if "torchaudio" in line and twi.CPU_INDEX in line
+    ]
+
+    assert sh_uninstall, (
+        f"install.sh did not uninstall stale torchaudio\nexit={proc_sh.returncode}\n{log_sh}"
+    )
+    assert sh_audio and sh_audio[-1] > sh_uninstall[0], (
+        f"install.sh did not install torchaudio after uninstall\nexit={proc_sh.returncode}\n{log_sh}"
+    )
+    assert py_uninstall, (
+        f"install.py did not uninstall stale torchaudio\nexit={proc_py.returncode}\n{log_py}"
+    )
+    assert py_audio and py_audio[-1] > py_uninstall[0], (
+        f"install.py did not install torchaudio after uninstall\nexit={proc_py.returncode}\n{log_py}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_coherence_refuses_override_index_without_torchaudio(
+    tmp_path_factory: pytest.TempPathFactory, installer: str
+) -> None:
+    """A coherent audio stack refuses an index that cannot provide torchaudio.
+
+    Invariant: when --research is not set, torchaudio is installed, and the
+    chosen index reports ``torchaudio_unavailable``, both installers exit
+    before installing torch with the same guidance message.
+    """
+    twi = _load_twi_helpers()
+    flags = ["--cuda", "--no-wizard", "--index-url", twi.CUDA132_INDEX]
+    env = {"KAINE_WHEEL_PROBE_NVML": "0"}
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.10.0",
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.10.0",
+        extra_env=env,
+    )
+
+    expected = (
+        f"install: torchaudio is installed, but {twi.CUDA132_INDEX} publishes no "
+        "torchaudio for torch 2.14.0; choose a different --index-url, or "
+        "uninstall torchaudio first to drop the audio stack"
+    )
+
+    sh_combined = proc_sh.stdout + proc_sh.stderr
+    py_combined = proc_py.stdout + proc_py.stderr
+
+    assert expected in sh_combined, (
+        f"install.sh did not print the expected coherence refusal\n"
+        f"exit={proc_sh.returncode}\nstdout={proc_sh.stdout}\nstderr={proc_sh.stderr}"
+    )
+    assert expected in py_combined, (
+        f"install.py did not print the expected coherence refusal\n"
+        f"exit={proc_py.returncode}\nstdout={proc_py.stdout}\nstderr={proc_py.stderr}"
+    )
+    assert proc_sh.returncode != 0 and proc_py.returncode != 0, (
+        f"expected non-zero exit for coherence refusal (sh={proc_sh.returncode}, "
+        f"py={proc_py.returncode})"
+    )
+    assert not any(
+        "torch==" in line or "torch>=" in line for line in log_sh.splitlines()
+    ), f"install.sh installed torch despite coherence refusal\n{log_sh}"
+    assert not any(
+        "torch==" in line or "torch>=" in line for line in log_py.splitlines()
+    ), f"install.py installed torch despite coherence refusal\n{log_py}"
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_research_refuses_override_index_without_torchaudio(
+    tmp_path_factory: pytest.TempPathFactory, installer: str
+) -> None:
+    """--research still refuses an index that cannot provide torchaudio."""
+    twi = _load_twi_helpers()
+    flags = ["--cuda", "--no-wizard", "--research", "--index-url", twi.CUDA132_INDEX]
+    env = {"KAINE_WHEEL_PROBE_NVML": "0"}
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        nvidia_cuda="13.2",
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        nvidia_cuda="13.2",
+        extra_env=env,
+    )
+
+    expected = (
+        f"install: --research needs torchaudio, but {twi.CUDA132_INDEX} publishes no "
+        "torchaudio for torch 2.14.0; choose a different --index-url or drop --research"
+    )
+
+    sh_combined = proc_sh.stdout + proc_sh.stderr
+    py_combined = proc_py.stdout + proc_py.stderr
+
+    assert expected in sh_combined, (
+        f"install.sh did not print the expected research refusal\n"
+        f"exit={proc_sh.returncode}\nstdout={proc_sh.stdout}\nstderr={proc_sh.stderr}"
+    )
+    assert expected in py_combined, (
+        f"install.py did not print the expected research refusal\n"
+        f"exit={proc_py.returncode}\nstdout={proc_py.stdout}\nstderr={proc_py.stderr}"
+    )
+    assert proc_sh.returncode != 0 and proc_py.returncode != 0, (
+        f"expected non-zero exit for research refusal (sh={proc_sh.returncode}, "
+        f"py={proc_py.returncode})"
+    )
+    assert not any(
+        "torch==" in line or "torch>=" in line for line in log_sh.splitlines()
+    ), f"install.sh installed torch despite research refusal\n{log_sh}"
+    assert not any(
+        "torch==" in line or "torch>=" in line for line in log_py.splitlines()
+    ), f"install.py installed torch despite research refusal\n{log_py}"
