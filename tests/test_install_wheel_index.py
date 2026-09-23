@@ -881,7 +881,7 @@ def test_torch_and_torchvision_installed_together(tmp_path: Path) -> None:
     for line in pip_log.splitlines():
         tokens = line.split()
         has_torch = any(t.startswith(("torch>=", "torch==", "torch<")) for t in tokens)
-        has_tv = "torchvision" in tokens
+        has_tv = any(t == "torchvision" or t.startswith("torchvision==") for t in tokens)
         has_cpu_index = "--index-url" in tokens and CPU_INDEX in tokens
         if has_torch and has_tv and has_cpu_index:
             return

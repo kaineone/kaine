@@ -877,3 +877,86 @@ def test_parity_research_refuses_override_index_without_torchaudio(
     assert not any(
         "torch==" in line or "torch>=" in line for line in log_py.splitlines()
     ), f"install.py installed torch despite research refusal\n{log_py}"
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_cpu_exact_pins_match_resolved_index(tmp_path: Path, installer: str) -> None:
+    """CPU --no-wizard installs torch/torchvision with == pins from the resolved CPU index."""
+    twi = _load_twi_helpers()
+    import platform
+
+    import kaine.wheel_index as wi
+
+    arch = wi._normalize_arch(platform.machine())
+    expected = wi.resolve_fixed_flavor("cpu", arch)
+    torch_pin = expected["torch_version"]
+    tv_pin = expected["torchvision_version"]
+
+    proc, log = twi._run_install(tmp_path, ["--cpu", "--no-wizard"], installer=installer)
+    install_lines = _torch_install_lines(log)
+
+    assert any(f"torch=={torch_pin}" in line for line in install_lines), (
+        f"torch=={torch_pin} not found in pip log (arch={arch})\n{log}"
+    )
+    assert any(f"torchvision=={tv_pin}" in line for line in install_lines), (
+        f"torchvision=={tv_pin} not found in pip log (arch={arch})\n{log}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_cpu_coherent_torchaudio_avoids_uninstall(tmp_path: Path, installer: str) -> None:
+    """A coherent torchaudio does not get uninstalled before being reinstalled."""
+    twi = _load_twi_helpers()
+    import platform
+
+    import kaine.wheel_index as wi
+
+    arch = wi._normalize_arch(platform.machine())
+    expected = wi.resolve_fixed_flavor("cpu", arch, need_torchaudio=True)
+    ta_pin = expected["torchaudio_version"]
+    assert ta_pin is not None, "expected a CPU torchaudio pin for this host"
+
+    proc, log = twi._run_install(
+        tmp_path,
+        ["--cpu", "--no-wizard"],
+        installer=installer,
+        fake_torchaudio=f"{ta_pin}+cpu",
+    )
+
+    assert "uninstall -y torchaudio" not in log, (
+        f"coherent torchaudio was uninstalled\n{log}\nexit={proc.returncode}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_xpu_aarch64_refuses_before_install(tmp_path: Path, installer: str) -> None:
+    """--xpu on a forced aarch64 host refuses before issuing any torch install."""
+    twi = _load_twi_helpers()
+    sitecustomize_dir = tmp_path / "sitecustomize"
+    sitecustomize_dir.mkdir()
+    (sitecustomize_dir / "sitecustomize.py").write_text(
+        "import platform\n"
+        "platform.machine = lambda: 'aarch64'\n",
+        encoding="utf-8",
+    )
+
+    proc, log = twi._run_install(
+        tmp_path,
+        ["--xpu", "--no-wizard"],
+        installer=installer,
+        extra_env={"PYTHONPATH": str(sitecustomize_dir)},
+    )
+
+    refusal = (
+        "install: no xpu wheel index carries a torch in the project's "
+        "tested range for this architecture."
+    )
+    assert proc.returncode == 1, (
+        f"expected exit 1, got {proc.returncode}\nstderr={proc.stderr}\nstdout={proc.stdout}"
+    )
+    assert refusal in proc.stderr, (
+        f"expected refusal line in stderr\nstderr={proc.stderr}"
+    )
+    assert _torch_install_lines(log) == [], (
+        f"unexpected torch install line in pip log\n{log}"
+    )

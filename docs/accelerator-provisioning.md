@@ -61,7 +61,7 @@ When a CUDA index is selected, the resolver records the exact `torch`, `torchvis
 
 Data provenance for the ladder lives in `kaine/wheel_data.py`, which records the published versions and architecture lists for each index (dated). Drift against the live indexes is reported by `python -m kaine.wheel_index --verify-indexes`.
 
-The research install path (`scripts/install.sh --research`) always passes `--need-torchaudio` to the resolver. Because the cu132 index publishes no `torchaudio` wheels, hosts that would otherwise resolve to cu132 instead resolve to cu130 so that `torchaudio` is available. Audio-stack coherence triggers when any `torchaudio` wheel is installed and `--research` is not given: both installers still pass `--need-torchaudio` to the resolver, replace a `torchaudio` whose base version or local tag does not match the resolved stack, and on flavors without a resolved `torchaudio` pin (cpu, xpu, mps) reinstall `torchaudio` from that flavor's index under the torch constraints on every run, so a driver ≥ 13.2 host that was installed with `--research` stays on cu130 instead of switching to cu132 and losing `torchaudio`. `torchaudio`'s last release is 2.11.0; torch 2.12–2.14 are paired with it by release timing only, and the resolver emits a warning saying no wheel metadata asserts that pairing.
+The research install path (`scripts/install.sh --research`) always passes `--need-torchaudio` to the resolver. Because the cu132 index publishes no `torchaudio` wheels, hosts that would otherwise resolve to cu132 instead resolve to cu130 so that `torchaudio` is available. Audio-stack coherence triggers when any `torchaudio` wheel is installed and `--research` is not given: both installers still pass `--need-torchaudio` to the resolver, replace a `torchaudio` whose base version or local tag does not match the resolved stack, and keep a matching `torchaudio` on re-runs. The cpu and xpu flavors resolve the exact newest in-range `torch` recorded for the host architecture with its recorded `torchvision` and `torchaudio` companions; xpu wheels are recorded for x86_64 only and the installer refuses that flavor on other architectures. The mps flavor installs `torch` within the tested range from the default PyPI index without an exact `torchaudio` pin because no MPS wheel data is recorded, so `torchaudio` is reinstalled from PyPI under the torch constraints on each mps run. `torchaudio`'s last release is 2.11.0; torch 2.12–2.14 are paired with it by release timing only, and the resolver emits a warning saying no wheel metadata asserts that pairing.
 
 If `torchaudio` is installed and the chosen index publishes no `torchaudio` for the resolved torch version, both installers refuse before installing `torch`, telling the operator to choose a different `--index-url` or uninstall `torchaudio` first to drop the audio stack.
 
@@ -105,7 +105,7 @@ Precedence, highest first:
 2. CUDA resolution algorithm
 3. Terminal CPU fallback
 
-Only the cuda flavor consults the CUDA resolution algorithm. The `--cpu`, `--xpu`, and `--mps` flavors use fixed indexes; `--rocm` is resolved from the host ROCm version and GFX targets (see above).
+Only the cuda flavor consults the CUDA resolution algorithm. The `--cpu` and `--xpu` flavors are resolved from the host architecture via `kaine.wheel_index`; `--mps` uses the default PyPI index with no exact pin; `--rocm` is resolved from the host ROCm version and GFX targets (see above).
 
 ## Pre-boot GPU headroom check
 

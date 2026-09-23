@@ -314,6 +314,86 @@ if [[ "$RESEARCH" -eq 0 ]] && _package_installed torchaudio; then
   echo "==> torchaudio is installed; keeping the audio stack coherent (resolving with --need-torchaudio)"
 fi
 
+# Resolver helper for the fixed-index flavors (cpu, xpu). Sets RESOLVER_PY,
+# RESOLVER_JSON, RESOLVER_URL, TORCH_PIN, TV_PIN and TA_PIN. Returns 0 when a
+# usable index_url was returned, 1 when the resolver returned a null index_url,
+# and 2 when the resolver produced no output or unparseable JSON.
+_resolve_fixed_flavor() {
+  local flavor="$1"
+  local kaine_root resolver_py resolver_json
+  local extra_args=()
+  kaine_root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)" || true
+  resolver_py=""
+  for _resolver_candidate in \
+    "${VENV_DIR}/bin/python" \
+    "${VENV_PY:-}"
+  do
+    if [ -n "$_resolver_candidate" ] && [ -x "$_resolver_candidate" ]; then
+      resolver_py="$_resolver_candidate"
+      break
+    fi
+  done
+  if [ -z "$resolver_py" ] && command -v python3 >/dev/null 2>&1; then
+    resolver_py="$(command -v python3)"
+  fi
+  if [ "$RESEARCH" -eq 1 ] || [ "$NEED_TORCHAUDIO" -eq 1 ]; then
+    extra_args+=("--need-torchaudio")
+  fi
+
+  RESOLVER_PY="$resolver_py"
+  RESOLVER_JSON=""
+  if [ -n "$resolver_py" ]; then
+    RESOLVER_JSON="$(cd "$kaine_root" 2>/dev/null && PYTHONPATH="$kaine_root${PYTHONPATH:+:$PYTHONPATH}" "$resolver_py" -m kaine.wheel_index --flavor "$flavor" ${extra_args[@]+"${extra_args[@]}"} 2>/dev/null || true)"
+  fi
+
+  RESOLVER_URL=""
+  TORCH_PIN=""
+  TV_PIN=""
+  TA_PIN=""
+  local _parsed=0
+  if [ -n "$RESOLVER_JSON" ] && [ -n "$resolver_py" ]; then
+    if printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; json.load(sys.stdin)' >/dev/null 2>&1; then
+      _parsed=1
+    fi
+  fi
+  if [ "$_parsed" -eq 1 ]; then
+    RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("index_url"); print("" if v is None else v)' 2>/dev/null || true)"
+    TORCH_PIN="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torch_version"); print("" if v is None else v)' 2>/dev/null || true)"
+    TV_PIN="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchvision_version"); print("" if v is None else v)' 2>/dev/null || true)"
+    TA_PIN="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchaudio_version"); print("" if v is None else v)' 2>/dev/null || true)"
+  fi
+
+  if [ -n "$RESOLVER_URL" ]; then
+    return 0
+  fi
+  if [ "$_parsed" -eq 1 ]; then
+    return 1
+  fi
+  return 2
+}
+
+# Print resolver warnings from RESOLVER_JSON for a fixed-index flavor.
+_print_fixed_flavor_warnings() {
+  if [ -n "$RESOLVER_JSON" ] && [ -n "$RESOLVER_PY" ]; then
+    printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys
+d=json.load(sys.stdin)
+for w in (d.get("warnings") or []):
+    print("wheel-index warning: {}".format(w))
+' || true
+  fi
+}
+
+# Print resolver warnings from RESOLVER_JSON to stderr with a WARNING: prefix.
+_print_resolver_warnings_to_stderr() {
+  if [ -n "$RESOLVER_JSON" ] && [ -n "$RESOLVER_PY" ]; then
+    printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys
+d=json.load(sys.stdin)
+for w in (d.get("warnings") or []):
+    sys.stderr.write("WARNING: {}\n".format(w))
+' 2>/dev/null >&2 || true
+  fi
+}
+
 case "$flavor" in
   cuda)
     # Host-resolved CUDA wheel index (kaine.wheel_index). The resolver is
@@ -514,14 +594,50 @@ for w in (d.get("warnings") or []):
       echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
     fi
   ;;
-  xpu)  INDEX_URL="$XPU_INDEX_URL" ;;
-  cpu)  INDEX_URL="$CPU_INDEX_URL" ;;
+  xpu)
+    _rc=0
+    _resolve_fixed_flavor xpu || _rc=$?
+    if [ $_rc -eq 0 ]; then
+      INDEX_URL="$RESOLVER_URL"
+      echo "wheel index: $INDEX_URL (source: host-resolved xpu wheel data)"
+      if [ -n "$TORCH_PIN" ]; then
+        echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
+      fi
+      _print_fixed_flavor_warnings xpu
+    else
+      echo "install: no xpu wheel index carries a torch in the project's tested range for this architecture." >&2
+      if [ $_rc -eq 1 ]; then
+        _print_resolver_warnings_to_stderr
+      fi
+      exit 1
+    fi
+    ;;
+  cpu)
+    _rc=0
+    _resolve_fixed_flavor cpu || _rc=$?
+    if [ $_rc -eq 0 ]; then
+      INDEX_URL="$RESOLVER_URL"
+      echo "wheel index: $INDEX_URL (source: host-resolved cpu wheel data)"
+      if [ -n "$TORCH_PIN" ]; then
+        echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
+      fi
+      _print_fixed_flavor_warnings cpu
+    elif [ $_rc -eq 1 ]; then
+      echo "install: no cpu wheel index carries a torch in the project's tested range for this architecture." >&2
+      _print_resolver_warnings_to_stderr
+      exit 1
+    else
+      echo "WARNING: CPU wheel-index pins could not be resolved; using the fixed CPU index $CPU_INDEX_URL." >&2
+      INDEX_URL="$CPU_INDEX_URL"
+    fi
+    ;;
   mps)  INDEX_URL="" ;;  # macOS MPS ships in the default PyPI wheel
   *) echo "unknown flavor $flavor" >&2; exit 3 ;;
 esac
 
 # An operator --index-url override applies only to the CUDA flavor; every
-# other flavor keeps its fixed wheel index and never consults the resolver.
+# other flavor keeps the wheel index chosen above (resolved from recorded wheel
+# data for cpu, xpu and rocm; the default PyPI index for mps).
 if [ -n "${INDEX_URL_OVERRIDE:-}" ] && [ "$flavor" != "cuda" ]; then
   echo "NOTICE: ignoring --index-url for flavor '$flavor' (only the cuda flavor accepts an operator index override)." >&2
 fi

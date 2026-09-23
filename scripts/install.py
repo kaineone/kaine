@@ -668,6 +668,61 @@ def _resolve_rocm_index(
     return url, torch_pin, tv_pin, ta_pin, selftest, ta_unavailable
 
 
+def _resolve_fixed_flavor(
+    flavor: str,
+    need_torchaudio: bool,
+    venv_python: Path | None = None,
+) -> tuple[str | None, str | None, str | None, str | None, dict | None]:
+    """Resolve a fixed-index flavor (cpu/xpu) via ``kaine.wheel_index --flavor``.
+
+    Mirrors the bash ``_resolve_fixed_flavor`` helper. CPU falls back to the
+    fixed CPU index with a warning if the resolver cannot run or returns no
+    usable output; XPU exits with a clear error before any torch install.
+    Returns ``(index_url, torch_pin, tv_pin, ta_pin, resolver_data)``.
+    """
+    resolver_args = ["--flavor", flavor]
+    if need_torchaudio:
+        resolver_args.append("--need-torchaudio")
+
+    stdout, stderr, rc = _run_resolver(resolver_args, venv_python)
+    data = _parse_resolver_result(stdout, stderr, rc)
+
+    if data is None:
+        if flavor == "cpu":
+            print(
+                "WARNING: CPU wheel-index pins could not be resolved; "
+                f"using the fixed CPU index {CPU_INDEX_URL}.",
+                file=sys.stderr,
+            )
+            return CPU_INDEX_URL, None, None, None, None
+        print(
+            "install: no xpu wheel index carries a torch in the project's "
+            "tested range for this architecture.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    url = data.get("index_url")
+    if not url:
+        print(
+            f"install: no {flavor} wheel index carries a torch in the project's "
+            "tested range for this architecture.",
+            file=sys.stderr,
+        )
+        for warning in data.get("warnings") or []:
+            print(f"WARNING: {warning}", file=sys.stderr)
+        raise SystemExit(1)
+
+    torch_pin, tv_pin, ta_pin, _ = _extract_pins(data)
+    print(f"wheel index: {url} (source: host-resolved {flavor} wheel data)")
+    if torch_pin:
+        print(f"==> resolved torch {torch_pin} / torchvision {tv_pin} from {url}")
+    for warning in data.get("warnings") or []:
+        print(f"wheel-index warning: {warning}")
+
+    return url, torch_pin, tv_pin, ta_pin, data
+
+
 def torch_index_url(
     flavor: str,
     override: str | None = None,
@@ -920,6 +975,13 @@ def main() -> None:
             "(resolving with --need-torchaudio)"
         )
 
+    if args.index_url is not None and flavor not in ("cuda", "rocm"):
+        print(
+            f"NOTICE: ignoring --index-url for flavor '{flavor}' (only the cuda "
+            f"flavor accepts an operator index override).",
+            file=sys.stderr,
+        )
+
     gpu_index_url: str | None = None
     resolve_research = args.research or need_torchaudio_coherent
     ta_unavailable = False
@@ -967,8 +1029,20 @@ def main() -> None:
             selftest,
             ta_unavailable,
         ) = _resolve_rocm_index(venv_python=py, research=resolve_research)
+    elif flavor in ("cpu", "xpu"):
+        (
+            index_url,
+            torch_pin,
+            tv_pin,
+            ta_pin,
+            _,
+        ) = _resolve_fixed_flavor(
+            flavor, resolve_research, venv_python=py
+        )
+        selftest = False
     else:
-        index_url = torch_index_url(flavor, override=args.index_url)
+        # mps
+        index_url = None
         torch_pin = tv_pin = ta_pin = None
         selftest = False
 
