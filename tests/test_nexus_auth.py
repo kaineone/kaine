@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
-from fastapi import Depends, FastAPI
+import httpx
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 from starlette.responses import HTMLResponse
 
@@ -263,6 +265,8 @@ def test_login_success_sets_cookie_and_cookie_authenticates():
     set_cookie = r.headers["set-cookie"]
     assert "HttpOnly" in set_cookie
     assert "SameSite=strict" in set_cookie
+    # max-age tracks the absolute server-side session cap (default 24h).
+    assert "Max-Age=86400" in set_cookie
     assert TOKEN not in r.cookies[SESSION_COOKIE]
     assert TOKEN not in r.text
 
@@ -352,29 +356,56 @@ def test_blocked_wrong_attempts_get_429():
 
 
 def test_correct_token_logs_in_after_limiter_exhausted():
-    config = NexusConfig(operator_token=TOKEN, login_max_failures=2)
+    import kaine.nexus.auth as auth_module
+
+    config = NexusConfig(
+        operator_token=TOKEN,
+        login_max_failures=2,
+        login_block_delay_s=0.5,
+    )
     app = _wired_app(config)
     client = TestClient(app, base_url="http://127.0.0.1:8088")
 
-    assert client.post(
-        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-    ).status_code == 401
-    assert client.post(
-        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-    ).status_code == 401
+    slept: list[float] = []
 
-    # Correct token is never refused by the limiter.
-    r = client.post(
-        "/auth/login",
-        data={"token": TOKEN},
-        headers=JSON_ACCEPT,
-        follow_redirects=False,
-    )
-    assert r.status_code == 200
-    assert "session_key" in r.json()
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    original_sleep = auth_module._sleep
+    auth_module._sleep = fake_sleep
+    try:
+        assert (
+            client.post(
+                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+            ).status_code
+            == 401
+        )
+        assert (
+            client.post(
+                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+            ).status_code
+            == 401
+        )
+        assert slept == []
+
+        # Correct token submitted while the client is blocked still signs in,
+        # after waiting its turn.
+        r = client.post(
+            "/auth/login",
+            data={"token": TOKEN},
+            headers=JSON_ACCEPT,
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert "session_key" in r.json()
+        assert slept == [0.5]
+    finally:
+        auth_module._sleep = original_sleep
 
 
 def test_login_rate_limit_locks_out_wrong_attempts():
+    import kaine.nexus.auth as auth_module
+
     now = [0.0]
 
     def clock():
@@ -384,31 +415,51 @@ def test_login_rate_limit_locks_out_wrong_attempts():
         operator_token=TOKEN,
         login_max_failures=2,
         login_failure_window_s=60,
+        login_block_delay_s=0.5,
     )
     app = _wired_app(config, clock=clock)
     client = TestClient(app, base_url="http://127.0.0.1:8088")
 
-    assert client.post(
-        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-    ).status_code == 401
-    assert client.post(
-        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-    ).status_code == 401
+    slept: list[float] = []
 
-    blocked = client.post(
-        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-    )
-    assert blocked.status_code == 429
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
 
-    now[0] += 61.0
-    allowed = client.post(
-        "/auth/login",
-        data={"token": TOKEN},
-        headers=JSON_ACCEPT,
-        follow_redirects=False,
-    )
-    assert allowed.status_code == 200
-    assert "session_key" in allowed.json()
+    original_sleep = auth_module._sleep
+    auth_module._sleep = fake_sleep
+    try:
+        assert (
+            client.post(
+                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+            ).status_code
+            == 401
+        )
+        assert (
+            client.post(
+                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+            ).status_code
+            == 401
+        )
+        assert slept == []
+
+        blocked = client.post(
+            "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+        )
+        assert blocked.status_code == 429
+        assert slept == [0.5]
+
+        now[0] += 61.0
+        allowed = client.post(
+            "/auth/login",
+            data={"token": TOKEN},
+            headers=JSON_ACCEPT,
+            follow_redirects=False,
+        )
+        assert allowed.status_code == 200
+        assert "session_key" in allowed.json()
+        assert slept == [0.5]
+    finally:
+        auth_module._sleep = original_sleep
 
 
 def test_plain_form_post_redirects_nojs_without_session():
@@ -717,3 +768,247 @@ def test_create_app_serves_health_json_without_auth():
         r = client.get("/diagnostics/health.json")
         assert r.status_code == 200
         assert "checked_at" in r.json()
+
+
+def test_blocked_login_attempts_sleep_before_token_check():
+    """M1: blocked clients are slowed before the token is checked."""
+    import kaine.nexus.auth as auth_module
+
+    config = NexusConfig(
+        operator_token=TOKEN,
+        login_max_failures=2,
+        login_block_delay_s=1.25,
+    )
+    app = _wired_app(config)
+    client = TestClient(app, base_url="http://127.0.0.1:8088")
+
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    original_sleep = auth_module._sleep
+    auth_module._sleep = fake_sleep
+    try:
+        # First two wrong attempts are not blocked at request start: no sleep.
+        assert (
+            client.post(
+                "/auth/login", data={"token": "bad1"}, headers=JSON_ACCEPT
+            ).status_code
+            == 401
+        )
+        assert (
+            client.post(
+                "/auth/login", data={"token": "bad2"}, headers=JSON_ACCEPT
+            ).status_code
+            == 401
+        )
+        assert slept == []
+
+        # Third attempt starts blocked; it sleeps, then the wrong token yields 429.
+        blocked_wrong = client.post(
+            "/auth/login", data={"token": "bad3"}, headers=JSON_ACCEPT
+        )
+        assert blocked_wrong.status_code == 429
+        assert blocked_wrong.json()["detail"] == "Too many attempts; wait and try again."
+        assert slept == [1.25]
+
+        # Blocked client with the correct token sleeps, then logs in successfully.
+        blocked_correct = client.post(
+            "/auth/login",
+            data={"token": TOKEN},
+            headers=JSON_ACCEPT,
+            follow_redirects=False,
+        )
+        assert blocked_correct.status_code == 200
+        assert "session_key" in blocked_correct.json()
+        assert slept == [1.25, 1.25]
+
+        # A successful login resets the limiter; further requests do not sleep.
+        slept.clear()
+        after_reset = client.post(
+            "/auth/login",
+            data={"token": TOKEN},
+            headers=JSON_ACCEPT,
+            follow_redirects=False,
+        )
+        assert after_reset.status_code == 200
+        assert slept == []
+    finally:
+        auth_module._sleep = original_sleep
+
+
+def test_concurrent_blocked_login_attempts_serialize_delay():
+    """Blocked login attempts for the same client are serialized, not run in parallel."""
+    import kaine.nexus.auth as auth_module
+
+    config = NexusConfig(
+        operator_token=TOKEN,
+        login_max_failures=1,
+        login_block_delay_s=0.1,
+    )
+    app = _wired_app(config)
+
+    max_concurrent = [0]
+    current = [0]
+    sleeps: list[float] = []
+
+    async def instrumented_sleep(delay: float) -> None:
+        sleeps.append(delay)
+        current[0] += 1
+        max_concurrent[0] = max(max_concurrent[0], current[0])
+        await asyncio.sleep(0.01)
+        current[0] -= 1
+
+    original_sleep = auth_module._sleep
+    auth_module._sleep = instrumented_sleep
+    try:
+
+        async def _run():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+            ) as client:
+                # Seed one failure so all subsequent attempts start blocked.
+                seed = await client.post(
+                    "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+                )
+                assert seed.status_code == 401
+
+                async def one_attempt():
+                    return await client.post(
+                        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+                    )
+
+                return await asyncio.gather(*[
+                    asyncio.create_task(one_attempt()) for _ in range(5)
+                ])
+
+        responses = asyncio.run(_run())
+
+        for r in responses:
+            assert r.status_code == 429
+            assert r.json()["detail"] == "Too many attempts; wait and try again."
+
+        assert len(sleeps) == 5
+        assert max_concurrent[0] == 1
+    finally:
+        auth_module._sleep = original_sleep
+
+
+def test_create_app_responses_carry_frame_protection_headers():
+    """M2: every response gets X-Frame-Options and a CSP frame-ancestors directive."""
+    class StubBridge:
+        async def start(self):
+            pass
+        async def stop(self):
+            pass
+        async def publish_synthetic(self, **kwargs):
+            pass
+
+    config = NexusConfig(
+        operator_token=TOKEN,
+        conversation_enabled=True,
+        diagnostics_enabled=True,
+    )
+    app = create_app(
+        config=config,
+        bridge=StubBridge(),  # type: ignore[arg-type]
+        history_loader=lambda n: [],
+        metrics_snapshot=lambda: {},
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8088") as client:
+        # Login page keeps its own full CSP; middleware adds X-Frame-Options only.
+        r_login = client.get("/login")
+        assert r_login.status_code == 200
+        assert r_login.headers.get("X-Frame-Options") == "DENY"
+        csp_login = r_login.headers.get("Content-Security-Policy")
+        assert csp_login is not None
+        assert "frame-ancestors 'none'" in csp_login
+        assert csp_login.count("frame-ancestors") == 1
+
+        # Health JSON gets both headers.
+        r_health = client.get("/diagnostics/health.json")
+        assert r_health.status_code == 200
+        assert r_health.headers.get("X-Frame-Options") == "DENY"
+        csp_health = r_health.headers.get("Content-Security-Policy")
+        assert csp_health == "frame-ancestors 'none'"
+
+        # A generic JSON failure route also gets both headers.
+        r_json = client.post(
+            "/auth/login", data={"token": "wrong"}, headers=JSON_ACCEPT
+        )
+        assert r_json.status_code == 401
+        assert r_json.headers.get("X-Frame-Options") == "DENY"
+        csp_json = r_json.headers.get("Content-Security-Policy")
+        assert "frame-ancestors 'none'" in csp_json
+        assert csp_json.count("frame-ancestors") == 1
+
+
+def test_login_cookie_max_age_uses_session_max_hours():
+    """L1: cookie lifetime follows the absolute server-side session cap."""
+    config = NexusConfig(operator_token=TOKEN, session_max_hours=2)
+    app = _wired_app(config)
+    client = TestClient(app, base_url="http://127.0.0.1:8088")
+
+    r = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    set_cookie = r.headers["set-cookie"]
+    assert "Max-Age=7200" in set_cookie
+
+
+def test_conversation_read_gate_evaluation_requires_bearer():
+    """L3: privileged read surfaces require Bearer authentication."""
+    class StubBridge:
+        async def start(self):
+            pass
+        async def stop(self):
+            pass
+        async def publish_synthetic(self, **kwargs):
+            pass
+
+    config = NexusConfig(
+        operator_token=TOKEN,
+        conversation_enabled=True,
+        diagnostics_enabled=True,
+    )
+    app = create_app(
+        config=config,
+        bridge=StubBridge(),  # type: ignore[arg-type]
+        history_loader=lambda n: [],
+        metrics_snapshot=lambda: {},
+    )
+
+    eval_router = APIRouter()
+
+    @eval_router.get(
+        "/diagnostics/evaluation/summary.json",
+        dependencies=list(app.state.read_dependencies),
+    )
+    async def eval_summary():
+        return {"summary": True}
+
+    app.include_router(eval_router)
+
+    with TestClient(app, base_url="http://127.0.0.1:8088") as client:
+        r_unauth = client.get("/diagnostics/evaluation/summary.json")
+        assert r_unauth.status_code == 401
+
+        r_auth = client.get(
+            "/diagnostics/evaluation/summary.json",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        )
+        assert r_auth.status_code == 200
+        assert r_auth.json() == {"summary": True}
+
+
+def test_config_repr_hides_operator_token():
+    """L5: repr must not leak the configured operator token."""
+    config = NexusConfig(operator_token="x" * 40)
+    representation = repr(config)
+    assert "x" * 40 not in representation
+    assert "operator_token" not in representation

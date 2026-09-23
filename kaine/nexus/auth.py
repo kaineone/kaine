@@ -16,6 +16,7 @@ key delivered once at login and sent in ``X-Nexus-Session-Key``.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import secrets
@@ -39,6 +40,10 @@ SESSION_KEY_HEADER = "X-Nexus-Session-Key"
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _MAX_RATE_LIMIT_KEYS = 1024
 _MAX_LOGIN_BODY_BYTES = 4096
+
+# Injected sleep function so tests can observe the login block delay without
+# actually waiting.
+_sleep = asyncio.sleep
 
 
 class NexusAuthError(HTTPException):
@@ -147,7 +152,12 @@ class SessionStore:
 
 
 class LoginRateLimiter:
-    """Per-key brute-force failure limiter with bounded memory."""
+    """Per-key brute-force failure limiter with bounded memory.
+
+    The failure map stores at most ``_MAX_RATE_LIMIT_KEYS`` entries; the
+    per-key asyncio locks are kept in sync so they are bounded by the same
+    number of live keys.
+    """
 
     def __init__(
         self,
@@ -159,12 +169,14 @@ class LoginRateLimiter:
         self.window_s = window_s
         self.clock = clock
         self._failures: OrderedDict[str, list[float]] = OrderedDict()
+        self._locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
 
     def record_failure(self, key: str) -> None:
         now = self.clock()
         if key not in self._failures:
             if len(self._failures) >= _MAX_RATE_LIMIT_KEYS:
-                self._failures.popitem(last=False)
+                oldest, _ = self._failures.popitem(last=False)
+                self._locks.pop(oldest, None)
             self._failures[key] = []
         else:
             self._failures.move_to_end(key)
@@ -182,7 +194,8 @@ class LoginRateLimiter:
         cutoff = now - self.window_s
         recent = [t for t in failures if t >= cutoff]
         if not recent:
-            del self._failures[key]
+            self._failures.pop(key, None)
+            self._locks.pop(key, None)
             return False
 
         self._failures[key] = recent
@@ -191,6 +204,22 @@ class LoginRateLimiter:
 
     def reset(self, key: str) -> None:
         self._failures.pop(key, None)
+        self._locks.pop(key, None)
+
+    def lock_for(self, key: str) -> asyncio.Lock:
+        """Return the asyncio lock for a blocked client key.
+
+        The number of live locks never exceeds the number of tracked failure
+        keys because the lock entry is dropped whenever the key is dropped or
+        reset.
+        """
+        lock = self._locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[key] = lock
+        else:
+            self._locks.move_to_end(key)
+        return lock
 
 
 def require_operator_token(request: Request) -> None:
@@ -324,8 +353,9 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
         limiter: LoginRateLimiter = request.app.state.login_limiter
         sessions: SessionStore = request.app.state.sessions
 
-        # Compare the token first; a correct token is never refused by the limiter.
-        if _tokens_match(token, config.operator_token):
+        was_blocked = limiter.is_blocked(key)
+
+        async def _grant_session() -> RedirectResponse | JSONResponse:
             limiter.reset(key)
             if not accepts_json:
                 # Plain form post with no JS cannot receive the one-time key,
@@ -341,6 +371,8 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
                 {"session_key": session_key, "redirect": "/"},
                 status_code=status.HTTP_200_OK,
             )
+            # The browser cookie tracks the absolute server-side session cap;
+            # idle expiry is still enforced server-side.
             response.set_cookie(
                 SESSION_COOKIE,
                 session_id,
@@ -348,12 +380,11 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
                 samesite="strict",
                 path="/",
                 secure=request.url.scheme == "https",
-                max_age=int(config.session_idle_minutes * 60),
+                max_age=int(config.session_max_hours * 3600),
             )
             return _set_no_store(response)
 
-        # Wrong token: apply rate limiting.
-        if limiter.is_blocked(key):
+        async def _locked_response() -> RedirectResponse | JSONResponse:
             if accepts_json:
                 return _set_no_store(
                     JSONResponse(
@@ -368,21 +399,40 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
                 )
             )
 
-        limiter.record_failure(key)
-
-        if accepts_json:
+        async def _unauthorized_response() -> RedirectResponse | JSONResponse:
+            if accepts_json:
+                return _set_no_store(
+                    JSONResponse(
+                        {"detail": "invalid operator token"},
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                    )
+                )
             return _set_no_store(
-                JSONResponse(
-                    {"detail": "invalid operator token"},
-                    status_code=status.HTTP_401_UNAUTHORIZED,
+                RedirectResponse(
+                    "/login?error=1",
+                    status_code=status.HTTP_303_SEE_OTHER,
                 )
             )
-        return _set_no_store(
-            RedirectResponse(
-                "/login?error=1",
-                status_code=status.HTTP_303_SEE_OTHER,
-            )
-        )
+
+        # Slow any already-blocked client before the token is checked. A correct
+        # token is still never refused.
+        if was_blocked:
+            async with limiter.lock_for(key):
+                await _sleep(config.login_block_delay_s)
+                if _tokens_match(token, config.operator_token):
+                    return await _grant_session()
+                # Wrong token submitted while already blocked.
+                limiter.record_failure(key)
+                return await _locked_response()
+
+        # Not blocked at request start.
+        if _tokens_match(token, config.operator_token):
+            return await _grant_session()
+
+        # Wrong token: record the failure but return 401 on this attempt. Only
+        # attempts made while already blocked return 429.
+        limiter.record_failure(key)
+        return await _unauthorized_response()
 
     @router.post(
         "/auth/logout",

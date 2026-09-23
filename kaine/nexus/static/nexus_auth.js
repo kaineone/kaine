@@ -22,6 +22,16 @@
 
   var STORAGE_KEY = "kaine.nexus.sessionKey";
 
+  // Clock hook for tests; defaults to the real clock.
+  if (typeof window.__nexusAuthNow !== "function") {
+    window.__nexusAuthNow = function () {
+      return Date.now();
+    };
+  }
+  function nexusNow() {
+    return window.__nexusAuthNow();
+  }
+
   function getStoredKey() {
     try {
       return window.localStorage.getItem(STORAGE_KEY);
@@ -127,10 +137,25 @@
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initLoginForm);
-  } else {
+  function initLogoutButton() {
+    var btn = document.getElementById("nexus-logout");
+    if (!btn) {
+      return;
+    }
+    btn.addEventListener("click", function () {
+      window.NexusAuth.logout();
+    });
+  }
+
+  function initUI() {
     initLoginForm();
+    initLogoutButton();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initUI);
+  } else {
+    initUI();
   }
 
   // ---------------------------------------------------------------------------
@@ -258,4 +283,66 @@
       return !!getStoredKey();
     }
   };
+
+  // ---------------------------------------------------------------------------
+  // EventSource wrapper — probes on terminal errors so a expired session does
+  // not leave diagnostics silently "reconnecting" forever.
+  // ---------------------------------------------------------------------------
+
+  if (typeof window.EventSource !== "undefined" && window.EventSource) {
+    var OriginalEventSource = window.EventSource;
+
+    class NexusEventSource extends OriginalEventSource {
+      constructor(...args) {
+        super(...args);
+        this.__nexusErrors = 0;
+        this.__nexusLastProbe = null;
+        this.__nexusProbing = false;
+        var self = this;
+        OriginalEventSource.prototype.addEventListener.call(
+          this,
+          "error",
+          function (event) {
+            self.__nexusOnError(event);
+          }
+        );
+      }
+
+      __nexusOnError(event) {
+        var now = nexusNow();
+        this.__nexusErrors += 1;
+        if (
+          this.readyState === OriginalEventSource.CLOSED ||
+          this.__nexusErrors >= 3
+        ) {
+          this.__nexusMaybeProbe(now);
+        }
+      }
+
+      __nexusMaybeProbe(now) {
+        if (this.__nexusProbing) {
+          return;
+        }
+        if (typeof this.__nexusLastProbe === "number" && now - this.__nexusLastProbe < 30000) {
+          return;
+        }
+        this.__nexusLastProbe = now;
+        this.__nexusProbing = true;
+        var self = this;
+        fetch("/diagnostics/perception.json", { cache: "no-store" })
+          .catch(function () {})
+          .finally(function () {
+            self.__nexusProbing = false;
+          });
+      }
+    }
+
+    ["CONNECTING", "OPEN", "CLOSED"].forEach(function (name) {
+      if (typeof OriginalEventSource[name] !== "undefined") {
+        NexusEventSource[name] = OriginalEventSource[name];
+      }
+    });
+
+    window.EventSource = NexusEventSource;
+  }
 })();

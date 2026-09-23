@@ -33,6 +33,7 @@
         <a class="rail__seg{% if _path == "/" %} is-active{% endif %}" href="/">Console</a>
         <a class="rail__seg{% if _path.startswith("/diagnostics/") and not _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/">Diagnostics</a>
         <a class="rail__seg{% if _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/evaluation/">Evaluation</a>
+        <button type="button" class="rail__seg rail__logout" id="nexus-logout">Log out</button>
       </nav>
       {% endblock %}
     </aside>

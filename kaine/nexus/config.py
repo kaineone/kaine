@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import tomllib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,7 @@ class NexusConfig:
     # Operator authentication. Empty string means no token is configured;
     # state-changing endpoints and privileged read surfaces return 401.
     # Loaded from KAINE_NEXUS_TOKEN env or config/secrets.toml [nexus] operator_token.
-    operator_token: str = ""
+    operator_token: str = field(default="", repr=False)
     # CSRF/Origin protection. Defaults cover loopback-only operation.
     allowed_origins: tuple[str, ...] = (
         "http://127.0.0.1:8088",
@@ -47,6 +47,10 @@ class NexusConfig:
     session_max_hours: int = 24
     login_max_failures: int = 5
     login_failure_window_s: int = 300
+    # Delay applied to login attempts from a client that has already exceeded
+    # the failure limit. Slows brute-force guessing while still allowing a
+    # correct token to log in.
+    login_block_delay_s: float = 2.0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "NexusConfig":
@@ -71,6 +75,9 @@ class NexusConfig:
             login_max_failures=int(data.get("login_max_failures", cls.login_max_failures)),
             login_failure_window_s=int(
                 data.get("login_failure_window_s", cls.login_failure_window_s)
+            ),
+            login_block_delay_s=float(
+                data.get("login_block_delay_s", cls.login_block_delay_s)
             ),
         )
 

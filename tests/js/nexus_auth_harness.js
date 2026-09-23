@@ -34,6 +34,42 @@ function makeElement(id, extras) {
   return el;
 }
 
+function makeFakeEventSource() {
+  var instances = [];
+  function FakeES(url, options) {
+    this.url = url;
+    this.options = options;
+    this.readyState = FakeES.CONNECTING;
+    this._listeners = {};
+    instances.push(this);
+  }
+  FakeES.CONNECTING = 0;
+  FakeES.OPEN = 1;
+  FakeES.CLOSED = 2;
+  FakeES.instances = instances;
+  FakeES.prototype.addEventListener = function (type, fn) {
+    var list = this._listeners[type] || (this._listeners[type] = []);
+    list.push(fn);
+  };
+  FakeES.prototype.removeEventListener = function (type, fn) {
+    var list = this._listeners[type];
+    if (!list) return;
+    var idx = list.indexOf(fn);
+    if (idx !== -1) list.splice(idx, 1);
+  };
+  FakeES.prototype.dispatchEvent = function (event) {
+    var list = this._listeners[event.type];
+    if (!list) return;
+    for (var i = 0; i < list.length; i++) {
+      list[i].call(this, event);
+    }
+  };
+  FakeES.prototype.triggerError = function () {
+    this.dispatchEvent({ type: "error", target: this, currentTarget: this });
+  };
+  return FakeES;
+}
+
 function makeSandbox(scenario) {
   var localStorageData = {};
   var localStorage = {
@@ -88,6 +124,7 @@ function makeSandbox(scenario) {
     Request: globalThis.Request,
     URL: globalThis.URL,
     Promise: globalThis.Promise,
+    Date: globalThis.Date,
     console: globalThis.console,
     fetch: fakeFetch,
     encodeURIComponent: globalThis.encodeURIComponent,
@@ -368,6 +405,141 @@ var scenarios = [
         throw new Error(
           "expected no extra assign for /auth/login 401, got " +
             JSON.stringify(sandbox._assignTargets)
+        );
+      }
+    }
+  },
+  {
+    name: "logout button click",
+    setup: function (sandbox) {
+      sandbox.localStorage.setItem(STORAGE_KEY, "K1");
+      var logoutBtn = makeElement("nexus-logout");
+      sandbox._elements["nexus-logout"] = logoutBtn;
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {};
+        }
+      });
+    },
+    run: async function (sandbox) {
+      var btn = sandbox.document.getElementById("nexus-logout");
+      var handler = btn.getHandler("click");
+      if (!handler) {
+        throw new Error("logout click handler not attached");
+      }
+      handler();
+      await tick();
+      var logoutCalls = sandbox._fetchCalls.filter(function (call) {
+        return call.url === "/auth/logout";
+      });
+      if (logoutCalls.length !== 1) {
+        throw new Error(
+          "expected one /auth/logout fetch, got " + logoutCalls.length
+        );
+      }
+      if (
+        !logoutCalls[0].init.method ||
+        logoutCalls[0].init.method.toUpperCase() !== "POST"
+      ) {
+        throw new Error(
+          "expected POST /auth/logout, got " + logoutCalls[0].init.method
+        );
+      }
+      if (sandbox.localStorage.getItem(STORAGE_KEY) !== null) {
+        throw new Error("session key should be cleared after logout");
+      }
+      if (
+        sandbox._assignTargets.length !== 1 ||
+        sandbox._assignTargets[0] !== "/login"
+      ) {
+        throw new Error(
+          "expected assign('/login') after logout, got " +
+            JSON.stringify(sandbox._assignTargets)
+        );
+      }
+    }
+  },
+  {
+    name: "EventSource wrapper probes on CLOSED error and throttles",
+    setup: function (sandbox) {
+      var FakeES = makeFakeEventSource();
+      sandbox.EventSource = FakeES;
+      sandbox.window.EventSource = FakeES;
+      sandbox._fakeEventSourceClass = FakeES;
+      sandbox._now = 0;
+      sandbox.__nexusAuthNow = function () {
+        return sandbox._now;
+      };
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {};
+        }
+      });
+    },
+    run: async function (sandbox) {
+      var FakeES = sandbox._fakeEventSourceClass;
+      var Wrapped = sandbox.window.EventSource;
+      if (!Wrapped) {
+        throw new Error("EventSource wrapper was not installed");
+      }
+      if (
+        Wrapped.CONNECTING !== FakeES.CONNECTING ||
+        Wrapped.OPEN !== FakeES.OPEN ||
+        Wrapped.CLOSED !== FakeES.CLOSED
+      ) {
+        throw new Error("wrapper is missing EventSource readyState constants");
+      }
+
+      var es = new Wrapped("/diagnostics/stream");
+      if (FakeES.instances.length !== 1) {
+        throw new Error(
+          "expected one underlying EventSource instance, got " +
+            FakeES.instances.length
+        );
+      }
+
+      es.readyState = FakeES.CLOSED;
+      es.triggerError();
+      await tick();
+      var probeCalls = sandbox._fetchCalls.filter(function (call) {
+        return call.url === "/diagnostics/perception.json";
+      });
+      if (probeCalls.length !== 1) {
+        throw new Error(
+          "expected one probe after CLOSED error, got " + probeCalls.length
+        );
+      }
+      if (probeCalls[0].init.cache !== "no-store") {
+        throw new Error(
+          "probe fetch should use cache: 'no-store', got " +
+            probeCalls[0].init.cache
+        );
+      }
+
+      es.readyState = FakeES.CLOSED;
+      es.triggerError();
+      await tick();
+      probeCalls = sandbox._fetchCalls.filter(function (call) {
+        return call.url === "/diagnostics/perception.json";
+      });
+      if (probeCalls.length !== 1) {
+        throw new Error(
+          "expected no second probe within 30 s, got " + probeCalls.length
+        );
+      }
+
+      sandbox._now += 30000;
+      es.readyState = FakeES.CLOSED;
+      es.triggerError();
+      await tick();
+      probeCalls = sandbox._fetchCalls.filter(function (call) {
+        return call.url === "/diagnostics/perception.json";
+      });
+      if (probeCalls.length !== 2) {
+        throw new Error(
+          "expected second probe after 30 s, got " + probeCalls.length
         );
       }
     }

@@ -29,6 +29,23 @@ def test_base_template_loads_auth_script_first():
     )
 
 
+def test_logout_button_in_base_template():
+    html = BASE_TEMPLATE.read_text(encoding="utf-8")
+    assert 'id="nexus-logout"' in html, "rail logout button missing"
+
+    match = re.search(
+        r'<button\b[^>]*\bid="nexus-logout"[^>]*>',
+        html,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert match, "could not locate the logout button tag"
+
+    tag = match.group(0)
+    assert not re.search(r"\bon\w+\s*=", tag, re.IGNORECASE), (
+        "logout button must not use inline event-handler attributes"
+    )
+
+
 def test_nexus_auth_js_required_content():
     text = AUTH_JS.read_text(encoding="utf-8")
 

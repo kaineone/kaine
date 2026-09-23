@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable
 
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 
 from kaine.bus.schema import Event
 from kaine.lifecycle.manager import ForkManager
@@ -40,6 +41,38 @@ from kaine.nexus.perception import build_perception_router, perception_snapshot
 from kaine.nexus.privacy import PrivacyFilter
 
 log = logging.getLogger(__name__)
+
+
+class FrameOptionsMiddleware:
+    """Set anti-clickjacking headers on every HTTP response without touching bodies.
+
+    This only intercepts the response-start ASGI message, so SSE streams and
+    other chunked responses keep flowing unchanged.
+    """
+
+    def __init__(self, app: Callable) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def wrapped_send(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message["headers"])
+                headers["X-Frame-Options"] = "DENY"
+
+                csp = headers.get("content-security-policy")
+                directive = "frame-ancestors 'none'"
+                if csp is None:
+                    headers["Content-Security-Policy"] = directive
+                elif directive not in csp:
+                    headers["Content-Security-Policy"] = f"{csp}; {directive}"
+
+            await send(message)
+
+        await self.app(scope, receive, wrapped_send)
 
 
 def create_app(
@@ -107,6 +140,10 @@ def create_app(
     # CSRF/Origin protection rejects cross-origin or rebinding requests with
     # 403 before they reach route handlers.
     app.add_middleware(NexusCSRFMiddleware, config=config)
+
+    # Anti-clickjacking headers on every response (headers only, so SSE streams
+    # are unaffected).
+    app.add_middleware(FrameOptionsMiddleware)
 
     # Auth surface: login/logout and the login form. No auth dependencies.
     app.include_router(build_auth_router(config))

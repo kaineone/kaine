@@ -427,9 +427,13 @@ the diagnostics stream); state-changing requests also require the session key or
 `Authorization: Bearer <token>`. Sessions expire after idle inactivity
 (`[nexus].session_idle_minutes`, default 720) or absolute age
 (`[nexus].session_max_hours`, default 24), and are cleared on restart. An operator
-logs out by posting to `POST /auth/logout`. A correct token always signs in; a
-wrong token returns 401, and after `[nexus].login_max_failures` failures within
-`[nexus].login_failure_window_s`, further attempts return 429.
+logs out by posting to `POST /auth/logout`. A correct token always signs in. A
+wrong token returns 401; after `login_max_failures` failures within
+`login_failure_window_s`, further attempts from that client are serialized and
+each delayed by `login_block_delay_s` (default 2 s), and wrong ones return 429. A
+correct token submitted while the client is blocked still signs in after waiting
+its turn. The login limiter only slows an attacker; security rests primarily on
+the token's length (at least 32 characters).
 
 Every request is checked against `[nexus].host_allowlist` (default
 `127.0.0.1`, `localhost`, `::1`). A request whose `Host` header is not in the
