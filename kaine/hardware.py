@@ -501,16 +501,28 @@ def describe_host() -> dict[str, Any]:
 
 #: RAM floor (GiB) below which the torch/transformers runtime is unrealistic and
 #: the host is an edge/sensor node (Tier 0). The GGML/ONNX family still runs.
+#: Nominal RAM floor (GiB) for an embodied CPU agent (Tier 1). Hosts with a
+#: nominal 4 GB board report slightly less usable memory because firmware and
+#: the OS reserve a slice; the comparison in :func:`recommend_tier` applies
+#: :data:`NOMINAL_USABLE_FRACTION` so a nominal 4 GB board still qualifies.
 TIER1_MIN_RAM_GB = 4.0
 
-#: Budget floor for the full Tier-2 workstation experience (no module residency
-#: required). Applied after the Tier-0 rules.
+#: Nominal budget for the full Tier-2 workstation experience (no module residency
+#: required). Reported usable memory is lower than the nominal card/RAM size
+#: because firmware and the OS reserve a slice; see :data:`NOMINAL_USABLE_FRACTION`.
 TIER2_MIN_BUDGET_GB = 16.0
 
-#: Budget floor for an accelerator host that qualifies for Tier 2 but needs module
-#: residency to fit. Between this and :data:`TIER2_MIN_BUDGET_GB` the host is
-#: still Tier 2, with residency guidance.
+#: Nominal budget floor for an accelerator host that qualifies for Tier 2 but
+#: needs module residency to fit. Between this (after the usable fraction) and
+#: :data:`TIER2_MIN_BUDGET_GB` the host is still Tier 2, with residency guidance.
 RESIDENCY_MIN_BUDGET_GB = 6.0
+
+#: Nominal size vs. reported-usable size on every accelerator/host platform.
+#: A "16 GB" card or Jetson reports ~15.3 GiB usable because firmware and the
+#: kernel reserve a slice. Comparing the *reported* budget against the nominal
+#: thresholds with this fraction keeps the ladder honest (a nominal 16 GB host
+#: still qualifies for Tier 2 full).
+NOMINAL_USABLE_FRACTION = 0.9
 
 #: 32-bit ARM (armv6/armv7) cannot realistically bear the torch stack; such a
 #: host is capped at the Tier-0 symbolic-reasoning + memory + sensor role.
@@ -672,6 +684,9 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
     device reports unified memory. If any discrete device lacks a known VRAM
     total, the overall budget is reported as unknown rather than undercounted.
     Failures degrade to ``("unknown", None)``.
+
+    All memory totals are returned in GiB (bytes / 1024**3), consistent with
+    :func:`total_ram_gb`.
     """
     try:
         from kaine import hostmem
@@ -745,7 +760,7 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
     if seen_unified:
         return "unified", None
     if seen_discrete:
-        return "discrete", total_vram_bytes / 1e9
+        return "discrete", total_vram_bytes / (1024 ** 3)
     if any_success:
         return "unknown", None
     return "unknown", None
@@ -776,19 +791,23 @@ def recommend_tier(
       CPU is 32-bit ARM: an edge / sensor node (GGML/ONNX only, no torch).
       Existing rules stay first.
     * **Tier 3** — two or more accelerators with a memory budget of at least
-      :data:`TIER2_MIN_BUDGET_GB` GiB.
+      :data:`TIER2_MIN_BUDGET_GB` GiB (adjusted by
+      :data:`NOMINAL_USABLE_FRACTION`).
     * **Tier 2 (full)** — one accelerator with a memory budget of at least
-      :data:`TIER2_MIN_BUDGET_GB` GiB.
+      :data:`TIER2_MIN_BUDGET_GB` GiB (adjusted by
+      :data:`NOMINAL_USABLE_FRACTION`).
     * **Tier 2 (residency required)** — an accelerator host whose memory budget
       is between :data:`RESIDENCY_MIN_BUDGET_GB` GiB and
-      :data:`TIER2_MIN_BUDGET_GB` GiB. The reason explains that module residency
-      is not yet implemented and gives interim operator guidance.
+      :data:`TIER2_MIN_BUDGET_GB` GiB (both adjusted by
+      :data:`NOMINAL_USABLE_FRACTION`). The reason explains that module
+      residency is not yet implemented and gives interim operator guidance.
     * **Tier 1** — below the residency floor or without an accelerator: an
       embodied CPU agent.
 
-    The memory budget is system RAM on unified-memory hosts and
+    The memory budget is system RAM (GiB) on unified-memory hosts and
     ``min(RAM, VRAM)`` on discrete hosts (or whichever value is known when one
-    is missing); unknown state falls back to RAM.
+    is missing); unknown state falls back to RAM. VRAM is reported in GiB
+    (bytes / 1024**3), consistent with RAM.
     """
     arch_v = (arch if arch is not None else cpu_arch()).lower()
     ram_v = ram_gb if ram_gb is not None else total_ram_gb()
@@ -851,9 +870,9 @@ def recommend_tier(
         return _rec(0, f"32-bit ARM ({arch_v}); torch stack not viable")
     if not torch_v:
         return _rec(0, "torch does not import on this host")
-    if ram_v is not None and ram_v < TIER1_MIN_RAM_GB:
+    if ram_v is not None and ram_v < TIER1_MIN_RAM_GB * NOMINAL_USABLE_FRACTION:
         return _rec(
-            0, f"RAM {ram_v} GB below Tier-1 floor of {TIER1_MIN_RAM_GB} GB"
+            0, f"RAM {ram_v} GB below Tier-1 floor of {TIER1_MIN_RAM_GB} GB (nominal)"
         )
 
     if has_accelerator:
@@ -863,7 +882,7 @@ def recommend_tier(
                 f"accelerator present ({accel_v}) but memory budget unknown; "
                 "falling back to CPU agent",
             )
-        if budget >= TIER2_MIN_BUDGET_GB:
+        if budget >= TIER2_MIN_BUDGET_GB * NOMINAL_USABLE_FRACTION:
             if gpu_v >= 2:
                 return _rec(
                     3,
@@ -873,7 +892,7 @@ def recommend_tier(
                 2,
                 f"accelerator present ({accel_v}), {budget} GB memory budget",
             )
-        if budget >= RESIDENCY_MIN_BUDGET_GB:
+        if budget >= RESIDENCY_MIN_BUDGET_GB * NOMINAL_USABLE_FRACTION:
             return _rec(
                 2,
                 f"accelerator present ({accel_v}), {budget} GB memory budget; "

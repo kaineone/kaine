@@ -16,7 +16,11 @@ the configuration is consumed.
 
 Deployment tiers (tier0..tier3) are applied as a separate layer between the
 module-selection profile and the operator override, so recording a tier only
-ever bounds backends/devices; it never replaces the selected module set.
+ever bounds backends and devices; it never replaces the selected module set.
+Tier files carry an advisory ``[tier]`` table (``unsupported_modules``,
+``oscillator_supported``); they are forbidden from containing a ``[modules]``
+table or an ``[oscillator].enabled`` key, which would otherwise silently change
+the module set.
 """
 from __future__ import annotations
 
@@ -217,7 +221,7 @@ def load_kaine_config(
        ``config/profiles/<profile>.toml`` (e.g. the base-thesis
        ``thesis_test`` profile);
     3. an optional deployment-tier profile
-       ``config/profiles/<tier>.toml`` (bounds backends/devices; never
+       ``config/profiles/<tier>.toml`` (bounds backends and devices; never
        changes which modules are enabled);
     4. an optional operator override at ``operator_path`` — the operator's local
        working config, which STILL WINS so their toggles and private voice are
@@ -228,6 +232,11 @@ def load_kaine_config(
     (see :func:`resolve_tier_name`). Either may be ``None`` to skip that layer.
     A selected profile or tier whose file is missing raises :class:`ProfileError`
     — an explicit selection is honored or reported, never silently ignored.
+
+    A tier file that contains a ``[modules]`` table or an
+    ``[oscillator].enabled`` key raises :class:`ProfileError` ("tier <name> may
+    not set module toggles; tiers only bound backends and devices"), because a
+    deployment tier must never silently change the enabled module set.
 
     A missing operator file is harmless; a malformed one is tolerated (falls back
     without it). Raises :class:`FileNotFoundError` if the shipped file is absent.
@@ -258,7 +267,17 @@ def load_kaine_config(
                 f"tier {tier!r} selected but {tier_path} does not exist"
             )
         with tier_path.open("rb") as fh:
-            merged = deep_merge(merged, tomllib.load(fh))
+            tier_raw = tomllib.load(fh)
+        if "modules" in tier_raw:
+            raise ProfileError(
+                f"tier {tier!r} may not set module toggles; tiers only bound backends and devices"
+            )
+        osc = tier_raw.get("oscillator")
+        if isinstance(osc, dict) and "enabled" in osc:
+            raise ProfileError(
+                f"tier {tier!r} may not set module toggles; tiers only bound backends and devices"
+            )
+        merged = deep_merge(merged, tier_raw)
 
     # Layer 4: the operator's local working config (still wins over everything).
     op_path = Path(operator_path)
@@ -299,7 +318,7 @@ def load_runtime_config(
       env, then ``[deployment].tier`` from the operator overlay) and layered on
       top of the module profile.
 
-    The tier only bounds backends/devices for the host hardware; it never
+    The tier only bounds backends and devices for the host hardware; it never
     replaces the selected module set. An explicit profile selection is honored
     or reported, never silently ignored.
     """

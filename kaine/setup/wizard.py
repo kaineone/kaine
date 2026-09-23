@@ -417,9 +417,10 @@ def run_wizard(
         Optional callable returning a :class:`kaine.hardware.TierRecommendation`.
         When provided (and not in ``defaults`` mode) the wizard shows the tier,
         reason, and memory budget, and asks whether to record the matching tier
-        as ``[deployment].tier``. Recording a tier only bounds backends/devices
-        for this hardware; it never changes the module set. Never applies without
-        an explicit ``yes``.
+        as ``[deployment].tier``. Recording a tier only bounds backends and
+        devices for this hardware and never changes which modules are enabled;
+        the pre-boot check reports any enabled module this tier cannot run.
+        Never applies without an explicit ``yes``.
     defaults:
         Non-interactive mode for tests/CI: records the ack as the default path,
         chooses a minimal safe module set, all-CPU devices, no metrics, no
@@ -525,8 +526,9 @@ def run_wizard(
                 line("  Memory budget: unknown")
             if _ask_yes_no(
                 input_fn,
-                f"Record tier {tier_label} for this install? It bounds backends "
-                f"for this hardware; the module set is unchanged. [y/N]",
+                f"Record tier {tier_label} for this install? It bounds backends and devices "
+                f"for this hardware and never changes which modules are enabled; the pre-boot "
+                f"check reports any enabled module this tier cannot run. [y/N]",
                 default=False,
             ):
                 _set(cfg, "deployment", "tier", tier_label)

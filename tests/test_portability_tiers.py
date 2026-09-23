@@ -280,6 +280,20 @@ def test_recommend_tier_no_accel_16gb_tier1():
     assert rec.tier == 1
 
 
+def test_recommend_tier_3_7gb_torch_aarch64_tier1():
+    rec = hardware.recommend_tier(
+        torch_ok=True, ram_gb=3.7, arch="aarch64", gpu_count=0
+    )
+    assert rec.tier == 1
+
+
+def test_recommend_tier_3_5gb_torch_aarch64_tier0():
+    rec = hardware.recommend_tier(
+        torch_ok=True, ram_gb=3.5, arch="aarch64", gpu_count=0
+    )
+    assert rec.tier == 0
+
+
 def test_recommend_tier_torch_missing_tier0():
     rec = hardware.recommend_tier(
         torch_ok=False,
@@ -302,6 +316,71 @@ def test_recommend_tier_unknown_state_32gb_one_gpu_tier2():
     )
     assert rec.tier == 2
     assert rec.memory_budget_gb == 32.0
+
+
+def test_probe_unified_15_3gb_tier2_full(monkeypatch):
+    """A nominal 16 GB unified host reports ~15.3 GiB usable and still clears
+    the Tier-2 full threshold after the nominal-usable fraction is applied."""
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("unified", None)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=15.3,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "unified"
+    assert rec.memory_budget_gb == 15.3
+    assert rec.tier == 2
+    assert rec.residency_required is False
+
+
+def test_probe_discrete_16gib_card_budget_16_and_tier2_full(monkeypatch):
+    """A nominal 16 GB discrete card reports 17179869184 bytes / 16.0 GiB and
+    clears the Tier-2 full threshold after the nominal-usable fraction."""
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("discrete", 17179869184)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=32.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "discrete"
+    assert rec.memory_budget_gb == 16.0
+    assert rec.tier == 2
+    assert rec.residency_required is False
+
+
+def test_probe_unified_7_4gb_orin_nano_super_residency(monkeypatch):
+    """A nominal 8 GB unified host (Orin Nano Super) falls in the residency band."""
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("unified", None)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=7.4,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "unified"
+    assert rec.memory_budget_gb == 7.4
+    assert rec.tier == 2
+    assert rec.residency_required is True
 
 
 # --------------------------------------------------------------------------
@@ -341,9 +420,9 @@ def _make_classification(state, vram_bytes=None):
 def test_probe_multi_gpu_budget_sums_vram(monkeypatch):
     def fake_classify(index, torch=None):
         if index == 0:
-            return _make_classification("discrete", 12_000_000_000)
+            return _make_classification("discrete", 12884901888)  # 12 GiB
         if index == 1:
-            return _make_classification("discrete", 8_000_000_000)
+            return _make_classification("discrete", 8589934592)   # 8 GiB
         raise IndexError(index)
 
     monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
@@ -363,7 +442,7 @@ def test_probe_multi_gpu_budget_sums_vram(monkeypatch):
 def test_probe_single_gpu_budget_uses_vram_and_requires_residency(monkeypatch):
     def fake_classify(index, torch=None):
         if index == 0:
-            return _make_classification("discrete", 12_000_000_000)
+            return _make_classification("discrete", 12884901888)  # 12 GiB
         raise IndexError(index)
 
     monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
@@ -537,13 +616,18 @@ def test_missing_selected_profile_raises_not_silent(tmp_path: Path):
 
 
 def test_shipped_profiles_are_inert_no_module_enabled():
-    """Safety invariant: a shipped profile never turns a module on."""
+    """Safety invariant: a shipped tier never turns a module on and never
+    carries a [modules] table; unfit modules are listed in the advisory
+    [tier] table only."""
     for name in PROFILE_NAMES:
         path = REPO_ROOT / PROFILES_DIR / f"{name}.toml"
         parsed = tomllib.loads(path.read_text())
         modules = parsed.get("modules", {})
         enabled = sorted(k for k, on in modules.items() if on)
         assert enabled == [], f"{name} enables modules {enabled} (must be inert)"
+        # Tier files use the advisory [tier] table; they must not set toggles.
+        assert "modules" not in parsed, f"{name} contains a forbidden [modules] table"
+        assert "tier" in parsed, f"{name} lacks the advisory [tier] table"
 
 
 def test_shipped_profiles_are_voice_free():

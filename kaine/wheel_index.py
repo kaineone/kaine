@@ -68,6 +68,12 @@ def _vtuple(version) -> tuple[int, int, int]:
     return tuple(parts[:3])
 
 
+def _mm_pair(version) -> tuple[int, int]:
+    """Major.minor tuple of a version string; used to detect unasserted companion pairings."""
+    v = _vtuple(version)
+    return (v[0], v[1])
+
+
 def _strip_torch_prefix(req: str) -> str:
     req = str(req or "").strip()
     if req.lower().startswith("torch"):
@@ -251,13 +257,15 @@ def _arch_list_to_entries(arch_string: str) -> tuple[str, ...]:
 def _device_coverage(cc, entries):
     """Coverage of one device cc by an entry list.
 
-    Returns (\"exact\", None), (\"same_major\", covering_sm) or
-    (\"ptx\", ptx_version); None when uncovered.
+    Returns ("exact", None), ("same_major", covering_sm) or
+    ("ptx", ptx_version); None when uncovered.
 
     Same-major coverage: a cubin sm_X.Y runs on a device (X, Y2) when
     Y2 >= Y.  We therefore pick the highest cubin minor that is still
-    <= the device minor.  Exact SASS matches are preferred; PTX is a
-    last-resort fallback.
+    <= the device minor.  A PTX ``compute_Z.W`` entry can be JIT-compiled
+    by the driver only for devices whose compute capability (X, Y) >= (Z, W);
+    we therefore pick the highest such PTX entry.  Exact SASS matches are
+    preferred, same-major SASS is next, and PTX is a last-resort fallback.
     """
     cc = (int(cc[0]), int(cc[1]))
     want = f"sm_{cc[0]}{cc[1]}"
@@ -270,7 +278,7 @@ def _device_coverage(cc, entries):
         if sass is not None and sass[0] == cc[0] and sass[1] <= cc[1]:
             if best_same is None or sass[1] > best_same[0]:
                 best_same = (sass[1], sm_name)
-        if ptx is not None and ptx >= cc:
+        if ptx is not None and ptx <= cc:
             if best_ptx is None or ptx > best_ptx:
                 best_ptx = ptx
     if best_same is not None:
@@ -412,7 +420,7 @@ DECISION_TABLE: tuple = (
         "row": 6,
         "arch": "x86_64",
         "driver_min": None,
-        "driver_max": (12, 4),
+        "driver_max": (12, 5),
         "driver_unknown_ok": True,
         "unified": "any",
         "cc_guard": None,
@@ -490,7 +498,7 @@ DECISION_TABLE: tuple = (
         "row": 12,
         "arch": "aarch64",
         "driver_min": None,
-        "driver_max": (12, 4),
+        "driver_max": (12, 5),
         "driver_unknown_ok": True,
         "unified": "any",
         "cc_guard": None,
@@ -1231,18 +1239,29 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
         row = _match_table_row(probes, url)
         if row is not None:
             reason = f"{reason}; matches decision table row {row['row']}"
-        selftest = (
-            probes.memory_state == "unified"
-            and probes.arch == "aarch64"
-            and cu_version >= (13, 0)
-        )
-        if selftest:
-            warnings.append(
-                "unified-memory Jetson-class GPU: upstream wheels run compatible (not native) "
-                "kernels on this device and some models have produced NaNs; the installer "
-                "runs a GPU-vs-CPU numerical self-test and falls back to CPU wheels if it fails"
-            )
-        return {
+
+        selftest = False
+        selftest_warning = None
+        if probes.arch == "aarch64" and cu_version >= (13, 0):
+            if probes.memory_state == "unified":
+                selftest = True
+                selftest_warning = (
+                    "unified-memory Jetson-class GPU: upstream wheels run compatible (not native) "
+                    "kernels on this device and some models have produced NaNs; the installer "
+                    "runs a GPU-vs-CPU numerical self-test and falls back to CPU wheels if it fails"
+                )
+            elif probes.memory_state == "unknown":
+                selftest = True
+                selftest_warning = (
+                    "memory classification is unknown on this aarch64 CUDA host; the installer "
+                    "runs the GPU-vs-CPU numerical self-test as a precaution"
+                )
+        if selftest_warning is not None:
+            warnings.append(selftest_warning)
+
+        tv = version
+        ta = _companion(name, probes.arch, version, "torchaudio")
+        result = {
             "variant": "cuda",
             "index_url": url,
             "selected_reason": reason,
@@ -1250,10 +1269,16 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
             "warnings": warnings,
             "torch_version": version,
             "torchvision_version": _companion(name, probes.arch, version, "torchvision"),
-            "torchaudio_version": _companion(name, probes.arch, version, "torchaudio"),
+            "torchaudio_version": ta,
             "torch_spec": spec_str,
             "selftest_required": selftest,
         }
+        if need_torchaudio and ta is not None and _mm_pair(ta) != _mm_pair(tv):
+            warnings.append(
+                f"torchaudio {ta} is paired with torch {tv} by release timing only; "
+                "no published wheel metadata asserts this pairing"
+            )
+        return result
 
     # Ladder step 6 -- exhaustion: CPU index with a detailed warning.
     cpu_version = _newest_arch_version("cpu", probes.arch, spec_list)
@@ -1270,6 +1295,11 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
         })
         warnings.append(
             f"CPU fallback rejected: no torchaudio published for torch {cpu_version} on the CPU index"
+        )
+    if need_torchaudio and cpu_ta is not None and cpu_version is not None and _mm_pair(cpu_ta) != _mm_pair(cpu_version):
+        warnings.append(
+            f"torchaudio {cpu_ta} is paired with torch {cpu_version} by release timing only; "
+            "no published wheel metadata asserts this pairing"
         )
     if driver is None:
         terminal = (
@@ -1387,7 +1417,7 @@ def _as_probes(probes) -> Probes:
     )
 
 
-def _apply_operator_override(result: dict, override, probes: Probes, spec_str: str, spec_list):
+def _apply_operator_override(result: dict, override, probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = False):
     """Apply an authoritative operator --index-url override to a ladder result."""
     out = dict(result)
     url = str(override).rstrip("/")
@@ -1431,18 +1461,46 @@ def _apply_operator_override(result: dict, override, probes: Probes, spec_str: s
     out["torchvision_version"] = _companion(short, probes.arch, torch_version, "torchvision")
     out["torchaudio_version"] = _companion(short, probes.arch, torch_version, "torchaudio")
 
+    out["torchaudio_unavailable"] = False
+    if need_torchaudio:
+        if out["torchaudio_version"] is None and torch_version is not None:
+            out["torchaudio_unavailable"] = True
+            cleaned.append(
+                f"operator --index-url {url} publishes no torchaudio for torch {torch_version}; "
+                "the --research install needs torchaudio"
+            )
+        else:
+            out["torchaudio_unavailable"] = False
+
+    tv = out["torch_version"]
+    ta = out["torchaudio_version"]
+    if need_torchaudio and ta is not None and tv is not None and _mm_pair(ta) != _mm_pair(tv):
+        cleaned.append(
+            f"torchaudio {ta} is paired with torch {tv} by release timing only; "
+            "no published wheel metadata asserts this pairing"
+        )
+
     selftest = False
-    if probes.memory_state == "unified" and probes.arch == "aarch64" and short and short.startswith("cu"):
+    selftest_warning = None
+    if probes.arch == "aarch64" and short is not None and short.startswith("cu"):
         cv = _cuda_version_from_short(short)
         if cv is not None and cv >= (13, 0):
-            selftest = True
+            if probes.memory_state == "unified":
+                selftest = True
+                selftest_warning = (
+                    "unified-memory Jetson-class GPU: upstream wheels run compatible (not native) "
+                    "kernels on this device and some models have produced NaNs; the installer "
+                    "runs a GPU-vs-CPU numerical self-test and falls back to CPU wheels if it fails"
+                )
+            elif probes.memory_state == "unknown":
+                selftest = True
+                selftest_warning = (
+                    "memory classification is unknown on this aarch64 CUDA host; the installer "
+                    "runs the GPU-vs-CPU numerical self-test as a precaution"
+                )
     out["selftest_required"] = selftest
-    if selftest:
-        cleaned.append(
-            "unified-memory Jetson-class GPU: upstream wheels run compatible (not native) "
-            "kernels on this device and some models have produced NaNs; the installer "
-            "runs a GPU-vs-CPU numerical self-test and falls back to CPU wheels if it fails"
-        )
+    if selftest_warning is not None:
+        cleaned.append(selftest_warning)
 
     out["warnings"] = cleaned
     return out
@@ -1476,7 +1534,7 @@ def _resolve_index_ladder(probes, *, override=None, spec=None, need_torchaudio: 
         }
         if override is not None:
             result = _apply_operator_override(
-                result, override, normalized, spec_str, spec_list
+                result, override, normalized, spec_str, spec_list, need_torchaudio=need_torchaudio
             )
         return result
     except Exception as exc:
@@ -1556,16 +1614,17 @@ def _coerce_rocm_version(value):
     return None
 
 
-def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
+def resolve_rocm(rocm_version, gfx_targets, arch, spec=None, need_torchaudio: bool = False):
     """Select a ROCm wheel index for the host.
 
     Returns a dict with index_url, torch_version, torchvision_version,
     torchaudio_version, selected_reason and warnings.
 
     Targets are normalized (lower-case, ``gfx000`` and ``*-generic`` dropped,
-    de-duplicated).  An index is acceptable when it covers at least one
-    probed target.  The selected index is the acceptable one with the
-    highest in-range torch version, tie-breaking by newest ROCm version.
+    de-duplicated).  When GFX targets are supplied, an index is acceptable only
+    if it covers at least one requested target.  The selected index is the
+    acceptable one with the highest in-range torch version, tie-breaking by
+    newest ROCm version.
     """
     if spec is None:
         spec = project_torch_spec()
@@ -1623,13 +1682,19 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
     oldest = qualifying_all[0] if qualifying_all else None
 
     if gfx:
-        # Refuse only when no probed target is covered by any host-eligible index.
-        any_covered = any(
-            any(g in rocm_info.get("gfx", ()) for g in gfx)
-            for _ver, _name, _chosen, rocm_info in host_eligible
-        )
-        if not any_covered:
+        # An index is acceptable only when it covers at least one probed target.
+        host_eligible = [
+            item
+            for item in host_eligible
+            if any(g in item[3].get("gfx", ()) for g in gfx)
+        ]
+        if not host_eligible:
             host_str = _fmt_version(host_ver)
+            for g in sorted(gfx):
+                warnings.append(
+                    f"GFX target {g} is not covered by any host-eligible ROCm index; "
+                    "consider setting HIP_VISIBLE_DEVICES to restrict PyTorch to a covered GPU"
+                )
             if oldest is not None:
                 warn = (
                     f"no ROCm index <= host ROCm {host_str}, range {spec}, "
@@ -1642,11 +1707,6 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
                     f"no ROCm index <= host ROCm {host_str}, range {spec}, "
                     f"arch {arch} covers any GFX target in [{','.join(gfx)}]; "
                     "no recorded ROCm index would cover any of these targets"
-                )
-            for g in sorted(gfx):
-                warnings.append(
-                    f"GFX target {g} is not covered by any host-eligible ROCm index; "
-                    "consider setting HIP_VISIBLE_DEVICES to restrict PyTorch to a covered GPU"
                 )
             return {
                 "index_url": None,
@@ -1710,11 +1770,19 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
         selected_reason += f" and covers GFX target(s) {','.join(covered)}"
     else:
         selected_reason += " (GFX check skipped)"
+
+    ta = _companion(name, arch, chosen, "torchaudio")
+    if need_torchaudio and ta is not None and _mm_pair(ta) != _mm_pair(chosen):
+        warnings.append(
+            f"torchaudio {ta} is paired with torch {chosen} by release timing only; "
+            "no published wheel metadata asserts this pairing"
+        )
+
     return {
         "index_url": url,
         "torch_version": chosen,
         "torchvision_version": _companion(name, arch, chosen, "torchvision"),
-        "torchaudio_version": _companion(name, arch, chosen, "torchaudio"),
+        "torchaudio_version": ta,
         "selected_reason": selected_reason,
         "warnings": warnings,
     }
@@ -1910,7 +1978,7 @@ def main(argv=None) -> int:
 
     if rocm_version is not None:
         arch = _normalize_arch(platform.machine())
-        result = resolve_rocm(rocm_version, gfx, arch)
+        result = resolve_rocm(rocm_version, gfx, arch, need_torchaudio=need_torchaudio)
         if ignored:
             result.setdefault("warnings", []).append(
                 "unrecognized CLI arguments ignored: " + " ".join(ignored)

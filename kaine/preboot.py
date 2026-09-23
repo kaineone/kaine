@@ -39,9 +39,11 @@ loop — only read-only probes and throwaway round-trips):
                   diverging or distressed individual at the first live
                   crossing (paper §3.7 / §6.2).
   5. CONFIG     — which boot mode this run would take (operator-supervised vs
-                  research), which modules are enabled, and whether the
-                  preservation config would fail closed (require_encryption
-                  set but state encryption off while a monitor is enabled).
+                  research), which modules are enabled, whether the tier being
+                  recorded can actually run the enabled modules, and whether
+                  the preservation config would fail closed
+                  (require_encryption set but state encryption off while a
+                  monitor is enabled).
 
 Every check is best-effort and NEVER raises out of this module — a check that
 cannot run reports the honest gap as a FAIL/SKIP row with a reason, never a
@@ -467,7 +469,8 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
 
 
 def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
-    """Report the boot mode, the enabled modules, the encryption posture, and the torch stack.
+    """Report the boot mode, the enabled modules, the tier fit, the encryption
+    posture, and the torch stack.
 
     Performs no I/O beyond reading installed package metadata for the
     torch-stack row, in addition to what is already in ``config`` — reuses
@@ -499,6 +502,73 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
                 "NONE — the entity would boot collecting no events at all",
             )
         )
+
+    tier_cfg = config.get("tier")
+    if tier_cfg is None:
+        results.append(
+            CheckResult(
+                GROUP_CONFIG,
+                "Tier fit",
+                SKIP,
+                "no deployment tier recorded",
+            )
+        )
+    elif not isinstance(tier_cfg, dict):
+        results.append(
+            CheckResult(
+                GROUP_CONFIG,
+                "Tier fit",
+                FAIL,
+                "malformed [tier] table: expected a table with name / unsupported_modules / oscillator_supported",
+            )
+        )
+    else:
+        tier_name = str(tier_cfg.get("name", "unknown"))
+        unsupported_modules = tier_cfg.get("unsupported_modules") or []
+        if not isinstance(unsupported_modules, list):
+            results.append(
+                CheckResult(
+                    GROUP_CONFIG,
+                    "Tier fit",
+                    FAIL,
+                    "malformed [tier] table: expected a table with name / unsupported_modules / oscillator_supported",
+                )
+            )
+        else:
+            unsupported = set(unsupported_modules)
+            offending = [m for m in enabled if m in unsupported]
+            oscillator_enabled = bool((config.get("oscillator") or {}).get("enabled", False))
+            oscillator_supported = bool(tier_cfg.get("oscillator_supported", True))
+            if offending:
+                results.append(
+                    CheckResult(
+                        GROUP_CONFIG,
+                        "Tier fit",
+                        FAIL,
+                        f"enabled modules unsupported by tier {tier_name}: "
+                        f"{', '.join(offending)}; disable them in the operator config "
+                        "or record a larger tier",
+                    )
+                )
+            elif oscillator_enabled and not oscillator_supported:
+                results.append(
+                    CheckResult(
+                        GROUP_CONFIG,
+                        "Tier fit",
+                        FAIL,
+                        f"[oscillator].enabled is not supported by tier {tier_name}; "
+                        "disable it in the operator config or record a larger tier",
+                    )
+                )
+            else:
+                results.append(
+                    CheckResult(
+                        GROUP_CONFIG,
+                        "Tier fit",
+                        PASS,
+                        f"tier {tier_name}: the enabled modules fit",
+                    )
+                )
 
     preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
     encryption_enabled = bool(

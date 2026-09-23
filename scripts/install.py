@@ -238,6 +238,11 @@ def _index_tag(index_url: str | None) -> str:
     return index_url.rstrip("/").split("/")[-1]
 
 
+def _is_pytorch_whl_url(index_url: str | None) -> bool:
+    """True when ``index_url`` is a ``download.pytorch.org/whl/<tag>`` URL."""
+    return bool(index_url and index_url.startswith("https://download.pytorch.org/whl/"))
+
+
 def _installed_torch_tag(py: Path) -> str:
     """Return the local build tag of the installed torch wheel, if any."""
     try:
@@ -271,8 +276,18 @@ def _installed_torch_base(py: Path) -> str | None:
     return out or None
 
 
-def _needs_force_reinstall(installed_tag: str, target_tag: str) -> bool:
-    """True when the installed torch build tag differs from the target index tag."""
+def _needs_force_reinstall(installed_tag: str, target_tag: str, index_url: str | None) -> bool:
+    """True when the installed torch build tag must be forced to match the target.
+
+    Tag comparisons are only meaningful for ``download.pytorch.org/whl/<tag>``
+    URLs. An installed wheel with no local tag is treated as the ``cpu`` tag,
+    so default PyPI / macOS / Jetson wheels are not force-reinstalled when the
+    target index is ``cpu``.
+    """
+    if not _is_pytorch_whl_url(index_url):
+        return False
+    if not installed_tag:
+        installed_tag = "cpu"
     return installed_tag != target_tag
 
 
@@ -324,18 +339,30 @@ def _marker_matches(
     )
 
 
-def _torchaudio_should_uninstall(installed_ta: str | None, ta_pin: str | None) -> bool:
+def _torchaudio_should_uninstall(
+    installed_ta: str | None, ta_pin: str | None, index_url: str | None
+) -> bool:
     """Return True when an installed torchaudio must be removed before pinning.
 
     If no target torchaudio pin applies, any installed torchaudio is stale.
-    If a pin applies, an installed version that differs is stale. A matching
-    installed version is kept.
+    If a pin applies, the installed base version must match and the installed
+    local tag must match the target index tag under the same rule used for
+    torch force-reinstall: an untagged wheel counts as ``cpu``, and tag checks
+    are skipped entirely when the target URL is not a PyTorch wheel index.
     """
     if not installed_ta:
         return False
     if ta_pin is None:
         return True
-    return installed_ta != ta_pin
+    base, _, installed_tag = installed_ta.partition("+")
+    if base != ta_pin:
+        return True
+    if not _is_pytorch_whl_url(index_url):
+        return False
+    if not installed_tag:
+        installed_tag = "cpu"
+    target_tag = _index_tag(index_url)
+    return installed_tag != target_tag
 
 
 def _resolve_cuda_index(
@@ -405,6 +432,14 @@ def _resolve_cuda_index(
 
     torch_pin, tv_pin, ta_pin, selftest = _extract_pins(data)
 
+    if research and data.get("torchaudio_unavailable"):
+        print(
+            f"install: --research needs torchaudio, but {url} publishes no "
+            f"torchaudio for torch {torch_pin}; choose a different --index-url or drop --research",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     if not quiet:
         probes = data.get("probes") or {}
         for name in sorted(probes):
@@ -460,23 +495,37 @@ def _auto_rocm_version() -> str | None:
     return _rocm_version_from_file(Path("/opt/rocm/.info/version"))
 
 
-_ROCM_NAME_RE = re.compile(r"^\s*Name:\s*(gfx[0-9a-f]+)\s*$", re.MULTILINE)
-_ROCM_AGENT_RE = re.compile(r"^\s*(gfx[0-9a-f]+)\s*$", re.MULTILINE)
+_ROCM_NAME_RE = re.compile(r"^\s*Name:\s*(\S+)", re.MULTILINE)
+
+
+def _clean_gfx_token(raw: str) -> str | None:
+    """Return the cleaned gfx name if ``raw`` names a real target.
+
+    ``raw`` is the whitespace-delimited token (e.g. ``"gfx90a:xnack-"`` or
+    ``"gfx11-generic"``).  Feature suffixes after the first ``:`` are
+    discarded, then ``gfx000`` and names ending in ``-generic`` are dropped,
+    and the remainder must match ``gfx[0-9a-f]+``.
+    """
+    token = raw.split(":", 1)[0]
+    if token == "gfx000" or token.endswith("-generic"):
+        return None
+    if re.fullmatch(r"gfx[0-9a-f]+", token):
+        return token
+    return None
 
 
 def _rocm_gfx_from_text(text: str) -> tuple[str, ...]:
     """Return order-stable unique gfx names extracted from ``rocminfo`` output.
 
-    Only lines matching ``Name: gfx<hex>`` are parsed; ``gfx000`` and names
-    ending in ``-generic`` are dropped.
+    Only ``Name:`` tokens are parsed.  Feature suffixes (anything after the
+    first ``:``), the reserved ``gfx000`` target, and ``-generic`` names are
+    dropped.  Tokens that are not ``gfx[0-9a-f]+`` after cleaning are ignored.
     """
     seen: set[str] = set()
     out: list[str] = []
     for m in _ROCM_NAME_RE.finditer(text):
-        val = m.group(1)
-        if val == "gfx000" or val.endswith("-generic"):
-            continue
-        if val not in seen:
+        val = _clean_gfx_token(m.group(1))
+        if val is not None and val not in seen:
             seen.add(val)
             out.append(val)
     return tuple(out)
@@ -485,37 +534,41 @@ def _rocm_gfx_from_text(text: str) -> tuple[str, ...]:
 def _rocm_gfx_from_agent_text(text: str) -> tuple[str, ...]:
     """Return order-stable unique gfx names from ``rocm_agent_enumerator`` output.
 
-    One target per line; ``gfx000`` and names ending in ``-generic`` are
-    dropped.
+    Each non-empty line is stripped and treated as a single token;
+    feature suffixes after the first ``:`` are stripped, and
+    ``gfx000`` / ``-generic`` targets are dropped.
     """
     seen: set[str] = set()
     out: list[str] = []
-    for line in text.splitlines():
-        m = _ROCM_AGENT_RE.match(line)
-        if not m:
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
             continue
-        val = m.group(1)
-        if val == "gfx000" or val.endswith("-generic"):
-            continue
-        if val not in seen:
+        val = _clean_gfx_token(line)
+        if val is not None and val not in seen:
             seen.add(val)
             out.append(val)
     return tuple(out)
 
 
 def _rocm_gfx_from_command(cmd: list[str]) -> tuple[str, ...] | None:
-    """Run ``cmd`` and extract unique gfx names from its stdout."""
+    """Run ``cmd`` and extract unique gfx names from its stdout.
+
+    Output is parsed even when the command exits non-zero, matching the bash
+    installer's behaviour of keeping names from a failing ``rocminfo``.
+    """
     exe = shutil.which(cmd[0])
     if not exe:
         return None
     try:
-        output = subprocess.check_output(
+        proc = subprocess.run(
             [exe, *cmd[1:]],
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
             text=True,
         )
     except Exception:
         return None
+    output = proc.stdout or ""
     gfx = _rocm_gfx_from_text(output)
     if gfx:
         return gfx
@@ -545,6 +598,7 @@ def _auto_rocm_gfx() -> tuple[str | None, str]:
 def _resolve_rocm_index(
     venv_python: Path | None = None,
     quiet: bool = False,
+    research: bool = False,
 ) -> tuple[str, str | None, str | None, str | None, bool]:
     """Resolve the ROCm wheel index for this host via ``kaine.wheel_index``.
 
@@ -565,6 +619,8 @@ def _resolve_rocm_index(
     resolver_args = ["--rocm-version", rocm_version]
     if gfx:
         resolver_args.extend(["--gfx", gfx])
+    if research:
+        resolver_args.append("--need-torchaudio")
 
     stdout, stderr, rc = _run_resolver(resolver_args, venv_python)
     data = _parse_resolver_result(stdout, stderr, rc)
@@ -622,21 +678,15 @@ def torch_index_url(
     if flavor == "cuda":
         url, *_ = _resolve_cuda_index(research, override, quiet=True)
         return url
-    if flavor == "rocm":
-        if override is not None:
-            print(
-                f"notice: --index-url {override} applies only to the cuda "
-                f"flavor; ignored for {flavor!r}, proceeding with host-resolved ROCm index",
-                file=sys.stderr,
-            )
-        url, *_ = _resolve_rocm_index(quiet=True)
-        return url
     if override is not None:
         print(
-            f"notice: --index-url {override} applies only to the cuda "
-            f"flavor; ignored for {flavor!r}, proceeding unchanged",
+            f"NOTICE: ignoring --index-url for flavor '{flavor}' (only the cuda "
+            f"flavor accepts an operator index override).",
             file=sys.stderr,
         )
+    if flavor == "rocm":
+        url, *_ = _resolve_rocm_index(quiet=True)
+        return url
     return _INDEX_BY_FLAVOR[flavor]
 
 
@@ -838,6 +888,12 @@ def main() -> None:
             index_url = CPU_INDEX_URL
             selftest = False
     elif flavor == "rocm":
+        if args.index_url is not None:
+            print(
+                f"NOTICE: ignoring --index-url for flavor '{flavor}' (only the cuda "
+                f"flavor accepts an operator index override).",
+                file=sys.stderr,
+            )
         index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_rocm_index(
             venv_python=py
         )
@@ -890,7 +946,7 @@ def main() -> None:
 
         target_tag = _index_tag(index_url)
         installed_tag = _installed_torch_tag(py)
-        if _needs_force_reinstall(installed_tag, target_tag):
+        if _needs_force_reinstall(installed_tag, target_tag, index_url):
             print(
                 f"==> installed torch build tag '{installed_tag}' differs from "
                 f"target index tag '{target_tag}'; forcing reinstall"
@@ -1010,7 +1066,7 @@ def main() -> None:
         ).strip()
     except subprocess.CalledProcessError:
         installed_ta = ""
-    if _torchaudio_should_uninstall(installed_ta, ta_pin):
+    if _torchaudio_should_uninstall(installed_ta, ta_pin, index_url):
         print(
             f"==> uninstalling stale torchaudio {installed_ta} "
             f"(target pin: {ta_pin or 'none'})"

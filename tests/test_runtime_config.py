@@ -73,7 +73,9 @@ def _write_minimal_configs(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path
     (profiles / "thesis_test.toml").write_text(
         '[modules]\nsoma = true\nchronos = true\nlingua = false\n[lingua]\nmodel_id = "thesis-model"\n'
     )
-    (profiles / "tier0.toml").write_text("[modules]\n")
+    (profiles / "tier0.toml").write_text(
+        '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n'
+    )
     (profiles / "tier1.toml").write_text('[lingua]\nbackend = "http"\n')
     (profiles / "tier2.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
     (profiles / "tier3.toml").write_text('[lingua]\nbackend = "datacenter"\n')
@@ -126,6 +128,49 @@ def test_load_runtime_config_invalid_tier_slug_raises(monkeypatch, tmp_path: Pat
 
     with pytest.raises(ProfileError):
         load_runtime_config(shipped, op)
+
+
+def test_real_thesis_test_plus_tier0_preserves_module_set(tmp_path: Path):
+    """Recording a tier must never change which modules are enabled."""
+    cfg_with_tier = load_runtime_config(
+        SHIPPED,
+        tmp_path / "no-operator.toml",
+        env={"KAINE_TIER": "tier0"},
+        profiles_dir=REPO_ROOT / "config" / "profiles",
+    )
+    cfg_thesis_only = load_runtime_config(
+        SHIPPED,
+        tmp_path / "no-operator-2.toml",
+        env={},
+        profiles_dir=REPO_ROOT / "config" / "profiles",
+    )
+    assert cfg_with_tier["modules"] == cfg_thesis_only["modules"]
+
+
+def test_load_runtime_config_tier_with_modules_table_raises(monkeypatch, tmp_path: Path):
+    """A tier file containing a [modules] table must raise ProfileError."""
+    shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
+    (profiles / "tier0.toml").write_text("[modules]\nlingua = false\n")
+
+    with pytest.raises(ProfileError, match="tier 'tier0' may not set module toggles"):
+        load_runtime_config(
+            shipped,
+            tmp_path / "no-operator.toml",
+            env={"KAINE_TIER": "tier0"},
+        )
+
+
+def test_load_runtime_config_tier_with_oscillator_enabled_raises(monkeypatch, tmp_path: Path):
+    """A tier file containing [oscillator].enabled must raise ProfileError."""
+    shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
+    (profiles / "tier0.toml").write_text("[oscillator]\nenabled = false\n")
+
+    with pytest.raises(ProfileError, match="tier 'tier0' may not set module toggles"):
+        load_runtime_config(
+            shipped,
+            tmp_path / "no-operator.toml",
+            env={"KAINE_TIER": "tier0"},
+        )
 
 
 def test_preboot_uses_load_runtime_config(monkeypatch):

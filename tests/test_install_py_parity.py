@@ -155,12 +155,29 @@ def test_index_tag_extraction() -> None:
     assert module._index_tag("") == ""
 
 
-def test_needs_force_reinstall_when_tags_differ() -> None:
+def test_is_pytorch_whl_url_recognises_pytorch_indices() -> None:
     module = _load_install_module()
-    assert module._needs_force_reinstall("cpu", "cu130")
-    assert module._needs_force_reinstall("cu126", "cu130")
-    assert not module._needs_force_reinstall("cu130", "cu130")
-    assert not module._needs_force_reinstall("", "")
+    assert module._is_pytorch_whl_url("https://download.pytorch.org/whl/cu130")
+    assert module._is_pytorch_whl_url("https://download.pytorch.org/whl/cpu")
+    assert not module._is_pytorch_whl_url("https://example.invalid/custom")
+    assert not module._is_pytorch_whl_url(None)
+    assert not module._is_pytorch_whl_url("")
+
+
+def test_needs_force_reinstall_tag_rule() -> None:
+    module = _load_install_module()
+    cu130_url = "https://download.pytorch.org/whl/cu130"
+    cpu_url = "https://download.pytorch.org/whl/cpu"
+    custom_url = "https://example.invalid/custom"
+
+    assert module._needs_force_reinstall("cu126", "cu130", cu130_url)
+    assert not module._needs_force_reinstall("cu130", "cu130", cu130_url)
+    # An untagged wheel counts as cpu.
+    assert not module._needs_force_reinstall("", "cpu", cpu_url)
+    assert module._needs_force_reinstall("", "cu130", cu130_url)
+    # Non-PyTorch indices never force based on tags.
+    assert not module._needs_force_reinstall("cpu", "cu130", custom_url)
+    assert not module._needs_force_reinstall("", "", custom_url)
 
 
 def test_accel_fallback_marker_round_trip(tmp_path: Path) -> None:
@@ -238,11 +255,28 @@ def test_marker_mismatches_when_index_differs() -> None:
 
 def test_torchaudio_should_uninstall_logic() -> None:
     module = _load_install_module()
-    assert module._torchaudio_should_uninstall("2.10.0", None)
-    assert module._torchaudio_should_uninstall("2.10.0", "2.11.0")
-    assert not module._torchaudio_should_uninstall("2.11.0", "2.11.0")
-    assert not module._torchaudio_should_uninstall(None, "2.11.0")
-    assert not module._torchaudio_should_uninstall("", "2.11.0")
+    cu130 = "https://download.pytorch.org/whl/cu130"
+    cu126 = "https://download.pytorch.org/whl/cu126"
+    cpu = "https://download.pytorch.org/whl/cpu"
+    custom = "https://example.invalid/custom"
+
+    # Mismatching base version is always uninstalled.
+    assert module._torchaudio_should_uninstall("2.10.0", "2.11.0", cu130)
+    # Matching base but mismatching PyTorch wheel tag is uninstalled.
+    assert module._torchaudio_should_uninstall("2.11.0+cu126", "2.11.0", cu130)
+    # Matching base and tag is kept.
+    assert not module._torchaudio_should_uninstall("2.11.0+cu130", "2.11.0", cu130)
+    # An untagged wheel counts as cpu and is kept on the CPU index.
+    assert not module._torchaudio_should_uninstall("2.11.0", "2.11.0", cpu)
+    # No target pin means any installed torchaudio is stale.
+    assert module._torchaudio_should_uninstall("2.11.0", None, cu130)
+    # Non-PyTorch indices do not force-tag stale.
+    assert not module._torchaudio_should_uninstall("2.11.0+cu126", "2.11.0", custom)
+    # Wheel tag mismatches against the chosen cu126 index.
+    assert module._torchaudio_should_uninstall("2.11.0+cu130", "2.11.0", cu126)
+    # Absent torchaudio is never uninstalled.
+    assert not module._torchaudio_should_uninstall(None, "2.11.0", cu130)
+    assert not module._torchaudio_should_uninstall("", "2.11.0", cu130)
 
 
 def test_rocm_version_from_file(tmp_path: Path) -> None:
@@ -268,6 +302,34 @@ def test_rocm_agent_enumerator_parsing() -> None:
     module = _load_install_module()
     text = "gfx1036\ngfx1100\ngfx11-generic\ngfx000\ngfx1100\n"
     assert module._rocm_gfx_from_agent_text(text) == ("gfx1036", "gfx1100")
+
+
+def test_rocm_agent_enumerator_parsing_full_line() -> None:
+    module = _load_install_module()
+    text = "amdgcn-amd-amdhsa--gfx90a\n gfx1100:xnack- \ngfx11-generic\n"
+    assert module._rocm_gfx_from_agent_text(text) == ("gfx1100",)
+
+
+def test_rocm_gfx_text_strips_feature_suffixes() -> None:
+    module = _load_install_module()
+    text = (
+        "Name: gfx90a:xnack-\n"
+        "Name: gfx90a:sramecc+:xnack-\n"
+        "Name: gfx000\n"
+        "Name: gfx90a:xnack-\n"
+    )
+    assert module._rocm_gfx_from_text(text) == ("gfx90a",)
+
+
+def test_rocm_agent_text_strips_feature_suffixes() -> None:
+    module = _load_install_module()
+    text = (
+        "gfx90a:xnack-\n"
+        "gfx90a:sramecc+:xnack-\n"
+        "gfx000\n"
+        "gfx90a:xnack-\n"
+    )
+    assert module._rocm_gfx_from_agent_text(text) == ("gfx90a",)
 
 
 def _skip_if_resolver_missing() -> None:
@@ -323,3 +385,107 @@ def test_print_index_rocm_no_index_for_unsupported_version() -> None:
     )
     assert result.returncode != 0
     assert "no ROCm wheel index carries" in result.stderr
+
+
+def _load_twi_helpers() -> ...:
+    """Load the shim harness from the install.sh integration tests."""
+    spec = importlib.util.spec_from_file_location(
+        "_kaine_twi_helpers", _repo_root() / "tests" / "test_install_wheel_index.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _torch_install_lines(pip_log: str, include_audio: bool = False) -> list[str]:
+    """Return pip argv lines that installed torch/torchvision/torchaudio."""
+    lines: list[str] = []
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        if "pip" not in tokens or "install" not in tokens:
+            continue
+        has_torch = any(t.startswith(("torch==", "torch>=")) for t in tokens)
+        has_tv = "torchvision" in tokens
+        has_ta = "torchaudio" in tokens
+        if has_torch or has_tv or (include_audio and has_ta):
+            lines.append(line)
+    return lines
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or shutil.which("bash") is None,
+    reason="bash/POSIX shell unavailable; parity tests cannot exercise install.sh",
+)
+def test_parity_cuda_132_no_wizard(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """``install.sh`` and ``install.py`` issue the same torch install argv for CUDA."""
+    twi = _load_twi_helpers()
+    flags = ["--cuda", "--no-wizard"]
+    env = {"KAINE_WHEEL_PROBE_NVML": "0"}
+
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        nvidia_cuda="13.2",
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        nvidia_cuda="13.2",
+        extra_env=env,
+    )
+
+    sh_lines = _torch_install_lines(log_sh)
+    py_lines = _torch_install_lines(log_py)
+
+    assert sh_lines == py_lines, (
+        f"pip argv for torch/torchvision install differs between install.sh "
+        f"and install.py\nsh:\n{log_sh}\npy:\n{log_py}\n"
+        f"sh exit={proc_sh.returncode}, py exit={proc_py.returncode}"
+    )
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or shutil.which("bash") is None,
+    reason="bash/POSIX shell unavailable; parity tests cannot exercise install.sh",
+)
+def test_parity_rocm_with_rocminfo_sample(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """``install.sh`` and ``install.py`` issue the same torch install argv for ROCm."""
+    twi = _load_twi_helpers()
+    flags = ["--rocm", "--no-wizard"]
+    env = {"KAINE_ROCM_VERSION": "7.2"}
+
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        rocm=True,
+        rocminfo_sample=True,
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        rocm=True,
+        rocminfo_sample=True,
+        extra_env=env,
+    )
+
+    sh_lines = _torch_install_lines(log_sh)
+    py_lines = _torch_install_lines(log_py)
+
+    assert sh_lines == py_lines, (
+        f"pip argv for torch/torchvision install differs between install.sh "
+        f"and install.py\nsh:\n{log_sh}\npy:\n{log_py}\n"
+        f"sh exit={proc_sh.returncode}, py exit={proc_py.returncode}"
+    )

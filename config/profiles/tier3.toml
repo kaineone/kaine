@@ -10,7 +10,14 @@
 # INERT + VOICE-FREE by contract (see tier0.toml header): it enables no module
 # and embeds no private voice.
 #
-# Apply deliberately:  KAINE_PROFILE=tier3 python -m kaine.cycle
+# Apply deliberately:  KAINE_TIER=tier3 python -m kaine.cycle
+#               or:    record [deployment].tier = "tier3" via the wizard
+#               or:    set it in config/kaine.operator.toml
+
+[tier]
+name = "tier3"
+unsupported_modules = []
+oscillator_supported = true
 
 [lingua]
 backend = "ollama"      # OpenAI-compatible HTTP server

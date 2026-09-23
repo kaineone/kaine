@@ -181,16 +181,14 @@ def _walk_arch_map(node, arch, index, out):
 def _ptx_scenarios():
     """Derive (arch, driver, caps, url-token) triples covered only via PTX.
 
-    A device (X, Y) is PTX-covered (never exact-SASS) when some compute_ZW
-    entry has (Z, W) >= (X, Y) while no exact sm_XY entry exists.  The driver
-    is pinned to the index's own version so no newer candidate can shadow it.
+    A device (X, Y) is PTX-covered when some compute_ZW entry has
+    (Z, W) <= (X, Y), no exact sm_XY entry exists, and no same-major
+    SASS entry sm_XW2 with W2 <= Y exists.  The driver is pinned to the
+    index's own version so no newer driver-eligible candidate can shadow it.
     """
-    try:
-        mapping = INDEX_ARCH_MAP if isinstance(INDEX_ARCH_MAP, dict) else dict(INDEX_ARCH_MAP)
-    except Exception:
-        return []
+    from kaine.wheel_data import CUDA_ARCH
     found = []
-    _walk_arch_map(mapping, None, None, found)
+    _walk_arch_map(CUDA_ARCH, None, None, found)
     scenarios = []
     for arch, index_name, exact, ptx in found:
         if not ptx:
@@ -198,29 +196,23 @@ def _ptx_scenarios():
         match = _CU_RE.search(index_name)
         if not match:
             continue
-        version = _cu_version(match.group(1))
-        max_ptx = max(ptx)
-        device = None
-        for major in range(max_ptx[0], 1, -1):
-            candidate = (major, 0)
-            if candidate <= max_ptx and candidate not in exact:
-                device = candidate
-                break
-        if device is None:
-            grid = [
-                (major, minor)
-                for major in range(2, max_ptx[0] + 1)
-                for minor in range(0, 10)
-                if (major, minor) <= max_ptx and (major, minor) not in exact
-            ]
-            device = max(grid) if grid else None
-        if device is None:
-            continue
+        index_ver = _cu_version(match.group(1))
         token = "cu" + match.group(1)
-        scenarios.append((arch, version, (device,), token, index_name))
+        max_ptx = max(ptx)
+        max_exact_major = max((level[0] for level in exact), default=0)
+        device = (max(max_exact_major + 1, max_ptx[0]), 0)
+        if device > index_ver:
+            continue
+        if device in exact:
+            continue
+        if any(level[0] == device[0] and level[1] <= device[1] for level in exact):
+            continue
+        if not any(level <= device for level in ptx):
+            continue
+        scenarios.append((arch, index_ver, (device,), token, index_name))
     scenarios.sort(key=lambda item: (item[0], -item[1][0], -item[1][1]))
     scenarios.sort(
-        key=lambda item: 0 if any(token in item[4].lower() for token in _TABLE_INDEX_TOKENS) else 1
+        key=lambda item: 0 if any(t in item[4].lower() for t in _TABLE_INDEX_TOKENS) else 1
     )
     deduped, seen = [], set()
     for item in scenarios:
@@ -737,14 +729,14 @@ def test_every_device_must_be_covered():
 
 def test_ptx_counts_as_coverage_and_is_annotated():
     """Invariant: a device with no exact SASS entry is still covered when the
-    index map carries a compute_ZW PTX entry with (Z, W) >= the device
+    index carries a compute_ZW PTX entry with (Z, W) <= the device
     capability, and the selection is annotated as JIT-from-PTX.
 
     Cost prevented: refusing a workable JIT'd wheel — or JIT'ing silently.
     """
     scenario = _pick_ptx_scenario()
     if scenario is None:
-        pytest.skip("INDEX_ARCH_MAP exposes no PTX-only coverage scenario")
+        pytest.skip("recorded CUDA arch lists expose no PTX-only coverage scenario")
     arch, driver, caps, token = scenario
     result = resolve_index(_probes(arch=arch, driver=driver, caps=caps))
     assert result["index_url"] != CPU_INDEX

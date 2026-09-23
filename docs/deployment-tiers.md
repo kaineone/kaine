@@ -19,25 +19,71 @@ land; today's shipped backends are listed in the staging section.
 
 ## Tier recommendation
 
-`scripts/probe-host` and the first-run wizard recommend a tier from a memory budget (unified: system RAM; discrete: the smaller of RAM and total VRAM across GPUs): Tier 3 for two or more GPUs with >= 16 GB, Tier 2 for one GPU with >= 16 GB, Tier 2 with module residency required for 6–16 GB (module residency is not implemented yet, so such hosts keep the base-thesis module set, serve a language model that fits such as the 4B GGUF, and keep vision/voice extras off), Tier 1 below 6 GB or without an accelerator; the wizard writes `[deployment].profile` only when the operator confirms, and `KAINE_PROFILE` / `--profile` still take precedence.
+`scripts/probe-host` and the first-run wizard recommend a tier from a memory
+budget: unified-memory hosts use system RAM; discrete hosts use the smaller of
+system RAM and total VRAM across GPUs. Thresholds compare nominal sizes against
+reported memory times 0.9 (firmware and kernel reserve memory; a nominal 16 GB
+Jetson reports about 15.3 GiB): Tier 3 for two or more accelerators with a
+budget of at least 16 GB; Tier 2 for one accelerator with a budget of at least
+16 GB; Tier 2 with module residency required for an accelerator host with a
+budget from 6 GB up to 16 GB (module residency is not implemented yet, so such
+hosts keep the base-thesis module set, serve a language model that fits, and
+keep heavy extras off); Tier 1 below 6 GB or without an accelerator; Tier 0 when
+torch is absent, on 32-bit ARM, or when RAM is below the nominal 4 GB floor
+(with the same 0.9 allowance). An 8 GB Orin Nano Super recommends Tier 2 with
+residency required.
+
+The wizard shows the recommendation, the reason, and the memory budget, and
+records `[deployment].tier` in the operator's local configuration only when the
+operator explicitly confirms. `KAINE_TIER` or the recorded `[deployment].tier`
+applies the tier; `KAINE_PROFILE` / `--profile` selects the module profile and
+does not apply a tier.
+
+## What a tier is
+
+A tier is a TOML overlay (`config/profiles/tierN.toml`) layered **between**
+the shipped defaults, the module-selection profile (the base-thesis
+`thesis_test` profile by default, or `--profile` / `KAINE_PROFILE`), and your
+local `config/kaine.operator.toml` — your local config still wins. A tier file
+is not a module profile: using a tier file as `--profile` / `KAINE_PROFILE`
+replaces the module profile, so that is not the way to apply a tier.
+
+Tier files are inert and voice-free: they never enable a module or embed a
+private voice (those stay local operator actions). A tier only bounds which
+backend each already-selected module uses and which devices it targets; it never
+changes the module set. Which faculties are *active* is a separate, orthogonal
+choice from the tier: the default is the **base-thesis form** (Soma, Chronos,
+Topos, Audition, Thymos, Lingua — see the `thesis_test` profile).
+
+Each tier file carries an advisory `[tier]` table with `name`,
+`unsupported_modules`, and `oscillator_supported`. A tier file that contains a
+`[modules]` section or an `[oscillator].enabled` key is refused with
+`ProfileError`; tiers only bound backends and devices, never toggle modules.
+
+## Applying a tier
 
 Selecting a tier is an **operator action**. Run the host probe for a
-recommendation, then choose the profile deliberately — nothing auto-applies:
+recommendation, then apply the tier deliberately — nothing auto-applies:
 
 ```
 .venv/bin/python scripts/probe-host          # recommends a tier; never applies one
-KAINE_PROFILE=tier1 python -m kaine.cycle     # or: python -m kaine.cycle --profile tier1
+KAINE_TIER=tier1 python -m kaine.cycle       # applies the tier for this run
+# or record [deployment].tier via the wizard:
+# .venv/bin/python -m kaine.setup
 ```
 
-A profile is a TOML overlay (`config/profiles/tierN.toml`) layered **between**
-the shipped defaults and your local `config/kaine.operator.toml` — your local
-config still wins. Profiles are inert and voice-free: they never enable a module
-or embed a private voice (those stay local operator actions). Which faculties are
-*active* is a separate, orthogonal choice from the tier: the default is the
-**base-thesis form** (Soma, Chronos, Topos, Audition, Thymos, Lingua — see the
-`thesis_test` profile), and a tier profile never changes that — it only bounds
-which *backend* each already-selected module uses on the chosen hardware, and
-disables faculties the host cannot bear.
+The cycle and the pre-boot check load configuration through the same layering:
+shipped `config/kaine.toml` → module profile (`thesis_test` by default, or
+`--profile` / `KAINE_PROFILE`) → deployment tier (`KAINE_TIER`, else
+`[deployment].tier` in `config/kaine.operator.toml`) → operator config.
+
+## Pre-boot Tier-fit check
+
+The pre-boot check has a `Tier fit` row: it FAILS naming enabled modules the
+tier lists as unsupported (or an enabled oscillator the tier cannot run), with
+the fix to disable them in the operator config or record a larger tier; it
+PASSES when they fit; it SKIPS when no tier is recorded; and it FAILS on a
+malformed `[tier]` table.
 
 ## Capability matrix
 
@@ -52,13 +98,15 @@ disables faculties the host cannot bear.
 | **Memory embeddings** | sentence-transformers MiniLM (torch, CPU) — ONNX/static is the Phase-2 target | sentence-transformers MiniLM (torch, CPU) — ONNX/static is the Phase-2 target | sentence-transformers (torch) | sentence-transformers |
 | **Vector store (Mnemos)** | sqlite-vec (in-process) | sqlite-vec (in-process) | Qdrant (server) | Qdrant |
 | **Torch runtime required** | yes (today) — removed in portability-program Phase 2 | yes (today) — removed in portability-program Phase 2 | yes | yes |
-| **Disabled by profile** | topos, audition, vox, empatheia, phantasia | vox, vocal emotion | (none) | (none) |
+| **Unsupported / disabled by tier** | topos, audition, vox, empatheia, phantasia listed as unsupported; oscillator unsupported | vox listed as unsupported; vocal emotion disabled via `[audition].emotion_model_id = ""` | (none) | (none) |
 
 Explicit **absences** (stated so a tier is never oversold):
 
 - **No expressive TTS and no vocal emotion below Tier 2.** emotion2vec+ (funasr)
   has no clean edge port; it is a Tier-2-only faculty. Below it, vocal emotion is
   explicitly disabled (`[audition].emotion_model_id = ""`), not silently faked.
+  The tier lists vox as unsupported at Tier 0 and Tier 1; the pre-boot Tier-fit
+  check fails if an unsupported module is enabled.
 - **Vision is periodic, not streaming, at Tier 1** — seconds per frame on the SBC
   CPU. The ONNX/dinov2.cpp vision backend is not yet built; today Topos on CPU
   still runs through the torch path where enabled.
@@ -75,14 +123,15 @@ The runtime venv stays lean: a backend's third-party dependency is imported only
 when that backend is selected, so you install a tier's extras and no others.
 
 - **Tier 0 — edge / sensor node.** `llama-cpp-python` (in-process GGUF Lingua)
-  and `sqlite-vec` (in-process Mnemos vector store). The profile disables topos,
-  audition, vox, empatheia, and phantasia. **Torch is still required today**:
-  Mnemos builds a sentence-transformers MiniLM embedder, and Soma/Chronos run
-  torch+ncps CfC networks. A sub-1B GGUF model file. Measured: a full voice turn
-  on a Raspberry Pi Zero 2 W (512 MB) with whisper.cpp tiny.en + SmolLM2-360M +
-  Flite takes 37–46 s when loading one model at a time. The whisper.cpp-tiny
-  batch STT, Piper TTS, ONNX vision, and ONNX/static embeddings backends are
-  staged seams — when selected they degrade to their declared fallback.
+  and `sqlite-vec` (in-process Mnemos vector store). The tier lists topos,
+  audition, vox, empatheia, and phantasia as unsupported, and the oscillator as
+  unsupported. **Torch is still required today**: Mnemos builds a
+  sentence-transformers MiniLM embedder, and Soma/Chronos run torch+ncps CfC
+  networks. A sub-1B GGUF model file. Measured: a full voice turn on a Raspberry
+  Pi Zero 2 W (512 MB) with whisper.cpp tiny.en + SmolLM2-360M + Flite takes
+  37–46 s when loading one model at a time. The whisper.cpp-tiny batch STT,
+  Piper TTS, ONNX vision, and ONNX/static embeddings backends are staged seams —
+  when selected they degrade to their declared fallback.
 - **Tier 1 — embodied CPU agent.** As Tier 0, but keeps Topos on CPU and enables
   audition. Vox and vocal emotion remain disabled. The intended ONNX MiniLM /
   ONNX vision / whisper.cpp / Piper backends are staged seams; today the

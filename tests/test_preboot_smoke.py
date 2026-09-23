@@ -367,6 +367,51 @@ def test_smoke_config_sanity_no_modules_fails():
     assert modules_row.status == preboot.FAIL
 
 
+def test_smoke_config_sanity_tier_fit_skips_when_no_tier():
+    config = _enabled_config()
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.SKIP
+    assert "no deployment tier recorded" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_fit_passes_when_modules_fit():
+    config = _enabled_config(
+        modules={"lingua": True, "soma": True},
+        tier={"name": "tier0", "unsupported_modules": ["topos", "audition"], "oscillator_supported": False},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.PASS
+    assert "tier tier0: the enabled modules fit" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_fit_fails_on_unsupported_modules():
+    config = _enabled_config(
+        modules={"lingua": True, "topos": True, "audition": True},
+        tier={"name": "tier0", "unsupported_modules": ["topos", "audition", "vox"], "oscillator_supported": False},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "topos" in tier_row.detail
+    assert "audition" in tier_row.detail
+    assert "disable them in the operator config or record a larger tier" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_fit_fails_on_unsupported_oscillator():
+    config = _enabled_config(
+        modules={"lingua": True},
+        tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": False},
+        oscillator={"enabled": True},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "[oscillator].enabled" in tier_row.detail
+    assert "disable it in the operator config or record a larger tier" in tier_row.detail
+
+
 def test_smoke_config_sanity_flags_fail_closed_encryption_posture():
     config = _enabled_config(
         preservation={
@@ -392,6 +437,22 @@ def test_smoke_config_sanity_encryption_posture_ok_when_satisfied():
     results = preboot.check_config_sanity(config)
     posture = next(r for r in results if r.name == "Preservation encryption posture")
     assert posture.status == preboot.PASS
+
+
+def test_smoke_config_sanity_tier_string_value_fails():
+    config = _enabled_config(tier="tier1")
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "malformed [tier] table" in tier_row.detail
+
+
+def test_smoke_config_sanity_unsupported_modules_string_fails():
+    config = _enabled_config(tier={"name": "tier0", "unsupported_modules": "vox"})
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "malformed [tier] table" in tier_row.detail
 
 
 # ---------------------------------------------------------------------------

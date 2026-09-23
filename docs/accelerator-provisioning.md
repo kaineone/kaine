@@ -14,11 +14,9 @@ KAINE auto-detects accelerator hardware at install time and at boot time. The in
 - compute capability of every probed GPU (`nvidia-smi --query-gpu=compute_cap`)
 - unified-memory state (`kaine.hostmem`)
 
-It then walks the decision table below to pick the correct PyTorch wheel index. The resolver is advisory: if probing fails, `install.sh` uses its legacy fallback. Every decision — probe results, matched row, resolved index — is logged.
-
 ### Decision table
 
-The table below is the authoritative rendering of `kaine.wheel_index.DECISION_TABLE`. Rows are evaluated top-to-bottom; the first match wins. The resolver first filters the candidate indexes to those whose CUDA version is less than or equal to the host driver's CUDA version, then picks the newest driver-compatible index that publishes an in-range `torch` covering every probed GPU.
+The table below is `kaine.wheel_index.DECISION_TABLE` rendered for operators. It is not a first-match lookup. The resolver labels the selected result with the matching row number; the actual selection is driven by the algorithm described in the following paragraphs.
 
 | Row | Arch    | Driver CUDA       | Unified | CC guard | Index          | Warning |
 |-----|---------|-------------------|---------|----------|----------------|---------|
@@ -39,7 +37,23 @@ The table below is the authoritative rendering of `kaine.wheel_index.DECISION_TA
 | 15  | aarch64 | any or unknown    | yes     | —        | CPU            | yes     |
 | 16  | other   | any or unknown    | any     | —        | CPU            | yes     |
 
-Rows with a CC guard require every probed GPU's compute capability to have either an exact `sm_XX` entry, a same-major SASS entry that is ≤ the device's minor version, or a compatible PTX entry (`compute_XX` with XX ≥ device SM) in `INDEX_ARCH_MAP`. `INDEX_ARCH_MAP` records, per index URL, which architectures and SM variants that index covers. Rows with `Warning` = yes resolve to the CPU index and surface a warning at install time.
+An aarch64 host whose memory classification is unknown matches the non-unified rows; with driver CUDA ≥ 13.0 the resolver still requires the GPU-vs-CPU numerical self-test for it.
+
+Rows with a CC guard require every probed GPU's compute capability to be covered by the selected index's build list. Coverage for a GPU with compute capability `X.Y` means the build list contains one of:
+
+- an exact `sm_XY` entry;
+- a same-major SASS `sm_XZ` entry with `Z ≤ Y` (the highest such entry is used);
+- a PTX `compute_ZW` entry with `(Z, W) ≤ (X, Y)`.
+
+PTX forward-compiles to newer GPUs at load time; a PTX version newer than the GPU is not usable, so PTX never covers an older GPU.
+
+The resolver algorithm is:
+
+1. Filter candidate indexes to those whose CUDA version is less than or equal to the host driver's CUDA version.
+2. From the driver-compatible `(index, torch version)` pairs where the torch version satisfies the tested range in `pyproject.toml` and the index's build list covers every probed GPU, select the highest torch version.
+3. Tie-break by the newest CUDA index.
+
+For example, an x86_64 host with driver CUDA 12.9 and two GPUs with compute capabilities 8.9 and 6.1 resolves to cu126 with torch 2.14.0, because cu126 is the newest index whose in-range torch covers both GPUs at the highest in-range torch version, not cu129 even though the driver supports it.
 
 The tested `torch` range is declared in `pyproject.toml` (currently `>=2.9.1,<2.15`). It is a *bounded tested range*: the offline suite runs in CI at both ends of the range on the CPU index (the newest in-range torch, and the range's lower bound), accelerator hosts are verified manually and recorded in the Tested hosts table, Dependabot does not raise this bound automatically, and widening the range needs the CI job at both new ends plus a recorded smoke test on each accelerator family the change affects. Not every intermediate point is exercised.
 
@@ -47,41 +61,49 @@ When a CUDA index is selected, the resolver records the exact `torch`, `torchvis
 
 Data provenance for the ladder lives in `kaine/wheel_data.py`, which records the published versions and architecture lists for each index (dated). Drift against the live indexes is reported by `python -m kaine.wheel_index --verify-indexes`.
 
-The research install path (`scripts/install.sh --research`) passes `--need-torchaudio` to the resolver. Because the cu132 index publishes no `torchaudio` wheels, hosts that would otherwise resolve to cu132 instead resolve to cu130 so that `torchaudio` is available.
+The research install path (`scripts/install.sh --research`) passes `--need-torchaudio` to the resolver. Because the cu132 index publishes no `torchaudio` wheels, hosts that would otherwise resolve to cu132 instead resolve to cu130 so that `torchaudio` is available. `torchaudio`'s last release is 2.11.0; torch 2.12–2.14 are paired with it by release timing only, and the resolver emits a warning saying no wheel metadata asserts that pairing.
 
 ### ROCm wheel index resolution
 
-AMD hosts are resolved from the host ROCm version (read from `/opt/rocm/.info/version`, or overridden with `KAINE_ROCM_VERSION`) and the GFX targets (from `rocminfo`, or overridden with `KAINE_ROCM_GFX`). The resolver selects the newest ROCm wheel index whose version is ≤ the host ROCm version, publishes an in-range `torch` for the host architecture, and covers every listed GFX target. When no in-range ROCm index fits, the resolver refuses with a clear message instead of silently falling back to CUDA wheels.
+AMD hosts are resolved from the host ROCm version (read from `/opt/rocm/.info/version`, or overridden with `KAINE_ROCM_VERSION`) and the GFX targets (from `KAINE_ROCM_GFX`, else `rocminfo` agent names, else `rocm_agent_enumerator`; feature suffixes after `:` are stripped, `gfx000` and `-generic` are dropped, and a failing `rocminfo` falls through). The installer prints `==> ROCm version: <v>; gfx targets: <list> (source: ...)`.
+
+The resolver selects, among ROCm wheel indexes whose version is less than or equal to the host ROCm version, that publish an in-range `torch` for the host architecture, and whose build list covers at least one requested GFX target, the highest in-range torch then the newest ROCm index. It warns about targets the chosen index does not cover (suggesting `HIP_VISIBLE_DEVICES`) and refuses when none fits; there is no CUDA fallback.
 
 ### Jetson handling
 
 Jetson hosts appear as aarch64 with unified memory.
 
-- JetPack 7 (driver CUDA ≥ 13.0) resolves to a cu13x wheel index and runs a GPU-vs-CPU numerical self-test (`python -m kaine.accel_selftest`). If the self-test fails, the installer automatically falls back to CPU wheels.
+- JetPack 7 (driver CUDA ≥ 13.0) resolves to a cu13x wheel index and runs a GPU-vs-CPU numerical self-test (`python -m kaine.accel_selftest`). If the self-test fails or cannot run, the installer reinstalls CPU wheels and writes `<venv>/kaine-accel-fallback.json` (index, torch, reason, date).
 - JetPack 6 (driver CUDA < 13.0) resolves to CPU wheels with a note that a JetPack-provided CUDA wheel index is required. Python 3.12 is required for the upstream CPU wheels.
 
 ### Unified-memory note for non-aarch64 hosts
 
-Unified-memory evidence is ignored for CUDA on non-aarch64 hosts: NVIDIA unified-memory GPUs are aarch64-only. If a non-aarch64 host reports unified memory, the resolver treats it as discrete for the CUDA ladder (the evidence likely comes from a non-NVIDIA integrated GPU).
+Unified-memory evidence is ignored for CUDA on non-aarch64 hosts: NVIDIA unified-memory GPUs are aarch64-only. If a non-aarch64 host reports unified memory, the resolver treats it as discrete for the CUDA ladder (the evidence likely comes from a non-NVIDIA integrated GPU) and surfaces a warning.
+
+### Installer re-runs
+
+The installer writes exact pins to `<venv>/kaine-torch-constraints.txt`. On re-run, it uses `--force-reinstall` when the installed torch local tag differs from the target `download.pytorch.org/whl/<tag>` index (untagged counts as `cpu`). A stale `torchaudio` (wrong base version or tag, or no pin) is uninstalled before the constraints file is written. When the self-test fails or cannot run, the installer reinstalls CPU wheels and writes `<venv>/kaine-accel-fallback.json` (index, torch, reason, date); later runs keep CPU wheels for that index/torch pair until `--retry-gpu`.
 
 ### Tested hosts
 
-| Host | Accelerator | Index | torch | Verified |
-|------|-------------|-------|-------|----------|
-| Development workstation (x86_64) | RTX 4070 SUPER + RTX 3070, driver CUDA 13.x | cu130/cu132 | 2.14.0 | offline suite 2026-09-22 |
-| CPU (x86_64) | none | cpu | 2.9.1 and 2.14.0 | offline suite 2026-09-22 |
+| Host | Accelerator | Index resolved / installed | torch | Verified |
+|------|-------------|---------------------------|-------|----------|
+| Development workstation (x86_64) | RTX 4070 SUPER + RTX 3070, driver CUDA 13.2 | cu132 from live probes; torch 2.14.0+cu130 installed | 2.14.0 | The full offline suite passes with CUDA available; no install from the cu132 index has been exercised on it. |
+| CPU-only (x86_64) | none | cpu | 2.9.1 and 2.14.0 | The offline suite passes in CI. |
 
-Other rows are added when a host is verified.
+Other rows are added when a host is verified. No Jetson, ROCm, XPU, or Apple host has been verified yet.
 
 ### Operator override: `--index-url`
 
-`--index-url <URL>` on `install.sh` overrides the resolved CUDA wheel index. Precedence, highest first:
+`--index-url <URL>` overrides the resolved CUDA wheel index for the cuda flavor only; other flavors print `NOTICE: ignoring --index-url for flavor ...`. A cuda override result carries `torchaudio_unavailable`. With `--research` and no `torchaudio` on that index, both installers refuse before installing torch.
+
+Precedence, highest first:
 
 1. Operator override (`--index-url`)
-2. Decision table
+2. CUDA resolution algorithm
 3. Terminal CPU fallback
 
-Only the cuda flavor consults the table. The `--cpu`, `--xpu`, and `--mps` flavors use fixed indexes; `--rocm` is resolved from the host ROCm version and GFX targets (see above); only the `cuda` flavor accepts `--index-url`.
+Only the cuda flavor consults the CUDA resolution algorithm. The `--cpu`, `--xpu`, and `--mps` flavors use fixed indexes; `--rocm` is resolved from the host ROCm version and GFX targets (see above).
 
 ## Pre-boot GPU headroom check
 
@@ -126,11 +148,11 @@ Every memory figure carries a provenance string identifying its source (for exam
 
 ### Jetson (Tegra)
 
-- aarch64 with unified memory; Xavier is `sm_72`, Orin is `sm_87`.
-- No upstream CUDA wheel index ships Tegra SASS, so the resolver lands on the CPU index with a JetPack pointer (decision table row 10).
-- NVIDIA ships Jetson PyTorch wheels through forums.developer.nvidia.com, outside the standard pip indices.
-- Operators should pass `--index-url` with the JetPack-appropriate wheel URL, or build torch from source.
-- JetPack 6.x ships CUDA 12.6; JetPack 7.x ships CUDA 13.2.
+- aarch64 with unified memory; Xavier is `sm_72`, Orin is `sm_87` and can be reached via same-major `sm_80` SASS on cu130/cu132.
+- JetPack 7 (CUDA 13.x) resolves to a cu13x index and runs the GPU-vs-CPU numerical self-test; with `--research` it resolves to cu130 because cu132 publishes no torchaudio wheels.
+- JetPack 6 (CUDA 12.6) resolves to the CPU index with a note naming Python 3.12 and the manual `--index-url` override.
+- Orin Nano Super (JetPack 7.2, CUDA 13.2, `sm_87`, unified) resolves to cu132 torch 2.14.0 via same-major `sm_80` SASS with the self-test; with `--research`, cu130 torch 2.14.0 plus torchaudio 2.11.0.
+- Operators can pass `--index-url` with a JetPack-appropriate wheel URL, or build torch from source.
 
 ### AMD APU
 

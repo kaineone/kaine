@@ -39,8 +39,8 @@ shim (which must exist, to shadow a real binary on GPU-equipped test hosts),
 while absence of a presence-detected tool is simulated by omitting the shim
 entirely; the module skips itself on hosts that carry the real ROCm/XPU
 tooling, because no shim can hide a real binary.  The real interpreter runs the
-wheel-index resolver: the ``python3``/``python`` shims delegate everything to
-the real interpreter except ``-m venv`` (a skeleton virtualenv is fabricated —
+wheel-index resolver: the ``python3``/``python`` shims delegate everything to the
+real interpreter except ``-m venv`` (a skeleton virtualenv is fabricated —
 no ensurepip, no network, no real venv anywhere), ``-m pip`` (routed to the pip
 shim, so it absorbs every install attempt), and ``-m kaine.wheel_index``
 (which can be forced to mark the resolved stack as requiring a GPU self-test
@@ -201,6 +201,33 @@ printf '  Name: gfx1100\n'
 exit 0
 """
 
+_ROCM_INFO_EXIT1_SHIM = r"""#!/bin/sh
+# Test shim: rocminfo prints a usable gfx name and exits non-zero.
+# The installer must keep the parsed name and continue, not abort under set -e.
+printf '  Name: gfx1100\n'
+exit 1
+"""
+
+_ROCM_INFO_SUFFIX_SHIM = r"""#!/bin/sh
+# Test shim: rocminfo names carry feature suffixes.
+printf '  Name: gfx90a:xnack-\n'
+printf '  Name: gfx90a:sramecc+:xnack-\n'
+printf '  Name: gfx000\n'
+printf '  Name: gfx11-generic\n'
+printf '  Name: gfx90a:xnack-\n'
+exit 0
+"""
+
+_ROCM_AGENT_SUFFIX_SHIM = r"""#!/bin/sh
+# Test shim: rocm_agent_enumerator names carry feature suffixes.
+printf 'gfx90a:xnack-\n'
+printf 'gfx90a:sramecc+:xnack-\n'
+printf 'gfx000\n'
+printf 'gfx11-generic\n'
+printf 'gfx90a:xnack-\n'
+exit 0
+"""
+
 _SYCL_LS_OK_SHIM = r"""#!/bin/sh
 # Test shim: sycl-ls reporting one Level Zero GPU.
 printf 'level_zero:gpu(0) Intel(R) Arc(TM) A770 Graphics [0x56a0]\n'
@@ -334,7 +361,7 @@ def _index_urls(pip_log: str) -> list[str]:
 
 def _context(proc: subprocess.CompletedProcess, pip_log: str) -> str:
     return (
-        f"\ninstall.sh exit code: {proc.returncode}"
+        f"\ninstaller exit code: {proc.returncode}"
         f"\n--- stdout ---\n{proc.stdout}"
         f"\n--- stderr ---\n{proc.stderr}"
         f"\n--- pip argv log ---\n{pip_log}"
@@ -369,22 +396,27 @@ def _run_install(
     tmp_path: Path,
     flags: list[str],
     *,
+    installer: str = "install.sh",
     nvidia_cuda: str | None = None,
     rocm: bool = False,
     rocminfo_sample: bool = False,
+    rocminfo_exit1: bool = False,
+    rocminfo_suffix: bool = False,
+    rocm_agent_suffix: bool = False,
     xpu: bool = False,
     fake_torch: str | None = None,
     fake_torchaudio: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess, str]:
-    """Run ``bash scripts/install.sh <flags>`` with a shimmed PATH.
+    """Run ``bash scripts/install.sh <flags>`` or ``python scripts/install.py
+    <flags>`` with a shimmed PATH.
 
     Returns ``(completed_process, pip_argv_log_text)``.  Every shim lives in
     ``tmp_path``; the pip shim absorbs every install attempt, so nothing is
     installed; the installer is pointed at a skeleton venv under ``tmp_path``
     and the network is never touched.  The returned exit status is deliberately
     never asserted by any case: the shimmed install can never satisfy
-    install.sh's closing torch-import verification, so a non-zero exit is the
+    the closing torch-import verification, so a non-zero exit is the
     correct outcome here.
 
     Steering:
@@ -401,7 +433,7 @@ def _run_install(
       /gfx000 sample so bash gfx parsing is exercised.
     * ``xpu=True`` writes succeeding sycl-ls and xpu-smi shims.
     * ``fake_torch="cpu"`` puts a fake CPU-flavor torch package at the front of
-      PYTHONPATH so install.sh's flavor probe reports a CPU wheel installed.
+      PYTHONPATH so the installer's flavor probe reports a CPU wheel installed.
     * ``fake_torchaudio="<version>"`` puts a fake torchaudio distribution at the
       front of PYTHONPATH so the installer sees a stale torchaudio.
     * ``extra_env`` is merged into the test environment after the base copy,
@@ -431,13 +463,18 @@ def _run_install(
 
     if rocm:
         _write_shim(shim_dir / "rocm-smi", _ROCM_SMI_OK_SHIM)
-    if rocminfo_sample:
+
+    if rocminfo_exit1:
+        _write_shim(shim_dir / "rocminfo", _ROCM_INFO_EXIT1_SHIM)
+    elif rocminfo_suffix:
+        _write_shim(shim_dir / "rocminfo", _ROCM_INFO_SUFFIX_SHIM)
+    elif rocminfo_sample:
         _write_shim(shim_dir / "rocminfo", _ROCM_INFO_SAMPLE_SHIM)
-    # else: no rocm-smi/rocminfo shims at all.  install.sh detects ROCm by
-    # PRESENCE (`command -v rocm-smi` succeeds whenever the file exists,
-    # whatever its exit code), so a failing shim would still count as "present"
-    # and flip the flavor to rocm — the mistake that once made this CPU-only
-    # case receive the rocm6.2 index.  Absence is simulated by omission.
+    # else: no rocminfo shim at all.
+
+    if rocm_agent_suffix:
+        _write_shim(shim_dir / "rocm_agent_enumerator", _ROCM_AGENT_SUFFIX_SHIM)
+    # else: no rocm_agent_enumerator shim at all.
 
     if xpu:
         _write_shim(shim_dir / "sycl-ls", _SYCL_LS_OK_SHIM)
@@ -512,10 +549,18 @@ def _run_install(
     repo_venv_before = _venv_snapshot(repo_venv)
     repo_pycache = REPO_ROOT / "kaine" / "__pycache__"
     repo_pycache_before = repo_pycache.exists()
+
+    if installer == "install.sh":
+        cmd: list[str] = ["bash", "scripts/install.sh", *flags]
+    elif installer == "install.py":
+        cmd = [sys.executable, str(REPO_ROOT / "scripts" / "install.py"), *flags]
+    else:
+        raise ValueError(f"unknown installer: {installer}")
+
     proc = None  # type: ignore[assignment]  # assigned inside try; pytest.fail always raises on timeout
     try:
         proc = subprocess.run(
-            ["bash", "scripts/install.sh", *flags],
+            cmd,
             cwd=str(REPO_ROOT),
             env=env,
             stdin=subprocess.DEVNULL,
@@ -526,21 +571,20 @@ def _run_install(
         )
     except subprocess.TimeoutExpired as exc:
         pytest.fail(
-            "scripts/install.sh did not finish within {}s (stdout={!r}, stderr={!r})".format(
-                RUN_TIMEOUT_SECONDS, exc.stdout, exc.stderr
-            )
+            f"{installer} did not finish within {RUN_TIMEOUT_SECONDS}s "
+            f"(stdout={exc.stdout!r}, stderr={exc.stderr!r})"
         )
     finally:
         repo_venv_after = _venv_snapshot(repo_venv)
         if not repo_venv_before and repo_venv_after:
             shutil.rmtree(repo_venv, ignore_errors=True)
             pytest.fail(
-                f"scripts/install.sh created {repo_venv} despite "
+                f"{installer} created {repo_venv} despite "
                 f"KAINE_VENV_DIR pointing to a skeleton venv under tmp_path"
             )
         if repo_venv_before and repo_venv_before != repo_venv_after:
             pytest.fail(
-                f"scripts/install.sh modified the repository venv {repo_venv}: "
+                f"{installer} modified the repository venv {repo_venv}: "
                 f"before={repo_venv_before!r} after={repo_venv_after!r}"
             )
         if not repo_pycache_before and repo_pycache.exists():
@@ -977,11 +1021,12 @@ def test_stale_torchaudio_is_uninstalled(tmp_path: Path) -> None:
 
 
 def test_rocm_gfx_parsing_from_rocminfo_filters_igpu_generic_and_gfx000(tmp_path: Path) -> None:
-    """rocminfo parsing drops gfx000, -generic names and duplicates.
+    """The ROCm flavor parses rocminfo, filters iGPU/generic/gfx000, and resolves.
 
-    Invariant: only lines matching ``Name: gfx<hex>`` are considered; the
-    result is de-duplicated and preserves order, yielding gfx1036 and gfx1100
-    from the standard sample.
+    Invariant: with the rocminfo sample shim that emits gfx1036, gfx1100,
+    gfx11-generic and gfx000, the installer keeps only the real targets,
+    prints them in the ROCm version line, and resolves the host-aware
+    rocm7.2 index.
     """
     proc, pip_log = _run_install(
         tmp_path,
@@ -993,10 +1038,129 @@ def test_rocm_gfx_parsing_from_rocminfo_filters_igpu_generic_and_gfx000(tmp_path
     urls = _index_urls(pip_log)
     assert set(urls) == {ROCM72_INDEX}, _context(proc, pip_log)
     combined = proc.stdout + proc.stderr
+    assert "==> ROCm version:" in combined, _context(proc, pip_log)
     assert "gfx1036" in combined, _context(proc, pip_log)
     assert "gfx1100" in combined, _context(proc, pip_log)
     assert "gfx11-generic" not in combined, _context(proc, pip_log)
     assert "gfx000" not in combined, _context(proc, pip_log)
+
+
+def test_matching_torchaudio_with_local_tag_is_not_uninstalled(tmp_path: Path) -> None:
+    """A torchaudio whose base version and tag match the resolved pin is kept.
+
+    Invariant: an installed ``torchaudio==2.11.0+cu130`` satisfies the cu130
+    research pin (base 2.11.0, tag cu130) and must not be uninstalled; pip
+    must still receive the research ``torchaudio==2.11.0`` install line.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard", "--research"],
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.11.0+cu130",
+    )
+    lines = pip_log.splitlines()
+    assert not any("uninstall -y torchaudio" in line for line in lines), _context(
+        proc, pip_log
+    )
+    assert any("torchaudio==2.11.0" in line for line in lines), _context(proc, pip_log)
+
+
+def test_no_force_reinstall_for_untagged_cpu_wheel_on_cpu_index(tmp_path: Path) -> None:
+    """An untagged (PyPI-style) torch wheel is not force-reinstalled for --cpu.
+
+    Invariant: an installed wheel with no local tag is treated as ``cpu``; when
+    the target index is also ``cpu`` the tag rule does not force a reinstall.
+    The fake torch here reports flavor ``cpu`` and version ``2.14.0`` with no
+    ``+`` tag, so the installer skips the torch install entirely.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cpu", "--no-wizard"],
+        fake_torch="cpu",
+    )
+    lines = pip_log.splitlines()
+    assert not any("--force-reinstall" in line for line in lines), _context(proc, pip_log)
+    assert not any("torch==" in line for line in lines), _context(proc, pip_log)
+
+
+def test_rocminfo_nonzero_exit_does_not_silently_abort(tmp_path: Path) -> None:
+    """A rocminfo that prints a gfx name and exits non-zero is not fatal.
+
+    Invariant: under ``set -euo pipefail`` the command substitution parsing
+    ``rocminfo`` must not make the installer exit silently; the parsed name
+    is kept and the installer reaches the ROCm version line.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--rocm"],
+        rocm=True,
+        rocminfo_exit1=True,
+        extra_env={"KAINE_ROCM_VERSION": "7.2"},
+    )
+    combined = proc.stdout + proc.stderr
+    assert "==> ROCm version:" in combined, _context(proc, pip_log)
+    assert set(_index_urls(pip_log)) == {ROCM72_INDEX}, _context(proc, pip_log)
+
+
+def test_rocminfo_feature_suffixes_are_stripped(tmp_path: Path) -> None:
+    """rocminfo parsing strips gfx feature suffixes before filtering."""
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--rocm"],
+        rocm=True,
+        rocminfo_suffix=True,
+        extra_env={"KAINE_ROCM_VERSION": "7.2"},
+    )
+    combined = proc.stdout + proc.stderr
+    assert "gfx90a" in combined, _context(proc, pip_log)
+    assert "xnack" not in combined, _context(proc, pip_log)
+    assert "sramecc" not in combined, _context(proc, pip_log)
+    assert "gfx000" not in combined, _context(proc, pip_log)
+    assert "gfx11-generic" not in combined, _context(proc, pip_log)
+    assert set(_index_urls(pip_log)) == {ROCM72_INDEX}, _context(proc, pip_log)
+
+
+def test_rocm_agent_feature_suffixes_are_stripped(tmp_path: Path) -> None:
+    """rocm_agent_enumerator parsing strips gfx feature suffixes before filtering."""
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--rocm"],
+        rocm=True,
+        rocm_agent_suffix=True,
+        extra_env={"KAINE_ROCM_VERSION": "7.2"},
+    )
+    combined = proc.stdout + proc.stderr
+    assert "gfx90a" in combined, _context(proc, pip_log)
+    assert "xnack" not in combined, _context(proc, pip_log)
+    assert "sramecc" not in combined, _context(proc, pip_log)
+    assert "gfx000" not in combined, _context(proc, pip_log)
+    assert "gfx11-generic" not in combined, _context(proc, pip_log)
+    assert set(_index_urls(pip_log)) == {ROCM72_INDEX}, _context(proc, pip_log)
+
+
+def test_research_refused_when_torchaudio_unavailable_for_override(tmp_path: Path) -> None:
+    """--research with an index that has no torchaudio exits before installing torch.
+
+    Invariant: when the resolver reports ``torchaudio_unavailable`` for the
+    chosen operator --index-url and --research is set, the installer exits
+    non-zero before any ``pip install torch`` line and prints the required
+    guidance.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard", "--research", "--index-url", CUDA132_INDEX],
+        nvidia_cuda="13.2",
+    )
+    assert proc.returncode != 0, _context(proc, pip_log)
+    combined = proc.stdout + proc.stderr
+    expected = (
+        f"install: --research needs torchaudio, but {CUDA132_INDEX} publishes no "
+        "torchaudio for torch 2.14.0; choose a different --index-url or drop --research"
+    )
+    assert expected in combined, _context(proc, pip_log)
+    assert not any(
+        "torch==" in line or "torch>=" in line for line in pip_log.splitlines()
+    ), _context(proc, pip_log)
 
 
 def test_print_torch_spec_matches_pyproject() -> None:

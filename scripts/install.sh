@@ -2,12 +2,13 @@
 #
 # The CUDA wheel index is host-resolved by kaine.wheel_index from the CPU
 # architecture, the driver's CUDA version, the GPUs' compute capability and
-# the unified-memory classification. Hosts with no usable CUDA wheel (e.g.
-# Tegra/Jetson) resolve to the CPU index with a warning instead of receiving
-# a wheel that fails at the first kernel launch. --index-url <URL> overrides
-# the resolved CUDA index; it is ignored for --cpu/--rocm/--xpu/--mps.
+# the unified-memory classification. JetPack 7 hosts (driver CUDA >= 13.0)
+# resolve to a cu13x index and run a GPU-vs-CPU numerical self-test with a CPU
+# fallback; JetPack 6 hosts resolve to CPU wheels with a note. --index-url
+# <URL> overrides the resolved CUDA index; it is ignored for --cpu/--rocm/--xpu/--mps.
 # GPU preflight memory states (known-discrete, known-unified, unknown):
 # see docs/accelerator-provisioning.md for details.
+#
 # KAINE installer: detects host hardware and installs PyTorch from the
 # matching wheel index, then installs the rest of KAINE editable.
 #
@@ -184,6 +185,43 @@ _index_tag() {
   echo "${url##*/}"
 }
 
+# Normalize a gfx name token from rocminfo / rocm_agent_enumerator output.
+# Input may include leading/trailing whitespace and an optional ':' feature
+# suffix.  Prints the cleaned name when it names a real gfx target; prints
+# nothing for gfx000, -generic targets, or otherwise invalid tokens.
+_normalize_gfx_name() {
+  local raw="$1"
+  # Trim leading and trailing whitespace.
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  # Strip feature suffixes (anything from the first ':' onward).
+  raw="${raw%%:*}"
+  # Drop the reserved/invalid targets.
+  [ "$raw" = "gfx000" ] && return
+  case "$raw" in *-generic) return ;; esac
+  # Only accept gfx<hex>.
+  [[ "$raw" =~ ^gfx[0-9a-f]+$ ]] || return
+  printf '%s\n' "$raw"
+}
+
+_is_pytorch_whl_url() {
+  local url="$1"
+  [[ "$url" == https://download.pytorch.org/whl/* ]]
+}
+
+_tags_match() {
+  local installed_tag="$1"
+  local target_tag="$2"
+  local url="$3"
+  if ! _is_pytorch_whl_url "$url"; then
+    return 0
+  fi
+  if [[ -z "$installed_tag" ]]; then
+    installed_tag="cpu"
+  fi
+  [[ "$installed_tag" == "$target_tag" ]]
+}
+
 _current_torch_base() {
   "$PY" -c "import torch; print(torch.__version__.split('+',1)[0])" 2>/dev/null || true
 }
@@ -272,6 +310,7 @@ case "$flavor" in
     fi
     RESOLVER_VARIANT=""
     RESOLVER_URL=""
+    TA_UNAVAILABLE="false"
     if [ -n "$RESOLVER_JSON" ] && [ -n "$RESOLVER_PY" ]; then
       RESOLVER_VARIANT="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("variant"); print("" if v is None else v)' 2>/dev/null || true)"
       RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("index_url"); print("" if v is None else v)' 2>/dev/null || true)"
@@ -279,8 +318,13 @@ case "$flavor" in
       TV_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchvision_version"); print("" if v is None else v)' 2>/dev/null || true)"
       TA_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchaudio_version"); print("" if v is None else v)' 2>/dev/null || true)"
       SELFTEST="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print("true" if json.load(sys.stdin).get("selftest_required") else "false")' 2>/dev/null || true)"
+      TA_UNAVAILABLE="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print("true" if json.load(sys.stdin).get("torchaudio_unavailable") else "false")' 2>/dev/null || true)"
     fi
     if [ -n "$RESOLVER_URL" ]; then
+      if [ "$RESEARCH" -eq 1 ] && [ "$TA_UNAVAILABLE" = "true" ]; then
+        echo "install: --research needs torchaudio, but $RESOLVER_URL publishes no torchaudio for torch ${TORCH_PIN}; choose a different --index-url or drop --research" >&2
+        exit 1
+      fi
       INDEX_URL="$RESOLVER_URL"
       GPU_INDEX_URL="$RESOLVER_URL"
       if [ -n "${INDEX_URL_OVERRIDE:-}" ]; then
@@ -356,11 +400,9 @@ else:
       ROCM_GFX_SOURCE="none"
       _gfx_list=""
       if command -v rocminfo >/dev/null 2>&1; then
-        _gfx_list="$(rocminfo 2>/dev/null | sed -nE 's/^[[:space:]]*Name:[[:space:]]+(gfx[0-9a-f]+)[[:space:]]*$/\1/p' | while read -r name; do
-          [ "$name" = "gfx000" ] && continue
-          case "$name" in *-generic) continue ;; esac
-          printf '%s\n' "$name"
-        done | awk '!seen[$0]++' | tr '\n' ',' | sed 's/,$//')"
+        _gfx_list="$(rocminfo 2>/dev/null | sed -nE 's/^[[:space:]]*Name:[[:space:]]+([^[:space:]]+).*/\1/p' | while read -r name; do
+          _normalize_gfx_name "$name"
+        done | awk '!seen[$0]++' | tr '\n' ',' | sed 's/,$//')" || true
         if [ -n "$_gfx_list" ]; then
           ROCM_GFX="$_gfx_list"
           ROCM_GFX_SOURCE="rocminfo"
@@ -368,15 +410,9 @@ else:
       fi
       if [ -z "$ROCM_GFX" ] && command -v rocm_agent_enumerator >/dev/null 2>&1; then
         _gfx_list="$(rocm_agent_enumerator 2>/dev/null | while read -r name; do
-          name="$(printf '%s' "$name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-          case "$name" in
-            gfx[0-9a-f]*)
-              [ "$name" = "gfx000" ] && continue
-              case "$name" in *-generic) continue ;; esac
-              printf '%s\n' "$name"
-              ;;
-          esac
-        done | awk '!seen[$0]++' | tr '\n' ',' | sed 's/,$//')"
+          name="$(_normalize_gfx_name "$name")"
+          [ -n "$name" ] && printf '%s\n' "$name"
+        done | awk '!seen[$0]++' | tr '\n' ',' | sed 's/,$//')" || true
         if [ -n "$_gfx_list" ]; then
           ROCM_GFX="$_gfx_list"
           ROCM_GFX_SOURCE="rocm_agent_enumerator"
@@ -400,10 +436,14 @@ else:
     fi
 
     RESOLVER_JSON=""
+    resolver_extra_args=()
+    if [ "$RESEARCH" -eq 1 ]; then
+      resolver_extra_args+=("--need-torchaudio")
+    fi
     if [ -n "$ROCM_GFX" ]; then
-      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" --gfx "$ROCM_GFX" 2>/dev/null || true)"
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" --gfx "$ROCM_GFX" "${resolver_extra_args[@]}" 2>/dev/null || true)"
     else
-      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" 2>/dev/null || true)"
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" "${resolver_extra_args[@]}" 2>/dev/null || true)"
     fi
 
     RESOLVER_URL=""
@@ -497,12 +537,17 @@ if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswit
   else
     echo "==> torch installed with flavor '$installed_flavor' but want '$flavor'; reinstalling"
   fi
-  target_tag=$(_index_tag "$INDEX_URL")
-  installed_tag=$(_installed_torch_tag)
-  if [ "$installed_tag" != "$target_tag" ]; then
-    echo "==> installed torch build tag '$installed_tag' differs from target index tag '$target_tag'; forcing reinstall"
-    FORCE_REINSTALL_FLAG="--force-reinstall"
-    need_install=1
+  if _is_pytorch_whl_url "$INDEX_URL"; then
+    target_tag=$(_index_tag "$INDEX_URL")
+    installed_tag=$(_installed_torch_tag)
+    if [[ -z "$installed_tag" ]]; then
+      installed_tag="cpu"
+    fi
+    if [ "$installed_tag" != "$target_tag" ]; then
+      echo "==> installed torch build tag '$installed_tag' differs from target index tag '$target_tag'; forcing reinstall"
+      FORCE_REINSTALL_FLAG="--force-reinstall"
+      need_install=1
+    fi
   fi
 fi
 
@@ -550,12 +595,17 @@ if [[ "$SELFTEST" == "true" ]]; then
 fi
 
 # Ensure the constraints file never pins a torchaudio that does not belong to
-# the resolved stack. If torchaudio is installed and its version is not the
-# resolved TA pin (or no TA pin applies because this is not a --research
-# install), uninstall it before writing constraints.
+# the resolved stack. If torchaudio is installed, keep it only when the base
+# version matches the resolved TA pin and the local tag matches the target
+# index tag (untagged wheels count as cpu); otherwise uninstall it.
 if _package_installed torchaudio; then
   installed_ta=$(_package_version torchaudio)
-  if [ -z "$TA_PIN" ] || [ "$installed_ta" != "$TA_PIN" ]; then
+  installed_ta_base=${installed_ta%%+*}
+  installed_ta_tag=${installed_ta#*+}
+  if [[ "$installed_ta" == "$installed_ta_base" ]]; then
+    installed_ta_tag=""
+  fi
+  if [[ -z "$TA_PIN" ]] || [[ "$installed_ta_base" != "$TA_PIN" ]] || ! _tags_match "$installed_ta_tag" "$(_index_tag "$INDEX_URL")" "$INDEX_URL"; then
     echo "==> uninstalling stale torchaudio $installed_ta (target pin: ${TA_PIN:-none})"
     "$PIP" uninstall -y torchaudio
   fi
