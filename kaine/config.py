@@ -278,16 +278,12 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                 f"oscillator.enabled expected bool, got {type(enabled).__name__}"
             )
 
-    deployment = config.get("deployment")
-    if isinstance(deployment, dict):
-        tier_name = deployment.get("tier")
-        if tier_name is not None and not isinstance(tier_name, str):
-            raise ConfigShapeError(
-                f"deployment.tier expected string, got {type(tier_name).__name__}"
-            )
-
     security = config.get("security")
-    if isinstance(security, dict):
+    if security is not None:
+        if not isinstance(security, dict):
+            raise ConfigShapeError(
+                f"security expected table, got {type(security).__name__}"
+            )
         state_encryption = security.get("state_encryption")
         if state_encryption is not None and not isinstance(state_encryption, dict):
             raise ConfigShapeError(
@@ -299,6 +295,18 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                 raise ConfigShapeError(
                     f"security.state_encryption.enabled expected bool, got {type(enabled).__name__}"
                 )
+
+    deployment = config.get("deployment")
+    if deployment is not None:
+        if not isinstance(deployment, dict):
+            raise ConfigShapeError(
+                f"deployment expected table, got {type(deployment).__name__}"
+            )
+        tier_name = deployment.get("tier")
+        if tier_name is not None and not isinstance(tier_name, str):
+            raise ConfigShapeError(
+                f"deployment.tier expected string, got {type(tier_name).__name__}"
+            )
 
 
 def require_known_keys(

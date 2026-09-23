@@ -303,7 +303,13 @@ def build_diagnostics_router(
     @router.get("/forks.json")
     async def forks_json():
         if fork_manager is None:
-            return JSONResponse({"forks": []})
+            return JSONResponse(
+                {
+                    "forks": [],
+                    "available": False,
+                    "reason": "fork operations are disabled: the state-encryption posture could not be installed (see the Nexus log)",
+                }
+            )
         out = []
         for snap_id in fork_manager.list_snapshots():
             try:
@@ -326,7 +332,7 @@ def build_diagnostics_router(
                 out.append(entry)
             except Exception:
                 continue
-        return JSONResponse({"forks": out})
+        return JSONResponse({"forks": out, "available": True})
 
     @router.post("/forks", dependencies=[Depends(require_operator_token)])
     async def create_fork(body: ForkRequestBody):

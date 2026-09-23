@@ -42,24 +42,23 @@ log = logging.getLogger(__name__)
 
 
 def _load_config(config_path: str | os.PathLike[str]) -> dict:
-    """Load kaine.toml through the canonical loader; ``{}`` on failure.
+    """Load kaine.toml through the canonical loader.
 
     Routes through :func:`kaine.config.load_kaine_config` so the research
     entrypoint honours the gitignored operator override
     (``config/kaine.operator.toml``) exactly like the cognitive cycle does,
     instead of parsing the shipped file with raw ``tomllib`` and silently
     ignoring operator choices.
+
+    Returns ``{}`` only when the requested config file does not exist.
+    Configuration errors are allowed to propagate so the CLI can fail closed.
     """
     from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
 
     p = Path(config_path)
     if not p.exists():
         return {}
-    try:
-        return load_kaine_config(p, OPERATOR_CONFIG_PATH)
-    except Exception as exc:
-        log.warning("could not load config %s: %s", p, exc)
-        return {}
+    return load_kaine_config(p, OPERATOR_CONFIG_PATH, strict_operator=True)
 
 
 def _smtp_config_from_toml(cfg: dict):
@@ -279,7 +278,14 @@ def main(
         return 0
 
     # --- Load config --------------------------------------------------------
-    cfg = _load_config(args.config)
+    from kaine.config import ProfileError
+
+    try:
+        cfg = _load_config(args.config)
+    except ProfileError as exc:
+        err.write(f"research: configuration error: {exc}\n")
+        return 2
+
     rs_cfg = cfg.get("research_submission") or {}
     enabled = bool(rs_cfg.get("enabled", False))
     recipient = str(rs_cfg.get("recipient") or "").strip()

@@ -33,7 +33,6 @@ import logging
 import os
 import sys
 import time
-import tomllib
 from pathlib import Path
 from typing import Any, Callable
 
@@ -102,12 +101,15 @@ def _cycle_appears_running(runtime_path: Path) -> bool:
 
 
 def _load_kaine_config(path: Path) -> dict[str, Any]:
-    try:
-        if path.is_file():
-            return tomllib.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        log.warning("could not parse %s; proceeding with defaults", path, exc_info=True)
-    return {}
+    """Load the merged KAINE configuration, raising on operator errors.
+
+    Returns ``{}`` only when the requested config file does not exist.
+    """
+    from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
+
+    if not path.is_file():
+        return {}
+    return load_kaine_config(path, OPERATOR_CONFIG_PATH, strict_operator=True)
 
 
 def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
@@ -216,7 +218,24 @@ def main(
         )
         return 3
 
-    config = _load_kaine_config(args.config)
+    # --- Load config and install state encryption BEFORE any destructive work
+    from kaine.config import ProfileError
+    from kaine.security.crypto import install_from_section
+
+    try:
+        config = _load_kaine_config(args.config)
+    except ProfileError as exc:
+        err.write(f"decommission: configuration error: {exc}\n")
+        return 2
+
+    try:
+        install_from_section((config.get("security") or {}).get("state_encryption") or {})
+    except Exception as exc:
+        err.write(
+            f"decommission: state-encryption setup failed; refusing to assess, back up or delete: {type(exc).__name__}: {exc}\n"
+        )
+        return 2
+
     entity_name = _resolve_entity_name(state_root, config)
 
     # --- Assess divergence (pure reads) --------------------------------
