@@ -1190,7 +1190,7 @@ def main() -> None:
     # --research was not requested.
     if need_torchaudio_coherent:
         _install_torchaudio(
-            pip, index_url, ta_pin, constraints, research=False, force_reinstall=force_reinstall
+            pip, index_url, ta_pin, constraints, research=False, force_reinstall=False
         )
         pinned = write_torch_constraints(py, constraints)
         print(f"==> pinned torch stack: {pinned}")

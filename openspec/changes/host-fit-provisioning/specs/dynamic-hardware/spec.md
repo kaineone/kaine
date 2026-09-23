@@ -11,16 +11,24 @@ to a wheel source: NVIDIA → a CUDA index resolved from the host probe as
 described below, AMD → a ROCm index, Intel → an XPU index, CPU → the CPU index;
 Apple Silicon SHALL install the default PyPI wheel (which bundles the MPS
 backend) with no `--index-url`. The script SHALL install the exact torch version
-(and matching companions) resolved as described below from the chosen source, pin
-it in the torch constraints file, then install the rest of KAINE under those
-constraints. On re-run, the script SHALL force-reinstall torch whenever the
-installed local tag differs from the target flavor, including when the target is
-an operator `--index-url` that does not point to `download.pytorch.org/whl/<tag>`
-(untagged counts as `cpu`). When a matching `torchaudio` wheel is already
-installed and `--research` is not given, the script SHALL still pass
-`--need-torchaudio` and keep or install the matching `torchaudio`, so a host
-previously installed with `--research` does not drift to an index without
-`torchaudio` on a later run.
+(and matching companions) resolved as described below from the chosen source,
+pin it in the torch constraints file, then install the rest of KAINE under those
+constraints. On re-run, the script SHALL classify the installed torch by its
+build metadata (`torch.version.hip` → rocm, `torch.version.cuda` → cuda, an XPU
+build → xpu, an MPS build on macOS arm64 → mps, else cpu), compare it with the
+effective target flavor (cpu when the chosen index is the CPU index, for example
+after a self-test fallback), and force-reinstall on a mismatch. A matching
+flavor with a different pinned base version SHALL reinstall. On
+`download.pytorch.org/whl/<tag>` indexes a local-tag mismatch SHALL force a
+reinstall (untagged counts as cpu); for operator `--index-url` values that do not
+point to `download.pytorch.org/whl/<tag>`, tag checks are skipped. When any
+`torchaudio` wheel is installed and `--research` is not given, the script SHALL
+pass `--need-torchaudio` to the resolver, replace a `torchaudio` that does not
+match the resolved stack, and on flavors without a resolved `torchaudio` pin
+(cpu, xpu, mps) reinstall `torchaudio` from that flavor's index under the torch
+constraints. If `torchaudio` is installed and the
+chosen index publishes no `torchaudio` for the resolved torch version, both
+installers SHALL refuse before installing torch.
 
 The NVIDIA flavor SHALL NOT map to a single fixed CUDA index. When the NVIDIA
 flavor is selected (auto-detected or forced with `--cuda`), the script SHALL
@@ -109,12 +117,30 @@ resolution, and flag semantics.
   changes
 
 #### Scenario: Flavor change forces torch reinstallation
-- **WHEN** the script is re-run and the target wheel flavor or index differs from the installed torch local tag (for example `+cpu` installed and CUDA wanted, or the operator passes an `--index-url` outside `download.pytorch.org`)
+- **WHEN** the script is re-run and the effective target flavor differs from the
+  installed torch build (for example a `+cpu` wheel is installed but CUDA wheels
+  are wanted, or the operator passes an `--index-url` outside
+  `download.pytorch.org`)
 - **THEN** it force-reinstalls torch from the target source before writing the constraints file
 
 #### Scenario: Re-run keeps installed torchaudio when not researching
-- **WHEN** a host already has a matching `torchaudio` wheel installed, `--research` is not given, and the resolved CUDA index would otherwise omit `torchaudio` (for example `cu132`)
-- **THEN** the resolver passes `--need-torchaudio` and keeps or installs the matching `torchaudio`, staying on an index that provides it (for example `cu130`) instead of switching to `cu132` and losing `torchaudio`
+- **WHEN** a host already has any `torchaudio` wheel installed, `--research` is
+  not given, and the resolved CUDA index would otherwise omit `torchaudio` (for
+  example `cu132`)
+- **THEN** the resolver passes `--need-torchaudio` and keeps or installs the
+  matching `torchaudio`, staying on an index that provides it (for example
+  `cu130`) instead of switching to `cu132` and losing `torchaudio`; on flavors
+  without a resolved `torchaudio` pin (cpu, xpu, mps) `torchaudio` is reinstalled
+  from that flavor's index under the torch constraints
+
+#### Scenario: Coherent audio stack refuses an index without torchaudio
+- **WHEN** an operator runs `bash scripts/install.sh --cuda --index-url
+  https://download.pytorch.org/whl/cu132` on a host where `torchaudio` is already
+  installed and `--research` is not given
+- **THEN** both installers refuse before installing torch, because `torchaudio`
+  is installed but the cu132 index publishes no `torchaudio` wheels for the
+  resolved torch version, and they tell the operator to choose a different
+  `--index-url` or uninstall `torchaudio` first
 
 #### Scenario: aarch64 unified-memory host avoids the SBSA-only index
 - **WHEN** an operator runs `bash scripts/install.sh` on an aarch64 host with a
