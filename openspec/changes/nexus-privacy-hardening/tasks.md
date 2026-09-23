@@ -1,6 +1,6 @@
 ## 1. Nexus authentication layer
 
-- [ ] 1.1 Add `operator_token` field to `NexusConfig` loaded from `KAINE_NEXUS_TOKEN` env or `config/secrets.toml`, and verify `kaine/nexus/config.py` parses it without logging the value.
+- [x] 1.1 Add `operator_token` field to `NexusConfig` loaded from `KAINE_NEXUS_TOKEN` env or `config/secrets.toml`, and verify `kaine/nexus/config.py` parses it without logging the value.
 - [x] 1.2 Create `kaine/nexus/auth.py` with a FastAPI `Depends` callable that validates `Authorization: Bearer <token>` and returns 401 when the token is missing or mismatched; verify with unit tests for missing, wrong, and valid tokens.
 - [x] 1.3 Apply the auth dependency to all state-changing routers in `kaine/nexus/app.py` (`cycle_control`, `perception`, diagnostics forks/merges/rates endpoints) and verify unauthenticated POSTs return 401.
 - [x] 1.4 Apply the auth dependency to privileged read surfaces when `conversation_enabled` or `dev_content_override` is true (conversation router, diagnostics SSE) and verify unauthenticated requests return 401.
