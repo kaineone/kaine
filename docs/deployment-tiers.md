@@ -17,6 +17,10 @@ brings Termux and JAX-free reasoning, and Phase 4 adds residency and multi-node
 support. The tier ladder describes the intended backend set once those phases
 land; today's shipped backends are listed in the staging section.
 
+## Tier recommendation
+
+`scripts/probe-host` and the first-run wizard recommend a tier from a memory budget (unified: system RAM; discrete: the smaller of RAM and total VRAM across GPUs): Tier 3 for two or more GPUs with >= 16 GB, Tier 2 for one GPU with >= 16 GB, Tier 2 with module residency required for 6–16 GB (module residency is not implemented yet, so such hosts keep the base-thesis module set, serve a language model that fits such as the 4B GGUF, and keep vision/voice extras off), Tier 1 below 6 GB or without an accelerator; the wizard writes `[deployment].profile` only when the operator confirms, and `KAINE_PROFILE` / `--profile` still take precedence.
+
 Selecting a tier is an **operator action**. Run the host probe for a
 recommendation, then choose the profile deliberately — nothing auto-applies:
 

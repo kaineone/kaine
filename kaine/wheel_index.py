@@ -396,7 +396,7 @@ DECISION_TABLE: tuple = (
     {
         "row": 5,
         "arch": "x86_64",
-        "driver_min": (12, 5),
+        "driver_min": (12, 6),
         "driver_max": (12, 7),
         "driver_unknown_ok": False,
         "unified": "no",
@@ -417,7 +417,7 @@ DECISION_TABLE: tuple = (
         "cc_guard_note": None,
         "index_url": CPU_INDEX,
         "warning": True,
-        "note": "CPU index + warning (no in-range wheels for cu118/cu121; driver CUDA < 12.5 or unknown)",
+        "note": "CPU index + warning (no in-range wheels for cu118/cu121; driver CUDA < 12.6 or unknown)",
     },
     {
         "row": 7,
@@ -474,7 +474,7 @@ DECISION_TABLE: tuple = (
     {
         "row": 11,
         "arch": "aarch64",
-        "driver_min": (12, 5),
+        "driver_min": (12, 6),
         "driver_max": (12, 7),
         "driver_unknown_ok": False,
         "unified": "no",
@@ -495,7 +495,7 @@ DECISION_TABLE: tuple = (
         "cc_guard_note": None,
         "index_url": CPU_INDEX,
         "warning": True,
-        "note": "CPU index + warning (aarch64 driver CUDA < 12.5 or unknown)",
+        "note": "CPU index + warning (aarch64 driver CUDA < 12.6 or unknown)",
     },
     {
         "row": 13,

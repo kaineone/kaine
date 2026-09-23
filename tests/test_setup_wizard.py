@@ -10,6 +10,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from kaine.setup import tomlwriter
 from kaine.setup.__main__ import main as setup_main
 from kaine.setup.wizard import (
@@ -337,6 +339,38 @@ def test_wizard_tier_recommendation_skipped_in_defaults_mode():
     )
     assert "deployment" not in result.config
     assert result.acknowledged is True
+
+
+# ----------------------------------------------------------------------------
+# __main__ wiring
+# ----------------------------------------------------------------------------
+
+
+def test_main_wires_recommend_tier(monkeypatch, tmp_path: Path):
+    """The real CLI entrypoint passes kaine.hardware.recommend_tier to run_wizard."""
+    import kaine.hardware
+    from kaine.setup import __main__ as setup_main_mod
+
+    recorded: dict = {}
+
+    class _Sentinel(Exception):
+        pass
+
+    def fake_run_wizard(**kwargs):
+        recorded.update(kwargs)
+        raise _Sentinel("run_wizard reached")
+
+    monkeypatch.setattr(setup_main_mod, "run_wizard", fake_run_wizard)
+
+    op = tmp_path / "op.toml"
+    out = io.StringIO()
+    with pytest.raises(_Sentinel):
+        setup_main(
+            ["--operator-path", str(op)],
+            input_fn=lambda _p: "",
+            out=out,
+        )
+    assert recorded["recommend_tier_fn"] is kaine.hardware.recommend_tier
 
 
 # ----------------------------------------------------------------------------
