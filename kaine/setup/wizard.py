@@ -388,6 +388,7 @@ def run_wizard(
     corrective_install_fn: Callable[[str], bool] | None = None,
     wheel_index_url: str | None = None,
     defaults: bool = False,
+    recommend_tier_fn: Callable[[], Any] | None = None,
 ) -> WizardResult:
     """Run the wizard's step logic and return the assembled operator-config.
 
@@ -412,6 +413,12 @@ def run_wizard(
         interpreter (signature ``(interpreter, *, backend) -> (found, detail)``,
         e.g. :func:`kaine.setup.trainer_provisioning.probe_trainer`). When None
         or in ``defaults`` mode the optional Stage-2 trainer step is skipped.
+    recommend_tier_fn:
+        Optional callable returning a :class:`kaine.hardware.TierRecommendation`.
+        When provided (and not in ``defaults`` mode) the wizard shows the tier,
+        reason, and memory budget, and asks whether to apply the matching
+        profile to ``[deployment].profile``. Never applies without an explicit
+        ``yes``.
     defaults:
         Non-interactive mode for tests/CI: records the ack as the default path,
         chooses a minimal safe module set, all-CPU devices, no metrics, no
@@ -494,6 +501,33 @@ def run_wizard(
             proposed[address] = answer
     for address, dev in proposed.items():
         _apply_device_address(cfg, address, dev)
+
+    # --- Step 3a: deployment tier recommendation -----------------------------
+    if not defaults and recommend_tier_fn is not None:
+        line()
+        line("-" * 70)
+        line("Deployment tier recommendation")
+        line("-" * 70)
+        try:
+            rec = recommend_tier_fn()
+        except Exception as exc:
+            line(f"  Tier recommendation unavailable ({exc}).")
+            rec = None
+        if rec is not None:
+            tier_label = getattr(rec, "profile", f"tier{getattr(rec, 'tier', '')}")
+            line(f"  Recommended tier: {tier_label}")
+            line(f"  Reason: {getattr(rec, 'reason', '')}")
+            budget = getattr(rec, "memory_budget_gb", None)
+            if budget is not None:
+                line(f"  Memory budget: {budget} GB")
+            else:
+                line("  Memory budget: unknown")
+            if _ask_yes_no(
+                input_fn,
+                f"Apply profile {tier_label} to this install?",
+                default=False,
+            ):
+                _set(cfg, "deployment", "profile", tier_label)
 
     # --- Step 3b: accelerator/runtime mismatch check -----------------------
     mismatch_info = _accel_mismatch_step(

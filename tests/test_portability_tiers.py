@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine import hardware
+from kaine import hardware, hostmem
 from kaine.backend_state import (
     backend_failures,
     clear_backend_failures,
@@ -191,6 +191,215 @@ def test_probe_script_recommends_only_does_not_apply():
 
 
 # --------------------------------------------------------------------------
+# Host-fit-provisioning: memory budget + residency ladder
+# --------------------------------------------------------------------------
+
+
+def test_recommend_tier_unified_8gb_one_gpu_residency_required():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=8.0,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="unified",
+    )
+    assert rec.tier == 2
+    assert rec.residency_required is True
+    assert rec.memory_budget_gb == 8.0
+    assert rec.memory_state == "unified"
+    assert "module residency" in rec.reason.lower()
+
+
+def test_recommend_tier_discrete_64ram_12vram_one_gpu_residency_required():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="discrete",
+        vram_gb=12.0,
+    )
+    assert rec.tier == 2
+    assert rec.residency_required is True
+    assert rec.memory_budget_gb == 12.0
+
+
+def test_recommend_tier_discrete_64ram_24vram_one_gpu_no_residency():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="discrete",
+        vram_gb=24.0,
+    )
+    assert rec.tier == 2
+    assert rec.residency_required is False
+    assert rec.memory_budget_gb == 24.0
+
+
+def test_recommend_tier_discrete_64ram_24vram_two_gpu_tier3():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=2,
+        accelerator="cuda",
+        memory_state="discrete",
+        vram_gb=24.0,
+    )
+    assert rec.tier == 3
+    assert rec.residency_required is False
+
+
+def test_recommend_tier_unified_5gb_accel_tier1():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=5.0,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="unified",
+    )
+    assert rec.tier == 1
+
+
+def test_recommend_tier_no_accel_16gb_tier1():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=16.0,
+        arch="x86_64",
+        gpu_count=0,
+        accelerator="cpu",
+        memory_state="unified",
+    )
+    assert rec.tier == 1
+
+
+def test_recommend_tier_torch_missing_tier0():
+    rec = hardware.recommend_tier(
+        torch_ok=False,
+        ram_gb=16.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.tier == 0
+
+
+def test_recommend_tier_unknown_state_32gb_one_gpu_tier2():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=32.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="unknown",
+    )
+    assert rec.tier == 2
+    assert rec.memory_budget_gb == 32.0
+
+
+# --------------------------------------------------------------------------
+# Host-fit-provisioning: live hostmem probe via monkeypatch
+# --------------------------------------------------------------------------
+
+
+def _make_classification(state, vram_bytes=None):
+    pools = []
+    if vram_bytes is not None:
+        pools.append(
+            hostmem.Pool(
+                kind="vram",
+                total_bytes=int(vram_bytes),
+                available_bytes=int(vram_bytes),
+                provenance="mock",
+                unknown_reason=None,
+            )
+        )
+    pools.append(
+        hostmem.Pool(
+            kind="system",
+            total_bytes=int(64 * 1024 ** 3),
+            available_bytes=int(32 * 1024 ** 3),
+            provenance="mock",
+            unknown_reason=None,
+        )
+    )
+    return hostmem.MemoryClassification(
+        state=state,
+        pools=tuple(pools),
+        evidence="mock",
+        unknown_reason=None,
+    )
+
+
+def test_probe_multi_gpu_budget_sums_vram(monkeypatch):
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("discrete", 12_000_000_000)
+        if index == 1:
+            return _make_classification("discrete", 8_000_000_000)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=2,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "discrete"
+    assert rec.memory_budget_gb == 20.0
+    assert rec.tier == 3
+    assert rec.residency_required is False
+
+
+def test_probe_single_gpu_budget_uses_vram_and_requires_residency(monkeypatch):
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("discrete", 12_000_000_000)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "discrete"
+    assert rec.memory_budget_gb == 12.0
+    assert rec.tier == 2
+    assert rec.residency_required is True
+
+
+def test_probe_unified_gpu_budget_uses_ram(monkeypatch):
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("unified", None)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=8.0,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "unified"
+    assert rec.memory_budget_gb == 8.0
+    assert rec.tier == 2
+    assert rec.residency_required is True
+
+
+# --------------------------------------------------------------------------
 # 4. Tier profiles: layered load + safety invariants
 # --------------------------------------------------------------------------
 
@@ -213,6 +422,43 @@ def test_resolve_profile_name_rejects_traversal():
         resolve_profile_name("../secrets", env={})
     with pytest.raises(ProfileError):
         resolve_profile_name("tier0/../../etc", env={})
+
+
+def test_resolve_profile_name_reads_operator_overlay(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\nprofile = "tier1"\n')
+    assert resolve_profile_name(None, env={}, operator_path=op) == "tier1"
+
+
+def test_resolve_profile_name_env_wins_over_operator_overlay(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\nprofile = "tier1"\n')
+    assert resolve_profile_name(None, env={"KAINE_PROFILE": "tier3"}, operator_path=op) == "tier3"
+
+
+def test_resolve_profile_name_explicit_wins_over_overlay(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\nprofile = "tier1"\n')
+    assert resolve_profile_name("tier2", env={}, operator_path=op) == "tier2"
+
+
+def test_resolve_profile_name_missing_overlay_key_returns_none(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[other]\nkey = "value"\n')
+    assert resolve_profile_name(None, env={}, operator_path=op) is None
+
+
+def test_resolve_profile_name_malformed_overlay_returns_none(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text("not valid toml [[[[")
+    assert resolve_profile_name(None, env={}, operator_path=op) is None
+
+
+def test_resolve_profile_name_invalid_overlay_profile_raises(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\nprofile = "../secrets"\n')
+    with pytest.raises(ProfileError):
+        resolve_profile_name(None, env={}, operator_path=op)
 
 
 def test_profile_layers_between_shipped_and_operator(tmp_path: Path):

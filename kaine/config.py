@@ -53,17 +53,47 @@ class ProfileError(ValueError):
 
 
 def resolve_profile_name(
-    explicit: str | None = None, *, env: dict[str, str] | None = None
+    explicit: str | None = None,
+    *,
+    env: dict[str, str] | None = None,
+    operator_path: str | os.PathLike[str] | None = None,
 ) -> str | None:
-    """Resolve the selected profile name from an explicit value or the env var.
+    """Resolve the selected profile name from explicit value, env var, or overlay.
 
-    An explicit value (e.g. from ``--profile``) wins over ``KAINE_PROFILE``.
-    Returns ``None`` when neither is set (→ Tier 2 default). Validates the slug
-    and raises :class:`ProfileError` on a malformed name.
+    Resolution order (later layers only consulted when earlier layers are unset):
+
+    1. ``explicit`` value (e.g. from ``--profile``).
+    2. ``KAINE_PROFILE`` environment variable (or the supplied ``env`` mapping).
+    3. ``[deployment].profile`` in the operator overlay at ``operator_path``
+       (defaults to :data:`OPERATOR_CONFIG_PATH`).
+
+    Returns ``None`` when none are set, the overlay is missing, or the overlay
+    is malformed. Validates the slug and raises :class:`ProfileError` on a
+    malformed name (in any layer).
     """
     source = os.environ if env is None else env
     name = (explicit if explicit is not None else source.get(PROFILE_ENV_VAR)) or ""
     name = name.strip()
+    if name:
+        if not _PROFILE_NAME_RE.match(name):
+            raise ProfileError(
+                f"invalid profile name {name!r}: expected a slug of [a-z0-9_]"
+            )
+        return name
+
+    # Neither explicit nor env: consult the operator overlay.
+    op_path = Path(operator_path) if operator_path is not None else OPERATOR_CONFIG_PATH
+    if not op_path.exists():
+        return None
+    try:
+        with op_path.open("rb") as fh:
+            overlay = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    deployment = overlay.get("deployment")
+    if not isinstance(deployment, dict):
+        return None
+    name = str(deployment.get("profile", "")).strip()
     if not name:
         return None
     if not _PROFILE_NAME_RE.match(name):

@@ -503,13 +503,22 @@ def describe_host() -> dict[str, Any]:
 #: the host is an edge/sensor node (Tier 0). The GGML/ONNX family still runs.
 TIER1_MIN_RAM_GB = 4.0
 
+#: Budget floor for the full Tier-2 workstation experience (no module residency
+#: required). Applied after the Tier-0 rules.
+TIER2_MIN_BUDGET_GB = 16.0
+
+#: Budget floor for an accelerator host that qualifies for Tier 2 but needs module
+#: residency to fit. Between this and :data:`TIER2_MIN_BUDGET_GB` the host is
+#: still Tier 2, with residency guidance.
+RESIDENCY_MIN_BUDGET_GB = 6.0
+
 #: 32-bit ARM (armv6/armv7) cannot realistically bear the torch stack; such a
 #: host is capped at the Tier-0 symbolic-reasoning + memory + sensor role.
 _ARM32_ARCHES = ("armv6", "armv7", "armv6l", "armv7l")
 
 #: The honest capability matrix, per tier. ``present`` / ``degraded`` / ``absent``
 #: name what each tier can and cannot do (openspec deployment-tiers). Rendered by
-#: ``scripts/probe-host`` and mirrored in ``docs/deployment-tiers.md``.
+# ``scripts/probe-host`` and mirrored in ``docs/deployment-tiers.md``.
 TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
     0: {
         "name": "edge / sensor node",
@@ -578,6 +587,10 @@ class TierRecommendation:
     torch_importable: bool
     gpu_count: int
 
+    memory_budget_gb: float | None = None
+    memory_state: str = "unknown"
+    residency_required: bool = False
+
     @property
     def profile(self) -> str:
         return f"tier{self.tier}"
@@ -592,6 +605,9 @@ class TierRecommendation:
             "profile": self.profile,
             "reason": self.reason,
             "total_ram_gb": self.total_ram_gb,
+            "memory_budget_gb": self.memory_budget_gb,
+            "memory_state": self.memory_state,
+            "residency_required": self.residency_required,
             "cpu_arch": self.cpu_arch,
             "accelerator": self.accelerator,
             "torch_importable": self.torch_importable,
@@ -647,6 +663,86 @@ def torch_importable() -> bool:
     return _try_torch() is not None
 
 
+def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
+    """Probe accelerator memory state and sum discrete VRAM across devices.
+
+    Calls ``kaine.hostmem.classify_accelerator_memory(i)`` for every counted
+    accelerator device, totals the ``kind == "vram"`` pool bytes for each
+    device classified ``discrete``, and treats the host as ``unified`` if any
+    device reports unified memory. Failures degrade to ``("unknown", None)``.
+    """
+    try:
+        from kaine import hostmem
+    except Exception:
+        return "unknown", None
+
+    def _state_is(raw_state: Any, label: str) -> bool:
+        """Compare a MemoryState enum or string value to a lowercase label."""
+        mem_state_cls = getattr(hostmem, "MemoryState", None)
+        if mem_state_cls is not None:
+            member = getattr(mem_state_cls, label.upper(), None)
+            if member is not None and raw_state == member:
+                return True
+        candidate = getattr(raw_state, "value", None)
+        if candidate is None:
+            candidate = getattr(raw_state, "name", None)
+        if candidate is None:
+            candidate = raw_state
+        return str(candidate).lower() == label
+
+    count = (
+        gpu_count
+        if gpu_count is not None
+        else (_cuda_device_count() + _xpu_device_count())
+    )
+
+    total_vram_bytes = 0
+    seen_discrete = False
+    seen_unified = False
+    any_success = False
+
+    if count > 0:
+        indices = range(count)
+    else:
+        # No counted CUDA/XPU devices, but an accelerator may still exist
+        # (e.g. MPS). Try a single classification at index 0.
+        indices = (0,)
+
+    for i in indices:
+        try:
+            classification = hostmem.classify_accelerator_memory(i)
+            any_success = True
+        except Exception:
+            continue
+
+        raw_state = getattr(classification, "state", None)
+        if _state_is(raw_state, "unified"):
+            seen_unified = True
+        elif _state_is(raw_state, "discrete"):
+            seen_discrete = True
+            pools = getattr(classification, "pools", ()) or ()
+            for pool in pools:
+                if isinstance(pool, dict):
+                    kind = pool.get("kind")
+                    total_bytes = pool.get("total_bytes")
+                else:
+                    kind = getattr(pool, "kind", None)
+                    total_bytes = getattr(pool, "total_bytes", None)
+                if kind == "vram" and total_bytes is not None:
+                    try:
+                        total_vram_bytes += int(total_bytes)
+                    except Exception:
+                        pass
+
+    if seen_unified:
+        return "unified", None
+    if seen_discrete:
+        return "discrete", total_vram_bytes / 1e9
+    if any_success:
+        return "unknown", None
+    return "unknown", None
+
+
 def recommend_tier(
     *,
     ram_gb: float | None = None,
@@ -654,22 +750,36 @@ def recommend_tier(
     torch_ok: bool | None = None,
     gpu_count: int | None = None,
     accelerator: str | None = None,
+    memory_state: str | None = None,
+    vram_gb: float | None = None,
 ) -> TierRecommendation:
     """Map host capabilities to a recommended deployment tier.
 
     Recommends only — it does not apply a profile or start the entity. The
     override arguments exist for deterministic testing across host classes; when
-    omitted each is probed from the live host.
+    omitted each is probed from the live host, and memory classification falls
+    back to ``kaine.hostmem`` (``memory_state`` / ``vram_gb``).
 
-    The ladder mirrors the runtime cliff (openspec design):
+    The ladder mirrors the runtime cliff (openspec design) and the approved
+    host-fit-provisioning change:
 
     * **Tier 0** — torch does not import, RAM is below the Tier-1 floor, or the
       CPU is 32-bit ARM: an edge / sensor node (GGML/ONNX only, no torch).
-    * **Tier 1** — torch imports and RAM ≥ :data:`TIER1_MIN_RAM_GB` but no
-      accelerator is present: an embodied CPU agent.
-    * **Tier 2** — an accelerator (CUDA / ROCm / MPS / XPU) with exactly one GPU:
-      the workstation default.
-    * **Tier 3** — two or more GPUs: datacenter / multi-GPU.
+      Existing rules stay first.
+    * **Tier 3** — two or more accelerators with a memory budget of at least
+      :data:`TIER2_MIN_BUDGET_GB` GiB.
+    * **Tier 2 (full)** — one accelerator with a memory budget of at least
+      :data:`TIER2_MIN_BUDGET_GB` GiB.
+    * **Tier 2 (residency required)** — an accelerator host whose memory budget
+      is between :data:`RESIDENCY_MIN_BUDGET_GB` GiB and
+      :data:`TIER2_MIN_BUDGET_GB` GiB. The reason explains that module residency
+      is not yet implemented and gives interim operator guidance.
+    * **Tier 1** — below the residency floor or without an accelerator: an
+      embodied CPU agent.
+
+    The memory budget is system RAM on unified-memory hosts and
+    ``min(RAM, VRAM)`` on discrete hosts (or whichever value is known when one
+    is missing); unknown state falls back to RAM.
     """
     arch_v = (arch if arch is not None else cpu_arch()).lower()
     ram_v = ram_gb if ram_gb is not None else total_ram_gb()
@@ -683,9 +793,31 @@ def recommend_tier(
     else:
         detected = detect_device()
         accel_v = detected if detected in ("cuda", "xpu", "mps") else "cpu"
+
+    probed_state, probed_vram = _classify_memory(gpu_count=gpu_v)
+    mem_state = memory_state if memory_state is not None else probed_state
+    mem_vram = vram_gb if vram_gb is not None else probed_vram
+
+    if mem_state == "unified":
+        budget = ram_v
+    elif mem_state == "discrete":
+        if ram_v is not None and mem_vram is not None:
+            budget = min(ram_v, mem_vram)
+        elif ram_v is not None:
+            budget = ram_v
+        elif mem_vram is not None:
+            budget = mem_vram
+        else:
+            budget = None
+    else:
+        budget = ram_v
+
+    if budget is not None:
+        budget = round(budget, 2)
+
     has_accelerator = accel_v in ("cuda", "xpu", "mps") or gpu_v > 0
 
-    def _rec(tier: int, reason: str) -> TierRecommendation:
+    def _rec(tier: int, reason: str, residency: bool = False) -> TierRecommendation:
         return TierRecommendation(
             tier=tier,
             reason=reason,
@@ -694,6 +826,9 @@ def recommend_tier(
             accelerator=accel_v,
             torch_importable=bool(torch_v),
             gpu_count=gpu_v,
+            memory_budget_gb=budget,
+            memory_state=mem_state,
+            residency_required=residency,
         )
 
     # 32-bit ARM cannot bear the torch stack — capped at the sensor role.
@@ -705,9 +840,40 @@ def recommend_tier(
         return _rec(
             0, f"RAM {ram_v} GB below Tier-1 floor of {TIER1_MIN_RAM_GB} GB"
         )
-    if has_accelerator:
-        if gpu_v >= 2:
-            return _rec(3, f"{gpu_v} GPUs present (multi-GPU)")
-        return _rec(2, f"accelerator present ({accel_v})")
-    return _rec(1, "torch importable, adequate RAM, no accelerator (CPU agent)")
 
+    if has_accelerator:
+        if budget is None:
+            return _rec(
+                1,
+                f"accelerator present ({accel_v}) but memory budget unknown; "
+                "falling back to CPU agent",
+            )
+        if budget >= TIER2_MIN_BUDGET_GB:
+            if gpu_v >= 2:
+                return _rec(
+                    3,
+                    f"{gpu_v} GPUs present, {budget} GB memory budget",
+                )
+            return _rec(
+                2,
+                f"accelerator present ({accel_v}), {budget} GB memory budget",
+            )
+        if budget >= RESIDENCY_MIN_BUDGET_GB:
+            return _rec(
+                2,
+                f"accelerator present ({accel_v}), {budget} GB memory budget; "
+                "module residency is required on this host and is not yet implemented, "
+                "so until it lands the operator should keep the default base-thesis "
+                "module set, serve the language organ with a model that fits "
+                "(e.g. the 4B GGUF) and keep vision/voice extras off.",
+                residency=True,
+            )
+        return _rec(
+            1,
+            f"accelerator present but memory budget {budget} GB below "
+            f"{RESIDENCY_MIN_BUDGET_GB} GB; CPU agent",
+        )
+
+    return _rec(
+        1, "torch importable, adequate RAM, no accelerator (CPU agent)"
+    )

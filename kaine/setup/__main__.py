@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, TextIO
 
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
+from kaine.hardware import recommend_tier
 from kaine.setup import tomlwriter
 from kaine.setup.wizard import WizardResult, run_wizard
 
@@ -440,6 +441,7 @@ def main(
         shipped_config=shipped,
         probe_services=(None if args.defaults else probe_services),
         probe_trainer=(None if args.defaults else _probe_trainer),
+        recommend_tier_fn=recommend_tier,
         defaults=args.defaults,
     )
 
