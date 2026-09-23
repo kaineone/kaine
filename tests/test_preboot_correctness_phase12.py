@@ -435,9 +435,9 @@ def test_c3_volition_in_flight_guard_and_realization():
 
 
 def test_c3_realization_failed_event_is_content_free():
-    """The realization_failed audit event carries mode and reason class
-    ONLY — never the text, the prompt, or any payload headed for
-    generation."""
+    """The realization_failed audit record carries mode and reason class
+    ONLY — never the text, the prompt, or any payload headed for generation.
+    This test intercepts the real record writer (_write_mode_record)."""
     try:
         from kaine.modules.lingua.module import Lingua
     except ImportError:  # the class lives directly on the package
@@ -448,29 +448,28 @@ def test_c3_realization_failed_event_is_content_free():
     mod = object.__new__(Lingua)  # bypass heavy __init__
     mod.name = "lingua"
     mod._gen_task = None  # no held generation on this bare instance
-    published: list[tuple[str, dict]] = []
+    published: list[tuple[str, str, dict]] = []
 
-    async def fake_publish(topic, payload):
-        published.append((topic, dict(payload)))
+    async def fake_write_mode_record(stream, type_, payload):
+        published.append((stream, type_, dict(payload)))
 
     async def failing_speak(text):
         raise RuntimeError("boom " + text)
 
-    mod._publish = fake_publish
+    mod._write_mode_record = fake_write_mode_record
     mod.speak = failing_speak
     mod.think = failing_speak
 
     asyncio.run(mod._realize_intent(vt.SPEAK, secret))
 
     assert len(published) == 1
-    topic, payload = published[0]
-    assert topic == "lingua.internal"
-    assert payload["type"] == "realization_failed"
-    assert payload["mode"] == vt.SPEAK
-    assert payload["reason_class"] == "RuntimeError"
-    # Schema is content-free: exactly these keys, nothing else.
-    assert set(payload) == {"type", "mode", "reason_class"}
-    assert secret not in json.dumps(payload)
+    stream, type_, payload = published[0]
+    assert stream == "lingua.internal"
+    assert type_ == "realization_failed"
+    assert payload == {"mode": vt.SPEAK, "reason_class": "RuntimeError"}
+    # Schema is content-free: exactly these payload keys, nothing else.
+    assert set(payload) == {"mode", "reason_class"}
+    assert secret not in json.dumps([stream, type_, payload])
 
 
 # --------------------------------------------------------------------------
