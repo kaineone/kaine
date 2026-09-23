@@ -112,7 +112,7 @@ reasoning = [
 training = [
     "unsloth>=2026.9.6,<2027",
     "trl>=0.11,<1",
-    "peft>=0.19.1,<1",
+    "peft>=0.21.0,<1",
     "datasets>=2.20,<5",
 ]
 # DreamerV3 RSSM world model for Phantasia (paper §3.3.2).
