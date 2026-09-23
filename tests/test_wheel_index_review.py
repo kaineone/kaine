@@ -182,6 +182,16 @@ def test_operator_override_with_torchaudio_available_flag_is_false():
     assert "publishes no torchaudio" not in joined
 
 
+def test_coerce_rocm_version_accepts_strings_and_pairs():
+    """_coerce_rocm_version returns a (major, minor) pair or None."""
+    from kaine.wheel_index import _coerce_rocm_version
+
+    assert _coerce_rocm_version("7.2") == (7, 2)
+    assert _coerce_rocm_version((6, 4)) == (6, 4)
+    assert _coerce_rocm_version(3) is None
+    assert _coerce_rocm_version(("a", "b")) is None
+
+
 def test_cli_need_torchaudio_override_emits_torchaudio_unavailable(capsys, monkeypatch):
     monkeypatch.setenv("KAINE_WHEEL_PROBE_NVML", "0")
     rc = main([

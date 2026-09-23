@@ -272,8 +272,18 @@ def run_selftest(
     if device == "cuda":
         try:
             torch.cuda.synchronize()
-        except Exception:
-            pass
+        except Exception as exc:
+            return _make_result(
+                ok=False,
+                skipped=False,
+                reason=(
+                    "accelerator self-test failed: torch.cuda.synchronize() "
+                    f"raised {exc.__class__.__name__}: {exc}"
+                ),
+                checks=checks,
+                device_name=device_name,
+                torch_version=torch_version,
+            )
 
     reason = "passed" if ok else "accelerator self-test failed"
     return _make_result(

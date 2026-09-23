@@ -75,6 +75,28 @@ def test_half_matmul_nan_fails():
     assert failing_half_matmul[0]["finite"] is False
 
 
+def test_cuda_synchronize_failure_is_reported():
+    """A failing final torch.cuda.synchronize() is reported as a hard failure."""
+    real_torch = pytest.importorskip("torch")
+
+    def boom():
+        raise RuntimeError("synchronize boom")
+
+    fake = types.SimpleNamespace(**vars(real_torch))
+    fake.cuda = types.SimpleNamespace(
+        is_available=lambda: True,
+        is_bf16_supported=lambda: False,
+        get_device_name=lambda idx: "Fake CUDA",
+        synchronize=boom,
+    )
+
+    result = run_selftest(device="cuda", torch_module=fake)
+    assert result["ok"] is False
+    assert result["skipped"] is False
+    assert "torch.cuda.synchronize()" in result["reason"]
+    assert "RuntimeError" in result["reason"]
+
+
 def test_main_json_cpu(capsys):
     """``--json`` emits valid JSON and exits 0 on a passing CPU run."""
     pytest.importorskip("torch")

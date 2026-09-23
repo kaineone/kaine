@@ -299,7 +299,7 @@ def test_wizard_accepting_tier_writes_deployment_tier():
         out=sink,
         host=_host(cuda=1),
         shipped_config=_shipped(),
-        recommend_tier_fn=lambda: _tier2_rec(),
+        recommend_tier_fn=_tier2_rec,
     )
     assert result.config["deployment"]["tier"] == "tier2"
     assert "profile" not in result.config.get("deployment", {})
@@ -314,6 +314,6 @@ def test_wizard_declining_tier_writes_nothing():
         out=sink,
         host=_host(cuda=1),
         shipped_config=_shipped(),
-        recommend_tier_fn=lambda: _tier2_rec(),
+        recommend_tier_fn=_tier2_rec,
     )
     assert "deployment" not in result.config

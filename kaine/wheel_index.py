@@ -144,7 +144,8 @@ def project_torch_spec(pyproject_path=None) -> str:
                     spec = _strip_torch_prefix(dep)
                     if spec:
                         return spec
-        except Exception:
+        except (tomllib.TOMLDecodeError, AttributeError, TypeError):
+            # Regex scan below is the fallback for an unparsable or unusually shaped pyproject.toml.
             pass
     for line in text.splitlines():
         match = re.search(r'["\']torch\s*([<>=!~][^"\']*)["\']', line)
@@ -1609,7 +1610,8 @@ def _coerce_rocm_version(value):
         t = tuple(value)
         if len(t) == 2:
             return (int(t[0]), int(t[1]))
-    except Exception:
+    except (TypeError, ValueError):
+        # A value that is not a (major, minor) pair is not a version, so None is returned.
         pass
     return None
 

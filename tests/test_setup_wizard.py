@@ -282,7 +282,7 @@ def test_wizard_tier_recommendation_applied_on_yes():
         out=sink,
         host=_host(cuda=1),
         shipped_config=_shipped(),
-        recommend_tier_fn=lambda: _tier2_residency_rec(),
+        recommend_tier_fn=_tier2_residency_rec,
     )
     assert result.config["deployment"]["tier"] == "tier2"
 
@@ -296,7 +296,7 @@ def test_wizard_tier_recommendation_not_applied_on_no():
         out=sink,
         host=_host(cuda=1),
         shipped_config=_shipped(),
-        recommend_tier_fn=lambda: _tier2_residency_rec(),
+        recommend_tier_fn=_tier2_residency_rec,
     )
     assert "deployment" not in result.config
 
@@ -321,7 +321,7 @@ def test_wizard_tier_recommendation_default_no_writes_nothing():
         out=sink,
         host=_host(cuda=1),
         shipped_config=_shipped(),
-        recommend_tier_fn=lambda: _tier2_residency_rec(),
+        recommend_tier_fn=_tier2_residency_rec,
     )
     assert "deployment" not in result.config
 
@@ -334,7 +334,7 @@ def test_wizard_tier_recommendation_skipped_in_defaults_mode():
         out=sink,
         host=_host(cuda=1),
         shipped_config=_shipped(),
-        recommend_tier_fn=lambda: _tier2_residency_rec(),
+        recommend_tier_fn=_tier2_residency_rec,
         defaults=True,
     )
     assert "deployment" not in result.config
