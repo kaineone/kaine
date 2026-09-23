@@ -6,11 +6,13 @@
 # left a gap — a dependency-range bump (Dependabot edits pyproject.toml) or a code
 # change could land with the 3000+ test suite never run in CI. This job closes it.
 #
-# Path-filtered to code, tests, and pyproject so a Dependabot dependency bump is
-# actually validated here (install the new version, run the suite) instead of
-# passing on static checks alone. Offline: fakes stand in for external services;
-# no entity boot, no network services, no secrets. CPU torch keeps the install
-# light (the forward models are CPU-only by policy).
+# Path-filtered to code, tests, pyproject, the installers, container/deployment
+# artifacts, documentation and the workflow itself so a Dependabot dependency bump
+# is actually validated here (install the new version, run the suite) and so are
+# PRs that change only the installers, config, compose, quadlet, docker files,
+# Dockerfile or docs (all covered by existing tests). Offline: fakes stand in for
+# external services; no entity boot, no network services, no secrets. CPU torch
+# keeps the install light (the forward models are CPU-only by policy).
 name: tests
 
 on:
@@ -22,6 +24,13 @@ on:
       - "conftest.py"
       - "pyproject.toml"
       - ".github/workflows/tests.yml"
+      - "scripts/**"
+      - "config/**"
+      - "compose/**"
+      - "quadlet/**"
+      - "docker/**"
+      - "Dockerfile"
+      - "docs/**"
   pull_request:
     branches: ["main"]
     paths:
@@ -30,6 +39,13 @@ on:
       - "conftest.py"
       - "pyproject.toml"
       - ".github/workflows/tests.yml"
+      - "scripts/**"
+      - "config/**"
+      - "compose/**"
+      - "quadlet/**"
+      - "docker/**"
+      - "Dockerfile"
+      - "docs/**"
 
 permissions:
   contents: read

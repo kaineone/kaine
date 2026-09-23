@@ -33,11 +33,18 @@
 #   bash scripts/install.sh --research # ALSO install the perception extras (.[perception])
 #   bash scripts/install.sh --no-wizard # skip the interactive wizard
 #   bash scripts/install.sh --print-torch-spec # print the resolved torch spec and exit
+#   bash scripts/install.sh --retry-gpu # delete the GPU self-test fallback marker and retry the resolved CUDA index
 #
 # The installer pins the installed torch stack (torch, torchvision and, with
 # --research, torchaudio) in $KAINE_VENV_DIR/kaine-torch-constraints.txt and
 # passes that constraints file to every subsequent pip install, so later
 # editable installs cannot re-resolve torch from a different index.
+#
+# On a host where the resolved CUDA wheels fail the GPU numerical self-test
+# (unified-memory devices), the installer falls back to CPU wheels and writes
+# $KAINE_VENV_DIR/kaine-accel-fallback.json. Later runs skip the GPU attempt
+# and keep CPU wheels while that file matches the resolved index/torch version.
+# Use --retry-gpu to delete the marker and attempt the GPU index again.
 #
 # The default install stays lean (no cv2/av/funasr). The venv is created at
 # $KAINE_VENV_DIR/ if absent. Use --python /path/to/python to override the
@@ -59,6 +66,7 @@ PYTHON_BIN="python3"
 FORCE=""
 NO_WIZARD=0
 RESEARCH=0
+RETRY_GPU=0
 # Pins filled by host-aware wheel-index resolution for CUDA and ROCm.
 TORCH_PIN=""
 TV_PIN=""
@@ -98,12 +106,26 @@ while [[ $# -gt 0 ]]; do
     --python) PYTHON_BIN="$2"; shift 2 ;;
     --no-wizard) NO_WIZARD=1; shift ;;
     --research) RESEARCH=1; shift ;;
+    --retry-gpu) RETRY_GPU=1; shift ;;
     --print-torch-spec)
       printf '%s\n' "$TORCH_SPEC"
       exit 0
       ;;
     --help|-h)
-      sed -n '2,50p' "$0"; exit 0 ;;
+      cat <<'EOF'
+bash scripts/install.sh           # auto-detect
+bash scripts/install.sh --cpu     # force CPU wheels
+bash scripts/install.sh --cuda    # force CUDA wheels (resolved via kaine.wheel_index)
+bash scripts/install.sh --index-url URL  # force a specific CUDA wheel index
+bash scripts/install.sh --rocm    # force ROCm wheels (host-resolved)
+bash scripts/install.sh --xpu     # force Intel XPU wheels
+bash scripts/install.sh --mps     # force macOS MPS (default PyPI wheel)
+bash scripts/install.sh --research # ALSO install the perception extras (.[perception])
+bash scripts/install.sh --no-wizard # skip the interactive wizard
+bash scripts/install.sh --print-torch-spec # print the resolved torch spec and exit
+bash scripts/install.sh --retry-gpu # delete the GPU self-test fallback marker and retry the resolved CUDA index
+EOF
+      exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -115,6 +137,14 @@ VENV_DIR="${KAINE_VENV_DIR:-.venv}"
 # same directory regardless of whether KAINE_VENV_DIR was absolute.
 if [[ ! "$VENV_DIR" = /* ]]; then
   VENV_DIR="$ROOT/$VENV_DIR"
+fi
+ACCEL_FALLBACK_FILE="$VENV_DIR/kaine-accel-fallback.json"
+
+# Honour an explicit request to clear the GPU fallback marker before any
+# host resolution happens.
+if [[ "$RETRY_GPU" -eq 1 ]] && [[ -f "$ACCEL_FALLBACK_FILE" ]]; then
+  echo "==> --retry-gpu: clearing previous GPU fallback marker"
+  rm -f "$ACCEL_FALLBACK_FILE"
 fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
@@ -148,6 +178,42 @@ with open(out_path, "w") as f:
 PY
 }
 
+_index_tag() {
+  local url="$1"
+  url="${url%/}"
+  echo "${url##*/}"
+}
+
+_current_torch_base() {
+  "$PY" -c "import torch; print(torch.__version__.split('+',1)[0])" 2>/dev/null || true
+}
+
+_installed_torch_tag() {
+  "$PY" -c "import torch, sys; v=torch.__version__; sys.stdout.write(v.split('+',1)[1] if '+' in v else '')" 2>/dev/null || true
+}
+
+_package_installed() {
+  local pkg="$1"
+  "$PY" -c "import importlib.metadata as md; md.version('$pkg')" >/dev/null 2>&1
+}
+
+_package_version() {
+  local pkg="$1"
+  "$PY" -c "import importlib.metadata as md; print(md.version('$pkg'))" 2>/dev/null || true
+}
+
+_read_accel_fallback_marker() {
+  local file="$1"
+  if [ -f "$file" ]; then
+    "$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("index_url","NA"), d.get("torch","NA"))' "$file" 2>/dev/null
+  fi
+}
+
+_write_accel_fallback_marker() {
+  local file="$1" url="$2" torch="$3" reason="$4"
+  "$PY" -c 'import json,sys,datetime; d={"reason":sys.argv[4],"index_url":sys.argv[2],"torch":sys.argv[3],"date":datetime.datetime.now(datetime.timezone.utc).isoformat()}; json.dump(d,open(sys.argv[1],"w"))' "$file" "$url" "$torch" "$reason"
+}
+
 echo "==> upgrading pip"
 "$PIP" install --quiet --upgrade pip
 
@@ -179,6 +245,7 @@ case "$flavor" in
     # advisory: if it cannot run or its output is unusable, fall back to the
     # legacy hardcoded index below so the installer is never blocked.
     INDEX_URL="$NVIDIA_INDEX_URL"
+    GPU_INDEX_URL="$NVIDIA_INDEX_URL"
     KAINE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)" || true
     RESOLVER_PY=""
     for _resolver_candidate in \
@@ -215,6 +282,7 @@ case "$flavor" in
     fi
     if [ -n "$RESOLVER_URL" ]; then
       INDEX_URL="$RESOLVER_URL"
+      GPU_INDEX_URL="$RESOLVER_URL"
       if [ -n "${INDEX_URL_OVERRIDE:-}" ]; then
         INDEX_URL_SOURCE="operator override (--index-url)"
       else
@@ -249,6 +317,23 @@ else:
         echo "WARNING: the requested --index-url override could not be applied because the resolver failed; continuing with the legacy default." >&2
       fi
     fi
+
+    # Self-test fallback marker: if a previous run recorded a GPU self-test
+    # failure for the exact index/torch version we just resolved, skip the
+    # GPU attempt and keep CPU wheels unless the operator asked to retry.
+    if [ -f "$ACCEL_FALLBACK_FILE" ] && [ "$RETRY_GPU" -ne 1 ]; then
+      marker=$(_read_accel_fallback_marker "$ACCEL_FALLBACK_FILE" || true)
+      if [ -n "$marker" ]; then
+        marker_url=$(printf '%s' "$marker" | cut -d' ' -f1)
+        marker_torch=$(printf '%s' "$marker" | cut -d' ' -f2)
+        current_target_torch="${TORCH_PIN:-$(_current_torch_base)}"
+        if [ "$marker_url" = "$GPU_INDEX_URL" ] && [ "$marker_torch" = "$current_target_torch" ] && [ -n "$current_target_torch" ]; then
+          echo "NOTICE: GPU self-test previously failed for this index/torch version; recorded in $ACCEL_FALLBACK_FILE. Using CPU wheels. Use --retry-gpu to attempt the GPU index again." >&2
+          INDEX_URL="$CPU_INDEX_URL"
+          SELFTEST="false"
+        fi
+      fi
+    fi
   ;;
   rocm)
     # Host-resolved ROCm wheel index (kaine.wheel_index). Never fall back to a
@@ -264,16 +349,38 @@ else:
     fi
 
     ROCM_GFX="${KAINE_ROCM_GFX:-}"
-    if [ -z "$ROCM_GFX" ]; then
-      _gfx_lines=""
+    ROCM_GFX_SOURCE=""
+    if [ -n "$ROCM_GFX" ]; then
+      ROCM_GFX_SOURCE="KAINE_ROCM_GFX"
+    else
+      ROCM_GFX_SOURCE="none"
+      _gfx_list=""
       if command -v rocminfo >/dev/null 2>&1; then
-        _gfx_lines="$(rocminfo 2>/dev/null | grep -oE 'gfx[0-9a-zA-Z]+' | sort -u | tr '\n' ',' | sed 's/,$//' || true)"
+        _gfx_list="$(rocminfo 2>/dev/null | sed -nE 's/^[[:space:]]*Name:[[:space:]]+(gfx[0-9a-f]+)[[:space:]]*$/\1/p' | while read -r name; do
+          [ "$name" = "gfx000" ] && continue
+          case "$name" in *-generic) continue ;; esac
+          printf '%s\n' "$name"
+        done | awk '!seen[$0]++' | tr '\n' ',' | sed 's/,$//')"
+        if [ -n "$_gfx_list" ]; then
+          ROCM_GFX="$_gfx_list"
+          ROCM_GFX_SOURCE="rocminfo"
+        fi
       fi
-      if [ -z "$_gfx_lines" ] && command -v rocm_agent_enumerator >/dev/null 2>&1; then
-        _gfx_lines="$(rocm_agent_enumerator 2>/dev/null | grep -oE 'gfx[0-9a-zA-Z]+' | sort -u | tr '\n' ',' | sed 's/,$//' || true)"
-      fi
-      if [ -n "$_gfx_lines" ]; then
-        ROCM_GFX="$_gfx_lines"
+      if [ -z "$ROCM_GFX" ] && command -v rocm_agent_enumerator >/dev/null 2>&1; then
+        _gfx_list="$(rocm_agent_enumerator 2>/dev/null | while read -r name; do
+          name="$(printf '%s' "$name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          case "$name" in
+            gfx[0-9a-f]*)
+              [ "$name" = "gfx000" ] && continue
+              case "$name" in *-generic) continue ;; esac
+              printf '%s\n' "$name"
+              ;;
+          esac
+        done | awk '!seen[$0]++' | tr '\n' ',' | sed 's/,$//')"
+        if [ -n "$_gfx_list" ]; then
+          ROCM_GFX="$_gfx_list"
+          ROCM_GFX_SOURCE="rocm_agent_enumerator"
+        fi
       fi
     fi
 
@@ -319,6 +426,12 @@ for w in (d.get("warnings") or []):
     fi
 
     INDEX_URL="$RESOLVER_URL"
+    echo "==> ROCm version: $ROCM_VERSION; gfx targets: ${ROCM_GFX:-none detected} (source: $ROCM_GFX_SOURCE)"
+    printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys
+d=json.load(sys.stdin)
+for w in (d.get("warnings") or []):
+    print("wheel-index warning: {}".format(w))
+' || true
     echo "wheel index: $INDEX_URL (source: host-resolved ROCm decision table)"
     if [ -n "$TORCH_PIN" ]; then
       echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
@@ -370,6 +483,7 @@ print("cpu")
 
 need_install=1
 installed_torch_base=""
+FORCE_REINSTALL_FLAG=""
 if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswith('2.') else 1)" 2>/dev/null; then
   installed_flavor=$("$PY" -c "$_FLAVOR_PROBE" 2>/dev/null || echo "unknown")
   installed_torch_base=$("$PY" -c "import torch; print(torch.__version__.split('+',1)[0])" 2>/dev/null || true)
@@ -383,39 +497,67 @@ if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswit
   else
     echo "==> torch installed with flavor '$installed_flavor' but want '$flavor'; reinstalling"
   fi
+  target_tag=$(_index_tag "$INDEX_URL")
+  installed_tag=$(_installed_torch_tag)
+  if [ "$installed_tag" != "$target_tag" ]; then
+    echo "==> installed torch build tag '$installed_tag' differs from target index tag '$target_tag'; forcing reinstall"
+    FORCE_REINSTALL_FLAG="--force-reinstall"
+    need_install=1
+  fi
 fi
 
 if [[ "$need_install" -eq 1 ]]; then
   if [[ -n "$TORCH_PIN" ]]; then
     if [[ -n "$TV_PIN" ]]; then
       echo "==> installing torch==$TORCH_PIN torchvision==$TV_PIN from $INDEX_URL"
-      "$PIP" install --index-url "$INDEX_URL" "torch==$TORCH_PIN" "torchvision==$TV_PIN"
+      "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" "torch==$TORCH_PIN" "torchvision==$TV_PIN"
     else
       echo "==> installing torch==$TORCH_PIN torchvision from $INDEX_URL"
-      "$PIP" install --index-url "$INDEX_URL" "torch==$TORCH_PIN" torchvision
+      "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" "torch==$TORCH_PIN" torchvision
     fi
   elif [[ "$flavor" == "mps" ]]; then
     echo "==> installing $TORCH_SPEC torchvision (default PyPI wheel for MPS)"
-    "$PIP" install "$TORCH_SPEC" torchvision
+    "$PIP" install $FORCE_REINSTALL_FLAG "$TORCH_SPEC" torchvision
   else
     echo "==> installing $TORCH_SPEC torchvision from $INDEX_URL"
-    "$PIP" install --index-url "$INDEX_URL" "$TORCH_SPEC" torchvision
+    "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" "$TORCH_SPEC" torchvision
   fi
 fi
 
 # GPU numerical self-test for host-resolved unified-memory wheels.
 if [[ "$SELFTEST" == "true" ]]; then
   echo "==> running GPU numerical self-test"
-  if ! "$PY" -m kaine.accel_selftest; then
-    echo "WARNING: the GPU wheels failed the numerical self-test on this unified-memory device; CPU wheels will be installed instead." >&2
+  _selftest_rc=0
+  "$PY" -m kaine.accel_selftest || _selftest_rc=$?
+  if [[ "$_selftest_rc" -ne 0 ]]; then
+    if [[ "$_selftest_rc" -eq 1 ]]; then
+      echo "WARNING: the GPU wheels failed the numerical self-test on this unified-memory device; CPU wheels will be installed instead." >&2
+      _selftest_reason="GPU numerical self-test failed"
+    else
+      echo "WARNING: the GPU numerical self-test could not run (exit $_selftest_rc); CPU wheels will be installed instead." >&2
+      _selftest_reason="GPU numerical self-test could not run (exit $_selftest_rc)"
+    fi
     if [[ -n "$TV_PIN" ]]; then
       "$PIP" install --force-reinstall --index-url "$CPU_INDEX_URL" "torch==$TORCH_PIN" "torchvision==$TV_PIN"
     else
       "$PIP" install --force-reinstall --index-url "$CPU_INDEX_URL" "torch==$TORCH_PIN" torchvision
     fi
     INDEX_URL="$CPU_INDEX_URL"
+    _write_accel_fallback_marker "$ACCEL_FALLBACK_FILE" "$GPU_INDEX_URL" "$TORCH_PIN" "$_selftest_reason"
   else
     echo "==> GPU numerical self-test passed"
+  fi
+fi
+
+# Ensure the constraints file never pins a torchaudio that does not belong to
+# the resolved stack. If torchaudio is installed and its version is not the
+# resolved TA pin (or no TA pin applies because this is not a --research
+# install), uninstall it before writing constraints.
+if _package_installed torchaudio; then
+  installed_ta=$(_package_version torchaudio)
+  if [ -z "$TA_PIN" ] || [ "$installed_ta" != "$TA_PIN" ]; then
+    echo "==> uninstalling stale torchaudio $installed_ta (target pin: ${TA_PIN:-none})"
+    "$PIP" uninstall -y torchaudio
   fi
 fi
 
@@ -432,13 +574,13 @@ echo "==> installing the rest of KAINE (editable, with test deps)"
 if [[ "$RESEARCH" -eq 1 ]]; then
   if [[ -n "$TA_PIN" ]]; then
     echo "==> [--research] installing torchaudio==$TA_PIN from $INDEX_URL"
-    "$PIP" install --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" "torchaudio==$TA_PIN"
+    "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" "torchaudio==$TA_PIN"
   elif [[ "$flavor" == "mps" ]]; then
     echo "==> [--research] installing torchaudio (default PyPI wheel for MPS)"
-    "$PIP" install -c "$TORCH_CONSTRAINTS" torchaudio
+    "$PIP" install $FORCE_REINSTALL_FLAG -c "$TORCH_CONSTRAINTS" torchaudio
   else
     echo "==> [--research] installing torchaudio from $INDEX_URL"
-    "$PIP" install --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" torchaudio
+    "$PIP" install $FORCE_REINSTALL_FLAG --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" torchaudio
   fi
   pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
   echo "==> pinned torch stack: $pinned"

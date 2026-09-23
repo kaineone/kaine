@@ -146,6 +146,105 @@ def test_extract_pins_missing_keys_are_none() -> None:
     assert selftest is False
 
 
+def test_index_tag_extraction() -> None:
+    module = _load_install_module()
+    assert module._index_tag("https://download.pytorch.org/whl/cu130") == "cu130"
+    assert module._index_tag("https://download.pytorch.org/whl/cpu/") == "cpu"
+    assert module._index_tag("https://example.invalid/custom") == "custom"
+    assert module._index_tag(None) == ""
+    assert module._index_tag("") == ""
+
+
+def test_needs_force_reinstall_when_tags_differ() -> None:
+    module = _load_install_module()
+    assert module._needs_force_reinstall("cpu", "cu130")
+    assert module._needs_force_reinstall("cu126", "cu130")
+    assert not module._needs_force_reinstall("cu130", "cu130")
+    assert not module._needs_force_reinstall("", "")
+
+
+def test_accel_fallback_marker_round_trip(tmp_path: Path) -> None:
+    module = _load_install_module()
+    marker_path = tmp_path / "kaine-accel-fallback.json"
+    module._write_accel_fallback_marker(
+        marker_path,
+        reason="GPU numerical self-test failed",
+        index_url="https://download.pytorch.org/whl/cu130",
+        torch="2.14.0",
+    )
+    marker = module._read_accel_fallback_marker(marker_path)
+    assert marker is not None
+    assert marker["reason"] == "GPU numerical self-test failed"
+    assert marker["index_url"] == "https://download.pytorch.org/whl/cu130"
+    assert marker["torch"] == "2.14.0"
+    assert "date" in marker
+
+
+def test_marker_matches_when_all_same() -> None:
+    module = _load_install_module()
+    marker = {
+        "index_url": "https://download.pytorch.org/whl/cu130",
+        "torch": "2.14.0",
+    }
+    assert module._marker_matches(
+        marker,
+        index_url="https://download.pytorch.org/whl/cu130",
+        torch_pin="2.14.0",
+        installed_base=None,
+    )
+
+
+def test_marker_matches_falls_back_to_installed_base() -> None:
+    module = _load_install_module()
+    marker = {
+        "index_url": "https://download.pytorch.org/whl/cu130",
+        "torch": "2.14.0",
+    }
+    assert module._marker_matches(
+        marker,
+        index_url="https://download.pytorch.org/whl/cu130",
+        torch_pin=None,
+        installed_base="2.14.0",
+    )
+
+
+def test_marker_mismatches_when_torch_differs() -> None:
+    module = _load_install_module()
+    marker = {
+        "index_url": "https://download.pytorch.org/whl/cu130",
+        "torch": "2.14.0",
+    }
+    assert not module._marker_matches(
+        marker,
+        index_url="https://download.pytorch.org/whl/cu130",
+        torch_pin="2.15.0",
+        installed_base=None,
+    )
+
+
+def test_marker_mismatches_when_index_differs() -> None:
+    module = _load_install_module()
+    marker = {
+        "index_url": "https://download.pytorch.org/whl/cu130",
+        "torch": "2.14.0",
+    }
+    assert not module._marker_matches(
+        marker,
+        index_url="https://download.pytorch.org/whl/cu126",
+        torch_pin="2.14.0",
+        installed_base=None,
+    )
+
+
+def test_torchaudio_should_uninstall_logic() -> None:
+    module = _load_install_module()
+    assert module._torchaudio_should_uninstall("2.10.0", None)
+    assert module._torchaudio_should_uninstall("2.10.0", "2.11.0")
+    assert not module._torchaudio_should_uninstall("2.11.0", "2.11.0")
+    assert not module._torchaudio_should_uninstall(None, "2.11.0")
+    assert not module._torchaudio_should_uninstall("", "2.11.0")
+
+
 def test_rocm_version_from_file(tmp_path: Path) -> None:
     module = _load_install_module()
     version_file = tmp_path / "version"
@@ -153,10 +252,22 @@ def test_rocm_version_from_file(tmp_path: Path) -> None:
     assert module._rocm_version_from_file(version_file) == "7.2"
 
 
-def test_rocm_gfx_from_text_order_stable_unique() -> None:
+def test_rocm_gfx_parsing_filters_igpu_generic_and_gfx000() -> None:
     module = _load_install_module()
-    text = "Name: gfx1100\nName: gfx1100\nName: gfx90a\n"
-    assert module._rocm_gfx_from_text(text) == ("gfx1100", "gfx90a")
+    text = (
+        "  Name: gfx1036\n"
+        "  Name: gfx1100\n"
+        "  Name: gfx11-generic\n"
+        "  Name: gfx000\n"
+        "  Name: gfx1100\n"
+    )
+    assert module._rocm_gfx_from_text(text) == ("gfx1036", "gfx1100")
+
+
+def test_rocm_agent_enumerator_parsing() -> None:
+    module = _load_install_module()
+    text = "gfx1036\ngfx1100\ngfx11-generic\ngfx000\ngfx1100\n"
+    assert module._rocm_gfx_from_agent_text(text) == ("gfx1036", "gfx1100")
 
 
 def _skip_if_resolver_missing() -> None:

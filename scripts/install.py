@@ -14,10 +14,17 @@ The installer pins the installed torch stack (torch, torchvision and, with
 ``--research``, torchaudio) in ``$KAINE_VENV_DIR/kaine-torch-constraints.txt``
 and passes that constraints file to every subsequent pip install, so later
 editable installs cannot re-resolve torch from a different index.
+
+On a host where the resolved CUDA wheels fail the GPU numerical self-test
+(unified-memory devices), the installer falls back to CPU wheels and writes
+``$KAINE_VENV_DIR/kaine-accel-fallback.json``. Later runs skip the GPU attempt
+and keep CPU wheels while that file matches the resolved index/torch version.
+Use ``--retry-gpu`` to delete the marker and attempt the GPU index again.
 """
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -219,6 +226,118 @@ def _extract_pins(data: dict | None) -> tuple[str | None, str | None, str | None
     )
 
 
+def _index_tag(index_url: str | None) -> str:
+    """Return the wheel build tag implied by a PyTorch wheel index URL.
+
+    Examples: ``https://download.pytorch.org/whl/cu130`` -> ``"cu130"``;
+    ``https://download.pytorch.org/whl/cpu/`` -> ``"cpu"``; ``None`` or an
+    empty URL (MPS / default PyPI) -> ``""``.
+    """
+    if not index_url:
+        return ""
+    return index_url.rstrip("/").split("/")[-1]
+
+
+def _installed_torch_tag(py: Path) -> str:
+    """Return the local build tag of the installed torch wheel, if any."""
+    try:
+        out = subprocess.check_output(
+            [
+                str(py),
+                "-c",
+                "import torch; print(torch.__version__.split('+',1)[1] if '+' in torch.__version__ else '')",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return ""
+    return out
+
+
+def _installed_torch_base(py: Path) -> str | None:
+    try:
+        out = subprocess.check_output(
+            [
+                str(py),
+                "-c",
+                "import torch; print(torch.__version__.split('+',1)[0])",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return None
+    return out or None
+
+
+def _needs_force_reinstall(installed_tag: str, target_tag: str) -> bool:
+    """True when the installed torch build tag differs from the target index tag."""
+    return installed_tag != target_tag
+
+
+def _accel_fallback_marker_path(venv_dir: Path) -> Path:
+    return venv_dir / "kaine-accel-fallback.json"
+
+
+def _read_accel_fallback_marker(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _write_accel_fallback_marker(
+    path: Path, *, reason: str, index_url: str, torch: str
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "reason": reason,
+        "index_url": index_url,
+        "torch": torch,
+        "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+def _marker_matches(
+    marker: dict | None,
+    *,
+    index_url: str | None,
+    torch_pin: str | None,
+    installed_base: str | None,
+) -> bool:
+    if not marker or not index_url:
+        return False
+    marker_url = marker.get("index_url")
+    marker_torch = marker.get("torch")
+    target_torch = torch_pin or installed_base
+    return bool(
+        marker_url
+        and marker_url == index_url
+        and target_torch
+        and marker_torch == target_torch
+    )
+
+
+def _torchaudio_should_uninstall(installed_ta: str | None, ta_pin: str | None) -> bool:
+    """Return True when an installed torchaudio must be removed before pinning.
+
+    If no target torchaudio pin applies, any installed torchaudio is stale.
+    If a pin applies, an installed version that differs is stale. A matching
+    installed version is kept.
+    """
+    if not installed_ta:
+        return False
+    if ta_pin is None:
+        return True
+    return installed_ta != ta_pin
+
+
 def _resolve_cuda_index(
     research: bool,
     override: str | None,
@@ -341,15 +460,43 @@ def _auto_rocm_version() -> str | None:
     return _rocm_version_from_file(Path("/opt/rocm/.info/version"))
 
 
-_ROCM_GFX_RE = re.compile(r"gfx[0-9a-zA-Z]+")
+_ROCM_NAME_RE = re.compile(r"^\s*Name:\s*(gfx[0-9a-f]+)\s*$", re.MULTILINE)
+_ROCM_AGENT_RE = re.compile(r"^\s*(gfx[0-9a-f]+)\s*$", re.MULTILINE)
 
 
 def _rocm_gfx_from_text(text: str) -> tuple[str, ...]:
-    """Return order-stable unique gfx names extracted from ``text``."""
+    """Return order-stable unique gfx names extracted from ``rocminfo`` output.
+
+    Only lines matching ``Name: gfx<hex>`` are parsed; ``gfx000`` and names
+    ending in ``-generic`` are dropped.
+    """
     seen: set[str] = set()
     out: list[str] = []
-    for m in _ROCM_GFX_RE.finditer(text):
-        val = m.group(0)
+    for m in _ROCM_NAME_RE.finditer(text):
+        val = m.group(1)
+        if val == "gfx000" or val.endswith("-generic"):
+            continue
+        if val not in seen:
+            seen.add(val)
+            out.append(val)
+    return tuple(out)
+
+
+def _rocm_gfx_from_agent_text(text: str) -> tuple[str, ...]:
+    """Return order-stable unique gfx names from ``rocm_agent_enumerator`` output.
+
+    One target per line; ``gfx000`` and names ending in ``-generic`` are
+    dropped.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in text.splitlines():
+        m = _ROCM_AGENT_RE.match(line)
+        if not m:
+            continue
+        val = m.group(1)
+        if val == "gfx000" or val.endswith("-generic"):
+            continue
         if val not in seen:
             seen.add(val)
             out.append(val)
@@ -370,21 +517,29 @@ def _rocm_gfx_from_command(cmd: list[str]) -> tuple[str, ...] | None:
     except Exception:
         return None
     gfx = _rocm_gfx_from_text(output)
+    if gfx:
+        return gfx
+    gfx = _rocm_gfx_from_agent_text(output)
     return gfx if gfx else None
 
 
-def _auto_rocm_gfx() -> str | None:
-    """Use ``KAINE_ROCM_GFX`` or detect from ``rocminfo`` / ``rocm_agent_enumerator``."""
+def _auto_rocm_gfx() -> tuple[str | None, str]:
+    """Use ``KAINE_ROCM_GFX`` or detect from ``rocminfo`` / ``rocm_agent_enumerator``.
+
+    Returns ``(gfx_targets, source)`` where ``source`` identifies how the
+    targets were obtained: ``KAINE_ROCM_GFX``, ``rocminfo``,
+    ``rocm_agent_enumerator``, or ``none``.
+    """
     env = os.environ.get("KAINE_ROCM_GFX")
     if env:
-        return env
+        return env, "KAINE_ROCM_GFX"
     gfx = _rocm_gfx_from_command(["rocminfo"])
     if gfx:
-        return ",".join(gfx)
+        return ",".join(gfx), "rocminfo"
     gfx = _rocm_gfx_from_command(["rocm_agent_enumerator"])
     if gfx:
-        return ",".join(gfx)
-    return None
+        return ",".join(gfx), "rocm_agent_enumerator"
+    return None, "none"
 
 
 def _resolve_rocm_index(
@@ -406,7 +561,7 @@ def _resolve_rocm_index(
         )
         raise SystemExit(1)
 
-    gfx = _auto_rocm_gfx()
+    gfx, gfx_source = _auto_rocm_gfx()
     resolver_args = ["--rocm-version", rocm_version]
     if gfx:
         resolver_args.extend(["--gfx", gfx])
@@ -427,12 +582,19 @@ def _resolve_rocm_index(
                 print(f"WARNING: {warning}", file=sys.stderr)
         raise SystemExit(1)
 
-    if not quiet:
-        print(f"wheel index: {url} (source: host-resolved ROCm decision table)")
-
     torch_pin, tv_pin, ta_pin, selftest = _extract_pins(data)
-    if not quiet and torch_pin:
-        print(f"==> resolved torch {torch_pin} / torchvision {tv_pin} from {url}")
+    if not quiet:
+        gfx_display = gfx if gfx is not None else "none detected"
+        print(
+            f"==> ROCm version: {rocm_version}; "
+            f"gfx targets: {gfx_display} (source: {gfx_source})"
+        )
+        for warning in data.get("warnings") or []:
+            print(f"wheel-index warning: {warning}")
+        print(f"wheel index: {url} (source: host-resolved ROCm decision table)")
+        if torch_pin:
+            print(f"==> resolved torch {torch_pin} / torchvision {tv_pin} from {url}")
+
     return url, torch_pin, tv_pin, ta_pin, selftest
 
 
@@ -564,22 +726,6 @@ def torch_installed_flavor(py: Path) -> str:
     return out or "absent"
 
 
-def _installed_torch_base(py: Path) -> str | None:
-    try:
-        out = subprocess.check_output(
-            [
-                str(py),
-                "-c",
-                "import torch; print(torch.__version__.split('+',1)[0])",
-            ],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    except subprocess.CalledProcessError:
-        return None
-    return out or None
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
@@ -625,6 +771,14 @@ def main() -> None:
             "stays lean (no cv2/av/funasr)"
         ),
     )
+    parser.add_argument(
+        "--retry-gpu",
+        action="store_true",
+        help=(
+            "delete the GPU self-test fallback marker and retry the "
+            "host-resolved CUDA index (only useful with the CUDA flavor)"
+        ),
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -651,15 +805,38 @@ def main() -> None:
 
     pip = venv / "bin" / "pip"
     py = venv / "bin" / "python"
+    marker_path = _accel_fallback_marker_path(venv)
+
+    if args.retry_gpu and marker_path.exists():
+        print("==> --retry-gpu: clearing previous GPU fallback marker")
+        marker_path.unlink()
 
     run([str(pip), "install", "--quiet", "--upgrade", "pip"])
 
     flavor = detect_flavor(args.force)
+    gpu_index_url: str | None = None
 
     if flavor == "cuda":
-        index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_cuda_index(
+        gpu_index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_cuda_index(
             args.research, override=args.index_url, venv_python=py
         )
+        index_url = gpu_index_url
+        marker = _read_accel_fallback_marker(marker_path)
+        installed_base = _installed_torch_base(py)
+        if _marker_matches(
+            marker,
+            index_url=gpu_index_url,
+            torch_pin=torch_pin,
+            installed_base=installed_base,
+        ):
+            print(
+                f"NOTICE: GPU self-test previously failed for this index/torch version; "
+                f"recorded in {marker_path}. Using CPU wheels. Use --retry-gpu to "
+                "attempt the GPU index again.",
+                file=sys.stderr,
+            )
+            index_url = CPU_INDEX_URL
+            selftest = False
     elif flavor == "rocm":
         index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_rocm_index(
             venv_python=py
@@ -673,7 +850,12 @@ def main() -> None:
 
     # Idempotent torch install: only skip when a torch-2.x with the right
     # flavor and, when pinned, the right base version is already present.
+    # Also force-reinstall when the installed local build tag differs from
+    # the target index tag, because pip treats "2.14.0+cpu" as satisfying
+    # "torch==2.14.0" and will not swap flavors without --force-reinstall.
     need_install = True
+    force_reinstall = False
+    installed_base = _installed_torch_base(py)
     try:
         subprocess.check_call(
             [
@@ -688,7 +870,6 @@ def main() -> None:
         pass
     else:
         installed_flavor = torch_installed_flavor(py)
-        installed_base = _installed_torch_base(py)
         if installed_flavor == flavor:
             if torch_pin is not None and installed_base != torch_pin:
                 print(
@@ -707,7 +888,20 @@ def main() -> None:
                 "reinstalling"
             )
 
+        target_tag = _index_tag(index_url)
+        installed_tag = _installed_torch_tag(py)
+        if _needs_force_reinstall(installed_tag, target_tag):
+            print(
+                f"==> installed torch build tag '{installed_tag}' differs from "
+                f"target index tag '{target_tag}'; forcing reinstall"
+            )
+            force_reinstall = True
+            need_install = True
+
     if need_install:
+        install_cmd = [str(pip), "install"]
+        if force_reinstall:
+            install_cmd.append("--force-reinstall")
         if torch_pin is not None:
             if tv_pin is not None:
                 print(
@@ -715,8 +909,7 @@ def main() -> None:
                 )
                 run(
                     [
-                        str(pip),
-                        "install",
+                        *install_cmd,
                         "--index-url",
                         index_url,
                         f"torch=={torch_pin}",
@@ -729,8 +922,7 @@ def main() -> None:
                 )
                 run(
                     [
-                        str(pip),
-                        "install",
+                        *install_cmd,
                         "--index-url",
                         index_url,
                         f"torch=={torch_pin}",
@@ -742,15 +934,14 @@ def main() -> None:
                 f"==> installing {torch_spec_value} torchvision "
                 "(default PyPI wheel for MPS)"
             )
-            run([str(pip), "install", torch_spec_value, "torchvision"])
+            run([*install_cmd, torch_spec_value, "torchvision"])
         else:
             print(
                 f"==> installing {torch_spec_value} torchvision from {index_url}"
             )
             run(
                 [
-                    str(pip),
-                    "install",
+                    *install_cmd,
                     "--index-url",
                     index_url,
                     torch_spec_value,
@@ -763,20 +954,26 @@ def main() -> None:
         print("==> running GPU numerical self-test")
         try:
             subprocess.check_call([str(py), "-m", "kaine.accel_selftest"])
-        except subprocess.CalledProcessError:
-            print(
-                "WARNING: the GPU wheels failed the numerical self-test on this "
-                "unified-memory device; CPU wheels will be installed instead.",
-                file=sys.stderr,
-            )
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode == 1:
+                reason = "GPU numerical self-test failed"
+                print(
+                    "WARNING: the GPU wheels failed the numerical self-test on this "
+                    "unified-memory device; CPU wheels will be installed instead.",
+                    file=sys.stderr,
+                )
+            else:
+                reason = f"GPU numerical self-test could not run (exit {exc.returncode})"
+                print(
+                    f"WARNING: the GPU numerical self-test could not run "
+                    f"(exit {exc.returncode}); CPU wheels will be installed instead.",
+                    file=sys.stderr,
+                )
+            cpu_install_cmd = [str(pip), "install", "--force-reinstall", "--index-url", CPU_INDEX_URL]
             if tv_pin is not None:
                 run(
                     [
-                        str(pip),
-                        "install",
-                        "--force-reinstall",
-                        "--index-url",
-                        CPU_INDEX_URL,
+                        *cpu_install_cmd,
                         f"torch=={torch_pin}",
                         f"torchvision=={tv_pin}",
                     ]
@@ -784,18 +981,41 @@ def main() -> None:
             else:
                 run(
                     [
-                        str(pip),
-                        "install",
-                        "--force-reinstall",
-                        "--index-url",
-                        CPU_INDEX_URL,
+                        *cpu_install_cmd,
                         f"torch=={torch_pin}",
                         "torchvision",
                     ]
                 )
             index_url = CPU_INDEX_URL
+            if gpu_index_url is not None:
+                _write_accel_fallback_marker(
+                    marker_path,
+                    reason=reason,
+                    index_url=gpu_index_url,
+                    torch=torch_pin or installed_base or "",
+                )
         else:
             print("==> GPU numerical self-test passed")
+
+    # Ensure the constraints file never pins a stale torchaudio.
+    try:
+        installed_ta = subprocess.check_output(
+            [
+                str(py),
+                "-c",
+                "import importlib.metadata as md; print(md.version('torchaudio'))",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        installed_ta = ""
+    if _torchaudio_should_uninstall(installed_ta, ta_pin):
+        print(
+            f"==> uninstalling stale torchaudio {installed_ta} "
+            f"(target pin: {ta_pin or 'none'})"
+        )
+        run([str(pip), "uninstall", "-y", "torchaudio"])
 
     constraints = venv / "kaine-torch-constraints.txt"
     pinned = write_torch_constraints(py, constraints)
@@ -817,14 +1037,16 @@ def main() -> None:
     # so the reproducible perception feed can decode playlist media (cv2 video +
     # av audio) on a fresh research machine. The default install stays lean.
     if args.research:
+        ta_install_cmd = [str(pip), "install"]
+        if force_reinstall:
+            ta_install_cmd.append("--force-reinstall")
         if ta_pin is not None and index_url is not None:
             print(
                 f"==> [--research] installing torchaudio=={ta_pin} from {index_url}"
             )
             run(
                 [
-                    str(pip),
-                    "install",
+                    *ta_install_cmd,
                     "--index-url",
                     index_url,
                     "-c",
@@ -836,13 +1058,12 @@ def main() -> None:
             print(
                 "==> [--research] installing torchaudio (default PyPI wheel for MPS)"
             )
-            run([str(pip), "install", "-c", str(constraints), "torchaudio"])
+            run([*ta_install_cmd, "-c", str(constraints), "torchaudio"])
         else:
             print(f"==> [--research] installing torchaudio from {index_url}")
             run(
                 [
-                    str(pip),
-                    "install",
+                    *ta_install_cmd,
                     "--index-url",
                     index_url,
                     "-c",

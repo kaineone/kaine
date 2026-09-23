@@ -41,8 +41,11 @@ entirely; the module skips itself on hosts that carry the real ROCm/XPU
 tooling, because no shim can hide a real binary.  The real interpreter runs the
 wheel-index resolver: the ``python3``/``python`` shims delegate everything to
 the real interpreter except ``-m venv`` (a skeleton virtualenv is fabricated —
-no ensurepip, no network, no real venv anywhere) and ``-m pip`` (routed to the
-pip shim, so it absorbs every install attempt).
+no ensurepip, no network, no real venv anywhere), ``-m pip`` (routed to the pip
+shim, so it absorbs every install attempt), and ``-m kaine.wheel_index``
+(which can be forced to mark the resolved stack as requiring a GPU self-test
+when ``KAINE_TEST_FORCE_SELFTEST`` is set to ``1``, so the fallback path is
+exercised).
 
 Exit status: ``install.sh`` closes with a verification step that imports
 torch.  Under the absorbing pip shim nothing is installed, so that
@@ -57,6 +60,7 @@ on the architecture of the machine running the tests: the suite passes
 unchanged on x86_64 CI runners and on the aarch64 Jetson.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -129,6 +133,10 @@ case "$1" in
     printf 'pip 24.0 from @SHIM_DIR@/pip (python 3.11)\n'
     exit 0
     ;;
+  uninstall)
+    # Absorb uninstalls so the installer can record the command.
+    exit 0
+    ;;
   *)
     exit 0
     ;;
@@ -183,6 +191,16 @@ printf '========================================================================
 exit 0
 """
 
+_ROCM_INFO_SAMPLE_SHIM = r"""#!/bin/sh
+# Test shim: rocminfo with iGPU, dGPU, a generic name and gfx000.
+printf '  Name: gfx1036\n'
+printf '  Name: gfx1100\n'
+printf '  Name: gfx11-generic\n'
+printf '  Name: gfx000\n'
+printf '  Name: gfx1100\n'
+exit 0
+"""
+
 _SYCL_LS_OK_SHIM = r"""#!/bin/sh
 # Test shim: sycl-ls reporting one Level Zero GPU.
 printf 'level_zero:gpu(0) Intel(R) Arc(TM) A770 Graphics [0x56a0]\n'
@@ -197,13 +215,16 @@ exit 0
 
 _PYTHON_SHIM = r"""#!/bin/sh
 # Transparent python shim: delegate to the real interpreter so that it (and
-# only it) runs the wheel-index resolver.  Two exceptions keep the test
-# hermetic: `-m venv` fabricates a skeleton virtualenv (no ensurepip, no
-# network, no real venv anywhere) and `-m pip` is routed to the pip shim.
+# only it) runs the wheel-index resolver.  Exceptions keep the test hermetic:
+# `-m venv` fabricates a skeleton virtualenv (no ensurepip, no network, no
+# real venv anywhere); `-m pip` is routed to the pip shim; `-m kaine.wheel_index`
+# can be forced to request a GPU self-test when KAINE_TEST_FORCE_SELFTEST is
+# set to 1.
 REAL='@REAL_PYTHON3@'
 SHIM_DIR='@SHIM_DIR@'
 state=0
 is_venv=0
+is_wheel_index=0
 target=''
 for arg in "$@"; do
   case "$state" in
@@ -211,7 +232,11 @@ for arg in "$@"; do
       if [ "$arg" = '-m' ]; then state=1; fi
       ;;
     1)
-      if [ "$arg" = 'venv' ]; then is_venv=1; state=2; else state=0; fi
+      case "$arg" in
+        venv) is_venv=1; state=2 ;;
+        kaine.wheel_index) is_wheel_index=1; state=0 ;;
+        *) state=0 ;;
+      esac
       ;;
     2)
       case "$arg" in
@@ -221,6 +246,18 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [ "$is_wheel_index" = '1' ] && [ "${KAINE_TEST_FORCE_SELFTEST:-}" = '1' ]; then
+  output=$("$REAL" "$@" 2>/dev/null)
+  rc=$?
+  if [ "$rc" -eq 0 ] && [ -n "$output" ]; then
+    printf '%s\n' "$output" | "$REAL" -c 'import json,sys; d=json.load(sys.stdin); d["selftest_required"]=True; print(json.dumps(d))'
+    exit 0
+  fi
+  printf '%s\n' "$output"
+  exit "$rc"
+fi
+
 if [ "$is_venv" = '1' ] && [ -n "$target" ]; then
   mkdir -p "$target/bin"
   {
@@ -240,12 +277,41 @@ if [ "$is_venv" = '1' ] && [ -n "$target" ]; then
   printf '# no-op activate (test shim)\n' > "$target/bin/activate"
   exit 0
 fi
+
 if [ "$#" -ge 2 ] && [ "$1" = '-m' ] && [ "$2" = 'pip' ]; then
   shift 2
   exec "$SHIM_DIR/pip" "$@"
 fi
+
 exec "$REAL" "$@"
 """
+
+_FAKE_TORCH_CPU = '''\
+__version__ = "2.14.0+cpu"
+
+
+class version:
+    hip = None
+
+
+class cuda:
+    @staticmethod
+    def is_available():
+        return False
+
+
+class _mps:
+    @staticmethod
+    def is_available():
+        return False
+
+
+class backends:
+    mps = _mps()
+
+
+__all__ = ["__version__", "version", "cuda", "backends"]
+'''
 
 
 def _write_shim(path: Path, body: str) -> None:
@@ -305,7 +371,10 @@ def _run_install(
     *,
     nvidia_cuda: str | None = None,
     rocm: bool = False,
+    rocminfo_sample: bool = False,
     xpu: bool = False,
+    fake_torch: str | None = None,
+    fake_torchaudio: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess, str]:
     """Run ``bash scripts/install.sh <flags>`` with a shimmed PATH.
@@ -327,11 +396,14 @@ def _run_install(
       otherwise fall through to.
     * ``nvidia_cuda="<version>"`` writes a succeeding nvidia-smi reporting
       that "CUDA Version" header.
-    * ``rocm=True`` / ``xpu=True`` write succeeding ROCm/XPU shims.  When
-      False, NO shim is written at all: ROCm and XPU are detected by presence
-      alone (``command -v`` succeeds for any existing file, whatever its exit
-      code), so a failing shim would still count as "present" — their absence
-      is simulated by omission (see the module skipif for the host requirement).
+    * ``rocm=True`` writes a succeeding rocm-smi shim.  ``rocminfo_sample=True``
+      also writes a rocminfo shim that emits the gfx1036/gfx1100/gfx11-generic
+      /gfx000 sample so bash gfx parsing is exercised.
+    * ``xpu=True`` writes succeeding sycl-ls and xpu-smi shims.
+    * ``fake_torch="cpu"`` puts a fake CPU-flavor torch package at the front of
+      PYTHONPATH so install.sh's flavor probe reports a CPU wheel installed.
+    * ``fake_torchaudio="<version>"`` puts a fake torchaudio distribution at the
+      front of PYTHONPATH so the installer sees a stale torchaudio.
     * ``extra_env`` is merged into the test environment after the base copy,
       so callers can set ``KAINE_ROCM_VERSION``/``KAINE_ROCM_GFX`` etc.
 
@@ -359,11 +431,13 @@ def _run_install(
 
     if rocm:
         _write_shim(shim_dir / "rocm-smi", _ROCM_SMI_OK_SHIM)
-    # else: no rocm-smi shim at all.  install.sh detects ROCm by PRESENCE
-    # (`command -v rocm-smi` succeeds whenever the file exists, whatever its
-    # exit code), so a failing shim would still count as "present" and flip
-    # the flavor to rocm — the mistake that once made this CPU-only case
-    # receive the rocm6.2 index.  Absence is simulated by omission.
+    if rocminfo_sample:
+        _write_shim(shim_dir / "rocminfo", _ROCM_INFO_SAMPLE_SHIM)
+    # else: no rocm-smi/rocminfo shims at all.  install.sh detects ROCm by
+    # PRESENCE (`command -v rocm-smi` succeeds whenever the file exists,
+    # whatever its exit code), so a failing shim would still count as "present"
+    # and flip the flavor to rocm — the mistake that once made this CPU-only
+    # case receive the rocm6.2 index.  Absence is simulated by omission.
 
     if xpu:
         _write_shim(shim_dir / "sycl-ls", _SYCL_LS_OK_SHIM)
@@ -400,24 +474,38 @@ def _run_install(
     env["KAINE_VENV_DIR"] = str(venv_dir)
     env["VIRTUAL_ENV"] = str(venv_dir)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["KAINE_WHEEL_PROBE_NVML"] = "0"
     inherited_pythonpath = env.get("PYTHONPATH")
     env["PYTHONPATH"] = (
         os.pathsep.join([str(REPO_ROOT), inherited_pythonpath])
         if inherited_pythonpath
         else str(REPO_ROOT)
     )
-    # Shadow any system-installed torch so install.sh's idempotency check
-    # ("import torch" succeeds → "already installed" → skip pip install)
-    # always falls through to the pip install step.  Without this, CI
-    # runners that carry torch in their base environment never reach the
-    # `pip install --index-url …` command the tests assert on.
+
+    # PYTHONPATH front: a fake torch package (or an ImportError poison) and an
+    # optional fake torchaudio distribution.  These are seen by the real
+    # interpreter that the shim delegates to.
     poison_dir = tmp_path / "poison"
     poison_dir.mkdir()
-    (poison_dir / "torch").mkdir()
-    (poison_dir / "torch" / "__init__.py").write_text(
-        "raise ImportError('torch not installed (test shim)')\n",
-        encoding="utf-8",
-    )
+    torch_dir = poison_dir / "torch"
+    torch_dir.mkdir()
+    if fake_torch == "cpu":
+        (torch_dir / "__init__.py").write_text(_FAKE_TORCH_CPU, encoding="utf-8")
+    else:
+        (torch_dir / "__init__.py").write_text(
+            "raise ImportError('torch not installed (test shim)')\n",
+            encoding="utf-8",
+        )
+    if fake_torchaudio is not None:
+        ta_pkg = poison_dir / "torchaudio"
+        ta_pkg.mkdir()
+        (ta_pkg / "__init__.py").write_text("# fake torchaudio\n", encoding="utf-8")
+        ta_dist = poison_dir / f"torchaudio-{fake_torchaudio}.dist-info"
+        ta_dist.mkdir()
+        (ta_dist / "METADATA").write_text(
+            f"Metadata-Version: 2.1\nName: torchaudio\nVersion: {fake_torchaudio}\n",
+            encoding="utf-8",
+        )
     env["PYTHONPATH"] = os.pathsep.join([str(poison_dir), env["PYTHONPATH"]])
 
     repo_venv = REPO_ROOT / ".venv"
@@ -743,6 +831,172 @@ def test_install_proceeds_past_constraints_to_editable_install(tmp_path: Path) -
         "no recorded pip invocation contained both -e and '.[test]'"
         + _context(proc, pip_log)
     )
+
+
+def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path) -> None:
+    """A failing GPU self-test falls back to CPU wheels and records the marker.
+
+    Invariant: when the resolver requests a GPU numerical self-test and it
+    fails (here because torch is poisoned in the test harness), pip first
+    installs the GPU torch stack, then force-reinstalls the CPU stack, and the
+    installer writes ``kaine-accel-fallback.json`` naming the GPU index and
+    torch version.  Later runs skip the GPU attempt while the marker matches.
+    Cost prevented: repeated futile GPU installs and self-tests on hosts
+    where the GPU wheels are known-bad.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard"],
+        nvidia_cuda="13.2",
+        extra_env={"KAINE_TEST_FORCE_SELFTEST": "1"},
+    )
+    lines = pip_log.splitlines()
+    gpu_lines = [line for line in lines if CUDA132_INDEX in line and "torch==" in line]
+    assert gpu_lines, _context(proc, pip_log)
+    gpu_idx = lines.index(gpu_lines[0])
+    later_lines = lines[gpu_idx + 1 :]
+    cpu_force_lines = [
+        line
+        for line in later_lines
+        if CPU_INDEX in line and "--force-reinstall" in line and "torch==" in line
+    ]
+    assert cpu_force_lines, _context(proc, pip_log)
+
+    marker_file = tmp_path / "venv" / "kaine-accel-fallback.json"
+    assert marker_file.exists(), _context(proc, pip_log)
+    data = json.loads(marker_file.read_text(encoding="utf-8"))
+    assert data["index_url"] == CUDA132_INDEX, _context(proc, pip_log)
+    assert data["torch"] == "2.14.0", _context(proc, pip_log)
+    # The harness poisons torch, so the self-test exits 2 (skipped), not 1.
+    assert data["reason"] == "GPU numerical self-test could not run (exit 2)", _context(
+        proc, pip_log
+    )
+
+
+def test_selftest_fallback_skip_gpu_when_marker_present(tmp_path: Path) -> None:
+    """A matching marker makes the installer keep/switch to CPU wheels.
+
+    Invariant: if ``kaine-accel-fallback.json`` already records a GPU self-test
+    failure for the exact index/torch version the resolver just chose, the
+    installer skips the GPU install and uses the CPU index, printing a notice
+    that names the marker file and the ``--retry-gpu`` flag.
+    """
+    venv_dir = tmp_path / "venv"
+    marker_file = venv_dir / "kaine-accel-fallback.json"
+    marker_file.parent.mkdir(parents=True, exist_ok=True)
+    marker_file.write_text(
+        json.dumps(
+            {
+                "reason": "GPU numerical self-test failed",
+                "index_url": CUDA132_INDEX,
+                "torch": "2.14.0",
+                "date": "2026-01-01T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard"],
+        nvidia_cuda="13.2",
+        extra_env={"KAINE_TEST_FORCE_SELFTEST": "0"},
+    )
+    urls = _index_urls(pip_log)
+    assert CUDA132_INDEX not in urls, _context(proc, pip_log)
+    assert CPU_INDEX in urls, _context(proc, pip_log)
+    combined = proc.stdout + proc.stderr
+    assert str(marker_file) in combined or "kaine-accel-fallback.json" in combined, _context(
+        proc, pip_log
+    )
+    assert "--retry-gpu" in combined, _context(proc, pip_log)
+
+
+def test_selftest_retry_gpu_removes_marker_and_attempts_gpu(tmp_path: Path) -> None:
+    """--retry-gpu deletes the marker and lets the installer attempt the GPU index."""
+    venv_dir = tmp_path / "venv"
+    marker_file = venv_dir / "kaine-accel-fallback.json"
+    marker_file.parent.mkdir(parents=True, exist_ok=True)
+    marker_file.write_text(
+        json.dumps(
+            {
+                "reason": "GPU numerical self-test failed",
+                "index_url": CUDA132_INDEX,
+                "torch": "2.14.0",
+                "date": "2026-01-01T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard", "--retry-gpu"],
+        nvidia_cuda="13.2",
+        extra_env={"KAINE_TEST_FORCE_SELFTEST": "0"},
+    )
+    urls = _index_urls(pip_log)
+    assert CUDA132_INDEX in urls, _context(proc, pip_log)
+    assert not marker_file.exists(), _context(proc, pip_log)
+
+
+def test_flavor_switch_uses_force_reinstall(tmp_path: Path) -> None:
+    """Switching from a CPU wheel to a CUDA wheel at the same version forces reinstall.
+
+    Invariant: pip treats ``2.14.0+cpu`` as satisfying ``torch==2.14.0`` and
+    will not swap to a CUDA wheel unless the installer passes
+    ``--force-reinstall``.  With a fake CPU-flavor torch installed, the target
+    CUDA index (cu132) is reached with ``--force-reinstall``.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard"],
+        nvidia_cuda="13.2",
+        fake_torch="cpu",
+    )
+    lines = pip_log.splitlines()
+    cuda_lines = [line for line in lines if CUDA132_INDEX in line and "torch==" in line]
+    assert cuda_lines, _context(proc, pip_log)
+    assert all("--force-reinstall" in line for line in cuda_lines), _context(proc, pip_log)
+
+
+def test_stale_torchaudio_is_uninstalled(tmp_path: Path) -> None:
+    """A stale torchaudio is uninstalled before the constraints file is written.
+
+    Invariant: when a torchaudio version that does not match the resolved
+    research pin is already present, the installer emits
+    ``pip uninstall -y torchaudio`` before writing constraints, so the stale
+    pin can never leak into ``kaine-torch-constraints.txt``.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard", "--research"],
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.10.0",
+    )
+    lines = pip_log.splitlines()
+    assert any("uninstall -y torchaudio" in line for line in lines), _context(proc, pip_log)
+
+
+def test_rocm_gfx_parsing_from_rocminfo_filters_igpu_generic_and_gfx000(tmp_path: Path) -> None:
+    """rocminfo parsing drops gfx000, -generic names and duplicates.
+
+    Invariant: only lines matching ``Name: gfx<hex>`` are considered; the
+    result is de-duplicated and preserves order, yielding gfx1036 and gfx1100
+    from the standard sample.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--rocm"],
+        rocm=True,
+        rocminfo_sample=True,
+        extra_env={"KAINE_ROCM_VERSION": "7.2"},
+    )
+    urls = _index_urls(pip_log)
+    assert set(urls) == {ROCM72_INDEX}, _context(proc, pip_log)
+    combined = proc.stdout + proc.stderr
+    assert "gfx1036" in combined, _context(proc, pip_log)
+    assert "gfx1100" in combined, _context(proc, pip_log)
+    assert "gfx11-generic" not in combined, _context(proc, pip_log)
+    assert "gfx000" not in combined, _context(proc, pip_log)
 
 
 def test_print_torch_spec_matches_pyproject() -> None:
