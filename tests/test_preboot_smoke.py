@@ -451,6 +451,8 @@ async def test_dry_run_resolves_state_key_before_services_check(monkeypatch, tmp
 def test_dry_run_main_exits_zero_when_everything_passes(monkeypatch, capsys):
     config = _enabled_config(modules={"lingua": False, "soma": True}, perception_feed={"mode": "off"})
     monkeypatch.setattr(preboot, "load_kaine_config", lambda *a, **k: config)
+    monkeypatch.setattr(preboot, "check_torch_stack", lambda: [])
+    monkeypatch.setattr(preboot, "describe_torch_stack", lambda: "torch 2.14.0+cu130")
 
     async def _fake_run_async_checks(_config):
         return [

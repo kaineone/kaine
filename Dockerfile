@@ -73,16 +73,20 @@ RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 RUN pip install --upgrade pip
 
-# Single source of truth for the wheel index: copy ONLY install.py first so the
-# torch layer caches independently of the rest of the source tree.
+# Single source of truth for the wheel index: copy install.py and pyproject.toml
+# first so the torch layer caches independently of the rest of the source tree.
+# The torch layer also re-builds when pyproject.toml changes, which is required
+# so the image follows the project torch requirement.
 COPY scripts/install.py /src/scripts/install.py
+COPY pyproject.toml /src/pyproject.toml
 RUN TORCH_INDEX="$(python /src/scripts/install.py --print-index "${FLAVOR}")" \
  && TORCH_SPEC="$(python /src/scripts/install.py --print-torch-spec)" \
  && if [ -n "${TORCH_INDEX}" ]; then \
-        pip install --index-url "${TORCH_INDEX}" "${TORCH_SPEC}"; \
+        pip install --index-url "${TORCH_INDEX}" "${TORCH_SPEC}" torchvision; \
     else \
-        pip install "${TORCH_SPEC}"; \
-    fi
+        pip install "${TORCH_SPEC}" torchvision; \
+    fi \
+ && python -c "import importlib.metadata as md; names=('torch','torchvision','torchaudio'); installed={d.metadata.get('Name','').lower():d.version for d in md.distributions()}; open('/src/kaine-torch-constraints.txt','w').write(''.join(f'{n}=={installed[n]}\n' for n in names if n in installed))"
 
 # Now the rest of the source and the editable install with extras.
 COPY pyproject.toml README.md /src/
@@ -94,7 +98,8 @@ WORKDIR /src
 # [audio] extra is selected. Its source tarball needs pkg-config + ffmpeg-dev and
 # would leave a runtime .so dependency the slim runtime stage lacks — the wheel is
 # self-contained. No effect on builds that don't pull av (the lean default).
-RUN PIP_ONLY_BINARY=av pip install -e "${KAINE_EXTRAS}"
+# Pass the torch-stack constraints file so the extras cannot re-resolve torch.
+RUN PIP_ONLY_BINARY=av pip install -c /src/kaine-torch-constraints.txt -e "${KAINE_EXTRAS}"
 
 # =========================================================================
 # Stage 2 — runtime: slim base, non-root user, venv + source copied in, offline

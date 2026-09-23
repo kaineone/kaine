@@ -22,23 +22,23 @@ Technique: for every case a temporary directory of executable shim scripts is
 put FIRST on ``PATH`` and ``bash scripts/install.sh <flags>`` is executed with
 the repo root (derived from ``__file__``) as working directory.  The ``pip``
 shim appends its full argv to a log file and exits 0, so every install attempt
-is absorbed: nothing is installed, no virtualenv is created and the network is
-never touched.  ``nvidia-smi``/``rocm-smi``/``xpu-smi``/``sycl-ls`` shims steer
-accelerator detection, and the installer's detection semantics dictate how
-"absence" is simulated: NVIDIA is accepted only where ``nvidia-smi`` exists
-AND ``nvidia-smi -L`` succeeds, while ROCm (``rocm-smi`` or ``/opt/rocm``) and
-Intel XPU (``xpu-smi`` or ``sycl-ls``) are detected by PRESENCE alone —
-``command -v`` succeeds whenever the file exists on PATH, whatever its exit
-code, so even a failing shim counts as "present".  A broken nvidia-smi is
-therefore simulated with a present-but-failing shim (which must exist, to
-shadow the real binary on GPU-equipped test hosts), while absence of a
-presence-detected tool is simulated by omitting the shim entirely; the module
-skips itself on hosts that carry the real ROCm/XPU tooling, because no shim
-can hide a real binary.  The real interpreter runs the wheel-index resolver:
-the ``python3``/``python`` shims delegate everything to the real interpreter
-except ``-m venv`` (a skeleton virtualenv is fabricated — no ensurepip, no
-network, no real venv anywhere) and ``-m pip`` (routed to the pip shim, so it
-absorbs every install attempt).
+is absorbed: nothing is installed; the installer is pointed at a skeleton venv
+under ``tmp_path`` and the network is never touched.  ``nvidia-smi``/
+``rocm-smi``/``xpu-smi``/``sycl-ls`` shims steer accelerator detection, and the
+installer's detection semantics dictate how "absence" is simulated: NVIDIA is
+accepted only where ``nvidia-smi`` exists AND ``nvidia-smi -L`` succeeds, while
+ROCm (``rocm-smi`` or ``/opt/rocm``) and Intel XPU (``xpu-smi`` or ``sycl-ls``)
+are detected by PRESENCE alone — ``command -v`` succeeds whenever the file
+exists on PATH, whatever its exit code, so even a failing shim counts as
+"present".  A broken nvidia-smi is therefore simulated with a present-but-failing
+shim (which must exist, to shadow a real binary on GPU-equipped test hosts),
+while absence of a presence-detected tool is simulated by omitting the shim
+entirely; the module skips itself on hosts that carry the real ROCm/XPU
+tooling, because no shim can hide a real binary.  The real interpreter runs the
+wheel-index resolver: the ``python3``/``python`` shims delegate everything to
+the real interpreter except ``-m venv`` (a skeleton virtualenv is fabricated —
+no ensurepip, no network, no real venv anywhere) and ``-m pip`` (routed to the
+pip shim, so it absorbs every install attempt).
 
 Exit status: ``install.sh`` closes with a verification step that imports
 torch.  Under the absorbing pip shim nothing is installed, so that
@@ -268,6 +268,30 @@ def _context(proc: subprocess.CompletedProcess, pip_log: str) -> str:
     )
 
 
+def _venv_snapshot(venv_dir: Path) -> list[tuple[str, int]]:
+    """Return a sorted snapshot of a venv directory for change detection.
+
+    Records (relative_path, mtime_ns) for the directory itself, every entry
+    directly inside its ``bin/`` subdirectory, and every directory matching
+    ``.venv/lib/python*/site-packages`` (which catches torch-stack swaps
+    that ``bin/`` would miss).  The relative paths are normalised to
+    ``.venv``, ``.venv/bin/<name>`` and ``.venv/lib/python*/site-packages``
+    so that the snapshot is independent of where the venv actually lives.
+    """
+    snapshot: list[tuple[str, int]] = []
+    if venv_dir.exists():
+        snapshot.append((".venv", venv_dir.stat().st_mtime_ns))
+        bin_dir = venv_dir / "bin"
+        if bin_dir.exists():
+            for entry in bin_dir.iterdir():
+                snapshot.append((".venv/bin/" + entry.name, entry.stat().st_mtime_ns))
+        for site_dir in venv_dir.glob("lib/python*/site-packages"):
+            if site_dir.is_dir():
+                rel = ".venv/" + str(site_dir.relative_to(venv_dir))
+                snapshot.append((rel, site_dir.stat().st_mtime_ns))
+    return sorted(snapshot)
+
+
 def _run_install(
     tmp_path: Path,
     flags: list[str],
@@ -280,10 +304,11 @@ def _run_install(
 
     Returns ``(completed_process, pip_argv_log_text)``.  Every shim lives in
     ``tmp_path``; the pip shim absorbs every install attempt, so nothing is
-    installed, no virtualenv is created and the network is never touched.
-    The returned exit status is deliberately never asserted by any case: the
-    shimmed install can never satisfy install.sh's closing torch-import
-    verification, so a non-zero exit is the correct outcome here.
+    installed; the installer is pointed at a skeleton venv under ``tmp_path``
+    and the network is never touched.  The returned exit status is deliberately
+    never asserted by any case: the shimmed install can never satisfy
+    install.sh's closing torch-import verification, so a non-zero exit is the
+    correct outcome here.
 
     Steering:
 
@@ -297,8 +322,12 @@ def _run_install(
     * ``rocm=True`` / ``xpu=True`` write succeeding ROCm/XPU shims.  When
       False, NO shim is written at all: ROCm and XPU are detected by presence
       alone (``command -v`` succeeds for any existing file, whatever its exit
-      code), so a failing shim would still count as "present" — absence is
-      simulated by omission (see the module skipif for the host requirement).
+      code), so a failing shim would still count as "present" — their absence
+      is simulated by omission (see the module skipif for the host requirement).
+
+    Guard: if the repository ``.venv`` is created or modified despite
+    ``KAINE_VENV_DIR`` pointing at a skeleton venv under ``tmp_path``, the
+    test fails so the developer's environment is never touched silently.
     """
     shim_dir = tmp_path / "shims"
     shim_dir.mkdir()
@@ -356,6 +385,7 @@ def _run_install(
 
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([str(shim_dir), env.get("PATH", "")])
+    env["KAINE_VENV_DIR"] = str(venv_dir)
     env["VIRTUAL_ENV"] = str(venv_dir)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     inherited_pythonpath = env.get("PYTHONPATH")
@@ -379,7 +409,7 @@ def _run_install(
     env["PYTHONPATH"] = os.pathsep.join([str(poison_dir), env["PYTHONPATH"]])
 
     repo_venv = REPO_ROOT / ".venv"
-    repo_venv_before = repo_venv.exists()
+    repo_venv_before = _venv_snapshot(repo_venv)
     repo_pycache = REPO_ROOT / "kaine" / "__pycache__"
     repo_pycache_before = repo_pycache.exists()
     proc = None  # type: ignore[assignment]  # assigned inside try; pytest.fail always raises on timeout
@@ -401,9 +431,18 @@ def _run_install(
             )
         )
     finally:
-        # Defensive cleanup: nothing of ours may survive in the repository.
-        if not repo_venv_before and repo_venv.exists():
+        repo_venv_after = _venv_snapshot(repo_venv)
+        if not repo_venv_before and repo_venv_after:
             shutil.rmtree(repo_venv, ignore_errors=True)
+            pytest.fail(
+                f"scripts/install.sh created {repo_venv} despite "
+                f"KAINE_VENV_DIR pointing to a skeleton venv under tmp_path"
+            )
+        if repo_venv_before and repo_venv_before != repo_venv_after:
+            pytest.fail(
+                f"scripts/install.sh modified the repository venv {repo_venv}: "
+                f"before={repo_venv_before!r} after={repo_venv_after!r}"
+            )
         if not repo_pycache_before and repo_pycache.exists():
             shutil.rmtree(repo_pycache, ignore_errors=True)
 
@@ -582,3 +621,89 @@ def test_index_url_override_wins_over_host_resolution(tmp_path: Path) -> None:
     )
     urls = _index_urls(pip_log)
     assert urls and set(urls) == {OVERRIDE_INDEX}, _context(proc, pip_log)
+
+
+def test_torch_and_torchvision_installed_together(tmp_path: Path) -> None:
+    """The torch install step passes torch and torchvision together from one index."""
+    proc, pip_log = _run_install(tmp_path, ["--cpu", "--no-wizard"])
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        has_torch = any(t.startswith(("torch>=", "torch==", "torch<")) for t in tokens)
+        has_tv = "torchvision" in tokens
+        has_cpu_index = "--index-url" in tokens and CPU_INDEX in tokens
+        if has_torch and has_tv and has_cpu_index:
+            return
+    pytest.fail(
+        "no recorded pip invocation installed torch and torchvision together "
+        f"from {CPU_INDEX!r}" + _context(proc, pip_log)
+    )
+
+
+def test_later_installs_are_constrained(tmp_path: Path) -> None:
+    """Every editable install receives the torch stack constraints file."""
+    proc, pip_log = _run_install(tmp_path, ["--cpu", "--no-wizard"])
+    lines = pip_log.splitlines()
+    assert any("-e" in line.split() for line in lines), _context(proc, pip_log)
+    for line in lines:
+        tokens = line.split()
+        if "-e" not in tokens:
+            continue
+        if "-c" not in tokens:
+            pytest.fail(f"pip line with -e lacks -c: {line!r}" + _context(proc, pip_log))
+        c_idx = tokens.index("-c")
+        if c_idx + 1 >= len(tokens) or not tokens[c_idx + 1].endswith(
+            "kaine-torch-constraints.txt"
+        ):
+            pytest.fail(
+                f"pip line with -e has no kaine-torch-constraints.txt after -c: {line!r}"
+                + _context(proc, pip_log)
+            )
+
+
+def test_install_proceeds_past_constraints_to_editable_install(tmp_path: Path) -> None:
+    """The installer reaches the editable install after writing constraints.
+
+    Regression guard for the empty-constraints-file crash: with the pip shim
+    absorbing every install, the constraints file is empty, but the script
+    must not abort and must still invoke ``pip install -e ".[test]"``.
+    """
+    proc, pip_log = _run_install(tmp_path, ["--cpu", "--no-wizard"])
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        if "-e" in tokens and ".[test]" in tokens:
+            return
+    pytest.fail(
+        "no recorded pip invocation contained both -e and '.[test]'"
+        + _context(proc, pip_log)
+    )
+
+
+def test_print_torch_spec_matches_pyproject() -> None:
+    """--print-torch-spec emits the torch dependency from pyproject.toml."""
+    import tomllib
+
+    with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+        deps = tomllib.load(f)["project"]["dependencies"]
+    operators = ("~=", "==", "!=", "<=", ">=", ">", "<")
+    expected = next(
+        dep
+        for dep in deps
+        if dep.startswith("torch")
+        and any(dep[len("torch") :].lstrip().startswith(op) for op in operators)
+    )
+    proc = subprocess.run(
+        ["bash", "scripts/install.sh", "--print-torch-spec"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        errors="replace",
+        timeout=RUN_TIMEOUT_SECONDS,
+    )
+    assert proc.returncode == 0, (
+        f"install.sh --print-torch-spec exited {proc.returncode}\n"
+        f"stdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert proc.stdout.strip() == expected, (
+        f"expected {expected!r}, got {proc.stdout.strip()!r}\n"
+        f"stderr: {proc.stderr}"
+    )

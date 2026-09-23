@@ -11,8 +11,18 @@
 # KAINE installer: detects host hardware and installs PyTorch from the
 # matching wheel index, then installs the rest of KAINE editable.
 #
+# The torch version spec is read from pyproject.toml (the first project
+# dependency line that starts with "torch" followed by a version operator).
+# Use --print-torch-spec to print the resolved spec and exit without touching
+# the environment.
+#
 # Idempotent — safe to re-run. Run from the repo root.
 #
+# Environment:
+#   KAINE_VENV_DIR    virtualenv directory to use (default: .venv; may be
+#                     absolute or relative to the repo root). Created if absent.
+#
+# Flags:
 #   bash scripts/install.sh           # auto-detect
 #   bash scripts/install.sh --cpu     # force CPU wheels
 #   bash scripts/install.sh --cuda    # force CUDA wheels (resolved via kaine.wheel_index)
@@ -22,24 +32,39 @@
 #   bash scripts/install.sh --mps     # force macOS MPS (default PyPI wheel)
 #   bash scripts/install.sh --research # ALSO install the perception extras (.[perception])
 #   bash scripts/install.sh --no-wizard # skip the interactive wizard
+#   bash scripts/install.sh --print-torch-spec # print the resolved torch spec and exit
+#
+# The installer pins the installed torch stack (torch, torchvision and, with
+# --research, torchaudio) in $KAINE_VENV_DIR/kaine-torch-constraints.txt and
+# passes that constraints file to every subsequent pip install, so later
+# editable installs cannot re-resolve torch from a different index.
 #
 # The default install stays lean (no cv2/av/funasr). The venv is created at
-# .venv/ if absent. Use --python /path/to/python to override the interpreter the
-# venv is built from.
+# $KAINE_VENV_DIR/ if absent. Use --python /path/to/python to override the
+# interpreter the venv is built from.
 
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT="$(pwd)"
 
+TORCH_SPEC_LINE=$(sed -n '/^[[:space:]]*"torch[<>=!~ ]/p' pyproject.toml | head -n 1)
+TORCH_SPEC=$(printf '%s' "$TORCH_SPEC_LINE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/",$//;s/"$//')
+if [[ -z "$TORCH_SPEC" ]]; then
+  echo "install.sh: could not find torch dependency in pyproject.toml" >&2
+  exit 1
+fi
+
 PYTHON_BIN="python3"
 FORCE=""
 NO_WIZARD=0
 RESEARCH=0
-TORCH_SPEC="torch>=2.5,<3"
 # Legacy fallback: used only when the host-resolved wheel-index probe
 # (kaine.wheel_index) fails; the cuda flavor branch below normally overrides it.
-NVIDIA_INDEX_URL="https://download.pytorch.org/whl/cu128"
+# cu126 is the CUDA index with the widest driver compatibility that carries
+# the project's torch floor (cu128 stops at torch 2.11); the host-aware
+# resolver still chooses per host when it is available.
+NVIDIA_INDEX_URL="https://download.pytorch.org/whl/cu126"
 ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm6.2"
 XPU_INDEX_URL="https://download.pytorch.org/whl/xpu"
 CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"
@@ -69,19 +94,55 @@ while [[ $# -gt 0 ]]; do
     --python) PYTHON_BIN="$2"; shift 2 ;;
     --no-wizard) NO_WIZARD=1; shift ;;
     --research) RESEARCH=1; shift ;;
+    --print-torch-spec)
+      printf '%s\n' "$TORCH_SPEC"
+      exit 0
+      ;;
     --help|-h)
-      sed -n '2,25p' "$0"; exit 0 ;;
+      sed -n '2,50p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
 
-if [[ ! -d ".venv" ]]; then
-  echo "==> creating venv at .venv/ using $PYTHON_BIN"
-  "$PYTHON_BIN" -m venv .venv
+VENV_DIR="${KAINE_VENV_DIR:-.venv}"
+
+# Normalise to an absolute path so every downstream reference (venv
+# creation, resolver candidate selection, constraints file) points at the
+# same directory regardless of whether KAINE_VENV_DIR was absolute.
+if [[ ! "$VENV_DIR" = /* ]]; then
+  VENV_DIR="$ROOT/$VENV_DIR"
 fi
 
-PIP=".venv/bin/pip"
-PY=".venv/bin/python"
+if [[ ! -d "$VENV_DIR" ]]; then
+  echo "==> creating venv at $VENV_DIR/ using $PYTHON_BIN"
+  "$PYTHON_BIN" -m venv "$VENV_DIR"
+fi
+
+PIP="$VENV_DIR/bin/pip"
+PY="$VENV_DIR/bin/python"
+
+write_torch_constraints() {
+  local out="$1"
+  "$PY" - "$out" <<'PY'
+import importlib.metadata as md
+import sys
+names = ["torch", "torchvision", "torchaudio"]
+out_path = sys.argv[1]
+with open(out_path, "w") as f:
+    pins = []
+    for name in names:
+        try:
+            ver = md.version(name)
+            f.write(f"{name}=={ver}\n")
+            pins.append(f"{name}=={ver}")
+        except md.PackageNotFoundError:
+            pass
+    if pins:
+        print(" ".join(pins))
+    else:
+        print("(none installed)")
+PY
+}
 
 echo "==> upgrading pip"
 "$PIP" install --quiet --upgrade pip
@@ -117,10 +178,8 @@ case "$flavor" in
     KAINE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)" || true
     RESOLVER_PY=""
     for _resolver_candidate in \
-      ".venv/bin/python" \
-      "${VENV_PY:-}" \
-      "${VENV_DIR:-}/bin/python" \
-      "${KAINE_ROOT}/.venv/bin/python"
+      "${VENV_DIR}/bin/python" \
+      "${VENV_PY:-}"
     do
       if [ -n "$_resolver_candidate" ] && [ -x "$_resolver_candidate" ]; then
         RESOLVER_PY="$_resolver_candidate"
@@ -236,24 +295,37 @@ fi
 
 if [[ "$need_install" -eq 1 ]]; then
   if [[ "$flavor" == "mps" ]]; then
-    echo "==> installing $TORCH_SPEC (default PyPI wheel for MPS)"
-    "$PIP" install "$TORCH_SPEC"
+    echo "==> installing $TORCH_SPEC torchvision (default PyPI wheel for MPS)"
+    "$PIP" install "$TORCH_SPEC" torchvision
   else
-    echo "==> installing $TORCH_SPEC from $INDEX_URL"
-    "$PIP" install --index-url "$INDEX_URL" "$TORCH_SPEC"
+    echo "==> installing $TORCH_SPEC torchvision from $INDEX_URL"
+    "$PIP" install --index-url "$INDEX_URL" "$TORCH_SPEC" torchvision
   fi
 fi
 
+TORCH_CONSTRAINTS="$VENV_DIR/kaine-torch-constraints.txt"
+pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
+echo "==> pinned torch stack: $pinned"
+
 echo "==> installing the rest of KAINE (editable, with test deps)"
-"$PIP" install --quiet -e ".[test]"
+"$PIP" install --quiet -c "$TORCH_CONSTRAINTS" -e ".[test]"
 
 # --research: ALSO provision the perception extras (audio+vision incl. PyAV) so
 # the reproducible perception feed can decode playlist media (cv2 video + av
 # audio) on a fresh research machine. The default install stays lean.
 if [[ "$RESEARCH" -eq 1 ]]; then
-  echo "==> [--research] installing perception extras: pip install -e .[perception]"
+  if [[ "$flavor" == "mps" ]]; then
+    echo "==> [--research] installing torchaudio (default PyPI wheel for MPS)"
+    "$PIP" install -c "$TORCH_CONSTRAINTS" torchaudio
+  else
+    echo "==> [--research] installing torchaudio from $INDEX_URL"
+    "$PIP" install --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" torchaudio
+  fi
+  pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
+  echo "==> pinned torch stack: $pinned"
+  echo "==> [--research] installing perception extras: pip install -c $TORCH_CONSTRAINTS -e .[perception]"
   echo "    (audio: sounddevice, webrtcvad, funasr, librosa, av;  vision: opencv-python-headless)"
-  "$PIP" install -e ".[perception]"
+  "$PIP" install -c "$TORCH_CONSTRAINTS" -e ".[perception]"
   echo "==> [--research] perception extras installed (playlist audio/video decode ready)"
 fi
 
@@ -267,14 +339,23 @@ print("cuda.is_available", torch.cuda.is_available())
 print(json.dumps(describe_host(), indent=2, default=str))
 PY
 
+"$PY" - <<'PY'
+import sys
+from kaine.torch_stack import check_torch_stack
+problems = check_torch_stack()
+for p in problems:
+    print("TORCH STACK MISMATCH:", p, file=sys.stderr)
+sys.exit(1 if problems else 0)
+PY
+
 echo "==> install complete"
 
 # GPU trainer note: this script sets up the KAINE runtime venv only. The
 # voice-alignment GPU trainer (Unsloth Studio on NVIDIA, unsloth-core on AMD)
-# is a SEPARATE environment — never install it into .venv/. For Qwen3.5 support
-# the trainer env also requires transformers v5 (Unsloth Studio ships 4.x by
-# default). See docs/hardware.md#qwen35-trainer-prerequisites for the upgrade
-# command and the mainline-GGUF conversion requirement.
+# is a SEPARATE environment — never install it into the KAINE runtime venv.
+# For Qwen3.5 support the trainer env also requires transformers v5 (Unsloth
+# Studio ships 4.x by default). See docs/hardware.md#qwen35-trainer-prerequisites
+# for the upgrade command and the mainline-GGUF conversion requirement.
 
 # First-run wizard hand-off. Only offer it interactively (a TTY) and when not
 # suppressed with --no-wizard. It writes config/kaine.operator.toml, detects the
@@ -286,8 +367,8 @@ if [[ "$NO_WIZARD" -eq 0 ]] && [[ -t 0 ]] && [[ -t 1 ]]; then
     y|Y|yes|YES)
       "$PY" -m kaine.setup ;;
     *)
-      echo "==> skipped. Run it later with: .venv/bin/python -m kaine.setup" ;;
+      echo "==> skipped. Run it later with: $VENV_DIR/bin/python -m kaine.setup" ;;
   esac
 else
-  echo "==> run the first-run wizard with: .venv/bin/python -m kaine.setup"
+  echo "==> run the first-run wizard with: $VENV_DIR/bin/python -m kaine.setup"
 fi
