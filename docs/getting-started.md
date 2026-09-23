@@ -687,23 +687,57 @@ gracefully, and external model endpoints are config keys. The portability work
 adds per-component runtime backends (GGML/ONNX alongside PyTorch) and named
 tier profiles.
 
-Planned capability tiers (post-research):
+Planned capability tiers and current portability program:
 
-- **~512 MB-class SBC or retired low-RAM smartphone (Tier 0 — sensor node).**
-  Modules: soma, chronos, nous, mnemos (sqlite-vec), eidolon, thymos, a sub-1B
-  GGUF Lingua (slow). Honest role: symbolic reasoning + episodic memory +
-  perception satellite, optionally feeding a higher-tier host over the bus.
-  Lighter runtimes: llama.cpp (GGUF), whisper.cpp, ONNX-Runtime.
+The tier profiles in `config/profiles/` describe what runs on each hardware
+class today; all of them still require PyTorch. See
+[docs/deployment-tiers.md](deployment-tiers.md) for the full tier definitions.
 
-- **4–8 GB-class SBC or retired flagship smartphone under a userland like
-  Termux (Tier 1 — embodied CPU agent).** Adds STT (whisper.cpp), Piper TTS,
-  ONNX MiniLM embeddings, periodic vision (dinov2.cpp / ONNX), mic/camera via
-  device APIs. 1–2B GGUF LLM at chat pace.
+- **Tier 0 — sensor node (`tier0.toml`).** Targets ~512 MB-class SBCs and
+  similar low-RAM hosts, but today it still depends on torch because Soma and
+  Chronos run torch+ncps CfC networks and Mnemos builds a
+  sentence-transformers MiniLM embedder. The profile disables Topos, Audition,
+  Vox, Empatheia and Phantasia; it uses the llama.cpp (llama-cpp-python) GGUF
+  Lingua backend and sqlite-vec for Mnemos; it disables the oscillator and does
+  not change the subjective clock. Existing backends are llama.cpp Lingua and
+  sqlite-vec Mnemos; whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision,
+  ONNX/static embeddings, NumPy CfC and JAX-free Nous/Phantasia are not yet
+  built. Measured on a Raspberry Pi Zero 2 W (512 MB), a full voice turn using
+  whisper.cpp tiny.en + SmolLM2-360M + Flite takes 37–46 s when loading one
+  model at a time. The base `pyproject.toml` depends on torch, transformers,
+  sentence-transformers, ncps, qdrant-client and pynvml, so a plain
+  `pip install` fails on 32-bit ARM and on Termux; the original ARMv6 Pi Zero
+  cannot host the torch stack.
 
-- **RISC-V and other architectures.** GGML/ONNX runtimes are already being
-  ported to RISC-V (rvv vector extension). KAINE's Tier 0/1 profiles should
-  run on a capable RISC-V board without code changes once those runtime ports
-  mature.
+- **Tier 1 — embodied CPU agent (`tier1.toml`).** Runs on 4–8 GB-class CPU
+  hosts such as 64-bit SBCs. It uses llama.cpp Lingua, sqlite-vec Mnemos with
+  CPU embeddings, Topos on CPU, and disables Vox and vocal emotion. It still
+  needs torch for the CfC and embedder modules; Nous and Phantasia need JAX
+  for real function because their non-JAX engines are a non-reasoning fake and
+  a dev-only non-learning stub.
 
-> The Tier 2 workstation configuration (current default) is unchanged. All
-> portability work is additive and staged; no existing behavior is modified.
+- **Tier 2/Tier 3 — workstation and server (`tier2.toml`, `tier3.toml`).**
+  Pin Ollama for Lingua and Qdrant for vector memory. They also require torch;
+  these remain the default workstation-class configurations.
+
+Cycle processing runs at 10 Hz and conscious access at 3.33 Hz. A cycle
+overrun starts the next tick immediately. Subjective time tracks wall time ×
+`time_scale`, so slow hardware gives the entity fewer ticks per subjective
+second unless the operator lowers `time_scale` by hand; no tier profile
+currently sets `time_scale`.
+
+Smaller hardware reaches the full module set through the portability program
+documented in `openspec/changes/portability-program`: Phase 1 installs KAINE
+anywhere Linux runs (extras, Docker-free Redis, curl|sh bootstrap); Phase 2
+replaces the torch core with NumPy CfC, one shared ONNX/model2vec embedder and
+sherpa-onnx speech, and adds slip-driven `time_scale`; Phase 3 adds JAX-free
+Nous/Phantasia, Termux support and thin-client offload for the Pi Zero 2 W;
+Phase 4 covers residency, arm64 images and multi-node.
+
+- **RISC-V and other architectures — target, not current.** GGML/ONNX runtime
+  ports to RISC-V (rvv vector extension) are maturing; the Tier 0/1 profiles
+  are intended to run unchanged on capable RISC-V boards once those runtimes
+  and the portability-program backends are in place.
+
+> The Tier 2 workstation configuration is unchanged. All portability work is
+> additive and staged; no existing behavior is modified.

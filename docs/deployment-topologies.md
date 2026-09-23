@@ -15,10 +15,9 @@ spread *out*) and the explicit untrusted-compute boundary.
 Conflating KAINE's workloads is what produces bad distributed-compute plans.
 Separated, they get three different verdicts:
 
-1. **The live cognitive loop** — the ~3.33 Hz workspace cycle
-   (`[cycle].processing_rate_hz = 3.333`, ~300 ms budget) and the modules in its
-   per-tick feedback path. Latency-critical, stateful, partly bound to physical
-   sensors.
+1. **The live cognitive loop** — processing at 10 Hz (~100 ms budget) and
+   conscious access at 3.33 Hz (P3b), and the modules in its per-tick feedback
+   path. Latency-critical, stateful, partly bound to physical sensors.
 2. **The stateful stores** — Mnemos episodic/semantic/procedural memory and the
    Eidolon self-model. Read/written every cycle; ethically significant; the
    continuity of this state is the welfare claim.

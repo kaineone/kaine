@@ -23,8 +23,10 @@ enforced wherever the dev/CI tooling is present.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,19 +35,26 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _lint_imports_cmd() -> list[str] | None:
-    """Resolve the lint-imports entrypoint, preferring the project venv."""
-    venv_bin = REPO_ROOT / ".venv" / "bin" / "lint-imports"
-    if venv_bin.exists():
-        return [str(venv_bin)]
+    """Resolve the lint-imports entrypoint."""
     found = shutil.which("lint-imports")
     if found:
         return [found]
-    # Fall back to the module form if the import-linter package is importable.
+
+    venv_script = Path(sys.executable).parent / "lint-imports"
+    if venv_script.exists() and venv_script.is_file() and os.access(venv_script, os.X_OK):
+        return [str(venv_script)]
+
     try:
         import importlinter  # noqa: F401
     except ImportError:
         return None
-    return ["python", "-m", "importlinter"]
+
+    return [
+        sys.executable,
+        "-c",
+        "import sys; from importlinter.cli import lint_imports_command; "
+        "sys.exit(lint_imports_command())",
+    ]
 
 
 def test_import_boundary_contracts_kept():
@@ -93,4 +102,3 @@ def test_external_train_script_not_imported_by_kaine():
         "scripts/hypnos_external_train.py must never be imported by kaine "
         f"(it runs in the external trainer env). Offenders: {offenders}"
     )
-

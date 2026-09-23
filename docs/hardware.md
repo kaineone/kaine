@@ -181,8 +181,18 @@ copy GGUFs from Ollama's blob store for use outside Ollama.
 
 ## Lighter and larger hardware
 
-The architecture is config-toggled and device-adaptive, so reduced module sets
-run on lighter hardware and operators with more capable machines can scale the
-organ up. Planned portability tiers (SBC / smartphone / RISC-V profiles with
-GGML/ONNX runtimes) are a post-research design direction documented under
-[Getting Started — Smaller and upcycled hardware](getting-started.md#smaller-and-upcycled-hardware).
+Today every tier still depends on torch: Soma and Chronos run torch+ncps CfC
+networks, Mnemos/Empatheia/Hypnos each build a sentence-transformers MiniLM
+embedder, and the edge profiles only reduce the module set rather than remove
+the torch requirement — `tier0.toml` disables Topos, Audition, Vox, Empatheia
+and Phantasia, while `tier1.toml` disables Vox and vocal emotion. Tier 2 and
+Tier 3 remain the workstation defaults that pin Ollama and Qdrant. Smaller
+and upcycled hardware therefore reaches the full module set through the
+portability program in `openspec/changes/portability-program`: Phase 1 installs
+anywhere Linux runs, Phase 2 delivers a torch-free NumPy CfC core with a shared
+ONNX/model2vec embedder and sherpa-onnx speech plus slip-driven `time_scale`,
+Phase 3 adds JAX-free Nous/Phantasia plus Termux and thin-client offload for
+the Pi Zero 2 W, and Phase 4 covers residency, arm64 images and multi-node. See
+[docs/deployment-tiers.md](deployment-tiers.md) for the tier definitions and
+[Getting Started — Smaller and upcycled hardware](getting-started.md#smaller-and-upcycled-hardware)
+for the current capability list.

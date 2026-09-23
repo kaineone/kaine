@@ -1,16 +1,21 @@
 # Deployment tiers — the portability ladder
 
 KAINE is *the architecture*, not the hardware. The mind is the loop, and the
-loop is mostly cheap CPU coordination around a few heavy models. So the same
-mind can inhabit hardware ranging from a retired phone to a datacenter, **trading
-capability for reach rather than changing identity**. This document is the honest
-capability matrix: what each tier can and cannot do.
+loop is mostly cheap CPU coordination around a few heavy models. The goal of the
+`portability-program` change is for the same mind to inhabit hardware ranging
+from a retired phone to a datacenter, **trading capability for reach rather than
+changing identity**; today every tier still carries a PyTorch runtime. This
+document is the honest capability matrix: what each tier can and cannot do today.
 
-The portability cliff is **not** the GPU — it is the **PyTorch / transformers /
-funasr runtime**. Anything in the GGML/ONNX family (llama.cpp, whisper.cpp,
-dinov2.cpp, sqlite-vec, ONNX Runtime) ports down to a ~512 MB-class single-board
-computer (SBC); anything that needs the torch graph realistically needs a
-4–8 GB-class SBC minimum. The tier ladder is built around that single fact.
+The portability cliff is the **PyTorch / transformers / sentence-transformers /
+ncps runtime**. Base dependencies include `torch`, `transformers`,
+`sentence-transformers`, `ncps`, `qdrant-client`, and `pynvml`, so a plain
+`pip install` of KAINE fails on 32-bit ARM and on Termux (there are no torch
+wheels for Android/Termux or 32-bit ARM). The `portability-program` change is
+staged to remove that cliff — Phase 2 introduces a torch-free core, Phase 3
+brings Termux and JAX-free reasoning, and Phase 4 adds residency and multi-node
+support. The tier ladder describes the intended backend set once those phases
+land; today's shipped backends are listed in the staging section.
 
 Selecting a tier is an **operator action**. Run the host probe for a
 recommendation, then choose the profile deliberately — nothing auto-applies:
@@ -27,21 +32,23 @@ or embed a private voice (those stay local operator actions). Which faculties ar
 *active* is a separate, orthogonal choice from the tier: the default is the
 **base-thesis form** (Soma, Chronos, Topos, Audition, Thymos, Lingua — see the
 `thesis_test` profile), and a tier profile never changes that — it only bounds
-which *backend* each already-selected module uses on the chosen hardware.
+which *backend* each already-selected module uses on the chosen hardware, and
+disables faculties the host cannot bear.
 
 ## Capability matrix
 
 | Faculty | Tier 0 — edge/sensor | Tier 1 — CPU agent | Tier 2 — workstation | Tier 3 — datacenter |
 |---|---|---|---|---|
-| **Host** | ~512 MB SBC / retired phone | 4–8 GB SBC / 8 GB phone | 1–2 GPU workstation | multi-GPU server |
+| **Host (program target / runs today)** | target ~512 MB SBC / retired phone; today no 512 MB host runs the Tier 0 module set (torch and the embedders exceed the memory); the original Pi Zero (ARMv6) and Termux cannot install the torch stack at all | target 4–8 GB SBC / 8 GB phone; today 64-bit Linux SBCs with 4–8 GB (for example a Pi 4/5 or a Jetson) can run it on CPU, slowly; phones cannot until Phase 3 | 1–2 GPU workstation | multi-GPU server |
 | **Language (Lingua)** | sub-1B GGUF, slow (llama.cpp) | 1–2B GGUF, chat pace (llama.cpp) | Gemma/Qwen on GPU (Ollama) | larger LLM, long context |
-| **Vision (Topos)** | ✗ absent | periodic, CPU (ONNX/dinov2.cpp) | streaming DINOv2/InternVideo (torch) | higher-rate |
-| **Speech-in (Audition STT)** | optional whisper.cpp-tiny batch | whisper.cpp / faster-whisper | faster-whisper > realtime | > realtime |
+| **Vision (Topos)** | ✗ absent | periodic, CPU (ONNX/dinov2.cpp — target) | streaming DINOv2/InternVideo (torch) | higher-rate |
+| **Speech-in (Audition STT)** | optional whisper.cpp-tiny batch (target) | whisper.cpp / faster-whisper (target) | faster-whisper > realtime | > realtime |
 | **Vocal emotion** | ✗ absent | ✗ absent | emotion2vec+ | emotion2vec+ |
-| **Speech-out (Vox TTS)** | ✗ absent | Piper (plain) | Chatterbox (expressive) | Chatterbox |
-| **Memory embeddings** | — | ONNX MiniLM | sentence-transformers (torch) | sentence-transformers |
+| **Speech-out (Vox TTS)** | ✗ absent | Piper (plain — target) | Chatterbox (expressive) | Chatterbox |
+| **Memory embeddings** | sentence-transformers MiniLM (torch, CPU) — ONNX/static is the Phase-2 target | sentence-transformers MiniLM (torch, CPU) — ONNX/static is the Phase-2 target | sentence-transformers (torch) | sentence-transformers |
 | **Vector store (Mnemos)** | sqlite-vec (in-process) | sqlite-vec (in-process) | Qdrant (server) | Qdrant |
-| **Torch runtime required** | no | optional | yes | yes |
+| **Torch runtime required** | yes (today) — removed in portability-program Phase 2 | yes (today) — removed in portability-program Phase 2 | yes | yes |
+| **Disabled by profile** | topos, audition, vox, empatheia, phantasia | vox, vocal emotion | (none) | (none) |
 
 Explicit **absences** (stated so a tier is never oversold):
 
@@ -49,28 +56,37 @@ Explicit **absences** (stated so a tier is never oversold):
   has no clean edge port; it is a Tier-2-only faculty. Below it, vocal emotion is
   explicitly disabled (`[audition].emotion_model_id = ""`), not silently faked.
 - **Vision is periodic, not streaming, at Tier 1** — seconds per frame on the SBC
-  CPU.
+  CPU. The ONNX/dinov2.cpp vision backend is not yet built; today Topos on CPU
+  still runs through the torch path where enabled.
 - **A ≥2B language model does not fit a ~512 MB Tier-0 host.** Tier 0 is a
   symbolic-reasoning + episodic-memory + perception node, not a conversational
   host.
+- **Torch is required at every tier today.** Even Tier 0 and Tier 1 need the
+  torch stack because Soma and Chronos run torch+ncps CfC networks and Mnemos,
+  Empatheia, and Hypnos build sentence-transformers MiniLM embedders.
 
 ## Per-tier install notes
 
 The runtime venv stays lean: a backend's third-party dependency is imported only
 when that backend is selected, so you install a tier's extras and no others.
 
-- **Tier 0 — edge / sensor node.** `llama-cpp-python` (in-process GGUF) and
-  `sqlite-vec` (in-process vector store). No torch, no Qdrant, no funasr. A
-  sub-1B GGUF model file on disk. Optional: `whisper.cpp` (tiny) for manual/batch
-  STT.
-- **Tier 1 — embodied CPU agent.** As Tier 0, plus `onnxruntime` for MiniLM
-  embeddings and ONNX/dinov2.cpp periodic vision, plus `piper-tts` for plain TTS,
-  plus a STT engine (`whisper.cpp` or the `kaine[audio]` faster-whisper path on
-  CPU). A 1–2B GGUF model file.
-- **Tier 2 — workstation (default).** The full stack: an OpenAI-compatible model
-  server (Ollama / llama-server / Unsloth Studio), Qdrant, `sentence-transformers`,
-  `torch`, `kaine[audio]` (faster-whisper + emotion2vec+/funasr), Chatterbox.
-  This is what `pip install -e .` + the first-run wizard provision today.
+- **Tier 0 — edge / sensor node.** `llama-cpp-python` (in-process GGUF Lingua)
+  and `sqlite-vec` (in-process Mnemos vector store). The profile disables topos,
+  audition, vox, empatheia, and phantasia. **Torch is still required today**:
+  Mnemos builds a sentence-transformers MiniLM embedder, and Soma/Chronos run
+  torch+ncps CfC networks. A sub-1B GGUF model file. Measured: a full voice turn
+  on a Raspberry Pi Zero 2 W (512 MB) with whisper.cpp tiny.en + SmolLM2-360M +
+  Flite takes 37–46 s when loading one model at a time. The whisper.cpp-tiny
+  batch STT, Piper TTS, ONNX vision, and ONNX/static embeddings backends are
+  staged seams — when selected they degrade to their declared fallback.
+- **Tier 1 — embodied CPU agent.** As Tier 0, but keeps Topos on CPU and enables
+  audition. Vox and vocal emotion remain disabled. The intended ONNX MiniLM /
+  ONNX vision / whisper.cpp / Piper backends are staged seams; today the
+  torch-backed sentence-transformers embedder and llama.cpp Lingua run here.
+- **Tier 2 — workstation (default).** Ollama for Lingua, Qdrant for Mnemos,
+  sentence-transformers (torch), faster-whisper + emotion2vec+ (torch/funasr),
+  Chatterbox. This is what `pip install -e .` + the first-run wizard provision
+  today.
 - **Tier 3 — datacenter / multi-GPU.** The Tier-2 stack; scale up model ids,
   context lengths, and per-module GPU placement in `config/kaine.operator.toml`.
   Multi-instance fleets and cross-host module splits are the companion
@@ -78,10 +94,16 @@ when that backend is selected, so you install a tier's extras and no others.
 
 ## Staging status
 
-Landed: the backend-selection framework, Tier-2-preserving defaults, the
+Shipped today: the backend-selection framework, Tier-2-preserving defaults, the
 `llama.cpp`/GGUF Lingua backend, the `sqlite-vec` Mnemos backend, the four tier
-profiles, and the host probe. The remaining edge backends (whisper.cpp STT, Piper
-TTS, ONNX/dinov2.cpp vision, ONNX MiniLM embeddings) are staged seams — the tier
-ladder is designed for them and this doc lists them, but they land in follow-ups.
-Each is lazy-imported: a host that selects an unshipped backend degrades to its
-declared fallback with a surfaced reason rather than crashing the boot.
+profiles, and the host probe. The core also ships torch-backed backends used by
+every tier: torch+ncps CfC networks for Soma and Chronos, and
+sentence-transformers MiniLM embedders for Mnemos, Empatheia, and Hypnos.
+
+Not yet built: whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision, ONNX/static
+embeddings, NumPy CfC, and JAX-free Nous/Phantasia. Those backends are the focus
+of the `portability-program` change (Phase 2 removes the torch requirement from
+the core, Phase 3 brings Termux and JAX-free reasoning, Phase 4 adds residency,
+arm64 images, and multi-node). Each backend is lazy-imported: a host that
+selects an unshipped backend degrades to its declared fallback with a surfaced
+reason rather than crashing boot.
