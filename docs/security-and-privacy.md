@@ -402,24 +402,64 @@ aborts if either secret is unset.
 
 ## Nexus auth posture
 
-Nexus binds to `127.0.0.1:8088` by default. State-changing endpoints and any
-privileged read surface (conversation, diagnostics SSE when `dev_content_override`
-or `conversation_enabled` is true) require `Authorization: Bearer <token>`.
-Configure the token via `KAINE_NEXUS_TOKEN` or `config/secrets.toml`
-`[nexus] operator_token`. The token is never logged.
+Nexus serves the operator web UI and diagnostics surface. By default it binds
+to `127.0.0.1:8088`. `/diagnostics/health.json` is always unauthenticated; it
+only reports dependency status.
 
-Cross-origin and DNS-rebinding requests are rejected by the CSRF middleware.
-State-changing POST/PUT/PATCH/DELETE requests must either carry an `Origin`
-header in `allowed_origins` or a `Host` header in `host_allowlist`. The defaults
-allow only `127.0.0.1` and `localhost`.
+Authentication uses a single operator token with session and request guards
+against DNS rebinding and cross-site request forgery. The operator token must be
+at least 32 characters. Generate one with:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+Store it in the `KAINE_NEXUS_TOKEN` environment variable or `config/secrets.toml`
+under `[nexus] operator_token`. A token placed in `config/kaine.toml` or
+`config/kaine.operator.toml` is refused at startup, so committed configuration
+files cannot silently ship a credential. The token is never logged.
+
+Browser sign-in: `GET /login` serves the form; its script (`/static/nexus_auth.js`)
+POSTs the token to `POST /auth/login` with `Accept: application/json` and receives
+`{"session_key"}` once, plus an `HttpOnly` `SameSite=Strict` session cookie. The
+key is kept in `localStorage` (origin-scoped, so another `localhost` port cannot
+read it) and sent as `X-Nexus-Session-Key` on every state-changing request. The
+session cookie alone authorizes only `GET/HEAD/OPTIONS` (page loads, reads, and
+the diagnostics stream); state-changing requests also require the session key or
+`Authorization: Bearer <token>`. Sessions expire after idle inactivity
+(`[nexus].session_idle_minutes`, default 720) or absolute age
+(`[nexus].session_max_hours`, default 24), and are cleared on restart. An operator
+logs out by posting to `POST /auth/logout`. A correct token always signs in; a
+wrong token returns 401, and after `[nexus].login_max_failures` failures within
+`[nexus].login_failure_window_s`, further attempts return 429.
+
+Every request is checked against `[nexus].host_allowlist` (default
+`127.0.0.1`, `localhost`, `::1`). A request whose `Host` header is not in the
+allowlist is rejected before routing, blocking DNS-rebinding attacks. Setting
+`host_allowlist` or `allowed_origins` replaces the default entirely, so operators
+adding a tailnet name or reverse-proxy hostname must list the loopback names too.
+A reverse proxy must preserve the `Host` header. The `Secure` cookie flag is set
+only when Nexus sees an HTTPS scheme; Uvicorn trusts `X-Forwarded-Proto` only
+from proxies it is configured to trust.
 
 Binding a non-loopback interface requires two explicit opt-ins:
-`non_loopback_allowed = true` and a configured `operator_token`. Without both,
-`python -m kaine.nexus` exits before listening.
+`non_loopback_allowed = true` and a configured operator token. In the shipped
+containers Nexus binds `0.0.0.0` inside the container with
+`KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1`, while the published port remains
+`127.0.0.1` only. Without a token, `python -m kaine.nexus` exits before
+listening.
 
-**Operator responsibility:** do not change `nexus.host` to `0.0.0.0` without a
-token and a clear reason. Do not flip `dev_content_override = true` on a shared
-machine.
+**Residual exposure.** Browsers share cookies across every origin under the same
+host, including different `localhost` ports. Another web service on the same host
+that the operator's browser visits can therefore obtain the Nexus session cookie.
+With that cookie alone it can READ pages and the diagnostics stream (which include
+raw content only when `conversation_enabled` or `dev_content_override` is on)
+and issue `GET/HEAD/OPTIONS` requests, but it cannot change state. Do not browse
+untrusted local services while signed in when either of those content-bearing modes
+is on.
+
+**Operator responsibility:** do not change `[nexus].host` to `0.0.0.0` without a
+token and a clear reason. When adding a tailnet or reverse-proxy name, add the
+loopback names to `host_allowlist` and the corresponding HTTPS origins to
+`allowed_origins`. Do not flip `dev_content_override = true` on a shared machine.
 
 ---
 

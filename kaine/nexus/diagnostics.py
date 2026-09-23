@@ -231,6 +231,24 @@ async def build_diagnostics_context(
     return context
 
 
+def build_health_router(health_prober: HealthProber | None) -> APIRouter:
+    """Always-unauthenticated health snapshot endpoint.
+
+    Mounted separately from the rest of ``/diagnostics`` so container health
+    checks succeed even when conversation or dev-content override forces the
+    privileged-read dependency on the diagnostics router.
+    """
+    router = APIRouter()
+
+    @router.get("/diagnostics/health.json")
+    async def health_json():
+        if health_prober is None:
+            return JSONResponse({"dependencies": [], "modules": [], "checked_at": None})
+        return JSONResponse(await health_prober.snapshot())
+
+    return router
+
+
 def build_diagnostics_router(
     bridge: BusBridge,
     *,
@@ -259,12 +277,6 @@ def build_diagnostics_router(
             rate_control_publisher=rate_control_publisher,
         )
         return templates.TemplateResponse(request, "diagnostics.html", context)
-
-    @router.get("/health.json")
-    async def health_json():
-        if health_prober is None:
-            return JSONResponse({"dependencies": [], "modules": [], "checked_at": None})
-        return JSONResponse(await health_prober.snapshot())
 
     @router.post("/cycle/rates", dependencies=[Depends(require_operator_token)])
     async def set_cycle_rates(body: RateControlBody):

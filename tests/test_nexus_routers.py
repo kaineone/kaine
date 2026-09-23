@@ -61,6 +61,11 @@ async def _make_client(
         from dataclasses import replace
 
         config = replace(base, **config.__dict__)
+    # TestClient sends Host: test; make sure it remains allowed after merging.
+    if "test" not in config.host_allowlist:
+        from dataclasses import replace
+
+        config = replace(config, host_allowlist=(*config.host_allowlist, "test"))
     if token is not None:
         from dataclasses import replace
 
@@ -555,7 +560,7 @@ async def test_push_snapshots_periodically_pushes_combined_snapshot():
         try:
             await task
         except asyncio.CancelledError:
-            # Expected: the background task was just cancelled and is awaited to
+            # Expected: the background task was cancelled and is awaited to
             # unwind during test teardown. Suppress intentionally.
             pass
 
@@ -591,7 +596,7 @@ async def test_push_snapshots_periodically_never_faster_than_health_cache_ttl():
         try:
             await task
         except asyncio.CancelledError:
-            # Expected: the background task was just cancelled and is awaited to
+            # Expected: the background task was cancelled and is awaited to
             # unwind during test teardown. Suppress intentionally.
             pass
 
@@ -623,7 +628,7 @@ async def test_push_snapshots_periodically_survives_health_prober_none():
         try:
             await task
         except asyncio.CancelledError:
-            # Expected: the background task was just cancelled and is awaited to
+            # Expected: the background task was cancelled and is awaited to
             # unwind during test teardown. Suppress intentionally.
             pass
 

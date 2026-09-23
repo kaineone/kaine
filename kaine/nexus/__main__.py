@@ -24,7 +24,7 @@ from kaine.evaluation.stream_registry import diagnostics_streams
 from kaine.lifecycle.manager import ForkManager, merger_from_name
 from kaine.nexus.app import create_app, make_default_privacy_filter
 from kaine.nexus.bridge import BusBridge
-from kaine.nexus.config import load_nexus_config
+from kaine.nexus.config import NexusConfigError, load_nexus_config
 from kaine.nexus.conversation import LINGUA_EXTERNAL_STREAM
 from kaine.nexus.health import load_health_prober
 
@@ -247,7 +247,8 @@ async def _build():
                     eval_cfg,
                     attribution=eval_attribution,
                     registry=eval_registry,
-                )
+                ),
+                dependencies=list(getattr(app.state, "read_dependencies", [])),
             )
         except Exception:
             logging.warning("evaluation tab failed to mount", exc_info=True)
@@ -272,6 +273,9 @@ def main() -> int:
     loop = asyncio.new_event_loop()
     try:
         app, config = loop.run_until_complete(_build())
+    except NexusConfigError as exc:
+        log.error("nexus: %s", exc)
+        return 1
     finally:
         loop.close()
 

@@ -45,4 +45,18 @@ An adversarial review found these tasks only partly done, so they are unticked:
 1.1 (the operator token is read from `KAINE_NEXUS_TOKEN` or `kaine.toml`, not from `config/secrets.toml`),
 4.2 (the warning lives in `kaine/security/crypto.py`, not `kaine/boot.py`),
 5.1 (the premise was wrong: `secrets/state_key` was gitignored and never in the repository; deleting it removed the only copy of the operator's state key. Key custody moves to a per-entity design).
-The review also found that the dashboard JavaScript and the SSE stream cannot send the Bearer token, and that the containerised Nexus refuses its `0.0.0.0` bind. This change stays open until those are fixed.
+The review also found that the dashboard JavaScript and the SSE stream cannot send the Bearer token, and that the containerised Nexus refuses its `0.0.0.0` bind. Section 7 fixes those and completes 1.1.
+
+## 7. Operator session and review fixes (2026-09-22)
+
+- [x] 7.1 Read `[nexus].operator_token` from `config/secrets.toml` (env wins); refuse to start on a non-empty token in `config/kaine.toml`; add `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` and `KAINE_NEXUS_ALLOWED_ORIGINS` env overrides; derive default `allowed_origins` from the port; add `session_idle_minutes` and login rate-limit settings.
+- [x] 7.2 Replace the hand-rolled comparison with `hmac.compare_digest` on encoded bytes.
+- [x] 7.3 Add the `/login` page, `POST /auth/login`, `POST /auth/logout` and an in-memory session store; accept Bearer or session cookie in `require_operator_token`; redirect unauthenticated HTML navigation to `/login`; rate-limit failed logins.
+- [x] 7.4 Validate the Host header on every method with correct IPv6 parsing; keep the Origin check for state-changing methods.
+- [x] 7.5 Set `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` and `KAINE_NEXUS_TOKEN` in the compose and Quadlet Nexus definitions, keeping publishing loopback-only.
+- [x] 7.6 Tests: session login/logout/expiry/rate limit, cookie-authenticated fetch and SSE, HTML redirect, secrets.toml token, kaine.toml refusal, Host check on GET, IPv6 host, derived origins, container env start.
+- [x] 7.7 Document the login flow and token placement in `docs/security-and-privacy.md` (present tense).
+- [x] 7.8 Session key for state changes: return a per-session key once at login, require `X-Nexus-Session-Key` with the cookie on state-changing gated requests, add `static/nexus_auth.js` (fetch wrapper and login form handler) loaded from `_base.html`, absolute session lifetime, compare the token before the rate-limit check.
+- [x] 7.9 Keep `/diagnostics/health.json` unauthenticated; gate the evaluation tab with the same read dependencies as the other surfaces.
+- [x] 7.10 Refuse tokens under 32 characters, strip the env token, refuse malformed overlay/secrets files; remove the explicit `allowed_origins`/`host_allowlist` from the shipped `kaine.toml` so derived defaults apply, and correct its comments; document proxy/tailnet `host_allowlist` entries and the residual cookie read exposure.
+

@@ -14,7 +14,14 @@ from fastapi.staticfiles import StaticFiles
 
 from kaine.bus.schema import Event
 from kaine.lifecycle.manager import ForkManager
-from kaine.nexus.auth import require_operator_token
+from kaine.nexus.auth import (
+    LoginRateLimiter,
+    NexusAuthError,
+    SessionStore,
+    auth_error_handler,
+    build_auth_router,
+    require_operator_token,
+)
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import NexusConfig
 from kaine.nexus.conversation import (
@@ -23,7 +30,11 @@ from kaine.nexus.conversation import (
 )
 from kaine.nexus.csrf import NexusCSRFMiddleware
 from kaine.nexus.cycle_control import build_cycle_control_router, control_snapshot
-from kaine.nexus.diagnostics import build_diagnostics_router, push_snapshots_periodically
+from kaine.nexus.diagnostics import (
+    build_diagnostics_router,
+    build_health_router,
+    push_snapshots_periodically,
+)
 from kaine.nexus.health import HealthProber
 from kaine.nexus.perception import build_perception_router, perception_snapshot
 from kaine.nexus.privacy import PrivacyFilter
@@ -79,6 +90,15 @@ def create_app(
 
     app = FastAPI(lifespan=lifespan)
     app.state.config = config
+    app.state.sessions = SessionStore(
+        idle_seconds=config.session_idle_minutes * 60,
+        max_age_seconds=getattr(config, "session_max_hours", 24) * 3600,
+    )
+    app.state.login_limiter = LoginRateLimiter(
+        max_failures=config.login_max_failures,
+        window_s=config.login_failure_window_s,
+    )
+    app.add_exception_handler(NexusAuthError, auth_error_handler)
 
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
@@ -88,11 +108,15 @@ def create_app(
     # 403 before they reach route handlers.
     app.add_middleware(NexusCSRFMiddleware, config=config)
 
+    # Auth surface: login/logout and the login form. No auth dependencies.
+    app.include_router(build_auth_router(config))
+
     # Auth dependency: required for state-changing endpoints and privileged
     # read surfaces when conversation or dev content override is enabled.
     privileged_read = config.conversation_enabled or config.dev_content_override
     state_change_dep = [Depends(require_operator_token)]
     read_dep = [Depends(require_operator_token)] if privileged_read else []
+    app.state.read_dependencies = read_dep
 
     if config.conversation_enabled:
         app.include_router(
@@ -127,6 +151,9 @@ def create_app(
             ),
             dependencies=read_dep,
         )
+        # Health endpoint is always unauthenticated so container probes keep
+        # working regardless of the privileged-read gate.
+        app.include_router(build_health_router(health_prober))
         app.include_router(build_perception_router(), dependencies=state_change_dep)
         app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
     return app
