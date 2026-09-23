@@ -53,8 +53,9 @@ def _load_metadata() -> dict[str, tuple[str, list[str]]]:
                 match = _VERSION_RE.search(text)
                 if match:
                     version = match.group(1)
-        except (OSError, UnicodeError):
-            # Best-effort metadata read: fall back to dist.version on file/encoding errors.
+        except Exception:
+            # Best-effort read of <pkg>/version.py; any failure falls back to
+            # dist.version so the coherence check never raises.
             pass
         reqs = dist.requires or []
         dists[name] = (version, list(reqs))
