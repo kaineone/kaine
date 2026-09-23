@@ -18,7 +18,11 @@ Volume=kaine-state.volume:/app/state
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
 Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
-HealthCmd=curl -fsS http://127.0.0.1:8088/diagnostics/health.json
+# The published port stays loopback-only and the token comes from the mounted secrets.toml.
+Environment=KAINE_NEXUS_HOST=0.0.0.0
+Environment=KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1
+Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088
+HealthCmd=python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8088/diagnostics/health.json', timeout=4).status==200 else 1)"
 HealthInterval=15s
 HealthRetries=5
 

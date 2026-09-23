@@ -53,7 +53,7 @@ def _lint_imports_cmd() -> list[str] | None:
         sys.executable,
         "-c",
         "import sys; from importlinter.cli import lint_imports_command; "
-        "sys.exit(lint_imports_command())",
+        + "sys.exit(lint_imports_command())",
     ]
 
 

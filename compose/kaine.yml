@@ -239,6 +239,13 @@ services:
       # 127.0.0.1, which binds the container's own loopback and is unreachable via
       # the port mapping. Publishing is still loopback-only (see ports:).
       KAINE_NEXUS_HOST: 0.0.0.0
+      # The bind is all-interfaces inside the container; publishing stays 127.0.0.1-only.
+      # Nexus still refuses to start without a token.
+      KAINE_NEXUS_NON_LOOPBACK_ALLOWED: "1"
+      # Token from env first; empty falls through to the read-only mounted config/secrets.toml.
+      KAINE_NEXUS_TOKEN: ${KAINE_NEXUS_TOKEN:-}
+      # Allowed Origins must reflect the host-published port, not the in-container 8088.
+      KAINE_NEXUS_ALLOWED_ORIGINS: http://127.0.0.1:${KAINE_NEXUS_HOST_PORT:-8088},http://localhost:${KAINE_NEXUS_HOST_PORT:-8088}
     volumes:
       # Operator overlay + secrets bind-mounted READ-ONLY, never COPYed (design §8).
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro

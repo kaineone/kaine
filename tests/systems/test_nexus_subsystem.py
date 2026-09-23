@@ -40,7 +40,7 @@ async def test_diagnostics_route_returns_200():
         fork_manager=None,
     )
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8088") as c:
         async with app.router.lifespan_context(app):
             r = await c.get("/diagnostics/")
     assert r.status_code == 200

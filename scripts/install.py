@@ -1234,9 +1234,9 @@ def main() -> None:
             str(py),
             "-c",
             "import sys; from kaine.torch_stack import check_torch_stack; "
-            "problems = check_torch_stack(); "
-            "[print('TORCH STACK MISMATCH:', p, file=sys.stderr) for p in problems]; "
-            "sys.exit(1 if problems else 0)",
+            + "problems = check_torch_stack(); "
+            + "[print('TORCH STACK MISMATCH:', p, file=sys.stderr) for p in problems]; "
+            + "sys.exit(1 if problems else 0)",
         ]
     )
     print("==> install complete")

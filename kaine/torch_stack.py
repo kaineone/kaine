@@ -54,6 +54,8 @@ def _load_metadata() -> dict[str, tuple[str, list[str]]]:
                 if match:
                     version = match.group(1)
         except Exception:
+            # Best-effort read of <pkg>/version.py; any failure falls back to
+            # dist.version so the coherence check never raises.
             pass
         reqs = dist.requires or []
         dists[name] = (version, list(reqs))
