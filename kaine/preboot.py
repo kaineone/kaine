@@ -75,6 +75,7 @@ from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
 from kaine.security.crypto import CryptoConfigError, install_from_section
 from kaine.setup.organ import verify_organ_generates
+from kaine.torch_stack import check_torch_stack, describe_torch_stack
 
 log = logging.getLogger(__name__)
 
@@ -466,9 +467,10 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
 
 
 def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
-    """Report the boot mode, the enabled modules, and the encryption posture.
+    """Report the boot mode, the enabled modules, the encryption posture, and the torch stack.
 
-    Pure (no I/O beyond what's already in ``config``) — reuses
+    Performs no I/O beyond reading installed package metadata for the
+    torch-stack row, in addition to what is already in ``config`` — reuses
     ``research_mode_requested`` and ``PreservationConfig`` rather than
     re-deriving boot-mode logic.
     """
@@ -537,6 +539,22 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
                 f"state_encryption.enabled={encryption_enabled}",
             )
         )
+
+    problems = check_torch_stack()
+    desc = describe_torch_stack()
+    if problems:
+        results.append(
+            CheckResult(
+                GROUP_CONFIG,
+                "Torch stack",
+                FAIL,
+                "; ".join(problems) + " — reinstall with scripts/install.sh",
+            )
+        )
+    elif desc == "torch not installed":
+        results.append(CheckResult(GROUP_CONFIG, "Torch stack", SKIP, desc))
+    else:
+        results.append(CheckResult(GROUP_CONFIG, "Torch stack", PASS, desc))
     return results
 
 
