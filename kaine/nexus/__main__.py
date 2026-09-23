@@ -102,19 +102,64 @@ def _load_lifecycle_config() -> dict[str, Any]:
     return data.get("lifecycle") or {}
 
 
+def _build_fork_manager(
+    lifecycle_cfg_loader: Any,
+    encryption_section_loader: Any,
+) -> tuple[ForkManager | None, str | None]:
+    """Install the configured state-encryption posture and construct a ForkManager.
+
+    Returns the manager and a reason string when fork/merge I/O is disabled.
+    The reason is forwarded to the diagnostics router so /forks.json can
+    report why fork operations are unavailable.
+    """
+    try:
+        from kaine.security.crypto import install_from_section
+
+        install_from_section(encryption_section_loader())
+    except Exception as exc:
+        log.error(
+            "state-encryption setup failed; fork/merge state operations are disabled: %s: %s",
+            type(exc).__name__,
+            exc,
+        )
+        return None, "the state-encryption posture could not be installed"
+
+    try:
+        lifecycle_cfg = lifecycle_cfg_loader()
+        adapter_merger_name = str(lifecycle_cfg.get("adapter_merger", "auto"))
+        adapter_merge_section = lifecycle_cfg.get("adapter_merge") or {}
+        adapter_merger = merger_from_name(
+            adapter_merger_name, config_section=adapter_merge_section
+        )
+        snapshots_path = str(lifecycle_cfg.get("snapshots_path", "state/forks"))
+        max_retained = int(lifecycle_cfg.get("max_snapshots_retained", 64))
+        return (
+            ForkManager(
+                snapshots_path,
+                adapter_merger=adapter_merger,
+                max_snapshots_retained=max_retained,
+            ),
+            None,
+        )
+    except Exception:
+        log.warning("fork manager unavailable", exc_info=True)
+        return None, "the fork manager could not be constructed"
+
+
 def _load_security_state_encryption_config() -> dict[str, Any]:
     """Read [security.state_encryption] from config/kaine.toml (merged with
-    the gitignored operator override; empty if unreadable, which yields a
-    disabled no-op encryptor)."""
+    the gitignored operator overlay).
+
+    Raises on configuration errors so a malformed overlay can never be
+    interpreted as a disabled encryption section. Only returns an empty
+    section when the config file does not exist, which is the documented
+    unconfigured case.
+    """
     from kaine.config import load_kaine_config
 
     if not Path("config/kaine.toml").exists():
         return {}
-    try:
-        data = load_kaine_config()
-    except Exception:
-        logging.exception("failed to read config/kaine.toml")
-        return {}
+    data = load_kaine_config()
     return (data.get("security") or {}).get("state_encryption") or {}
 
 
@@ -136,28 +181,10 @@ async def _build():
 
     # Install the same state-encryption posture the cycle uses so fork/merge
     # snapshots written/read from this process honour [security.state_encryption].
-    try:
-        from kaine.security.crypto import install_from_section
-
-        install_from_section(_load_security_state_encryption_config())
-    except Exception:
-        logging.warning("state-encryption setup failed", exc_info=True)
-
-    fork_manager: ForkManager | None = None
-    try:
-        lifecycle_cfg = _load_lifecycle_config()
-        adapter_merger_name = str(lifecycle_cfg.get("adapter_merger", "auto"))
-        adapter_merge_section = lifecycle_cfg.get("adapter_merge") or {}
-        adapter_merger = merger_from_name(adapter_merger_name, config_section=adapter_merge_section)
-        snapshots_path = str(lifecycle_cfg.get("snapshots_path", "state/forks"))
-        max_retained = int(lifecycle_cfg.get("max_snapshots_retained", 64))
-        fork_manager = ForkManager(
-            snapshots_path,
-            adapter_merger=adapter_merger,
-            max_snapshots_retained=max_retained,
-        )
-    except Exception:
-        logging.warning("fork manager unavailable", exc_info=True)
+    # Fails closed: a configuration or key error disables fork/merge I/O.
+    fork_manager, fm_reason = _build_fork_manager(
+        _load_lifecycle_config, _load_security_state_encryption_config
+    )
 
     health_prober = None
     try:
@@ -232,6 +259,7 @@ async def _build():
         history_loader=history_loader,
         metrics_snapshot=metrics_snapshot,
         fork_manager=fork_manager,
+        fork_manager_reason=fm_reason,
         health_prober=health_prober,
         rate_control_publisher=rate_control_publisher,
         evaluation_provider=evaluation_provider,

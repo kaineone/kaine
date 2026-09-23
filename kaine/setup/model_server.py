@@ -321,11 +321,19 @@ def _resolve_launch(
 
 
 def _load_config() -> dict[str, Any]:
+    import logging
+
     from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
 
+    log = logging.getLogger(__name__)
     try:
         return load_kaine_config(SHIPPED_CONFIG_PATH, OPERATOR_CONFIG_PATH)
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "could not load model server configuration (%s: %s); using empty defaults",
+            type(exc).__name__,
+            exc,
+        )
         return {}
 
 

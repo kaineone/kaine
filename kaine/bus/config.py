@@ -81,6 +81,10 @@ def load_bus_config(
     env: Optional[dict[str, str]] = None,
     operator_toml: Optional[Path] = None,
 ) -> BusConfig:
+    import logging
+
+    log = logging.getLogger(__name__)
+
     env = env if env is not None else os.environ
     root = _project_root()
     kaine_toml = kaine_toml or root / DEFAULT_KAINE_TOML
@@ -93,9 +97,16 @@ def load_bus_config(
     )
     try:
         op_doc = _read_toml(op_path)
-    except (OSError, tomllib.TOMLDecodeError):
-        # A malformed or unreadable operator file must never break boot; fall
-        # back to the shipped configuration, matching load_kaine_config.
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        # Runtime entrypoints surface operator-file errors through
+        # load_kaine_config with strict_operator=True; the bus is a read-only
+        # surface, so it warns and continues with the shipped configuration.
+        log.warning(
+            "operator file %s could not be read or parsed (%s: %s); using shipped configuration",
+            op_path,
+            type(exc).__name__,
+            exc,
+        )
         op_doc = {}
     if op_doc:
         kaine_doc = deep_merge(kaine_doc, op_doc)

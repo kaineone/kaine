@@ -260,6 +260,7 @@ def build_diagnostics_router(
     cycle_control_provider: Callable[[], dict[str, Any]] | None = None,
     health_prober: HealthProber | None = None,
     rate_control_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    fork_manager_reason: str | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/diagnostics")
     templates = _templates()
@@ -303,7 +304,14 @@ def build_diagnostics_router(
     @router.get("/forks.json")
     async def forks_json():
         if fork_manager is None:
-            return JSONResponse({"forks": []})
+            reason = fork_manager_reason or "no fork manager is configured"
+            return JSONResponse(
+                {
+                    "forks": [],
+                    "available": False,
+                    "reason": f"fork operations are disabled: {reason} (see the Nexus log)",
+                }
+            )
         out = []
         for snap_id in fork_manager.list_snapshots():
             try:
@@ -326,7 +334,7 @@ def build_diagnostics_router(
                 out.append(entry)
             except Exception:
                 continue
-        return JSONResponse({"forks": out})
+        return JSONResponse({"forks": out, "available": True})
 
     @router.post("/forks", dependencies=[Depends(require_operator_token)])
     async def create_fork(body: ForkRequestBody):

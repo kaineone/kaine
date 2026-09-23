@@ -22,6 +22,13 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+
+def _empty_config(tmp_path):
+    """An empty config file: the CLI loads the shipped layering with nothing overridden."""
+    path = tmp_path / "empty-config.toml"
+    path.write_text("", encoding="utf-8")
+    return str(path)
+
 def _make_eval_root(tmp_path: Path) -> Path:
     """Populate a tmp eval root with both metric files AND decoy sensitive files."""
     eval_root = tmp_path / "evaluation"
@@ -198,7 +205,7 @@ def test_preview_never_sends(tmp_path: Path, monkeypatch):
     out_buf = StringIO()
     code = main(
         ["--preview", "--eval-root", str(eval_root), "--out-root", str(out_dir),
-         "--config", str(tmp_path / "no-config.toml")],
+         "--config", _empty_config(tmp_path)],
         out=out_buf,
         err=StringIO(),
     )
@@ -325,7 +332,7 @@ def test_cli_send_eof_fails_safe(tmp_path: Path):
     with mock.patch.object(email_mod, "send_or_write", guarded_send):
         code = main(
             ["--send", "--eval-root", str(eval_root), "--out-root", str(out_dir),
-             "--config", str(tmp_path / "no-config.toml")],
+             "--config", _empty_config(tmp_path)],
             input_fn=eof_input,
             out=out_buf,
             err=err_buf,
@@ -363,7 +370,7 @@ def test_cli_send_decline_fails_safe(tmp_path: Path):
     with mock.patch.object(email_mod, "send_or_write", guarded_send):
         code = main(
             ["--send", "--eval-root", str(eval_root), "--out-root", str(out_dir),
-             "--config", str(tmp_path / "no-config.toml")],
+             "--config", _empty_config(tmp_path)],
             input_fn=mock_input,
             out=StringIO(),
             err=StringIO(),
@@ -401,7 +408,7 @@ def test_cli_send_confirm_calls_send_or_write(tmp_path: Path):
         # covered by the sibling exit-code tests, so it isn't bound here.
         main(
             ["--send", "--eval-root", str(eval_root), "--out-root", str(out_dir),
-             "--config", str(tmp_path / "no-config.toml")],
+             "--config", _empty_config(tmp_path)],
             input_fn=mock_input,
             out=StringIO(),
             err=StringIO(),
@@ -827,7 +834,7 @@ def test_cli_preview_blocks_on_inadmissible_eval_root(tmp_path: Path):
     err_buf = StringIO()
     code = main(
         ["--preview", "--eval-root", str(eval_root), "--out-root", str(out_dir),
-         "--config", str(tmp_path / "no-config.toml")],
+         "--config", _empty_config(tmp_path)],
         out=out_buf,
         err=err_buf,
     )
@@ -1060,7 +1067,7 @@ def test_cli_expected_stream_flag_triggers_missing_stream_block(tmp_path: Path):
     code = main(
         ["--preview", "--eval-root", str(eval_root),
          "--out-root", str(tmp_path / "out"),
-         "--config", str(tmp_path / "no-config.toml"),
+         "--config", _empty_config(tmp_path),
          "--expected-stream", "cycle.tick", "--expected-stream", "welfare"],
         out=out_buf, err=err_buf,
     )

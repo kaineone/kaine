@@ -34,7 +34,25 @@ def _scripted_input(answers):
     return _input
 
 
+pytest = __import__("pytest")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_operator_overlay(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "kaine.config.OPERATOR_CONFIG_PATH",
+        tmp_path / "config" / "kaine.operator.toml",
+    )
+
+
 def _args(tmp_path, *, dry_run=False, eval_root=None):
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = cfg_dir / "kaine.toml"
+    cfg_path.write_text(
+        "# minimal config\n[research_submission]\nenabled = false\n",
+        encoding="utf-8",
+    )
     a = [
         "--state-root",
         str(tmp_path / "state"),
@@ -45,7 +63,7 @@ def _args(tmp_path, *, dry_run=False, eval_root=None):
         "--out-root",
         str(tmp_path / "backups"),
         "--config",
-        str(tmp_path / "nonexistent.toml"),
+        str(cfg_path),
     ]
     if dry_run:
         a.append("--dry-run")

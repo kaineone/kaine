@@ -42,24 +42,17 @@ log = logging.getLogger(__name__)
 
 
 def _load_config(config_path: str | os.PathLike[str]) -> dict:
-    """Load kaine.toml through the canonical loader; ``{}`` on failure.
+    """Load kaine.toml through the canonical runtime loader.
 
-    Routes through :func:`kaine.config.load_kaine_config` so the research
-    entrypoint honours the gitignored operator override
-    (``config/kaine.operator.toml``) exactly like the cognitive cycle does,
-    instead of parsing the shipped file with raw ``tomllib`` and silently
-    ignoring operator choices.
+    Routes through :func:`kaine.config.load_runtime_config` so the research
+    entrypoint honours the shipped file, the module profile, the deployment
+    tier and the gitignored operator override exactly like the cognitive
+    cycle does. A missing, unreadable, unparsable or shape-invalid config
+    raises so the CLI can fail closed.
     """
-    from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
+    from kaine.config import OPERATOR_CONFIG_PATH, load_runtime_config
 
-    p = Path(config_path)
-    if not p.exists():
-        return {}
-    try:
-        return load_kaine_config(p, OPERATOR_CONFIG_PATH)
-    except Exception as exc:
-        log.warning("could not load config %s: %s", p, exc)
-        return {}
+    return load_runtime_config(Path(config_path), OPERATOR_CONFIG_PATH)
 
 
 def _smtp_config_from_toml(cfg: dict):
@@ -173,7 +166,7 @@ def main(
     out: IO[str] | None = None,
     err: IO[str] | None = None,
 ) -> int:
-    """Entry point. Returns exit code (0 = success, 1 = error, 2 = no-send)."""
+    """Entry point. Returns exit code (0 = success, 1 = error, 2 = no-send, 6 = configuration error)."""
     out = out or sys.stdout
     err = err or sys.stderr
 
@@ -279,7 +272,16 @@ def main(
         return 0
 
     # --- Load config --------------------------------------------------------
-    cfg = _load_config(args.config)
+    import tomllib
+
+    from kaine.config import ConfigShapeError, ProfileError
+
+    try:
+        cfg = _load_config(args.config)
+    except (ProfileError, ConfigShapeError, FileNotFoundError, OSError, tomllib.TOMLDecodeError) as exc:
+        err.write(f"research: configuration error: {type(exc).__name__}: {exc}\n")
+        return 6
+
     rs_cfg = cfg.get("research_submission") or {}
     enabled = bool(rs_cfg.get("enabled", False))
     recipient = str(rs_cfg.get("recipient") or "").strip()
