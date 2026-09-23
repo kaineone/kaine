@@ -317,3 +317,39 @@ def test_wizard_declining_tier_writes_nothing():
         recommend_tier_fn=_tier2_rec,
     )
     assert "deployment" not in result.config
+
+
+def test_load_runtime_config_strict_on_unparsable_operator(monkeypatch, tmp_path: Path):
+    """Runtime path raises ProfileError when the operator overlay exists but is unparsable."""
+    shipped, _profiles = _write_minimal_configs(tmp_path, monkeypatch)
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text("not valid toml [[")
+
+    with pytest.raises(ProfileError, match="operator config.*could not be read or parsed") as exc_info:
+        load_runtime_config(shipped, op)
+
+    assert str(op) in str(exc_info.value)
+
+
+def test_load_kaine_config_warns_and_continues_on_unparsable_operator(
+    monkeypatch, tmp_path: Path, caplog
+):
+    """Read-only callers get a warning and the shipped result when the operator overlay is unparsable."""
+    import logging
+
+    from kaine.config import load_kaine_config
+
+    shipped, _profiles = _write_minimal_configs(tmp_path, monkeypatch)
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text("not valid toml [[")
+
+    with caplog.at_level(logging.WARNING, logger="kaine.config"):
+        cfg = load_kaine_config(shipped, op)
+
+    # Without strict_operator the parse error is swallowed and the shipped
+    # configuration (no profile applied) is returned.
+    assert cfg["modules"]["all_off"] is False
+    assert any(
+        str(op) in rec.message and "could not be read or parsed" in rec.message
+        for rec in caplog.records
+    )

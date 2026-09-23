@@ -24,6 +24,7 @@ the module set.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tomllib
@@ -54,12 +55,23 @@ TIER_ENV_VAR = "KAINE_TIER"
 _PROFILE_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
+log = logging.getLogger(__name__)
+
+
 class ProfileError(ValueError):
     """Raised when a selected tier profile name is invalid or its file is absent.
 
     A profile the operator explicitly asked for that cannot be found is an error,
     not a silent fall-through to Tier 2 — silently ignoring the request would run
     the wrong deployment while looking like it honored the selection.
+    """
+
+
+class ConfigShapeError(ProfileError):
+    """Raised when the merged configuration violates a runtime shape rule.
+
+    Subclasses :class:`ProfileError` so the pre-boot check and the cycle
+    report it as a configuration error without additional handlers.
     """
 
 
@@ -205,6 +217,90 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
     return result
 
 
+def validate_config_shape(config: dict[str, Any]) -> None:
+    """Validate the shape of sections the runtime relies on.
+
+    Checks the merged configuration for the section/key types the runtime
+    reads directly. Unknown sections and keys pass through untouched. A
+    violation raises :class:`ConfigShapeError` naming the dotted key, the
+    expected type and the actual type; the message never includes the
+    offending value.
+    """
+    modules = config.get("modules")
+    if modules is not None:
+        if not isinstance(modules, dict):
+            raise ConfigShapeError(
+                f"modules expected table, got {type(modules).__name__}"
+            )
+        for key, value in modules.items():
+            if not isinstance(value, bool):
+                raise ConfigShapeError(
+                    f"modules.{key} expected bool, got {type(value).__name__}"
+                )
+
+    tier = config.get("tier")
+    if tier is not None:
+        if not isinstance(tier, dict):
+            raise ConfigShapeError(
+                f"tier expected table, got {type(tier).__name__}"
+            )
+        name = tier.get("name")
+        if name is not None and not isinstance(name, str):
+            raise ConfigShapeError(
+                f"tier.name expected string, got {type(name).__name__}"
+            )
+        unsupported = tier.get("unsupported_modules")
+        if unsupported is not None:
+            if not isinstance(unsupported, list):
+                raise ConfigShapeError(
+                    f"tier.unsupported_modules expected list, got {type(unsupported).__name__}"
+                )
+            for idx, item in enumerate(unsupported):
+                if not isinstance(item, str):
+                    raise ConfigShapeError(
+                        f"tier.unsupported_modules[{idx}] expected string, got {type(item).__name__}"
+                    )
+        osc_supp = tier.get("oscillator_supported")
+        if osc_supp is not None and not isinstance(osc_supp, bool):
+            raise ConfigShapeError(
+                f"tier.oscillator_supported expected bool, got {type(osc_supp).__name__}"
+            )
+
+    oscillator = config.get("oscillator")
+    if oscillator is not None:
+        if not isinstance(oscillator, dict):
+            raise ConfigShapeError(
+                f"oscillator expected table, got {type(oscillator).__name__}"
+            )
+        enabled = oscillator.get("enabled")
+        if enabled is not None and not isinstance(enabled, bool):
+            raise ConfigShapeError(
+                f"oscillator.enabled expected bool, got {type(enabled).__name__}"
+            )
+
+    deployment = config.get("deployment")
+    if isinstance(deployment, dict):
+        tier_name = deployment.get("tier")
+        if tier_name is not None and not isinstance(tier_name, str):
+            raise ConfigShapeError(
+                f"deployment.tier expected string, got {type(tier_name).__name__}"
+            )
+
+    security = config.get("security")
+    if isinstance(security, dict):
+        state_encryption = security.get("state_encryption")
+        if state_encryption is not None and not isinstance(state_encryption, dict):
+            raise ConfigShapeError(
+                f"security.state_encryption expected table, got {type(state_encryption).__name__}"
+            )
+        if isinstance(state_encryption, dict):
+            enabled = state_encryption.get("enabled")
+            if enabled is not None and not isinstance(enabled, bool):
+                raise ConfigShapeError(
+                    f"security.state_encryption.enabled expected bool, got {type(enabled).__name__}"
+                )
+
+
 def require_known_keys(
     section: dict[str, Any], allowed: set[str], table_name: str = ""
 ) -> None:
@@ -232,6 +328,7 @@ def load_kaine_config(
     profile: str | None = None,
     profiles_dir: str | os.PathLike[str] | None = None,
     tier: str | None = None,
+    strict_operator: bool = False,
 ) -> dict[str, Any]:
     """Load the layered KAINE config: shipped → profile → tier → operator override.
 
@@ -262,8 +359,15 @@ def load_kaine_config(
     not set module toggles; tiers only bound backends and devices"), because a
     deployment tier must never silently change the enabled module set.
 
-    A missing operator file is harmless; a malformed one is tolerated (falls back
-    without it). Raises :class:`FileNotFoundError` if the shipped file is absent.
+    A missing operator file is harmless; a malformed one is tolerated by
+    default (falls back with a logged warning). When ``strict_operator`` is true,
+    an existing but unreadable/unparsable operator file raises
+    :class:`ProfileError`. Raises :class:`FileNotFoundError` if the shipped file
+    is absent.
+
+    After merging all layers, the result is validated with
+    :func:`validate_config_shape`; shape violations raise
+    :class:`ConfigShapeError`.
     """
     if profiles_dir is None:
         profiles_dir = PROFILES_DIR
@@ -301,15 +405,27 @@ def load_kaine_config(
     # Layer 4: the operator's local working config (still wins over everything).
     op_path = Path(operator_path)
     if not op_path.exists():
+        validate_config_shape(merged)
         return merged
     try:
         with op_path.open("rb") as fh:
             override = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError):
-        # A malformed or unreadable operator file must never break boot; fall
-        # back to the shipped+profile+tier configuration.
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        if strict_operator:
+            raise ProfileError(
+                f"operator config {op_path} could not be read or parsed: {type(exc).__name__}: {exc}"
+            ) from exc
+        log.warning(
+            "operator config %s could not be read or parsed: %s: %s",
+            op_path,
+            type(exc).__name__,
+            exc,
+        )
+        validate_config_shape(merged)
         return merged
-    return deep_merge(merged, override)
+    merged = deep_merge(merged, override)
+    validate_config_shape(merged)
+    return merged
 
 
 def load_runtime_config(
@@ -340,6 +456,10 @@ def load_runtime_config(
     The tier only bounds backends and devices for the host hardware; it never
     replaces the selected module set. An explicit profile selection is honored
     or reported, never silently ignored.
+
+    This path is strict about the operator overlay: an operator file that exists
+    but cannot be read or parsed raises :class:`ProfileError` rather than being
+    skipped.
     """
     resolved_profile = resolve_profile_name(profile, env=env)
     if resolved_profile is None:
@@ -355,4 +475,5 @@ def load_runtime_config(
         profile=resolved_profile,
         tier=resolved_tier,
         profiles_dir=profiles_dir,
+        strict_operator=True,
     )

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+from pathlib import Path
+
 import pytest
 
 from kaine.nexus.config import NexusConfig, NexusConfigError, load_nexus_config
@@ -188,6 +190,72 @@ def test_is_loopback_host():
     assert _is_loopback_host("::1") is True
     assert _is_loopback_host("192.168.1.1") is False
     assert _is_loopback_host("0.0.0.0") is False
+
+
+def test_load_security_state_encryption_config_propagates_shape_error(
+    monkeypatch, tmp_path: Path
+):
+    """A malformed operator overlay must not be interpreted as disabled encryption."""
+    from kaine.config import ConfigShapeError
+    from kaine.nexus.__main__ import _load_security_state_encryption_config
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "kaine.toml").write_text(
+        '[modules]\nsoma = false\n[security.state_encryption]\nenabled = "true"\n'
+    )
+    (config_dir / "kaine.operator.toml").write_text("")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ConfigShapeError, match="security.state_encryption.enabled.*expected.*bool"):
+        _load_security_state_encryption_config()
+
+
+def test_build_fork_manager_returns_none_when_encryption_setup_fails(caplog):
+    """Encryption setup failure must leave fork/merge state I/O unavailable."""
+    import logging
+
+    from kaine.config import ConfigShapeError
+    from kaine.nexus.__main__ import _build_fork_manager
+
+    def broken_encryption_loader():
+        raise ConfigShapeError("security.state_encryption.enabled expected bool, got str")
+
+    def lifecycle_loader():
+        return {}
+
+    with caplog.at_level(logging.ERROR, logger="kaine.nexus"):
+        fm = _build_fork_manager(lifecycle_loader, broken_encryption_loader)
+
+    assert fm is None
+    assert any(
+        "state-encryption setup failed; fork/merge state operations are disabled" in rec.message
+        and "ConfigShapeError" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_build_fork_manager_returns_fork_manager_when_encryption_disabled(
+    caplog, tmp_path: Path
+):
+    """A valid, disabled encryption posture allows ForkManager construction."""
+    import logging
+
+    from kaine.nexus.__main__ import _build_fork_manager
+
+    def encryption_loader():
+        return {"enabled": False}
+
+    def lifecycle_loader():
+        return {"snapshots_path": str(tmp_path / "forks")}
+
+    with caplog.at_level(logging.WARNING, logger="kaine.nexus"):
+        fm = _build_fork_manager(lifecycle_loader, encryption_loader)
+
+    assert fm is not None
+    assert not any(
+        "state-encryption setup failed" in rec.message for rec in caplog.records
+    )
 
 
 def _fake_build(app, config):

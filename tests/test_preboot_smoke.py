@@ -621,3 +621,18 @@ def test_cycle_main_catches_profile_error(monkeypatch, capsys):
     assert rc != 0
     assert "kaine.cycle: configuration error:" in err
     assert "bad tier requested" in err
+
+
+def test_dry_run_main_returns_2_on_config_shape_error(monkeypatch, capsys):
+    """A ConfigShapeError from load_runtime_config is reported as a configuration error."""
+    from kaine.config import ConfigShapeError
+
+    def _raise(*a, **k):
+        raise ConfigShapeError("modules.soma expected bool, got str")
+
+    monkeypatch.setattr(preboot, "load_runtime_config", _raise)
+    rc = preboot.main([])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "pre-boot: configuration error:" in err
+    assert "modules.soma expected bool, got str" in err
