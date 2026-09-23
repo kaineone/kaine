@@ -9,6 +9,14 @@ updates:
     labels: ["dependencies"]
     commit-message:
       prefix: "chore(deps)"
+    # The torch stack is pinned to a TESTED range (see
+    # openspec/changes/host-fit-provisioning). Raising it silently drops hosts
+    # whose wheel indexes stop at an older torch, so it changes only through a
+    # deliberate, CI-tested change.
+    ignore:
+      - dependency-name: "torch"
+      - dependency-name: "torchvision"
+      - dependency-name: "torchaudio"
 
   # The GitHub Actions used by the CI workflows (pin/upgrade the actions).
   - package-ecosystem: "github-actions"
