@@ -21,4 +21,4 @@
 ## 4. Docs and verification
 
 - [x] 4.1 Document the constraints file, `KAINE_VENV_DIR`, and the pre-boot check in `docs/hardware.md` (present tense).
-- [ ] 4.2 Full offline suite green; `openspec validate torch-stack-coherence --strict` passes.
+- [x] 4.2 Full offline suite green; `openspec validate torch-stack-coherence --strict` passes.
