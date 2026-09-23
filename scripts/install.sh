@@ -61,7 +61,10 @@ NO_WIZARD=0
 RESEARCH=0
 # Legacy fallback: used only when the host-resolved wheel-index probe
 # (kaine.wheel_index) fails; the cuda flavor branch below normally overrides it.
-NVIDIA_INDEX_URL="https://download.pytorch.org/whl/cu128"
+# cu126 is the CUDA index with the widest driver compatibility that carries
+# the project's torch floor (cu128 stops at torch 2.11); the host-aware
+# resolver still chooses per host when it is available.
+NVIDIA_INDEX_URL="https://download.pytorch.org/whl/cu126"
 ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm6.2"
 XPU_INDEX_URL="https://download.pytorch.org/whl/xpu"
 CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"

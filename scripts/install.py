@@ -33,7 +33,10 @@ from pathlib import Path
 # Legacy hardcoded CUDA wheel index. Kept only as the documented
 # fallback for when the host-aware resolver (kaine.wheel_index) is
 # unavailable or fails; normal CUDA installs resolve per host instead.
-NVIDIA_INDEX_URL = "https://download.pytorch.org/whl/cu128"
+# cu126 is the CUDA index with the widest driver compatibility that carries
+# the project's torch floor (cu128 stops at torch 2.11); the host-aware
+# resolver still chooses per host when it is available.
+NVIDIA_INDEX_URL = "https://download.pytorch.org/whl/cu126"
 ROCM_INDEX_URL = "https://download.pytorch.org/whl/rocm6.2"
 XPU_INDEX_URL = "https://download.pytorch.org/whl/xpu"
 CPU_INDEX_URL = "https://download.pytorch.org/whl/cpu"
