@@ -499,12 +499,11 @@ def describe_host() -> dict[str, Any]:
 # operator-supervised boot.
 # ---------------------------------------------------------------------------
 
-#: RAM floor (GiB) below which the torch/transformers runtime is unrealistic and
-#: the host is an edge/sensor node (Tier 0). The GGML/ONNX family still runs.
-#: Nominal RAM floor (GiB) for an embodied CPU agent (Tier 1). Hosts with a
-#: nominal 4 GB board report slightly less usable memory because firmware and
-#: the OS reserve a slice; the comparison in :func:`recommend_tier` applies
-#: :data:`NOMINAL_USABLE_FRACTION` so a nominal 4 GB board still qualifies.
+#: Nominal RAM floor (GB) below which the torch/transformers runtime is
+#: unrealistic and the host is an edge/sensor node (Tier 0); the GGML/ONNX family
+#: still runs. Reported memory is lower than the nominal board size because
+#: firmware and the OS reserve a slice, so :func:`recommend_tier` compares
+#: reported GiB against this floor times :data:`NOMINAL_USABLE_FRACTION`.
 TIER1_MIN_RAM_GB = 4.0
 
 #: Nominal budget for the full Tier-2 workstation experience (no module residency

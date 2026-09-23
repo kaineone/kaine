@@ -76,9 +76,15 @@ def _write_minimal_configs(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path
     (profiles / "tier0.toml").write_text(
         '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n'
     )
-    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "http"\n')
-    (profiles / "tier2.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
-    (profiles / "tier3.toml").write_text('[lingua]\nbackend = "datacenter"\n')
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\n'
+    )
+    (profiles / "tier2.toml").write_text(
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
+    (profiles / "tier3.toml").write_text(
+        '[tier]\nname = "tier3"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "datacenter"\n'
+    )
     monkeypatch.setattr("kaine.config.PROFILES_DIR", profiles)
     return shipped, profiles
 
@@ -121,6 +127,21 @@ def test_load_runtime_config_kaine_tier_overrides_overlay(monkeypatch, tmp_path:
     assert cfg["lingua"]["backend"] == "http"
 
 
+def test_load_runtime_config_kaine_tier_equal_profile_refused_if_not_tier(monkeypatch, tmp_path: Path):
+    """KAINE_TIER=thesis_test must be refused, not silently skipped because tier==profile."""
+    shipped, _profiles = _write_minimal_configs(tmp_path, monkeypatch)
+    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
+        load_runtime_config(shipped, tmp_path / "no-operator.toml", env={"KAINE_TIER": "thesis_test"})
+
+
+def test_load_runtime_config_kaine_tier_module_profile_refused(monkeypatch, tmp_path: Path):
+    """A module-selection profile used as a tier must be refused."""
+    shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
+    (profiles / "module_profile.toml").write_text("[modules]\nlingua = true\n")
+    with pytest.raises(ProfileError, match="module_profile is not a deployment tier"):
+        load_runtime_config(shipped, tmp_path / "no-operator.toml", env={"KAINE_TIER": "module_profile"})
+
+
 def test_load_runtime_config_invalid_tier_slug_raises(monkeypatch, tmp_path: Path):
     shipped, _profiles = _write_minimal_configs(tmp_path, monkeypatch)
     op = tmp_path / "kaine.operator.toml"
@@ -150,7 +171,9 @@ def test_real_thesis_test_plus_tier0_preserves_module_set(tmp_path: Path):
 def test_load_runtime_config_tier_with_modules_table_raises(monkeypatch, tmp_path: Path):
     """A tier file containing a [modules] table must raise ProfileError."""
     shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
-    (profiles / "tier0.toml").write_text("[modules]\nlingua = false\n")
+    (profiles / "tier0.toml").write_text(
+        '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n[modules]\nlingua = false\n'
+    )
 
     with pytest.raises(ProfileError, match="tier 'tier0' may not set module toggles"):
         load_runtime_config(
@@ -163,7 +186,9 @@ def test_load_runtime_config_tier_with_modules_table_raises(monkeypatch, tmp_pat
 def test_load_runtime_config_tier_with_oscillator_enabled_raises(monkeypatch, tmp_path: Path):
     """A tier file containing [oscillator].enabled must raise ProfileError."""
     shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
-    (profiles / "tier0.toml").write_text("[oscillator]\nenabled = false\n")
+    (profiles / "tier0.toml").write_text(
+        '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n[oscillator]\nenabled = false\n'
+    )
 
     with pytest.raises(ProfileError, match="tier 'tier0' may not set module toggles"):
         load_runtime_config(

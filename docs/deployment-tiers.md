@@ -21,17 +21,18 @@ land; today's shipped backends are listed in the staging section.
 
 `scripts/probe-host` and the first-run wizard recommend a tier from a memory
 budget: unified-memory hosts use system RAM; discrete hosts use the smaller of
-system RAM and total VRAM across GPUs. Thresholds compare nominal sizes against
-reported memory times 0.9 (firmware and kernel reserve memory; a nominal 16 GB
-Jetson reports about 15.3 GiB): Tier 3 for two or more accelerators with a
-budget of at least 16 GB; Tier 2 for one accelerator with a budget of at least
-16 GB; Tier 2 with module residency required for an accelerator host with a
-budget from 6 GB up to 16 GB (module residency is not implemented yet, so such
+system RAM and total VRAM across GPUs. The recommender scales each nominal
+threshold by 0.9 and applies the result as a floor on reported memory (firmware
+and kernel reserve memory; a nominal 16 GB threshold becomes a 14.4 GiB floor,
+6 GB becomes 5.4 GiB, and the Tier-0 4 GB nominal floor becomes 3.6 GiB): Tier
+3 for two or more accelerators with a budget of at least the 16 GB floor; Tier
+2 for one accelerator with a budget of at least the 16 GB floor; Tier 2 with
+module residency required for an accelerator host with a budget from the 6 GB
+floor up to the 16 GB floor (module residency is not implemented yet, so such
 hosts keep the base-thesis module set, serve a language model that fits, and
-keep heavy extras off); Tier 1 below 6 GB or without an accelerator; Tier 0 when
-torch is absent, on 32-bit ARM, or when RAM is below the nominal 4 GB floor
-(with the same 0.9 allowance). An 8 GB Orin Nano Super recommends Tier 2 with
-residency required.
+keep heavy extras off); Tier 1 below the 6 GB floor or without an accelerator;
+Tier 0 when torch is absent, on 32-bit ARM, or when reported RAM is below the
+4 GB floor. An 8 GB Orin Nano Super recommends Tier 2 with residency required.
 
 The wizard shows the recommendation, the reason, and the memory budget, and
 records `[deployment].tier` in the operator's local configuration only when the
@@ -41,12 +42,19 @@ does not apply a tier.
 
 ## What a tier is
 
-A tier is a TOML overlay (`config/profiles/tierN.toml`) layered **between**
-the shipped defaults, the module-selection profile (the base-thesis
-`thesis_test` profile by default, or `--profile` / `KAINE_PROFILE`), and your
-local `config/kaine.operator.toml` — your local config still wins. A tier file
-is not a module profile: using a tier file as `--profile` / `KAINE_PROFILE`
-replaces the module profile, so that is not the way to apply a tier.
+A tier is a TOML overlay (`config/profiles/tierN.toml`) layered after the
+shipped defaults and the module-selection profile (the base-thesis `thesis_test`
+profile by default, or `--profile` / `KAINE_PROFILE`), and before your local
+`config/kaine.operator.toml` — your local config still wins. The cycle and the
+pre-boot check load configuration in this order, with later layers overriding
+earlier ones. A tier file is not a module profile: using a tier file as
+`--profile` / `KAINE_PROFILE` replaces the module profile and also merges its
+`[tier]` table, so that is not the way to apply a tier.
+
+A tier file must contain a `[tier]` table. Naming a file that lacks one (for
+example, the module profile `thesis_test`) as the tier via `KAINE_TIER` or
+`[deployment].tier` is refused with a configuration error; the cycle and the
+pre-boot check exit with `configuration error: ...` instead of a traceback.
 
 Tier files are inert and voice-free: they never enable a module or embed a
 private voice (those stay local operator actions). A tier only bounds which
@@ -82,8 +90,10 @@ shipped `config/kaine.toml` → module profile (`thesis_test` by default, or
 The pre-boot check has a `Tier fit` row: it FAILS naming enabled modules the
 tier lists as unsupported (or an enabled oscillator the tier cannot run), with
 the fix to disable them in the operator config or record a larger tier; it
-PASSES when they fit; it SKIPS when no tier is recorded; and it FAILS on a
-malformed `[tier]` table.
+PASSES when they fit; it SKIPS when the merged configuration contains no
+`[tier]` table (including when no tier is recorded or a non-tier file is
+named); and it FAILS on a malformed `[tier]` table or malformed `[oscillator]`
+shape, naming the problem.
 
 ## Capability matrix
 

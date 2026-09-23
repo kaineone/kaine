@@ -447,6 +447,39 @@ def test_smoke_config_sanity_tier_string_value_fails():
     assert "malformed [tier] table" in tier_row.detail
 
 
+def test_smoke_config_sanity_tier_unsupported_modules_list_of_lists():
+    config = _enabled_config(
+        modules={"lingua": True},
+        tier={"name": "tier0", "unsupported_modules": [["x"]]},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "unsupported_modules must be a list of strings" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_oscillator_supported_non_bool():
+    config = _enabled_config(
+        tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": "yes"},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "oscillator_supported must be a bool" in tier_row.detail
+
+
+def test_smoke_config_sanity_oscillator_scalar_value():
+    config = _enabled_config(
+        modules={"lingua": True},
+        tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": True},
+        oscillator=True,
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "malformed [oscillator] section" in tier_row.detail
+
+
 def test_smoke_config_sanity_unsupported_modules_string_fails():
     config = _enabled_config(tier={"name": "tier0", "unsupported_modules": "vox"})
     results = preboot.check_config_sanity(config)
@@ -553,3 +586,38 @@ def test_dry_run_main_returns_2_when_config_missing(monkeypatch, capsys):
     monkeypatch.setattr(preboot, "load_runtime_config", _raise)
     rc = preboot.main([])
     assert rc == 2
+
+
+def test_dry_run_main_returns_2_on_profile_error(monkeypatch, capsys):
+    from kaine.config import ProfileError
+
+    def _raise(*a, **k):
+        raise ProfileError("bad tier requested")
+
+    monkeypatch.setattr(preboot, "load_runtime_config", _raise)
+    rc = preboot.main([])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "pre-boot: configuration error:" in err
+    assert "bad tier requested" in err
+
+
+def test_cycle_main_catches_profile_error(monkeypatch, capsys):
+    import kaine.cycle.__main__ as cycle_main
+    from kaine.config import ProfileError
+
+    def _raise(*a, **k):
+        raise ProfileError("bad tier requested")
+
+    monkeypatch.setattr(cycle_main, "_load_kaine_config", _raise)
+
+    def _booted(**k):
+        raise AssertionError("cycle booted")
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _booted)
+
+    rc = cycle_main.main([])
+    err = capsys.readouterr().err
+    assert rc != 0
+    assert "kaine.cycle: configuration error:" in err
+    assert "bad tier requested" in err

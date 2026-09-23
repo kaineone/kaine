@@ -106,7 +106,8 @@ def resolve_tier_name(
 
     Returns ``None`` when neither is set, the overlay is missing, or the overlay
     is malformed. Validates the slug and raises :class:`ProfileError` when the
-    name is malformed or its profile file does not exist.
+    name is malformed, its profile file does not exist, or the file is not a
+    deployment tier (it lacks the advisory ``[tier]`` table).
     """
     source = os.environ if env is None else env
     name = str(source.get(TIER_ENV_VAR, "")).strip()
@@ -115,11 +116,7 @@ def resolve_tier_name(
             raise ProfileError(
                 f"invalid tier name {name!r}: expected a slug of [a-z0-9_]"
             )
-        tier_path = profile_path(name, profiles_dir=profiles_dir)
-        if not tier_path.exists():
-            raise ProfileError(
-                f"tier {name!r} selected but {tier_path} does not exist"
-            )
+        _require_tier_profile(name, profiles_dir=profiles_dir)
         return name
 
     op_path = Path(operator_path)
@@ -140,11 +137,7 @@ def resolve_tier_name(
         raise ProfileError(
             f"invalid tier name {name!r}: expected a slug of [a-z0-9_]"
         )
-    tier_path = profile_path(name, profiles_dir=profiles_dir)
-    if not tier_path.exists():
-        raise ProfileError(
-            f"tier {name!r} selected but {tier_path} does not exist"
-        )
+    _require_tier_profile(name, profiles_dir=profiles_dir)
     return name
 
 
@@ -160,6 +153,34 @@ def profile_path(name: str, *, profiles_dir: str | os.PathLike[str] | None = Non
     if not _PROFILE_NAME_RE.match(name or ""):
         raise ProfileError(f"invalid profile name {name!r}")
     return Path(profiles_dir) / f"{name}.toml"
+
+
+def _require_tier_profile(
+    name: str,
+    *,
+    profiles_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Load and validate a deployment-tier profile file.
+
+    Raises :class:`ProfileError` if the file is missing, malformed, or does
+    not contain the advisory ``[tier]`` table.
+    """
+    tier_path = profile_path(name, profiles_dir=profiles_dir)
+    if not tier_path.exists():
+        raise ProfileError(
+            f"tier {name!r} selected but {tier_path} does not exist"
+        )
+    try:
+        with tier_path.open("rb") as fh:
+            raw = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise ProfileError(f"tier {name!r} is malformed TOML: {exc}") from exc
+    if "tier" not in raw:
+        raise ProfileError(
+            f"{name} is not a deployment tier (no [tier] table); "
+            "tiers are config/profiles/tier0..tier3"
+        )
+    return raw
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -233,6 +254,9 @@ def load_kaine_config(
     A selected profile or tier whose file is missing raises :class:`ProfileError`
     — an explicit selection is honored or reported, never silently ignored.
 
+    A tier file must contain an advisory ``[tier]`` table; otherwise it is not a
+    deployment tier and raises :class:`ProfileError`.
+
     A tier file that contains a ``[modules]`` table or an
     ``[oscillator].enabled`` key raises :class:`ProfileError` ("tier <name> may
     not set module toggles; tiers only bound backends and devices"), because a
@@ -260,24 +284,19 @@ def load_kaine_config(
             merged = deep_merge(merged, tomllib.load(fh))
 
     # Layer 3: the deployment tier overlay (between profile and operator).
-    if tier and tier != profile:
-        tier_path = profile_path(tier, profiles_dir=profiles_dir)
-        if not tier_path.exists():
-            raise ProfileError(
-                f"tier {tier!r} selected but {tier_path} does not exist"
-            )
-        with tier_path.open("rb") as fh:
-            tier_raw = tomllib.load(fh)
-        if "modules" in tier_raw:
-            raise ProfileError(
-                f"tier {tier!r} may not set module toggles; tiers only bound backends and devices"
-            )
-        osc = tier_raw.get("oscillator")
-        if isinstance(osc, dict) and "enabled" in osc:
-            raise ProfileError(
-                f"tier {tier!r} may not set module toggles; tiers only bound backends and devices"
-            )
-        merged = deep_merge(merged, tier_raw)
+    if tier:
+        tier_raw = _require_tier_profile(tier, profiles_dir=profiles_dir)
+        if tier != profile:
+            if "modules" in tier_raw:
+                raise ProfileError(
+                    f"tier {tier!r} may not set module toggles; tiers only bound backends and devices"
+                )
+            osc = tier_raw.get("oscillator")
+            if isinstance(osc, dict) and "enabled" in osc:
+                raise ProfileError(
+                    f"tier {tier!r} may not set module toggles; tiers only bound backends and devices"
+                )
+            merged = deep_merge(merged, tier_raw)
 
     # Layer 4: the operator's local working config (still wins over everything).
     op_path = Path(operator_path)

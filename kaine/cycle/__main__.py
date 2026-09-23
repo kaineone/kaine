@@ -1355,6 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    from kaine.config import ProfileError
     from kaine.cycle.research_gate import (
         RESEARCH_GATE_EXIT_CODE,
         research_mode_requested,
@@ -1378,6 +1379,9 @@ def main(argv: list[str] | None = None) -> int:
             config = _load_kaine_config()
         else:
             config = _load_kaine_config(profile=known.profile)
+    except ProfileError as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
+        return 1
     except Exception as exc:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
         return 1

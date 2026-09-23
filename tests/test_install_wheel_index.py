@@ -1065,6 +1065,68 @@ def test_matching_torchaudio_with_local_tag_is_not_uninstalled(tmp_path: Path) -
     assert any("torchaudio==2.11.0" in line for line in lines), _context(proc, pip_log)
 
 
+JETSON_CU130_INDEX = "https://pypi.jetson-ai-lab.io/jp7/cu130"
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_cuda_132_plain_with_torchaudio_resolves_cu130_coherently(
+    tmp_path: Path, installer: str
+) -> None:
+    """A plain CUDA run with torchaudio installed stays on an index carrying it.
+
+    Invariant: when torchaudio is already present and --research is not given,
+    the installer resolves with --need-torchaudio. On a driver CUDA 13.2 host
+    that means cu130 (cu132 carries no torchaudio), the matching torchaudio is
+    kept, and the audio-stack coherence notice is printed.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--no-wizard"],
+        installer=installer,
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.11.0+cu130",
+    )
+    urls = _index_urls(pip_log)
+    lines = pip_log.splitlines()
+    assert CUDA130_INDEX in urls, _context(proc, pip_log)
+    assert not any("uninstall -y torchaudio" in line for line in lines), _context(
+        proc, pip_log
+    )
+    assert (
+        "torchaudio is installed; keeping the audio stack coherent"
+        in proc.stdout + proc.stderr
+    ), _context(proc, pip_log)
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_non_pytorch_index_url_forces_reinstall_on_flavor_mismatch(
+    tmp_path: Path, installer: str
+) -> None:
+    """A non-PyTorch --index-url still forces reinstall when the flavor differs.
+
+    Invariant: a fake CPU-flavor torch already installed satisfies the bare
+    torch spec, so pip would not swap to the requested CUDA index without
+    --force-reinstall. The installer must add --force-reinstall even when the
+    target URL is not on download.pytorch.org.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--cuda", "--index-url", JETSON_CU130_INDEX, "--no-wizard"],
+        installer=installer,
+        nvidia_cuda="13.2",
+        fake_torch="cpu",
+    )
+    torch_lines = [
+        line
+        for line in pip_log.splitlines()
+        if "torch==" in line and JETSON_CU130_INDEX in line
+    ]
+    assert torch_lines, _context(proc, pip_log)
+    assert all("--force-reinstall" in line for line in torch_lines), _context(
+        proc, pip_log
+    )
+
+
 def test_no_force_reinstall_for_untagged_cpu_wheel_on_cpu_index(tmp_path: Path) -> None:
     """An untagged (PyPI-style) torch wheel is not force-reinstalled for --cpu.
 

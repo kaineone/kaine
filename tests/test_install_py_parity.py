@@ -399,11 +399,15 @@ def _load_twi_helpers() -> ...:
 
 
 def _torch_install_lines(pip_log: str, include_audio: bool = False) -> list[str]:
-    """Return pip argv lines that installed torch/torchvision/torchaudio."""
+    """Return pip argv lines that installed torch/torchvision/torchaudio.
+
+    The pip shim in the integration harness records only the arguments it was
+    called with, so the lines start with ``install`` rather than ``pip``.
+    """
     lines: list[str] = []
     for line in pip_log.splitlines():
         tokens = line.split()
-        if "pip" not in tokens or "install" not in tokens:
+        if "install" not in tokens:
             continue
         has_torch = any(t.startswith(("torch==", "torch>=")) for t in tokens)
         has_tv = "torchvision" in tokens
@@ -487,5 +491,85 @@ def test_parity_rocm_with_rocminfo_sample(tmp_path_factory: pytest.TempPathFacto
     assert sh_lines == py_lines, (
         f"pip argv for torch/torchvision install differs between install.sh "
         f"and install.py\nsh:\n{log_sh}\npy:\n{log_py}\n"
+        f"sh exit={proc_sh.returncode}, py exit={proc_py.returncode}"
+    )
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or shutil.which("bash") is None,
+    reason="bash/POSIX shell unavailable; parity tests cannot exercise install.sh",
+)
+def test_parity_rocm_research(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """``install.sh`` and ``install.py`` resolve ROCm --research identically."""
+    twi = _load_twi_helpers()
+    flags = ["--rocm", "--no-wizard", "--research"]
+    env = {"KAINE_ROCM_VERSION": "7.2"}
+
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        rocm=True,
+        rocminfo_sample=True,
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        rocm=True,
+        rocminfo_sample=True,
+        extra_env=env,
+    )
+
+    sh_lines = _torch_install_lines(log_sh, include_audio=True)
+    py_lines = _torch_install_lines(log_py, include_audio=True)
+
+    assert sh_lines == py_lines, (
+        f"pip argv differs between install.sh and install.py for ROCm --research\n"
+        f"sh:\n{log_sh}\npy:\n{log_py}\n"
+        f"sh exit={proc_sh.returncode}, py exit={proc_py.returncode}"
+    )
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or shutil.which("bash") is None,
+    reason="bash/POSIX shell unavailable; parity tests cannot exercise install.sh",
+)
+def test_parity_cuda_coherent_torchaudio(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """``install.sh`` and ``install.py`` resolve the same coherent audio stack."""
+    twi = _load_twi_helpers()
+    flags = ["--cuda", "--no-wizard"]
+    env = {"KAINE_WHEEL_PROBE_NVML": "0"}
+
+    sh_tmp = tmp_path_factory.mktemp("sh")
+    py_tmp = tmp_path_factory.mktemp("py")
+
+    proc_sh, log_sh = twi._run_install(
+        sh_tmp,
+        flags,
+        installer="install.sh",
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.11.0+cu130",
+        extra_env=env,
+    )
+    proc_py, log_py = twi._run_install(
+        py_tmp,
+        flags,
+        installer="install.py",
+        nvidia_cuda="13.2",
+        fake_torchaudio="2.11.0+cu130",
+        extra_env=env,
+    )
+
+    sh_lines = _torch_install_lines(log_sh, include_audio=True)
+    py_lines = _torch_install_lines(log_py, include_audio=True)
+
+    assert sh_lines == py_lines, (
+        f"pip argv differs between install.sh and install.py for coherent torchaudio\n"
+        f"sh:\n{log_sh}\npy:\n{log_py}\n"
         f"sh exit={proc_sh.returncode}, py exit={proc_py.returncode}"
     )

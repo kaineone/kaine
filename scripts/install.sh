@@ -134,8 +134,8 @@ done
 VENV_DIR="${KAINE_VENV_DIR:-.venv}"
 
 # Normalise to an absolute path so every downstream reference (venv
-# creation, resolver candidate selection, constraints file) points at the
-# same directory regardless of whether KAINE_VENV_DIR was absolute.
+# creation, resolver candidate selection, constraints file) points at the same
+# directory regardless of whether KAINE_VENV_DIR was absolute.
 if [[ ! "$VENV_DIR" = /* ]]; then
   VENV_DIR="$ROOT/$VENV_DIR"
 fi
@@ -277,6 +277,16 @@ else
   echo "==> no accelerator detected: picking CPU wheels"
 fi
 
+# Audio-stack coherence: if torchaudio is already installed and this is not a
+# --research run, resolve CUDA/ROCm indices as if --research was requested so
+# the chosen wheel index carries a matching torchaudio. The matching install
+# is performed later with the same path used by --research.
+NEED_TORCHAUDIO=0
+if [[ "$RESEARCH" -eq 0 ]] && [[ "$flavor" == "cuda" || "$flavor" == "rocm" ]] && _package_installed torchaudio; then
+  NEED_TORCHAUDIO=1
+  echo "==> torchaudio is installed; keeping the audio stack coherent (resolving with --need-torchaudio)"
+fi
+
 case "$flavor" in
   cuda)
     # Host-resolved CUDA wheel index (kaine.wheel_index). The resolver is
@@ -300,13 +310,13 @@ case "$flavor" in
     fi
     RESOLVER_JSON=""
     resolver_extra_args=()
-    if [ "$RESEARCH" -eq 1 ]; then
+    if [ "$RESEARCH" -eq 1 ] || [ "$NEED_TORCHAUDIO" -eq 1 ]; then
       resolver_extra_args+=("--need-torchaudio")
     fi
     if [ -n "${INDEX_URL_OVERRIDE:-}" ]; then
-      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --override "$INDEX_URL_OVERRIDE" "${resolver_extra_args[@]}" 2>/dev/null || true)"
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --override "$INDEX_URL_OVERRIDE" ${resolver_extra_args[@]+"${resolver_extra_args[@]}"} 2>/dev/null || true)"
     else
-      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index "${resolver_extra_args[@]}" 2>/dev/null || true)"
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index ${resolver_extra_args[@]+"${resolver_extra_args[@]}"} 2>/dev/null || true)"
     fi
     RESOLVER_VARIANT=""
     RESOLVER_URL=""
@@ -437,13 +447,13 @@ else:
 
     RESOLVER_JSON=""
     resolver_extra_args=()
-    if [ "$RESEARCH" -eq 1 ]; then
+    if [ "$RESEARCH" -eq 1 ] || [ "$NEED_TORCHAUDIO" -eq 1 ]; then
       resolver_extra_args+=("--need-torchaudio")
     fi
     if [ -n "$ROCM_GFX" ]; then
-      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" --gfx "$ROCM_GFX" "${resolver_extra_args[@]}" 2>/dev/null || true)"
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" --gfx "$ROCM_GFX" ${resolver_extra_args[@]+"${resolver_extra_args[@]}"} 2>/dev/null || true)"
     else
-      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" "${resolver_extra_args[@]}" 2>/dev/null || true)"
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" ${resolver_extra_args[@]+"${resolver_extra_args[@]}"} 2>/dev/null || true)"
     fi
 
     RESOLVER_URL=""
@@ -536,6 +546,7 @@ if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswit
     fi
   else
     echo "==> torch installed with flavor '$installed_flavor' but want '$flavor'; reinstalling"
+    FORCE_REINSTALL_FLAG="--force-reinstall"
   fi
   if _is_pytorch_whl_url "$INDEX_URL"; then
     target_tag=$(_index_tag "$INDEX_URL")
@@ -617,6 +628,27 @@ echo "==> pinned torch stack: $pinned"
 
 echo "==> installing the rest of KAINE (editable, with test deps)"
 "$PIP" install --quiet -c "$TORCH_CONSTRAINTS" -e ".[test]"
+
+# Audio-stack coherence: a pre-existing torchaudio on CUDA/ROCm must follow
+# the resolved torch stack even when --research is not set. Install a matching
+# torchaudio from the resolved index, or keep it when it already matches.
+if [[ "$NEED_TORCHAUDIO" -eq 1 ]] && [[ -n "$TA_PIN" ]]; then
+  installed_ta=$(_package_version torchaudio || true)
+  installed_ta_base=${installed_ta%%+*}
+  installed_ta_tag=${installed_ta#*+}
+  if [[ "$installed_ta" == "$installed_ta_base" ]]; then
+    installed_ta_tag=""
+  fi
+  target_tag=$(_index_tag "$INDEX_URL")
+  if [[ -n "$installed_ta" ]] && [[ "$installed_ta_base" == "$TA_PIN" ]] && _tags_match "$installed_ta_tag" "$target_tag" "$INDEX_URL"; then
+    echo "==> installed torchaudio $installed_ta already matches the resolved pin; keeping it"
+  else
+    echo "==> installing torchaudio==$TA_PIN from $INDEX_URL (audio-stack coherence)"
+    "$PIP" install --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" "torchaudio==$TA_PIN"
+  fi
+  pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
+  echo "==> pinned torch stack: $pinned"
+fi
 
 # --research: ALSO provision the perception extras (audio+vision incl. PyAV) so
 # the reproducible perception feed can decode playlist media (cv2 video + av

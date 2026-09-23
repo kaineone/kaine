@@ -476,6 +476,10 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
     torch-stack row, in addition to what is already in ``config`` — reuses
     ``research_mode_requested`` and ``PreservationConfig`` rather than
     re-deriving boot-mode logic.
+
+    Tier-fit validation is defensive: the operator overlay can write any shape
+    into ``[tier]`` or ``[oscillator]``, so every access is type-checked and
+    surfaced as an honest FAIL row instead of an uncaught exception.
     """
     results: list[CheckResult] = []
 
@@ -524,51 +528,79 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
         )
     else:
         tier_name = str(tier_cfg.get("name", "unknown"))
-        unsupported_modules = tier_cfg.get("unsupported_modules") or []
+        unsupported_modules = tier_cfg.get("unsupported_modules")
+        oscillator_supported_raw = tier_cfg.get("oscillator_supported", True)
+
+        if unsupported_modules is None:
+            unsupported_modules = []
+
+        malformed: str | None = None
         if not isinstance(unsupported_modules, list):
+            malformed = "unsupported_modules must be a list of strings"
+        elif not all(isinstance(m, str) for m in unsupported_modules):
+            malformed = "unsupported_modules must be a list of strings"
+        elif not isinstance(oscillator_supported_raw, bool):
+            malformed = "oscillator_supported must be a bool"
+
+        if malformed:
             results.append(
                 CheckResult(
                     GROUP_CONFIG,
                     "Tier fit",
                     FAIL,
-                    "malformed [tier] table: expected a table with name / unsupported_modules / oscillator_supported",
+                    f"malformed [tier] table: {malformed}",
                 )
             )
         else:
             unsupported = set(unsupported_modules)
             offending = [m for m in enabled if m in unsupported]
-            oscillator_enabled = bool((config.get("oscillator") or {}).get("enabled", False))
-            oscillator_supported = bool(tier_cfg.get("oscillator_supported", True))
-            if offending:
+            oscillator_section = config.get("oscillator")
+            if oscillator_section is not None and not isinstance(oscillator_section, dict):
                 results.append(
                     CheckResult(
                         GROUP_CONFIG,
                         "Tier fit",
                         FAIL,
-                        f"enabled modules unsupported by tier {tier_name}: "
-                        f"{', '.join(offending)}; disable them in the operator config "
-                        "or record a larger tier",
-                    )
-                )
-            elif oscillator_enabled and not oscillator_supported:
-                results.append(
-                    CheckResult(
-                        GROUP_CONFIG,
-                        "Tier fit",
-                        FAIL,
-                        f"[oscillator].enabled is not supported by tier {tier_name}; "
-                        "disable it in the operator config or record a larger tier",
+                        "malformed [oscillator] section: expected a table",
                     )
                 )
             else:
-                results.append(
-                    CheckResult(
-                        GROUP_CONFIG,
-                        "Tier fit",
-                        PASS,
-                        f"tier {tier_name}: the enabled modules fit",
-                    )
+                oscillator_enabled = (
+                    bool(oscillator_section.get("enabled", False))
+                    if isinstance(oscillator_section, dict)
+                    else False
                 )
+                oscillator_supported = bool(oscillator_supported_raw)
+                if offending:
+                    results.append(
+                        CheckResult(
+                            GROUP_CONFIG,
+                            "Tier fit",
+                            FAIL,
+                            f"enabled modules unsupported by tier {tier_name}: "
+                            f"{', '.join(offending)}; disable them in the operator config "
+                            "or record a larger tier",
+                        )
+                    )
+                elif oscillator_enabled and not oscillator_supported:
+                    results.append(
+                        CheckResult(
+                            GROUP_CONFIG,
+                            "Tier fit",
+                            FAIL,
+                            f"[oscillator].enabled is not supported by tier {tier_name}; "
+                            "disable it in the operator config or record a larger tier",
+                        )
+                    )
+                else:
+                    results.append(
+                        CheckResult(
+                            GROUP_CONFIG,
+                            "Tier fit",
+                            PASS,
+                            f"tier {tier_name}: the enabled modules fit",
+                        )
+                    )
 
     preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
     encryption_enabled = bool(
@@ -705,6 +737,7 @@ def report_ok(results: list[CheckResult]) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from kaine.config import ProfileError
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(
         prog="python -m kaine.preboot",
@@ -721,6 +754,9 @@ def main(argv: list[str] | None = None) -> int:
         config = load_runtime_config(SHIPPED_CONFIG_PATH, OPERATOR_CONFIG_PATH)
     except FileNotFoundError as exc:
         sys.stderr.write(f"preboot: could not load config: {exc}\n")
+        return 2
+    except ProfileError as exc:
+        sys.stderr.write(f"pre-boot: configuration error: {exc}\n")
         return 2
 
     try:

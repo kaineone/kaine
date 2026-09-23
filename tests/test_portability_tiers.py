@@ -539,12 +539,19 @@ def test_resolve_tier_name_missing_profile_file_raises():
         resolve_tier_name(env={"KAINE_TIER": "tier9"})
 
 
+def test_resolve_tier_name_rejects_profile_without_tier_table():
+    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
+        resolve_tier_name(env={"KAINE_TIER": "thesis_test"})
+
+
 def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
     shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
     op = tmp_path / "kaine.operator.toml"
     op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
 
@@ -562,8 +569,12 @@ def test_tier_profile_layers_between_profile_and_operator(tmp_path: Path):
     shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "http"\nmodel_id = "tier1-model"\n')
-    (profiles / "tier2.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\nmodel_id = "tier1-model"\n'
+    )
+    (profiles / "tier2.toml").write_text(
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
     op = tmp_path / "kaine.operator.toml"
     op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
 
@@ -580,7 +591,9 @@ def test_load_kaine_config_equal_profile_and_tier_applied_once(tmp_path: Path):
     shipped.write_text('[lingua]\nbackend = "ollama"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "http"\n')
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\n'
+    )
     op = tmp_path / "kaine.operator.toml"  # absent
 
     cfg = load_kaine_config(shipped, op, profile="tier1", tier="tier1", profiles_dir=profiles)
@@ -592,11 +605,23 @@ def test_load_kaine_config_tier_without_profile(tmp_path: Path):
     shipped.write_text('[lingua]\nbackend = "ollama"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    (profiles / "tier2.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
+    (profiles / "tier2.toml").write_text(
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
     op = tmp_path / "kaine.operator.toml"  # absent
 
     cfg = load_kaine_config(shipped, op, profile=None, tier="tier2", profiles_dir=profiles)
     assert cfg["lingua"]["backend"] == "llama_cpp"
+
+
+def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    op = tmp_path / "kaine.operator.toml"  # absent
+    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
+        load_kaine_config(
+            shipped, op, tier="thesis_test", profiles_dir=REPO_ROOT / "config" / "profiles"
+        )
 
 
 def test_no_profile_is_behaviour_identical(tmp_path: Path):

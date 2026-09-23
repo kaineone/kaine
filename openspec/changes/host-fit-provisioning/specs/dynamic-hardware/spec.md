@@ -11,28 +11,36 @@ to a wheel source: NVIDIA → a CUDA index resolved from the host probe as
 described below, AMD → a ROCm index, Intel → an XPU index, CPU → the CPU index;
 Apple Silicon SHALL install the default PyPI wheel (which bundles the MPS
 backend) with no `--index-url`. The script SHALL install the exact torch version
-(and matching companions) resolved as described below from the chosen source,
-pin it in the torch constraints file, then install the rest of KAINE under those
-constraints.
+(and matching companions) resolved as described below from the chosen source, pin
+it in the torch constraints file, then install the rest of KAINE under those
+constraints. On re-run, the script SHALL force-reinstall torch whenever the
+installed local tag differs from the target flavor, including when the target is
+an operator `--index-url` that does not point to `download.pytorch.org/whl/<tag>`
+(untagged counts as `cpu`). When a matching `torchaudio` wheel is already
+installed and `--research` is not given, the script SHALL still pass
+`--need-torchaudio` and keep or install the matching `torchaudio`, so a host
+previously installed with `--research` does not drift to an index without
+`torchaudio` on a later run.
 
 The NVIDIA flavor SHALL NOT map to a single fixed CUDA index. When the NVIDIA
 flavor is selected (auto-detected or forced with `--cuda`), the script SHALL
 probe the host's CPU architecture (e.g. `uname -m`), the driver's maximum
-supported CUDA version (from the `nvidia-smi` report), the GPU's compute
-capability (e.g. `nvidia-smi --query-gpu=compute_cap`), and whether the GPU has
-unified memory (an integrated GPU sharing system RAM, e.g. NVIDIA Tegra/Jetson
-parts). It SHALL resolve the CUDA wheel index by filtering candidate indexes to
-those whose CUDA version is less than or equal to the host driver's CUDA version,
-then from the driver-compatible `(index, torch version)` pairs where the torch
-version satisfies the full torch specifier in `pyproject.toml` and the index's
-build list covers every probed GPU, selecting the highest torch version and
-tie-breaking by the newest CUDA index. Coverage for a GPU with compute
-capability `X.Y` means the build list contains an exact `sm_XY` entry, a
-same-major SASS `sm_XZ` entry with `Z ≤ Y`, or a PTX `compute_ZW` entry with
-`(Z, W) ≤ (X, Y)`. The documented `DECISION_TABLE` SHALL label the selected
-result; it SHALL NOT drive selection. A final CPU fallback entry SHALL always
-match so resolution cannot fail. The script SHALL log the probe results and the
-resolved index (or operator override) before installing torch.
+supported CUDA version (first from the `nvidia-smi` header, then from NVML), the
+GPU's compute capability (first from NVML, then `nvidia-smi
+--query-gpu=compute_cap`, then torch), and whether the GPU has unified memory
+(an integrated GPU sharing system RAM, e.g. NVIDIA Tegra/Jetson parts). It SHALL
+resolve the CUDA wheel index by filtering candidate indexes to those whose CUDA
+version is less than or equal to the host driver's CUDA version, then from the
+driver-compatible `(index, torch version)` pairs where the torch version satisfies
+the full torch specifier in `pyproject.toml` and the index's build list covers
+every probed GPU, selecting the highest torch version and tie-breaking by the
+newest CUDA index. Coverage for a GPU with compute capability `X.Y` means the
+build list contains an exact `sm_XY` entry, a same-major SASS `sm_XZ` entry with
+`Z ≤ Y`, or a PTX `compute_ZW` entry with `(Z, W) ≤ (X, Y)`. The documented
+`DECISION_TABLE` SHALL label the selected result; it SHALL NOT drive selection. A
+final CPU fallback entry SHALL always match so resolution cannot fail. The script
+SHALL log the probe results and the resolved index (or operator override) before
+installing torch.
 
 On non-aarch64 hosts, unified-memory evidence SHALL be ignored for the CUDA
 ladder with a warning; those hosts are treated as discrete. On aarch64 hosts
@@ -99,6 +107,14 @@ resolution, and flag semantics.
   the right flavor (recognizing cuda, rocm, xpu, mps, or cpu) and skips the torch
   install step, but still runs `pip install -e .[test]` to pick up any pyproject
   changes
+
+#### Scenario: Flavor change forces torch reinstallation
+- **WHEN** the script is re-run and the target wheel flavor or index differs from the installed torch local tag (for example `+cpu` installed and CUDA wanted, or the operator passes an `--index-url` outside `download.pytorch.org`)
+- **THEN** it force-reinstalls torch from the target source before writing the constraints file
+
+#### Scenario: Re-run keeps installed torchaudio when not researching
+- **WHEN** a host already has a matching `torchaudio` wheel installed, `--research` is not given, and the resolved CUDA index would otherwise omit `torchaudio` (for example `cu132`)
+- **THEN** the resolver passes `--need-torchaudio` and keeps or installs the matching `torchaudio`, staying on an index that provides it (for example `cu130`) instead of switching to `cu132` and losing `torchaudio`
 
 #### Scenario: aarch64 unified-memory host avoids the SBSA-only index
 - **WHEN** an operator runs `bash scripts/install.sh` on an aarch64 host with a

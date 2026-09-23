@@ -276,6 +276,23 @@ def _installed_torch_base(py: Path) -> str | None:
     return out or None
 
 
+def _installed_package_version(py: Path, package: str) -> str | None:
+    """Return the installed version of ``package`` in the venv, or ``None``."""
+    try:
+        out = subprocess.check_output(
+            [
+                str(py),
+                "-c",
+                f"import importlib.metadata as md; print(md.version({package!r}))",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return None
+    return out or None
+
+
 def _needs_force_reinstall(installed_tag: str, target_tag: str, index_url: str | None) -> bool:
     """True when the installed torch build tag must be forced to match the target.
 
@@ -864,11 +881,28 @@ def main() -> None:
     run([str(pip), "install", "--quiet", "--upgrade", "pip"])
 
     flavor = detect_flavor(args.force)
+
+    # Audio-stack coherence: if torchaudio is already installed and this is
+    # not a --research run, resolve CUDA/ROCm indices as if --research was set
+    # so the chosen wheel index carries a matching torchaudio.
+    installed_ta = _installed_package_version(py, "torchaudio")
+    need_torchaudio_coherent = (
+        not args.research
+        and flavor in ("cuda", "rocm")
+        and installed_ta is not None
+    )
+    if need_torchaudio_coherent:
+        print(
+            "==> torchaudio is installed; keeping the audio stack coherent "
+            "(resolving with --need-torchaudio)"
+        )
+
     gpu_index_url: str | None = None
+    resolve_research = args.research or need_torchaudio_coherent
 
     if flavor == "cuda":
         gpu_index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_cuda_index(
-            args.research, override=args.index_url, venv_python=py
+            resolve_research, override=args.index_url, venv_python=py
         )
         index_url = gpu_index_url
         marker = _read_accel_fallback_marker(marker_path)
@@ -895,7 +929,7 @@ def main() -> None:
                 file=sys.stderr,
             )
         index_url, torch_pin, tv_pin, ta_pin, selftest = _resolve_rocm_index(
-            venv_python=py
+            venv_python=py, research=resolve_research
         )
     else:
         index_url = torch_index_url(flavor, override=args.index_url)
@@ -943,6 +977,8 @@ def main() -> None:
                 f"==> torch installed with flavor {installed_flavor!r} but want {flavor!r}; "
                 "reinstalling"
             )
+            force_reinstall = True
+            need_install = True
 
         target_tag = _index_tag(index_url)
         installed_tag = _installed_torch_tag(py)
@@ -1088,6 +1124,36 @@ def main() -> None:
             ".[test]",
         ]
     )
+
+    # Audio-stack coherence for a pre-existing torchaudio on CUDA/ROCm: make
+    # the installed torchaudio follow the resolved torch stack even when
+    # --research was not requested.
+    if need_torchaudio_coherent and ta_pin is not None and index_url is not None:
+        if installed_ta and not _torchaudio_should_uninstall(
+            installed_ta, ta_pin, index_url
+        ):
+            print(
+                f"==> installed torchaudio {installed_ta} already matches the "
+                f"resolved pin; keeping it"
+            )
+        else:
+            print(
+                f"==> installing torchaudio=={ta_pin} from {index_url} "
+                f"(audio-stack coherence)"
+            )
+            run(
+                [
+                    str(pip),
+                    "install",
+                    "--index-url",
+                    index_url,
+                    "-c",
+                    str(constraints),
+                    f"torchaudio=={ta_pin}",
+                ]
+            )
+        pinned = write_torch_constraints(py, constraints)
+        print(f"==> pinned torch stack: {pinned}")
 
     # --research: ALSO provision the perception extras (audio+vision incl. PyAV)
     # so the reproducible perception feed can decode playlist media (cv2 video +

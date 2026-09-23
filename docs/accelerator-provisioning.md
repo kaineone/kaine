@@ -10,8 +10,8 @@ KAINE auto-detects accelerator hardware at install time and at boot time. The in
 `scripts/install.sh` resolves the CUDA wheel index at install time by invoking `python -m kaine.wheel_index`. The resolver probes four host properties:
 
 - CPU architecture (`uname`)
-- driver CUDA version (the `nvidia-smi` header)
-- compute capability of every probed GPU (`nvidia-smi --query-gpu=compute_cap`)
+- driver CUDA version — first from the `nvidia-smi` header, then from NVML
+- compute capability of every probed GPU — first from NVML, then `nvidia-smi --query-gpu=compute_cap`, then torch
 - unified-memory state (`kaine.hostmem`)
 
 ### Decision table
@@ -61,11 +61,11 @@ When a CUDA index is selected, the resolver records the exact `torch`, `torchvis
 
 Data provenance for the ladder lives in `kaine/wheel_data.py`, which records the published versions and architecture lists for each index (dated). Drift against the live indexes is reported by `python -m kaine.wheel_index --verify-indexes`.
 
-The research install path (`scripts/install.sh --research`) passes `--need-torchaudio` to the resolver. Because the cu132 index publishes no `torchaudio` wheels, hosts that would otherwise resolve to cu132 instead resolve to cu130 so that `torchaudio` is available. `torchaudio`'s last release is 2.11.0; torch 2.12–2.14 are paired with it by release timing only, and the resolver emits a warning saying no wheel metadata asserts that pairing.
+The research install path (`scripts/install.sh --research`) always passes `--need-torchaudio` to the resolver. Because the cu132 index publishes no `torchaudio` wheels, hosts that would otherwise resolve to cu132 instead resolve to cu130 so that `torchaudio` is available. When a matching `torchaudio` wheel is already installed and `--research` is not given, both installers still pass `--need-torchaudio` and keep or install the matching `torchaudio`, so a driver ≥ 13.2 host that was installed with `--research` stays on cu130 instead of switching to cu132 and losing `torchaudio`. `torchaudio`'s last release is 2.11.0; torch 2.12–2.14 are paired with it by release timing only, and the resolver emits a warning saying no wheel metadata asserts that pairing.
 
 ### ROCm wheel index resolution
 
-AMD hosts are resolved from the host ROCm version (read from `/opt/rocm/.info/version`, or overridden with `KAINE_ROCM_VERSION`) and the GFX targets (from `KAINE_ROCM_GFX`, else `rocminfo` agent names, else `rocm_agent_enumerator`; feature suffixes after `:` are stripped, `gfx000` and `-generic` are dropped, and a failing `rocminfo` falls through). The installer prints `==> ROCm version: <v>; gfx targets: <list> (source: ...)`.
+AMD hosts are resolved from the host ROCm version (read from `/opt/rocm/.info/version`, or overridden with `KAINE_ROCM_VERSION`) and the GFX targets (from `KAINE_ROCM_GFX`, else `rocminfo` agent names parsed even when `rocminfo` exits non-zero, else `rocm_agent_enumerator`; feature suffixes after `:` are stripped, `gfx000` and `-generic` are dropped, and `rocminfo` output that yields no usable target falls through to `rocm_agent_enumerator`). The installer prints `==> ROCm version: <v>; gfx targets: <list> (source: ...)`.
 
 The resolver selects, among ROCm wheel indexes whose version is less than or equal to the host ROCm version, that publish an in-range `torch` for the host architecture, and whose build list covers at least one requested GFX target, the highest in-range torch then the newest ROCm index. It warns about targets the chosen index does not cover (suggesting `HIP_VISIBLE_DEVICES`) and refuses when none fits; there is no CUDA fallback.
 
@@ -82,7 +82,7 @@ Unified-memory evidence is ignored for CUDA on non-aarch64 hosts: NVIDIA unified
 
 ### Installer re-runs
 
-The installer writes exact pins to `<venv>/kaine-torch-constraints.txt`. On re-run, it uses `--force-reinstall` when the installed torch local tag differs from the target `download.pytorch.org/whl/<tag>` index (untagged counts as `cpu`). A stale `torchaudio` (wrong base version or tag, or no pin) is uninstalled before the constraints file is written. When the self-test fails or cannot run, the installer reinstalls CPU wheels and writes `<venv>/kaine-accel-fallback.json` (index, torch, reason, date); later runs keep CPU wheels for that index/torch pair until `--retry-gpu`.
+The installer writes exact pins to `<venv>/kaine-torch-constraints.txt`. On re-run, it uses `--force-reinstall` whenever the installed torch local tag differs from the target flavor, including when the target is an operator `--index-url` that does not point to `download.pytorch.org/whl/<tag>` (untagged counts as `cpu`). A stale `torchaudio` (wrong base version or tag, or no pin) is uninstalled before the constraints file is written. When the self-test fails or cannot run, the installer reinstalls CPU wheels and writes `<venv>/kaine-accel-fallback.json` (index, torch, reason, date); later runs keep CPU wheels for that index/torch pair until `--retry-gpu`.
 
 ### Tested hosts
 
