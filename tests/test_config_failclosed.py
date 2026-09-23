@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""Fail-closed configuration handling in the research, decommission and Nexus paths."""
+
 import io
 import logging
 from pathlib import Path
