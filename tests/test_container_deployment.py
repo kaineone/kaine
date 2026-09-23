@@ -190,6 +190,19 @@ def test_all_published_ports_are_loopback_only():
             assert str(mapping).startswith("127.0.0.1:"), f"{name}: {mapping}"
 
 
+def test_compose_nexus_has_privacy_hardening_environment():
+    doc = _load_compose()
+    env = doc["services"]["kaine-nexus"]["environment"]
+    # Non-loopback binding is explicitly enabled inside the container (publishing
+    # stays loopback-only).
+    assert env["KAINE_NEXUS_NON_LOOPBACK_ALLOWED"] in ("1", "true", "yes")
+    # The env token entry exists (empty falls through to the mounted secrets.toml).
+    assert "KAINE_NEXUS_TOKEN" in env
+    # Allowed Origins must reflect the host-published port, not the in-container 8088.
+    assert "KAINE_NEXUS_ALLOWED_ORIGINS" in env
+    assert "${KAINE_NEXUS_HOST_PORT:-8088}" in env["KAINE_NEXUS_ALLOWED_ORIGINS"]
+
+
 def test_cycle_and_nexus_depend_on_healthy_data_services():
     doc = _load_compose()
     for svc_name in ("kaine-cycle", "kaine-nexus"):
@@ -329,6 +342,23 @@ def test_quadlet_cycle_has_no_install_section():
     # The data/nexus units, by contrast, ARE enabled for reboot survival.
     assert _has_section((_QUADLET / "kaine-nexus.container").read_text(), "[Install]")
     assert _has_section((_QUADLET / "kaine-redis.container").read_text(), "[Install]")
+
+
+def test_quadlet_nexus_privacy_hardening_and_python_healthcheck():
+    text = (_QUADLET / "kaine-nexus.container").read_text()
+    # Nexus binds all-interfaces inside the container; the published port is loopback-only.
+    assert "Environment=KAINE_NEXUS_HOST=0.0.0.0" in text
+    assert "Environment=KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1" in text
+    assert (
+        "Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088"
+        in text
+    )
+    assert "PublishPort=127.0.0.1:" in text
+    health_lines = [ln for ln in text.splitlines() if ln.startswith("HealthCmd")]
+    assert health_lines
+    health_cmd = health_lines[0]
+    assert "curl" not in health_cmd
+    assert "python" in health_cmd
 
 
 def test_quadlet_referenced_volumes_have_unit_files():
