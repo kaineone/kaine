@@ -279,11 +279,11 @@ def test_defaults_writes_valid_file(tmp_path: Path):
     assert "research_submission" not in data
 
 
-def test_defaults_does_not_modify_shipped_config():
+def test_defaults_does_not_modify_shipped_config(tmp_path: Path):
     before = SHIPPED.read_bytes()
     out = io.StringIO()
     setup_main(
-        ["--defaults", "--operator-path", "/tmp/kaine_wizard_test_op.toml"],
+        ["--defaults", "--operator-path", str(tmp_path / "kaine_wizard_test_op.toml")],
         input_fn=lambda _p: "",
         out=out,
     )

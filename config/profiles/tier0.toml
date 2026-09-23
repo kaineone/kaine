@@ -34,6 +34,8 @@ backend = "llama_cpp"
 backend = "sqlite_vec"
 device = "cpu"
 
-# Slow the subjective clock: an edge CPU cannot sustain the workstation cycle rate.
+# Disable the oscillatory layer to save CPU on an edge host. This does NOT slow
+# the subjective clock; set [cycle] time_scale by hand until the slip-driven
+# controller lands.
 [oscillator]
 enabled = false
