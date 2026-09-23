@@ -355,9 +355,7 @@ def test_blocked_wrong_attempts_get_429():
     assert blocked.json()["detail"] == "Too many attempts; wait and try again."
 
 
-def test_correct_token_logs_in_after_limiter_exhausted():
-    import kaine.nexus.auth as auth_module
-
+def test_correct_token_logs_in_after_limiter_exhausted(monkeypatch):
     config = NexusConfig(
         operator_token=TOKEN,
         login_max_failures=2,
@@ -371,41 +369,36 @@ def test_correct_token_logs_in_after_limiter_exhausted():
     async def fake_sleep(delay: float) -> None:
         slept.append(delay)
 
-    original_sleep = auth_module._sleep
-    auth_module._sleep = fake_sleep
-    try:
-        assert (
-            client.post(
-                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-            ).status_code
-            == 401
-        )
-        assert (
-            client.post(
-                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-            ).status_code
-            == 401
-        )
-        assert slept == []
+    monkeypatch.setattr("kaine.nexus.auth._sleep", fake_sleep)
 
-        # Correct token submitted while the client is blocked still signs in,
-        # after waiting its turn.
-        r = client.post(
-            "/auth/login",
-            data={"token": TOKEN},
-            headers=JSON_ACCEPT,
-            follow_redirects=False,
-        )
-        assert r.status_code == 200
-        assert "session_key" in r.json()
-        assert slept == [0.5]
-    finally:
-        auth_module._sleep = original_sleep
+    assert (
+        client.post(
+            "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+        ).status_code
+        == 401
+    )
+    assert slept == []
+
+    # Correct token submitted while the client is blocked still signs in,
+    # after waiting its turn.
+    r = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "session_key" in r.json()
+    assert slept == [0.5]
 
 
-def test_login_rate_limit_locks_out_wrong_attempts():
-    import kaine.nexus.auth as auth_module
-
+def test_login_rate_limit_locks_out_wrong_attempts(monkeypatch):
     now = [0.0]
 
     def clock():
@@ -425,41 +418,38 @@ def test_login_rate_limit_locks_out_wrong_attempts():
     async def fake_sleep(delay: float) -> None:
         slept.append(delay)
 
-    original_sleep = auth_module._sleep
-    auth_module._sleep = fake_sleep
-    try:
-        assert (
-            client.post(
-                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-            ).status_code
-            == 401
-        )
-        assert (
-            client.post(
-                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-            ).status_code
-            == 401
-        )
-        assert slept == []
+    monkeypatch.setattr("kaine.nexus.auth._sleep", fake_sleep)
 
-        blocked = client.post(
+    assert (
+        client.post(
             "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-        )
-        assert blocked.status_code == 429
-        assert slept == [0.5]
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+        ).status_code
+        == 401
+    )
+    assert slept == []
 
-        now[0] += 61.0
-        allowed = client.post(
-            "/auth/login",
-            data={"token": TOKEN},
-            headers=JSON_ACCEPT,
-            follow_redirects=False,
-        )
-        assert allowed.status_code == 200
-        assert "session_key" in allowed.json()
-        assert slept == [0.5]
-    finally:
-        auth_module._sleep = original_sleep
+    blocked = client.post(
+        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+    )
+    assert blocked.status_code == 429
+    assert slept == [0.5]
+
+    now[0] += 61.0
+    allowed = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert allowed.status_code == 200
+    assert "session_key" in allowed.json()
+    assert slept == [0.5]
 
 
 def test_plain_form_post_redirects_nojs_without_session():
@@ -770,10 +760,8 @@ def test_create_app_serves_health_json_without_auth():
         assert "checked_at" in r.json()
 
 
-def test_blocked_login_attempts_sleep_before_token_check():
+def test_blocked_login_attempts_sleep_before_token_check(monkeypatch):
     """M1: blocked clients are slowed before the token is checked."""
-    import kaine.nexus.auth as auth_module
-
     config = NexusConfig(
         operator_token=TOKEN,
         login_max_failures=2,
@@ -787,61 +775,56 @@ def test_blocked_login_attempts_sleep_before_token_check():
     async def fake_sleep(delay: float) -> None:
         slept.append(delay)
 
-    original_sleep = auth_module._sleep
-    auth_module._sleep = fake_sleep
-    try:
-        # First two wrong attempts are not blocked at request start: no sleep.
-        assert (
-            client.post(
-                "/auth/login", data={"token": "bad1"}, headers=JSON_ACCEPT
-            ).status_code
-            == 401
-        )
-        assert (
-            client.post(
-                "/auth/login", data={"token": "bad2"}, headers=JSON_ACCEPT
-            ).status_code
-            == 401
-        )
-        assert slept == []
+    monkeypatch.setattr("kaine.nexus.auth._sleep", fake_sleep)
 
-        # Third attempt starts blocked; it sleeps, then the wrong token yields 429.
-        blocked_wrong = client.post(
-            "/auth/login", data={"token": "bad3"}, headers=JSON_ACCEPT
-        )
-        assert blocked_wrong.status_code == 429
-        assert blocked_wrong.json()["detail"] == "Too many attempts; wait and try again."
-        assert slept == [1.25]
+    # First two wrong attempts are not blocked at request start: no sleep.
+    assert (
+        client.post(
+            "/auth/login", data={"token": "bad1"}, headers=JSON_ACCEPT
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/auth/login", data={"token": "bad2"}, headers=JSON_ACCEPT
+        ).status_code
+        == 401
+    )
+    assert slept == []
 
-        # Blocked client with the correct token sleeps, then logs in successfully.
-        blocked_correct = client.post(
-            "/auth/login",
-            data={"token": TOKEN},
-            headers=JSON_ACCEPT,
-            follow_redirects=False,
-        )
-        assert blocked_correct.status_code == 200
-        assert "session_key" in blocked_correct.json()
-        assert slept == [1.25, 1.25]
+    # Third attempt starts blocked; it sleeps, then the wrong token yields 429.
+    blocked_wrong = client.post(
+        "/auth/login", data={"token": "bad3"}, headers=JSON_ACCEPT
+    )
+    assert blocked_wrong.status_code == 429
+    assert blocked_wrong.json()["detail"] == "Too many attempts; wait and try again."
+    assert slept == [1.25]
 
-        # A successful login resets the limiter; further requests do not sleep.
-        slept.clear()
-        after_reset = client.post(
-            "/auth/login",
-            data={"token": TOKEN},
-            headers=JSON_ACCEPT,
-            follow_redirects=False,
-        )
-        assert after_reset.status_code == 200
-        assert slept == []
-    finally:
-        auth_module._sleep = original_sleep
+    # Blocked client with the correct token sleeps, then logs in successfully.
+    blocked_correct = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert blocked_correct.status_code == 200
+    assert "session_key" in blocked_correct.json()
+    assert slept == [1.25, 1.25]
+
+    # A successful login resets the limiter; further requests do not sleep.
+    slept.clear()
+    after_reset = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert after_reset.status_code == 200
+    assert slept == []
 
 
-def test_concurrent_blocked_login_attempts_serialize_delay():
+def test_concurrent_blocked_login_attempts_serialize_delay(monkeypatch):
     """Blocked login attempts for the same client are serialized, not run in parallel."""
-    import kaine.nexus.auth as auth_module
-
     config = NexusConfig(
         operator_token=TOKEN,
         login_max_failures=1,
@@ -860,39 +843,35 @@ def test_concurrent_blocked_login_attempts_serialize_delay():
         await asyncio.sleep(0.01)
         current[0] -= 1
 
-    original_sleep = auth_module._sleep
-    auth_module._sleep = instrumented_sleep
-    try:
+    monkeypatch.setattr("kaine.nexus.auth._sleep", instrumented_sleep)
 
-        async def _run():
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
-            ) as client:
-                # Seed one failure so all subsequent attempts start blocked.
-                seed = await client.post(
+    async def _run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            # Seed one failure so all subsequent attempts start blocked.
+            seed = await client.post(
+                "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
+            )
+            assert seed.status_code == 401
+
+            async def one_attempt():
+                return await client.post(
                     "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
                 )
-                assert seed.status_code == 401
 
-                async def one_attempt():
-                    return await client.post(
-                        "/auth/login", data={"token": "bad"}, headers=JSON_ACCEPT
-                    )
+            return await asyncio.gather(*[
+                asyncio.create_task(one_attempt()) for _ in range(5)
+            ])
 
-                return await asyncio.gather(*[
-                    asyncio.create_task(one_attempt()) for _ in range(5)
-                ])
+    responses = asyncio.run(_run())
 
-        responses = asyncio.run(_run())
+    for r in responses:
+        assert r.status_code == 429
+        assert r.json()["detail"] == "Too many attempts; wait and try again."
 
-        for r in responses:
-            assert r.status_code == 429
-            assert r.json()["detail"] == "Too many attempts; wait and try again."
-
-        assert len(sleeps) == 5
-        assert max_concurrent[0] == 1
-    finally:
-        auth_module._sleep = original_sleep
+    assert len(sleeps) == 5
+    assert max_concurrent[0] == 1
 
 
 def test_create_app_responses_carry_frame_protection_headers():
