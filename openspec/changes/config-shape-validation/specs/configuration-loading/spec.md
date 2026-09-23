@@ -16,7 +16,7 @@ After merging the shipped configuration, the module profile, the deployment tier
 - **THEN** validation passes
 
 ### Requirement: Runtime entrypoints load the operator overlay strictly
-The loader used by the cognitive cycle and the pre-boot check SHALL raise a configuration error when the operator overlay file exists but cannot be read or parsed. Other callers MAY skip such a file and continue with the remaining layers, but SHALL log a warning naming the file and the parse error when they do. A command-line tool that acts on the configuration (the research submission CLI and the decommission CLI) SHALL NOT replace a configuration it failed to load or validate with an empty configuration; it SHALL report "<tool>: configuration error: <message>" and exit non-zero. The pre-boot check SHALL report a configuration error as "pre-boot: configuration error: <message>" and exit with status 2, and the cycle SHALL refuse to boot with "kaine.cycle: configuration error: <message>" and a non-zero exit, both without a traceback.
+The loader used by the cognitive cycle and the pre-boot check SHALL raise a configuration error when the operator overlay file exists but cannot be read or parsed. Other callers MAY skip such a file and continue with the remaining layers, but SHALL log a warning naming the file and the parse error when they do. A command-line tool that acts on the configuration (the research submission CLI and the decommission CLI) SHALL load it with the same layering as the cycle (shipped, module profile, deployment tier, operator overlay, strict about the operator file) and SHALL NOT replace a configuration it failed to find, read, parse or validate with an empty configuration; it SHALL report "<tool>: configuration error: <message>" and exit with status 6, a status reserved for configuration errors. The pre-boot check SHALL report a configuration error as "pre-boot: configuration error: <message>" and exit with status 2, and the cycle SHALL refuse to boot with "kaine.cycle: configuration error: <message>" and a non-zero exit, both without a traceback.
 
 #### Scenario: Unparsable operator file stops the runtime
 - **WHEN** `config/kaine.operator.toml` contains a TOML syntax error and the pre-boot check or the cycle starts
@@ -29,4 +29,8 @@ The loader used by the cognitive cycle and the pre-boot check SHALL raise a conf
 #### Scenario: Research CLI refuses a malformed configuration
 - **WHEN** the research submission CLI runs while the merged configuration fails validation
 - **THEN** it reports a configuration error and exits non-zero instead of continuing with an empty configuration that drops the admissibility stream list and the encryption settings
+
+#### Scenario: Missing configuration file stops a configuration-driven CLI
+- **WHEN** the research submission CLI or the decommission CLI is run with a `--config` path that does not exist (for example from another working directory)
+- **THEN** it reports a configuration error naming the path and exits with status 6 without doing anything else
 

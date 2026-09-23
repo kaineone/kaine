@@ -27,3 +27,11 @@
 - [x] 4.5 The bus configuration and the model-server setup log a warning when they skip an unparsable operator file or a configuration they cannot load.
 - [x] 4.6 Test: encryption enabled with no key leaves the Nexus fork manager unconstructed.
 
+## 5. Re-review fixes
+
+- [x] 5.1 Research and decommission CLIs treat a missing `--config` file as a configuration error, load with the cycle's layering (`load_runtime_config`), catch unreadable or unparsable shipped files, and exit 6 on configuration errors.
+- [x] 5.2 Decommission refuses (exit 6) when a state file carries the encryption header and the installed encryptor is disabled.
+- [x] 5.3 Nexus reports the actual reason fork operations are unavailable.
+- [x] 5.4 Tests restore the process-global state encryptor after each test.
+- [x] 5.5 Tests: missing config, unparsable operator TOML and unparsable shipped TOML through both CLIs; encrypted state with encryption disabled.
+

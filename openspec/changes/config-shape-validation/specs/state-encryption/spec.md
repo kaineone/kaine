@@ -16,6 +16,10 @@ A component that reads `[security.state_encryption]` SHALL NOT treat a configura
 - **THEN** it reports a configuration error and exits before assessing divergence, capturing a backup or deleting anything, so it never judges or copies encrypted state through the pass-through encryptor
 
 #### Scenario: Nexus reports disabled fork operations
-- **WHEN** Nexus left its fork manager unconstructed because the encryption posture could not be installed
-- **THEN** the fork listing reports that fork operations are unavailable, with the reason, instead of an empty list of forks
+- **WHEN** Nexus has no fork manager (the encryption posture could not be installed, or the fork manager could not be constructed)
+- **THEN** the fork listing reports that fork operations are unavailable, with the actual reason, instead of an empty list of forks
+
+#### Scenario: Encrypted state with encryption disabled stops decommission
+- **WHEN** the decommission CLI finds a cognitive-state file carrying the encryption header while the installed encryptor is disabled
+- **THEN** it refuses with a configuration error and exit status 6 before assessing divergence, capturing a backup or deleting anything, because it could neither read that state for the welfare assessment nor back it up faithfully
 

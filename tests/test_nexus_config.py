@@ -225,9 +225,10 @@ def test_build_fork_manager_returns_none_when_encryption_setup_fails(caplog):
         return {}
 
     with caplog.at_level(logging.ERROR, logger="kaine.nexus"):
-        fm = _build_fork_manager(lifecycle_loader, broken_encryption_loader)
+        fm, reason = _build_fork_manager(lifecycle_loader, broken_encryption_loader)
 
     assert fm is None
+    assert reason == "the state-encryption posture could not be installed"
     assert any(
         "state-encryption setup failed; fork/merge state operations are disabled" in rec.message
         and "ConfigShapeError" in rec.message
@@ -250,9 +251,12 @@ def test_build_fork_manager_returns_fork_manager_when_encryption_disabled(
         return {"snapshots_path": str(tmp_path / "forks")}
 
     with caplog.at_level(logging.WARNING, logger="kaine.nexus"):
-        fm = _build_fork_manager(lifecycle_loader, encryption_loader)
+        fm, reason = _build_fork_manager(lifecycle_loader, encryption_loader)
 
-    assert fm is not None
+    from kaine.lifecycle.manager import ForkManager
+
+    assert isinstance(fm, ForkManager)
+    assert reason is None
     assert not any(
         "state-encryption setup failed" in rec.message for rec in caplog.records
     )

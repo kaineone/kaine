@@ -260,6 +260,7 @@ def build_diagnostics_router(
     cycle_control_provider: Callable[[], dict[str, Any]] | None = None,
     health_prober: HealthProber | None = None,
     rate_control_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    fork_manager_reason: str | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/diagnostics")
     templates = _templates()
@@ -303,11 +304,12 @@ def build_diagnostics_router(
     @router.get("/forks.json")
     async def forks_json():
         if fork_manager is None:
+            reason = fork_manager_reason or "no fork manager is configured"
             return JSONResponse(
                 {
                     "forks": [],
                     "available": False,
-                    "reason": "fork operations are disabled: the state-encryption posture could not be installed (see the Nexus log)",
+                    "reason": f"fork operations are disabled: {reason} (see the Nexus log)",
                 }
             )
         out = []

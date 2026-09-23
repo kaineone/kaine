@@ -16,6 +16,16 @@ def _reset_bus_singleton():
     reset_bus_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def _save_restore_state_encryptor():
+    """Save and restore the process-global state encryptor around each test."""
+    from kaine.security import crypto as crypto_module
+
+    previous = getattr(crypto_module, "_active", None)
+    yield
+    crypto_module._active = previous
+
+
 @pytest.fixture
 def bus_config_with_password() -> BusConfig:
     return BusConfig(password="test-password", audit_required=False)

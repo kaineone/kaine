@@ -59,7 +59,7 @@ def test_research_main_rejects_malformed_operator_overlay(tmp_path, monkeypatch)
         err=err,
     )
 
-    assert code == 2
+    assert code == 6
     assert "research: configuration error:" in err.getvalue()
 
 
@@ -93,7 +93,7 @@ def test_decommission_main_rejects_malformed_overlay(tmp_path, monkeypatch):
         err=err,
     )
 
-    assert code == 2
+    assert code == 6
     assert "decommission: configuration error:" in err.getvalue()
     assert sentinel.exists()
     assert not backup_root.exists() or not any(backup_root.iterdir())
@@ -131,7 +131,7 @@ def test_decommission_main_rejects_missing_encryption_key(tmp_path, monkeypatch)
         err=err,
     )
 
-    assert code == 2
+    assert code == 6
     assert "state-encryption setup failed" in err.getvalue()
     assert sentinel.exists()
     assert not backup_root.exists() or not any(backup_root.iterdir())
@@ -142,9 +142,10 @@ def test_nexus_build_fork_manager_fails_closed_on_missing_key(monkeypatch, caplo
     monkeypatch.setattr(crypto_module, "_load_key_from_keyring", lambda: None)
 
     with caplog.at_level(logging.ERROR, logger="kaine.nexus"):
-        result = _build_fork_manager(lambda: {}, lambda: {"enabled": True})
+        result, reason = _build_fork_manager(lambda: {}, lambda: {"enabled": True})
 
     assert result is None
+    assert reason == "the state-encryption posture could not be installed"
     assert any("CryptoConfigError" in rec.message for rec in caplog.records)
 
 
@@ -155,6 +156,7 @@ def test_nexus_forks_json_reports_disabled_when_no_fork_manager():
         bridge,
         fork_manager=None,
         metrics_snapshot=lambda: {},
+        fork_manager_reason="the state-encryption posture could not be installed",
     )
     app.include_router(router)
 
@@ -164,4 +166,185 @@ def test_nexus_forks_json_reports_disabled_when_no_fork_manager():
     payload = response.json()
     assert payload["forks"] == []
     assert payload["available"] is False
-    assert "fork operations are disabled" in payload["reason"]
+    assert payload["reason"] == (
+        "fork operations are disabled: the state-encryption posture could not be "
+        "installed (see the Nexus log)"
+    )
+
+
+def test_research_main_missing_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    out = io.StringIO()
+    err = io.StringIO()
+    code = research_main(
+        ["--config", str(tmp_path / "missing.toml"), "--preview"],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "research: configuration error:" in err.getvalue()
+    assert "FileNotFoundError" in err.getvalue()
+
+
+def test_decommission_main_missing_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    state_root = tmp_path / "state"
+    state_root.mkdir()
+    sentinel = state_root / "entity.dat"
+    sentinel.write_text("keep", encoding="utf-8")
+    backup_root = tmp_path / "backups"
+
+    out = io.StringIO()
+    err = io.StringIO()
+    code = decommission_main(
+        [
+            "--state-root",
+            str(state_root),
+            "--out-root",
+            str(backup_root),
+            "--config",
+            str(tmp_path / "missing.toml"),
+            "--dry-run",
+        ],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "decommission: configuration error:" in err.getvalue()
+    assert "FileNotFoundError" in err.getvalue()
+    assert sentinel.exists()
+    assert not backup_root.exists() or not any(backup_root.iterdir())
+
+
+def test_research_main_unparsable_operator_toml(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_configs(
+        tmp_path,
+        base="[research_submission]\nenabled = false\n",
+        operator="[modules]\nsoma = \n",
+    )
+    out = io.StringIO()
+    err = io.StringIO()
+    code = research_main(
+        ["--config", "config/kaine.toml", "--preview"],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "research: configuration error:" in err.getvalue()
+    assert "TOMLDecodeError" in err.getvalue()
+
+
+def test_decommission_main_unparsable_operator_toml(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_configs(
+        tmp_path,
+        base="[research_submission]\nenabled = false\n",
+        operator="[modules]\nsoma = \n",
+    )
+    state_root = tmp_path / "state"
+    state_root.mkdir()
+    sentinel = state_root / "entity.dat"
+    sentinel.write_text("keep", encoding="utf-8")
+    backup_root = tmp_path / "backups"
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+
+    out = io.StringIO()
+    err = io.StringIO()
+    code = decommission_main(
+        [
+            "--state-root",
+            str(state_root),
+            "--out-root",
+            str(backup_root),
+            "--dry-run",
+        ],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "decommission: configuration error:" in err.getvalue()
+    assert "TOMLDecodeError" in err.getvalue()
+    assert sentinel.exists()
+
+
+def test_research_main_unparsable_shipped_toml(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_configs(tmp_path, base="[research_submission\n")
+    out = io.StringIO()
+    err = io.StringIO()
+    code = research_main(
+        ["--config", "config/kaine.toml", "--preview"],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "research: configuration error:" in err.getvalue()
+    assert "TOMLDecodeError" in err.getvalue()
+    assert "Traceback" not in err.getvalue()
+
+
+def test_decommission_main_unparsable_shipped_toml(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_configs(tmp_path, base="[research_submission\n")
+    state_root = tmp_path / "state"
+    state_root.mkdir()
+    sentinel = state_root / "entity.dat"
+    sentinel.write_text("keep", encoding="utf-8")
+    backup_root = tmp_path / "backups"
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+
+    out = io.StringIO()
+    err = io.StringIO()
+    code = decommission_main(
+        [
+            "--state-root",
+            str(state_root),
+            "--out-root",
+            str(backup_root),
+            "--dry-run",
+        ],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "decommission: configuration error:" in err.getvalue()
+    assert "TOMLDecodeError" in err.getvalue()
+    assert "Traceback" not in err.getvalue()
+    assert sentinel.exists()
+
+
+def test_decommission_main_encrypted_self_model_disabled_encryption(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_configs(
+        tmp_path,
+        base="[security]\n[security.state_encryption]\nenabled = false\n",
+    )
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+
+    state_root = tmp_path / "state"
+    (state_root / "eidolon").mkdir(parents=True)
+    self_model = state_root / "eidolon" / "self_model.json"
+    self_model.write_bytes(b"KAINEgcm1:" + b"0" * 32)
+
+    backup_root = tmp_path / "backups"
+
+    out = io.StringIO()
+    err = io.StringIO()
+    code = decommission_main(
+        [
+            "--state-root",
+            str(state_root),
+            "--out-root",
+            str(backup_root),
+            "--dry-run",
+        ],
+        out=out,
+        err=err,
+    )
+    assert code == 6
+    assert "decommission: configuration error:" in err.getvalue()
+    assert "encrypted cognitive state found" in err.getvalue()
+    assert self_model.exists()
+    assert not backup_root.exists() or not any(backup_root.iterdir())

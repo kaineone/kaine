@@ -24,6 +24,8 @@ Exit codes
 3  the cycle appears to be running (stop the entity first)
 4  backup failed (nothing was deleted)
 5  operator declined a required continuity / transfer step (diverged path)
+6  configuration error (missing/unreadable/unparsable config, malformed shape,
+   or state-encryption posture could not be installed)
 """
 from __future__ import annotations
 
@@ -101,15 +103,41 @@ def _cycle_appears_running(runtime_path: Path) -> bool:
 
 
 def _load_kaine_config(path: Path) -> dict[str, Any]:
-    """Load the merged KAINE configuration, raising on operator errors.
+    """Load the merged KAINE configuration via the runtime loader.
 
-    Returns ``{}`` only when the requested config file does not exist.
+    Uses the same layering as the cognitive cycle (shipped, module profile,
+    deployment tier, operator overlay) and is strict about the operator file.
+    A missing, unreadable, unparsable or shape-invalid config raises.
     """
-    from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
+    from kaine.config import OPERATOR_CONFIG_PATH, load_runtime_config
 
-    if not path.is_file():
-        return {}
-    return load_kaine_config(path, OPERATOR_CONFIG_PATH, strict_operator=True)
+    return load_runtime_config(path, OPERATOR_CONFIG_PATH)
+
+
+def _encrypted_state_without_key(state_root: Path) -> Path | None:
+    """Return the first encrypted cognitive-state file, or None.
+
+    Only called when the installed state encryptor is disabled; any file
+    carrying the KAINE encryption header means we cannot safely read or back
+    it up, so decommission must fail closed.
+    """
+    from kaine.security.crypto import is_encrypted
+
+    root = Path(state_root)
+    if not root.is_dir():
+        return None
+    for p in root.rglob("*"):
+        if not p.is_file():
+            continue
+        try:
+            # Only the header is needed; state roots can hold multi-GB files.
+            with p.open("rb") as fh:
+                head = fh.read(64)
+        except OSError:
+            continue
+        if is_encrypted(head):
+            return p
+    return None
 
 
 def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
@@ -219,14 +247,16 @@ def main(
         return 3
 
     # --- Load config and install state encryption BEFORE any destructive work
-    from kaine.config import ProfileError
-    from kaine.security.crypto import install_from_section
+    import tomllib
+
+    from kaine.config import ConfigShapeError, ProfileError
+    from kaine.security.crypto import get_state_encryptor, install_from_section
 
     try:
         config = _load_kaine_config(args.config)
-    except ProfileError as exc:
-        err.write(f"decommission: configuration error: {exc}\n")
-        return 2
+    except (ProfileError, ConfigShapeError, FileNotFoundError, OSError, tomllib.TOMLDecodeError) as exc:
+        err.write(f"decommission: configuration error: {type(exc).__name__}: {exc}\n")
+        return 6
 
     try:
         install_from_section((config.get("security") or {}).get("state_encryption") or {})
@@ -234,7 +264,26 @@ def main(
         err.write(
             f"decommission: state-encryption setup failed; refusing to assess, back up or delete: {type(exc).__name__}: {exc}\n"
         )
-        return 2
+        return 6
+
+    # --- Defence in depth: refuse if encrypted state is present while encryptor is disabled
+    encryptor = get_state_encryptor()
+    if not encryptor.enabled:
+        encrypted_path = _encrypted_state_without_key(state_root)
+        if encrypted_path is None:
+            encrypted_path = _encrypted_state_without_key(Path(args.eval_root))
+        if encrypted_path is not None:
+            try:
+                rel = encrypted_path.relative_to(state_root)
+            except ValueError:
+                try:
+                    rel = encrypted_path.relative_to(Path(args.eval_root))
+                except ValueError:
+                    rel = encrypted_path
+            err.write(
+                f"decommission: configuration error: encrypted cognitive state found at {rel} but state encryption is disabled; provide the key before decommissioning\n"
+            )
+            return 6
 
     entity_name = _resolve_entity_name(state_root, config)
 

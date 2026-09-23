@@ -105,16 +105,12 @@ def _load_lifecycle_config() -> dict[str, Any]:
 def _build_fork_manager(
     lifecycle_cfg_loader: Any,
     encryption_section_loader: Any,
-) -> ForkManager | None:
+) -> tuple[ForkManager | None, str | None]:
     """Install the configured state-encryption posture and construct a ForkManager.
 
-    This helper exists so the encryption-install + fork-manager step of
-    Nexus startup can be exercised without bringing up network services. It
-    fails closed: any exception while installing the encryption posture
-    (including a configuration error or encryption enabled without a key)
-    logs an ERROR and returns ``None``, leaving fork/merge state I/O
-    unavailable. If encryption installs successfully but ForkManager
-    construction fails, it logs a WARNING and returns ``None``.
+    Returns the manager and a reason string when fork/merge I/O is disabled.
+    The reason is forwarded to the diagnostics router so /forks.json can
+    report why fork operations are unavailable.
     """
     try:
         from kaine.security.crypto import install_from_section
@@ -126,7 +122,7 @@ def _build_fork_manager(
             type(exc).__name__,
             exc,
         )
-        return None
+        return None, "the state-encryption posture could not be installed"
 
     try:
         lifecycle_cfg = lifecycle_cfg_loader()
@@ -137,14 +133,17 @@ def _build_fork_manager(
         )
         snapshots_path = str(lifecycle_cfg.get("snapshots_path", "state/forks"))
         max_retained = int(lifecycle_cfg.get("max_snapshots_retained", 64))
-        return ForkManager(
-            snapshots_path,
-            adapter_merger=adapter_merger,
-            max_snapshots_retained=max_retained,
+        return (
+            ForkManager(
+                snapshots_path,
+                adapter_merger=adapter_merger,
+                max_snapshots_retained=max_retained,
+            ),
+            None,
         )
     except Exception:
         log.warning("fork manager unavailable", exc_info=True)
-        return None
+        return None, "the fork manager could not be constructed"
 
 
 def _load_security_state_encryption_config() -> dict[str, Any]:
@@ -183,7 +182,7 @@ async def _build():
     # Install the same state-encryption posture the cycle uses so fork/merge
     # snapshots written/read from this process honour [security.state_encryption].
     # Fails closed: a configuration or key error disables fork/merge I/O.
-    fork_manager = _build_fork_manager(
+    fork_manager, fm_reason = _build_fork_manager(
         _load_lifecycle_config, _load_security_state_encryption_config
     )
 
@@ -260,6 +259,7 @@ async def _build():
         history_loader=history_loader,
         metrics_snapshot=metrics_snapshot,
         fork_manager=fork_manager,
+        fork_manager_reason=fm_reason,
         health_prober=health_prober,
         rate_control_publisher=rate_control_publisher,
         evaluation_provider=evaluation_provider,
