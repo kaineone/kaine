@@ -1,6 +1,6 @@
 ## 1. Nexus authentication layer
 
-- [x] 1.1 Add `operator_token` field to `NexusConfig` loaded from `KAINE_NEXUS_TOKEN` env or `config/secrets.toml`, and verify `kaine/nexus/config.py` parses it without logging the value.
+- [ ] 1.1 Add `operator_token` field to `NexusConfig` loaded from `KAINE_NEXUS_TOKEN` env or `config/secrets.toml`, and verify `kaine/nexus/config.py` parses it without logging the value.
 - [x] 1.2 Create `kaine/nexus/auth.py` with a FastAPI `Depends` callable that validates `Authorization: Bearer <token>` and returns 401 when the token is missing or mismatched; verify with unit tests for missing, wrong, and valid tokens.
 - [x] 1.3 Apply the auth dependency to all state-changing routers in `kaine/nexus/app.py` (`cycle_control`, `perception`, diagnostics forks/merges/rates endpoints) and verify unauthenticated POSTs return 401.
 - [x] 1.4 Apply the auth dependency to privileged read surfaces when `conversation_enabled` or `dev_content_override` is true (conversation router, diagnostics SSE) and verify unauthenticated requests return 401.
@@ -22,12 +22,12 @@
 ## 4. State encryption defaults
 
 - [x] 4.1 Update `kaine/security/crypto.py` so that `CryptoConfig.from_section` treats a missing `enabled` as true when a key is resolvable, and false otherwise with a warning; verify with unit tests for key-present, key-absent, and explicit false cases.
-- [x] 4.2 Add a boot-time warning in `kaine/boot.py` when encryption is explicitly disabled, and verify the warning appears in logs.
+- [ ] 4.2 Add a boot-time warning in `kaine/boot.py` when encryption is explicitly disabled, and verify the warning appears in logs.
 - [x] 4.3 Update `config/kaine.toml` comments to reflect the new default behavior without changing the explicit shipped value.
 
 ## 5. Secrets and remote bridge hardening
 
-- [x] 5.1 Remove `secrets/state_key` from the repo, add `secrets/state_key.example` with a placeholder and instructions, and verify `git status` no longer shows a real key.
+- [ ] 5.1 Remove `secrets/state_key` from the repo, add `secrets/state_key.example` with a placeholder and instructions, and verify `git status` no longer shows a real key.
 - [x] 5.2 Update `kaine/remote/bridge.py` to reject token-in-query and token-in-subprotocol connections, accept only `Authorization: Bearer <token>`, and verify with unit tests.
 - [x] 5.3 Add a fail-closed check in the bridge startup that refuses non-loopback binds when the token is empty, and verify with a unit test.
 
@@ -38,3 +38,11 @@
 - [x] 6.3 Update `docs/configuration.md` with the new `[nexus]` auth fields and `[security.state_encryption]` default semantics.
 - [x] 6.4 Run `openspec validate nexus-privacy-hardening --strict` and resolve all reported issues.
 - [x] 6.5 Run the affected test suites (`tests/test_nexus_*.py`, `tests/test_state_encryptor.py`, `tests/test_evaluation_config.py`, `tests/test_remote_bridge.py`) and ensure they pass or are updated to match the new behavior.
+
+## Review status (2026-09-22)
+
+An adversarial review found these tasks only partly done, so they are unticked:
+1.1 (the operator token is read from `KAINE_NEXUS_TOKEN` or `kaine.toml`, not from `config/secrets.toml`),
+4.2 (the warning lives in `kaine/security/crypto.py`, not `kaine/boot.py`),
+5.1 (the premise was wrong: `secrets/state_key` was gitignored and never in the repository; deleting it removed the only copy of the operator's state key. Key custody moves to a per-entity design).
+The review also found that the dashboard JavaScript and the SSE stream cannot send the Bearer token, and that the containerised Nexus refuses its `0.0.0.0` bind. This change stays open until those are fixed.

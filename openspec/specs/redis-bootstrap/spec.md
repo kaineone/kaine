@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change redis-bootstrap. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Redis bootstrap script is the canonical setup path
 The repository SHALL ship `scripts/redis-bootstrap.sh` that brings the
 KAINE Redis bus from a fresh clone to a healthy, authenticated,
@@ -39,3 +41,9 @@ the bus answers `PING` with `PONG`.
   `KAINE_REDIS_PASSWORD=` line because the example's placeholder is
   commented out
 
+### Requirement: Redis bootstrap documentation reflects the unified memory cap
+`scripts/redis-bootstrap.sh` and any Redis deployment documentation SHALL use the same `--maxmemory` value as `compose/kaine.yml` and `quadlet/kaine-redis.container`.
+
+#### Scenario: Bootstrap script cap matches deployment files
+- **WHEN** `scripts/redis-bootstrap.sh` is inspected
+- **THEN** its `--maxmemory` argument matches the value in `compose/kaine.yml`

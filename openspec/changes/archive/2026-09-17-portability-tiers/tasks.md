@@ -42,18 +42,18 @@
 
 ## 3. Remaining edge backends (staged)
 
-- [x] 3.1 whisper.cpp STT backend (Audio-In)
+- [ ] 3.1 whisper.cpp STT backend (Audio-In)
       — DEFERRED: needs an external whisper.cpp binary + a GGML model file, not
       installable/testable in this environment. The `[audition]` config seam and
       the tier profiles are ready for it; the concrete client lands in a
       follow-up (design §Non-goals stages the backends).
-- [x] 3.2 Piper TTS backend (Audio-Out)
+- [ ] 3.2 Piper TTS backend (Audio-Out)
       — DEFERRED: needs the `piper` binary + a voice model; same staging as 3.1.
       Vox is held off at Tier 0/1 in the profiles until it lands.
-- [x] 3.3 ONNX / dinov2.cpp vision backend (Topos), periodic-mode
+- [ ] 3.3 ONNX / dinov2.cpp vision backend (Topos), periodic-mode
       — DEFERRED: needs an ONNX/dinov2.cpp model export; staged. Tier profiles
       pin Topos to CPU and Tier 0 disables it.
-- [x] 3.4 ONNX MiniLM embeddings backend (Mnemos)
+- [ ] 3.4 ONNX MiniLM embeddings backend (Mnemos)
       — DEFERRED: needs an ONNX MiniLM export + onnxruntime model file; staged.
 - [x] 3.5 Document emotion2vec+ as Tier-2-only (no edge backend); ensure it
       disables cleanly below Tier 2
@@ -92,7 +92,7 @@
 - [x] 6.1 Capability matrix in DEPENDENCIES.md / a new `docs/deployment-tiers.md`
       — `docs/deployment-tiers.md` (per-faculty × per-tier matrix + explicit
       absences). Mirrored in `kaine/hardware.py:TIER_CAPABILITIES`.
-- [x] 6.2 Paper §4 / §10 updated with the tier ladder (see paper edit)
+- [ ] 6.2 Paper §4 / §10 updated with the tier ladder (see paper edit)
       — DEFERRED / FLAG: the paper source is NOT present in this public repo
       (no `.tex` / paper file under `docs/`), so the paper edit cannot be made
       here. Tracked for the private paper repo.
