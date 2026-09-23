@@ -3,7 +3,7 @@
 > **This file is generated - do not edit by hand.**
 > Regenerate with `~/.claude/bin/openspec-roadmap.sh` from the project root.
 > Generated on 2026-09-15 (UTC).
-> **Note:** The generator script is missing on this host, so this update was applied manually to reflect the new review-fix proposals.
+> **Note:** The generator script is missing on this host, so this file is maintained by hand. Last corrected 2026-09-22 to match each change's tasks.md after review.
 
 ## In flight
 
@@ -14,8 +14,9 @@
 | docs-base-thesis-reframe | 13/15 (86%) | documentation-consistency | ADDED | The project has been reconfigured to its **base-thesis form** as the ... |
 | perception-drives-salience | 9/11 (81%) | topos-perception | MODIFIED | The base thesis is that perception enters the workspace **as predicti... |
 | attention-driven-foveation | 13/18 (72%) | topos, topos-foveation | ADDED | Screen perception currently scales the whole screen to Topos's fixed ... |
-| developmental-maturation-gate | 32/32 (100%) | developmental-stage | ADDED | `gestational-womb-stimulus` gives the entity a womb to gestate in and... |
 | headless-host-operations | 47/51 (92%) | headless-host-operations | ADDED | KAINE's docs cover installing the software and bringing up services. ... |
+| nexus-privacy-hardening | 20/23 (87%) | evaluation-sidecar, nexus-auth, nexus-csrf-protection, nexus-dashboard, nexus-observability, remote-bridge, state-encryption | ADDED, MODIFIED | Nexus auth, CSRF and trajectory filtering landed; the dashboard and SSE stream cannot yet send the token, the containerised Nexus refuses its bind, and the token is not read from `secrets.toml`... |
+| stream-wiring-quality | 11/20 (55%) | architecture-boundaries, evaluation-observers, event-bus, lingua, stream-contract | ADDED, MODIFIED | `lingua.out` aggregate, observer consolidation and ruff enforcement landed; canonical stream names in observers and the per-stream maxlen key check remain... |
 | attention-driven-audition | 8/16 (50%) | audition, audition-predictive, auditory-perception | ADDED, MODIFIED | Hearing is currently **speech transcription for the language organ**,... |
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |
 | paracosmic-connector | 0/87 (0%) | kosmos | ADDED | > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper's ... |
@@ -25,11 +26,10 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-19 | developmental-maturation-gate (6 tasks reopened after review; see its tasks.md) |
 | 2026-09-17 | portability-tiers |
 | 2026-09-17 | condition-language-organ |
 | 2026-09-17 | performance-test-coverage |
-| 2026-09-17 | nexus-privacy-hardening |
-| 2026-09-17 | stream-wiring-quality |
 | 2026-09-17 | deployment-consistency |
 | 2026-09-15 | host-aware-accelerator-provisioning |
 | 2026-09-09 | coldstart-welfare-spot-honor-warmup |
