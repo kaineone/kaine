@@ -382,16 +382,13 @@ class Lingua(BaseModule):
             # refractory-scaled timeouts in the workspace policies; this
             # event is the observability trail.
             try:
-                await self._publish(
-                    "lingua.internal",
-                    {
-                        "type": "realization_failed",
-                        "mode": kind,
-                        "reason_class": type(exc).__name__,
-                    },
+                await self._write_mode_record(
+                    INTERNAL_STREAM,
+                    "realization_failed",
+                    {"mode": kind, "reason_class": type(exc).__name__},
                 )
             except Exception:
-                log.debug("lingua: realization_failed publish failed", exc_info=True)
+                log.warning("lingua: realization_failed publish failed", exc_info=True)
 
     async def _settle_gen_task(self) -> None:
         """Await the held generation, converting a preemptive cancellation into
@@ -448,6 +445,21 @@ class Lingua(BaseModule):
             self._intent_log.record_preemption(mode=mode or "external", tick=tick)
         except Exception:
             log.exception("lingua preemption record failed")
+
+    async def _write_mode_record(self, stream: str, type_: str, payload: dict[str, Any]) -> None:
+        await self._bus.client.xadd(
+            stream,
+            {
+                "source": self.name,
+                "type": type_,
+                "salience": repr(self._baseline_salience),
+                "timestamp": _now_iso(),
+                "causal_parent": "",
+                "payload": _json(payload),
+            },
+            maxlen=self._bus.config.default_maxlen,
+            approximate=True,
+        )
 
     async def _produce(
         self,
@@ -507,22 +519,7 @@ class Lingua(BaseModule):
             payload["faithful_rendering"] = faithful
         # Publish directly to the mode-specific stream (bypassing the
         # default <module>.out routing) so subscribers can filter cleanly.
-        await self._bus.client.xadd(
-            stream,
-            {
-                "source": self.name,
-                # Semantic speech type (external_speech / internal_speech) so the
-                # conversation surface and evaluation observers filter cleanly.
-                # mode is "external"/"internal"; the stream is the transport.
-                "type": f"{mode}_speech",
-                "salience": repr(self._baseline_salience),
-                "timestamp": _now_iso(),
-                "causal_parent": "",
-                "payload": _json(payload),
-            },
-            maxlen=self._bus.config.default_maxlen,
-            approximate=True,
-        )
+        await self._write_mode_record(stream, f"{mode}_speech", payload)
         # Also publish to the aggregate lingua.out stream so consumers that
         # expect the canonical <module>.out routing (nexus diagnostics, raw
         # archive, generic observers) see every utterance in one place.

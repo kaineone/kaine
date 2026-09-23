@@ -21,8 +21,10 @@ entity. They enforce the load-bearing invariants of the design:
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -85,7 +87,15 @@ def test_print_index_cli_accessor():
     spec = subprocess.run(
         [py, script, "--print-torch-spec"], capture_output=True, text=True, check=True
     )
-    assert spec.stdout.strip() == "torch>=2.5,<3"
+
+    with open(_REPO_ROOT / "pyproject.toml", "rb") as f:
+        deps = tomllib.load(f).get("project", {}).get("dependencies", [])
+    expected = next(
+        dep
+        for dep in deps
+        if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep)
+    )
+    assert spec.stdout.strip() == expected
 
 
 # --------------------------------------------------------------------------

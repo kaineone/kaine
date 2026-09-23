@@ -13,6 +13,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.modules.hypnos.ignition_audit import classify_realizations
 from kaine.modules.lingua import (
     EXTERNAL_STREAM,
     INTERNAL_STREAM,
@@ -20,6 +21,7 @@ from kaine.modules.lingua import (
     IntentExpressionLog,
     Lingua,
 )
+from kaine.workspace.volition import SPEAK
 
 
 async def _publish_intent(bus: AsyncBus, kind: str, about: str) -> None:
@@ -550,3 +552,75 @@ async def test_shutdown_cancels_in_flight_generation(bus: AsyncBus, tmp_path: Pa
     assert client.closed is True
     entries = await bus.client.xrange(EXTERNAL_STREAM)
     assert entries == []
+
+
+# --- failed-generation audit path ---------------------------------------------
+
+
+class _FailingChatClient:
+    """Chat client whose ``complete`` always raises, for testing the failure
+    audit path that must emit a content-free realization_failed record.
+    """
+
+    async def complete(self, request):
+        raise ConnectionError("organ down")
+
+    async def aclose(self) -> None:
+        pass
+
+
+def _make_failing_lingua(bus: AsyncBus, tmp_path: Path) -> Lingua:
+    return Lingua(
+        bus,
+        chat_client=_FailingChatClient(),
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
+        model_id="fake-model",
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_speak_writes_content_free_realization_failed_record(
+    bus: AsyncBus, tmp_path: Path
+):
+    lingua = _make_failing_lingua(bus, tmp_path)
+    await lingua._realize_intent(SPEAK, "hello secret")
+
+    entries = await bus.client.xrange(INTERNAL_STREAM)
+    assert len(entries) == 1
+    _entry_id, fields = entries[0]
+
+    assert fields["type"] == "realization_failed"
+    payload = json.loads(fields["payload"])
+    assert payload == {"mode": SPEAK, "reason_class": "ConnectionError"}
+
+    # Content-free: the sensitive input and exception message must never appear
+    # in any stored field (prompt/input/text/reason string are all excluded).
+    stored_text = " ".join(str(v) for v in fields.values())
+    assert "hello secret" not in stored_text
+    assert "organ down" not in stored_text
+
+    ext = await bus.client.xrange(EXTERNAL_STREAM)
+    assert len(ext) == 0
+
+
+@pytest.mark.asyncio
+async def test_realization_failed_record_is_counted_by_ignition_audit(
+    bus: AsyncBus, tmp_path: Path
+):
+    lingua = _make_failing_lingua(bus, tmp_path)
+    await lingua._realize_intent(SPEAK, "hello secret")
+
+    entries = await bus.client.xrange(INTERNAL_STREAM)
+    assert len(entries) == 1
+    entry_id, fields = entries[0]
+
+    record = {
+        "stream": INTERNAL_STREAM,
+        "type": fields["type"],
+        "source": fields.get("source", lingua.name),
+        "payload": json.loads(fields["payload"]),
+        "entry_id": entry_id,
+    }
+
+    report = classify_realizations([], [], [record])
+    assert report.realization_failed_count == 1
