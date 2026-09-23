@@ -27,7 +27,7 @@
 #   bash scripts/install.sh --cpu     # force CPU wheels
 #   bash scripts/install.sh --cuda    # force CUDA wheels (resolved via kaine.wheel_index)
 #   bash scripts/install.sh --index-url URL  # force a specific CUDA wheel index
-#   bash scripts/install.sh --rocm    # force ROCm wheels (rocm6.2)
+#   bash scripts/install.sh --rocm    # force ROCm wheels (host-resolved)
 #   bash scripts/install.sh --xpu     # force Intel XPU wheels
 #   bash scripts/install.sh --mps     # force macOS MPS (default PyPI wheel)
 #   bash scripts/install.sh --research # ALSO install the perception extras (.[perception])
@@ -59,13 +59,17 @@ PYTHON_BIN="python3"
 FORCE=""
 NO_WIZARD=0
 RESEARCH=0
+# Pins filled by host-aware wheel-index resolution for CUDA and ROCm.
+TORCH_PIN=""
+TV_PIN=""
+TA_PIN=""
+SELFTEST=""
 # Legacy fallback: used only when the host-resolved wheel-index probe
 # (kaine.wheel_index) fails; the cuda flavor branch below normally overrides it.
 # cu126 is the CUDA index with the widest driver compatibility that carries
 # the project's torch floor (cu128 stops at torch 2.11); the host-aware
 # resolver still chooses per host when it is available.
 NVIDIA_INDEX_URL="https://download.pytorch.org/whl/cu126"
-ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm6.2"
 XPU_INDEX_URL="https://download.pytorch.org/whl/xpu"
 CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"
 
@@ -190,18 +194,24 @@ case "$flavor" in
       RESOLVER_PY="$(command -v python3)"
     fi
     RESOLVER_JSON=""
-    if [ -n "$RESOLVER_PY" ]; then
-      if [ -n "${INDEX_URL_OVERRIDE:-}" ]; then
-        RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --override "$INDEX_URL_OVERRIDE" 2>/dev/null || true)"
-      else
-        RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index 2>/dev/null || true)"
-      fi
+    resolver_extra_args=()
+    if [ "$RESEARCH" -eq 1 ]; then
+      resolver_extra_args+=("--need-torchaudio")
+    fi
+    if [ -n "${INDEX_URL_OVERRIDE:-}" ]; then
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --override "$INDEX_URL_OVERRIDE" "${resolver_extra_args[@]}" 2>/dev/null || true)"
+    else
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index "${resolver_extra_args[@]}" 2>/dev/null || true)"
     fi
     RESOLVER_VARIANT=""
     RESOLVER_URL=""
     if [ -n "$RESOLVER_JSON" ] && [ -n "$RESOLVER_PY" ]; then
-      RESOLVER_VARIANT="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print(json.load(sys.stdin).get("variant",""))' 2>/dev/null || true)"
-      RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print(json.load(sys.stdin).get("index_url",""))' 2>/dev/null || true)"
+      RESOLVER_VARIANT="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("variant"); print("" if v is None else v)' 2>/dev/null || true)"
+      RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("index_url"); print("" if v is None else v)' 2>/dev/null || true)"
+      TORCH_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torch_version"); print("" if v is None else v)' 2>/dev/null || true)"
+      TV_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchvision_version"); print("" if v is None else v)' 2>/dev/null || true)"
+      TA_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchaudio_version"); print("" if v is None else v)' 2>/dev/null || true)"
+      SELFTEST="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print("true" if json.load(sys.stdin).get("selftest_required") else "false")' 2>/dev/null || true)"
     fi
     if [ -n "$RESOLVER_URL" ]; then
       INDEX_URL="$RESOLVER_URL"
@@ -229,6 +239,9 @@ else:
         print("wheel-index warning: {}".format(w))
 ' || true
       echo "wheel index: $INDEX_URL (source: $INDEX_URL_SOURCE)"
+      if [ -n "$TORCH_PIN" ]; then
+        echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
+      fi
       echo "$RESOLVER_JSON"
     else
       echo "WARNING: CUDA wheel-index probe failed (kaine.wheel_index missing, exited non-zero, or produced unparseable output); using the legacy hardcoded default index $NVIDIA_INDEX_URL." >&2
@@ -237,7 +250,80 @@ else:
       fi
     fi
   ;;
-  rocm) INDEX_URL="$ROCM_INDEX_URL" ;;
+  rocm)
+    # Host-resolved ROCm wheel index (kaine.wheel_index). Never fall back to a
+    # hardcoded index: if the resolver cannot find a wheel for this ROCm stack,
+    # the install stops with a clear error.
+    ROCM_VERSION="${KAINE_ROCM_VERSION:-}"
+    if [ -z "$ROCM_VERSION" ] && [ -r /opt/rocm/.info/version ]; then
+      ROCM_VERSION="$(grep -oE '[0-9]+\.[0-9]+' /opt/rocm/.info/version | head -n 1 || true)"
+    fi
+    if [ -z "$ROCM_VERSION" ]; then
+      echo "install.sh: could not determine ROCm version. Set KAINE_ROCM_VERSION (e.g. 7.2) and re-run." >&2
+      exit 1
+    fi
+
+    ROCM_GFX="${KAINE_ROCM_GFX:-}"
+    if [ -z "$ROCM_GFX" ]; then
+      _gfx_lines=""
+      if command -v rocminfo >/dev/null 2>&1; then
+        _gfx_lines="$(rocminfo 2>/dev/null | grep -oE 'gfx[0-9a-zA-Z]+' | sort -u | tr '\n' ',' | sed 's/,$//' || true)"
+      fi
+      if [ -z "$_gfx_lines" ] && command -v rocm_agent_enumerator >/dev/null 2>&1; then
+        _gfx_lines="$(rocm_agent_enumerator 2>/dev/null | grep -oE 'gfx[0-9a-zA-Z]+' | sort -u | tr '\n' ',' | sed 's/,$//' || true)"
+      fi
+      if [ -n "$_gfx_lines" ]; then
+        ROCM_GFX="$_gfx_lines"
+      fi
+    fi
+
+    KAINE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)" || true
+    RESOLVER_PY=""
+    for _resolver_candidate in \
+      "${VENV_DIR}/bin/python" \
+      "${VENV_PY:-}"
+    do
+      if [ -n "$_resolver_candidate" ] && [ -x "$_resolver_candidate" ]; then
+        RESOLVER_PY="$_resolver_candidate"
+        break
+      fi
+    done
+    if [ -z "$RESOLVER_PY" ] && command -v python3 >/dev/null 2>&1; then
+      RESOLVER_PY="$(command -v python3)"
+    fi
+
+    RESOLVER_JSON=""
+    if [ -n "$ROCM_GFX" ]; then
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" --gfx "$ROCM_GFX" 2>/dev/null || true)"
+    else
+      RESOLVER_JSON="$(cd "$KAINE_ROOT" 2>/dev/null && PYTHONPATH="$KAINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" "$RESOLVER_PY" -m kaine.wheel_index --rocm-version "$ROCM_VERSION" 2>/dev/null || true)"
+    fi
+
+    RESOLVER_URL=""
+    if [ -n "$RESOLVER_JSON" ] && [ -n "$RESOLVER_PY" ]; then
+      RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("index_url"); print("" if v is None else v)' 2>/dev/null || true)"
+      TORCH_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torch_version"); print("" if v is None else v)' 2>/dev/null || true)"
+      TV_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchvision_version"); print("" if v is None else v)' 2>/dev/null || true)"
+      TA_PIN="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchaudio_version"); print("" if v is None else v)' 2>/dev/null || true)"
+      SELFTEST="$(printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys; print("true" if json.load(sys.stdin).get("selftest_required") else "false")' 2>/dev/null || true)"
+    fi
+
+    if [ -z "$RESOLVER_URL" ]; then
+      echo "install.sh: no ROCm wheel index carries a torch in the project's tested range for ROCm $ROCM_VERSION (gfx: ${ROCM_GFX:-auto-detected})." >&2
+      printf '%s' "$RESOLVER_JSON" | "$RESOLVER_PY" -c 'import json,sys
+d=json.load(sys.stdin)
+for w in (d.get("warnings") or []):
+    sys.stderr.write("WARNING: {}\n".format(w))
+' 2>/dev/null >&2 || true
+      exit 1
+    fi
+
+    INDEX_URL="$RESOLVER_URL"
+    echo "wheel index: $INDEX_URL (source: host-resolved ROCm decision table)"
+    if [ -n "$TORCH_PIN" ]; then
+      echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
+    fi
+  ;;
   xpu)  INDEX_URL="$XPU_INDEX_URL" ;;
   cpu)  INDEX_URL="$CPU_INDEX_URL" ;;
   mps)  INDEX_URL="" ;;  # macOS MPS ships in the default PyPI wheel
@@ -283,23 +369,53 @@ print("cpu")
 '
 
 need_install=1
+installed_torch_base=""
 if "$PY" -c "import torch; import sys; sys.exit(0 if torch.__version__.startswith('2.') else 1)" 2>/dev/null; then
   installed_flavor=$("$PY" -c "$_FLAVOR_PROBE" 2>/dev/null || echo "unknown")
+  installed_torch_base=$("$PY" -c "import torch; print(torch.__version__.split('+',1)[0])" 2>/dev/null || true)
   if [[ "$installed_flavor" == "$flavor" ]]; then
-    echo "==> torch already installed at the right flavor ($installed_flavor); skipping torch install"
-    need_install=0
+    if [[ -n "$TORCH_PIN" ]] && [[ "$installed_torch_base" != "$TORCH_PIN" ]]; then
+      echo "==> torch installed with base version $installed_torch_base but want $TORCH_PIN; reinstalling"
+    else
+      echo "==> torch already installed at the right flavor ($installed_flavor); skipping torch install"
+      need_install=0
+    fi
   else
     echo "==> torch installed with flavor '$installed_flavor' but want '$flavor'; reinstalling"
   fi
 fi
 
 if [[ "$need_install" -eq 1 ]]; then
-  if [[ "$flavor" == "mps" ]]; then
+  if [[ -n "$TORCH_PIN" ]]; then
+    if [[ -n "$TV_PIN" ]]; then
+      echo "==> installing torch==$TORCH_PIN torchvision==$TV_PIN from $INDEX_URL"
+      "$PIP" install --index-url "$INDEX_URL" "torch==$TORCH_PIN" "torchvision==$TV_PIN"
+    else
+      echo "==> installing torch==$TORCH_PIN torchvision from $INDEX_URL"
+      "$PIP" install --index-url "$INDEX_URL" "torch==$TORCH_PIN" torchvision
+    fi
+  elif [[ "$flavor" == "mps" ]]; then
     echo "==> installing $TORCH_SPEC torchvision (default PyPI wheel for MPS)"
     "$PIP" install "$TORCH_SPEC" torchvision
   else
     echo "==> installing $TORCH_SPEC torchvision from $INDEX_URL"
     "$PIP" install --index-url "$INDEX_URL" "$TORCH_SPEC" torchvision
+  fi
+fi
+
+# GPU numerical self-test for host-resolved unified-memory wheels.
+if [[ "$SELFTEST" == "true" ]]; then
+  echo "==> running GPU numerical self-test"
+  if ! "$PY" -m kaine.accel_selftest; then
+    echo "WARNING: the GPU wheels failed the numerical self-test on this unified-memory device; CPU wheels will be installed instead." >&2
+    if [[ -n "$TV_PIN" ]]; then
+      "$PIP" install --force-reinstall --index-url "$CPU_INDEX_URL" "torch==$TORCH_PIN" "torchvision==$TV_PIN"
+    else
+      "$PIP" install --force-reinstall --index-url "$CPU_INDEX_URL" "torch==$TORCH_PIN" torchvision
+    fi
+    INDEX_URL="$CPU_INDEX_URL"
+  else
+    echo "==> GPU numerical self-test passed"
   fi
 fi
 
@@ -314,7 +430,10 @@ echo "==> installing the rest of KAINE (editable, with test deps)"
 # the reproducible perception feed can decode playlist media (cv2 video + av
 # audio) on a fresh research machine. The default install stays lean.
 if [[ "$RESEARCH" -eq 1 ]]; then
-  if [[ "$flavor" == "mps" ]]; then
+  if [[ -n "$TA_PIN" ]]; then
+    echo "==> [--research] installing torchaudio==$TA_PIN from $INDEX_URL"
+    "$PIP" install --index-url "$INDEX_URL" -c "$TORCH_CONSTRAINTS" "torchaudio==$TA_PIN"
+  elif [[ "$flavor" == "mps" ]]; then
     echo "==> [--research] installing torchaudio (default PyPI wheel for MPS)"
     "$PIP" install -c "$TORCH_CONSTRAINTS" torchaudio
   else

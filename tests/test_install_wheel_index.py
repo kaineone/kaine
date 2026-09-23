@@ -2,21 +2,25 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Integration tests: ``scripts/install.sh`` must hand pip the right ``--index-url``.
 
-``scripts/install.sh`` used to hardcode the NVIDIA cu128 wheel index and use it
-on every host where ``nvidia-smi`` succeeded — blind to CPU architecture, the
-driver's CUDA version and the GPU's compute capability.  On aarch64 that index
-serves SBSA wheels built for sm_90/sm_100: they import cleanly and then die at
-the FIRST KERNEL LAUNCH with "no kernel image is available for execution on
-the device" — the worst failure mode, because install and configuration both
-appeared to succeed.  The installer now resolves the wheel index from the host
-(``kaine/wheel_index.py``) and this module is the evidence that
+``scripts/install.sh`` used to hardcode the NVIDIA cu128 wheel index and the
+ROCm rocm6.2 wheel index, using them blindly on every host where the
+corresponding accelerator tooling succeeded — ignoring CPU architecture, the
+driver's CUDA version, the GPU's compute capability, and the ROCm stack/gfx
+targets.  On aarch64 the CUDA index serves SBSA wheels built for sm_90/sm_100:
+they import cleanly and then die at the FIRST KERNEL LAUNCH with "no kernel
+image is available for execution on the device" — the worst failure mode,
+because install and configuration both appeared to succeed.  The installer now
+resolves the wheel index from the host (``kaine/wheel_index.py``) for both CUDA
+and ROCm flavors and this module is the evidence that
 
   (a) the resolved index actually reaches pip as ``--index-url``,
   (b) an explicit operator ``--index-url`` override wins where it must win,
   (c) the override is ignored — with a notice naming the flavor — where it
-      must be ignored, and
-  (d) the non-CUDA flavors (``--cpu``/``--rocm``/``--xpu``/``--mps``) were not
-      disturbed by the change.
+      must be ignored,
+  (d) the non-resolved flavors (``--cpu``/``--xpu``/``--mps``) were not
+      disturbed by the CUDA change, and
+  (e) ``--rocm`` now resolves via the host-aware resolver and exits with a
+      clear error when no wheel index serves the detected ROCm stack.
 
 Technique: for every case a temporary directory of executable shim scripts is
 put FIRST on ``PATH`` and ``bash scripts/install.sh <flags>`` is executed with
@@ -98,8 +102,11 @@ pytestmark = [
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 CPU_INDEX = "https://download.pytorch.org/whl/cpu"
-ROCM_INDEX = "https://download.pytorch.org/whl/rocm6.2"
+ROCM62_INDEX = "https://download.pytorch.org/whl/rocm6.2"
+ROCM72_INDEX = "https://download.pytorch.org/whl/rocm7.2"
 XPU_INDEX = "https://download.pytorch.org/whl/xpu"
+CUDA132_INDEX = "https://download.pytorch.org/whl/cu132"
+CUDA130_INDEX = "https://download.pytorch.org/whl/cu130"
 OVERRIDE_INDEX = "https://example.invalid/custom"
 
 RUN_TIMEOUT_SECONDS = 120
@@ -299,6 +306,7 @@ def _run_install(
     nvidia_cuda: str | None = None,
     rocm: bool = False,
     xpu: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess, str]:
     """Run ``bash scripts/install.sh <flags>`` with a shimmed PATH.
 
@@ -324,6 +332,8 @@ def _run_install(
       alone (``command -v`` succeeds for any existing file, whatever its exit
       code), so a failing shim would still count as "present" — their absence
       is simulated by omission (see the module skipif for the host requirement).
+    * ``extra_env`` is merged into the test environment after the base copy,
+      so callers can set ``KAINE_ROCM_VERSION``/``KAINE_ROCM_GFX`` etc.
 
     Guard: if the repository ``.venv`` is created or modified despite
     ``KAINE_VENV_DIR`` pointing at a skeleton venv under ``tmp_path``, the
@@ -384,6 +394,8 @@ def _run_install(
     (venv_dir / "bin" / "activate").write_text("# no-op activate (test shim)\n", encoding="utf-8")
 
     env = os.environ.copy()
+    if extra_env is not None:
+        env.update(extra_env)
     env["PATH"] = os.pathsep.join([str(shim_dir), env.get("PATH", "")])
     env["KAINE_VENV_DIR"] = str(venv_dir)
     env["VIRTUAL_ENV"] = str(venv_dir)
@@ -498,22 +510,52 @@ def test_cpu_flag_beats_nvidia_smi_and_skips_resolver(tmp_path: Path) -> None:
     assert "selected_reason" not in combined_output, _context(proc, pip_log)
 
 
-def test_rocm_flag_keeps_prechange_rocm_index(tmp_path: Path) -> None:
-    """Case 3 — --rocm keeps the byte-identical pre-change ROCm index.
+def test_rocm_flag_resolves_host_aware_rocm_index(tmp_path: Path) -> None:
+    """Case 3 — --rocm now resolves the wheel index from the host.
 
-    Invariant: host-aware wheel-index resolution is scoped to the CUDA flavor;
-    --rocm still sends pip to https://download.pytorch.org/whl/rocm6.2 exactly
-    (the pre-change constant, asserted byte for byte).  Cost prevented:
-    silently repointing working ROCm installs at a different wheel index and
-    breaking environments that already work.
+    Invariant: the ROCm flavor runs ``kaine.wheel_index`` with the ROCm
+    version and gfx targets, so pip receives the host-resolved index
+    (rocm7.2 for the shimmed ROCm 7.2 / gfx1100 stack) and the exact pinned
+    torch stack from that index.  Cost prevented: silently repointing working
+    ROCm installs at a different wheel index and breaking environments that
+    already work.
 
     The non-zero exit is expected and deliberately not asserted: the pip shim
     absorbs the install without installing anything, so install.sh's closing
     torch-import verification cannot succeed.
     """
-    proc, pip_log = _run_install(tmp_path, ["--rocm"], rocm=True)
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--rocm"],
+        rocm=True,
+        extra_env={"KAINE_ROCM_VERSION": "7.2", "KAINE_ROCM_GFX": "gfx1100"},
+    )
     urls = _index_urls(pip_log)
-    assert set(urls) == {ROCM_INDEX}, _context(proc, pip_log)
+    assert set(urls) == {ROCM72_INDEX}, _context(proc, pip_log)
+    assert any("torch==2.14.0" in line for line in pip_log.splitlines()), _context(
+        proc, pip_log
+    )
+
+
+def test_rocm_unsupported_version_exits_with_tested_range_error(tmp_path: Path) -> None:
+    """An unsupported ROCm stack exits before any pip torch install.
+
+    Invariant: when the host-aware resolver cannot find a wheel index for the
+    detected ROCm stack, install.sh exits with a clear error mentioning the
+    project's tested range and never asks pip to install torch.
+    """
+    proc, pip_log = _run_install(
+        tmp_path,
+        ["--rocm"],
+        rocm=True,
+        extra_env={"KAINE_ROCM_VERSION": "6.2", "KAINE_ROCM_GFX": "gfx1100"},
+    )
+    combined = proc.stdout + proc.stderr
+    assert proc.returncode != 0, _context(proc, pip_log)
+    assert "tested range" in combined.lower(), _context(proc, pip_log)
+    assert not any("torch" in line for line in pip_log.splitlines()), _context(
+        proc, pip_log
+    )
 
 
 def test_xpu_flag_gets_dedicated_xpu_index(tmp_path: Path) -> None:
@@ -621,6 +663,31 @@ def test_index_url_override_wins_over_host_resolution(tmp_path: Path) -> None:
     )
     urls = _index_urls(pip_log)
     assert urls and set(urls) == {OVERRIDE_INDEX}, _context(proc, pip_log)
+
+
+def test_cuda_132_resolves_pinned_torch_stack(tmp_path: Path) -> None:
+    """A CUDA 13.2 host gets the exact pinned torch/torchvision from cu132."""
+    proc, pip_log = _run_install(
+        tmp_path, ["--cuda", "--no-wizard"], nvidia_cuda="13.2"
+    )
+    assert any(
+        "torch==2.14.0" in line
+        and "torchvision==0.29.0" in line
+        and CUDA132_INDEX in line
+        for line in pip_log.splitlines()
+    ), _context(proc, pip_log)
+
+
+def test_cuda_132_research_resolves_index_with_torchaudio(tmp_path: Path) -> None:
+    """--research on a CUDA 13.2 host passes --need-torchaudio and falls to cu130."""
+    proc, pip_log = _run_install(
+        tmp_path, ["--cuda", "--no-wizard", "--research"], nvidia_cuda="13.2"
+    )
+    urls = _index_urls(pip_log)
+    assert CUDA130_INDEX in urls, _context(proc, pip_log)
+    lines = pip_log.splitlines()
+    assert any("torchaudio==2.11.0" in line for line in lines), _context(proc, pip_log)
+    assert any("torch==2.14.0" in line for line in lines), _context(proc, pip_log)
 
 
 def test_torch_and_torchvision_installed_together(tmp_path: Path) -> None:

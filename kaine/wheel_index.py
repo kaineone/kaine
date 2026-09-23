@@ -31,7 +31,7 @@ import re
 import subprocess
 import sys
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -1095,6 +1095,14 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
         warnings.append(
             "torch requirement not found in pyproject.toml; using unrestricted range >=0"
         )
+
+    if probes.memory_state == "unified" and probes.arch != "aarch64":
+        warnings.append(
+            f"unified-memory evidence ignored for CUDA on {probes.arch}: "
+            "NVIDIA unified-memory GPUs are aarch64-only (the evidence likely comes from a "
+            "non-NVIDIA integrated GPU)"
+        )
+        probes = replace(probes, memory_state="discrete")
 
     driver = probes.driver_cuda
 
