@@ -53,7 +53,8 @@ def _load_metadata() -> dict[str, tuple[str, list[str]]]:
                 match = _VERSION_RE.search(text)
                 if match:
                     version = match.group(1)
-        except Exception:
+        except (OSError, UnicodeError):
+            # Best-effort metadata read: fall back to dist.version on file/encoding errors.
             pass
         reqs = dist.requires or []
         dists[name] = (version, list(reqs))
