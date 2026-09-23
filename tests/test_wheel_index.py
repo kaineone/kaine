@@ -39,8 +39,16 @@ from kaine.wheel_index import (
     DECISION_TABLE,
     INDEX_ARCH_MAP,
     Probes,
+    _arch_list_to_entries,
+    _device_coverage,
+    _in_range,
+    _parse_spec,
+    _token_semantics,
+    _vtuple,
     collect_probes,
+    project_torch_spec,
     resolve_index,
+    resolve_rocm,
 )
 
 try:  # section-1 modules; imported only so hermetic tests can re-bind helpers
@@ -52,8 +60,10 @@ except Exception:  # pragma: no cover - optional hedges, never a hard dependency
     pass  # optional modules; loaded so hermetic tests can monkeypatch.setattr helpers
 
 
-# Binding index URLs from decision-table rows 1-5 / 7-9, and the CPU fallback.
+# Binding index URLs from decision-table rows, and the CPU fallback.
+CU132 = "https://download.pytorch.org/whl/cu132"
 CU130 = "https://download.pytorch.org/whl/cu130"
+CU129 = "https://download.pytorch.org/whl/cu129"
 CU128 = "https://download.pytorch.org/whl/cu128"
 CU126 = "https://download.pytorch.org/whl/cu126"
 CU121 = "https://download.pytorch.org/whl/cu121"
@@ -96,7 +106,7 @@ def _probe_snapshot(probes):
 _SM_RE = re.compile(r"^sm_(\d{2,3})(\+ptx)?$", re.IGNORECASE)
 _COMPUTE_RE = re.compile(r"^compute_(\d{2,3})(\+ptx)?$", re.IGNORECASE)
 _CU_RE = re.compile(r"cu_?(\d{2,3})", re.IGNORECASE)
-_TABLE_INDEX_TOKENS = ("cu130", "cu128", "cu126", "cu121", "cu118")
+_TABLE_INDEX_TOKENS = ("cu132", "cu130", "cu129", "cu128", "cu126", "cu121", "cu118")
 
 
 def _sm_level(digits):
@@ -234,8 +244,13 @@ def _scenario_results():
         ("driver-bounds-12-4", _probes(driver=(12, 4), caps=((8, 0),)), None),
         ("driver-bounds-12-0", _probes(driver=(12, 0), caps=((8, 0),)), None),
         (
-            "jetson-trap",
+            "jetson-jetpack7",
             _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),), memory="unified"),
+            None,
+        ),
+        (
+            "jetson-jetpack6",
+            _probes(arch="aarch64", driver=(12, 6), caps=((8, 7),), memory="unified"),
             None,
         ),
         ("sbsa", _probes(arch="aarch64", driver=(12, 8), caps=((9, 0),)), None),
@@ -245,17 +260,17 @@ def _scenario_results():
         ("dual-identical-devices", _probes(caps=((9, 0), (9, 0))), None),
         (
             "aarch64-two-covered-devices",
-            _probes(arch="aarch64", driver=(12, 9), caps=((10, 0), (9, 0))),
+            _probes(arch="aarch64", driver=(12, 9), caps=((9, 0), (9, 0))),
             None,
         ),
         (
             "aarch64-second-device-uncovered",
-            _probes(arch="aarch64", driver=(12, 6), caps=((9, 0), (10, 0))),
+            _probes(driver=(12, 6), caps=((9, 0), (10, 0))),
             None,
         ),
         ("aarch64-cc-exhaustion", _probes(arch="aarch64", driver=(12, 6), caps=((10, 0),)), None),
         (
-            "rows-10-11-overlap",
+            "rows-12-15-overlap",
             _probes(arch="aarch64", driver=(12, 0), caps=((8, 7),), memory="unified"),
             None,
         ),
@@ -263,7 +278,7 @@ def _scenario_results():
         ("no-devices-probed", _probes(caps=()), None),
         ("other-arch", _probes(arch="other"), None),
         ("driver-below-all-indexes", _probes(driver=(11, 5), caps=((8, 0),)), None),
-        ("operator-override", _probes(), "https://download.pytorch.org/whl/cu129"),
+        ("operator-override", _probes(), CU129),
     ]
     results = [
         (name, resolve_index(probes, override=override)) for name, probes, override in scenarios
@@ -548,8 +563,12 @@ def test_x86_64_workstation_default_resolves_cu128():
     assert result["index_url"] != CPU_INDEX
 
 
-@pytest.mark.parametrize("driver", [(13, 0), (13, 2)], ids=["cuda-13-0-driver", "cuda-13-2-driver"])
-def test_cuda_13_driver_never_receives_cu128(driver):
+@pytest.mark.parametrize(
+    "driver,expected",
+    [((13, 0), CU130), ((13, 2), CU132)],
+    ids=["cuda-13-0-driver", "cuda-13-2-driver"],
+)
+def test_cuda_13_driver_never_receives_cu128(driver, expected):
     """Invariant: a CUDA 13.x driver is served a CUDA-13-compatible index and
     never the cu128 one.
 
@@ -557,7 +576,7 @@ def test_cuda_13_driver_never_receives_cu128(driver):
     to a CUDA 13 driver.
     """
     result = resolve_index(_probes(driver=driver))
-    assert result["index_url"] == CU130
+    assert result["index_url"] == expected
     assert "cu128" not in result["index_url"]
 
 
@@ -569,26 +588,50 @@ def test_driver_cuda_bounds_the_selected_index():
     explicitly allowed older-index downgrade).
     """
     cases = {
-        (12, 9): CU128,
+        (12, 9): CU129,
+        (12, 8): CU128,
         (12, 6): CU126,
-        (12, 4): CU121,
-        (12, 0): CU118,
+        (12, 4): CPU_INDEX,
+        (12, 0): CPU_INDEX,
     }
     for driver, expected in cases.items():
         result = resolve_index(_probes(driver=driver, caps=((8, 0),)))
         assert result["index_url"] == expected, driver
+        if expected is not CPU_INDEX:
+            cu_version = int(expected.rstrip("/").rsplit("/", 1)[-1][2:])
+            driver_version = driver[0] * 10 + driver[1]
+            assert cu_version <= driver_version
 
 
-def test_jetson_unified_host_gets_cpu_index_with_jetpack_remediation():
-    """Invariant: aarch64 + positively-unified memory (Tegra, sm_87) resolves
-    to the CPU index — upstream wheels carry no Tegra SASS — and the rejection
-    is explained with the --index-url / JetPack remediation.
+def test_jetson_unified_jetpack7_host_gets_cuda_index_with_selftest():
+    """Invariant: aarch64 + positively-unified memory with a CUDA 13.2 driver
+    (JetPack 7, sm_87) resolves to the newest CUDA 13.x index and runs a
+    numerical self-test, because upstream wheels ship compatible (not native)
+    Tegra kernels.
+
+    Cost prevented: silently installing a broken Jetson wheel, or skipping
+    the GPU self-test that catches the NaN regression.
+    """
+    probes = _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),), memory="unified")
+    result = resolve_index(probes)
+    assert result["index_url"] == CU132
+    assert result["variant"] == "cuda"
+    assert result["selftest_required"] is True
+    joined = " ".join(result["warnings"]).lower()
+    assert "nan" in joined
+
+
+def test_jetson_unified_jetpack6_host_gets_cpu_index_with_jetpack_remediation():
+    """Invariant: aarch64 + positively-unified memory with a driver below
+    CUDA 13.0 (JetPack 6, sm_87) resolves to the CPU index — upstream wheels
+    carry no Tegra SASS — and the rejection is explained with the
+    --index-url / JetPack remediation.
 
     Cost prevented: the worst failure mode — an install that 'succeeds' and
     then dies at the first kernel launch with 'no kernel image is available
     for execution on the device'.
     """
-    probes = _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),), memory="unified")
+    probes = _probes(arch="aarch64", driver=(12, 6), caps=((8, 7),), memory="unified")
     result = resolve_index(probes)
     assert result["index_url"] == CPU_INDEX
     assert result["rejected"], "rejection list must explain the exclusion"
@@ -636,16 +679,18 @@ def test_every_device_must_be_covered():
     identical = resolve_index(_probes(caps=((9, 0), (9, 0))))
     assert identical["index_url"] == CU128
 
-    both_covered = resolve_index(_probes(arch="aarch64", driver=(12, 9), caps=((10, 0), (9, 0))))
-    assert both_covered["index_url"] == CU128
+    both_covered = resolve_index(
+        _probes(arch="aarch64", driver=(12, 9), caps=((9, 0), (9, 0)))
+    )
+    assert both_covered["index_url"] == CU129
 
-    # cu126's aarch64 line serves sm_90 but not sm_100, so the second device
+    # cu126's x86 line serves sm_90 but not sm_100, so the second device
     # rejects the only candidate and the ladder exhausts to the CPU index.
     second_uncovered = resolve_index(
-        _probes(arch="aarch64", driver=(12, 6), caps=((9, 0), (10, 0)))
+        _probes(driver=(12, 6), caps=((9, 0), (10, 0)))
     )
     assert second_uncovered["index_url"] == CPU_INDEX
-    assert any("126" in str(entry.get("index", "")) for entry in second_uncovered["rejected"])
+    assert any("cu126" in str(entry.get("index", "")) for entry in second_uncovered["rejected"])
 
 
 def test_ptx_counts_as_coverage_and_is_annotated():
@@ -673,7 +718,7 @@ def test_override_wins_and_is_recorded_as_operator_provided():
 
     Cost prevented: silently ignoring an explicit operator --index-url.
     """
-    override = "https://download.pytorch.org/whl/cu129"
+    override = CU129
     result = resolve_index(_probes(), override=override)
     assert result["index_url"] == override
     assert "operator" in result["selected_reason"].lower()
@@ -707,19 +752,20 @@ def test_earlier_table_row_shadows_overlapping_later_row():
     Cost prevented: later, more generic rows (CPU fallback) swallowing
     earlier, more specific ones (CUDA indexes / the JetPack pointer).
     """
-    # Rows 10 and 11 both hold for aarch64 + unified + driver < 12.5; the
-    # earlier row 10 carries the JetPack remediation and must win.
+    # Rows 12 and 15 both hold for aarch64 + unified + driver < 12.5; the
+    # earlier row 12 carries the generic aarch64 CPU note and must win.
     overlap = resolve_index(
         _probes(arch="aarch64", driver=(12, 0), caps=((8, 7),), memory="unified")
     )
     assert overlap["index_url"] == CPU_INDEX
     joined = " ".join(overlap["warnings"]).lower()
-    assert "--index-url" in joined and "jetpack" in joined
+    assert "upgrade the nvidia driver" in joined
+    assert "--index-url" not in joined
 
-    # A CUDA 13.x driver makes the cu130 (row 1) and cu128 (row 2) indexes
-    # both driver-eligible; the earlier row (cu130) must shadow the later.
+    # A CUDA 13.2 driver makes the cu132 (row 1) and cu128 (row 4) indexes
+    # both driver-eligible; the earlier row (cu132) must shadow the later.
     shadowed = resolve_index(_probes(driver=(13, 2)))
-    assert shadowed["index_url"] == CU130
+    assert shadowed["index_url"] == CU132
     assert "cu128" not in shadowed["index_url"]
 
 
@@ -794,6 +840,145 @@ def test_results_are_json_round_trippable():
 
 
 # ---------------------------------------------------------------------------
+# New pure-resolution coverage tests against the real wheel_data
+# ---------------------------------------------------------------------------
+
+
+def test_vtuple_parse_spec_and_in_range_edge_cases():
+    """Edge cases for the stdlib-only version/specifier helpers."""
+    assert _vtuple("2.15.0") == (2, 15, 0)
+    assert _vtuple("2.14.9") == (2, 14, 9)
+    assert _vtuple("2.11.0+cu130") == (2, 11, 0)
+    spec = _parse_spec(">=2.9.1,<2.15")
+    assert _in_range("2.15.0", spec) is False
+    assert _in_range("2.14.9", spec) is True
+    assert _in_range("2.9.1", spec) is True
+    assert _in_range("2.9.0", spec) is False
+    assert _in_range("2.9.1", [("!=", (2, 9, 1))]) is False
+    assert _in_range("2.9.2", [("!=", (2, 9, 1))]) is True
+
+
+def test_project_torch_spec_reads_pyproject_and_env_overrides(monkeypatch, tmp_path):
+    """project_torch_spec parses pyproject.toml and KAINE_TORCH_SPEC wins."""
+    monkeypatch.delenv("KAINE_TORCH_SPEC", raising=False)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[project]\ndependencies = ["torch>=2.9.1,<2.15"]\n')
+    assert project_torch_spec(str(pyproject)) == ">=2.9.1,<2.15"
+    monkeypatch.setenv("KAINE_TORCH_SPEC", ">=2.12")
+    assert project_torch_spec(str(pyproject)) == ">=2.12"
+
+
+def test_token_semantics_and_arch_list_entries():
+    """_token_semantics accepts dotted levels, sm_/compute_ prefixes and
+    +PTX; _arch_list_to_entries expands a real CUDA_ARCH arch-list string.
+    """
+    assert _token_semantics("8.6") == ("sm_86", (8, 6), None)
+    assert _token_semantics("10.0") == ("sm_100", (10, 0), None)
+    assert _token_semantics("12.0+PTX") == ("sm_120", (12, 0), (12, 0))
+    assert _token_semantics("sm_86") == ("sm_86", (8, 6), None)
+    assert _token_semantics("compute_90") == (None, None, (9, 0))
+    assert _arch_list_to_entries("8.0;12.0+PTX") == ("sm_80", "sm_120", "compute_120")
+
+
+def test_same_major_and_ptx_device_coverage():
+    """Same-major SASS compatibility and forward PTX compatibility rules."""
+    assert _device_coverage((8, 9), ["sm_86"]) == ("same_major", "sm_86")
+    assert _device_coverage((8, 7), ["sm_80"]) == ("same_major", "sm_80")
+    assert _device_coverage((7, 0), ["sm_75"]) is None
+    assert _device_coverage((9, 0), ["compute_90"]) == ("ptx", (9, 0))
+
+
+def test_host_matrix():
+    """Pinned cross-section of the real resolve_index output."""
+    # x86 cc8.9 drv13.2 -> newest CUDA 13.x index
+    r = resolve_index(_probes(arch="x86_64", driver=(13, 2), caps=((8, 9),)))
+    assert r["index_url"] == CU132
+    assert r["torch_version"] == "2.14.0"
+    assert r["torchvision_version"] == "0.29.0"
+
+    # x86 cc8.6 drv12.8 -> cu128
+    r = resolve_index(_probes(arch="x86_64", driver=(12, 8), caps=((8, 6),)))
+    assert r["index_url"] == CU128
+    assert r["torch_version"] == "2.11.0"
+    assert r["torchvision_version"] == "0.26.0"
+
+    # x86 cc7.0 drv12.8 -> cu126 (cu128 does not cover sm_70)
+    r = resolve_index(_probes(arch="x86_64", driver=(12, 8), caps=((7, 0),)))
+    assert r["index_url"] == CU126
+    assert r["torch_version"] == "2.14.0"
+
+    # x86 cc6.1 drv12.6 -> cu126
+    r = resolve_index(_probes(arch="x86_64", driver=(12, 6), caps=((6, 1),)))
+    assert r["index_url"] == CU126
+
+    # x86 drv12.4 -> CPU with a warning about the range
+    r = resolve_index(_probes(arch="x86_64", driver=(12, 4), caps=((8, 0),)))
+    assert r["index_url"] == CPU_INDEX
+    assert any("range" in w.lower() for w in r["warnings"])
+
+    # x86 cc12.0 drv13.0 -> cu130 (cu132 needs driver >= 13.2)
+    r = resolve_index(_probes(arch="x86_64", driver=(13, 0), caps=((12, 0),)))
+    assert r["index_url"] == CU130
+
+    # aarch64 discrete cc9.0 drv13.0 -> cu130
+    r = resolve_index(_probes(arch="aarch64", driver=(13, 0), caps=((9, 0),)))
+    assert r["index_url"] == CU130
+
+
+def test_need_torchaudio_falls_back_to_index_with_audio():
+    """With need_torchaudio, an index without a matching torchaudio wheel is
+    rejected and the ladder continues to the newest index that provides one.
+    """
+    probes = _probes(arch="x86_64", driver=(13, 2), caps=((8, 9),))
+    with_audio = resolve_index(probes, need_torchaudio=True)
+    assert with_audio["index_url"] == CU130
+    assert with_audio["torchaudio_version"] == "2.11.0"
+
+    without = resolve_index(probes, need_torchaudio=False)
+    assert without["index_url"] == CU132
+    assert without["torchaudio_version"] is None
+
+
+def test_kaine_torch_spec_range_override(monkeypatch):
+    """KAINE_TORCH_SPEC can narrow the range and change the selected index."""
+    monkeypatch.setenv("KAINE_TORCH_SPEC", ">=2.9.1,<2.12")
+    probes = _probes(arch="x86_64", driver=(13, 2), caps=((8, 9),))
+    result = resolve_index(probes)
+    assert result["index_url"] == CU130
+    assert result["torch_version"] == "2.11.0"
+
+
+def test_resolve_rocm_matrix():
+    """ROCm resolution obeys the host version ceiling and GFX coverage."""
+    r = resolve_rocm((7, 2), "gfx1100", "x86_64")
+    assert r["index_url"] == "https://download.pytorch.org/whl/rocm7.2"
+    assert r["torch_version"] == "2.14.0"
+
+    r = resolve_rocm((6, 4), "gfx90a", "x86_64")
+    assert r["index_url"] == "https://download.pytorch.org/whl/rocm6.4"
+    assert r["torch_version"] == "2.9.1"
+
+    r = resolve_rocm((6, 2), (), "x86_64")
+    assert r["index_url"] is None
+    assert any("rocm6.3" in w for w in r["warnings"])
+
+    r = resolve_rocm((6, 4), "gfx000", "x86_64")
+    assert r["index_url"] is None
+    assert any("gfx" in w.lower() for w in r["warnings"])
+
+
+def test_index_arch_map_entries_parse():
+    """The derived INDEX_ARCH_MAP is non-empty and every entry token parses."""
+    assert INDEX_ARCH_MAP
+    for url, arch_map in INDEX_ARCH_MAP.items():
+        for arch, entries in arch_map.items():
+            assert entries, f"{url} {arch} has no entries"
+            for entry in entries:
+                sm, _sass, ptx = _token_semantics(entry)
+                assert sm is not None or ptx is not None, f"unparseable entry {entry!r}"
+
+
+# ---------------------------------------------------------------------------
 # collect_probes — injection only; the real nvidia-smi never runs
 # ---------------------------------------------------------------------------
 
@@ -837,7 +1022,7 @@ def test_collect_probes_normalizes_platform_machine(monkeypatch, machine_value, 
     before it reaches the decision table.
 
     Cost prevented: an unnormalized arch silently emptying the candidate list
-    (decision-table row 12) on exotic hosts.
+    (decision-table row 16) on exotic hosts.
     """
     _install_smi_fake(monkeypatch, "ok")
     _block_nvml(monkeypatch)
