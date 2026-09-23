@@ -1178,6 +1178,9 @@ def test_collect_probes_respects_kaine_wheel_probe_nvml_zero(monkeypatch):
     monkeypatch.setenv("KAINE_WHEEL_PROBE_NVML", "0")
     _install_smi_fake(monkeypatch, "ok")
     # Intentionally do not block NVML: the env switch must be authoritative.
+    # Hide torch so the compute-capability probe cannot be answered by real
+    # GPUs on the test host and the NVML note stays in the reported notes.
+    monkeypatch.setitem(sys.modules, "torch", None)
     probes = collect_probes()
     assert probes.driver_cuda == (13, 2)
     notes = " ".join(probes.notes.values())
@@ -1194,7 +1197,11 @@ def test_block_nvml_does_not_partially_initialize_torch(monkeypatch):
     in ``sys.modules``, polluting later tests with 'partially initialized
     module' errors.
     """
-    _run_collect_with_nvml_blocked(monkeypatch)
+    # Undo the block before importing: the invariant is that torch imports
+    # cleanly AFTER a blocked probe, whether or not an earlier test already
+    # imported it.
+    with pytest.MonkeyPatch.context() as blocked:
+        _run_collect_with_nvml_blocked(blocked)
     torch = importlib.import_module("torch")
     assert torch._utils is not None
     assert hasattr(torch, "_utils")
