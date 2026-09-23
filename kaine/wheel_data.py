@@ -140,10 +140,10 @@ COMPANIONS: dict[str, dict[str, dict[str, dict[str, str | None]]]] = {
         "aarch64": dict(_CU132_COMPANIONS),
     },
     "rocm6.3": {
-        "x86_64": {"2.9.1": {"torchvision": None, "torchaudio": None}},
+        "x86_64": {"2.9.1": {"torchvision": "0.24.1", "torchaudio": "2.9.1"}},
     },
     "rocm6.4": {
-        "x86_64": {"2.9.1": {"torchvision": None, "torchaudio": None}},
+        "x86_64": {"2.9.1": {"torchvision": "0.24.1", "torchaudio": "2.9.1"}},
     },
     "rocm7.0": {
         "x86_64": {"2.10.0": {"torchvision": "0.25.0", "torchaudio": "2.10.0"}},

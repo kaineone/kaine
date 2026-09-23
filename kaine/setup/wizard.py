@@ -416,9 +416,10 @@ def run_wizard(
     recommend_tier_fn:
         Optional callable returning a :class:`kaine.hardware.TierRecommendation`.
         When provided (and not in ``defaults`` mode) the wizard shows the tier,
-        reason, and memory budget, and asks whether to apply the matching
-        profile to ``[deployment].profile``. Never applies without an explicit
-        ``yes``.
+        reason, and memory budget, and asks whether to record the matching tier
+        as ``[deployment].tier``. Recording a tier only bounds backends/devices
+        for this hardware; it never changes the module set. Never applies without
+        an explicit ``yes``.
     defaults:
         Non-interactive mode for tests/CI: records the ack as the default path,
         chooses a minimal safe module set, all-CPU devices, no metrics, no
@@ -524,10 +525,11 @@ def run_wizard(
                 line("  Memory budget: unknown")
             if _ask_yes_no(
                 input_fn,
-                f"Apply profile {tier_label} to this install?",
+                f"Record tier {tier_label} for this install? It bounds backends "
+                f"for this hardware; the module set is unchanged. [y/N]",
                 default=False,
             ):
-                _set(cfg, "deployment", "profile", tier_label)
+                _set(cfg, "deployment", "tier", tier_label)
 
     # --- Step 3b: accelerator/runtime mismatch check -----------------------
     mismatch_info = _accel_mismatch_step(

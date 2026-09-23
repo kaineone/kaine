@@ -284,7 +284,7 @@ def test_wizard_tier_recommendation_applied_on_yes():
         shipped_config=_shipped(),
         recommend_tier_fn=lambda: _tier2_residency_rec(),
     )
-    assert result.config.get("deployment", {}).get("profile") == "tier2"
+    assert result.config["deployment"]["tier"] == "tier2"
 
 
 def test_wizard_tier_recommendation_not_applied_on_no():
@@ -307,7 +307,7 @@ def test_wizard_tier_recommendation_default_no_writes_nothing():
             return ACK_PHRASE
         if "Accept these device assignments" in prompt:
             return "y"
-        if "Apply profile" in prompt:
+        if "Record tier" in prompt:
             return ""  # accept the default No
         if "research" in prompt.lower():
             return "n"

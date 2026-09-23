@@ -431,36 +431,17 @@ def _load_kaine_config(
     env: dict[str, str] | None = None,
     profile: str | None = None,
 ) -> dict[str, Any]:
-    from kaine.config import (
-        OPERATOR_CONFIG_PATH,
-        load_kaine_config,
-        resolve_profile_name,
-    )
+    from kaine.config import OPERATOR_CONFIG_PATH, load_runtime_config
 
     target = Path(path or "config/kaine.toml")
     if not target.exists():
         raise FileNotFoundError(f"config/kaine.toml not found at {target}")
-    # Resolve the deployment-tier profile (explicit --profile wins over the
-    # KAINE_PROFILE env var; None → Tier-2 default). The profile overlay layers
-    # BETWEEN the shipped defaults and the operator's local working config, so
-    # operator choices from the first-run wizard still win (openspec
-    # deployment-tiers). Secrets merge last.
-    resolved_profile = resolve_profile_name(profile, env=env)
-    if resolved_profile is None:
-        # The base-thesis form is the project's default entity configuration:
-        # a fresh install that boots the cycle with no explicit profile gets the
-        # five predictive-workspace processors, STT off, and the self-initiated
-        # voice. An explicit --profile / KAINE_PROFILE still wins, and the
-        # operator's own config still layers on top. The boot gate is unchanged —
-        # this selects WHICH modules construct, never whether an entity boots.
-        # Fall back to the shipped defaults if the profile file is absent (a
-        # partial tree) rather than failing, since this is a default, not an
-        # explicit selection.
-        from kaine.config import profile_path
-
-        if profile_path("thesis_test").exists():
-            resolved_profile = "thesis_test"
-    config = load_kaine_config(target, OPERATOR_CONFIG_PATH, profile=resolved_profile)
+    # load_runtime_config applies the module-selection profile, the base-thesis
+    # thesis_test default, and the operator tier layer in one pass, so the cycle
+    # and the pre-boot check load the same configuration.
+    config = load_runtime_config(
+        target, OPERATOR_CONFIG_PATH, profile=profile, env=env
+    )
     _merge_qdrant_secret(config, secrets_path=secrets_path, env=env)
     return config
 
@@ -738,8 +719,8 @@ async def _boot_and_run(
     # sink starts — so (a) global randomness is pinned for the whole run and
     # (b) every durable record carries this run's id + seq from the very first
     # write. An explicit [experiment].seed pins the run; a blank one generates a
-    # fresh seed that the manifest records, so the run is reproducible after the
-    # fact. The context holds only ids/seed/sha/model-ids/config-digest — no
+    # fresh seed that the manifest records, so the run is reproducible after
+    # the fact. The context holds only ids/seed/sha/model-ids/config-digest — no
     # entity interior, no operator-identifying data.
     from datetime import datetime, timezone
 
@@ -809,7 +790,7 @@ async def _boot_and_run(
 
             lingua_cfg = kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(
-                lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1"),
+                str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1")),
                 str(lingua_cfg.get("model_id") or ""),
                 api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
             )

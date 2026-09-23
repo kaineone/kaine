@@ -16,9 +16,10 @@ Responsibilities are strictly split:
   I/O, no subprocesses, no probing.
 
 The fallback ladder is version-aware: it consults the recorded
-``PUBLISHED`` wheel lists from :mod:`kaine.wheel_data` and only selects an
-index that actually publishes an in-range ``torch`` for the host
-architecture and covers every probed device.
+``PUBLISHED`` wheel lists from :mod:`kaine.wheel_data` and selects the
+driver-eligible candidate with the highest in-range ``torch`` version
+that is published for the host architecture and covers every probed
+device.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ import urllib.request
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from .wheel_data import (
     COMPANIONS,
@@ -112,7 +114,7 @@ def project_torch_spec(pyproject_path=None) -> str:
     """Return the torch requirement (without the leading 'torch') from pyproject.
 
     Env ``KAINE_TORCH_SPEC`` wins.  Falls back to ``tomllib`` or a regex.
-    Returns ``">="`` (and the resolver emits a warning) when no spec is found.
+    Returns ``\">=\"`` (and the resolver emits a warning) when no spec is found.
     """
     env_spec = os.environ.get("KAINE_TORCH_SPEC")
     if env_spec is not None:
@@ -122,7 +124,7 @@ def project_torch_spec(pyproject_path=None) -> str:
     try:
         text = Path(pyproject_path).read_text(encoding="utf-8")
     except Exception:
-        return ">=0"
+        return ">="
     try:
         import tomllib
     except ImportError:
@@ -150,7 +152,7 @@ def project_torch_spec(pyproject_path=None) -> str:
             spec = match.group(1).strip().rstrip(",").strip()
             if spec:
                 return spec
-    return ">=0"
+    return ">="
 
 
 # ---------------------------------------------------------------------------
@@ -349,10 +351,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU132,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU132,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 2,
@@ -362,10 +364,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU130,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU130,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 3,
@@ -375,10 +377,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU129,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU129,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 4,
@@ -388,10 +390,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU128,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU128,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 5,
@@ -401,10 +403,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU126,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU126,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 6,
@@ -427,10 +429,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU132,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU132,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 8,
@@ -440,10 +442,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU130,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU130,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 9,
@@ -453,10 +455,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU129,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU129,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 10,
@@ -466,10 +468,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU128,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU128,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 11,
@@ -479,10 +481,10 @@ DECISION_TABLE: tuple = (
         "driver_unknown_ok": False,
         "unified": "no",
         "cc_guard": _CU126,
-        "cc_guard_note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "cc_guard_note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
         "index_url": _CU126,
         "warning": False,
-        "note": "newest driver-compatible CUDA index carrying an in-range torch that covers the device",
+        "note": "highest in-range torch on a driver-compatible CUDA index that covers the device",
     },
     {
         "row": 12,
@@ -646,6 +648,8 @@ def _run(cmd: list[str]) -> tuple[Any | None, str]:
 
 def _nvml_load() -> tuple[Any | None, str]:
     """Load and initialize NVML via ctypes; return (lib | None, note)."""
+    if os.environ.get("KAINE_WHEEL_PROBE_NVML") == "0":
+        return None, "disabled by KAINE_WHEEL_PROBE_NVML=0"
     try:
         lib = ctypes.CDLL(_NVML_LIB_NAME)
     except Exception as exc:
@@ -957,7 +961,7 @@ def _oldest_packaged_cuda_version() -> tuple[int, int]:
     return min(versions) if versions else (0, 0)
 
 
-def _cuda_selected_reason(probes: Probes, version: tuple[int, int], coverages) -> str:
+def _cuda_selected_reason(probes: Probes, cu_version: tuple[int, int], torch_version: str, coverages) -> str:
     if not coverages:
         coverage_desc = (
             "no per-device compute capability probed, so the filter is vacuously "
@@ -996,7 +1000,8 @@ def _cuda_selected_reason(probes: Probes, version: tuple[int, int], coverages) -
         else "unknown"
     )
     return (
-        f"newest candidate {_fmt_cu(version)} <= driver CUDA {driver_str} passing the "
+        f"highest in-range torch {torch_version} on newest driver-compatible "
+        f"index {_fmt_cu(cu_version)} <= driver CUDA {driver_str} passing the "
         f"architecture filter ({probes.arch}) and the compute-capability filter "
         f"({coverage_desc})"
     )
@@ -1087,7 +1092,15 @@ def _exhaustion_warning(probes: Probes, terminal: str, spec_str: str) -> str:
 
 
 def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = False) -> dict:
-    """The version-aware binding fallback ladder.  Pure."""
+    """The version-aware binding fallback ladder.  Pure.
+
+    Candidates are every (index CUDA version, index short name, torch version)
+    triple such that the index CUDA version is <= the probed driver CUDA, the
+    torch version is in range, and the version is published for the host arch.
+    Each candidate is checked against the architecture list recorded for that
+    exact torch version; survivors are ranked by highest torch version, then
+    newest CUDA index.
+    """
     rejected: list[dict[str, str]] = []
     warnings: list[str] = []
 
@@ -1106,48 +1119,60 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
 
     driver = probes.driver_cuda
 
-    # Ladder step 1 -- candidates: every cuX.Y index <= driver CUDA, newest first.
-    candidates: list[tuple[tuple[int, int], str]] = []
+    # Driver-eligible CUDA indices: every cuX.Y index with X.Y <= driver CUDA.
+    driver_eligible_indices: list[tuple[tuple[int, int], str]] = []
     if driver is not None:
         for name in PUBLISHED:
             if not name.startswith("cu"):
                 continue
-            version = _cuda_version_from_short(name)
-            if version is not None and version <= driver:
-                candidates.append((version, name))
-        candidates.sort(key=lambda item: (-item[0][0], -item[0][1], item[1]))
+            cu_version = _cuda_version_from_short(name)
+            if cu_version is not None and cu_version <= driver:
+                driver_eligible_indices.append((cu_version, name))
+    driver_eligible_indices.sort(
+        key=lambda item: (-item[0][0], -item[0][1], item[1])
+    )
 
-    # Ladder step 2 -- architecture/in-range filter.
-    arch_valid: list[tuple[tuple[int, int], str, str]] = []
-    for version, name in candidates:
-        chosen = _newest_arch_version(name, probes.arch, spec_list)
-        if chosen is None:
-            rejected.append({
-                "index": _index_url(name),
-                "reason": (
-                    f"no in-range torch published for {probes.arch} in range {spec_str}"
-                ),
-            })
-        else:
-            arch_valid.append((version, name, chosen))
-    newest_arch_valid = arch_valid[0] if arch_valid else None
+    # All (index, torch_version) candidates that pass the driver, arch and range filters.
+    all_candidates: list[tuple[tuple[int, int], str, str]] = []
+    for cu_version, name in driver_eligible_indices:
+        for version in PUBLISHED.get(name, {}).get(probes.arch, ()):
+            if _in_range(version, spec_list):
+                all_candidates.append((cu_version, name, version))
 
-    # Ladder steps 3 and 4 -- coverage and unified-memory rules.
+    # Rank by highest torch version, then newest CUDA index.
+    all_candidates.sort(
+        key=lambda item: (
+            -_vtuple(item[2])[0],
+            -_vtuple(item[2])[1],
+            -_vtuple(item[2])[2],
+            -item[0][0],
+            -item[0][1],
+            item[1],
+        )
+    )
+
+    newest_arch_valid = all_candidates[0] if all_candidates else None
+
+    any_coverage = False
+    any_unified = False
+    any_torchaudio = False
     survivors: list[tuple[tuple[int, int], str, str, tuple[str, ...], list]] = []
-    coverage_ok = False
-    unified_drop = 0
-    for version, name, chosen in arch_valid:
-        cu_data = CUDA_ARCH.get(chosen, {}).get(name, {})
+
+    for cu_version, name, version in all_candidates:
+        cu_data = CUDA_ARCH.get(version, {}).get(name, {})
         arch_list_str = cu_data.get(probes.arch)
         if arch_list_str is None:
             rejected.append({
                 "index": _index_url(name),
-                "reason": f"no recorded architecture list for {name} {probes.arch}",
+                "reason": (
+                    f"torch {version}: no recorded architecture list for {name} {probes.arch}"
+                ),
             })
             continue
+
         entries = _arch_list_to_entries(arch_list_str)
-        uncovered = None
         coverages = []
+        uncovered = None
         for device_idx, cc in enumerate(probes.compute_caps):
             cov = _device_coverage(cc, entries)
             coverages.append(cov)
@@ -1159,53 +1184,57 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
             rejected.append({
                 "index": _index_url(name),
                 "reason": (
-                    f"compute capability {major}.{minor} of device {device_idx} not "
-                    f"covered by the {probes.arch} build list for {name}"
+                    f"torch {version}: compute capability {major}.{minor} of device {device_idx} "
+                    f"not covered by the {probes.arch} build list for {name}"
                 ),
             })
             continue
-        coverage_ok = True
+        any_coverage = True
+
         if probes.memory_state == "unified":
-            if not (probes.arch == "aarch64" and version >= (13, 0)):
+            if not (probes.arch == "aarch64" and cu_version >= (13, 0)):
                 rejected.append({
                     "index": _index_url(name),
                     "reason": (
-                        "unified-memory host only supported on aarch64 with CUDA 13.0+ "
-                        "(JetPack 6 hosts take the CPU route)"
+                        f"torch {version}: unified-memory host only supported on aarch64 with "
+                        "CUDA 13.0+ (JetPack 6 hosts take the CPU route)"
                     ),
                 })
-                unified_drop += 1
                 continue
-        # Additional torchaudio constraint for this candidate.
+        any_unified = True
+
         if need_torchaudio:
-            ta = _companion(name, probes.arch, chosen, "torchaudio")
+            ta = _companion(name, probes.arch, version, "torchaudio")
             if ta is None:
                 rejected.append({
                     "index": _index_url(name),
-                    "reason": f"no torchaudio published for torch {chosen} on this index",
+                    "reason": f"torch {version}: no torchaudio published on this index",
                 })
                 continue
-        survivors.append((version, name, chosen, entries, coverages))
+        any_torchaudio = True
 
-    # Ladder step 5 -- first survivor wins.
+        survivors.append((cu_version, name, version, entries, coverages))
+
     if survivors:
-        version, name, chosen, _entries, coverages = survivors[0]
+        cu_version, name, version, _entries, coverages = survivors[0]
         url = _index_url(name)
-        if newest_arch_valid is not None and version < newest_arch_valid[0]:
-            warnings.append(
-                f"downgrade: selected {url} ({_fmt_cu(version)}); the newest candidate "
-                f"passing the driver and architecture filters was "
-                f"{_index_url(newest_arch_valid[1])} ({_fmt_cu(newest_arch_valid[0])}), "
-                f"rejected by a later filter"
-            )
-        reason = _cuda_selected_reason(probes, version, coverages)
+        if newest_arch_valid is not None:
+            nv_cu, nv_name, nv_version = newest_arch_valid
+            if (_vtuple(version), cu_version) < (_vtuple(nv_version), nv_cu):
+                warnings.append(
+                    f"downgrade: selected {url} ({_fmt_cu(cu_version)}) torch {version}; "
+                    f"the newest candidate passing the driver and architecture filters was "
+                    f"{_index_url(nv_name)} ({_fmt_cu(nv_cu)}) torch {nv_version}, "
+                    f"rejected by a later filter"
+                )
+        reason = _cuda_selected_reason(probes, cu_version, version, coverages)
         row = _match_table_row(probes, url)
         if row is not None:
             reason = f"{reason}; matches decision table row {row['row']}"
         selftest = (
             probes.memory_state == "unified"
             and probes.arch == "aarch64"
-            and version >= (13, 0)
+            and cu_version >= (13, 0)
         )
         if selftest:
             warnings.append(
@@ -1219,9 +1248,9 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
             "selected_reason": reason,
             "rejected": rejected,
             "warnings": warnings,
-            "torch_version": chosen,
-            "torchvision_version": _companion(name, probes.arch, chosen, "torchvision"),
-            "torchaudio_version": _companion(name, probes.arch, chosen, "torchaudio"),
+            "torch_version": version,
+            "torchvision_version": _companion(name, probes.arch, version, "torchvision"),
+            "torchaudio_version": _companion(name, probes.arch, version, "torchaudio"),
             "torch_spec": spec_str,
             "selftest_required": selftest,
         }
@@ -1247,24 +1276,28 @@ def _ladder(probes: Probes, spec_str: str, spec_list, need_torchaudio: bool = Fa
             "driver CUDA version could not be determined, so no candidate index "
             "satisfies 'index CUDA version <= driver CUDA'"
         )
-    elif not candidates:
+    elif not driver_eligible_indices:
         terminal = (
             f"driver CUDA {_fmt_version(driver)} predates the oldest packaged CUDA index "
             f"({_fmt_cu(_oldest_packaged_cuda_version())})"
         )
-    elif not arch_valid:
+    elif not all_candidates:
         terminal = (
             f"no packaged CUDA index provides an in-range torch for {probes.arch} in range {spec_str}"
         )
-    elif not coverage_ok:
+    elif not any_coverage:
         terminal = (
             "every architecture-compatible candidate was rejected by the "
             "compute-capability filter"
         )
-    elif unified_drop:
+    elif probes.memory_state == "unified" and not any_unified:
         terminal = (
             "unified-memory host not supported on this driver/architecture "
             "(aarch64 with CUDA 13.0+ required; JetPack 6 hosts take the CPU route)"
+        )
+    elif need_torchaudio and not any_torchaudio:
+        terminal = (
+            "every architecture-compatible candidate was rejected by the need-torchaudio filter"
         )
     else:
         terminal = "candidate ladder exhausted"
@@ -1494,6 +1527,19 @@ def _normalize_gfx(value):
         return ()
 
 
+def _normalize_gfx_targets(value):
+    """Normalize probed GFX targets: lower-case, drop gfx000/*-generic, dedup."""
+    raw = _normalize_gfx(value)
+    seen: list[str] = []
+    for token in raw:
+        token = token.lower().strip()
+        if not token or token == "gfx000" or token.endswith("-generic"):
+            continue
+        if token not in seen:
+            seen.append(token)
+    return tuple(seen)
+
+
 def _coerce_rocm_version(value):
     if value is None:
         return None
@@ -1515,15 +1561,21 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
 
     Returns a dict with index_url, torch_version, torchvision_version,
     torchaudio_version, selected_reason and warnings.
+
+    Targets are normalized (lower-case, ``gfx000`` and ``*-generic`` dropped,
+    de-duplicated).  An index is acceptable when it covers at least one
+    probed target.  The selected index is the acceptable one with the
+    highest in-range torch version, tie-breaking by newest ROCm version.
     """
     if spec is None:
         spec = project_torch_spec()
     spec_list = _parse_spec(spec)
     host_ver = _coerce_rocm_version(rocm_version)
-    gfx = _normalize_gfx(gfx_targets)
+    raw_gfx = _normalize_gfx(gfx_targets)
+    gfx = _normalize_gfx_targets(gfx_targets)
     warnings: list[str] = []
 
-    if not gfx:
+    if not raw_gfx:
         warnings.append("no GFX targets supplied; ROCm architecture coverage check skipped")
 
     if host_ver is None:
@@ -1538,14 +1590,21 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
             ],
         }
 
-    candidates = []
+    # Host-eligible indices with an in-range torch that are recorded for this arch.
+    host_eligible = []
     for name in PUBLISHED:
         ver = _rocm_version_from_short(name)
-        if ver is not None and ver <= host_ver:
-            candidates.append((ver, name))
-    candidates.sort(key=lambda item: (-item[0][0], -item[0][1], item[1]))
+        if ver is None or ver > host_ver:
+            continue
+        chosen = _newest_arch_version(name, arch, spec_list)
+        if chosen is None:
+            continue
+        rocm_info = ROCM_ARCH.get(chosen)
+        if rocm_info is None or name not in rocm_info.get("indexes", ()):
+            continue
+        host_eligible.append((ver, name, chosen, rocm_info))
 
-    # Oldest index that would work, ignoring the host-version ceiling.
+    # Oldest index that would work ignoring the host-version ceiling (remediation).
     qualifying_all = []
     for name in PUBLISHED:
         ver = _rocm_version_from_short(name)
@@ -1557,58 +1616,107 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
         rocm_info = ROCM_ARCH.get(chosen)
         if rocm_info is None or name not in rocm_info.get("indexes", ()):
             continue
-        if gfx and not set(gfx).issubset(rocm_info.get("gfx", ())):
+        if gfx and not any(g in rocm_info.get("gfx", ()) for g in gfx):
             continue
         qualifying_all.append((ver, name))
     qualifying_all.sort()
     oldest = qualifying_all[0] if qualifying_all else None
 
-    for ver, name in candidates:
-        chosen = _newest_arch_version(name, arch, spec_list)
-        if chosen is None:
-            continue
-        rocm_info = ROCM_ARCH.get(chosen)
-        if rocm_info is None or name not in rocm_info.get("indexes", ()):
-            continue
-        if gfx and not set(gfx).issubset(rocm_info.get("gfx", ())):
-            continue
-        url = _index_url(name)
-        selected_reason = (
-            f"newest ROCm index {name} <= host ROCm {_fmt_version(host_ver)} with "
-            f"torch {chosen} in range and GFX coverage"
+    if gfx:
+        # Refuse only when no probed target is covered by any host-eligible index.
+        any_covered = any(
+            any(g in rocm_info.get("gfx", ()) for g in gfx)
+            for _ver, _name, _chosen, rocm_info in host_eligible
         )
-        if not gfx:
-            selected_reason += " (GFX check skipped)"
+        if not any_covered:
+            host_str = _fmt_version(host_ver)
+            if oldest is not None:
+                warn = (
+                    f"no ROCm index <= host ROCm {host_str}, range {spec}, "
+                    f"arch {arch} covers any GFX target in [{','.join(gfx)}]; "
+                    f"the oldest ROCm index that would cover one is {_index_url(oldest[1])} "
+                    f"({_fmt_version(oldest[0])})"
+                )
+            else:
+                warn = (
+                    f"no ROCm index <= host ROCm {host_str}, range {spec}, "
+                    f"arch {arch} covers any GFX target in [{','.join(gfx)}]; "
+                    "no recorded ROCm index would cover any of these targets"
+                )
+            for g in sorted(gfx):
+                warnings.append(
+                    f"GFX target {g} is not covered by any host-eligible ROCm index; "
+                    "consider setting HIP_VISIBLE_DEVICES to restrict PyTorch to a covered GPU"
+                )
+            return {
+                "index_url": None,
+                "torch_version": None,
+                "torchvision_version": None,
+                "torchaudio_version": None,
+                "selected_reason": f"no ROCm index selected for host ROCm {_fmt_version(host_ver)}",
+                "warnings": warnings + [warn],
+            }
+
+    if not host_eligible:
+        host_str = _fmt_version(host_ver) if host_ver else "unknown"
+        if oldest is not None:
+            warn = (
+                f"no ROCm index compatible with host ROCm {host_str}, range {spec}, "
+                f"arch {arch} was found; "
+                f"the oldest ROCm index that would work is {_index_url(oldest[1])} "
+                f"({_fmt_version(oldest[0])})"
+            )
+        else:
+            warn = (
+                f"no ROCm index compatible with host ROCm {host_str}, range {spec}, "
+                f"arch {arch} was found; "
+                "no recorded ROCm index would work"
+            )
         return {
-            "index_url": url,
-            "torch_version": chosen,
-            "torchvision_version": _companion(name, arch, chosen, "torchvision"),
-            "torchaudio_version": _companion(name, arch, chosen, "torchaudio"),
-            "selected_reason": selected_reason,
-            "warnings": warnings,
+            "index_url": None,
+            "torch_version": None,
+            "torchvision_version": None,
+            "torchaudio_version": None,
+            "selected_reason": f"no ROCm index selected for host ROCm {host_str}",
+            "warnings": warnings + [warn],
         }
 
-    host_str = _fmt_version(host_ver) if host_ver else "unknown"
-    if oldest is not None:
-        warn = (
-            f"no ROCm index compatible with host ROCm {host_str}, range {spec}, "
-            f"arch {arch} and GFX [{','.join(gfx)}] was found; "
-            f"the oldest ROCm index that would work is {_index_url(oldest[1])} "
-            f"({_fmt_version(oldest[0])})"
+    # Select highest torch version, then newest ROCm.
+    host_eligible.sort(
+        key=lambda item: (
+            -_vtuple(item[2])[0],
+            -_vtuple(item[2])[1],
+            -_vtuple(item[2])[2],
+            -item[0][0],
+            -item[0][1],
+            item[1],
         )
+    )
+    ver, name, chosen, rocm_info = host_eligible[0]
+    url = _index_url(name)
+    index_gfx = set(rocm_info.get("gfx", ()))
+    covered = [g for g in gfx if g in index_gfx]
+    uncovered = [g for g in gfx if g not in index_gfx]
+    for g in uncovered:
+        warnings.append(
+            f"GFX target {g} is not covered by {name}; "
+            "consider setting HIP_VISIBLE_DEVICES to restrict PyTorch to the covered GPU(s)"
+        )
+    selected_reason = (
+        f"newest ROCm index {name} <= host ROCm {_fmt_version(host_ver)} with "
+        f"torch {chosen} in range"
+    )
+    if gfx:
+        selected_reason += f" and covers GFX target(s) {','.join(covered)}"
     else:
-        warn = (
-            f"no ROCm index compatible with host ROCm {host_str}, range {spec}, "
-            f"arch {arch} and GFX [{','.join(gfx)}] was found; "
-            "no recorded ROCm index would work"
-        )
+        selected_reason += " (GFX check skipped)"
     return {
-        "index_url": None,
-        "torch_version": None,
-        "torchvision_version": None,
-        "torchaudio_version": None,
-        "selected_reason": f"no ROCm index selected for host ROCm {host_str}",
-        "warnings": warnings + [warn],
+        "index_url": url,
+        "torch_version": chosen,
+        "torchvision_version": _companion(name, arch, chosen, "torchvision"),
+        "torchaudio_version": _companion(name, arch, chosen, "torchaudio"),
+        "selected_reason": selected_reason,
+        "warnings": warnings,
     }
 
 
@@ -1616,57 +1724,94 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None):
 # Index verification
 # ---------------------------------------------------------------------------
 
-def _fetch_index_versions(index_name: str, timeout: float = 15.0):
-    """Fetch cp312 torch versions from a live simple index."""
-    url = f"{_BASE_URL}{index_name}/torch/"
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            data = response.read().decode("utf-8", errors="replace")
-    except Exception as exc:
-        return None, str(exc)
-    versions = set()
-    for match in re.finditer(r'<a[^>]*href=["\']([^"\']+)["\']', data):
+_PLATFORM_ARCH_TAGS = {
+    "manylinux_2_28_x86_64": "x86_64",
+    "manylinux_2_17_x86_64": "x86_64",
+    "manylinux1_x86_64": "x86_64",
+    "linux_x86_64": "x86_64",
+    "win_amd64": "x86_64",
+    "manylinux_2_28_aarch64": "aarch64",
+    "manylinux_2_17_aarch64": "aarch64",
+    "linux_aarch64": "aarch64",
+}
+_WHEEL_HREF_RE = re.compile(r'<a[^>]*href=["\']([^"\']+)["\']')
+_WHEEL_FILENAME_RE = re.compile(
+    r"^torch-([0-9]+(?:\.[0-9]+)*)"
+    r"(?:\+[A-Za-z0-9.]+)?"
+    r"-cp312-cp312-"
+    r"([A-Za-z0-9_.]+)"
+    r"\.whl$"
+)
+_FINAL_RELEASE_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
+
+
+def _parse_simple_index(html: str) -> dict[str, set[str]]:
+    """Parse a PyTorch simple-index HTML page into {arch: {versions}}.
+
+    URL-decodes the href, strips any fragment, matches only cp312 torch
+    wheels that are final releases (no dev/rc/a/b/post suffixes), and maps
+    the platform tag to x86_64/aarch64.
+    """
+    out: dict[str, set[str]] = {"x86_64": set(), "aarch64": set()}
+    for match in _WHEEL_HREF_RE.finditer(html):
         href = match.group(1)
+        href = unquote(href)
+        href = href.split("#")[0]
         fname = href.split("/")[-1]
-        if not fname.endswith(".whl"):
+        fm = _WHEEL_FILENAME_RE.match(fname)
+        if not fm:
             continue
-        if "cp312" not in fname:
+        version = fm.group(1)
+        if not _FINAL_RELEASE_RE.match(version):
             continue
-        vm = re.match(r"torch-([\d\.]+)", fname)
-        if vm:
-            versions.add(vm.group(1))
-    return versions, None
+        platform_tag = fm.group(2)
+        arch = None
+        for tag, mapped in _PLATFORM_ARCH_TAGS.items():
+            if tag in platform_tag:
+                arch = mapped
+                break
+        if arch is None:
+            continue
+        out[arch].add(version)
+    return out
 
 
 def verify_indexes(spec=None):
-    """Diff in-range cp312 torch versions against the live indexes."""
+    """Diff in-range cp312 torch versions per (index, arch) against live indexes."""
     if spec is None:
         spec = project_torch_spec()
     spec_list = _parse_spec(spec)
     report = {}
     for name in PUBLISHED:
-        observed, error = _fetch_index_versions(name)
-        if error is not None:
-            report[name] = {
-                "error": error,
-                "expected": [],
-                "observed": [],
-                "added": [],
-                "missing": [],
-            }
+        url = f"{_BASE_URL}{name}/torch/"
+        try:
+            with urllib.request.urlopen(url, timeout=15.0) as response:
+                html = response.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            for arch in ("x86_64", "aarch64"):
+                report[f"{name}/{arch}"] = {
+                    "error": str(exc),
+                    "expected": [],
+                    "observed": [],
+                    "added": [],
+                    "missing": [],
+                }
             continue
-        expected = set()
-        for vers in PUBLISHED[name].values():
-            for v in vers:
-                if _in_range(v, spec_list):
-                    expected.add(v)
-        report[name] = {
-            "error": None,
-            "expected": sorted(expected),
-            "observed": sorted(observed),
-            "added": sorted(observed - expected),
-            "missing": sorted(expected - observed),
-        }
+        observed = _parse_simple_index(html)
+        for arch in ("x86_64", "aarch64"):
+            expected = {
+                v
+                for v in PUBLISHED[name].get(arch, ())
+                if _in_range(v, spec_list)
+            }
+            obs = observed.get(arch, set())
+            report[f"{name}/{arch}"] = {
+                "error": None,
+                "expected": sorted(expected),
+                "observed": sorted(obs),
+                "added": sorted(obs - expected),
+                "missing": sorted(expected - obs),
+            }
     return report
 
 

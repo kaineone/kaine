@@ -518,7 +518,7 @@ _ARM32_ARCHES = ("armv6", "armv7", "armv6l", "armv7l")
 
 #: The honest capability matrix, per tier. ``present`` / ``degraded`` / ``absent``
 #: name what each tier can and cannot do (openspec deployment-tiers). Rendered by
-# ``scripts/probe-host`` and mirrored in ``docs/deployment-tiers.md``.
+#: ``scripts/probe-host`` and mirrored in ``docs/deployment-tiers.md``.
 TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
     0: {
         "name": "edge / sensor node",
@@ -669,7 +669,9 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
     Calls ``kaine.hostmem.classify_accelerator_memory(i)`` for every counted
     accelerator device, totals the ``kind == "vram"`` pool bytes for each
     device classified ``discrete``, and treats the host as ``unified`` if any
-    device reports unified memory. Failures degrade to ``("unknown", None)``.
+    device reports unified memory. If any discrete device lacks a known VRAM
+    total, the overall budget is reported as unknown rather than undercounted.
+    Failures degrade to ``("unknown", None)``.
     """
     try:
         from kaine import hostmem
@@ -721,6 +723,7 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
         elif _state_is(raw_state, "discrete"):
             seen_discrete = True
             pools = getattr(classification, "pools", ()) or ()
+            device_vram = None
             for pool in pools:
                 if isinstance(pool, dict):
                     kind = pool.get("kind")
@@ -728,11 +731,16 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
                 else:
                     kind = getattr(pool, "kind", None)
                     total_bytes = getattr(pool, "total_bytes", None)
-                if kind == "vram" and total_bytes is not None:
-                    try:
-                        total_vram_bytes += int(total_bytes)
-                    except Exception:
-                        pass
+                if kind == "vram":
+                    if total_bytes is not None:
+                        if device_vram is None:
+                            device_vram = 0
+                        device_vram += int(total_bytes)
+            if device_vram is None:
+                # A discrete device with no known VRAM total would undercount
+                # the budget; report unknown instead.
+                return "unknown", None
+            total_vram_bytes += device_vram
 
     if seen_unified:
         return "unified", None
@@ -756,9 +764,10 @@ def recommend_tier(
     """Map host capabilities to a recommended deployment tier.
 
     Recommends only — it does not apply a profile or start the entity. The
-    override arguments exist for deterministic testing across host classes; when
-    omitted each is probed from the live host, and memory classification falls
-    back to ``kaine.hostmem`` (``memory_state`` / ``vram_gb``).
+    override arguments exist for deterministic testing across host classes.
+    The live host is probed only when ``memory_state`` is not supplied; when
+    ``memory_state`` is supplied without ``vram_gb`` the VRAM budget is treated
+    as unknown (the budget falls back to RAM) and no live VRAM probe is run.
 
     The ladder mirrors the runtime cliff (openspec design) and the approved
     host-fit-provisioning change:
@@ -794,7 +803,13 @@ def recommend_tier(
         detected = detect_device()
         accel_v = detected if detected in ("cuda", "xpu", "mps") else "cpu"
 
-    probed_state, probed_vram = _classify_memory(gpu_count=gpu_v)
+    # Probe the live host only when the caller has not supplied a memory state.
+    # If memory_state is supplied but vram_gb is not, treat VRAM as unknown and
+    # do not pull the live host's VRAM.
+    probed_state: str | None = None
+    probed_vram: float | None = None
+    if memory_state is None:
+        probed_state, probed_vram = _classify_memory(gpu_count=gpu_v)
     mem_state = memory_state if memory_state is not None else probed_state
     mem_vram = vram_gb if vram_gb is not None else probed_vram
 
@@ -827,7 +842,7 @@ def recommend_tier(
             torch_importable=bool(torch_v),
             gpu_count=gpu_v,
             memory_budget_gb=budget,
-            memory_state=mem_state,
+            memory_state=mem_state or "unknown",
             residency_required=residency,
         )
 

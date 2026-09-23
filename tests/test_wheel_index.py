@@ -22,6 +22,8 @@ would cause in ``scripts/install.sh``.
 
 import ctypes
 import ctypes.util
+import importlib
+import importlib.util
 import io
 import json
 import os
@@ -42,6 +44,7 @@ from kaine.wheel_index import (
     _arch_list_to_entries,
     _device_coverage,
     _in_range,
+    _parse_simple_index,
     _parse_spec,
     _token_semantics,
     _vtuple,
@@ -497,10 +500,22 @@ def _install_smi_fake(monkeypatch, mode="ok"):
     monkeypatch.setattr(pathlib.Path, "exists", fake_path_exists, raising=True)
 
 
+def _torch_installed():
+    """Return True when torch is importable without actually importing it."""
+    return importlib.util.find_spec("torch") is not None
+
+
 def _block_nvml(monkeypatch):
     """Make every NVML entry point fail, so probes stay machine-independent."""
     original_cdll = ctypes.CDLL
     original_find_library = ctypes.util.find_library
+
+    # Prevent a failed mid-import of torch from leaving broken submodules in
+    # sys.modules for later tests.  If torch is not already loaded, make any
+    # import of it fail cleanly while NVML/CDLL is blocked; monkeypatch will
+    # restore the real sys.modules entry after the test.
+    if "torch" not in sys.modules:
+        monkeypatch.setitem(sys.modules, "torch", None)
 
     def refuse(*args, **kwargs):
         raise OSError("NVML is blocked for hermetic wheel-index tests")
@@ -522,6 +537,17 @@ def _block_nvml(monkeypatch):
             monkeypatch.setattr(module, "CDLL", refuse, raising=False)
         if getattr(module, "find_library", None) is original_find_library:
             monkeypatch.setattr(module, "find_library", no_find_library, raising=False)
+
+
+def _run_collect_with_nvml_blocked(monkeypatch):
+    """Run collect_probes with all NVML/CDLL entry points blocked.
+
+    Uses a missing nvidia-smi so the subprocess layer falls through
+    immediately; the remaining torch probe is forced to fail cleanly.
+    """
+    _install_smi_fake(monkeypatch, "missing")
+    _block_nvml(monkeypatch)
+    return collect_probes()
 
 
 def _patch_machine(monkeypatch, value):
@@ -553,13 +579,16 @@ def test_binding_constants_are_public():
 
 def test_x86_64_workstation_default_resolves_cu128():
     """Invariant: the dual-GPU x86_64 workstation (driver CUDA 12.8, one sm_90
-    device, discrete memory) still resolves to the cu128 index.
+    device, discrete memory) resolves to the CUDA index carrying the highest
+    in-range torch that covers the device.
 
     Cost prevented: regressing the machine KAINE was developed on — the change
-    must be invisible to the existing default install path.
+    must route it to the best available wheel, not the newest CUDA index.
     """
     result = resolve_index(_probes())
-    assert result["index_url"] == CU128
+    # New selection policy: cu126 publishes torch 2.14.0 that covers sm_90,
+    # outranking cu128's older torch 2.11.0.
+    assert result["index_url"] == CU126
     assert result["index_url"] != CPU_INDEX
 
 
@@ -588,8 +617,8 @@ def test_driver_cuda_bounds_the_selected_index():
     explicitly allowed older-index downgrade).
     """
     cases = {
-        (12, 9): CU129,
-        (12, 8): CU128,
+        (12, 9): CU126,
+        (12, 8): CU126,
         (12, 6): CU126,
         (12, 4): CPU_INDEX,
         (12, 0): CPU_INDEX,
@@ -598,6 +627,8 @@ def test_driver_cuda_bounds_the_selected_index():
         result = resolve_index(_probes(driver=driver, caps=((8, 0),)))
         assert result["index_url"] == expected, driver
         if expected is not CPU_INDEX:
+            # New policy: highest in-range torch first; cu126 carries 2.14.0.
+            assert result["torch_version"] == "2.14.0", driver
             cu_version = int(expected.rstrip("/").rsplit("/", 1)[-1][2:])
             driver_version = driver[0] * 10 + driver[1]
             assert cu_version <= driver_version
@@ -651,7 +682,9 @@ def test_aarch64_sbsa_host_still_gets_cuda_index():
     GH200-class SBSA hardware.
     """
     result = resolve_index(_probes(arch="aarch64", driver=(12, 8), caps=((9, 0),)))
-    assert result["index_url"] == CU128
+    # New policy: cu126 carries the same 2.14.0 torch for aarch64 and wins
+    # the tie-break over cu128's older 2.11.0 when driver CUDA is 12.8.
+    assert result["index_url"] == CU126
     assert result["index_url"] != CPU_INDEX
 
 
@@ -664,7 +697,9 @@ def test_unknown_memory_never_excludes():
     """
     discrete = resolve_index(_probes(memory="discrete"))
     unknown = resolve_index(_probes(memory="unknown"))
-    assert discrete["index_url"] == CU128
+    # New policy: both pick cu126 because it carries the highest in-range
+    # torch that covers the default sm_90 device.
+    assert discrete["index_url"] == CU126
     assert discrete["index_url"] == unknown["index_url"]
     assert discrete["variant"] == unknown["variant"]
 
@@ -677,12 +712,19 @@ def test_every_device_must_be_covered():
     cannot execute (first-device-only coverage checks).
     """
     identical = resolve_index(_probes(caps=((9, 0), (9, 0))))
-    assert identical["index_url"] == CU128
+    # New policy: highest in-range torch first; cu126's 2.14.0 build covers
+    # sm_90, outranking newer CUDA indexes with older torch versions.
+    assert identical["index_url"] == CU126
+    assert identical["torch_version"] == "2.14.0"
 
-    both_covered = resolve_index(
-        _probes(arch="aarch64", driver=(12, 9), caps=((9, 0), (9, 0)))
+    # Blackwell cc 12.0 is covered by cu129 but not by cu126.  Under the new
+    # policy the coverage check (not torch version) decides the outcome, so
+    # the ladder selects cu129's torch 2.13.0.
+    blackwell_covered = resolve_index(
+        _probes(arch="x86_64", driver=(12, 9), caps=((12, 0),))
     )
-    assert both_covered["index_url"] == CU129
+    assert blackwell_covered["index_url"] == CU129
+    assert blackwell_covered["torch_version"] == "2.13.0"
 
     # cu126's x86 line serves sm_90 but not sm_100, so the second device
     # rejects the only candidate and the ladder exhausts to the CPU index.
@@ -805,7 +847,8 @@ def test_degenerate_probes_return_normally():
     assert resolve_index(_probes(arch="other"))["index_url"] == CPU_INDEX
     assert resolve_index(_probes(driver=(11, 5), caps=((8, 0),)))["index_url"] == CPU_INDEX
     # Garbage is not a positive unified verdict, so it must not exclude.
-    assert resolve_index(_probes(memory="nonsense"))["index_url"] == CU128
+    # New policy: default sm_90 on driver 12.8 now picks cu126 2.14.0.
+    assert resolve_index(_probes(memory="nonsense"))["index_url"] == CU126
 
 
 def test_results_are_json_round_trippable():
@@ -859,13 +902,27 @@ def test_vtuple_parse_spec_and_in_range_edge_cases():
 
 
 def test_project_torch_spec_reads_pyproject_and_env_overrides(monkeypatch, tmp_path):
-    """project_torch_spec parses pyproject.toml and KAINE_TORCH_SPEC wins."""
+    """project_torch_spec parses pyproject.toml and KAINE_TORCH_SPEC wins.
+    When pyproject.toml contains no torch requirement, the explicit fallback
+    \">=\" lets the resolver warn that no torch spec was found.
+    """
     monkeypatch.delenv("KAINE_TORCH_SPEC", raising=False)
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text('[project]\ndependencies = ["torch>=2.9.1,<2.15"]\n')
     assert project_torch_spec(str(pyproject)) == ">=2.9.1,<2.15"
+    empty = tmp_path / "empty.toml"
+    empty.write_text('[project]\ndependencies = ["numpy"]\n')
+    assert project_torch_spec(str(empty)) == ">="
     monkeypatch.setenv("KAINE_TORCH_SPEC", ">=2.12")
     assert project_torch_spec(str(pyproject)) == ">=2.12"
+
+
+def test_resolve_index_warns_when_torch_spec_missing():
+    """The resolver emits the previously-dead \"no torch requirement\" warning
+    when project_torch_spec returns the explicit fallback \">=\".
+    """
+    result = resolve_index(_probes(), spec=">=")
+    assert any("torch requirement not found" in w.lower() for w in result["warnings"])
 
 
 def test_token_semantics_and_arch_list_entries():
@@ -888,6 +945,52 @@ def test_same_major_and_ptx_device_coverage():
     assert _device_coverage((9, 0), ["compute_90"]) == ("ptx", (9, 0))
 
 
+def test_new_selection_policy_newest_in_range_torch_first():
+    """Pinned consequences of the new (index, torch_version) selection policy.
+
+    The ladder now evaluates every driver-eligible (index, version) pair and
+    chooses the highest torch version whose build list covers the device,
+    tie-breaking by newest CUDA index.
+    """
+    # x86_64 cc 8.6 driver 12.8 -> cu126 torch 2.14.0 (was cu128 2.11.0)
+    r = resolve_index(_probes(arch="x86_64", driver=(12, 8), caps=((8, 6),)))
+    assert r["index_url"] == CU126
+    assert r["torch_version"] == "2.14.0"
+
+    # x86_64 cc 12.0 (Blackwell) driver 12.8 -> cu128 torch 2.11.0
+    # (cu126 lacks sm_120, so the older CUDA index with the only covering build wins)
+    r = resolve_index(_probes(arch="x86_64", driver=(12, 8), caps=((12, 0),)))
+    assert r["index_url"] == CU128
+    assert r["torch_version"] == "2.11.0"
+
+    # x86_64 cc 8.9 driver 13.2 -> cu132 torch 2.14.0
+    r = resolve_index(_probes(arch="x86_64", driver=(13, 2), caps=((8, 9),)))
+    assert r["index_url"] == CU132
+    assert r["torch_version"] == "2.14.0"
+
+    # x86_64 cc 7.0 driver 13.2 -> cu126 torch 2.14.0
+    r = resolve_index(_probes(arch="x86_64", driver=(13, 2), caps=((7, 0),)))
+    assert r["index_url"] == CU126
+    assert r["torch_version"] == "2.14.0"
+
+    # aarch64 unified cc 8.7 driver 13.2 -> cu132 torch 2.14.0 with selftest
+    r = resolve_index(
+        _probes(arch="aarch64", driver=(13, 2), caps=((8, 7),), memory="unified")
+    )
+    assert r["index_url"] == CU132
+    assert r["torch_version"] == "2.14.0"
+    assert r["selftest_required"] is True
+
+    # with need_torchaudio, cc 8.9 driver 13.2 -> cu130 torch 2.14.0
+    r = resolve_index(
+        _probes(arch="x86_64", driver=(13, 2), caps=((8, 9),)),
+        need_torchaudio=True,
+    )
+    assert r["index_url"] == CU130
+    assert r["torch_version"] == "2.14.0"
+    assert r["torchaudio_version"] is not None
+
+
 def test_host_matrix():
     """Pinned cross-section of the real resolve_index output."""
     # x86 cc8.9 drv13.2 -> newest CUDA 13.x index
@@ -896,11 +999,11 @@ def test_host_matrix():
     assert r["torch_version"] == "2.14.0"
     assert r["torchvision_version"] == "0.29.0"
 
-    # x86 cc8.6 drv12.8 -> cu128
+    # x86 cc8.6 drv12.8 -> cu126 (new policy: 2.14.0 outranks cu128's 2.11.0)
     r = resolve_index(_probes(arch="x86_64", driver=(12, 8), caps=((8, 6),)))
-    assert r["index_url"] == CU128
-    assert r["torch_version"] == "2.11.0"
-    assert r["torchvision_version"] == "0.26.0"
+    assert r["index_url"] == CU126
+    assert r["torch_version"] == "2.14.0"
+    assert r["torchvision_version"] == "0.29.0"
 
     # x86 cc7.0 drv12.8 -> cu126 (cu128 does not cover sm_70)
     r = resolve_index(_probes(arch="x86_64", driver=(12, 8), caps=((7, 0),)))
@@ -931,8 +1034,10 @@ def test_need_torchaudio_falls_back_to_index_with_audio():
     """
     probes = _probes(arch="x86_64", driver=(13, 2), caps=((8, 9),))
     with_audio = resolve_index(probes, need_torchaudio=True)
+    # New policy: cu132's 2.14.0 lacks torchaudio, so cu130's 2.14.0 wins.
     assert with_audio["index_url"] == CU130
-    assert with_audio["torchaudio_version"] == "2.11.0"
+    assert with_audio["torch_version"] == "2.14.0"
+    assert with_audio["torchaudio_version"] is not None
 
     without = resolve_index(probes, need_torchaudio=False)
     assert without["index_url"] == CU132
@@ -962,9 +1067,29 @@ def test_resolve_rocm_matrix():
     assert r["index_url"] is None
     assert any("rocm6.3" in w for w in r["warnings"])
 
+    # gfx000 is treated as no targets, so a matching index is selected.
     r = resolve_rocm((6, 4), "gfx000", "x86_64")
-    assert r["index_url"] is None
-    assert any("gfx" in w.lower() for w in r["warnings"])
+    assert r["index_url"] == "https://download.pytorch.org/whl/rocm6.4"
+    assert r["torch_version"] == "2.9.1"
+
+
+def test_resolve_rocm_desktop_igpu_dgpu_pair():
+    """A desktop with an integrated gfx1036 and a discrete gfx1100 is accepted
+    when the discrete GPU is covered; the uncovered iGPU gets a named warning
+    and HIP_VISIBLE_DEVICES advice.
+    """
+    r = resolve_rocm((7, 2), ["gfx1036", "gfx1100"], "x86_64")
+    assert r["index_url"] == "https://download.pytorch.org/whl/rocm7.2"
+    assert any("gfx1036" in w for w in r["warnings"])
+    assert any("HIP_VISIBLE_DEVICES" in w for w in r["warnings"])
+    assert not any("gfx1100" in w for w in r["warnings"])
+
+
+def test_resolve_rocm_generic_targets_are_ignored():
+    """*-generic names are ignored during GFX normalization."""
+    r = resolve_rocm((7, 2), ["gfx11-generic", "gfx1100"], "x86_64")
+    assert r["index_url"] == "https://download.pytorch.org/whl/rocm7.2"
+    assert not any("generic" in w.lower() for w in r["warnings"])
 
 
 def test_index_arch_map_entries_parse():
@@ -976,6 +1101,26 @@ def test_index_arch_map_entries_parse():
             for entry in entries:
                 sm, _sass, ptx = _token_semantics(entry)
                 assert sm is not None or ptx is not None, f"unparseable entry {entry!r}"
+
+
+def test_parse_simple_index_realistic_html():
+    """_parse_simple_index decodes %2B, strips fragments, ignores dev/rc wheels
+    and non-cp312 wheels, and maps platform tags to the correct arch.
+    """
+    html = """
+    <html><body>
+    <a href="torch-2.14.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=abc123">x86</a>
+    <a href="torch-2.14.0%2Bcu130-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=def456">arm</a>
+    <a href="torch-2.13.0.dev20250415%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl">dev</a>
+    <a href="torch-2.12.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl">cp311</a>
+    <a href="torch-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl">old</a>
+    </body></html>
+    """
+    result = _parse_simple_index(html)
+    assert result == {
+        "x86_64": {"2.14.0", "2.11.0"},
+        "aarch64": {"2.14.0"},
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1029,6 +1174,38 @@ def test_collect_probes_normalizes_platform_machine(monkeypatch, machine_value, 
     _patch_machine(monkeypatch, machine_value)
     probes = collect_probes()
     assert probes.arch == expected
+
+
+def test_collect_probes_respects_kaine_wheel_probe_nvml_zero(monkeypatch):
+    """Invariant: KAINE_WHEEL_PROBE_NVML=0 disables NVML probing and the
+    resolver falls through to nvidia-smi, so tests do not depend on real NVML.
+
+    Cost prevented: hermetic tests failing or producing different results on
+    hosts with NVML installed.
+    """
+    monkeypatch.setenv("KAINE_WHEEL_PROBE_NVML", "0")
+    _install_smi_fake(monkeypatch, "ok")
+    # Intentionally do not block NVML: the env switch must be authoritative.
+    probes = collect_probes()
+    assert probes.driver_cuda == (13, 2)
+    notes = " ".join(probes.notes.values())
+    assert "disabled by KAINE_WHEEL_PROBE_NVML=0" in notes
+
+
+@pytest.mark.skipif(not _torch_installed(), reason="torch not installed")
+def test_block_nvml_does_not_partially_initialize_torch(monkeypatch):
+    """Regression: blocking NVML/CDLL while torch is not imported must make
+    the resolver's torch probe fail cleanly and leave sys.modules intact.
+
+    Previously, a ctypes.CDLL refusal could cause ``import torch`` to fail
+    midway and leave broken ``torch._inductor`` / ``torch._utils`` submodules
+    in ``sys.modules``, polluting later tests with 'partially initialized
+    module' errors.
+    """
+    _run_collect_with_nvml_blocked(monkeypatch)
+    torch = importlib.import_module("torch")
+    assert torch._utils is not None
+    assert hasattr(torch, "_utils")
 
 
 # _kaine_operator_override_patch_tests_ : regression tests for the
@@ -1102,13 +1279,12 @@ def test_override_preserves_ladder_audit_trail():
 
     SUCCEEDING ladder (x86_64, driver CUDA 12.8) + override: an EMPTY
     `rejected` list is the correct, truthful output — do NOT 'fix' this
-    back.  The candidate set is cu128, cu126, cu121, cu118 (every index
-    <= 12.8, newest first) and cu128, the first candidate, already passes
-    the architecture, compute-capability and memory filters, so it is
-    selected immediately and nothing is ever rejected.  The decision stays
-    auditable through `selected_reason`, which must record BOTH that the
-    URL is operator-provided AND what the ladder would have chosen without
-    it.
+    back.  The candidate set is every index <= 12.8; with the new policy the
+    highest in-range torch (cu126 2.14.0) passes the architecture and
+    compute-capability filters and is selected immediately, so nothing is
+    ever rejected.  The decision stays auditable through `selected_reason`,
+    which must record BOTH that the URL is operator-provided AND what the
+    ladder would have chosen without it.
 
     Neither case may emit the old 'was not applied' refusal warning.
     """
@@ -1128,7 +1304,7 @@ def test_override_preserves_ladder_audit_trail():
     )
     assert isinstance(succeeding["rejected"], list)
     # No truthiness/length assertion on `rejected` here: an empty list is
-    # the truthful result when the first candidate (cu128) wins at once.
+    # the truthful result when the first candidate (cu126 2.14.0) wins at once.
     ladder_alone = _OverridePatchResolveIndex(_override_patch_x86_probes())
     ladder_token = ladder_alone["index_url"].rstrip("/").rsplit("/", 1)[-1]
     reason = succeeding["selected_reason"].lower()

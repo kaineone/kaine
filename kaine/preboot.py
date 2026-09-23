@@ -68,7 +68,7 @@ from kaine.boot import (
     _build_perception_feed_audio_factory,
     _build_perception_feed_video_factory,
 )
-from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
+from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_runtime_config
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
 from kaine.nexus import health
@@ -648,7 +648,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.parse_args(argv)
 
     try:
-        config = load_kaine_config(SHIPPED_CONFIG_PATH, OPERATOR_CONFIG_PATH)
+        config = load_runtime_config(SHIPPED_CONFIG_PATH, OPERATOR_CONFIG_PATH)
     except FileNotFoundError as exc:
         sys.stderr.write(f"preboot: could not load config: {exc}\n")
         return 2

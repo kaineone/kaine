@@ -26,6 +26,7 @@ from kaine.config import (
     ProfileError,
     load_kaine_config,
     resolve_profile_name,
+    resolve_tier_name,
 )
 from kaine.modules.backends import (
     BackendRegistry,
@@ -424,41 +425,39 @@ def test_resolve_profile_name_rejects_traversal():
         resolve_profile_name("tier0/../../etc", env={})
 
 
-def test_resolve_profile_name_reads_operator_overlay(tmp_path: Path):
+def test_resolve_tier_name_env_wins_over_overlay(tmp_path: Path):
     op = tmp_path / "kaine.operator.toml"
-    op.write_text('[deployment]\nprofile = "tier1"\n')
-    assert resolve_profile_name(None, env={}, operator_path=op) == "tier1"
+    op.write_text('[deployment]\ntier = "tier1"\n')
+    assert resolve_tier_name(env={"KAINE_TIER": "tier2"}, operator_path=op) == "tier2"
 
 
-def test_resolve_profile_name_env_wins_over_operator_overlay(tmp_path: Path):
+def test_resolve_tier_name_reads_operator_overlay(tmp_path: Path):
     op = tmp_path / "kaine.operator.toml"
-    op.write_text('[deployment]\nprofile = "tier1"\n')
-    assert resolve_profile_name(None, env={"KAINE_PROFILE": "tier3"}, operator_path=op) == "tier3"
+    op.write_text('[deployment]\ntier = "tier1"\n')
+    assert resolve_tier_name(env={}, operator_path=op) == "tier1"
 
 
-def test_resolve_profile_name_explicit_wins_over_overlay(tmp_path: Path):
+def test_resolve_tier_name_missing_overlay_returns_none(tmp_path: Path):
     op = tmp_path / "kaine.operator.toml"
-    op.write_text('[deployment]\nprofile = "tier1"\n')
-    assert resolve_profile_name("tier2", env={}, operator_path=op) == "tier2"
+    assert resolve_tier_name(env={}, operator_path=op) is None
 
 
-def test_resolve_profile_name_missing_overlay_key_returns_none(tmp_path: Path):
-    op = tmp_path / "kaine.operator.toml"
-    op.write_text('[other]\nkey = "value"\n')
-    assert resolve_profile_name(None, env={}, operator_path=op) is None
-
-
-def test_resolve_profile_name_malformed_overlay_returns_none(tmp_path: Path):
+def test_resolve_tier_name_malformed_overlay_returns_none(tmp_path: Path):
     op = tmp_path / "kaine.operator.toml"
     op.write_text("not valid toml [[[[")
-    assert resolve_profile_name(None, env={}, operator_path=op) is None
+    assert resolve_tier_name(env={}, operator_path=op) is None
 
 
-def test_resolve_profile_name_invalid_overlay_profile_raises(tmp_path: Path):
+def test_resolve_tier_name_invalid_slug_raises(tmp_path: Path):
     op = tmp_path / "kaine.operator.toml"
-    op.write_text('[deployment]\nprofile = "../secrets"\n')
+    op.write_text('[deployment]\ntier = "../secrets"\n')
     with pytest.raises(ProfileError):
-        resolve_profile_name(None, env={}, operator_path=op)
+        resolve_tier_name(env={}, operator_path=op)
+
+
+def test_resolve_tier_name_missing_profile_file_raises():
+    with pytest.raises(ProfileError):
+        resolve_tier_name(env={"KAINE_TIER": "tier9"})
 
 
 def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
@@ -477,6 +476,48 @@ def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
     assert cfg["lingua"]["backend"] == "llama_cpp"
     # ...but the operator's local value still wins, and shipped siblings survive.
     assert cfg["lingua"]["model_id"] == "operator-choice"
+
+
+def test_tier_profile_layers_between_profile_and_operator(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "http"\nmodel_id = "tier1-model"\n')
+    (profiles / "tier2.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
+
+    cfg = load_kaine_config(
+        shipped, op, profile="tier1", tier="tier2", profiles_dir=profiles
+    )
+    # Tier overlay overrides the module profile, but operator still wins.
+    assert cfg["lingua"]["backend"] == "llama_cpp"
+    assert cfg["lingua"]["model_id"] == "operator-choice"
+
+
+def test_load_kaine_config_equal_profile_and_tier_applied_once(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "http"\n')
+    op = tmp_path / "kaine.operator.toml"  # absent
+
+    cfg = load_kaine_config(shipped, op, profile="tier1", tier="tier1", profiles_dir=profiles)
+    assert cfg["lingua"]["backend"] == "http"
+
+
+def test_load_kaine_config_tier_without_profile(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "tier2.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
+    op = tmp_path / "kaine.operator.toml"  # absent
+
+    cfg = load_kaine_config(shipped, op, profile=None, tier="tier2", profiles_dir=profiles)
+    assert cfg["lingua"]["backend"] == "llama_cpp"
 
 
 def test_no_profile_is_behaviour_identical(tmp_path: Path):
