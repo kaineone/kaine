@@ -566,41 +566,139 @@ def _scan(root: Path) -> set[Path]:
     return found
 
 
+class _WriteRecorder:
+    _hook_installed = False
+    _active = False
+    _writes: list[str] = []
+
+    def __enter__(self):
+        import os
+        import sys
+
+        if not _WriteRecorder._hook_installed:
+            _WriteRecorder._hook_installed = True
+
+            def _audit_hook(event, args):
+                try:
+                    if event != "open" or not _WriteRecorder._active:
+                        return
+                    path, mode, flags = args
+                    if isinstance(path, int):
+                        return
+                    is_write = False
+                    if isinstance(mode, str):
+                        if any(ch in mode for ch in "wax+"):
+                            is_write = True
+                    elif mode is None:
+                        if flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT):
+                            is_write = True
+                    if not is_write:
+                        return
+                    p = os.fspath(path)
+                    if isinstance(p, bytes):
+                        p = os.fsdecode(p)
+                    _WriteRecorder._writes.append(p)
+                except Exception:
+                    return
+
+            sys.addaudithook(_audit_hook)
+
+        _WriteRecorder._writes.clear()
+        _WriteRecorder._active = True
+        return _WriteRecorder._writes
+
+    def __exit__(self, exc_type, exc, tb):
+        _WriteRecorder._active = False
+        return False
+
+
+def _has_banned_extension(path: str | Path) -> bool:
+    return Path(path).suffix.lower() in BANNED_EXTENSIONS
+
+
+def _recorder_leaks(writes: list[str]) -> list[str]:
+    return [p for p in writes if _has_banned_extension(p)]
+
+
+def _redirect_temp(tmp_path: Path, monkeypatch):
+    import tempfile
+
+    private = tmp_path / "tmp"
+    private.mkdir()
+    monkeypatch.setenv("TMPDIR", str(private))
+    monkeypatch.setattr(tempfile, "tempdir", str(private))
+    return private
+
+
+def _format_zero_persistence_failure(by_path: dict[str, set[str]]) -> str:
+    lines = "\n".join(
+        f"  {path}  [{', '.join(sorted(detectors))}]"
+        for path, detectors in sorted(by_path.items())
+    )
+    return "ZERO-PERSISTENCE VIOLATED: remote bridge wrote disk artifacts:\n" + lines
+
+
 @pytest.mark.asyncio
-async def test_full_exchange_writes_nothing_to_disk(bus):
-    """ZERO-PERSISTENCE: a complete ingest/egress exchange leaves no media
-    artifacts in /tmp or the project tree."""
+async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
+    """ZERO-PERSISTENCE: a complete ingest/egress exchange writes no media
+    artifacts to disk, even transiently. Deterministic: uses a private temp
+    directory and a system audit hook instead of the machine-wide /tmp."""
     topos = _StubTopos()
     audition = _StubAudition()
     bridge = RemoteBridge(_config(), bus=bus, topos=topos, audition=audition)
-    url = await _started(bridge)
 
-    pre_tmp = _scan(Path("/tmp"))
+    private_tmp = _redirect_temp(tmp_path, monkeypatch)
     pre_project = _scan(PROJECT_ROOT)
-    try:
-        async with websockets.connect(f"{url}/ingest/video") as wsv:
-            await wsv.send(_jpeg_bytes())
-            await _wait_for(lambda: topos.frames)
-        async with websockets.connect(f"{url}/ingest/audio") as wsa:
-            await _wait_for(
-                lambda: bridge._net_stream is not None and bridge._net_stream._running,
-                timeout=3.0,
-            )
-            await wsa.send(_pcm(600, loud=True))
-            await wsa.send(_pcm(900, loud=False))
-            await _wait_for(lambda: audition.calls, timeout=5.0)
-        async with websockets.connect(f"{url}/speech") as wss:
-            await _wait_for(lambda: len(bridge._speech_tap._queues) >= 1)
-            await bridge._speech_tap.play(b"RIFFfake")
-            await asyncio.wait_for(wss.recv(), timeout=2.0)
-    finally:
-        await bridge.stop()
 
-    leaked = (_scan(Path("/tmp")) - pre_tmp) | (_scan(PROJECT_ROOT) - pre_project)
-    assert leaked == set(), (
-        "ZERO-PERSISTENCE VIOLATED: remote bridge wrote disk artifacts: "
-        f"{sorted(str(p) for p in leaked)}"
-    )
+    with _WriteRecorder() as writes:
+        url = await _started(bridge)
+        try:
+            async with websockets.connect(f"{url}/ingest/video") as wsv:
+                await wsv.send(_jpeg_bytes())
+                await _wait_for(lambda: topos.frames)
+            async with websockets.connect(f"{url}/ingest/audio") as wsa:
+                await _wait_for(
+                    lambda: bridge._net_stream is not None and bridge._net_stream._running,
+                    timeout=3.0,
+                )
+                await wsa.send(_pcm(600, loud=True))
+                await wsa.send(_pcm(900, loud=False))
+                await _wait_for(lambda: audition.calls, timeout=5.0)
+            async with websockets.connect(f"{url}/speech") as wss:
+                await _wait_for(lambda: len(bridge._speech_tap._queues) >= 1)
+                await bridge._speech_tap.play(b"RIFFfake")
+                await asyncio.wait_for(wss.recv(), timeout=2.0)
+        finally:
+            await bridge.stop()
+
+    by_path: dict[str, set[str]] = {}
+    for p in _recorder_leaks(writes):
+        by_path.setdefault(str(p), set()).add("recorder")
+    for p in _scan(private_tmp):
+        by_path.setdefault(str(p), set()).add("tempdir-scan")
+    for p in (_scan(PROJECT_ROOT) - pre_project):
+        by_path.setdefault(str(p), set()).add("project-scan")
+
+    assert not by_path, _format_zero_persistence_failure(by_path)
+
+
+def test_leak_detector_catches_real_disk_writes(monkeypatch, tmp_path):
+    """Sanity-check that the zero-persistence detectors actually catch real
+    leaks: a transient tempfile and a direct file in the private temp dir."""
+    import tempfile
+
+    private = _redirect_temp(tmp_path, monkeypatch)
+
+    with _WriteRecorder() as writes:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True) as f:
+            f.write(b"frame")
+            transient_path = f.name
+        direct = private / "frame.jpg"
+        with open(direct, "wb") as f:
+            f.write(b"direct")
+
+    assert transient_path in writes, "audit recorder missed transient frame.jpg"
+    assert direct in _scan(private), "private temp scan missed frame.jpg"
 
 
 # ---------------------------------------------------------------------------
