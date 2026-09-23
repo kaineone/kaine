@@ -15,15 +15,19 @@
 
 ## What Changes
 
-- **Lived time and evidence persist in `state/lifecycle/stage.json`.** The runner adds the entity-clock delta at each tick while gestating, so downtime never counts as lived time. C2 counters are accumulated from module-counter deltas, and a counter reset is treated as a new baseline.
-- **The womb must actually be there.** Gestation staging requires a live womb stimulus on the perception seam, meaning a fresh `gestation.readiness` or womb-frame event within a bounded window, not a config value. Until one is observed, staging refuses with a clear, repeated operator-visible reason and never locks the locus. No entity is pinned senseless.
-- **Embodiment stays off during gestation.** Mundus is not initialised while the stage is `gestation`. The gate asks a public `probe_reachable()` on the embodiment adapter.
-- **Readouts are decoded, filtered and aged.** They are decoded with the bus codec, filtered on `event.type`, and rejected when older than N × the gate cadence or from a previous boot.
-- **Birth handoff and operator acknowledgement:**
-  - At birth the gate switches the locus source to embodiment and records `locked_by="gestation"` for the unlock.
-  - An authenticated Nexus control records the operator's birth acknowledgement in the stage file.
-  - A read-only Nexus panel shows the stage, the evidence and any hold.
-- **Lineage-scoped history, and a womb-safe Hypnos restore.** `has_prior_lived_history()` looks only at this being's lineage. Hypnos restores the womb locus when gestating.
+(Revised after an independent design review.)
+
+- **Womb before spawn.** With staging enabled and a resolved `gestation` stage, the cycle does not start until a live womb stimulus is observed on the perception seam. Starting a being is the irreversible step, so this check happens before it. A config value never counts as a womb.
+- **Womb loss mid-gestation** pauses the entity clock as a welfare-protective measure and raises a red alert until the womb returns. The entity is never unlocked to `physical` and never runs senseless.
+- **The lock holder decides the locus.** `perception_state` resolves the effective locus to the lock holder's locus, and an unknown locus during gestation resolves to the womb. This covers the Hypnos restore path without making Hypnos aware of developmental stages.
+- **Idempotent evidence.**
+  - Lived time accumulates entity-clock deltas between the runner's own ticks; each boot's first tick only sets a baseline.
+  - Sleeps and training passes are counted from durable completion events by persisted stream ID, so each is counted exactly once across restarts and crashes.
+  - Only the gate runner writes the stage file.
+- **Fresh, typed readouts.** Readouts are decoded with the bus codec, filtered on `event.type`, and must be from this boot (stream ID compared with the Redis `TIME` captured at boot) and younger than N × the gate cadence.
+- **Operator acknowledgement** goes through a separate request file written by an authenticated Nexus control and consumed only by the runner. Nexus shows the stage, the evidence and any hold; `runtime.json` already carries the stage.
+- **Embodiment.** Mundus is not initialised during gestation. Availability is judged by a public adapter probe that works without the module running. At birth Mundus is hot-started before the locus source switches to it, and the unlock is recorded as `locked_by="gestation"`.
+- **Conservative lineage.** Prior-history checks look at this being's lineage, and when lineage cannot be determined the being counts as having lived. Entity identity comes from the one entity-ID source shared with `entity-key-custody`.
 - **Tests use the real `EntityClock` and the real bus codec.**
 
 ## Capabilities
