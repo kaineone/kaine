@@ -50,6 +50,13 @@ DECOY_FILES = {
 }
 
 
+
+def _empty_config(tmp_path):
+    """An empty config file: the CLI loads the shipped layering with nothing overridden."""
+    path = tmp_path / "empty-config.toml"
+    path.write_text("", encoding="utf-8")
+    return str(path)
+
 def _make_eval_root(tmp_path: Path) -> Path:
     eval_root = tmp_path / "evaluation"
     for subdir in METRICS_ONLY_DIRS:
@@ -313,7 +320,7 @@ def test_cli_claude_science_eof_fails_safe(tmp_path: Path):
         ["--claude-science", "--eval-root", str(eval_root),
          "--out-root", str(tmp_path / "bundle_out"),
          "--claude-science-out", str(cs_out),
-         "--config", str(tmp_path / "no-config.toml")],
+         "--config", _empty_config(tmp_path)],
         input_fn=eof_input,
         out=out_buf,
         err=err_buf,
@@ -338,7 +345,7 @@ def test_cli_claude_science_decline_fails_safe(tmp_path: Path):
         ["--claude-science", "--eval-root", str(eval_root),
          "--out-root", str(tmp_path / "bundle_out"),
          "--claude-science-out", str(cs_out),
-         "--config", str(tmp_path / "no-config.toml")],
+         "--config", _empty_config(tmp_path)],
         input_fn=lambda prompt: next(answers),
         out=out_buf,
         err=err_buf,
@@ -359,7 +366,7 @@ def test_cli_claude_science_confirm_writes_project(tmp_path: Path):
         ["--claude-science", "--plan", "--eval-root", str(eval_root),
          "--out-root", str(tmp_path / "bundle_out"),
          "--claude-science-out", str(cs_out),
-         "--config", str(tmp_path / "no-config.toml")],
+         "--config", _empty_config(tmp_path)],
         input_fn=lambda prompt: next(answers),
         out=out_buf,
         err=err_buf,
