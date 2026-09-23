@@ -231,6 +231,30 @@ def test_load_metadata_falls_back_to_dist_version_when_version_py_missing(tmp_pa
     assert got["torch"][0] == "2.14.0+cu130"
 
 
+def test_load_metadata_falls_back_to_dist_version_when_locate_file_fails(monkeypatch):
+    class _NonPathDistribution:
+        def __init__(self, version: str) -> None:
+            self.version = version
+            self.requires = []
+
+        def locate_file(self, _path: str) -> None:
+            raise NotImplementedError
+
+    def _dist(name: str) -> _NonPathDistribution:
+        return _NonPathDistribution("1.0.0+cpu")
+
+    monkeypatch.setattr("kaine.torch_stack.distribution", _dist)
+    got = _load_metadata()
+    assert got == {
+        "torch": ("1.0.0+cpu", []),
+        "torchvision": ("1.0.0+cpu", []),
+        "torchaudio": ("1.0.0+cpu", []),
+    }
+    assert check_torch_stack(got) == []
+    # The default (non-injected) path goes through the failing locate_file too.
+    assert check_torch_stack() == []
+
+
 def test_unparseable_torch_version_returns_problem():
     dists = {"torch": ("not-a-version", [])}
     probs = check_torch_stack(dists)
