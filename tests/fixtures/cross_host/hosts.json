@@ -338,7 +338,7 @@
       "notes": {}
     },
     "expected_resolver": {
-      "index_url": "https://download.pytorch.org/whl/cpu",
+      "index_url": "https://download.pytorch.org/whl/cu132",
       "warning": true
     },
     "expected_preflight_state": "known-unified",

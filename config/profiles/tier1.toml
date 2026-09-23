@@ -1,21 +1,27 @@
 # Tier 1 — embodied CPU agent (openspec deployment-tiers)
 #
 # Host class: 4–8 GB-class single-board computer, or a retired 8 GB flagship
-# smartphone under a userland like Termux. torch may be present but there is no
-# accelerator, so heavy models run on the edge runtimes at CPU pace: a 1–2B GGUF
-# LLM at chat pace, periodic (not streaming) vision, ONNX embeddings.
+# smartphone under a userland like Termux. torch is required today because Soma
+# and Chronos use torch+ncps CfC networks and Mnemos/Empatheia/Hypnos build
+# sentence-transformers MiniLM embedders; there is no accelerator, so heavy
+# models run on the edge runtimes at CPU pace: a 1–2B GGUF LLM at chat pace,
+# periodic (not streaming) vision, ONNX embeddings.
 #
 # INERT + VOICE-FREE by contract (see tier0.toml header): backends + device/
-# cycle-rate hints + disabling unsupported faculties only; no module is enabled
-# and no private voice is embedded. Layers between the shipped defaults and your
-# local config/kaine.operator.toml, which still wins.
+# cycle-rate hints only; no module is enabled and no private voice is embedded.
+# Layers between the shipped defaults and your local config/kaine.operator.toml,
+# which still wins.
 #
-# Apply deliberately:  KAINE_PROFILE=tier1 python -m kaine.cycle
+# Apply deliberately:  KAINE_TIER=tier1 python -m kaine.cycle
+#               or:    record [deployment].tier = "tier1" via the wizard
+#               or:    set it in config/kaine.operator.toml
 
-[modules]
-# No expressive TTS below Tier 2. (A Piper TTS edge backend is staged but not yet
-# shipped; until it lands, Vox stays off at Tier 1.)
-vox = false
+[tier]
+name = "tier1"
+unsupported_modules = [
+    "vox",  # no expressive TTS below Tier 2 (Piper edge backend not yet shipped)
+]
+oscillator_supported = true
 
 [lingua]
 backend = "llama_cpp"   # 1–2B GGUF at chat pace

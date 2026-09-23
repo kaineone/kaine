@@ -367,6 +367,51 @@ def test_smoke_config_sanity_no_modules_fails():
     assert modules_row.status == preboot.FAIL
 
 
+def test_smoke_config_sanity_tier_fit_skips_when_no_tier():
+    config = _enabled_config()
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.SKIP
+    assert "no deployment tier recorded" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_fit_passes_when_modules_fit():
+    config = _enabled_config(
+        modules={"lingua": True, "soma": True},
+        tier={"name": "tier0", "unsupported_modules": ["topos", "audition"], "oscillator_supported": False},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.PASS
+    assert "tier tier0: the enabled modules fit" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_fit_fails_on_unsupported_modules():
+    config = _enabled_config(
+        modules={"lingua": True, "topos": True, "audition": True},
+        tier={"name": "tier0", "unsupported_modules": ["topos", "audition", "vox"], "oscillator_supported": False},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "topos" in tier_row.detail
+    assert "audition" in tier_row.detail
+    assert "disable them in the operator config or record a larger tier" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_fit_fails_on_unsupported_oscillator():
+    config = _enabled_config(
+        modules={"lingua": True},
+        tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": False},
+        oscillator={"enabled": True},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "[oscillator].enabled" in tier_row.detail
+    assert "disable it in the operator config or record a larger tier" in tier_row.detail
+
+
 def test_smoke_config_sanity_flags_fail_closed_encryption_posture():
     config = _enabled_config(
         preservation={
@@ -392,6 +437,55 @@ def test_smoke_config_sanity_encryption_posture_ok_when_satisfied():
     results = preboot.check_config_sanity(config)
     posture = next(r for r in results if r.name == "Preservation encryption posture")
     assert posture.status == preboot.PASS
+
+
+def test_smoke_config_sanity_tier_string_value_fails():
+    config = _enabled_config(tier="tier1")
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "malformed [tier] table" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_unsupported_modules_list_of_lists():
+    config = _enabled_config(
+        modules={"lingua": True},
+        tier={"name": "tier0", "unsupported_modules": [["x"]]},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "unsupported_modules must be a list of strings" in tier_row.detail
+
+
+def test_smoke_config_sanity_tier_oscillator_supported_non_bool():
+    config = _enabled_config(
+        tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": "yes"},
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "oscillator_supported must be a bool" in tier_row.detail
+
+
+def test_smoke_config_sanity_oscillator_scalar_value():
+    config = _enabled_config(
+        modules={"lingua": True},
+        tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": True},
+        oscillator=True,
+    )
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "malformed [oscillator] section" in tier_row.detail
+
+
+def test_smoke_config_sanity_unsupported_modules_string_fails():
+    config = _enabled_config(tier={"name": "tier0", "unsupported_modules": "vox"})
+    results = preboot.check_config_sanity(config)
+    tier_row = next(r for r in results if r.name == "Tier fit")
+    assert tier_row.status == preboot.FAIL
+    assert "malformed [tier] table" in tier_row.detail
 
 
 # ---------------------------------------------------------------------------
@@ -450,7 +544,7 @@ async def test_dry_run_resolves_state_key_before_services_check(monkeypatch, tmp
 
 def test_dry_run_main_exits_zero_when_everything_passes(monkeypatch, capsys):
     config = _enabled_config(modules={"lingua": False, "soma": True}, perception_feed={"mode": "off"})
-    monkeypatch.setattr(preboot, "load_kaine_config", lambda *a, **k: config)
+    monkeypatch.setattr(preboot, "load_runtime_config", lambda *a, **k: config)
     monkeypatch.setattr(preboot, "check_torch_stack", lambda: [])
     monkeypatch.setattr(preboot, "describe_torch_stack", lambda: "torch 2.14.0+cu130")
 
@@ -471,7 +565,7 @@ def test_dry_run_main_exits_zero_when_everything_passes(monkeypatch, capsys):
 
 def test_dry_run_main_exits_nonzero_when_any_check_fails(monkeypatch, capsys):
     config = _enabled_config(modules={"lingua": False, "soma": True}, perception_feed={"mode": "off"})
-    monkeypatch.setattr(preboot, "load_kaine_config", lambda *a, **k: config)
+    monkeypatch.setattr(preboot, "load_runtime_config", lambda *a, **k: config)
 
     async def _fake_run_async_checks(_config):
         return [
@@ -489,6 +583,41 @@ def test_dry_run_main_returns_2_when_config_missing(monkeypatch, capsys):
     def _raise(*a, **k):
         raise FileNotFoundError("config/kaine.toml not found")
 
-    monkeypatch.setattr(preboot, "load_kaine_config", _raise)
+    monkeypatch.setattr(preboot, "load_runtime_config", _raise)
     rc = preboot.main([])
     assert rc == 2
+
+
+def test_dry_run_main_returns_2_on_profile_error(monkeypatch, capsys):
+    from kaine.config import ProfileError
+
+    def _raise(*a, **k):
+        raise ProfileError("bad tier requested")
+
+    monkeypatch.setattr(preboot, "load_runtime_config", _raise)
+    rc = preboot.main([])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "pre-boot: configuration error:" in err
+    assert "bad tier requested" in err
+
+
+def test_cycle_main_catches_profile_error(monkeypatch, capsys):
+    import kaine.cycle.__main__ as cycle_main
+    from kaine.config import ProfileError
+
+    def _raise(*a, **k):
+        raise ProfileError("bad tier requested")
+
+    monkeypatch.setattr(cycle_main, "_load_kaine_config", _raise)
+
+    def _booted(**k):
+        raise AssertionError("cycle booted")
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _booted)
+
+    rc = cycle_main.main([])
+    err = capsys.readouterr().err
+    assert rc != 0
+    assert "kaine.cycle: configuration error:" in err
+    assert "bad tier requested" in err

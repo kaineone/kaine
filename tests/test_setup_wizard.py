@@ -10,10 +10,13 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from kaine.setup import tomlwriter
 from kaine.setup.__main__ import main as setup_main
 from kaine.setup.wizard import (
     ACK_PHRASE,
+    MODULE_ORDER,
     implied_extras,
     propose_device_assignments,
     run_wizard,
@@ -167,7 +170,6 @@ def test_full_run_multi_gpu_produces_config():
     #  lingua model id
     #  research opt-in? -> n
     #  encryption? -> n
-    from kaine.setup.wizard import MODULE_ORDER
 
     answers = [ACK_PHRASE, "y"]
     # enable only soma + lingua, the rest off
@@ -201,8 +203,6 @@ def test_full_run_multi_gpu_produces_config():
 
 
 def test_vox_enabled_requires_voice_id():
-    from kaine.setup.wizard import MODULE_ORDER
-
     answers = [ACK_PHRASE, "y"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
@@ -227,8 +227,6 @@ def test_vox_enabled_requires_voice_id():
 
 
 def test_metrics_only_when_opted_in():
-    from kaine.setup.wizard import MODULE_ORDER
-
     answers = [ACK_PHRASE, "y"]
     for m in MODULE_ORDER:
         answers.append("n")
@@ -251,6 +249,128 @@ def test_metrics_only_when_opted_in():
     assert rs["tier"] == "metrics"
     assert rs["recipient"] == "alice@example.com"
     assert result.config["transfer"]["recipient"] == "alice@example.com"
+
+
+# ----------------------------------------------------------------------------
+# Tier recommendation step
+# ----------------------------------------------------------------------------
+
+
+def _tier2_residency_rec():
+    from kaine import hardware
+
+    return hardware.TierRecommendation(
+        tier=2,
+        reason="8 GB unified accelerator; module residency required",
+        total_ram_gb=8.0,
+        cpu_arch="aarch64",
+        accelerator="cuda",
+        torch_importable=True,
+        gpu_count=1,
+        memory_budget_gb=8.0,
+        memory_state="unified",
+        residency_required=True,
+    )
+
+
+def test_wizard_tier_recommendation_applied_on_yes():
+    answers = [ACK_PHRASE, "y", "y"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    a = _Answers(answers)
+    out, sink = _collect_out()
+    result = run_wizard(
+        input_fn=a,
+        out=sink,
+        host=_host(cuda=1),
+        shipped_config=_shipped(),
+        recommend_tier_fn=_tier2_residency_rec,
+    )
+    assert result.config["deployment"]["tier"] == "tier2"
+
+
+def test_wizard_tier_recommendation_not_applied_on_no():
+    answers = [ACK_PHRASE, "y", "n"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    a = _Answers(answers)
+    out, sink = _collect_out()
+    result = run_wizard(
+        input_fn=a,
+        out=sink,
+        host=_host(cuda=1),
+        shipped_config=_shipped(),
+        recommend_tier_fn=_tier2_residency_rec,
+    )
+    assert "deployment" not in result.config
+
+
+def test_wizard_tier_recommendation_default_no_writes_nothing():
+    def answer(prompt: str) -> str:
+        if ACK_PHRASE in prompt:
+            return ACK_PHRASE
+        if "Accept these device assignments" in prompt:
+            return "y"
+        if "Record tier" in prompt:
+            return ""  # accept the default No
+        if "research" in prompt.lower():
+            return "n"
+        if "encryption" in prompt.lower():
+            return "n"
+        return "n"
+
+    out, sink = _collect_out()
+    result = run_wizard(
+        input_fn=answer,
+        out=sink,
+        host=_host(cuda=1),
+        shipped_config=_shipped(),
+        recommend_tier_fn=_tier2_residency_rec,
+    )
+    assert "deployment" not in result.config
+
+
+def test_wizard_tier_recommendation_skipped_in_defaults_mode():
+    a = _Answers([])
+    out, sink = _collect_out()
+    result = run_wizard(
+        input_fn=a,
+        out=sink,
+        host=_host(cuda=1),
+        shipped_config=_shipped(),
+        recommend_tier_fn=_tier2_residency_rec,
+        defaults=True,
+    )
+    assert "deployment" not in result.config
+    assert result.acknowledged is True
+
+
+# ----------------------------------------------------------------------------
+# __main__ wiring
+# ----------------------------------------------------------------------------
+
+
+def test_main_wires_recommend_tier(monkeypatch, tmp_path: Path):
+    """The real CLI entrypoint passes kaine.hardware.recommend_tier to run_wizard."""
+    import kaine.hardware
+    from kaine.setup import __main__ as setup_main_mod
+
+    recorded: dict = {}
+
+    class _Sentinel(Exception):
+        pass
+
+    def fake_run_wizard(**kwargs):
+        recorded.update(kwargs)
+        raise _Sentinel("run_wizard reached")
+
+    monkeypatch.setattr(setup_main_mod, "run_wizard", fake_run_wizard)
+
+    op = tmp_path / "op.toml"
+    out = io.StringIO()
+    with pytest.raises(_Sentinel):
+        setup_main(
+            ["--operator-path", str(op)],
+            input_fn=lambda _p: "",
+            out=out,
+        )
+    assert recorded["recommend_tier_fn"] is kaine.hardware.recommend_tier
 
 
 # ----------------------------------------------------------------------------

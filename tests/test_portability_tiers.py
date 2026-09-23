@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine import hardware
+from kaine import hardware, hostmem
 from kaine.backend_state import (
     backend_failures,
     clear_backend_failures,
@@ -26,6 +26,7 @@ from kaine.config import (
     ProfileError,
     load_kaine_config,
     resolve_profile_name,
+    resolve_tier_name,
 )
 from kaine.modules.backends import (
     BackendRegistry,
@@ -191,6 +192,294 @@ def test_probe_script_recommends_only_does_not_apply():
 
 
 # --------------------------------------------------------------------------
+# Host-fit-provisioning: memory budget + residency ladder
+# --------------------------------------------------------------------------
+
+
+def test_recommend_tier_unified_8gb_one_gpu_residency_required():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=8.0,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="unified",
+    )
+    assert rec.tier == 2
+    assert rec.residency_required is True
+    assert rec.memory_budget_gb == 8.0
+    assert rec.memory_state == "unified"
+    assert "module residency" in rec.reason.lower()
+
+
+def test_recommend_tier_discrete_64ram_12vram_one_gpu_residency_required():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="discrete",
+        vram_gb=12.0,
+    )
+    assert rec.tier == 2
+    assert rec.residency_required is True
+    assert rec.memory_budget_gb == 12.0
+
+
+def test_recommend_tier_discrete_64ram_24vram_one_gpu_no_residency():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="discrete",
+        vram_gb=24.0,
+    )
+    assert rec.tier == 2
+    assert rec.residency_required is False
+    assert rec.memory_budget_gb == 24.0
+
+
+def test_recommend_tier_discrete_64ram_24vram_two_gpu_tier3():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=2,
+        accelerator="cuda",
+        memory_state="discrete",
+        vram_gb=24.0,
+    )
+    assert rec.tier == 3
+    assert rec.residency_required is False
+
+
+def test_recommend_tier_unified_5gb_accel_tier1():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=5.0,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="unified",
+    )
+    assert rec.tier == 1
+
+
+def test_recommend_tier_no_accel_16gb_tier1():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=16.0,
+        arch="x86_64",
+        gpu_count=0,
+        accelerator="cpu",
+        memory_state="unified",
+    )
+    assert rec.tier == 1
+
+
+def test_recommend_tier_3_7gb_torch_aarch64_tier1():
+    rec = hardware.recommend_tier(
+        torch_ok=True, ram_gb=3.7, arch="aarch64", gpu_count=0
+    )
+    assert rec.tier == 1
+
+
+def test_recommend_tier_3_5gb_torch_aarch64_tier0():
+    rec = hardware.recommend_tier(
+        torch_ok=True, ram_gb=3.5, arch="aarch64", gpu_count=0
+    )
+    assert rec.tier == 0
+
+
+def test_recommend_tier_torch_missing_tier0():
+    rec = hardware.recommend_tier(
+        torch_ok=False,
+        ram_gb=16.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.tier == 0
+
+
+def test_recommend_tier_unknown_state_32gb_one_gpu_tier2():
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=32.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+        memory_state="unknown",
+    )
+    assert rec.tier == 2
+    assert rec.memory_budget_gb == 32.0
+
+
+def test_probe_unified_15_3gb_tier2_full(monkeypatch):
+    """A nominal 16 GB unified host reports ~15.3 GiB usable and still clears
+    the Tier-2 full threshold after the nominal-usable fraction is applied."""
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("unified", None)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=15.3,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "unified"
+    assert rec.memory_budget_gb == 15.3
+    assert rec.tier == 2
+    assert rec.residency_required is False
+
+
+def test_probe_discrete_16gib_card_budget_16_and_tier2_full(monkeypatch):
+    """A nominal 16 GB discrete card reports 17179869184 bytes / 16.0 GiB and
+    clears the Tier-2 full threshold after the nominal-usable fraction."""
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("discrete", 17179869184)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=32.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "discrete"
+    assert rec.memory_budget_gb == 16.0
+    assert rec.tier == 2
+    assert rec.residency_required is False
+
+
+def test_probe_unified_7_4gb_orin_nano_super_residency(monkeypatch):
+    """A nominal 8 GB unified host (Orin Nano Super) falls in the residency band."""
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("unified", None)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=7.4,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "unified"
+    assert rec.memory_budget_gb == 7.4
+    assert rec.tier == 2
+    assert rec.residency_required is True
+
+
+# --------------------------------------------------------------------------
+# Host-fit-provisioning: live hostmem probe via monkeypatch
+# --------------------------------------------------------------------------
+
+
+def _make_classification(state, vram_bytes=None):
+    pools = []
+    if vram_bytes is not None:
+        pools.append(
+            hostmem.Pool(
+                kind="vram",
+                total_bytes=int(vram_bytes),
+                available_bytes=int(vram_bytes),
+                provenance="mock",
+                unknown_reason=None,
+            )
+        )
+    pools.append(
+        hostmem.Pool(
+            kind="system",
+            total_bytes=int(64 * 1024 ** 3),
+            available_bytes=int(32 * 1024 ** 3),
+            provenance="mock",
+            unknown_reason=None,
+        )
+    )
+    return hostmem.MemoryClassification(
+        state=state,
+        pools=tuple(pools),
+        evidence="mock",
+        unknown_reason=None,
+    )
+
+
+def test_probe_multi_gpu_budget_sums_vram(monkeypatch):
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("discrete", 12884901888)  # 12 GiB
+        if index == 1:
+            return _make_classification("discrete", 8589934592)   # 8 GiB
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=2,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "discrete"
+    assert rec.memory_budget_gb == 20.0
+    assert rec.tier == 3
+    assert rec.residency_required is False
+
+
+def test_probe_single_gpu_budget_uses_vram_and_requires_residency(monkeypatch):
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("discrete", 12884901888)  # 12 GiB
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=64.0,
+        arch="x86_64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "discrete"
+    assert rec.memory_budget_gb == 12.0
+    assert rec.tier == 2
+    assert rec.residency_required is True
+
+
+def test_probe_unified_gpu_budget_uses_ram(monkeypatch):
+    def fake_classify(index, torch=None):
+        if index == 0:
+            return _make_classification("unified", None)
+        raise IndexError(index)
+
+    monkeypatch.setattr(hostmem, "classify_accelerator_memory", fake_classify)
+    rec = hardware.recommend_tier(
+        torch_ok=True,
+        ram_gb=8.0,
+        arch="aarch64",
+        gpu_count=1,
+        accelerator="cuda",
+    )
+    assert rec.memory_state == "unified"
+    assert rec.memory_budget_gb == 8.0
+    assert rec.tier == 2
+    assert rec.residency_required is True
+
+
+# --------------------------------------------------------------------------
 # 4. Tier profiles: layered load + safety invariants
 # --------------------------------------------------------------------------
 
@@ -215,12 +504,54 @@ def test_resolve_profile_name_rejects_traversal():
         resolve_profile_name("tier0/../../etc", env={})
 
 
+def test_resolve_tier_name_env_wins_over_overlay(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\ntier = "tier1"\n')
+    assert resolve_tier_name(env={"KAINE_TIER": "tier2"}, operator_path=op) == "tier2"
+
+
+def test_resolve_tier_name_reads_operator_overlay(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\ntier = "tier1"\n')
+    assert resolve_tier_name(env={}, operator_path=op) == "tier1"
+
+
+def test_resolve_tier_name_missing_overlay_returns_none(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    assert resolve_tier_name(env={}, operator_path=op) is None
+
+
+def test_resolve_tier_name_malformed_overlay_returns_none(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text("not valid toml [[[[")
+    assert resolve_tier_name(env={}, operator_path=op) is None
+
+
+def test_resolve_tier_name_invalid_slug_raises(tmp_path: Path):
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[deployment]\ntier = "../secrets"\n')
+    with pytest.raises(ProfileError):
+        resolve_tier_name(env={}, operator_path=op)
+
+
+def test_resolve_tier_name_missing_profile_file_raises():
+    with pytest.raises(ProfileError):
+        resolve_tier_name(env={"KAINE_TIER": "tier9"})
+
+
+def test_resolve_tier_name_rejects_profile_without_tier_table():
+    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
+        resolve_tier_name(env={"KAINE_TIER": "thesis_test"})
+
+
 def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
     shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    (profiles / "tier1.toml").write_text('[lingua]\nbackend = "llama_cpp"\n')
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
     op = tmp_path / "kaine.operator.toml"
     op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
 
@@ -231,6 +562,66 @@ def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
     assert cfg["lingua"]["backend"] == "llama_cpp"
     # ...but the operator's local value still wins, and shipped siblings survive.
     assert cfg["lingua"]["model_id"] == "operator-choice"
+
+
+def test_tier_profile_layers_between_profile_and_operator(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\nmodel_id = "tier1-model"\n'
+    )
+    (profiles / "tier2.toml").write_text(
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
+    op = tmp_path / "kaine.operator.toml"
+    op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
+
+    cfg = load_kaine_config(
+        shipped, op, profile="tier1", tier="tier2", profiles_dir=profiles
+    )
+    # Tier overlay overrides the module profile, but operator still wins.
+    assert cfg["lingua"]["backend"] == "llama_cpp"
+    assert cfg["lingua"]["model_id"] == "operator-choice"
+
+
+def test_load_kaine_config_equal_profile_and_tier_applied_once(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "tier1.toml").write_text(
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\n'
+    )
+    op = tmp_path / "kaine.operator.toml"  # absent
+
+    cfg = load_kaine_config(shipped, op, profile="tier1", tier="tier1", profiles_dir=profiles)
+    assert cfg["lingua"]["backend"] == "http"
+
+
+def test_load_kaine_config_tier_without_profile(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "tier2.toml").write_text(
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+    )
+    op = tmp_path / "kaine.operator.toml"  # absent
+
+    cfg = load_kaine_config(shipped, op, profile=None, tier="tier2", profiles_dir=profiles)
+    assert cfg["lingua"]["backend"] == "llama_cpp"
+
+
+def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
+    shipped = tmp_path / "kaine.toml"
+    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    op = tmp_path / "kaine.operator.toml"  # absent
+    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
+        load_kaine_config(
+            shipped, op, tier="thesis_test", profiles_dir=REPO_ROOT / "config" / "profiles"
+        )
 
 
 def test_no_profile_is_behaviour_identical(tmp_path: Path):
@@ -250,13 +641,18 @@ def test_missing_selected_profile_raises_not_silent(tmp_path: Path):
 
 
 def test_shipped_profiles_are_inert_no_module_enabled():
-    """Safety invariant: a shipped profile never turns a module on."""
+    """Safety invariant: a shipped tier never turns a module on and never
+    carries a [modules] table; unfit modules are listed in the advisory
+    [tier] table only."""
     for name in PROFILE_NAMES:
         path = REPO_ROOT / PROFILES_DIR / f"{name}.toml"
         parsed = tomllib.loads(path.read_text())
         modules = parsed.get("modules", {})
         enabled = sorted(k for k, on in modules.items() if on)
         assert enabled == [], f"{name} enables modules {enabled} (must be inert)"
+        # Tier files use the advisory [tier] table; they must not set toggles.
+        assert "modules" not in parsed, f"{name} contains a forbidden [modules] table"
+        assert "tier" in parsed, f"{name} lacks the advisory [tier] table"
 
 
 def test_shipped_profiles_are_voice_free():

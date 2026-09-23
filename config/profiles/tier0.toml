@@ -2,27 +2,33 @@
 #
 # Host class: ~512 MB-class single-board computer or a retired low-RAM phone.
 # Role: symbolic reasoning + episodic memory + perception satellite, optionally
-# feeding a higher tier over the bus. No torch runtime — everything heavy runs on
-# the GGML/ONNX family (llama.cpp, sqlite-vec).
+# feeding a higher tier over the bus. The torch-free edge backends
+# (llama.cpp, sqlite-vec, whisper.cpp, Piper, ONNX vision/embeddings) are
+# staged seams; today the Tier-0 module set still requires torch because Soma
+# and Chronos use torch+ncps CfC networks and Mnemos/Empatheia/Hypnos build
+# sentence-transformers MiniLM embedders.
 #
-# This overlay is INERT and VOICE-FREE by contract (openspec: "Tier profiles
+# This overlay is INERT and VOICE-FREE by contract (openspec: "Tier files
 # preserve the safety invariants"): it selects runtime backends and device/
-# cycle-rate hints and DISABLES faculties this host cannot bear, but it NEVER
-# enables a module and embeds NO private predefined voice. Enabling modules and
-# selecting a voice remain local operator actions, exactly as for config/kaine.toml.
-# It layers BETWEEN the shipped defaults and your config/kaine.operator.toml,
-# which still wins.
+# cycle-rate hints, but it NEVER enables a module and embeds NO private
+# predefined voice. Enabling modules and selecting a voice remain local
+# operator actions, exactly as for config/kaine.toml. It layers BETWEEN the
+# shipped defaults and your config/kaine.operator.toml, which still wins.
 #
-# Apply deliberately:  KAINE_PROFILE=tier0 python -m kaine.cycle
-#               or:    python -m kaine.cycle --profile tier0
+# Apply deliberately:  KAINE_TIER=tier0 python -m kaine.cycle
+#               or:    record [deployment].tier = "tier0" via the wizard
+#               or:    set it in config/kaine.operator.toml
 
-[modules]
-# Faculties absent below the torch cliff — explicitly held off (never on).
-topos = false        # no vision runtime on a ~512 MB host
-audition = false     # no STT/emotion at Tier 0 (optional whisper.cpp-tiny batch is manual)
-vox = false          # no expressive TTS
-empatheia = false
-phantasia = false
+[tier]
+name = "tier0"
+unsupported_modules = [
+    "topos",        # no vision runtime on a ~512 MB host
+    "audition",     # no STT/emotion at Tier 0 (optional whisper.cpp-tiny batch is manual)
+    "vox",          # no expressive TTS
+    "empatheia",
+    "phantasia",
+]
+oscillator_supported = false  # the oscillatory layer is too heavy for an edge host
 
 [lingua]
 # In-process sub-1B GGUF (slow) — no Ollama/torch server. A >=2B LLM does NOT
@@ -33,9 +39,3 @@ backend = "llama_cpp"
 # In-process vector store — no Qdrant server, near-zero idle footprint.
 backend = "sqlite_vec"
 device = "cpu"
-
-# Disable the oscillatory layer to save CPU on an edge host. This does NOT slow
-# the subjective clock; set [cycle] time_scale by hand until the slip-driven
-# controller lands.
-[oscillator]
-enabled = false

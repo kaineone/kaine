@@ -13,7 +13,14 @@
 # Tier-2 default backends, which equal today's behaviour. It enables no module
 # and embeds no private voice.
 #
-# Apply deliberately:  KAINE_PROFILE=tier2 python -m kaine.cycle
+# Apply deliberately:  KAINE_TIER=tier2 python -m kaine.cycle
+#               or:    record [deployment].tier = "tier2" via the wizard
+#               or:    set it in config/kaine.operator.toml
+
+[tier]
+name = "tier2"
+unsupported_modules = []
+oscillator_supported = true
 
 [lingua]
 backend = "ollama"      # OpenAI-compatible HTTP server (today's default)
