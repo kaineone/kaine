@@ -75,7 +75,7 @@ vision = [
 # eager attention path, which needs NO flash-attn. transformers + torch are
 # already core; only these vendored-code deps are added here.
 internvideo = [
-    "einops>=0.7",
+    "einops>=0.8.2",
     "timm>=0.9",
     "easydict>=1.13",
 ]
@@ -126,7 +126,7 @@ training = [
 worldmodel = [
     "jax[cpu]>=0.10.2",
     "chex>=0.1.92",
-    "einops>=0.7",
+    "einops>=0.8.2",
 ]
 # Oscillatory-binding layer for Syneidesis (oscillatory-layer / paper §3.2).
 # Required only when [oscillator].enabled = true. Lazy-imported by the
