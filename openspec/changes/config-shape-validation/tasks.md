@@ -17,3 +17,13 @@
 - [x] 3.3 Guard: the shipped config, every profile and every tier file pass validation.
 - [x] 3.4 The Nexus state-encryption reader raises on a malformed configuration; with encryption enabled and no key, or a malformed configuration, Nexus leaves the fork manager unconstructed.
 - [x] 3.5 Pre-boot and cycle report the configuration error without a traceback.
+
+## 4. Second-review fixes
+
+- [ ] 4.1 Research CLI reports a configuration error and exits non-zero instead of continuing with `{}`.
+- [ ] 4.2 `[security]` and `[deployment]` must be tables.
+- [ ] 4.3 Decommission CLI loads the merged configuration strictly, installs the encryption posture, and refuses before assessing, backing up or deleting when either fails.
+- [ ] 4.4 Nexus `/forks.json` reports unavailability with the reason when the fork manager is unconstructed.
+- [ ] 4.5 The bus configuration and the model-server setup log a warning when they skip an unparsable operator file or a configuration they cannot load.
+- [ ] 4.6 Test: encryption enabled with no key leaves the Nexus fork manager unconstructed.
+

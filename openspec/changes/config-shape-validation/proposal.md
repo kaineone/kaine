@@ -15,6 +15,10 @@ The layered configuration loader (`kaine/config.py`) merges the shipped file, th
 - The pre-boot check reports any configuration error as "pre-boot: configuration error: …" and exits 2; the cycle refuses to boot with "kaine.cycle: configuration error: …" (both already catch `ProfileError`).
 - Nexus fails closed on encryption: its state-encryption reader raises on a configuration error instead of returning a disabled section, and when the configured encryption posture cannot be installed (a configuration error, or encryption enabled with no key) Nexus logs an error and does not construct its fork manager. Today that setup failure is only a warning, after which the fork manager reads and writes fork snapshots, which include preserved beings, through the disabled pass-through encryptor.
 
+- The research submission CLI no longer replaces a configuration it cannot load with `{}` (which dropped the admissibility stream list and the encryption settings); it reports a configuration error.
+- The decommission CLI read only the shipped file with raw `tomllib` (ignoring the operator overlay) and never installed the state encryptor, so the divergence assessment could not decrypt encrypted state (and could read an individuated entity as not individuated) and the pre-deletion backup was written unencrypted. It now loads the merged configuration strictly, installs the encryption posture, and refuses before assessing, backing up or deleting when either fails.
+- Nexus's fork listing reports that fork operations are unavailable, and why, instead of an empty list.
+
 ## Capabilities
 
 ### New Capabilities
@@ -25,7 +29,7 @@ The layered configuration loader (`kaine/config.py`) merges the shipped file, th
 
 ## Impact
 
-- `kaine/config.py`, `kaine/preboot.py`, `kaine/cycle/__main__.py`, `kaine/nexus/__main__.py`
+- `kaine/config.py`, `kaine/preboot.py`, `kaine/cycle/__main__.py`, `kaine/nexus/__main__.py`, `kaine/nexus/diagnostics.py`, `kaine/research/__main__.py`, `kaine/lifecycle/__main__.py`, `kaine/bus/config.py`, `kaine/setup/model_server.py`
 - Tests: `tests/test_runtime_config.py`, `tests/test_preboot_smoke.py`, and Nexus config-reader tests.
 - The shipped `config/kaine.toml`, every profile and every tier file already satisfy the shape rules; a guard test pins that.
 - No entity boot needed.

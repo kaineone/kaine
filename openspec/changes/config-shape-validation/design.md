@@ -15,4 +15,4 @@
 ## Risks
 
 - An operator config that relied on truthy strings or integers stops loading. That is the intended outcome, and the error names the key to fix.
-- Callers that catch `Exception` and fall back to `{}` now receive shape errors too. Each caller was reviewed: only the Nexus state-encryption reader weakens security on fallback, and it changes to fail closed.
+- Callers that catch `Exception` and fall back to `{}` now receive shape errors too. Each caller was reviewed: the Nexus state-encryption reader and the research submission CLI weaken safety on fallback and change to fail closed; the health board, the perception preview server and the model-server setup only lose display or defaults and keep a logged fallback. The decommission CLI did not use this loader at all and now does, strictly.
