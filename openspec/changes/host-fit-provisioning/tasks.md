@@ -19,5 +19,5 @@
 ## 4. Verification and docs
 
 - [x] 4.1 Update the decision table and add the tested-hosts table in `docs/accelerator-provisioning.md`; update `docs/deployment-tiers.md`.
-- [ ] 4.2 Golden fixtures regenerated; offline suite green at both ends of the torch range on the CPU index.
+- [x] 4.2 Golden fixtures regenerated; offline suite green at both ends of the torch range on the CPU index.
 - [x] 4.3 `openspec validate host-fit-provisioning --strict` passes.
