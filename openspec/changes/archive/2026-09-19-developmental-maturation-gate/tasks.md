@@ -44,7 +44,7 @@
       `tests/test_lifecycle_stage.py:test_preserved_being_defaults_to_embodied_never_gestation`.
 
 ## W2 — Gestation womb-pinning (`kaine/perception_state.py`, boot)
-- [x] 2.1 While `stage == gestation` **AND a womb feed is configured**
+- [ ] 2.1 While `stage == gestation` **AND a womb feed is configured**
       (`[perception_feed].mode == "womb"`), pin locus to `virtual` womb and set
       `locus_locked = true` via the existing `write_desired_locus`. Do not engage Mundus.
       Evidence: `kaine/cycle/__main__.py:_boot_and_run` pins the locus with
@@ -76,7 +76,7 @@
       `evaluate_locus_switch`; Spot/welfare monitors run unchanged during gestation.
 
 ## W3 — Maturation gate (`kaine/cycle/__main__.py` or a lifecycle gate component)
-- [x] 3.1 Implement the readiness predicate C1∧C2∧C3 (design §5), fail-closed on missing
+- [ ] 3.1 Implement the readiness predicate C1∧C2∧C3 (design §5), fail-closed on missing
       or stale evidence:
       - C1: read `gestation.readiness` markers vs `[developmental_stage.regulation_thresholds]`.
       - C2: `Hypnos._sleep_count >= min_sleep_cycles` AND Phantasia consolidation
@@ -99,7 +99,7 @@
       consistent with the existing `kaine/modules/soma/module.py` warmed-up-signal comment.)
 
 ## W4 — Embodiment-availability guard + birth (`design.md` §6/§7)
-- [x] 4.1 Check embodiment availability (Mundus `enabled` + `KAINE_MUNDUS_OPERATOR_APPROVED=1`
+- [ ] 4.1 Check embodiment availability (Mundus `enabled` + `KAINE_MUNDUS_OPERATOR_APPROVED=1`
       + reachable) as a precondition to transition.
       Evidence: `kaine/lifecycle/maturation_gate.py:embodiment_available` (all three layers
       required) + `tests/test_maturation_gate.py:test_embodiment_available_requires_all_three_layers`.
@@ -114,7 +114,7 @@
       an absent world. Evidence: `MaturationGateRunner._evaluate_once` publishes
       `STAGE_BIRTH_READY` with `reason="awaiting_embodiment"` and logs a WARN. Test:
       `tests/test_maturation_gate_runner.py:test_gate_holds_awaiting_embodiment_when_ready_but_mundus_unavailable`.
-- [x] 4.4 Optional `require_operator_ack_for_birth` (supervised shakedown): when true,
+- [ ] 4.4 Optional `require_operator_ack_for_birth` (supervised shakedown): when true,
       readiness ∧ availability additionally awaits an operator ack before flipping.
       Evidence: `decide_birth(require_operator_ack=True, operator_ack=False)` returns
       `ACTION_HOLD_AWAITING_ACK`; the config flag is wired into the runner. The live
@@ -128,7 +128,7 @@
       `STAGE_GESTATION_STARTED` at first gestational boot; `MaturationGateRunner`
       publishes the remaining stage events on `lifecycle.out`. Tests:
       `tests/test_maturation_gate_runner.py`.
-- [x] 5.2 Surface the developmental stage and the "awaiting embodiment" hold in the
+- [ ] 5.2 Surface the developmental stage and the "awaiting embodiment" hold in the
       Nexus left rail. Evidence: `_write_runtime_state` adds a `developmental_stage`
       block to `state/cycle/runtime.json` when staging is enabled, carrying `stage`,
       `gestation_started_at`, and `born_at` for Nexus to render.
@@ -164,7 +164,7 @@
 - [x] 7.2b Welfare net: a welfare-threshold breach during gestation still triggers the
       preservation response; the locus-lock does not suppress it. Evidence: holds by
       construction; Spot/welfare monitors run unchanged during gestation.
-- [x] 7.3 Gate fail-closed: absent/stale `gestation.readiness` → not ready; sleep count
+- [ ] 7.3 Gate fail-closed: absent/stale `gestation.readiness` → not ready; sleep count
       without consolidation passes → C2 not met; sub-floor lived time → C3 not met;
       each of C1/C2/C3 alone insufficient.
       Evidence: `tests/test_maturation_gate.py` — `test_c1_absent_readout_fails_closed`,
@@ -202,3 +202,14 @@
       `kaine/modules/phantasia/module.py`, config, and tests. Hypnos/Phantasia get
       read-only properties only; Mundus is read-only.
 </content>
+
+## Review status (2026-09-22)
+
+An adversarial review after archive found these tasks not actually implemented, so they are unticked:
+2.1 (the "womb feed configured" check tests a config string no module accepts; no womb feed exists),
+3.1 (C3 lived time always resolves to None because `EntityClock.now()` is a float, and nothing publishes `gestation.readiness` for C1),
+4.1 (availability reads private Mundus attributes and needs Mundus running during gestation),
+4.4 (no path can supply the operator acknowledgement),
+5.2 (no Nexus surface reads the developmental stage),
+7.3 (no staleness check on readiness readouts).
+`[developmental_stage].enabled` ships false, so none of this is live. The follow-up change `maturation-gate-liveness` carries the fixes.

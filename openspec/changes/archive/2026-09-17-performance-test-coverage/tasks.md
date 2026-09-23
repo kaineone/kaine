@@ -46,4 +46,8 @@
 
 - [x] 8.1 Run `openspec validate performance-test-coverage --strict` and resolve all issues.
 - [x] 8.2 Run the affected test suites and verify no regressions.
-- [x] 8.3 Profile the hot path before and after the changes and document the improvement.
+- [ ] 8.3 Profile the hot path before and after the changes and document the improvement.
+
+## Review status (2026-09-22)
+
+Task 8.3 is unticked: no before/after profile was recorded.
