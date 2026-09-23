@@ -105,7 +105,7 @@ Precedence, highest first:
 2. CUDA resolution algorithm
 3. Terminal CPU fallback
 
-Only the cuda flavor consults the CUDA resolution algorithm. The `--cpu` and `--xpu` flavors are resolved from the host architecture via `kaine.wheel_index`; `--mps` uses the default PyPI index with no exact pin; `--rocm` is resolved from the host ROCm version and GFX targets (see above).
+Only the cuda flavor consults the CUDA resolution algorithm. The `--cpu` and `--xpu` flavors are resolved from the host architecture via `kaine.wheel_index` (a cpu host on an architecture the wheel data does not record, such as s390x, installs unpinned from the CPU index with a warning, as does a cpu host when the resolver cannot run; xpu refuses instead); `--mps` uses the default PyPI index with no exact pin; `--rocm` is resolved from the host ROCm version and GFX targets (see above).
 
 ## Pre-boot GPU headroom check
 

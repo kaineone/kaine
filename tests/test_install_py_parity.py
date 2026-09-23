@@ -957,6 +957,46 @@ def test_parity_xpu_aarch64_refuses_before_install(tmp_path: Path, installer: st
     assert refusal in proc.stderr, (
         f"expected refusal line in stderr\nstderr={proc.stderr}"
     )
+    assert "for aarch64" in proc.stderr, (
+        f"expected architecture name in stderr\nstderr={proc.stderr}"
+    )
     assert _torch_install_lines(log) == [], (
         f"unexpected torch install line in pip log\n{log}"
+    )
+
+
+@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
+def test_parity_cpu_s390x_unpinned_install_from_cpu_index(tmp_path: Path, installer: str) -> None:
+    """--cpu on a forced s390x host installs unpinned from the CPU index."""
+    twi = _load_twi_helpers()
+    sitecustomize_dir = tmp_path / "sitecustomize"
+    sitecustomize_dir.mkdir()
+    (sitecustomize_dir / "sitecustomize.py").write_text(
+        "import platform\n"
+        "platform.machine = lambda: 's390x'\n",
+        encoding="utf-8",
+    )
+
+    proc, log = twi._run_install(
+        tmp_path,
+        ["--cpu", "--no-wizard"],
+        installer=installer,
+        extra_env={"PYTHONPATH": str(sitecustomize_dir)},
+    )
+
+    # The shim harness never lets the closing torch-import verification pass,
+    # so the exit status is not asserted (see _run_install).
+    assert "no cpu wheel data is recorded for s390x" in proc.stderr, (
+        f"expected s390x warning in stderr\nstderr={proc.stderr}"
+    )
+    assert "installing unpinned from the fixed CPU index" in proc.stderr, (
+        f"expected unpinned CPU install warning in stderr\nstderr={proc.stderr}"
+    )
+    torch_lines = _torch_install_lines(log)
+    assert torch_lines, "expected at least one torch install line"
+    assert all("torch==" not in line for line in torch_lines), (
+        f"expected no exact torch pin in install lines\n{torch_lines}"
+    )
+    assert any("download.pytorch.org/whl/cpu" in line for line in torch_lines), (
+        f"expected CPU index in install lines\n{torch_lines}"
     )

@@ -1,7 +1,7 @@
 # dynamic-hardware Specification
 
 ## Purpose
-How KAINE fits its PyTorch stack to the host it is installed on: the installers probe the accelerator and resolve the exact torch, torchvision and torchaudio build that the host can run, pin it, and keep it coherent across re-runs, so an install never ships a wheel that fails at the first kernel launch.
+How KAINE fits its PyTorch stack to the host it is installed on: the installers probe the accelerator and resolve the exact torch, torchvision and torchaudio build that the host can run, pin it, and keep it coherent across re-runs, so a resolved install does not ship a wheel whose recorded build lacks kernels for the host's GPUs.
 
 ## Requirements
 

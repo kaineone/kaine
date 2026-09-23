@@ -315,9 +315,11 @@ if [[ "$RESEARCH" -eq 0 ]] && _package_installed torchaudio; then
 fi
 
 # Resolver helper for the fixed-index flavors (cpu, xpu). Sets RESOLVER_PY,
-# RESOLVER_JSON, RESOLVER_URL, TORCH_PIN, TV_PIN and TA_PIN. Returns 0 when a
-# usable index_url was returned, 1 when the resolver returned a null index_url,
-# and 2 when the resolver produced no output or unparseable JSON.
+# RESOLVER_JSON, RESOLVER_URL, RESOLVER_ARCH_RECORDED, TORCH_PIN, TV_PIN and
+# TA_PIN. Returns 0 when a usable index_url was returned, 1 when the resolver
+# returned a null index_url (RESOLVER_ARCH_RECORDED indicates whether the
+# architecture is recorded), and 2 when the resolver produced no output or
+# unparseable JSON.
 _resolve_fixed_flavor() {
   local flavor="$1"
   local kaine_root resolver_py resolver_json
@@ -347,6 +349,7 @@ _resolve_fixed_flavor() {
   fi
 
   RESOLVER_URL=""
+  RESOLVER_ARCH_RECORDED="false"
   TORCH_PIN=""
   TV_PIN=""
   TA_PIN=""
@@ -358,6 +361,7 @@ _resolve_fixed_flavor() {
   fi
   if [ "$_parsed" -eq 1 ]; then
     RESOLVER_URL="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("index_url"); print("" if v is None else v)' 2>/dev/null || true)"
+    RESOLVER_ARCH_RECORDED="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); print("true" if d.get("arch_recorded") else "false")' 2>/dev/null || true)"
     TORCH_PIN="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torch_version"); print("" if v is None else v)' 2>/dev/null || true)"
     TV_PIN="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchvision_version"); print("" if v is None else v)' 2>/dev/null || true)"
     TA_PIN="$(printf '%s' "$RESOLVER_JSON" | "$resolver_py" -c 'import json,sys; d=json.load(sys.stdin); v=d.get("torchaudio_version"); print("" if v is None else v)' 2>/dev/null || true)"
@@ -390,7 +394,7 @@ _print_resolver_warnings_to_stderr() {
 d=json.load(sys.stdin)
 for w in (d.get("warnings") or []):
     sys.stderr.write("WARNING: {}\n".format(w))
-' 2>/dev/null >&2 || true
+' || true
   fi
 }
 
@@ -578,7 +582,7 @@ else:
 d=json.load(sys.stdin)
 for w in (d.get("warnings") or []):
     sys.stderr.write("WARNING: {}\n".format(w))
-' 2>/dev/null >&2 || true
+' || true
       exit 1
     fi
 
@@ -604,11 +608,12 @@ for w in (d.get("warnings") or []):
         echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
       fi
       _print_fixed_flavor_warnings xpu
-    else
+    elif [ $_rc -eq 1 ]; then
       echo "install: no xpu wheel index carries a torch in the project's tested range for this architecture." >&2
-      if [ $_rc -eq 1 ]; then
-        _print_resolver_warnings_to_stderr
-      fi
+      _print_resolver_warnings_to_stderr
+      exit 1
+    else
+      echo "install: the wheel-index resolver could not run; refusing to install xpu wheels without resolved pins." >&2
       exit 1
     fi
     ;;
@@ -622,10 +627,14 @@ for w in (d.get("warnings") or []):
         echo "==> resolved torch $TORCH_PIN / torchvision $TV_PIN from $INDEX_URL"
       fi
       _print_fixed_flavor_warnings cpu
-    elif [ $_rc -eq 1 ]; then
+    elif [ $_rc -eq 1 ] && [ "$RESOLVER_ARCH_RECORDED" = "true" ]; then
       echo "install: no cpu wheel index carries a torch in the project's tested range for this architecture." >&2
       _print_resolver_warnings_to_stderr
       exit 1
+    elif [ $_rc -eq 1 ]; then
+      echo "WARNING: no cpu wheel data is recorded for this architecture; installing unpinned from the fixed CPU index $CPU_INDEX_URL." >&2
+      _print_resolver_warnings_to_stderr
+      INDEX_URL="$CPU_INDEX_URL"
     else
       echo "WARNING: CPU wheel-index pins could not be resolved; using the fixed CPU index $CPU_INDEX_URL." >&2
       INDEX_URL="$CPU_INDEX_URL"

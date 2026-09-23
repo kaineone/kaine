@@ -1790,7 +1790,7 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None, need_torchaudio: bo
     }
 
 
-def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_torchaudio: bool = False):
+def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_torchaudio: bool = False, machine=None):
     """Select the newest in-range torch from a fixed flavor index.
 
     ``flavor`` must be ``cpu`` or ``xpu`` (those are also the short index
@@ -1800,10 +1800,14 @@ def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_t
     in-range ``torch`` that has a recorded ``torchaudio`` companion is
     chosen instead.
 
-    Returns a dict with the same keys as the CUDA and ROCm resolvers:
-    ``variant``, ``index_url``, ``torch_version``, ``torchvision_version``,
-    ``torchaudio_version``, ``selected_reason``, ``warnings``,
-    ``selftest_required`` = False, and ``torch_spec``.
+    ``machine`` is the raw host machine name (e.g. ``s390x``) and is used
+    in warnings when ``arch`` is normalized to ``other``.
+
+    Returns a dict with the same keys as the CUDA and ROCm resolvers plus
+    ``arch_recorded`` (bool): ``variant``, ``index_url``, ``torch_version``,
+    ``torchvision_version``, ``torchaudio_version``, ``selected_reason``,
+    ``warnings``, ``selftest_required`` = False, ``torch_spec`` and
+    ``arch_recorded``.
     """
     if spec is None:
         spec = project_torch_spec()
@@ -1811,6 +1815,8 @@ def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_t
 
     index_name = flavor
     warnings: list[str] = []
+    host_arch = machine if machine else arch
+    arch_recorded = arch in PUBLISHED.get(index_name, {})
 
     candidates = list(PUBLISHED.get(index_name, {}).get(arch, ()))
     if need_torchaudio:
@@ -1825,9 +1831,12 @@ def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_t
             break
 
     if chosen is None:
-        reason = f"no in-range torch published on the {flavor} index for {arch} (range {spec})"
-        if need_torchaudio:
-            reason += " with a torchaudio companion"
+        if flavor == "cpu" and not arch_recorded:
+            reason = f"no cpu wheel data is recorded for {host_arch}; pins cannot be resolved"
+        else:
+            reason = f"no in-range torch published on the {flavor} index for {host_arch} (range {spec})"
+            if need_torchaudio:
+                reason += " with a torchaudio companion"
         return {
             "variant": flavor,
             "index_url": None,
@@ -1838,6 +1847,7 @@ def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_t
             "warnings": [reason],
             "selftest_required": False,
             "torch_spec": spec,
+            "arch_recorded": arch_recorded,
         }
 
     ta = _companion(index_name, arch, chosen, "torchaudio")
@@ -1861,6 +1871,7 @@ def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_t
         "warnings": warnings,
         "selftest_required": False,
         "torch_spec": spec,
+        "arch_recorded": True,
     }
 
 
@@ -2030,8 +2041,11 @@ def main(argv=None) -> int:
             need_torchaudio = True
         elif arg == "--flavor":
             idx += 1
-            if idx < len(args):
+            if idx < len(args) and not args[idx].startswith("-"):
                 flavor = args[idx]
+            else:
+                flavor = ""
+                idx -= 1  # let the next flag be processed normally
         elif arg.startswith("--flavor="):
             flavor = arg.split("=", 1)[1]
         elif arg == "--rocm-version":
@@ -2075,7 +2089,13 @@ def main(argv=None) -> int:
             }
         else:
             arch = _normalize_arch(platform.machine())
-            result = resolve_fixed_flavor(flavor, arch, need_torchaudio=need_torchaudio)
+            result = resolve_fixed_flavor(
+                flavor, arch, need_torchaudio=need_torchaudio, machine=platform.machine()
+            )
+        if override is not None or rocm_version is not None or gfx is not None:
+            result.setdefault("warnings", []).append(
+                "--index-url/--rocm-version/--gfx are ignored with --flavor"
+            )
         if ignored:
             result.setdefault("warnings", []).append(
                 "unrecognized CLI arguments ignored: " + " ".join(ignored)

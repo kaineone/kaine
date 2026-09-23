@@ -16,9 +16,15 @@ pin it in the torch constraints file, then install the rest of KAINE under those
 constraints. For the cpu and xpu flavors the resolver SHALL select the newest
 in-range torch that index publishes for the host architecture, with its recorded
 torchvision and torchaudio companions (preferring a version with a torchaudio
-companion when `torchaudio` is needed), and SHALL refuse with a message naming
-the flavor and architecture when that index publishes no in-range torch for the
-architecture. The mps flavor SHALL install torch within the tested range from the
+companion when `torchaudio` is needed). When the recorded data covers the host
+architecture for that flavor but has no in-range torch, or the flavor is xpu and
+the architecture is not recorded, both installers SHALL refuse before installing
+torch with a message naming the flavor and the host architecture. When the flavor
+is cpu and the host architecture is not recorded at all (for example s390x), or
+when the resolver cannot run, the installers SHALL install from the CPU index
+within the tested range without an exact pin and print a warning naming the
+reason; for xpu a resolver that cannot run SHALL be refused with a message saying
+the resolver could not run. The mps flavor SHALL install torch within the tested range from the
 default PyPI index without an exact pin, because no MPS wheel data is recorded. On re-run, the script SHALL classify the installed torch by its
 build metadata (`torch.version.hip` → rocm, `torch.version.cuda` → cuda, an XPU
 build → xpu, an MPS build on macOS arm64 → mps, else cpu), compare it with the

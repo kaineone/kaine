@@ -293,6 +293,24 @@ def test_resolve_fixed_flavor_xpu_aarch64_refuses_with_warning():
     assert any(w == expected for w in result["warnings"])
 
 
+def test_resolve_fixed_flavor_cpu_unrecorded_arch_uses_machine_name():
+    from kaine import wheel_index
+
+    result = wheel_index.resolve_fixed_flavor("cpu", "other", machine="s390x")
+    assert result["arch_recorded"] is False
+    assert result["index_url"] is None
+    assert any("s390x" in w for w in result["warnings"])
+    assert any("no cpu wheel data is recorded" in w for w in result["warnings"])
+
+
+def test_resolve_fixed_flavor_cpu_x86_64_arch_recorded():
+    from kaine import wheel_index
+
+    result = wheel_index.resolve_fixed_flavor("cpu", "x86_64")
+    assert result["arch_recorded"] is True
+    assert result["index_url"] is not None
+
+
 def test_resolve_fixed_flavor_need_torchaudio_prefers_and_warns(monkeypatch):
     """With need_torchaudio, the highest torch that has a companion wins; a mm mismatch warns."""
     from kaine.wheel_index import resolve_fixed_flavor
@@ -352,3 +370,30 @@ def test_cli_flavor_bogus_outputs_refusal_json(capsys, monkeypatch):
     data = json.loads(capsys.readouterr().out)
     assert data["index_url"] is None
     assert any("unsupported --flavor bogus" in w for w in data["warnings"])
+
+
+def test_cli_bare_flavor_outputs_refusal_json(capsys):
+    """A bare --flavor with no value refuses in JSON without falling through to CUDA probing."""
+    from kaine import wheel_index as wi
+
+    rc = wi.main(["--flavor"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["index_url"] is None
+    assert "unsupported --flavor" in data["selected_reason"]
+    assert "expected cpu or xpu" in data["selected_reason"]
+
+
+def test_cli_flavor_cpu_with_index_url_ignored(capsys, monkeypatch):
+    """--index-url given with --flavor is reported as ignored."""
+    from kaine import wheel_index as wi
+
+    monkeypatch.setattr(wi.platform, "machine", lambda: "x86_64")
+    rc = wi.main(["--flavor", "cpu", "--index-url", "https://example.com"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["index_url"] is not None
+    assert any(
+        "--index-url/--rocm-version/--gfx are ignored with --flavor" in w
+        for w in data["warnings"]
+    )

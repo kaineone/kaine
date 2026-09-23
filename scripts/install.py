@@ -675,9 +675,10 @@ def _resolve_fixed_flavor(
 ) -> tuple[str | None, str | None, str | None, str | None, dict | None]:
     """Resolve a fixed-index flavor (cpu/xpu) via ``kaine.wheel_index --flavor``.
 
-    Mirrors the bash ``_resolve_fixed_flavor`` helper. CPU falls back to the
-    fixed CPU index with a warning if the resolver cannot run or returns no
-    usable output; XPU exits with a clear error before any torch install.
+    Mirrors the bash ``_resolve_fixed_flavor`` helper. CPU installs unpinned
+    from the fixed CPU index when the host architecture is not recorded or
+    when the resolver cannot run; XPU exits with a clear error before any torch
+    install when no pin can be resolved.
     Returns ``(index_url, torch_pin, tv_pin, ta_pin, resolver_data)``.
     """
     resolver_args = ["--flavor", flavor]
@@ -696,14 +697,24 @@ def _resolve_fixed_flavor(
             )
             return CPU_INDEX_URL, None, None, None, None
         print(
-            "install: no xpu wheel index carries a torch in the project's "
-            "tested range for this architecture.",
+            "install: the wheel-index resolver could not run; "
+            "refusing to install xpu wheels without resolved pins.",
             file=sys.stderr,
         )
         raise SystemExit(1)
 
     url = data.get("index_url")
+    arch_recorded = data.get("arch_recorded", False)
     if not url:
+        if flavor == "cpu" and not arch_recorded:
+            print(
+                "WARNING: no cpu wheel data is recorded for this architecture; "
+                f"installing unpinned from the fixed CPU index {CPU_INDEX_URL}.",
+                file=sys.stderr,
+            )
+            for warning in data.get("warnings") or []:
+                print(f"WARNING: {warning}", file=sys.stderr)
+            return CPU_INDEX_URL, None, None, None, data
         print(
             f"install: no {flavor} wheel index carries a torch in the project's "
             "tested range for this architecture.",
