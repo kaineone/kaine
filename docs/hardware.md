@@ -75,6 +75,25 @@ overrides every module's device at once. Full backend table and install commands
 total VRAM, and free VRAM — the same probe the first-run wizard uses to propose
 device assignments.
 
+### Keeping the torch stack coherent
+
+The installers read the torch requirement from `pyproject.toml` and install
+`torch` and `torchvision` together from the resolved wheel index. With
+`--research`, `torchaudio` is also installed from the same index first. After the
+core stack is in place, the installers record the installed `torch`, `torchvision`
+and `torchaudio` versions in `<venv>/kaine-torch-constraints.txt` and pass it with
+`-c` to every later `pip install`, so extras and subsequent resolves cannot swap
+the stack.
+
+`KAINE_VENV_DIR` selects the virtualenv directory (default `.venv`).
+
+The pre-boot sweep (`python -m kaine.preboot`) reports a "Torch stack" row under
+CONFIG SANITY and fails when a companion was built for a different torch or when
+the wheels come from different indexes (for example `torch +cu130` with
+`torchaudio +cu128`). The installers also fail their verify step on the same
+condition. The fix is to re-run `scripts/install.sh`. The check reads each
+package's `version.py` for the build tag because pip metadata can omit it.
+
 ### Pre-boot GPU headroom check
 
 When `[gpu_preflight].enabled = true`, the cycle verifies accelerator memory headroom **before** opening the bus or any module, and refuses to boot (exit code `4`) on a starved host rather than OOM-killing a just-spawned entity mid-init. The pre-flight is report-only: it queries `/v1/models` on the model server to report what is resident, reports other GPU consumers, and never terminates a process.
