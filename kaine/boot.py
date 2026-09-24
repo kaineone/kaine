@@ -18,7 +18,7 @@ import logging
 import os
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 
 if TYPE_CHECKING:
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
@@ -62,11 +62,26 @@ def _pop(section: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
     return {k: section[k] for k in section if k in allowed}
 
 
+def _check_injections(
+    module: str, injections: Optional[Mapping[str, Any]], allowed: set[str]
+) -> dict[str, Any]:
+    """Return the injections for ``module`` after checking every key is a seam
+    its constructor accepts (defence in depth: the plugin loader also checks)."""
+    out = dict(injections or {})
+    unknown = sorted(set(out) - allowed)
+    if unknown:
+        raise ConfigurationError(
+            f"{module} does not accept injection(s) {', '.join(unknown)}"
+        )
+    return out
+
+
 def make_soma(
     bus: AsyncBus,
     section: dict[str, Any],
     *,
     entity_clock: Optional[EntityClock] = None,
+    injections: Optional[Mapping[str, Any]] = None,
 ) -> BaseModule:
     from kaine.modules.soma.module import Soma
 
@@ -94,10 +109,16 @@ def make_soma(
         "regulation_warmup_stable_variance",
     }
     kw = _pop(section, allowed)
+    kw.update(_check_injections("soma", injections, {"forward_model"}))
     return Soma(bus, entity_clock=entity_clock, **kw)
 
 
-def make_chronos(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
+def make_chronos(
+    bus: AsyncBus,
+    section: dict[str, Any],
+    *,
+    injections: Optional[Mapping[str, Any]] = None,
+) -> BaseModule:
     from kaine.modules.chronos.module import Chronos
 
     allowed = {
@@ -131,6 +152,7 @@ def make_chronos(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         )
         if k in section
     }
+    kwargs.update(_check_injections("chronos", injections, {"network"}))
     return Chronos(bus, **kwargs)
 
 
@@ -624,10 +646,15 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
 _NOUS_COMPLEXITY_THRESHOLD = 4096
 
 
-def make_nous(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
-    from kaine.modules.nous.engine import PymdpEngine
-    from kaine.modules.nous.generative_model import build_generative_model
+def make_nous(
+    bus: AsyncBus,
+    section: dict[str, Any],
+    *,
+    injections: Optional[Mapping[str, Any]] = None,
+) -> BaseModule:
     from kaine.modules.nous.module import Nous
+
+    injected = _check_injections("nous", injections, {"engine"})
 
     allowed = {
         # Complexity envelope (validated below).
@@ -661,6 +688,14 @@ def make_nous(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             f"={product} exceeds threshold {_NOUS_COMPLEXITY_THRESHOLD}; "
             "EFE planning would risk overrunning the cycle budget"
         )
+
+    # An injected engine replaces the default; the envelope above is still
+    # validated, but no PymdpEngine (and no pymdp/JAX import) is built.
+    if "engine" in injected:
+        return Nous(bus, engine=injected["engine"], **cfg)
+
+    from kaine.modules.nous.engine import PymdpEngine
+    from kaine.modules.nous.generative_model import build_generative_model
 
     # Build the engine eagerly so a misconfigured envelope / missing reasoning
     # extra fails loudly at boot rather than mid-cycle.
@@ -1736,38 +1771,33 @@ def build_registry(
                 _desired.audio_live_desired,
                 _desired.video_live_desired,
             )
-    for name, factory in SIMPLE_FACTORIES.items():
+    # Topos and Audition read the shared feed (and the playlist clock stashed
+    # into kaine_config above) inside construct_module, so boot and Spot's
+    # restart path hand them the same instance.
+    for name in SIMPLE_FACTORIES:
         if not bool(toggles.get(name, False)):
             continue
-        section = dict(kaine_config.get(name) or {})
-        if name in ("topos", "audition"):
-            section["perception_feed"] = dict(perception_feed)
-        if name in _CLOCKED_FACTORIES:
-            module = factory(bus, section, entity_clock=entity_clock)
-        elif name == "praxis":
-            # Praxis alone takes the per-boot provenance secret so it can verify
-            # act-intent signatures at the boundary (see make_praxis).
-            module = factory(bus, section, intent_secret=intent_secret)
-        else:
-            module = factory(bus, section)
+        module = construct_module(
+            name,
+            bus,
+            kaine_config,
+            registry=registry,
+            entity_clock=entity_clock,
+            intent_secret=intent_secret,
+        )
         registry.register(module)
         log.info("registered module %s", name)
 
     if bool(toggles.get("hypnos", False)):
-        mnemos = registry.get("mnemos") if "mnemos" in registry else None
-        thymos = registry.get("thymos") if "thymos" in registry else None
-        phantasia = registry.get("phantasia") if "phantasia" in registry else None
+        # construct_module hands Hypnos its sibling modules from the registry.
         # Nous is now a pymdp/JAX active-inference engine with no NAR subprocess,
         # so there is no process for Hypnos's belief-revision phase to step;
         # that phase skips cleanly when nous_process is None.
-        hypnos = make_hypnos(
+        hypnos = construct_module(
+            "hypnos",
             bus,
-            dict(kaine_config.get("hypnos") or {}),
-            mnemos=mnemos,
-            nous_process=None,
-            thymos=thymos,
-            phantasia=phantasia,
-            kaine_config=kaine_config,
+            kaine_config,
+            registry=registry,
             entity_clock=entity_clock,
         )
         registry.register(hypnos)
@@ -1778,6 +1808,64 @@ def build_registry(
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
     return registry
+
+
+def construct_module(
+    name: str,
+    bus: AsyncBus,
+    kaine_config: dict[str, Any],
+    *,
+    registry: ModuleRegistry,
+    entity_clock: Optional[EntityClock] = None,
+    intent_secret: Optional[bytes] = None,
+    injections: Optional[Mapping[str, Any]] = None,
+) -> BaseModule:
+    """Construct a single module exactly as `build_registry` would.
+
+    Copies the module's section from ``kaine_config``, wires the shared
+    perception feed for Topos/Audition, injects ``entity_clock`` into clocked
+    factories, injects ``intent_secret`` into Praxis, and dispatches plugin
+    injections to Chronos, Soma and Nous.
+    """
+    if name not in SIMPLE_FACTORIES and name != "hypnos":
+        raise ConfigurationError(f"unknown module {name!r}")
+
+    if injections and name not in {"chronos", "soma", "nous"}:
+        raise ConfigurationError(
+            f"module {name!r} does not accept injections"
+        )
+
+    section = dict(kaine_config.get(name) or {})
+    if name in ("topos", "audition"):
+        section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
+
+    if name == "hypnos":
+        mnemos = registry.get("mnemos") if "mnemos" in registry else None
+        thymos = registry.get("thymos") if "thymos" in registry else None
+        phantasia = registry.get("phantasia") if "phantasia" in registry else None
+        return make_hypnos(
+            bus,
+            section,
+            mnemos=mnemos,
+            nous_process=None,
+            thymos=thymos,
+            phantasia=phantasia,
+            kaine_config=kaine_config,
+            entity_clock=entity_clock,
+        )
+
+    factory = SIMPLE_FACTORIES[name]
+    if name in _CLOCKED_FACTORIES:
+        if name in {"chronos", "soma", "nous"}:
+            return factory(
+                bus, section, entity_clock=entity_clock, injections=injections
+            )
+        return factory(bus, section, entity_clock=entity_clock)
+    if name == "praxis":
+        return factory(bus, section, intent_secret=intent_secret)
+    if name in {"chronos", "soma", "nous"}:
+        return factory(bus, section, injections=injections)
+    return factory(bus, section)
 
 
 def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, Any]) -> None:

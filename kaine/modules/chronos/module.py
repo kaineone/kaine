@@ -63,6 +63,9 @@ class Chronos(BaseModule):
             raise ValueError("prediction_error_window must be >= 2")
         self._featurizer = featurizer or SnapshotFeaturizer()
         self._network = network  # lazy import to avoid torch unless used
+        # An injected network (a plugin substrate, or a test double) brings its
+        # own hidden width; the prediction head must be sized from it.
+        self._network_injected = network is not None
         self._cfc_units = int(cfc_units)
         # When no detector is injected, size it from config. An injected
         # detector (e.g. in tests) brings its own window/threshold settings.
@@ -109,9 +112,21 @@ class Chronos(BaseModule):
         if self._forward_prediction and self._pred_head is None:
             from kaine.modules.chronos.network import ForwardPredictionHead
 
+            # The head reads the network's hidden state, so its width must be
+            # the width of the network actually in use.
+            if self._network_injected:
+                units = getattr(self._network, "units", None)
+                if units is None:
+                    raise ValueError(
+                        "Chronos: an injected network must expose `units` (its "
+                        "hidden width) when forward prediction is enabled"
+                    )
+                head_units = int(units)
+            else:
+                head_units = self._cfc_units
             self._pred_head = ForwardPredictionHead(
                 input_size=self._featurizer.feature_dim,
-                units=self._cfc_units,
+                units=head_units,
             )
 
         # Resolve cursors before starting tasks so initial events aren't missed

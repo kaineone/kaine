@@ -34,13 +34,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from kaine.boot import _CLOCKED_FACTORIES as CLOCKED_FACTORIES
 from kaine.boot import (
-    SIMPLE_FACTORIES,
     MetricsCollector,
     build_registry,
+    construct_module,
     make_coherence_scorer,
-    make_hypnos,
     make_salience_factors,
 )
 from kaine.bus.client import AsyncBus
@@ -648,6 +646,38 @@ def _lifecycle_event(
     )
 
 
+def _make_rebuild_module(
+    bus: AsyncBus,
+    kaine_config: dict[str, Any],
+    registry: Any,
+    intent_secret: bytes | None,
+) -> Any:
+    """Return Spot's heavy-restart constructor, bound to this boot's bus,
+    configuration, registry and Praxis intent secret."""
+
+    def rebuild_module(name: str) -> Any:
+        """Rebuild a single module exactly as build_registry would, for Spot's
+        heavy restart path. Hypnos re-fetches its siblings from the registry.
+
+        A restarted cognitive module must keep timing on the SAME shared
+        subjective clock the rest of the mind uses, so the one EntityClock on
+        the registry is re-injected here exactly as build_registry injects it.
+        """
+        # One construction path with build_registry (boot.construct_module):
+        # the same clock, the same Praxis intent secret, the same perception
+        # feed for Topos/Audition, and Hypnos rebuilt with its siblings.
+        return construct_module(
+            name,
+            bus,
+            kaine_config,
+            registry=registry,
+            entity_clock=registry.entity_clock,
+            intent_secret=intent_secret,
+        )
+
+    return rebuild_module
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
@@ -998,38 +1028,7 @@ async def _boot_and_run(
     spot_cfg = SpotConfig.from_section(kaine_config.get("spot") or {})
     fork_manager = ForkManager(Path("state/forks"))
 
-    def rebuild_module(name: str) -> Any:
-        """Rebuild a single module exactly as build_registry would, for Spot's
-        heavy restart path. Hypnos re-fetches its siblings from the registry.
-
-        A restarted cognitive module must keep timing on the SAME shared
-        subjective clock the rest of the mind uses, so the one EntityClock on
-        the registry is re-injected here exactly as build_registry injects it.
-        """
-        section = dict(kaine_config.get(name) or {})
-        shared_clock = registry.entity_clock
-        if name == "hypnos":
-            mnemos = registry.get("mnemos") if "mnemos" in registry else None
-            thymos = registry.get("thymos") if "thymos" in registry else None
-            phantasia = registry.get("phantasia") if "phantasia" in registry else None
-            return make_hypnos(
-                bus,
-                dict(kaine_config.get("hypnos") or {}),
-                mnemos=mnemos,
-                nous_process=None,
-                thymos=thymos,
-                phantasia=phantasia,
-                kaine_config=kaine_config,
-                entity_clock=shared_clock,
-            )
-        if name in CLOCKED_FACTORIES:
-            return SIMPLE_FACTORIES[name](bus, section, entity_clock=shared_clock)
-        if name == "praxis":
-            # A restarted Praxis must keep verifying act-intent provenance, so
-            # re-inject the same per-boot secret build_registry used. Without it
-            # the fail-closed default would refuse every act intent post-restart.
-            return SIMPLE_FACTORIES[name](bus, section, intent_secret=intent_secret)
-        return SIMPLE_FACTORIES[name](bus, section)
+    rebuild_module = _make_rebuild_module(bus, kaine_config, registry, intent_secret)
 
     await _write_runtime_state(
         cycle,

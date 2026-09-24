@@ -61,6 +61,10 @@ class Soma(BaseModule):
         alert_salience: float = 0.7,
         cycle_stream: str = "cycle.out",
         # --- Forward model / fatigue / regulation config ---
+        # An injected forward model (a plugin substrate, or a test double)
+        # replaces the default SubstrateForwardModel; forward_model_units then
+        # does not apply.
+        forward_model: Optional[Any] = None,
         forward_model_units: int = 32,
         prediction_error_window: int = 32,
         fatigue_decay_per_s: float = 0.01,
@@ -113,10 +117,13 @@ class Soma(BaseModule):
         self._cycle_cursor = "0"
 
         # --- Predictive interoception ---
-        self._forward_model = SubstrateForwardModel(
-            feature_dim=DEFAULT_FEATURE_DIM,
-            units=int(forward_model_units),
-        )
+        if forward_model is None:
+            self._forward_model = SubstrateForwardModel(
+                feature_dim=DEFAULT_FEATURE_DIM,
+                units=int(forward_model_units),
+            )
+        else:
+            self._forward_model = forward_model
         self._prediction_error_window: deque[float] = deque(
             maxlen=int(prediction_error_window)
         )
