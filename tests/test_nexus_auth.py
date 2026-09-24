@@ -259,7 +259,9 @@ def test_login_success_sets_cookie_and_cookie_authenticates():
     assert r.status_code == 200
     body = r.json()
     assert "session_key" in body
-    assert body["redirect"] == "/"
+    # Default config: conversation is off, so "/" is not mounted and the
+    # operator lands on diagnostics.
+    assert body["redirect"] == "/diagnostics/"
     assert SESSION_COOKIE in r.cookies
 
     set_cookie = r.headers["set-cookie"]
@@ -991,3 +993,26 @@ def test_config_repr_hides_operator_token():
     representation = repr(config)
     assert "x" * 40 not in representation
     assert "operator_token" not in representation
+
+
+def test_login_lands_on_console_when_conversation_enabled():
+    config = NexusConfig(operator_token=TOKEN, session_idle_minutes=30, conversation_enabled=True)
+    app = _wired_app(config)
+    client = TestClient(app, base_url="http://127.0.0.1:8088")
+    r = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    body = r.json()
+    assert r.status_code == 200
+    assert "redirect" in body
+    assert body["redirect"] == "/"
+
+
+def test_landing_path_follows_mounted_console():
+    from kaine.nexus.auth import landing_path
+
+    assert landing_path(NexusConfig(conversation_enabled=True)) == "/"
+    assert landing_path(NexusConfig(conversation_enabled=False)) == "/diagnostics/"

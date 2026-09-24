@@ -19,6 +19,7 @@ import uvicorn
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config
+from kaine.bus.errors import BusConfigError
 from kaine.bus.schema import Event
 from kaine.evaluation.stream_registry import diagnostics_streams
 from kaine.lifecycle.manager import ForkManager, merger_from_name
@@ -304,8 +305,24 @@ def main() -> int:
     except NexusConfigError as exc:
         log.error("nexus: %s", exc)
         return 1
+    except BusConfigError as exc:
+        # A fresh clone has no Redis password until the bootstrap has run; say
+        # what to do instead of dumping a traceback.
+        log.error(
+            "nexus: the event bus is not set up yet (%s). "
+            "Run: bash scripts/redis-bootstrap.sh",
+            exc,
+        )
+        return 1
     finally:
         loop.close()
+
+    if not (config.conversation_enabled or config.diagnostics_enabled):
+        log.error(
+            "nexus: no console is enabled; set [nexus].diagnostics_enabled "
+            "(or conversation_enabled) to true, since signing in would lead nowhere"
+        )
+        return 1
 
     if not _is_loopback_host(config.host):
         if not config.non_loopback_allowed:

@@ -262,6 +262,13 @@ def require_operator_token(request: Request) -> None:
     raise NexusAuthError()
 
 
+def landing_path(config: NexusConfig) -> str:
+    """Where a signed-in operator lands: the conversation console at ``/`` when it
+    is mounted, otherwise diagnostics. ``/`` does not exist when conversation is
+    off (the default), so sending everyone there would land on a 404."""
+    return "/" if config.conversation_enabled else "/diagnostics/"
+
+
 def build_auth_router(config: NexusConfig) -> APIRouter:
     """Routes for operator login, logout, and the login form."""
     router = APIRouter()
@@ -368,7 +375,7 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
                 )
             session_id, session_key = sessions.create()
             response = JSONResponse(
-                {"session_key": session_key, "redirect": "/"},
+                {"session_key": session_key, "redirect": landing_path(config)},
                 status_code=status.HTTP_200_OK,
             )
             # The browser cookie tracks the absolute server-side session cap;

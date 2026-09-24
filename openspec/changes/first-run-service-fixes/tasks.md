@@ -38,9 +38,9 @@
 
 ## 4. Nexus
 
-- [ ] 4.1 `main` catches `BusConfigError` and exits 1 with a message naming `bash scripts/redis-bootstrap.sh`.
-- [ ] 4.2 The login redirect goes to `/` when conversation is enabled, otherwise to `/diagnostics/`. Nexus refuses to start when neither console is enabled.
-- [ ] 4.3 Tests:
+- [x] 4.1 `main` catches `BusConfigError` and exits 1 with a message naming `bash scripts/redis-bootstrap.sh`.
+- [x] 4.2 The login redirect goes to `/` when conversation is enabled, otherwise to `/diagnostics/`. The shared page rail links only mounted consoles. Nexus refuses to start when neither console is enabled.
+- [x] 4.3 Tests:
   - Missing Redis password exits 1 without a traceback.
   - The login redirect for each console combination.
   - Refusal with both consoles disabled.
