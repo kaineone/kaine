@@ -37,8 +37,11 @@ Alternative considered: run the existing prompt loop in a thread and bridge `inp
 ### 3. Access control
 - Bind 127.0.0.1 on a free port, and refuse any other bind.
 - A 32-byte random launch token goes in the opened URL. It is exchanged once for an HttpOnly, SameSite=Strict session cookie and then invalidated.
-- Every state-changing request checks the session, the Host header against the loopback names, and the Origin header.
-- The server exits on finish or after 30 minutes idle.
+- The token also expires two minutes after launch. The URL reaches the browser as a command-line argument, which other local users can read from the process list, so a short window plus single use keeps a leaked URL worthless.
+- Every request except the token exchange requires the session. That includes page views, progress streams and the token reveal, not only changes.
+- Every state-changing request also checks the Host header against the loopback names, and the Origin header.
+- Responses that carry a secret, or the results of privileged jobs, are sent `Cache-Control: no-store`.
+- The server exits on finish or after 30 minutes idle. A running job counts as activity, so idle shutdown never cuts off a download or bootstrap.
 
 The launch URL is also printed, for a browser that does not open automatically.
 
@@ -57,7 +60,13 @@ Exactly one route starts the entity: the finish page's spawn action. It requires
 2. a passing pre-boot check that exercises the whole stack: services, the organ serving the configured model, perception reaching the senses, the welfare net armed, and Nexus live;
 3. a separate confirmation on a page that states what spawning means.
 
-It then starts the cycle through the same supervised start path the terminal uses, with the operator present, and hands the operator to Nexus. No other step, job or route can start `kaine.cycle`. A test enumerates the routes to prove it, and tests cover each unmet gate refusing.
+It then starts the cycle through the same supervised start path the terminal uses, with the operator present, and hands the operator to Nexus. `KAINE_CYCLE_OPERATOR_PRESENT=1` is set in that one child process's environment only; it is never written to any file. No other step, job or route can start `kaine.cycle`. A test enumerates the routes to prove it, and tests cover each unmet gate refusing.
+
+Further rules for the spawn action:
+- **The pre-boot check is the shared preflight.** It runs the checks the terminal path already uses (`scripts/first-boot.sh` and `kaine.cycle.preflight.run_preflight`). Whatever those do not yet cover from the list above, such as perception reaching the senses or the welfare net being armed, is added to that shared preflight, not to a browser-only check. The terminal and browser can therefore never disagree about readiness, and a check never needs the entity running to pass.
+- **One entity at a time.** Spawn refuses when a cycle is already running, as recorded in `state/cycle/runtime.json` with a live process. While a cycle is running, setup also refuses to save configuration, since a running entity must not have its configuration rewritten underneath it.
+- **Detached from setup.** The cycle and Nexus are started in their own session and process group (`start_new_session`), with output going to the usual log locations. Setup's exit, idle shutdown or crash therefore never signals or ends them. Setup never stops a running entity; shutting one down stays a Nexus or terminal action.
+- **Where the acknowledgement is recorded.** It is appended to a local, append-only record under `state/`, holding the time, the acknowledgement text's version and the operator's affirmation. It never leaves the machine.
 
 ### 7. Sign-in token hand-off
 The finish page offers "Show sign-in token". It reveals the token from `config/secrets.toml` on click, within the authenticated setup session, and never puts it in a URL or a log.
@@ -70,6 +79,8 @@ Alternative considered: auto sign-in to Nexus. Deferred, because it would need a
 - A step-model refactor could change terminal wizard behaviour. It is mitigated by keeping `run_wizard`'s contract and existing tests, plus the parity test.
 - Comments in `config/kaine.operator.toml` are lost on save. The page says so, and the file header already describes it as machine-written.
 
+- A leaked launch URL is limited by its single use and two-minute expiry.
+- Spawned processes outlive setup by design, so a crash in setup cannot take a running entity down with it.
 - Putting spawn in the browser makes starting an entity easier. That is the point for post-research operators. The three gates in decision 6a keep it deliberate, and the pre-boot check keeps it from starting into a half-working environment.
 
 ## Open Questions

@@ -20,7 +20,13 @@
   - a setup base template mirroring Nexus's `_base.html` rail and wordmark;
   - `setup.css` limited to Nexus tokens;
   - tests: the stylesheet is byte-identical to Nexus's, and `setup.css` has no literal colours or new fonts.
-- [ ] 3.2 Launch token exchanged for a session cookie. Host and Origin checks. Idle and finish shutdown.
+- [ ] 3.2 Access control:
+  - the launch token is single-use with a two-minute expiry, exchanged for a session cookie;
+  - the session is required on every request;
+  - Host and Origin checks on changes;
+  - `no-store` on secret-bearing responses;
+  - idle and finish shutdown, with running jobs counting as activity;
+  - saving is refused while a cycle runs.
 - [ ] 3.3 Step pages rendered from the step model, with server-side validation.
 - [ ] 3.4 A parity test: the same answers through the web driver and the terminal driver give identical config.
 - [ ] 3.5 `python -m kaine.setup --web` opens the browser and prints the URL.
@@ -38,14 +44,21 @@
 
 - [ ] 5.1 Service status lights, "Start Nexus", and "Show sign-in token".
 - [ ] 5.2 Spawn action:
-  - welfare acknowledgement recorded;
+  - welfare acknowledgement appended to the local record;
   - the full pre-boot check must pass;
   - separate confirmation;
-  - start through the supervised path;
+  - start through the supervised path, with the operator-presence variable set in the child's environment only;
+  - detached (`start_new_session`);
+  - refuse when a cycle is already running;
   - hand-off to Nexus.
+- [ ] 5.2a Extend the shared preflight (`kaine.cycle.preflight` / `scripts/first-boot.sh`) with any listed check it lacks, such as perception reaching the senses and the welfare net armed. The browser only calls it.
 - [ ] 5.3 Tests:
   - Each unmet gate refuses spawn.
   - A passing run starts exactly one cycle.
+  - A second spawn is refused.
+  - Setup exit leaves spawned processes running.
+  - An expired or reused token is refused.
+  - Reads without a session are refused.
 - [ ] 5.4 Accessibility pass: keyboard navigation, focus order, labels and contrast.
 - [ ] 5.5 `docs/getting-started.md` leads with the browser setup. The terminal wizard is documented as an alternative.
 - [ ] 5.6 `openspec validate browser-first-run --strict` passes.
