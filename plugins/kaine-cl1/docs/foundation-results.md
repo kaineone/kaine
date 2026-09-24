@@ -1,9 +1,9 @@
-# Substrate foundation — implementation results & findings
+# Substrate foundation: implementation results & findings
 
 The `cl1-substrate` foundation
 ([`wetware-substrate-foundation`](../openspec/changes/wetware-substrate-foundation/))
 is implemented and verified end-to-end against the vendored simulator. This
-records how to reproduce it and what the simulator actually does — including three
+records how to reproduce it and what the simulator does, including three
 non-obvious behaviours the design had to accommodate.
 
 ## Reproduce
@@ -41,7 +41,7 @@ default data stream unchanged, and re-opening the device in one process continue
 the frame clock rather than resetting it, so two in-process runs read different
 timeline regions. **Response:** a pluggable `ReferenceCulture` data source
 (`cl.sim.set_simulator_data_source`) that is (a) a pure function of absolute
-timestamp — reproducible in-process and across processes — and (b) stim-responsive,
+timestamp (reproducible in-process and across processes) and (b) stim-responsive,
 so encode→stim→record→decode is a real loop for offline characterisation. Not a
 biophysical model; the real culture replaces it entirely.
 
@@ -55,7 +55,7 @@ evaluation uses the frame-count/`read()` clock, not wall-clock tick boundaries.
 
 ### 3. The simulator silently swallows stimulation on channel 0
 `ChannelSet(0)` stims never commit (no stim record, no evoked response), while
-channels 1..63 work — a 0-is-falsy quirk in the SDK stim path. **Response:** the
+channels 1..63 work: a 0-is-falsy quirk in the SDK stim path. **Response:** the
 broker reserves channel 0 out of every territory (`reserved_channels={0}`), so no
 module can depend on it. Pinned as a regression in
 `test_channel_zero_is_unstimulable`.
@@ -67,7 +67,7 @@ module (not a stand-in): stock `Chronos(bus, network=WetwareTimingModel(...))` o
 a `fakeredis` bus publishes the same `chronos.out` contract as a silicon network
 (`tests/test_chronos_integration.py`). The seam confirmed: `Chronos.__init__`
 takes `network=` and builds its silicon CfC only when that is `None`, so the
-conversion is pure injection — no upstream edit.
+conversion is pure injection, with no upstream edit.
 
 To run the integration tests you need the `kaine` stack importable alongside the
 simulator. On the build machine that is one editable install into this venv:
@@ -80,7 +80,7 @@ python -m pytest tests/ -q                # 29 passing (sim-only + live kaine)
 ```
 
 The integration tests `pytest.importorskip("kaine")`, so on a machine without the
-stack the suite still runs (sim-only) and simply skips them. The forward-prediction
+stack the suite still runs (sim-only) and skips them. The forward-prediction
 head (`temporal_prediction_error`) uses torch; its predictive behaviour is covered
 at the model level by `test_chronos_wetware.py`, and the live test covers the event
 contract and the module running end-to-end on the substrate.

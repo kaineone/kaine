@@ -4,8 +4,8 @@
 
 Why this exists: Cortical Labs' free simulator, by its own documentation,
 "generates non-learning control data that does not respond to stimulation." That
-is correct for a baseline control, but it means the *closed loop* — stimulate,
-observe the evoked response — cannot be exercised on the default source, and its
+is correct for a baseline control, but it means the *closed loop* (stimulate,
+observe the evoked response) cannot be exercised on the default source, and its
 random path is not reproducible across in-process re-opens.
 
 `ReferenceCulture` is a pluggable `SimulatorDataSource` (the SDK's documented
@@ -40,7 +40,7 @@ _SPIKE_SAMPLES = 75  # cl._sim._data_buffer.SPIKE_SAMPLES_TOTAL
 _ZERO_WAVEFORM = np.zeros(_SPIKE_SAMPLES, dtype=np.float32)
 _EPOCH = 250  # absolute-time generation block (10 ms). Keeps read() output a pure
 #             # function of absolute timestamps, independent of how loop() chunks
-#             # its reads — which is what makes a seeded run reproducible.
+#             # its reads, which is what makes a seeded run reproducible.
 
 
 class ReferenceCulture(SimulatorDataSource):
@@ -142,7 +142,7 @@ class ReferenceCulture(SimulatorDataSource):
             for ch in channels:
                 if not (0 <= ch < self._channel_count):
                     continue
-                # keyed by (seed, stim, channel) only — spikes live at absolute
+                # keyed by (seed, stim, channel) only; spikes live at absolute
                 # timestamps in [stim_ts, stim_ts + response); window just filters.
                 rng = np.random.default_rng([self._seed, stim_ts, ch])
                 base = self._evoked_spikes if ch == stim_ch else self._evoked_spikes // 2

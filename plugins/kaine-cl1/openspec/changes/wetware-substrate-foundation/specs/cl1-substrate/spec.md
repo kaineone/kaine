@@ -97,7 +97,7 @@ A module conversion SHALL be realised by injecting a CL1-backed forward model
 through KAINE's existing client seam, leaving the module's `name`, bus
 subscriptions, and published `<name>.out` event shapes unchanged. Where a module
 lacks a suitable seam, the overlay SHALL contribute a vendor-neutral seam upstream
-(silicon default unchanged) or subclass within this repo — never edit the pinned
+(silicon default unchanged) or subclass within this repo; never edit the pinned
 KAINE dependency or the vendored simulator.
 
 #### Scenario: Event shapes are preserved

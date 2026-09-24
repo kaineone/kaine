@@ -3,8 +3,8 @@
 ### Requirement: Nous can run active inference on the substrate
 
 When `[backends].nous = "cl1"`, Nous' generative-model client SHALL be realised on
-a substrate territory — population-coding beliefs to stimulation, delivering
-observations as evidence, and decoding policy selection from territory firing —
+a substrate territory that population-codes beliefs to stimulation, delivers
+observations as evidence, and decodes policy selection from territory firing,
 injected behind Nous' existing client interface with `name`, bus subscriptions,
 and `nous.out` event shapes unchanged. The backend SHALL default off (`"silicon"`)
 until its decode-reliability gate passes.

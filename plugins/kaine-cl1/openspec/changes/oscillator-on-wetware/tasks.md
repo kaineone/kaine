@@ -1,7 +1,7 @@
 ## 1. Backend
 
 - [ ] 1.1 Implement `WetwareOscillator` implementing `OscillatorProtocol`
-      (`phase()`, `step(activity)`, `set_frequency(scale)`) —
+      (`phase()`, `step(activity)`, `set_frequency(scale)`), in
       `kaine_cl1/backends/oscillator.py`.
 - [ ] 1.2 Drive: `step(activity)` sets periodic entraining stim on the oscillator
       territory scaled by activity.
@@ -20,7 +20,7 @@
 ## 3. Acceptance (simulator)
 
 - [ ] 3.1 Two modules driven at the same frequency show high PLV coherence; at
-      detuned frequencies, low coherence — the tissue-sourced phase carries the
+      detuned frequencies, low coherence: the tissue-sourced phase carries the
       binding signal.
 - [ ] 3.2 `set_frequency(0.5)` measurably halves the effective phase advance rate.
 - [ ] 3.3 A module with no substrate oscillator reports the neutral phase and does

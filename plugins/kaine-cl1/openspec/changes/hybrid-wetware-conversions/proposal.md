@@ -1,8 +1,8 @@
 ## Why
 
-Beyond the four strong-tier conversions — where the whole forward model moves to
-the substrate — there are four modules where only *part* of the module belongs on
-wetware and the rest genuinely needs silicon. These are the **hybrid** tier:
+Beyond the four strong-tier conversions, where the whole forward model moves to
+the substrate, there are four modules where only *part* of the module belongs on
+wetware and the rest needs silicon. These are the **hybrid** tier:
 silicon and wetware working together within one module. For some of them the
 hybrid split is a stepping stone; for others it is likely **permanent by design**,
 because the silicon half (an LLM, an RSSM rollout, an emotion classifier) is not
@@ -11,8 +11,8 @@ hybrid; this tier is where the two substrates co-operate *inside* a single organ
 
 Grouping them in one change sets shared terms: each converts only its named
 sub-signal, ships **default-off** behind its own acceptance gate, and is judged on
-whether the wetware half earns its place — a split that does not is reported and
-the module stays fully silicon, no regression.
+whether the wetware half earns its place; a split that does not earn its place
+is reported, and the module stays fully silicon with no regression.
 
 ## What Changes
 
@@ -23,11 +23,11 @@ the module's event shapes are unchanged.
 - **Audition (front end only).** Convert the "any sound → prediction-error
   salience" acoustic front end. STT and vocal-emotion stay silicon (model-bound).
   Encode audio envelope → temporal stim; decode surprise → auditory salience.
-  *Likely permanent hybrid* — transcription is not a wetware task.
+  *Likely permanent hybrid*, since transcription is not a wetware task.
 - **Phantasia (surprise read-out only).** Source the RSSM world-model's scalar
   **surprise** from culture criticality/LZ instead of silicon. The world-model
   rollout itself stays silicon (high-dimensional). *Likely permanent hybrid.*
-- **Volition / action-selection.** Closed-loop discrete action selection — the
+- **Volition / action-selection.** Closed-loop discrete action selection, the
   literal DishBrain "Pong" paradigm. Encode state → stim; decode action from
   territory firing balance. Hardest decode; strongest concept. *Could become a
   full conversion* if decode proves reliable.
@@ -38,10 +38,12 @@ the module's event shapes are unchanged.
 ## Non-goals
 
 - Converting the model-bound silicon halves (STT, emotion classifier, RSSM
-  rollout, LLM) — those stay silicon, sometimes permanently.
+  rollout, LLM); those stay silicon, sometimes permanently.
 - Enabling any of these by default.
-- Executing on real hardware in this change (the project goal, deferred until
-  grant-funded access; validated on the simulator meanwhile).
+- Executing on real hardware in this change (the project goal; real CL1
+  hardware is not available to this project yet, so this work is validated on
+  the simulator, and running on real tissue is a deliberate, reviewed future
+  step).
 
 ## Impact
 

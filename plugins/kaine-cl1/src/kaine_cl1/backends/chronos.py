@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Chronos on wetware — the reference conversion.
+"""Chronos on wetware: the reference conversion.
 
 Chronos is KAINE's interval-timing organ. Upstream it steps a small Closed-form
 Continuous-time (CfC) network each tick and feeds the resulting hidden state to a
@@ -10,7 +10,7 @@ error becomes salience.
 Chronos already exposes the exact seam we need: its constructor takes
 ``network=`` and only builds the silicon ``CfCNetwork`` when that is ``None``
 (``kaine/modules/chronos/module.py``). So the conversion is
-pure injection — ``Chronos(bus, network=WetwareTimingModel(...))`` — with the
+pure injection (``Chronos(bus, network=WetwareTimingModel(...))``), with the
 module body, its bus subscriptions, and its ``chronos.out`` event shapes unchanged.
 
 ``WetwareTimingModel`` matches ``CfCNetwork``'s ``.tick(feature_vec) -> hidden``
@@ -73,7 +73,7 @@ class WetwareTimingModel:
 
     @property
     def units(self) -> int:
-        """Hidden-state width — one component per leased electrode."""
+        """Hidden-state width: one component per leased electrode."""
         return len(self._channels)
 
     @property

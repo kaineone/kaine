@@ -37,7 +37,7 @@ from kaine.modules.chronos.rumination import RecurrenceRuminationDetector  # noq
 
 class _SiliconNetwork:
     """A silicon stand-in with the same interface KAINE's own tests use for the
-    `network=` seam — for schema comparison against the wetware backend."""
+    `network=` seam, for schema comparison against the wetware backend."""
 
     def __init__(self, units: int = 8):
         self.units = units

@@ -35,7 +35,7 @@ def _clamp01(x: float) -> float:
 
 @dataclass(frozen=True)
 class StimRequest:
-    """A single channel's stimulation this tick — a `(ChannelSet, StimDesign)`."""
+    """A single channel's stimulation this tick: a `(ChannelSet, StimDesign)`."""
 
     channel: int
     amplitude_uA: float
@@ -146,7 +146,7 @@ class SurpriseDecoder:
     Bins the territory's spikes into a binary population raster, measures its
     Lempel-Ziv complexity (response disorder), and compares it to a rolling
     baseline: a response more disordered than recent history reads as higher
-    surprise. This is the free-energy bridge — the module maps it to salience.
+    surprise. This is the free-energy bridge: the module maps it to salience.
     """
 
     channels: Sequence[int]
@@ -178,7 +178,7 @@ class SurpriseDecoder:
         c = float(self.complexity(spikes, from_ts, frame_count))
         if len(self._history) < 2:
             self._history.append(c)
-            return 0.5  # no baseline yet — neutral surprise
+            return 0.5  # no baseline yet: neutral surprise
         hist = np.array(self._history, dtype=float)
         mu, sigma = float(hist.mean()), float(hist.std())
         self._history.append(c)

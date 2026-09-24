@@ -4,10 +4,10 @@ Nous is KAINE's reasoning organ: **active-inference** belief updating and policy
 selection over a compact discrete generative model (`pymdp`). Active inference is
 the free-energy principle, and the free-energy principle is exactly the paradigm
 Cortical Labs' cultures are characterised under (DishBrain). Conceptually this is
-the **purest** fit of all — the biological substrate minimising surprise in a
+the **purest** fit of all: the biological substrate minimising surprise in a
 closed loop *is* active inference. It is placed after Chronos/Soma/Oscillator
-because the hard part — reliably **decoding a discrete policy choice** from
-spikes — is a genuine research problem, so it is scoped as convertible but
+because the hard part, reliably **decoding a discrete policy choice** from
+spikes, is a genuine research problem, so it is scoped as convertible but
 enabled only once decode is validated.
 
 ## What Changes
@@ -27,11 +27,13 @@ enabled only once decode is validated.
 ## Non-goals
 
 - Replacing `pymdp`'s semantics or Nous' event schema.
-- Claiming biological active inference beats the silicon baseline — the plan only
-  requires measurable predictive work, benchmarked against KAINE's existing
-  active-inference benchmark.
-- Executing on real hardware in this change (the project goal, deferred until
-  grant-funded access; validated on the simulator meanwhile).
+- Claiming biological active inference beats the silicon baseline. The plan
+  only requires measurable predictive work, benchmarked against KAINE's
+  existing active-inference benchmark.
+- Executing on real hardware in this change (the project goal; real CL1
+  hardware is not available to this project yet, so this work is validated on
+  the simulator, and running on real tissue is a deliberate, reviewed future
+  step).
 
 ## Impact
 

@@ -1,7 +1,7 @@
 ## 1. Backend
 
 - [ ] 1.1 Implement `WetwareActiveInference` satisfying Nous' generative-model
-      client interface — `kaine_cl1/backends/nous.py`.
+      client interface, in `kaine_cl1/backends/nous.py`.
 - [ ] 1.2 Encoder: belief-over-states vector → population code; observations →
       evidence stim.
 - [ ] 1.3 Decoder: sub-population firing balance → selected policy; entropy/

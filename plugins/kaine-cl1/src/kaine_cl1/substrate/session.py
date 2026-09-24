@@ -6,8 +6,8 @@ Exactly one session exists per process. The broker drives it; module backends
 never open their own connection (they receive channel handles from the broker).
 
 Reproducibility note (verified against the vendored simulator): the timing-driven
-`neurons.loop()` path is *not* reproducible run-to-run — wall-clock tick
-segmentation varies — but the frame-count-driven `neurons.read(n)` path IS
+`neurons.loop()` path is *not* reproducible run-to-run (wall-clock tick
+segmentation varies), but the frame-count-driven `neurons.read(n)` path IS
 bit-identical across processes for a fixed `CL_SDK_RANDOM_SEED`. So deterministic
 offline evaluation reads fixed frame blocks; `loop()` is for real-time cadence.
 See `openspec/changes/wetware-substrate-foundation/`.
@@ -27,11 +27,11 @@ class SubstrateConfig:
     """Resolved configuration for a substrate session (mirrors the SDK env knobs)."""
 
     #: "simulator" (default; what we build/validate on) or "hardware" (deliberate,
-    #: reviewed opt-in — a real culture is reached only by explicit choice).
+    #: reviewed opt-in: a real culture is reached only by explicit choice).
     target: str = "simulator"
     #: Simulator only. Decouples the loop from wall-clock for fast offline
-    #: evaluation (CL_SDK_ACCELERATED_TIME=1). Must be False on real hardware —
-    #: biology runs in real time.
+    #: evaluation (CL_SDK_ACCELERATED_TIME=1). Must be False on real hardware,
+    #: since biology runs in real time.
     accelerated_time: bool = False
     #: Optional `.clr`/HDF5 recording to replay instead of synthetic data
     #: (CL_SDK_REPLAY_PATH). None → deterministic synthetic frames from the seed.
@@ -121,7 +121,7 @@ class SubstrateSession:
         return self._neurons
 
     def read_frames(self, frame_count: int) -> "np.ndarray":
-        """Read a fixed block of raw frames — the reproducible, timing-independent
+        """Read a fixed block of raw frames: the reproducible, timing-independent
         path. Bit-identical across runs for a fixed seed (verified)."""
         import numpy as np
 

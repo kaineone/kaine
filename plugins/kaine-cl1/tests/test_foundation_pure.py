@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
-"""Pure-logic foundation tests — no simulator required."""
+"""Pure-logic foundation tests: no simulator required."""
 from __future__ import annotations
 
 from dataclasses import dataclass

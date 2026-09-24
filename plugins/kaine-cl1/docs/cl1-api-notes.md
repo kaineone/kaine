@@ -12,9 +12,10 @@ A CL1 system presents **one culture of living cortical neurons on a
 (inject current) and **record** (read extracellular voltage). The free `cl-sdk`
 package is a faithful **simulator** of this device: `cl.is_simulator()` returns
 `True`, and spikes are either replayed from a recording or generated from a
-seeded Poisson process. The simulator is where we build and validate now; the
-same API drives real cultures once grant-funded access exists (see
-`biological-welfare.md`).
+seeded Poisson process. The simulator is where we build and validate now,
+since real CL1 hardware is not available to this project yet; the same API
+will drive real cultures once running on real tissue becomes a deliberate,
+reviewed step (see `biological-welfare.md`).
 
 Key constants (simulator):
 - **64 channels** (`ChannelSet._CHANNELS_TOTAL`).
@@ -33,14 +34,14 @@ with cl.open() as neurons:
     neurons.stim(ChannelSet(8, 9), StimDesign(160, -1.0, 160, 1.0))
 ```
 
-- `StimDesign(dur_us, cur_uA, ...)` — mono / bi / triphasic (2, 4, or 6 args);
+- `StimDesign(dur_us, cur_uA, ...)`: mono / bi / triphasic (2, 4, or 6 args);
   consecutive phases must alternate polarity.
-- `BurstDesign(count, hz)` — a train of stims (≤ 200 Hz). This is the natural
+- `BurstDesign(count, hz)`: a train of stims (≤ 200 Hz). This is the natural
   primitive for **rate coding** a scalar into stimulation.
-- `ChannelSet` supports set algebra (`| & ^ ~`) — convenient for allocating and
+- `ChannelSet` supports set algebra (`| & ^ ~`), convenient for allocating and
   masking channel territories.
-- `neurons.create_stim_plan()` / `StimPlan` — compose multi-channel patterns.
-- `neurons.interrupt(...)`, `interrupt_then_stim(...)`, `sync(...)` — closed-loop
+- `neurons.create_stim_plan()` / `StimPlan`: compose multi-channel patterns.
+- `neurons.interrupt(...)`, `interrupt_then_stim(...)`, `sync(...)`: closed-loop
   control primitives.
 
 ## Reading: spikes, frames, the loop
@@ -57,9 +58,9 @@ for tick in neurons.loop(ticks_per_second=100, stop_after_ticks=1000):
   `LoopTick` carries `.analysis` (a `DetectionResult` with `.spikes` / `.stims`)
   and `.frames`. **This is where a converted module reads the culture's response
   to its stimulation in the same tick.**
-- `neurons.read(n)` — raw µV frames; `Spike.samples` is a 75-sample window
+- `neurons.read(n)`: raw µV frames; `Spike.samples` is a 75-sample window
   (25 pre, 50 post) around each detected spike.
-- `neurons.record(...)` / `Recording` / `DataStream` — persistence & streaming.
+- `neurons.record(...)` / `Recording` / `DataStream`: persistence and streaming.
 
 ## The analysis suite → our decoders
 
@@ -85,12 +86,12 @@ salience.
 
 ## Simulator knobs we rely on (`.env`)
 
-- `CL_SDK_ACCELERATED_TIME=1` — decouple from wall-clock for fast offline
+- `CL_SDK_ACCELERATED_TIME=1`: decouple from wall-clock for fast offline
   evaluation (incompatible with the visualisation WebSocket; hardware-invalid).
-- `CL_SDK_REPLAY_PATH` — replay a recording instead of synthetic Poisson data.
-- `CL_SDK_RANDOM_SEED`, `CL_SDK_SAMPLE_MEAN`, `CL_SDK_SPIKE_PERCENTILE` —
+- `CL_SDK_REPLAY_PATH`: replay a recording instead of synthetic Poisson data.
+- `CL_SDK_RANDOM_SEED`, `CL_SDK_SAMPLE_MEAN`, `CL_SDK_SPIKE_PERCENTILE`:
   deterministic synthetic-data controls (reproducible runs).
-- Custom `SimulatorDataSource` / `LiveSimulatorDataSource` — feed our own
+- Custom `SimulatorDataSource` / `LiveSimulatorDataSource`: feed our own
   stimulus-conditioned data source, and receive committed stims via
   `on_stim(stim)`. This is how a closed-loop *learning* experiment is wired in
   the sim: our data source can make the synthetic response depend on the stim
@@ -106,5 +107,5 @@ salience.
    broker aggregates sub-ticks into one cognitive-tick observation.
 3. **Lossy, low-dimensional interface.** 64 electrodes cannot carry a video
    latent or an LLM's hidden state. This is *why* only low-dimensional,
-   dynamics-heavy modules convert well — it is a property of the medium, not a
+   dynamics-heavy modules convert well: it is a property of the medium, not a
    temporary limitation. See `conversion-matrix.md`.

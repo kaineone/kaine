@@ -18,7 +18,7 @@ Research on Cortical Labs' published material (2026-09-23) found:
 
 **4. Cloud and hardware refused, with reasons.** `target` accepts only `"simulator"`. Supporting Cortical Cloud needs either a documented remote API or an on-device component that the operator deploys to their Cortical Cloud workspace. Neither can be designed from public information. Credential handling is deferred until then. When it comes, tokens will live outside `kaine.toml` (the secrets directory or the environment), never in logs or manifests.
 
-**5. CI.** The package's pure tests (config, plugin validation, codec) run without `cl-sdk`. The simulator tests need `cl-sdk`, which CI would install from PyPI in a separate job. Using CC BY-NC software in the CI of a non-commercial open project is within the licence, but it is the operator's call. The job is marked optional until confirmed.
+**5. CI.** No CI job installs `cl-sdk` (operator decision, 2026-09-24): KAINE's CI never fetches Cortical Labs' software. The plugin is linted by the root ruff job and covered by the import-linter and license-header checks; its test suite runs locally, where the operator has installed `cl-sdk`.
 
 **6. Tests against KAINE, not a pin.** Inside the repo, the plugin's KAINE-boot tests run against the checked-out KAINE, so a core change that breaks the plugin fails in the same PR.
 

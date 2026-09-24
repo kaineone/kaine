@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Soma on wetware — interoceptive forward model.
+"""Soma on wetware: interoceptive forward model.
 
 The biological substrate replaces Soma's frozen CfC reservoir; the readout
 stays a small online linear model so prediction error keeps the silicon

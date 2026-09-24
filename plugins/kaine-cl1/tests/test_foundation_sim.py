@@ -25,7 +25,7 @@ _CONFIG = {"seed": 42, "baseline_hz": 5.0, "evoked_spikes": 12, "response_ms": 2
 
 def _register():
     """(Re-)register the source. Re-registration resets the SDK singleton, so the
-    substrate timeline restarts at t=0 — necessary because the SDK does NOT reset
+    substrate timeline restarts at t=0, which is necessary because the SDK does NOT reset
     its frame clock on an in-process re-open (open 2 would otherwise continue the
     timeline and read a different, non-comparable region). Each 'run' below calls
     this first so runs are directly comparable and reproducible."""
@@ -49,7 +49,7 @@ def _session():
 def _collect_loop_spikes(limit_ts=6000):
     """Collect spikes with timestamp < limit_ts. Comparing over a fixed timestamp
     span (not a fixed tick count) is what makes the deterministic source's output
-    reproducible — accelerated `loop()` chunks frames-per-tick nondeterministically."""
+    reproducible: accelerated `loop()` chunks frames-per-tick nondeterministically."""
     out = []
     with _session() as s:
         for tick in s.neurons.loop(ticks_per_second=100):

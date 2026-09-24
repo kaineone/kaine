@@ -2,7 +2,7 @@
 """Chronos wetware backend against the simulator.
 
 The acceptance criterion from `chronos-on-wetware`: on a temporally *structured*
-stimulus the prediction error is lower than on a *scrambled* one — i.e. the
+stimulus the prediction error is lower than on a *scrambled* one, i.e. the
 biological forward model does real predictive work, not noise.
 
 `_LinearHead` mirrors `kaine.modules.chronos.network.ForwardPredictionHead`
@@ -91,7 +91,7 @@ def test_interface_matches_cfc_network():
 
 
 def test_hidden_reflects_input():
-    """Different feature amplitudes produce different hidden states — the encoded
+    """Different feature amplitudes produce different hidden states: the encoded
     input actually reaches and modulates the substrate."""
     s, b, model = _open()
     try:

@@ -10,7 +10,7 @@ conversion that proves the `cl1-substrate` pattern end-to-end on the simulator.
 
 ## What Changes
 
-- Add a `cl1` backend for Chronos' forward model — `WetwareTimingModel` — that
+- Add a `cl1` backend for Chronos' forward model (`WetwareTimingModel`) that
   satisfies the same client interface the silicon CfC presents to
   `kaine.modules.chronos`, backed by a channel territory on the shared substrate.
 - **Encode:** a summary of recent workspace activity → a temporal stimulation
@@ -26,8 +26,10 @@ conversion that proves the `cl1-substrate` pattern end-to-end on the simulator.
 ## Non-goals
 
 - Changing Chronos' cognitive semantics or event schema.
-- Executing on real hardware in this change — the goal, but deferred until
-  grant-funded access exists; built and validated on the simulator meanwhile.
+- Executing on real hardware in this change: that is the goal, but real CL1
+  hardware is not available to this project yet, so this is built and
+  validated on the simulator, and running on real tissue is a deliberate,
+  reviewed future step.
 
 ## Impact
 

@@ -3,7 +3,7 @@
 """The substrate broker: share one 64-channel array across converted modules.
 
 KAINE's silicon modules never contend for their models; on CL1 the resource is
-scarce and shared — 64 channels, one culture, one closed loop. The broker is the
+scarce and shared: 64 channels, one culture, one closed loop. The broker is the
 multiplexer:
 
 - **Channel allocation.** Each module leases a disjoint block of the 64 channels,
@@ -121,7 +121,7 @@ class SubstrateBroker:
         self._pending.pop(module, None)
 
     def territory_map(self) -> dict[str, tuple[int, ...]]:
-        """The full lease map — recorded into the run manifest for reproducibility."""
+        """The full lease map, recorded into the run manifest for reproducibility."""
         return {m: t.channels for m, t in self._territories.items()}
 
     # -- spike routing (pure) ---------------------------------------------------

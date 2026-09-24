@@ -9,13 +9,13 @@ key-value memory, encode HD video, or emit grammatical language is not, and thos
 stay on silicon.
 
 Scoring axes:
-- **Dimensionality** — can the input/output fit through 64 electrodes? (lower = better)
-- **Dynamics-nativeness** — is the computation fundamentally about temporal
+- **Dimensionality**: can the input/output fit through 64 electrodes? (lower = better)
+- **Dynamics-nativeness**: is the computation fundamentally about temporal
   prediction / recurrence? (higher = better)
-- **Decodability** — can we read a useful signal back out of spikes with the
+- **Decodability**: can we read a useful signal back out of spikes with the
   `cl.analysis` suite? (higher = better)
 
-## Strong tier — convert first (the plan implements these)
+## Strong tier: convert first (the plan implements these)
 
 | Module | Role | Why it fits | Coding scheme |
 |---|---|---|---|
@@ -24,27 +24,27 @@ Scoring axes:
 | **Oscillator layer** | LIF oscillators for phase/coherence binding | biological neurons **are** oscillators; the culture's intrinsic bursting *is* the oscillation | drive with periodic stim; decode phase via DCT/burst timing → PLV coherence |
 | **Nous** | active inference over a compact discrete generative model | active inference **is** the free-energy principle, which is the DishBrain paradigm; conceptually the purest fit | population-code beliefs → stim; closed-loop stim as evidence; decode policy via territory firing balance |
 
-## Hybrid tier — silicon + wetware together (planned, default-off)
+## Hybrid tier: silicon + wetware together (planned, default-off)
 
 Only the named sub-signal moves to wetware; the silicon half stays. For several of
-these the split is likely **permanent by design** — the silicon half is not a
-wetware task — so "hybrid" is a stable end state, not a failed full conversion.
+these the split is likely **permanent by design**, since the silicon half is not a
+wetware task, so "hybrid" is a stable end state, not a failed full conversion.
 
 | Module | Wetware half | Silicon half (stays) | Note |
 |---|---|---|---|
 | **Audition (front end only)** | "any sound → prediction-error salience" acoustic front end | STT, vocal-emotion (model-bound) | likely permanent hybrid |
 | **Phantasia (surprise signal only)** | scalar **surprise** from culture criticality/LZ | the RSSM world-model rollout (high-dim) | likely permanent hybrid |
-| **Volition / action-selection** | closed-loop action selection — the DishBrain "Pong" paradigm | intent plumbing + safety gate | could become a full conversion if decode proves reliable |
+| **Volition / action-selection** | closed-loop action selection, the DishBrain "Pong" paradigm | intent plumbing + safety gate | could become a full conversion if decode proves reliable |
 | **Thymos** | dimensional valence/arousal from population dynamics (arousal ≈ global excitability) | affect state machinery | speculative; welfare-sensitive; review-gated |
 
-## Silicon-only — do not convert (and why)
+## Silicon-only: do not convert (and why)
 
 | Module(s) | Reason |
 |---|---|
 | **Lingua**, **Vox** | large language / TTS models; symbolic, high-dim; no meaningful electrode encoding |
 | **Topos** | HD video encoder (InternVideo); 64 electrodes cannot carry a visual latent. (A *toy* down-sampled visual task à la DishBrain-Pong could be a future demo, but it is not "running Topos".) |
 | **Mnemos**, **Empatheia** | vector stores / per-agent ToM; need reliable addressable key-value memory the substrate cannot provide |
-| **Eidolon**, **Praxis**, **Hypnos**, **Perception**, **Mundus** | orchestration / self-model / effector-IO / control planes — not forward models at all |
+| **Eidolon**, **Praxis**, **Hypnos**, **Perception**, **Mundus** | orchestration / self-model / effector-IO / control planes, not forward models at all |
 
 ## The ceiling
 
@@ -59,7 +59,7 @@ A conversion is "successful" when, on the simulator:
 1. the module's `<name>.out` events keep their **exact upstream shape**;
 2. the module participates in the cognitive cycle at the required cadence without
    starving it; and
-3. the workspace-mediation ablation (KAINE's own falsifiable test) still runs —
+3. the workspace-mediation ablation (KAINE's own falsifiable test) still runs:
    i.e. the biological forward model does *measurable predictive work*, not noise.
 Point 3 is the load-bearing criterion: a converted module that publishes pure
 noise fails KAINE's existing ablation, which is the intended detector.

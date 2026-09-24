@@ -14,7 +14,7 @@
 
 - [x] 3.1 Import-linter: core `kaine` must not import `kaine_cl1`.
 - [x] 3.3 Normalise plugin file headers with `scripts/apply_license_headers.py`; confirm root pytest does not collect `plugins/`.
-- [ ] 3.2 CI: pure plugin tests always; simulator tests in an optional job that installs `cl-sdk` (pending operator confirmation).
+- [x] 3.2 CI: no job installs `cl-sdk` (operator decision); the plugin is covered by ruff, import-linter and the header check, and its suite runs locally.
 
 ## 4. Tests
 
