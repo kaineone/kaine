@@ -1,6 +1,6 @@
 ## 1. Package
 
-- [x] 1.1 Move `src/kaine_cl1/`, tests and OpenSpec history from `kaineone/kaine-CL1` into `plugins/kaine-cl1/`; drop `vendor/cl-sdk/` and the `cl-sdk` dependency; depend on `kaine` at the repo version.
+- [x] 1.1 Move `src/kaine_cl1/`, tests and OpenSpec history from `kaineone/kaine-CL1` into `plugins/kaine-cl1/`; drop `vendor/cl-sdk/` and the `cl-sdk` dependency; do not declare `kaine` (never imported; the PyPI name belongs to an unrelated project).
 - [x] 1.2 Lazy `cl` import with the requirements message; `seams()` checks for it.
 - [x] 1.3 `target` accepts only `"simulator"`; `"cloud"` and `"hardware"` refused with reasons.
 - [x] 1.4 `data_source` (`reference_culture` default, `sdk`, `replay` + `replay_path`) and the WARNING boot line.

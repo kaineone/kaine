@@ -15,8 +15,12 @@ keywords = ["cognitive-architecture", "biocomputing", "cortical-labs", "cl1", "p
 # Cortical Labs' cl-sdk is deliberately NOT a dependency: it is licensed CC BY-NC 4.0
 # (non-commercial only) and the operator installs it themselves (`pip install cl-sdk`).
 # The plugin refuses to load, with instructions, when it is missing.
+#
+# KAINE itself is deliberately NOT declared either: this package never imports it
+# (KAINE loads the plugin, not the reverse), and the name "kaine" on PyPI belongs
+# to an unrelated project, so declaring it would let pip fetch a stranger's code
+# into an environment without KAINE. Install this plugin into KAINE's environment.
 dependencies = [
-  "kaine",
   "numpy>=1.26",
 ]
 

@@ -8,7 +8,7 @@ and what is not supported yet, is [`docs/cl1.md`](../../docs/cl1.md).
 ## Quick start
 
 ```bash
-pip install ./plugins/kaine-cl1   # from the KAINE repository root
+pip install ./plugins/kaine-cl1   # from the KAINE repository root, in KAINE's environment
 pip install cl-sdk                # Cortical Labs' SDK: CC BY-NC 4.0, installed by you
 ```
 

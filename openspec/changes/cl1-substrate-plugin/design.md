@@ -10,7 +10,7 @@ Research on Cortical Labs' published material (2026-09-23) found:
 
 ## Decisions
 
-**1. Separate distribution inside the repo.** Keeping `kaine-cl1` as its own package with its own `pyproject.toml` keeps core KAINE's dependency set and import graph unchanged, and makes installing it a deliberate act. Its version tracks KAINE's release and it depends on `kaine` at the same version.
+**1. Separate distribution inside the repo.** Keeping `kaine-cl1` as its own package with its own `pyproject.toml` keeps core KAINE's dependency set and import graph unchanged, and makes installing it a deliberate act. Its version tracks KAINE's release. It does not declare `kaine` as a dependency: it never imports KAINE (KAINE loads it), and the name `kaine` on PyPI belongs to an unrelated project, so declaring it would let pip install a stranger's package into an environment that lacks KAINE. The plugin is installed into KAINE's environment.
 
 **2. Point to `cl-sdk`, never install it.** No `kaine[cl1]` extra and no wizard install. The operator runs `pip install cl-sdk` themselves after reading the licence note. `kaine_cl1` imports `cl` lazily and checks for it in `seams()`, so an enabled plugin without `cl-sdk` fails at load time with the instructions, before any module is built.
 

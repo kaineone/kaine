@@ -51,7 +51,7 @@ prints these same points.
 
 ## Installing and enabling
 
-From the repository root:
+From the repository root, in the same Python environment as KAINE:
 
 ```bash
 pip install ./plugins/kaine-cl1
