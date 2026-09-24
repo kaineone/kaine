@@ -54,6 +54,8 @@ class RunContext:
     # rendered frames, no operator paths — just the descriptor. Empty dict means
     # the feed contributed nothing (e.g. off, or the descriptor was unavailable).
     perception_feed: dict[str, Any] = field(default_factory=dict)
+    # Enabled plugin manifest (non-content: names, distribution, version, seams).
+    plugins: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view suitable for JSON serialization (manifest, stamping)."""
@@ -111,6 +113,7 @@ def mint_run_context(
     model_ids: Mapping[str, str],
     version: str,
     perception_feed: Mapping[str, Any] | None = None,
+    plugins: Mapping[str, Any] | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
 
@@ -123,6 +126,10 @@ def mint_run_context(
     ``kaine.boot.gather_perception_feed_descriptor``) — this keeps
     ``kaine.experiment`` boundary-neutral and off the ``kaine.modules`` package,
     exactly like ``model_ids``.
+
+    ``plugins`` is the plugin manifest entry, passed in BY THE CALLER as data
+    (gathered at the cycle/boot layer via ``kaine.plugins``) — this keeps
+    ``kaine.experiment`` boundary-neutral and off the plugin mechanism.
     """
     return RunContext(
         run_id=uuid.uuid4().hex,
@@ -133,6 +140,7 @@ def mint_run_context(
         config_digest=compute_config_digest(config),
         kaine_version=str(version),
         perception_feed=dict(perception_feed or {"mode": "off"}),
+        plugins=dict(plugins or {}),
     )
 
 
