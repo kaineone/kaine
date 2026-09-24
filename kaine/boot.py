@@ -1895,15 +1895,19 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
 
     Spot's heavy restart path constructs a fresh module and swaps it into the
     registry via ``replace``; the new instance must be re-wired exactly as
-    ``build_registry`` wires the full set. The individual wirings are idempotent
+    ``build_registry`` wires the full set, except for oscillators (below). The individual wirings are idempotent
     and cheap, so we re-run the global helpers rather than scoping to one
     module (the ``name`` argument documents intent and lets a future
     optimization narrow the work without changing callers).
+
+    Oscillators are deliberately NOT rebuilt here: Spot hands the rebuilt
+    module its predecessor's oscillator, and every other module keeps its own,
+    so no module's phase history is reset by another module's restart
+    (oscillator-continuity-on-restart).
     """
     _wire_self_hearing_gate(registry)
     _wire_lingua_self_model(registry)
     _wire_eidolon_capabilities(registry)
-    _wire_oscillators(registry, kaine_config)
 
 
 # Allowed keys for the workspace-level [oscillator] section (oscillatory-layer).

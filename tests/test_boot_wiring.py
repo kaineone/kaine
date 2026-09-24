@@ -977,44 +977,33 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
     assert new_model.capability_map.get("effectors") == ["file_write", "notify"]
 
 
-def test_rewire_module_restores_oscillator_wiring():
-    """After Spot rebuilds a module, rewire_module must attach a fresh oscillator
-    when the oscillatory layer is enabled."""
+def test_rewire_module_leaves_oscillators_untouched():
+    """rewire_module never builds or replaces oscillators: a restarted module
+    receives its predecessor's oscillator from Spot's heavy restart path, and
+    every other module keeps its own (oscillator-continuity-on-restart; the
+    Spot hand-over is covered in tests/test_oscillator_continuity.py)."""
     from kaine.modules.registry import ModuleRegistry
 
     bus = _bus()
-    soma = make_soma(
-        bus,
-        {
-            "read_interval_s": 1.0,
-            "cycle_latency_target_ms": 300.0,
-        },
-    )
+    section = {"read_interval_s": 1.0, "cycle_latency_target_ms": 300.0}
+    soma = make_soma(bus, dict(section))
     registry = ModuleRegistry()
     registry.register(soma)
-
     kaine_config = {
-        "oscillator": {
-            "enabled": True,
-            "population_size": 16,
-            "plv_window": 10,
-        }
+        "oscillator": {"enabled": True, "population_size": 16, "plv_window": 10}
     }
-    rewire_module(registry, "soma", kaine_config)
-    assert soma.oscillator is not None
 
-    # Simulate Spot rebuilding soma.
-    new_soma = make_soma(
-        bus,
-        {
-            "read_interval_s": 1.0,
-            "cycle_latency_target_ms": 300.0,
-        },
-    )
-    assert new_soma.oscillator is None
+    existing = object()
+    soma.attach_oscillator(existing)
+    rewire_module(registry, "soma", kaine_config)
+    assert soma.oscillator is existing
+
+    # A freshly rebuilt instance swapped in without Spot's hand-over is not
+    # given an oscillator by rewire_module.
+    new_soma = make_soma(bus, dict(section))
     registry.replace("soma", new_soma)
     rewire_module(registry, "soma", kaine_config)
-    assert new_soma.oscillator is not None
+    assert new_soma.oscillator is None
 
 
 # ---------------------------------------------------------------------------

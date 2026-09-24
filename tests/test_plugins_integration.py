@@ -475,9 +475,10 @@ def _spot(registry, config, bus):
 
 
 @pytest.mark.asyncio
-async def test_spot_nous_heavy_restart_refreshes_engine_and_oscillator(monkeypatch, bus):
-    """Two real Spot heavy restarts of Nous each request a fresh engine and a
-    fresh plugin oscillator (tasks 4.5 / 4.10)."""
+async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeypatch, bus):
+    """Two real Spot heavy restarts of Nous each request a fresh engine from the
+    plugin (tasks 4.5 / 4.10), while the plugin oscillator is requested once at
+    boot and carried over unchanged (oscillator-continuity-on-restart)."""
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
 
     engine_plugin = _NousEnginePlugin()
@@ -501,6 +502,7 @@ async def test_spot_nous_heavy_restart_refreshes_engine_and_oscillator(monkeypat
     assert engine_plugin.calls == 1
     assert nous.engine.call_id == 1
     assert nous._oscillator is not None and nous._oscillator.call_id == 1
+    boot_oscillator = nous._oscillator
 
     spot = _spot(registry, config, bus)
     first = await spot._restart_module("nous")
@@ -511,8 +513,8 @@ async def test_spot_nous_heavy_restart_refreshes_engine_and_oscillator(monkeypat
     nous = registry.get("nous")
     assert engine_plugin.calls == 3
     assert nous.engine.call_id == 3
-    assert osc_plugin.calls == 3
-    assert nous._oscillator.call_id == 3
+    assert osc_plugin.calls == 1
+    assert nous._oscillator is boot_oscillator
 
     await _close_module(nous)
 
