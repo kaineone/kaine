@@ -29,15 +29,16 @@ configuration from either front end.
 ### Requirement: Setup writes only the keys it owns
 Setup SHALL write only configuration keys on its owned-key allowlist, and
 SHALL merge them into an existing operator override rather than replacing
-the file. The allowlist SHALL exclude `[research]`, every operator-presence
-gate and `[nexus].non_loopback_allowed`.
+the file. The allowlist SHALL exclude `[research]`, which the research
+harness owns, every operator-presence gate, and
+`[nexus].non_loopback_allowed`.
 
 #### Scenario: Hand edits survive a re-run
 - **WHEN** the operator override contains a key that setup does not own
 - **AND** setup is run again and saved
 - **THEN** that key and its value are unchanged
 
-#### Scenario: Research mode cannot be enabled from setup
+#### Scenario: Research configuration is not a setup choice
 - **WHEN** any combination of setup answers is saved
 - **THEN** the operator override contains no `[research]` table written by setup
 
@@ -56,10 +57,26 @@ happened and what to do next without ending the setup session.
 - **THEN** the page reports the failure and the remedy
 - **AND** the operator can continue to the other steps
 
-### Requirement: Setup never starts the entity
-The setup interface SHALL NOT start or spawn the entity, and SHALL expose no
-action that runs `kaine.cycle`. Starting Nexus is permitted.
+### Requirement: Spawning is a deliberate, gated action
+The setup interface SHALL start the entity only through a single spawn action
+on the finish page. That action SHALL require a welfare acknowledgement given
+on that page, a passing end-to-end pre-boot check, and a separate
+confirmation, and SHALL start the cycle through the supervised start path. No
+other setup step, job or route SHALL start `kaine.cycle`.
 
-#### Scenario: No entity-start route
+#### Scenario: Pre-boot check failing
+- **WHEN** the operator requests spawn while any pre-boot check fails
+- **THEN** the entity is not started
+- **AND** the page names the failing check and its remedy
+
+#### Scenario: Acknowledgement missing
+- **WHEN** spawn is requested without the welfare acknowledgement on that page
+- **THEN** the entity is not started
+
+#### Scenario: Only one entity-start route
 - **WHEN** the setup server's routes are enumerated
-- **THEN** none of them starts `kaine.cycle`
+- **THEN** exactly one of them can start `kaine.cycle`, and it is the gated spawn action
+
+#### Scenario: Other steps never spawn
+- **WHEN** any other setup step or job completes
+- **THEN** no cycle process has been started

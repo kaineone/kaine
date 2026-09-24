@@ -1,7 +1,7 @@
 ## 1. Step model
 
 - [ ] 1.1 Add `kaine/setup/steps.py` with `Step` and `Field`, and express every current wizard step in it (orientation, welfare acknowledgement, hardware and devices, tier, accelerator mismatch, modules, model/voice/STT, trainer, metrics, encryption).
-- [ ] 1.2 Add the owned-key allowlist and a test that no step writes outside it, including `[research]` and any operator-presence gate.
+- [ ] 1.2 Add the owned-key allowlist and a test that no step writes outside it, including `[research]` (owned by the research harness) and any operator-presence gate.
 - [ ] 1.3 Make `run_wizard` render the step model while keeping its signature and all existing wizard tests green.
 
 ## 2. Merge on save
@@ -27,11 +27,20 @@
 - [ ] 4.3 Tests:
   - A job never starts without its POST.
   - Failures are reported and setup continues.
-  - No web route can start `kaine.cycle`.
+  - Only the spawn route can start `kaine.cycle`.
 
 ## 5. Finish page and docs
 
 - [ ] 5.1 Service status lights, "Start Nexus", and "Show sign-in token".
-- [ ] 5.2 Accessibility pass: keyboard navigation, focus order, labels and contrast.
-- [ ] 5.3 `docs/getting-started.md` leads with the browser setup. The terminal wizard is documented as an alternative.
-- [ ] 5.4 `openspec validate browser-first-run --strict` passes.
+- [ ] 5.2 Spawn action:
+  - welfare acknowledgement recorded;
+  - the full pre-boot check must pass;
+  - separate confirmation;
+  - start through the supervised path;
+  - hand-off to Nexus.
+- [ ] 5.3 Tests:
+  - Each unmet gate refuses spawn.
+  - A passing run starts exactly one cycle.
+- [ ] 5.4 Accessibility pass: keyboard navigation, focus order, labels and contrast.
+- [ ] 5.5 `docs/getting-started.md` leads with the browser setup. The terminal wizard is documented as an alternative.
+- [ ] 5.6 `openspec validate browser-first-run --strict` passes.

@@ -1,6 +1,6 @@
 ## Context
 
-Non-programmers should be able to install and configure KAINE without a terminal session beyond, at most, one command that the phase 2 launcher will later replace. The existing wizard already separates logic from I/O. Nexus already provides a FastAPI and Jinja stack, a stylesheet and a token model. The entity must never start as a side effect of setup.
+Non-programmers who run a full entity after the research phase should be able to install, configure and spawn it without a terminal session beyond, at most, one command that the phase 2 launcher will later replace. Research runs are out of scope: the automated harness configures and starts them with its safety net. The existing wizard already separates logic from I/O, and Nexus already provides a FastAPI and Jinja stack, a stylesheet and a token model. The entity must never start as a side effect of setup; spawning is its own deliberate step.
 
 ## Goals / Non-Goals
 
@@ -12,7 +12,7 @@ Goals:
 Non-Goals:
 - Packaging, the launcher, Windows.
 - Remote setup of another machine.
-- Spawning the entity from setup.
+- Configuring or starting research runs.
 
 ## Decisions
 
@@ -40,8 +40,16 @@ The organ download, extras install, dependency bootstraps and "Start Nexus" are 
 ### 5. Merge on save
 The step model knows which keys it owns. Saving loads the existing operator file, replaces only owned keys, and writes the result. Unowned keys, including hand edits, survive. The page shows the owned keys that change before the write. `tomlwriter` gains a merge that preserves unowned tables and keys; comments in the operator file are not preserved, and the page says so.
 
-### 6. Boundaries enforced in code
-A module-level allowlist in `kaine/setup/steps.py` lists every config key setup may write. `[research]`, the operator-presence environment gates, `[nexus].non_loopback_allowed` and any entity-start path are absent from it. A test fails if any step writes a key outside the allowlist, and another test proves the web app exposes no route that starts `kaine.cycle`.
+### 6. Owned keys enforced in code
+A module-level allowlist in `kaine/setup/steps.py` lists every config key setup may write. `[research]` is absent because research runs are the harness's job, not an installation choice. The operator-presence environment gates and `[nexus].non_loopback_allowed` are also absent. A test fails if any step writes a key outside the allowlist.
+
+### 6a. Spawning as a gated action
+Exactly one route starts the entity: the finish page's spawn action. It requires, in order:
+1. a welfare acknowledgement given on that page, recorded with the time and the acknowledgement text's version;
+2. a passing pre-boot check that exercises the whole stack: services, the organ serving the configured model, perception reaching the senses, the welfare net armed, and Nexus live;
+3. a separate confirmation on a page that states what spawning means.
+
+It then starts the cycle through the same supervised start path the terminal uses, with the operator present, and hands the operator to Nexus. No other step, job or route can start `kaine.cycle`. A test enumerates the routes to prove it, and tests cover each unmet gate refusing.
 
 ### 7. Sign-in token hand-off
 The finish page offers "Show sign-in token". It reveals the token from `config/secrets.toml` on click, within the authenticated setup session, and never puts it in a URL or a log.
@@ -53,6 +61,8 @@ Alternative considered: auto sign-in to Nexus. Deferred, because it would need a
 - A browser-reachable server that can run install commands is a privileged surface. It is mitigated by loopback-only binding, the one-time token, Host and Origin checks, consent per job, argument-list subprocesses and the idle shutdown.
 - A step-model refactor could change terminal wizard behaviour. It is mitigated by keeping `run_wizard`'s contract and existing tests, plus the parity test.
 - Comments in `config/kaine.operator.toml` are lost on save. The page says so, and the file header already describes it as machine-written.
+
+- Putting spawn in the browser makes starting an entity easier. That is the point for post-research operators. The three gates in decision 6a keep it deliberate, and the pre-boot check keeps it from starting into a half-working environment.
 
 ## Open Questions
 

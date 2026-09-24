@@ -4,6 +4,8 @@ Setting up KAINE today means a terminal: `python -m kaine.setup` asks a long run
 
 The wizard's step logic is already free of I/O (`kaine/setup/wizard.py` takes injected input and output functions), and Nexus already gives the project a local web stack. The missing piece is a setup experience in the browser that covers the same choices with the same safety gates.
 
+The audience is people who run a full entity after the research phase. Research runs are configured and started by the automated research harness with its safety net, not through this setup.
+
 This is phase 1 of three:
 1. Browser first run (this change).
 2. A single launcher, a desktop icon or one command, that starts the services in order and shows status lights.
@@ -22,13 +24,13 @@ It depends on `first-run-service-fixes`: re-runnable bootstraps, a generated sig
   - shuts itself down when setup finishes or after a period of inactivity.
 - **Long tasks run with consent and visible progress.** The organ download, dependency installs and the Redis and Qdrant bootstraps each start only when the operator clicks for that task. Each shows live progress and a plain status line, and offers the exact command under "details". A failure explains what happened and what to do next, and the rest of setup keeps working.
 - **Re-running setup keeps what is there.** Pages are pre-filled from the existing `config/kaine.operator.toml`. Saving merges only the keys the wizard owns, so hand edits survive. The operator sees a summary of changes before anything is written. Today the file is overwritten wholesale.
-- **A finish page that leads somewhere.** It shows a status light for each needed service and a "Start Nexus" button. Starting Nexus is not starting the entity. It also has a "Show sign-in token" control that reveals the generated token on click, inside the authenticated session.
-- **Hard boundaries, enforced in code.** The browser setup cannot:
-  - start or spawn the entity;
-  - set `[research].enabled` or any operator-presence gate;
-  - enable a non-loopback Nexus.
+- **A finish page that leads somewhere.** It shows a status light for each needed service, a "Start Nexus" button, and a "Show sign-in token" control that reveals the generated token on click, inside the authenticated session.
+- **Spawning is a deliberate, gated action.** The finish page offers "Spawn the entity" only after:
+  - the operator gives the CAL welfare acknowledgement, recorded at that moment;
+  - the pre-boot check passes end to end: services up, organ serving the configured model, perception reaching the senses, welfare net armed, Nexus live.
 
-  Spawning stays a separate, explicit step with the welfare acknowledgement and the pre-boot checklist. An allowlist of config keys that setup may write is checked by a test.
+  The page then shows what spawning means and asks for a separate confirmation. Setup never spawns as a side effect of any other step.
+- **Research mode is not a setup choice.** `[research]` belongs to the automated research harness, so setup never writes it. An allowlist of the config keys that setup may write is checked by a test. It also excludes the operator-presence gates and `[nexus].non_loopback_allowed`.
 
 ## Impact
 
@@ -44,4 +46,4 @@ It depends on `first-run-service-fixes`: re-runnable bootstraps, a generated sig
 - Out of scope:
   - the launcher and the installer (phases 2 and 3);
   - Windows support;
-  - any change to how the entity is spawned.
+  - changes to the cycle's own start gates. Spawning from the finish page goes through the existing supervised start path.
