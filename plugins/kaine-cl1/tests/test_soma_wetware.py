@@ -57,22 +57,21 @@ def test_wrong_length_raises(substrate):
 def test_non_finite_feature_skips_the_tick(substrate, monkeypatch):
     broker, territory = substrate
     model = WetwareInteroceptiveModel(broker, territory)
-    calls = 0
+    calls = [0]
     orig = broker.run_cognitive_tick
 
     def counting(*args, **kwargs):
-        nonlocal calls
-        calls += 1
+        calls[0] += 1
         return orig(*args, **kwargs)
 
     monkeypatch.setattr(broker, "run_cognitive_tick", counting)
     before_state = model.state_dict()
     model.step(STEADY)
-    assert calls == 1
+    assert calls[0] == 1
 
     err = model.step([float("nan")] + [0.0] * 7)
     assert err == 0.0
-    assert calls == 1
+    assert calls[0] == 1
     assert model.adaptation_steps == 0
     assert model.state_dict() == before_state
 

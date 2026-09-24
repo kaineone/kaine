@@ -15,7 +15,6 @@ os.environ.setdefault("CL_SDK_VISUALISATION", "0")
 import logging
 from typing import Any
 
-import kaine_cl1.plugin as plugin_mod
 import numpy as np
 import pytest
 from kaine_cl1.config import overlay_from_mapping
@@ -46,7 +45,7 @@ def clean_source():
 
 
 def test_missing_cl_sdk_stops_the_plugin(monkeypatch):
-    monkeypatch.setattr(plugin_mod, "_cl_sdk_installed", lambda: False)
+    monkeypatch.setattr("kaine_cl1.plugin._cl_sdk_installed", lambda: False)
     plugin = Cl1Plugin()
     for cfg in (_cfg(), {}):
         with pytest.raises(ValueError) as exc_info:
@@ -63,7 +62,7 @@ def test_missing_cl_sdk_through_kaines_loader(monkeypatch):
     from kaine.boot import known_module_names
     from kaine.plugins import PluginError, load_plugins
 
-    monkeypatch.setattr(plugin_mod, "_cl_sdk_installed", lambda: False)
+    monkeypatch.setattr("kaine_cl1.plugin._cl_sdk_installed", lambda: False)
 
     config = {
         "modules": {"chronos": True},
@@ -140,17 +139,14 @@ def test_session_registers_the_reference_culture(clean_source, monkeypatch):
 
     monkeypatch.setattr(cl.sim, "set_simulator_data_source", recorder)
 
-    session = SubstrateSession(
+    with SubstrateSession(
         SubstrateConfig(
             accelerated_time=True,
             data_source="reference_culture",
             random_seed=5,
         )
-    )
-    try:
-        session.open()
-    finally:
-        session.close()
+    ):
+        pass
 
     assert len(calls) == 1
     factory, cfg = calls[0]
@@ -174,13 +170,8 @@ def test_session_sdk_source_clears_registration(clean_source, monkeypatch):
     monkeypatch.setattr(cl.sim, "clear_simulator_data_source", wrapper)
     monkeypatch.setenv("CL_SDK_REPLAY_PATH", "stale.h5")
 
-    session = SubstrateSession(
-        SubstrateConfig(accelerated_time=True, data_source="sdk")
-    )
-    try:
-        session.open()
-    finally:
-        session.close()
+    with SubstrateSession(SubstrateConfig(accelerated_time=True, data_source="sdk")):
+        pass
 
     assert count >= 1
     assert "CL_SDK_REPLAY_PATH" not in os.environ
@@ -206,11 +197,8 @@ def test_session_leaves_source_alone_when_unset(clean_source, monkeypatch):
     monkeypatch.setattr(cl.sim, "set_simulator_data_source", set_recorder)
     monkeypatch.setattr(cl.sim, "clear_simulator_data_source", clear_recorder)
 
-    session = SubstrateSession(SubstrateConfig(accelerated_time=True))
-    try:
-        session.open()
-    finally:
-        session.close()
+    with SubstrateSession(SubstrateConfig(accelerated_time=True)):
+        pass
 
     assert not set_calls
     assert not clear_calls

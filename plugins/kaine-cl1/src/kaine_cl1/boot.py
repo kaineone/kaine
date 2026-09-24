@@ -42,11 +42,11 @@ class WetwareBackendSpec:
 #: The implemented backends. Oscillator and Nous land next.
 WETWARE_BACKENDS: dict[str, WetwareBackendSpec] = {
     "chronos": WetwareBackendSpec(
-        make=lambda broker, territory: WetwareTimingModel(broker, territory),
+        make=WetwareTimingModel,
         inject_kwarg="network",
     ),
     "soma": WetwareBackendSpec(
-        make=lambda broker, territory: WetwareInteroceptiveModel(broker, territory),
+        make=WetwareInteroceptiveModel,
         inject_kwarg="forward_model",
     ),
 }

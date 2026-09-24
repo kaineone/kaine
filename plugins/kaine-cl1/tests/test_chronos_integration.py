@@ -9,6 +9,7 @@ machine), this proves the conversion is pure injection: stock Chronos +
 """
 from __future__ import annotations
 
+import math
 import os
 
 import pytest
@@ -113,7 +114,7 @@ async def test_wetware_network_injects_into_real_chronos():
     for ev in events:
         err = ev.payload["temporal_prediction_error"]
         assert isinstance(err, (int, float))
-        assert err == err  # not NaN
+        assert not math.isnan(err)
 
 
 async def test_event_schema_matches_silicon():
