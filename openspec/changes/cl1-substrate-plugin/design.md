@@ -29,9 +29,9 @@ Research on Cortical Labs' published material (2026-09-23) found:
 
 **8. Naming outside `plugins/`.** Core code, `README.md` and architecture docs stay vendor-neutral ("an optional substrate plugin, see `plugins/kaine-cl1`"). The two operator-facing places whose job is to state the requirement name Cortical Labs, at the operator's direction: the wizard's optional step and `docs/cl1.md`.
 
-**10. Config writes and the browser setup.** The wizard step writes the `[plugins]` block through `kaine.secrets_file` (`upsert_toml_field` / `read_toml_field`), which refuses layouts it cannot edit safely, rather than editing TOML by hand. If the browser-based setup (kaine #179) lands later, this step is re-expressed in its step model.
-
 **9. Sequencing.** The wizard and `docs/getting-started.md` edits are based on main after `first-run-service-fixes` (merged as kaine #180). The package move under `plugins/` does not touch those files and can go first.
+
+**10. Config writes and the browser setup.** The wizard step writes the `[plugins]` block through `kaine.secrets_file` (`upsert_toml_field` / `read_toml_field`), which refuses layouts it cannot edit safely, rather than editing TOML by hand. If the browser-based setup (kaine #179) lands later, this step is re-expressed in its step model.
 
 ## Risks
 
