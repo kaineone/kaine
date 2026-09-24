@@ -156,7 +156,7 @@ packages = ["kaine", "kaine.bus", "kaine.cycle", "kaine.evaluation", "kaine.fait
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-include = ["kaine/**/*.py", "tests/**/*.py"]
+include = ["kaine/**/*.py", "tests/**/*.py", "plugins/**/*.py"]
 
 [tool.ruff.lint]
 select = [

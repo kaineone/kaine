@@ -13,6 +13,7 @@ broker. See `openspec/changes/wetware-substrate-foundation/` (requirement:
 """
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
@@ -27,6 +28,8 @@ _PULSE_US = 200
 
 
 def _clamp01(x: float) -> float:
+    if math.isnan(x):
+        return 0.0
     return 0.0 if x < 0.0 else 1.0 if x > 1.0 else float(x)
 
 
@@ -39,6 +42,13 @@ class StimRequest:
 
     def to_cl(self):
         from cl import ChannelSet, StimDesign
+
+        # Guard the single choke point to the SDK: a non-finite current never reaches tissue.
+        if not math.isfinite(self.amplitude_uA):
+            raise ValueError(
+                f"refusing to stimulate channel {self.channel} with "
+                f"non-finite amplitude {self.amplitude_uA!r}"
+            )
 
         a = min(abs(self.amplitude_uA), _MAX_UA)
         # Biphasic, charge-balanced, alternating polarity (SDK requirement).
@@ -75,7 +85,7 @@ class PopulationEncoder:
             )
         return [
             RateEncoder(ch, max_uA=self._max).encode(v)
-            for ch, v in zip(self._channels, vec)
+            for ch, v in zip(self._channels, vec, strict=True)
         ]
 
 

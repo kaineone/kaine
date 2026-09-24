@@ -49,6 +49,9 @@ Before you do, note three things about it:
 If the plugin is enabled and `cl-sdk` is not installed, KAINE refuses to boot and
 prints these same points.
 
+The plugin and `cl-sdk` both need Python 3.12 or later, so a KAINE install on
+Python 3.11 cannot use it.
+
 ## Installing and enabling
 
 From the repository root, in the same Python environment as KAINE:

@@ -19,6 +19,7 @@ See `openspec/changes/wetware-substrate-foundation/`.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
@@ -151,12 +152,25 @@ class SubstrateBroker:
     def queue_stim(self, module: str, requests: Sequence[StimRequest]) -> None:
         if module not in self._territories:
             raise KeyError(f"module {module!r} has no territory")
+        requests = list(requests)
+        # The broker enforces territory isolation and finite currents before anything is queued.
+        for req in requests:
+            if req.channel not in self._territories[module].channels:
+                raise ValueError(
+                    f"module {module!r} may not stimulate channel {req.channel}: "
+                    f"it is outside its territory {self._territories[module].channels}"
+                )
+            if not math.isfinite(req.amplitude_uA):
+                raise ValueError(
+                    f"module {module!r} queued a non-finite amplitude "
+                    f"{req.amplitude_uA!r} on channel {req.channel}"
+                )
         self._pending.setdefault(module, []).extend(requests)
 
     def _deliver_pending(self) -> None:
         if not self._pending:
             return
-        for module, requests in self._pending.items():
+        for requests in self._pending.values():
             for req in requests:
                 channel_set, design = req.to_cl()
                 self._neurons.stim(channel_set, design)
