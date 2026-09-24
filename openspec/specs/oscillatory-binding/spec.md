@@ -1,7 +1,12 @@
 # oscillatory-binding Specification
 
 ## Purpose
-TBD - created by archiving change oscillatory-layer. Update Purpose after archive.
+Give each cognitive module a spiking (leaky integrate-and-fire) oscillator whose phase
+the global workspace reads as phase-locking value across a coalition's members, so
+coherent coalitions gain salience (a bounded multiplier) and incoherent ones lose it.
+The layer is optional and, when disabled, leaves workspace selection bit-for-bit
+unchanged; an oscillator persists across module restarts so a module's rhythm is
+continuous for the life of the run.
 
 ## Requirements
 
