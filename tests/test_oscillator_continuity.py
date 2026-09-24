@@ -40,7 +40,6 @@ class _RecordingDefaultOscillator:
     def step(self, dt: float) -> None:
         self.steps.append(dt)
 
-    @property
     def phase(self) -> float:
         return self._phase
 

@@ -1895,7 +1895,7 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
 
     Spot's heavy restart path constructs a fresh module and swaps it into the
     registry via ``replace``; the new instance must be re-wired exactly as
-    ``build_registry`` wires the full set. The individual wirings are idempotent
+    ``build_registry`` wires the full set, except for oscillators (below). The individual wirings are idempotent
     and cheap, so we re-run the global helpers rather than scoping to one
     module (the ``name`` argument documents intent and lets a future
     optimization narrow the work without changing callers).
