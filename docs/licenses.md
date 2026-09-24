@@ -71,6 +71,11 @@ SSPL SaaS clause does not apply to private local use).
 | `snntorch` | `oscillator` | MIT | Yes |
 | `scipy` | `oscillator` | BSD-3-Clause | Yes |
 
+The optional substrate plugin in `plugins/kaine-cl1` (a separate distribution,
+not installed with KAINE) uses Cortical Labs' `cl-sdk`, which is licensed
+CC BY-NC 4.0 (non-commercial use only). KAINE neither bundles nor installs it;
+operators who enable that plugin install it themselves. See [cl1.md](cl1.md).
+
 ---
 
 ## Test dependencies

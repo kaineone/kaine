@@ -2,7 +2,7 @@
 #
 # A pure static check, deliberately separate from the full pytest suite: it
 # installs only ruff (no torch/redis/services, no entity boot, no secrets) and
-# runs `ruff check kaine tests` against the configuration in pyproject.toml
+# runs `ruff check kaine tests plugins` against the configuration in pyproject.toml
 # [tool.ruff]. Style and import-order regressions fail this job in seconds,
 # long before the heavy suite runs.
 name: ruff
@@ -32,4 +32,4 @@ jobs:
         run: python -m pip install "ruff>=0.15,<0.16"
 
       - name: Run ruff
-        run: ruff check kaine tests
+        run: ruff check kaine tests plugins

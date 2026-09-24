@@ -1,0 +1,44 @@
+# kaine-cl1 example configuration.
+#
+# Paste this into the kaine config (kaine.toml or an override). kaine loads the
+# plugin only because [plugins].enabled names it; with "cl1" absent, or every
+# module set to "silicon", the system is exactly KAINE. load_overlay() reads this
+# file as is, or the same keys at top level ([substrate], [backends]).
+
+[plugins]
+enabled = ["cl1"]
+
+[plugins.cl1.substrate]
+# The plugin runs only against Cortical Labs' simulator (cl-sdk, installed by you).
+# "cloud" and "hardware" are refused: see docs/cl1.md at the repository root.
+target = "simulator"
+# Required while the substrate tick is blocking (foundation task 3.3). It
+# decouples the simulator from wall-clock time so a substrate tick cannot stall
+# the cognitive loop.
+accelerated_time = true
+ticks_per_second = 100        # substrate closed-loop rate
+cognitive_rate = 3.333        # KAINE cognitive-cycle rate (Hz); ticks_per_second must nest in it
+random_seed = 42              # deterministic synthetic spikes when no replay is set
+# Which simulated data the substrate produces (docs/cl1.md):
+#   "reference_culture": this plugin's synthetic culture, responds to stimulation (default)
+#   "sdk":               cl-sdk's own data, ignores stimulation (a baseline control)
+#   "replay":            the recording at replay_path
+data_source = "reference_culture"
+# replay_path = "recordings/session.clr"   # optional: replay a recording instead of synthetic data
+
+# Per-module backend selection. Absent or "silicon" == pure upstream behaviour.
+# "cl1" routes that module's forward model onto the shared substrate. Only
+# modules with an implemented wetware backend are accepted; the others name the
+# OpenSpec change that will add them.
+[plugins.cl1.backends]
+chronos = "cl1"
+soma = "cl1"
+# oscillator = "silicon"      # oscillator-on-wetware
+# nous = "silicon"            # nous-on-wetware
+# audition_frontend, phantasia_surprise, volition, thymos: hybrid-wetware-conversions
+
+# Channel-territory sizes (electrodes leased per converted module). Channel 0 is
+# reserved, so the sum must stay <= 63.
+[plugins.cl1.substrate.territories]
+chronos = 12
+soma = 12

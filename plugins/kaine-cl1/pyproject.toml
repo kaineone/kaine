@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kaine-cl1"
+version = "26.06.0a1"
+description = "Optional KAINE plugin that runs selected modules' forward models on Cortical Labs CL1 biological neural compute (simulator only for now)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "LicenseRef-CAL-0.2" }
+authors = [{ name = "Kaine.One" }]
+keywords = ["cognitive-architecture", "biocomputing", "cortical-labs", "cl1", "predictive-processing", "kaine-plugin"]
+
+# Cortical Labs' cl-sdk is deliberately NOT a dependency: it is licensed CC BY-NC 4.0
+# (non-commercial only) and the operator installs it themselves (`pip install cl-sdk`).
+# The plugin refuses to load, with instructions, when it is missing.
+#
+# KAINE itself is deliberately NOT declared either: this package never imports it
+# (KAINE loads the plugin, not the reverse), and the name "kaine" on PyPI belongs
+# to an unrelated project, so declaring it would let pip fetch a stranger's code
+# into an environment without KAINE. Install this plugin into KAINE's environment.
+dependencies = [
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "fakeredis>=2.20",
+]
+
+# KAINE loads this plugin only when its config names it:
+# [plugins] enabled = ["cl1"], with settings under [plugins.cl1].
+[project.entry-points."kaine.plugins"]
+cl1 = "kaine_cl1.plugin:make_plugin"
+
+[project.urls]
+Homepage = "https://kaine.one"
+Simulator = "https://github.com/Cortical-Labs/cl-sdk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kaine_cl1"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

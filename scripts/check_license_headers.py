@@ -18,7 +18,7 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Directories to walk (relative to repo root).
-INCLUDE_DIRS = ["kaine", "scripts", "tests"]
+INCLUDE_DIRS = ["kaine", "plugins", "scripts", "tests"]
 
 # Exclusion patterns — matched against each path component.
 EXCLUDE_PARTS = {

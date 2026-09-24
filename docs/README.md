@@ -101,6 +101,10 @@ Developer how-tos for extending KAINE:
 - [Building embodiment adapters for Mundus](guides/embodiment-adapters.md) — give a
   KAINE entity a new body (a physical robot, a VR/game avatar, a simulator, a custom
   effector) by implementing the `EmbodimentAdapter` contract; the core never changes.
+- [Module plugins](plugins.md): substitute the model behind a declared module seam
+  from an out-of-tree package, loaded only when the configuration names it.
+- [The optional substrate plugin](cl1.md): run selected modules' forward models on
+  a biological-substrate simulator through `plugins/kaine-cl1`; off by default.
 
 ## Processes
 
