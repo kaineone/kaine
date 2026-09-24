@@ -91,6 +91,11 @@ config/kaine.operator.toml
 !.env.example
 compose/.env
 compose/*.env
+# kaine.secrets_file lock files and interrupted-write temp files (may hold secrets).
+config/.*.lock
+config/.*.tmp.*
+compose/.*.lock
+compose/.*.tmp.*
 
 # Upstream third-party source trees built locally (ONA, etc.).
 # Ignore the *contents* of external/ rather than the directory itself, so the

@@ -551,11 +551,12 @@ phases run. Do not stop the cycle during this window.
 Speaches must run on CPU with the `medium.en` model loaded. GPU/cuDNN
 configurations produce crashes; an unconfigured model returns 404.
 
+Restart Speaches with the CPU build and `medium.en`. With the Quadlet units
+(`quadlet/kaine-speaches.container` uses the `latest-cpu` image):
+
 ```bash
-systemctl --user stop speaches-stt.service
-# Edit the service file to ensure: --model medium.en --device cpu
-systemctl --user start speaches-stt.service
-curl -fsS http://127.0.0.1:8000/health
+systemctl --user restart kaine-speaches.service
+curl -fsS http://127.0.0.1:8000/v1/models
 ```
 
 The Nexus health board will show Speaches as `up` when the `/v1/models` endpoint
@@ -630,7 +631,7 @@ the password from `compose/.env`:
 
 ```bash
 docker compose -f compose/redis.yml down
-bash scripts/redis-bootstrap.sh --keep-password
+bash scripts/redis-bootstrap.sh
 docker compose -f compose/redis.yml ps
 ```
 

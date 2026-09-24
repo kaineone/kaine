@@ -19,8 +19,8 @@ that is mounted:
 - `/` when the conversation console is enabled;
 - otherwise `/diagnostics/`.
 
-Nexus SHALL refuse to start when neither console is enabled, since sign-in
-would lead nowhere.
+Page navigation SHALL link only consoles that are mounted. Nexus SHALL refuse
+to start when neither console is enabled, since sign-in would lead nowhere.
 
 #### Scenario: Default configuration
 - **WHEN** conversation is disabled and diagnostics is enabled
@@ -31,6 +31,11 @@ would lead nowhere.
 - **WHEN** conversation is enabled
 - **AND** the operator signs in
 - **THEN** the login response redirects to `/`
+
+#### Scenario: Navigation links only mounted consoles
+- **WHEN** conversation is disabled
+- **THEN** the diagnostics and evaluation pages show no link to the conversation console
+- **AND** their brand link points to `/diagnostics/`
 
 #### Scenario: Nothing to serve
 - **WHEN** both the conversation console and diagnostics are disabled

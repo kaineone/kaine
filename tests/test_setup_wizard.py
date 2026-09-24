@@ -538,8 +538,18 @@ def test_provision_organ_consent_downloads_then_offers_launch(monkeypatch, tmp_p
 
 def test_defaults_subprocess_smoke(tmp_path: Path):
     op = tmp_path / "op.toml"
+    secrets_path = tmp_path / "secrets.toml"
+    # A real subprocess run from the repo root: the autouse redirect cannot reach
+    # it, so the secrets path is passed explicitly and the checkout's own
+    # config/secrets.toml must come out untouched.
+    real_secrets = REPO_ROOT / "config" / "secrets.toml"
+    before = real_secrets.read_bytes() if real_secrets.exists() else None
     proc = subprocess.run(
-        [sys.executable, "-m", "kaine.setup", "--defaults", "--operator-path", str(op)],
+        [
+            sys.executable, "-m", "kaine.setup", "--defaults",
+            "--operator-path", str(op),
+            "--secrets-path", str(secrets_path),
+        ],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -547,6 +557,10 @@ def test_defaults_subprocess_smoke(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     with op.open("rb") as fh:
         tomllib.load(fh)
+    with secrets_path.open("rb") as fh:
+        assert len(tomllib.load(fh)["nexus"]["operator_token"]) >= 32
+    after = real_secrets.read_bytes() if real_secrets.exists() else None
+    assert after == before
 
 
 # --- accelerator/runtime mismatch detection --------------------------------
@@ -655,3 +669,150 @@ def test_cpu_only_skips_mismatch():
         input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
     )
     assert result.mismatch_verdict is None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_secrets_path(monkeypatch, tmp_path) -> None:
+    """Keep every main() run in this file from writing a token into the
+    developer's real config/secrets.toml."""
+    # Patch the module object: a dotted-string target ending in "__main__" does
+    # not resolve to kaine.setup.__main__.
+    from kaine.setup import __main__ as setup_main_module
+
+    monkeypatch.setattr(
+        setup_main_module, "DEFAULT_SECRETS_PATH", tmp_path / "secrets.toml"
+    )
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+
+
+def test_nexus_token_generated_on_fresh_install(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    out = io.StringIO()
+    status = _ensure_nexus_token(path, out=out.write, env={})
+    assert status == "generated"
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    token = data["nexus"]["operator_token"]
+    assert isinstance(token, str)
+    assert len(token) >= 32
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert token not in out.getvalue()
+
+
+def test_nexus_token_generated_keeps_other_tables(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    path.write_text('[redis]\npassword = "abc"\n', encoding="utf-8")
+    out = io.StringIO()
+    status = _ensure_nexus_token(path, out=out.write, env={})
+    assert status == "generated"
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    assert data["redis"]["password"] == "abc"
+    assert isinstance(data["nexus"]["operator_token"], str)
+    assert len(data["nexus"]["operator_token"]) >= 32
+
+
+def test_nexus_token_existing_is_kept(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    original = b'[nexus]\noperator_token = "' + b"x" * 40 + b'"\n'
+    path.write_bytes(original)
+    out = io.StringIO()
+    status = _ensure_nexus_token(path, out=out.write, env={})
+    assert status == "kept"
+    assert path.read_bytes() == original
+
+
+def test_nexus_token_env_var_wins(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    out = io.StringIO()
+    env = {"KAINE_NEXUS_TOKEN": "y" * 40}
+    status = _ensure_nexus_token(path, out=out.write, env=env)
+    assert status == "env"
+    assert not path.exists()
+
+
+def test_nexus_token_malformed_file_untouched(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    original = b"[nexus\nbroken"
+    path.write_bytes(original)
+    out = io.StringIO()
+    status = _ensure_nexus_token(path, out=out.write, env={})
+    assert status == "malformed"
+    assert path.read_bytes() == original
+
+
+def test_nexus_token_generated_token_is_accepted_by_nexus(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from kaine.nexus.config import load_nexus_config
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    secrets_path = tmp_path / "secrets.toml"
+    out = io.StringIO()
+    assert _ensure_nexus_token(secrets_path, out=out.write, env={}) == "generated"
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    config = load_nexus_config(
+        tmp_path / "kaine.toml",
+        operator_path=tmp_path / "none.toml",
+        secrets_path=secrets_path,
+    )
+    with secrets_path.open("rb") as f:
+        token = tomllib.load(f)["nexus"]["operator_token"]
+    assert config.operator_token == token
+
+
+def test_defaults_run_generates_token_in_redirected_path(tmp_path: Path) -> None:
+    secrets_path = tmp_path / "s.toml"
+    rc = setup_main(
+        [
+            "--defaults",
+            "--operator-path",
+            str(tmp_path / "op.toml"),
+            "--secrets-path",
+            str(secrets_path),
+        ],
+        input_fn=lambda _p: "",
+        out=io.StringIO(),
+    )
+    assert rc == 0
+    with secrets_path.open("rb") as f:
+        data = tomllib.load(f)
+    token = data["nexus"]["operator_token"]
+    assert isinstance(token, str)
+    assert len(token) >= 32
+
+
+def test_nexus_token_too_short_in_file_is_reported_not_kept(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    path.write_text('[nexus]\noperator_token = "short-token"\n')
+    before = path.read_bytes()
+    out = io.StringIO()
+    status = _ensure_nexus_token(path, out=out.write, env={})
+    assert status == "too_short"
+    assert path.read_bytes() == before
+    assert "short-token" not in out.getvalue()
+    assert "shorter than 32" in out.getvalue()
+
+
+def test_nexus_token_too_short_env_is_reported(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    out = io.StringIO()
+    status = _ensure_nexus_token(
+        tmp_path / "secrets.toml", out=out.write, env={"KAINE_NEXUS_TOKEN": "tiny"}
+    )
+    assert status == "too_short"
+    assert not (tmp_path / "secrets.toml").exists()
+    assert "tiny" not in out.getvalue()

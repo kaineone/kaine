@@ -88,8 +88,10 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
         name="qdrant",
         role="vector memory (mnemos, empatheia)",
         modules=("mnemos", "empatheia"),
-        binary="qdrant",
-        port=6333,
+        # Containerised: no host binary to look for. 6533 is the KAINE-owned
+        # container's host port (compose/qdrant.yml), not upstream's 6333.
+        binary=None,
+        port=6533,
         kind="command",
         command="bash scripts/qdrant-bootstrap.sh",
         note="starts the KAINE-owned Qdrant container.",
@@ -172,10 +174,12 @@ def detect_dependencies(
     *,
     specs: tuple[DepSpec, ...] = DEPENDENCIES,
     redis_port: Optional[int] = None,
+    qdrant_port: Optional[int] = None,
 ) -> list[DepStatus]:
     """Detect, for each NEEDED dependency, whether it is installed and running.
 
-    ``redis_port`` overrides the Redis port (the shipped config uses 6479).
+    ``redis_port`` overrides the Redis port (the shipped config uses 6479);
+    ``qdrant_port`` overrides the Qdrant port (default 6533).
     Real probes only: PATH lookup + TCP connect. Never raises.
     """
     out: list[DepStatus] = []
@@ -185,6 +189,8 @@ def detect_dependencies(
         port = spec.port
         if spec.name == "redis" and redis_port:
             port = redis_port
+        if spec.name == "qdrant" and qdrant_port:
+            port = qdrant_port
         out.append(
             DepStatus(
                 spec=spec,

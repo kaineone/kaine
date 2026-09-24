@@ -24,13 +24,17 @@
   {% include "_freeze_banner.html" %}
   {% include "_spot_banner.html" %}
   {% set _path = request.url.path if request is defined and request else "" %}
+  {# Only link consoles that are mounted: "/" exists only with conversation on. #}
+  {% set _conversation = request.app.state.config.conversation_enabled if request is defined and request and request.app.state.config is defined else true %}
   <div class="shell">
     {# console-style left rail: stacked rounded-end segments. #}
     <aside class="rail">
       {% block rail %}
-      <a class="rail__brand" href="/">KAINE</a>
+      <a class="rail__brand" href="{{ '/' if _conversation else '/diagnostics/' }}">KAINE</a>
       <nav class="rail__nav">
+        {% if _conversation %}
         <a class="rail__seg{% if _path == "/" %} is-active{% endif %}" href="/">Console</a>
+        {% endif %}
         <a class="rail__seg{% if _path.startswith("/diagnostics/") and not _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/">Diagnostics</a>
         <a class="rail__seg{% if _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/evaluation/">Evaluation</a>
         <button type="button" class="rail__seg rail__logout" id="nexus-logout">Log out</button>

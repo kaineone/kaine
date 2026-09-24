@@ -1128,3 +1128,31 @@ async def test_diagnostics_page_renders_entity_care_panel_readonly(tmp_path):
         assert "/diagnostics/decommission" not in low
         assert "delete entity" not in low
         assert "/decommission" not in low
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_rail_hides_console_link_when_conversation_off():
+    client, app = await _make_client(config=NexusConfig(conversation_enabled=False))
+    async with client:
+        async with app.router.lifespan_context(app):
+            r = await client.get(
+                "/diagnostics/",
+                headers={"Authorization": "Bearer test-token"},
+            )
+            assert r.status_code == 200
+            assert ">Console</a>" not in r.text
+            assert 'class="rail__brand" href="/diagnostics/"' in r.text
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_rail_shows_console_link_when_conversation_on():
+    client, app = await _make_client()
+    async with client:
+        async with app.router.lifespan_context(app):
+            r = await client.get(
+                "/diagnostics/",
+                headers={"Authorization": "Bearer test-token"},
+            )
+            assert r.status_code == 200
+            assert ">Console</a>" in r.text
+            assert 'class="rail__brand" href="/"' in r.text

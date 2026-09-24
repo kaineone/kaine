@@ -17,22 +17,24 @@ These are prerequisites for making first run approachable for non-programmers. T
 
 - **One section-aware secrets writer.** A new stdlib-only module `kaine/secrets_file.py` upserts a single `KEY=value` line in `compose/.env` and a single `field = "value"` inside a named TOML table of `config/secrets.toml`. It preserves every other line, byte for byte, and writes files mode 600. The Redis and Qdrant bootstrap scripts call it with `python3 -m kaine.secrets_file`, replacing their `cat >`, `sed` and inline-Python edits.
 - **Redis bootstrap keeps the password by default.** Re-running reuses the existing usable password. `--rotate` generates a new one. `--keep-password` stays accepted and changes nothing, so existing docs and scripts keep working.
+- **Qdrant bootstrap keeps its API key by default, for the same reason.** Today every run rotates the key (`--keep-key` avoids it), which disconnects Mnemos and Empatheia. A no-flag run now reuses the key, `--rotate` replaces it, and `--keep-key` stays accepted. `SECURITY.md` describes rotation as explicit.
 - **Setup generates the Nexus operator token.** When no token is configured, `python -m kaine.setup` writes a fresh `secrets.token_urlsafe(32)` token into `config/secrets.toml` `[nexus].operator_token` (it is at least 32 characters). An existing token, whether in the file or in `KAINE_NEXUS_TOKEN`, is never replaced. The token is not printed; setup states where it is stored.
 - **Nexus explains missing setup instead of crashing.** `main` catches the bus configuration error and exits 1 with a single log line naming the setup command that fixes it.
-- **Login lands on a console that exists.** Nexus redirects to `/` when the conversation console is mounted, otherwise to `/diagnostics/`. With neither console enabled, Nexus has nothing to serve after login, so it refuses to start with a plain message.
+- **Login lands on a console that exists.** Nexus redirects to `/` when the conversation console is mounted, otherwise to `/diagnostics/`. The page rail on diagnostics and evaluation stops linking the unmounted console, whose brand and "Console" links 404 today. With neither console enabled, Nexus has nothing to serve after login, so it refuses to start with a plain message.
 - **Dependency probes use the configured ports.** The Qdrant probe reads `[mnemos.qdrant].port`, falling back to `[empatheia.qdrant].port`, then to 6533. The Redis probe keeps reading `[redis].port`. Container services no longer look for a host binary.
 - **Guide corrected.** `docs/getting-started.md` describes Nexus sign-in with the generated token, and replaces the nonexistent unit names with the Speaches and Chatterbox launch steps that exist.
 
 ## Impact
 
 - Modified capability `redis-bootstrap` (password kept by default, section-aware mirror, `.env` upsert).
+- New capability `qdrant-bootstrap` (key kept by default, `--rotate`).
 - Added requirements in `first-run-wizard` (operator token generation, configured-port probes) and `nexus-dashboard` (setup-error exit, login landing).
 - Code:
   - `kaine/secrets_file.py` (new)
   - `scripts/redis-bootstrap.sh`, `scripts/qdrant-bootstrap.sh`
   - `kaine/setup/__main__.py`, `kaine/setup/dependencies.py`
-  - `kaine/nexus/__main__.py`, `kaine/nexus/auth.py`
-  - `docs/getting-started.md`, `config/secrets.example.toml`
+  - `kaine/nexus/__main__.py`, `kaine/nexus/auth.py`, `kaine/nexus/templates/_base.html`
+  - `docs/getting-started.md`, `docs/operations.md`, `SECURITY.md`, `config/secrets.example.toml`
 - Out of scope:
   - The state-encryption key, which belongs to per-entity key custody (`entity-key-custody`).
   - Merging wizard answers into an existing operator override, persisting the welfare acknowledgement and wiring the accelerator-mismatch step, which are a separate change.

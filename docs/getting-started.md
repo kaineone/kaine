@@ -349,9 +349,11 @@ KAINE runs its own Redis container isolated from any system Redis:
 bash scripts/redis-bootstrap.sh
 ```
 
-The script generates a password, writes `compose/.env` and `config/secrets.toml`
-(both `chmod 600`), brings up the container, and confirms `PONG`. Re-running
-rotates the password; use `--keep-password` to reuse the existing value.
+The script creates a password on first run, stores it in `compose/.env` and
+`config/secrets.toml` (both `chmod 600`, other entries in those files are left
+as they are), brings up the container, and confirms `PONG`. Re-running keeps the
+existing password, so it is safe to repeat. `--rotate` replaces it; anything
+already connected (Nexus, a running cycle) must then be restarted.
 
 Verify:
 
@@ -365,9 +367,10 @@ docker compose -f compose/redis.yml ps   # kaine-redis healthy
 bash scripts/qdrant-bootstrap.sh
 ```
 
-The script generates an API key, writes it into `config/secrets.toml`, and
-brings up the Qdrant container on `127.0.0.1:6533` (distinct from any system
-Qdrant on 6333). Verify:
+The script creates an API key on first run, stores it in `compose/.env` and
+`config/secrets.toml`, and brings up the Qdrant container on `127.0.0.1:6533`
+(distinct from any system Qdrant on 6333). Re-running keeps the key; `--rotate`
+replaces it. Verify:
 
 ```bash
 curl -s http://127.0.0.1:6533/readyz
@@ -435,20 +438,27 @@ curl -s http://127.0.0.1:11434/v1/models | python3 -m json.tool
 
 ### Speaches (STT)
 
+Speaches is a separate service. Run it on CPU with the `medium.en` model, either
+from the Speaches project (see the setup wizard's guidance) or through the
+`kaine-speaches` Quadlet unit if you installed the units in `quadlet/`
+(`quadlet/README.md`):
+
 ```bash
-systemctl --user restart speaches-stt.service
-systemctl --user status  speaches-stt.service
-curl -fsS http://127.0.0.1:8000/health
+systemctl --user restart kaine-speaches.service   # Quadlet install only
+curl -fsS http://127.0.0.1:8000/v1/models
 ```
 
-If the service fails, confirm it is configured to load `medium.en` on CPU. A
-cuDNN crash or 404 at this endpoint breaks the voice loop — see
+A cuDNN crash, or a 404 at this endpoint, breaks the voice loop — see
 [Troubleshooting](operations.md#troubleshooting).
 
 ### Chatterbox TTS
 
+Chatterbox is also a separate service: start its server from the Chatterbox
+project, or through the `kaine-chatterbox` Quadlet unit if you installed the
+units in `quadlet/`:
+
 ```bash
-systemctl --user restart chatterbox-tts.service
+systemctl --user restart kaine-chatterbox.service   # Quadlet install only
 curl -s http://127.0.0.1:8883/
 ```
 
@@ -467,10 +477,11 @@ can find under its `voices/` directory before enabling Vox.
 
 ### Step 1 — Read the security posture
 
-Read `SECURITY.md` end-to-end, specifically the two operator-responsibility
-gaps: state encryption is off by default, and Nexus has no auth (loopback
-only). Decide whether those defaults are appropriate for your deployment before
-proceeding.
+Read `SECURITY.md` end-to-end, specifically the operator-responsibility items:
+state encryption is off by default, and Nexus relies on its loopback bind plus
+an operator token (the default diagnostics page is readable without signing in;
+every control and the live stream require the token). Decide whether those
+defaults are appropriate for your deployment before proceeding.
 
 ### Step 2 — Verify preconditions
 
@@ -564,6 +575,13 @@ python -m kaine.nexus
 
 The dashboard starts on `http://127.0.0.1:8088`. Leave it running. With the
 cycle not yet up, the diagnostics page reports `cycle_status: not running`.
+
+To sign in, use the operator token that `python -m kaine.setup` generated: it is
+the `operator_token` value under `[nexus]` in `config/secrets.toml` (or the
+`KAINE_NEXUS_TOKEN` environment variable, which takes precedence). After signing
+in you land on the conversation console when it is enabled, otherwise on
+diagnostics. If no Redis password is configured yet, Nexus exits with a message
+naming `bash scripts/redis-bootstrap.sh` instead of starting.
 
 ### Step 5 — Launch the cycle
 

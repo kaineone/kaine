@@ -517,3 +517,70 @@ def test_session_and_login_fields_parse_with_defaults(monkeypatch, tmp_path):
     assert defaults.session_max_hours == 24
     assert defaults.login_max_failures == 5
     assert defaults.login_failure_window_s == 300
+
+
+def test_main_explains_missing_bus_setup_without_traceback(monkeypatch, caplog):
+    import logging
+
+    from kaine.bus.errors import BusConfigError
+    from kaine.nexus import __main__ as nexus_main
+
+    async def _broken():
+        raise BusConfigError("no Redis password found")
+
+    monkeypatch.setattr(nexus_main, "_build", _broken)
+
+    with caplog.at_level(logging.ERROR):
+        rc = nexus_main.main()
+
+    assert rc == 1
+    assert any("bash scripts/redis-bootstrap.sh" in rec.message for rec in caplog.records)
+    assert not any(rec.exc_info for rec in caplog.records)
+
+
+def test_main_refuses_when_no_console_enabled(monkeypatch, caplog):
+    import logging
+
+    from kaine.nexus import __main__ as nexus_main
+
+    config = NexusConfig(conversation_enabled=False, diagnostics_enabled=False)
+    fake_app = object()
+
+    class UvicornRecorder:
+        def __init__(self):
+            self.calls = []
+        def run(self, app, *, host, port):
+            self.calls.append((app, host, port))
+
+    uvicorn = UvicornRecorder()
+    monkeypatch.setattr(nexus_main, "_build", _fake_build(fake_app, config))
+    monkeypatch.setattr(nexus_main, "uvicorn", uvicorn)
+
+    with caplog.at_level(logging.ERROR):
+        rc = nexus_main.main()
+
+    assert rc == 1
+    assert not uvicorn.calls
+    assert any("no console is enabled" in rec.message for rec in caplog.records)
+
+
+def test_main_serves_with_diagnostics_only(monkeypatch):
+    from kaine.nexus import __main__ as nexus_main
+
+    config = NexusConfig(conversation_enabled=False, diagnostics_enabled=True)
+    fake_app = object()
+
+    class UvicornRecorder:
+        def __init__(self):
+            self.calls = []
+        def run(self, app, *, host, port):
+            self.calls.append((app, host, port))
+
+    uvicorn = UvicornRecorder()
+    monkeypatch.setattr(nexus_main, "_build", _fake_build(fake_app, config))
+    monkeypatch.setattr(nexus_main, "uvicorn", uvicorn)
+
+    rc = nexus_main.main()
+
+    assert rc == 0
+    assert uvicorn.calls == [(fake_app, config.host, config.port)]
