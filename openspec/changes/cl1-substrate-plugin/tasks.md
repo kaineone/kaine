@@ -7,12 +7,13 @@
 
 ## 2. Operator surface
 
-- [ ] 2.1 Wizard: optional CL1 step, default no, skipped in defaults mode, prints install commands, writes `[plugins]`.
+- [ ] 2.1 (After `first-run-service-fixes` merges.) Wizard: optional CL1 step, default no, skipped in defaults mode, prints install commands, writes `[plugins]`.
 - [ ] 2.2 `docs/cl1.md`, `plugins/kaine-cl1/README.md`, `DEPENDENCIES.md`, `THIRD_PARTY_LICENSES.md`.
 
 ## 3. Boundaries and CI
 
 - [ ] 3.1 Import-linter: core `kaine` must not import `kaine_cl1`.
+- [ ] 3.3 Normalise plugin file headers with `scripts/apply_license_headers.py`; confirm root pytest does not collect `plugins/`.
 - [ ] 3.2 CI: pure plugin tests always; simulator tests in an optional job that installs `cl-sdk` (pending operator confirmation).
 
 ## 4. Tests

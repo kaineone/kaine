@@ -22,6 +22,15 @@ Research on Cortical Labs' published material (2026-09-23) found:
 
 **6. Tests against KAINE, not a pin.** Inside the repo, the plugin's KAINE-boot tests run against the checked-out KAINE, so a core change that breaks the plugin fails in the same PR.
 
+**7. Repo boundaries.**
+- The plugin's files carry KAINE's own header (`LicenseRef-CAL-0.2` plus the copyright line), normalised with `scripts/apply_license_headers.py`; the plugin is CAL like the rest of the repo.
+- The root pytest configuration collects only `tests/`, so `plugins/kaine-cl1/tests` is never collected by core CI and core tests never import `kaine_cl1` or `cl`.
+- An import-linter contract forbids any `kaine` module from importing `kaine_cl1`; the plugin reaches core only through the `kaine.plugins` entry point.
+
+**8. Naming outside `plugins/`.** Core code, `README.md` and architecture docs stay vendor-neutral ("an optional substrate plugin, see `plugins/kaine-cl1`"). The two operator-facing places whose job is to state the requirement name Cortical Labs, at the operator's direction: the wizard's optional step and `docs/cl1.md`.
+
+**9. Sequencing.** The wizard and `docs/getting-started.md` edits land after `first-run-service-fixes` merges, based on that main, to avoid conflicting with it. The package move under `plugins/` does not touch those files and can go first.
+
 ## Risks
 
 - A simulated run could be mistaken for a biological one. Mitigated by the data-source label in the boot log and the docs. The seam entries in the manifest also mark the substitution.
