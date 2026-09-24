@@ -41,14 +41,14 @@ class StimRequest:
     amplitude_uA: float
 
     def to_cl(self):
-        from cl import ChannelSet, StimDesign
-
         # Guard the single choke point to the SDK: a non-finite current never reaches tissue.
         if not math.isfinite(self.amplitude_uA):
             raise ValueError(
                 f"refusing to stimulate channel {self.channel} with "
                 f"non-finite amplitude {self.amplitude_uA!r}"
             )
+
+        from cl import ChannelSet, StimDesign
 
         a = min(abs(self.amplitude_uA), _MAX_UA)
         # Biphasic, charge-balanced, alternating polarity (SDK requirement).
