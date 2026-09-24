@@ -21,7 +21,7 @@
 - [ ] 4.1 Enabled without `cl-sdk`: `PluginError` with the required wording.
 - [ ] 4.2 `target` `"cloud"` / `"hardware"` refused.
 - [ ] 4.3 Each `data_source`, including replay without a path.
-- [ ] 4.4 Wizard: defaults mode writes nothing; accepting writes the block and prints but does not run the install commands.
+- [ ] 4.4 Wizard: defaults mode writes nothing; accepting writes the block and prints but does not run the install commands. Tests redirect `--secrets-path` (from `first-run-service-fixes`), since `main()` writes a Nexus token.
 - [ ] 4.5 Existing kaine-cl1 suite passes against the in-repo KAINE.
 
 ## 5. Afterwards
