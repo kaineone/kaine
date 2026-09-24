@@ -25,6 +25,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT="$(pwd)"
+PY="$ROOT/.venv/bin/python"; if [[ ! -x "$PY" ]]; then PY=python3; fi
 
 ROTATE=0
 KEEP=0
@@ -45,13 +46,27 @@ SECRETS_EXAMPLE="config/secrets.example.toml"
 PW=""
 if [[ "$ROTATE" -eq 0 && -f "$ENV_FILE" ]]; then
   PW=$(grep -E '^KAINE_REDIS_PASSWORD=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)
-  if [[ -z "$PW" || "$PW" == "replace-me-with-a-strong-random-password" ]]; then
+  PW=${PW%$'\r'}
+  UNUSABLE=0
+  if [[ -z "$PW" || "${#PW}" -lt 32 ]]; then
+    UNUSABLE=1
+  else
+    shopt -s nocasematch
+    if [[ "$PW" == replace-me* ]]; then
+      UNUSABLE=1
+    fi
+    shopt -u nocasematch
+  fi
+  if [[ "$UNUSABLE" -eq 1 ]]; then
     if [[ "$KEEP" -eq 1 ]]; then
       echo "==> --keep-password set but no usable existing password; generating new" >&2
     fi
+    if [[ -n "$PW" ]]; then
+      echo "==> existing password is shorter than 32 characters or a placeholder; generating a new one" >&2
+    fi
     PW=""
   else
-    echo "==> preserving existing password from $ENV_FILE"
+    echo "==> kept the existing password from $ENV_FILE; pass --rotate to replace it"
   fi
 fi
 if [[ -z "$PW" ]]; then
@@ -61,7 +76,7 @@ fi
 
 # 2. Write compose/.env.
 umask 077
-printf '%s\n' "$PW" | python3 -m kaine.secrets_file env "$ENV_FILE" KAINE_REDIS_PASSWORD -
+printf '%s\n' "$PW" | "$PY" -m kaine.secrets_file env "$ENV_FILE" KAINE_REDIS_PASSWORD -
 chmod 600 "$ENV_FILE"
 echo "==> wrote $ENV_FILE (mode 600)"
 
@@ -71,7 +86,7 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   echo "==> created $SECRETS_FILE from example"
 fi
 chmod 600 "$SECRETS_FILE"
-printf '%s\n' "$PW" | python3 -m kaine.secrets_file toml "$SECRETS_FILE" redis password -
+printf '%s\n' "$PW" | "$PY" -m kaine.secrets_file toml "$SECRETS_FILE" redis password -
 echo "==> mirrored password into $SECRETS_FILE"
 
 # 4. Recreate the container so the new password takes effect.
@@ -83,7 +98,7 @@ KAINE_REDIS_PASSWORD="$PW" docker compose -f compose/redis.yml up -d 2>&1 | sed 
 # 5. Wait for healthy, then ping.
 echo -n "==> waiting for kaine-redis to be ready"
 for i in $(seq 1 30); do
-  if redis-cli -h 127.0.0.1 -p 6479 -a "$PW" --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+  if REDISCLI_AUTH="$PW" redis-cli -h 127.0.0.1 -p 6479 --no-auth-warning ping 2>/dev/null | grep -q PONG; then
     echo " ok"
     break
   fi

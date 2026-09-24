@@ -25,6 +25,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT="$(pwd)"
+PY="$ROOT/.venv/bin/python"; if [[ ! -x "$PY" ]]; then PY=python3; fi
 
 ROTATE=0
 KEEP=0
@@ -45,13 +46,27 @@ SECRETS_EXAMPLE="config/secrets.example.toml"
 KEY=""
 if [[ "$ROTATE" -eq 0 && -f "$ENV_FILE" ]]; then
   KEY=$(grep -E '^KAINE_QDRANT_API_KEY=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)
-  if [[ -z "$KEY" || "$KEY" == "REPLACE-ME-WITH-THE-KEY-IN-compose-env" || "$KEY" == "replace-me-with-a-strong-random-api-key" ]]; then
+  KEY=${KEY%$'\r'}
+  UNUSABLE=0
+  if [[ -z "$KEY" || "${#KEY}" -lt 32 ]]; then
+    UNUSABLE=1
+  else
+    shopt -s nocasematch
+    if [[ "$KEY" == replace-me* ]]; then
+      UNUSABLE=1
+    fi
+    shopt -u nocasematch
+  fi
+  if [[ "$UNUSABLE" -eq 1 ]]; then
     if [[ "$KEEP" -eq 1 ]]; then
       echo "==> --keep-key set but no usable existing key; generating new" >&2
     fi
+    if [[ -n "$KEY" ]]; then
+      echo "==> existing API key is shorter than 32 characters or a placeholder; generating a new one" >&2
+    fi
     KEY=""
   else
-    echo "==> preserving existing API key from $ENV_FILE"
+    echo "==> kept the existing API key from $ENV_FILE; pass --rotate to replace it"
   fi
 fi
 if [[ -z "$KEY" ]]; then
@@ -62,7 +77,7 @@ fi
 # 2. Upsert the KAINE_QDRANT_API_KEY line in compose/.env without
 # touching the Redis password if it's already there.
 umask 077
-printf '%s\n' "$KEY" | python3 -m kaine.secrets_file env "$ENV_FILE" KAINE_QDRANT_API_KEY -
+printf '%s\n' "$KEY" | "$PY" -m kaine.secrets_file env "$ENV_FILE" KAINE_QDRANT_API_KEY -
 chmod 600 "$ENV_FILE"
 echo "==> updated $ENV_FILE with KAINE_QDRANT_API_KEY"
 
@@ -72,7 +87,7 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   echo "==> created $SECRETS_FILE from example"
 fi
 chmod 600 "$SECRETS_FILE"
-printf '%s\n' "$KEY" | python3 -m kaine.secrets_file toml "$SECRETS_FILE" qdrant api_key -
+printf '%s\n' "$KEY" | "$PY" -m kaine.secrets_file toml "$SECRETS_FILE" qdrant api_key -
 echo "==> mirrored api_key into $SECRETS_FILE"
 
 # 4. Recreate the container.
@@ -85,7 +100,7 @@ KAINE_QDRANT_API_KEY="$KEY" docker compose -f compose/qdrant.yml up -d 2>&1 | se
 PORT="${KAINE_QDRANT_HOST_PORT:-6533}"
 echo -n "==> waiting for kaine-qdrant /readyz"
 for i in $(seq 1 60); do
-  if curl -fsS -H "api-key: $KEY" "http://127.0.0.1:${PORT}/readyz" >/dev/null 2>&1; then
+  if printf 'api-key: %s\n' "$KEY" | curl -fsS -H @- "http://127.0.0.1:${PORT}/readyz" >/dev/null 2>&1; then
     echo " ok"
     break
   fi

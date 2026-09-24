@@ -4,6 +4,7 @@
 import stat
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -294,3 +295,123 @@ def test_cli_bad_value_exits_two_without_echo(tmp_path):
     assert value not in result.stdout
     assert value not in result.stderr
     assert not path.exists()
+
+
+def test_toml_insert_at_eof_without_newline(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    path.write_bytes(b'[redis]\npassword = "x"\n\n[nexus]')
+    upsert_toml_field(path, "nexus", "operator_token", "abc123")
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert data["redis"]["password"] == "x"
+    assert data["nexus"]["operator_token"] == "abc123"
+
+
+def test_toml_refuses_inline_table(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    original = 'nexus = { host = "x" }\n'
+    path.write_bytes(original.encode("utf-8"))
+    with pytest.raises(ValueError, match="refusing to edit"):
+        upsert_toml_field(path, "nexus", "operator_token", "abc")
+    assert _read(path) == original
+
+
+def test_toml_refuses_dotted_keys(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    original = 'nexus.host = "x"\n'
+    path.write_bytes(original.encode("utf-8"))
+    with pytest.raises(ValueError, match="refusing to edit"):
+        upsert_toml_field(path, "nexus", "operator_token", "abc")
+    assert _read(path) == original
+
+
+def test_toml_refuses_multiline_string_value(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    original = '[redis]\npassword = """\nold\n"""\n'
+    path.write_bytes(original.encode("utf-8"))
+    with pytest.raises(ValueError, match="refusing to"):
+        upsert_toml_field(path, "redis", "password", "newsecret")
+    assert _read(path) == original
+
+
+def test_toml_refuses_malformed_file(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    original = "[nexus\n"
+    path.write_bytes(original.encode("utf-8"))
+    with pytest.raises(ValueError, match="refusing to edit"):
+        upsert_toml_field(path, "nexus", "operator_token", "abc")
+    assert _read(path) == original
+
+
+def test_toml_header_inside_multiline_string_not_used(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    original = '[a]\nnote = """\n[nexus]\n"""\n'
+    path.write_bytes(original.encode("utf-8"))
+    value = "op-123"
+    try:
+        upsert_toml_field(path, "nexus", "operator_token", value)
+    except ValueError:
+        return
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert data["nexus"]["operator_token"] == value
+    assert data["a"]["note"] == "[nexus]\n"
+
+
+def test_error_messages_never_contain_value(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    path.write_bytes(b'nexus = { host = "x" }\n')
+    value = "super-secret-token"
+    with pytest.raises(ValueError) as excinfo:
+        upsert_toml_field(path, "nexus", "operator_token", value)
+    assert value not in str(excinfo.value)
+
+
+def test_no_temp_files_left(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.toml"
+    upsert_toml_field(path, "nexus", "operator_token", "abc")
+    leftovers = [
+        name
+        for name in path.parent.iterdir()
+        if name.is_file()
+        and name.name.startswith(".")
+        and ".tmp." in name.name
+    ]
+    assert leftovers == []
+
+
+def test_symlinked_file_updated_at_target(tmp_path: Path) -> None:
+    import os
+
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    real_file = real_dir / "secrets.toml"
+    link = tmp_path / "secrets.toml"
+    link.symlink_to(real_file)
+    upsert_toml_field(link, "service", "token", "linkval")
+    assert link.is_symlink()
+    assert os.path.realpath(link) == os.path.realpath(real_file)
+    data = tomllib.loads(real_file.read_text(encoding="utf-8"))
+    assert data["service"]["token"] == "linkval"
+
+
+def test_concurrent_env_upserts_keep_both_keys(tmp_path: Path) -> None:
+    import threading
+
+    value_a = "value_a"
+    value_b = "value_b"
+    for round_no in range(20):
+        path = tmp_path / f"secrets_{round_no}.env"
+        threads = [
+            threading.Thread(target=upsert_env, args=(path, "KEY_A", value_a)),
+            threading.Thread(target=upsert_env, args=(path, "KEY_B", value_b)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        text = _read(path)
+        keys = {}
+        for line in text.splitlines():
+            key, _, val = line.partition("=")
+            keys[key] = val
+        assert keys.get("KEY_A") == value_a
+        assert keys.get("KEY_B") == value_b

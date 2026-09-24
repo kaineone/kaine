@@ -183,3 +183,118 @@ def test_help(name, fake_repo):
 def test_unknown_flag(name, fake_repo):
     r = _run(fake_repo, name, "--bogus")
     assert r.returncode == 2
+
+
+def test_redis_weak_existing_password_is_regenerated(fake_repo):
+    env_path = fake_repo / "compose" / ".env"
+    # A distinctive weak value, so the no-echo check cannot match ordinary
+    # output such as "kaine-redis".
+    env_path.write_text("KAINE_REDIS_PASSWORD=zq9weak\n")
+    r = _run(fake_repo, "redis-bootstrap.sh")
+    assert r.returncode == 0
+
+    env = _parse_env(env_path)
+    pw = env["KAINE_REDIS_PASSWORD"]
+    assert pw != "zq9weak"
+    assert len(pw) == 64
+    assert all(c in "0123456789abcdef" for c in pw)
+    assert "zq9weak" not in r.stdout and "zq9weak" not in r.stderr
+    assert "shorter than 32" in (r.stdout + r.stderr).lower()
+
+    secrets = _load_toml(fake_repo / "config" / "secrets.toml")
+    assert secrets["redis"]["password"] == pw
+
+
+def test_redis_placeholder_password_is_regenerated(fake_repo):
+    env_path = fake_repo / "compose" / ".env"
+    env_path.write_text("KAINE_REDIS_PASSWORD=REPLACE-ME-WITH-THE-PASSWORD-IN-compose-env\n")
+    r = _run(fake_repo, "redis-bootstrap.sh")
+    assert r.returncode == 0
+
+    env = _parse_env(env_path)
+    pw = env["KAINE_REDIS_PASSWORD"]
+    assert pw != "REPLACE-ME-WITH-THE-PASSWORD-IN-compose-env"
+    assert len(pw) == 64
+
+    secrets = _load_toml(fake_repo / "config" / "secrets.toml")
+    assert secrets["redis"]["password"] == pw
+
+
+def test_crlf_env_keeps_same_password_everywhere(fake_repo):
+    env_path = fake_repo / "compose" / ".env"
+    env_path.write_bytes(b"KAINE_REDIS_PASSWORD=" + b"a" * 64 + b"\r\n")
+    # The stored copies are normalised by kaine.secrets_file either way; the
+    # bug a stray \r causes is in the value handed to the container and to
+    # redis-cli, so record exactly what the redis-cli stub receives.
+    import shlex
+
+    seen = fake_repo / "auth.log"
+    stub = fake_repo / "bin" / "redis-cli"
+    stub.write_text(
+        f"#!/bin/sh\nprintf '%s' \"$REDISCLI_AUTH\" > {shlex.quote(str(seen))}\necho PONG\n"
+    )
+    stub.chmod(0o755)
+    r = _run(fake_repo, "redis-bootstrap.sh")
+    assert r.returncode == 0
+
+    env = _parse_env(env_path)
+    pw = env["KAINE_REDIS_PASSWORD"]
+    assert pw == "a" * 64
+
+    secrets = _load_toml(fake_repo / "config" / "secrets.toml")
+    assert secrets["redis"]["password"] == "a" * 64
+    assert "pass --rotate" in r.stdout
+    assert seen.read_bytes() == b"a" * 64
+
+
+def test_credentials_not_in_stub_argv(fake_repo):
+    import shlex
+
+    argv_log = fake_repo / "argv.log"
+
+    redis_stub = fake_repo / "bin" / "redis-cli"
+    redis_stub.write_text(
+        f"#!/bin/sh\nprintf '%s\\n' \"$@\" >> {shlex.quote(str(argv_log))}\necho PONG\n"
+    )
+    redis_stub.chmod(0o755)
+
+    curl_stub = fake_repo / "bin" / "curl"
+    curl_stub.write_text(
+        f"#!/bin/sh\nprintf '%s\\n' \"$@\" >> {shlex.quote(str(argv_log))}\nexit 0\n"
+    )
+    curl_stub.chmod(0o755)
+
+    rr = _run(fake_repo, "redis-bootstrap.sh")
+    assert rr.returncode == 0
+
+    rq = _run(fake_repo, "qdrant-bootstrap.sh")
+    assert rq.returncode == 0
+
+    env = _parse_env(fake_repo / "compose" / ".env")
+    pw = env["KAINE_REDIS_PASSWORD"]
+    key = env["KAINE_QDRANT_API_KEY"]
+
+    log = argv_log.read_text()
+    assert pw not in log
+    assert key not in log
+
+
+def test_scripts_prefer_venv_python(fake_repo):
+    import shlex
+    import sys
+
+    venv_bin = fake_repo / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    py_log = fake_repo / "py.log"
+    real_python = sys.executable
+
+    venv_python = venv_bin / "python"
+    venv_python.write_text(
+        f"#!/bin/sh\nprintf 'venv-python\\n' >> {shlex.quote(str(py_log))}\n"
+        f"exec {shlex.quote(real_python)} \"$@\"\n"
+    )
+    venv_python.chmod(0o755)
+
+    r = _run(fake_repo, "redis-bootstrap.sh")
+    assert r.returncode == 0
+    assert "venv-python" in py_log.read_text()

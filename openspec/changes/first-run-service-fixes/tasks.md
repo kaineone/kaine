@@ -54,3 +54,17 @@
 - [x] 5.2 `SECURITY.md` and `docs/operations.md`: rotation is explicit (`--rotate`); a re-run keeps credentials.
 - [x] 5.3 `config/secrets.example.toml`: say that `python -m kaine.setup` generates the operator token.
 - [x] 5.4 `openspec validate first-run-service-fixes --strict` passes.
+
+## 6. Second-review hardening
+
+- [x] 6.1 The TOML writer refuses instead of corrupting:
+  - it parses before and after the edit;
+  - it rejects inline, dotted, quoted and array-of-tables definitions and multi-line values it cannot place;
+  - it adds the missing newline at end of file.
+- [x] 6.2 Writes follow symlinks to their target.
+- [x] 6.3 An advisory lock guards each read-modify-write.
+- [x] 6.4 Temp and lock files are named after the target and gitignored.
+- [x] 6.5 Bootstraps keep credentials out of argv (`REDISCLI_AUTH`; the curl header is read from stdin).
+- [x] 6.6 Bootstraps strip CR from `.env` values and regenerate weak (<32) or placeholder credentials.
+- [x] 6.7 Bootstraps print a visible "kept …; pass --rotate" message and prefer `.venv/bin/python`.
+- [x] 6.8 Setup reports a Nexus token shorter than 32 characters instead of calling it kept.

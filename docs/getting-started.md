@@ -580,8 +580,8 @@ To sign in, use the operator token that `python -m kaine.setup` generated: it is
 the `operator_token` value under `[nexus]` in `config/secrets.toml` (or the
 `KAINE_NEXUS_TOKEN` environment variable, which takes precedence). After signing
 in you land on the conversation console when it is enabled, otherwise on
-diagnostics. If Redis has not been set up yet, Nexus exits with a message naming
-`bash scripts/redis-bootstrap.sh` instead of starting.
+diagnostics. If no Redis password is configured yet, Nexus exits with a message
+naming `bash scripts/redis-bootstrap.sh` instead of starting.
 
 ### Step 5 — Launch the cycle
 

@@ -790,3 +790,29 @@ def test_defaults_run_generates_token_in_redirected_path(tmp_path: Path) -> None
     token = data["nexus"]["operator_token"]
     assert isinstance(token, str)
     assert len(token) >= 32
+
+
+def test_nexus_token_too_short_in_file_is_reported_not_kept(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    path = tmp_path / "secrets.toml"
+    path.write_text('[nexus]\noperator_token = "short-token"\n')
+    before = path.read_bytes()
+    out = io.StringIO()
+    status = _ensure_nexus_token(path, out=out.write, env={})
+    assert status == "too_short"
+    assert path.read_bytes() == before
+    assert "short-token" not in out.getvalue()
+    assert "shorter than 32" in out.getvalue()
+
+
+def test_nexus_token_too_short_env_is_reported(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_nexus_token
+
+    out = io.StringIO()
+    status = _ensure_nexus_token(
+        tmp_path / "secrets.toml", out=out.write, env={"KAINE_NEXUS_TOKEN": "tiny"}
+    )
+    assert status == "too_short"
+    assert not (tmp_path / "secrets.toml").exists()
+    assert "tiny" not in out.getvalue()

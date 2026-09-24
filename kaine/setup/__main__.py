@@ -25,6 +25,8 @@ from kaine.setup.wizard import WizardResult, run_wizard
 DEFAULT_OPERATOR_PATH = OPERATOR_CONFIG_PATH
 # Where Nexus reads its operator token (kaine.nexus.config.load_nexus_config).
 DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
+# Nexus rejects shorter operator tokens (kaine.nexus.config.load_nexus_config).
+_MIN_NEXUS_TOKEN_LEN = 32
 
 
 def _describe_host_with_cpu() -> dict[str, Any]:
@@ -368,7 +370,15 @@ def _ensure_nexus_token(
     env = os.environ if env is None else env
     out("\n")
 
-    if env.get("KAINE_NEXUS_TOKEN", "").strip():
+    env_token = env.get("KAINE_NEXUS_TOKEN", "").strip()
+    if env_token:
+        if len(env_token) < _MIN_NEXUS_TOKEN_LEN:
+            out(
+                "Nexus sign-in token: KAINE_NEXUS_TOKEN is shorter than "
+                f"{_MIN_NEXUS_TOKEN_LEN} characters, so Nexus will refuse it. "
+                "Unset it or replace it with a longer one.\n"
+            )
+            return "too_short"
         out(
             "Nexus sign-in token: provided by KAINE_NEXUS_TOKEN; nothing written.\n"
         )
@@ -392,6 +402,16 @@ def _ensure_nexus_token(
         return "error"
 
     if isinstance(existing, str) and existing.strip():
+        # Never overwrite an operator's token, but say so when Nexus would
+        # refuse it rather than reporting it as fine.
+        if len(existing.strip()) < _MIN_NEXUS_TOKEN_LEN:
+            out(
+                f"Nexus sign-in token in {secrets_path} [nexus] operator_token is "
+                f"shorter than {_MIN_NEXUS_TOKEN_LEN} characters, so Nexus will "
+                "refuse it. Replace it, or delete that line and re-run setup to "
+                "generate one.\n"
+            )
+            return "too_short"
         out(
             f"Nexus sign-in token: already set in {secrets_path} [nexus] "
             "operator_token; kept.\n"
