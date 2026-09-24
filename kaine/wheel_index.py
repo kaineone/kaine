@@ -1790,6 +1790,91 @@ def resolve_rocm(rocm_version, gfx_targets, arch, spec=None, need_torchaudio: bo
     }
 
 
+def resolve_fixed_flavor(flavor: str, arch: str, spec: str | None = None, need_torchaudio: bool = False, machine=None):
+    """Select the newest in-range torch from a fixed flavor index.
+
+    ``flavor`` must be ``cpu`` or ``xpu`` (those are also the short index
+    names used in ``PUBLISHED`` and ``COMPANIONS``).  Selection mirrors the
+    CUDA/ROCm policy: the highest in-range ``torch`` version published for
+    ``arch`` is chosen; when ``need_torchaudio`` is true, the highest
+    in-range ``torch`` that has a recorded ``torchaudio`` companion is
+    chosen instead.
+
+    ``machine`` is the raw host machine name (e.g. ``s390x``) and is used
+    in warnings when ``arch`` is normalized to ``other``.
+
+    Returns a dict with the same keys as the CUDA and ROCm resolvers plus
+    ``arch_recorded`` (bool): ``variant``, ``index_url``, ``torch_version``,
+    ``torchvision_version``, ``torchaudio_version``, ``selected_reason``,
+    ``warnings``, ``selftest_required`` = False, ``torch_spec`` and
+    ``arch_recorded``.
+    """
+    if spec is None:
+        spec = project_torch_spec()
+    spec_list = _parse_spec(spec)
+
+    index_name = flavor
+    warnings: list[str] = []
+    host_arch = machine if machine else arch
+    arch_recorded = arch in PUBLISHED.get(index_name, {})
+
+    candidates = list(PUBLISHED.get(index_name, {}).get(arch, ()))
+    if need_torchaudio:
+        candidates = [
+            v for v in candidates if _companion(index_name, arch, v, "torchaudio") is not None
+        ]
+
+    chosen = None
+    for v in sorted(candidates, key=_vtuple, reverse=True):
+        if _in_range(v, spec_list):
+            chosen = v
+            break
+
+    if chosen is None:
+        if flavor == "cpu" and not arch_recorded:
+            reason = f"no cpu wheel data is recorded for {host_arch}; pins cannot be resolved"
+        else:
+            reason = f"no in-range torch published on the {flavor} index for {host_arch} (range {spec})"
+            if need_torchaudio:
+                reason += " with a torchaudio companion"
+        return {
+            "variant": flavor,
+            "index_url": None,
+            "torch_version": None,
+            "torchvision_version": None,
+            "torchaudio_version": None,
+            "selected_reason": reason,
+            "warnings": [reason],
+            "selftest_required": False,
+            "torch_spec": spec,
+            "arch_recorded": arch_recorded,
+        }
+
+    ta = _companion(index_name, arch, chosen, "torchaudio")
+    if need_torchaudio and ta is not None and _mm_pair(ta) != _mm_pair(chosen):
+        warnings.append(
+            f"torchaudio {ta} is paired with torch {chosen} by release timing only; "
+            "no published wheel metadata asserts this pairing"
+        )
+
+    selected_reason = f"newest {flavor} torch {chosen} in range for {arch}"
+    if need_torchaudio:
+        selected_reason += " with a torchaudio companion"
+
+    return {
+        "variant": flavor,
+        "index_url": _index_url(index_name),
+        "torch_version": chosen,
+        "torchvision_version": _companion(index_name, arch, chosen, "torchvision"),
+        "torchaudio_version": ta,
+        "selected_reason": selected_reason,
+        "warnings": warnings,
+        "selftest_required": False,
+        "torch_spec": spec,
+        "arch_recorded": True,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Index verification
 # ---------------------------------------------------------------------------
@@ -1899,6 +1984,7 @@ _USAGE = (
     "  --index-url URL         operator override for CUDA wheel index\n"
     "  --override URL          synonym for --index-url\n"
     "  --need-torchaudio       require a matching torchaudio wheel on the selected index\n"
+    "  --flavor cpu|xpu        resolve a fixed CPU or XPU index for this host\n"
     "  --rocm-version X.Y      print ROCm resolution JSON instead of CUDA\n"
     "  --gfx gfxA[,gfxB]       GFX targets for --rocm-version\n"
     "  --verify-indexes        diff recorded indexes against download.pytorch.org\n"
@@ -1938,6 +2024,7 @@ def main(argv=None) -> int:
     need_torchaudio = False
     rocm_version = None
     gfx = None
+    flavor = None
     verify = False
     ignored: list[str] = []
     args = [str(arg) for arg in argv] if argv is not None else []
@@ -1952,6 +2039,15 @@ def main(argv=None) -> int:
             override = arg.split("=", 1)[1]
         elif arg == "--need-torchaudio":
             need_torchaudio = True
+        elif arg == "--flavor":
+            idx += 1
+            if idx < len(args) and not args[idx].startswith("-"):
+                flavor = args[idx]
+            else:
+                flavor = ""
+                idx -= 1  # let the next flag be processed normally
+        elif arg.startswith("--flavor="):
+            flavor = arg.split("=", 1)[1]
         elif arg == "--rocm-version":
             idx += 1
             if idx < len(args):
@@ -1975,6 +2071,35 @@ def main(argv=None) -> int:
 
     if verify:
         result = verify_indexes()
+        print(json.dumps(result, sort_keys=True, default=str))
+        return 0
+
+    if flavor is not None:
+        if flavor not in ("cpu", "xpu"):
+            result = {
+                "variant": flavor,
+                "index_url": None,
+                "torch_version": None,
+                "torchvision_version": None,
+                "torchaudio_version": None,
+                "selected_reason": f"unsupported --flavor {flavor}; expected cpu or xpu",
+                "warnings": [f"unsupported --flavor {flavor}; expected cpu or xpu"],
+                "selftest_required": False,
+                "torch_spec": project_torch_spec(),
+            }
+        else:
+            arch = _normalize_arch(platform.machine())
+            result = resolve_fixed_flavor(
+                flavor, arch, need_torchaudio=need_torchaudio, machine=platform.machine()
+            )
+        if override is not None or rocm_version is not None or gfx is not None:
+            result.setdefault("warnings", []).append(
+                "--index-url/--rocm-version/--gfx are ignored with --flavor"
+            )
+        if ignored:
+            result.setdefault("warnings", []).append(
+                "unrecognized CLI arguments ignored: " + " ".join(ignored)
+            )
         print(json.dumps(result, sort_keys=True, default=str))
         return 0
 

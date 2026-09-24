@@ -221,3 +221,177 @@ def test_decision_table_12_5_driver_matches_cpu_row():
     )
     assert aarch64_row is not None
     assert aarch64_row["row"] == 12
+
+
+def test_resolve_fixed_flavor_cpu_matches_recorded_companions():
+    """The CPU resolver picks the newest in-range torch and its companions per arch."""
+
+    from kaine.wheel_index import (
+        COMPANIONS,
+        PUBLISHED,
+        _in_range,
+        _parse_spec,
+        _vtuple,
+        project_torch_spec,
+        resolve_fixed_flavor,
+    )
+
+    spec = project_torch_spec()
+    spec_list = _parse_spec(spec)
+    for test_arch in ("x86_64", "aarch64"):
+        candidates = PUBLISHED["cpu"].get(test_arch, ())
+        expected = next(
+            (v for v in sorted(candidates, key=_vtuple, reverse=True) if _in_range(v, spec_list)),
+            None,
+        )
+        result = resolve_fixed_flavor("cpu", test_arch)
+        assert result["variant"] == "cpu"
+        assert result["index_url"] == "https://download.pytorch.org/whl/cpu"
+        assert result["torch_version"] == expected
+        assert result["torchvision_version"] == COMPANIONS["cpu"].get(test_arch, {}).get(expected, {}).get("torchvision")
+        assert result["torchaudio_version"] == COMPANIONS["cpu"].get(test_arch, {}).get(expected, {}).get("torchaudio")
+        assert result["selftest_required"] is False
+        assert result["torch_spec"] == spec
+
+
+def test_resolve_fixed_flavor_xpu_x86_64_matches_recorded_companions():
+    """The XPU resolver picks the newest in-range x86_64 torch and its companions."""
+    from kaine.wheel_index import (
+        COMPANIONS,
+        PUBLISHED,
+        _in_range,
+        _parse_spec,
+        _vtuple,
+        project_torch_spec,
+        resolve_fixed_flavor,
+    )
+
+    spec_list = _parse_spec(project_torch_spec())
+    candidates = PUBLISHED["xpu"]["x86_64"]
+    expected = next(
+        v for v in sorted(candidates, key=_vtuple, reverse=True) if _in_range(v, spec_list)
+    )
+    result = resolve_fixed_flavor("xpu", "x86_64")
+    assert result["variant"] == "xpu"
+    assert result["index_url"] == "https://download.pytorch.org/whl/xpu"
+    assert result["torch_version"] == expected
+    companions = COMPANIONS["xpu"]["x86_64"][expected]
+    assert result["torchvision_version"] == companions["torchvision"]
+    assert result["torchaudio_version"] == companions.get("torchaudio")
+
+
+def test_resolve_fixed_flavor_xpu_aarch64_refuses_with_warning():
+    """XPU wheels are recorded for x86_64 only; aarch64 gets a clear refusal."""
+    from kaine.wheel_index import project_torch_spec, resolve_fixed_flavor
+
+    spec = project_torch_spec()
+    result = resolve_fixed_flavor("xpu", "aarch64")
+    assert result["variant"] == "xpu"
+    assert result["index_url"] is None
+    assert result["torch_version"] is None
+    expected = f"no in-range torch published on the xpu index for aarch64 (range {spec})"
+    assert any(w == expected for w in result["warnings"])
+
+
+def test_resolve_fixed_flavor_cpu_unrecorded_arch_uses_machine_name():
+    from kaine import wheel_index
+
+    result = wheel_index.resolve_fixed_flavor("cpu", "other", machine="s390x")
+    assert result["arch_recorded"] is False
+    assert result["index_url"] is None
+    assert any("s390x" in w for w in result["warnings"])
+    assert any("no cpu wheel data is recorded" in w for w in result["warnings"])
+
+
+def test_resolve_fixed_flavor_cpu_x86_64_arch_recorded():
+    from kaine import wheel_index
+
+    result = wheel_index.resolve_fixed_flavor("cpu", "x86_64")
+    assert result["arch_recorded"] is True
+    assert result["index_url"] is not None
+
+
+def test_resolve_fixed_flavor_need_torchaudio_prefers_and_warns(monkeypatch):
+    """With need_torchaudio, the highest torch that has a companion wins; a mm mismatch warns."""
+    from kaine.wheel_index import resolve_fixed_flavor
+
+    monkeypatch.setattr(
+        "kaine.wheel_index.PUBLISHED",
+        {
+            "cpu": {"x86_64": ("2.14.0", "2.13.0", "2.11.0")},
+        },
+    )
+    monkeypatch.setattr(
+        "kaine.wheel_index.COMPANIONS",
+        {
+            "cpu": {
+                "x86_64": {
+                    "2.14.0": {"torchvision": "0.19.0"},  # no torchaudio
+                    "2.13.0": {"torchvision": "0.18.0", "torchaudio": "2.11.0"},  # mismatched mm
+                    "2.11.0": {"torchvision": "0.16.0", "torchaudio": "2.11.0"},
+                }
+            }
+        },
+    )
+    result = resolve_fixed_flavor("cpu", "x86_64", spec=">=2.11.0,<2.15", need_torchaudio=True)
+    assert result["torch_version"] == "2.13.0"
+    assert result["torchaudio_version"] == "2.11.0"
+    assert any("paired with torch 2.13.0 by release timing only" in w for w in result["warnings"])
+
+
+def test_cli_flavor_cpu_outputs_resolution_json(capsys, monkeypatch):
+    """--flavor cpu prints the same JSON the installers consume."""
+    import platform
+    import sys
+
+    from kaine import wheel_index as wi
+
+    monkeypatch.setattr(sys, "argv", ["kaine.wheel_index", "--flavor", "cpu"])
+    rc = wi.main()
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    expected = wi.resolve_fixed_flavor("cpu", wi._normalize_arch(platform.machine()))
+    assert data["variant"] == "cpu"
+    assert data["index_url"] == expected["index_url"]
+    assert data["torch_version"] == expected["torch_version"]
+
+
+def test_cli_flavor_bogus_outputs_refusal_json(capsys, monkeypatch):
+    """--flavor with an unsupported value refuses in JSON without crashing."""
+    import sys
+
+    from kaine import wheel_index as wi
+
+    monkeypatch.setattr(sys, "argv", ["kaine.wheel_index", "--flavor", "bogus"])
+    rc = wi.main()
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["index_url"] is None
+    assert any("unsupported --flavor bogus" in w for w in data["warnings"])
+
+
+def test_cli_bare_flavor_outputs_refusal_json(capsys):
+    """A bare --flavor with no value refuses in JSON without falling through to CUDA probing."""
+    from kaine import wheel_index as wi
+
+    rc = wi.main(["--flavor"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["index_url"] is None
+    assert "unsupported --flavor" in data["selected_reason"]
+    assert "expected cpu or xpu" in data["selected_reason"]
+
+
+def test_cli_flavor_cpu_with_index_url_ignored(capsys, monkeypatch):
+    """--index-url given with --flavor is reported as ignored."""
+    from kaine import wheel_index as wi
+
+    monkeypatch.setattr(wi.platform, "machine", lambda: "x86_64")
+    rc = wi.main(["--flavor", "cpu", "--index-url", "https://example.com"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["index_url"] is not None
+    assert any(
+        "--index-url/--rocm-version/--gfx are ignored with --flavor" in w
+        for w in data["warnings"]
+    )
