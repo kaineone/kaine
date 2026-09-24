@@ -1,8 +1,8 @@
 ## 1. Secrets writer
 
-- [ ] 1.1 Add `kaine/secrets_file.py`, stdlib-only, with `upsert_env(path, key, value)` and `upsert_toml_field(path, table, field, value)`. Each preserves every other line unchanged, creates the file when absent, rejects values containing a quote, backslash or newline, and leaves the file mode 600.
-- [ ] 1.2 Add a `python -m kaine.secrets_file` command-line interface that takes `env PATH KEY VALUE` or `toml PATH TABLE FIELD VALUE`, reading VALUE from stdin when it is `-` so that secrets stay out of the process list.
-- [ ] 1.3 Tests:
+- [x] 1.1 Add `kaine/secrets_file.py`, stdlib-only, with `upsert_env(path, key, value)` and `upsert_toml_field(path, table, field, value)`. Each preserves every other line unchanged, creates the file when absent, rejects values containing a quote, backslash or newline, and leaves the file mode 600.
+- [x] 1.2 Add a `python -m kaine.secrets_file` command-line interface that takes `env PATH KEY VALUE` or `toml PATH TABLE FIELD VALUE`, reading VALUE from stdin when it is `-` so that secrets stay out of the process list.
+- [x] 1.3 Tests:
   - A same-named field in another table is untouched.
   - An unrelated `.env` key survives.
   - Upserting twice leaves one line.
@@ -11,15 +11,18 @@
 
 ## 2. Bootstrap scripts
 
-- [ ] 2.1 `redis-bootstrap.sh`:
+- [x] 2.1 `redis-bootstrap.sh`:
   - Reuse the existing usable password by default.
   - Rotate only with `--rotate`.
   - Accept `--keep-password` as a no-op.
   - Upsert through `kaine.secrets_file`.
   - Update the header comment and `--help` text.
-- [ ] 2.2 `qdrant-bootstrap.sh`: replace the inline Python and `sed` with `kaine.secrets_file`.
-- [ ] 2.3 Script tests (Docker is stubbed on `PATH`):
+- [x] 2.2 `qdrant-bootstrap.sh`:
+  - Replace the inline Python and `sed` with `kaine.secrets_file`.
+  - Keep the key by default, rotate only with `--rotate`, and accept `--keep-key` as a no-op.
+- [x] 2.3 Script tests (Docker is stubbed on `PATH`):
   - Running Qdrant setup, then Redis setup, keeps `KAINE_QDRANT_API_KEY`.
+  - A Qdrant re-run keeps the key, and `--rotate` changes it.
   - A Redis re-run keeps the password.
   - `--rotate` changes it.
 
@@ -48,5 +51,6 @@
   - Nexus sign-in with the generated token.
   - Remove the nonexistent `systemctl --user` unit commands in favour of the real launch steps.
   - Describe the Redis bootstrap's keep-by-default behaviour and `--rotate`.
-- [ ] 5.2 `config/secrets.example.toml`: say that `python -m kaine.setup` generates the operator token.
-- [ ] 5.3 `openspec validate first-run-service-fixes --strict` passes.
+- [ ] 5.2 `SECURITY.md` and `docs/operations.md`: rotation is explicit (`--rotate`); a re-run keeps credentials.
+- [ ] 5.3 `config/secrets.example.toml`: say that `python -m kaine.setup` generates the operator token.
+- [ ] 5.4 `openspec validate first-run-service-fixes --strict` passes.

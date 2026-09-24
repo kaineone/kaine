@@ -1,28 +1,38 @@
 #!/usr/bin/env bash
 # Bring the KAINE Qdrant memory store from a fresh clone to a healthy,
-# authenticated, ready state in one invocation. Mirrors
-# scripts/redis-bootstrap.sh.
+# authenticated, ready state in one invocation.
 #
-# - Generates a random API key (or preserves with --keep-key).
-# - Writes/updates compose/.env to set KAINE_QDRANT_API_KEY=<value>
-#   exactly once; preserves the existing KAINE_REDIS_PASSWORD line.
+# Behaviour:
+# - By default, reuse the existing usable KAINE_QDRANT_API_KEY from
+#   compose/.env (non-empty and not a placeholder). Generate a fresh key
+#   only when there is none.
+# - --rotate always generates a fresh API key.
+# - --keep-key is an alias for the default behaviour and is kept for
+#   backward compatibility.
+# - Upserts KAINE_QDRANT_API_KEY in compose/.env via kaine.secrets_file.
 # - Mirrors the key into config/secrets.toml under [qdrant].api_key.
 # - docker compose down && up -d so the container picks up the value.
-# - Confirms `/readyz` returns 200 with the api-key header.
+# - Confirms /readyz returns 200 with the api-key header.
+#
+# Idempotent: re-running without flags keeps the current key. Rotate
+# explicitly with --rotate to replace the credential.
 #
 #   bash scripts/qdrant-bootstrap.sh
 #   bash scripts/qdrant-bootstrap.sh --keep-key
+#   bash scripts/qdrant-bootstrap.sh --rotate
 
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT="$(pwd)"
 
+ROTATE=0
 KEEP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --rotate) ROTATE=1; shift ;;
     --keep-key) KEEP=1; shift ;;
-    --help|-h) sed -n '2,12p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -33,33 +43,27 @@ SECRETS_EXAMPLE="config/secrets.example.toml"
 
 # 1. Resolve the API key.
 KEY=""
-if [[ "$KEEP" -eq 1 && -f "$ENV_FILE" ]]; then
+if [[ "$ROTATE" -eq 0 && -f "$ENV_FILE" ]]; then
   KEY=$(grep -E '^KAINE_QDRANT_API_KEY=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)
-  if [[ -z "$KEY" || "$KEY" == "replace-me-with-a-strong-random-api-key" ]]; then
-    echo "==> --keep-key set but no usable existing key; generating new" >&2
+  if [[ -z "$KEY" || "$KEY" == "REPLACE-ME-WITH-THE-KEY-IN-compose-env" || "$KEY" == "replace-me-with-a-strong-random-api-key" ]]; then
+    if [[ "$KEEP" -eq 1 ]]; then
+      echo "==> --keep-key set but no usable existing key; generating new" >&2
+    fi
     KEY=""
+  else
+    echo "==> preserving existing API key from $ENV_FILE"
   fi
 fi
 if [[ -z "$KEY" ]]; then
   KEY=$(openssl rand -hex 32)
   echo "==> generated a fresh random API key"
-else
-  echo "==> preserving existing API key from $ENV_FILE"
 fi
 
 # 2. Upsert the KAINE_QDRANT_API_KEY line in compose/.env without
 # touching the Redis password if it's already there.
 umask 077
-if [[ ! -f "$ENV_FILE" ]]; then
-  touch "$ENV_FILE"
-fi
+printf '%s\n' "$KEY" | python3 -m kaine.secrets_file env "$ENV_FILE" KAINE_QDRANT_API_KEY -
 chmod 600 "$ENV_FILE"
-if grep -qE '^KAINE_QDRANT_API_KEY=' "$ENV_FILE"; then
-  sed -i.bak -E "s|^KAINE_QDRANT_API_KEY=.*|KAINE_QDRANT_API_KEY=$KEY|" "$ENV_FILE"
-  rm -f "${ENV_FILE}.bak"
-else
-  printf 'KAINE_QDRANT_API_KEY=%s\n' "$KEY" >> "$ENV_FILE"
-fi
 echo "==> updated $ENV_FILE with KAINE_QDRANT_API_KEY"
 
 # 3. Mirror into config/secrets.toml under [qdrant].api_key.
@@ -68,32 +72,7 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   echo "==> created $SECRETS_FILE from example"
 fi
 chmod 600 "$SECRETS_FILE"
-if grep -qE '^\[qdrant\]' "$SECRETS_FILE"; then
-  # Replace api_key under [qdrant]. Use a Python helper for safety
-  # because sed inside a section is fiddly across BSD/GNU.
-  python3 - "$SECRETS_FILE" "$KEY" <<'PY'
-import re, sys, pathlib
-path, key = pathlib.Path(sys.argv[1]), sys.argv[2]
-text = path.read_text(encoding="utf-8")
-def replace_under_section(text, section, field, value):
-    pattern = re.compile(
-        rf"(\[{section}\][^\[]*?\n)([ \t]*{field}\s*=\s*\".*?\")",
-        re.DOTALL,
-    )
-    if pattern.search(text):
-        return pattern.sub(lambda m: m.group(1) + f"{field} = \"{value}\"", text)
-    # Append into the section
-    pattern2 = re.compile(rf"(\[{section}\][^\[]*?)(\n\[|\Z)", re.DOTALL)
-    return pattern2.sub(
-        lambda m: m.group(1).rstrip() + f"\n{field} = \"{value}\"\n" + (m.group(2) or ""),
-        text,
-    )
-text = replace_under_section(text, "qdrant", "api_key", key)
-path.write_text(text, encoding="utf-8")
-PY
-else
-  printf '\n[qdrant]\napi_key = "%s"\n' "$KEY" >> "$SECRETS_FILE"
-fi
+printf '%s\n' "$KEY" | python3 -m kaine.secrets_file toml "$SECRETS_FILE" qdrant api_key -
 echo "==> mirrored api_key into $SECRETS_FILE"
 
 # 4. Recreate the container.
