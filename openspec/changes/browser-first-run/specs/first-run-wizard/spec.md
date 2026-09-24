@@ -3,15 +3,29 @@
 ### Requirement: Browser setup is private to the local machine
 `python -m kaine.setup --web` SHALL serve the setup interface only on
 127.0.0.1. It SHALL require a one-time launch token, carried in the URL it
-opens, which is exchanged for a session cookie and then invalidated. It SHALL
-reject any state-changing request whose session, Host header or Origin header
-does not match. It SHALL shut down when setup finishes or after 30 minutes
-without activity.
+opens, which is exchanged for a session cookie and then invalidated, and
+which expires two minutes after launch if unused. Every request other than the
+token exchange SHALL require the session. State-changing requests SHALL also
+be rejected unless the Host and Origin headers match. Responses carrying a
+secret SHALL NOT be cacheable. The server SHALL shut down when setup finishes,
+or after 30 minutes without activity, where a running job counts as activity.
 
 #### Scenario: Request without the session
 - **WHEN** a request to change a setting arrives without a valid setup session
 - **THEN** it is rejected
 - **AND** nothing is written
+
+#### Scenario: Reads need the session too
+- **WHEN** a progress stream or the sign-in token reveal is requested without a valid setup session
+- **THEN** it is rejected
+
+#### Scenario: Unused launch token expires
+- **WHEN** the launch URL is first opened more than two minutes after launch
+- **THEN** the token is refused
+
+#### Scenario: Idle shutdown waits for running jobs
+- **WHEN** a download is still running after 30 minutes without page activity
+- **THEN** the server stays up until the job ends
 
 #### Scenario: Launch token is single-use
 - **WHEN** the launch URL is opened a second time after the session was established
@@ -76,7 +90,12 @@ The setup interface SHALL start the entity only through a single spawn action
 on the finish page. That action SHALL require a welfare acknowledgement given
 on that page, a passing end-to-end pre-boot check, and a separate
 confirmation, and SHALL start the cycle through the supervised start path. No
-other setup step, job or route SHALL start `kaine.cycle`.
+other setup step, job or route SHALL start `kaine.cycle`. The pre-boot check
+SHALL be the same shared preflight the terminal path uses. Spawn SHALL refuse
+while a cycle is already running, and setup SHALL refuse to save configuration
+while one is running. The cycle and Nexus SHALL run detached from the setup
+server, so that setup's exit never ends them. The welfare acknowledgement SHALL
+be appended to a local record with its time and text version.
 
 #### Scenario: Pre-boot check failing
 - **WHEN** the operator requests spawn while any pre-boot check fails
@@ -94,3 +113,21 @@ other setup step, job or route SHALL start `kaine.cycle`.
 #### Scenario: Other steps never spawn
 - **WHEN** any other setup step or job completes
 - **THEN** no cycle process has been started
+
+#### Scenario: One entity at a time
+- **WHEN** spawn is requested while a cycle is already running
+- **THEN** no second cycle is started
+- **AND** the page says an entity is already running
+
+#### Scenario: No config rewrite under a running entity
+- **WHEN** setup tries to save configuration while a cycle is running
+- **THEN** nothing is written
+- **AND** the page explains why
+
+#### Scenario: Setup exit leaves the entity running
+- **WHEN** the setup server exits or times out after a successful spawn
+- **THEN** the cycle and Nexus processes keep running
+
+#### Scenario: Terminal and browser agree on readiness
+- **WHEN** the pre-boot check runs from the browser and from the terminal on the same machine
+- **THEN** both run the same checks and reach the same result
