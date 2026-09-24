@@ -31,6 +31,13 @@ from kaine.remote.bridge import (
     SpeechTapPlayer,
     build_remote_bridge,
 )
+from tests.zero_persistence import (
+    WriteRecorder,
+    format_zero_persistence_failure,
+    leaked_writes,
+    redirect_temp,
+    scan,
+)
 
 websockets = pytest.importorskip("websockets")
 
@@ -553,91 +560,6 @@ BANNED_EXTENSIONS = (
 )
 
 
-def _scan(root: Path) -> set[Path]:
-    found: set[Path] = set()
-    if not root.exists():
-        return found
-    for path in root.rglob("*"):
-        try:
-            if path.is_file() and path.suffix.lower() in BANNED_EXTENSIONS:
-                found.add(path)
-        except OSError:
-            continue
-    return found
-
-
-class _WriteRecorder:
-    _hook_installed = False
-    _active = False
-    _writes: list[str] = []
-
-    def __enter__(self):
-        import os
-        import sys
-
-        if not _WriteRecorder._hook_installed:
-            _WriteRecorder._hook_installed = True
-
-            def _audit_hook(event, args):
-                try:
-                    if event != "open" or not _WriteRecorder._active:
-                        return
-                    path, mode, flags = args
-                    if isinstance(path, int):
-                        return
-                    is_write = False
-                    if isinstance(mode, str):
-                        if any(ch in mode for ch in "wax+"):
-                            is_write = True
-                    elif mode is None:
-                        if flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT):
-                            is_write = True
-                    if not is_write:
-                        return
-                    p = os.fspath(path)
-                    if isinstance(p, bytes):
-                        p = os.fsdecode(p)
-                    _WriteRecorder._writes.append(p)
-                except Exception:
-                    return
-
-            sys.addaudithook(_audit_hook)
-
-        _WriteRecorder._writes.clear()
-        _WriteRecorder._active = True
-        return _WriteRecorder._writes
-
-    def __exit__(self, exc_type, exc, tb):
-        _WriteRecorder._active = False
-        return False
-
-
-def _has_banned_extension(path: str | Path) -> bool:
-    return Path(path).suffix.lower() in BANNED_EXTENSIONS
-
-
-def _recorder_leaks(writes: list[str]) -> list[str]:
-    return [p for p in writes if _has_banned_extension(p)]
-
-
-def _redirect_temp(tmp_path: Path, monkeypatch):
-    import tempfile
-
-    private = tmp_path / "tmp"
-    private.mkdir()
-    monkeypatch.setenv("TMPDIR", str(private))
-    monkeypatch.setattr(tempfile, "tempdir", str(private))
-    return private
-
-
-def _format_zero_persistence_failure(by_path: dict[str, set[str]]) -> str:
-    lines = "\n".join(
-        f"  {path}  [{', '.join(sorted(detectors))}]"
-        for path, detectors in sorted(by_path.items())
-    )
-    return "ZERO-PERSISTENCE VIOLATED: remote bridge wrote disk artifacts:\n" + lines
-
-
 @pytest.mark.asyncio
 async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
     """ZERO-PERSISTENCE: a complete ingest/egress exchange writes no media
@@ -647,10 +569,10 @@ async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
     audition = _StubAudition()
     bridge = RemoteBridge(_config(), bus=bus, topos=topos, audition=audition)
 
-    private_tmp = _redirect_temp(tmp_path, monkeypatch)
-    pre_project = _scan(PROJECT_ROOT)
+    private_tmp = redirect_temp(tmp_path, monkeypatch)
+    pre_project = scan(PROJECT_ROOT, BANNED_EXTENSIONS)
 
-    with _WriteRecorder() as writes:
+    with WriteRecorder() as recorder:
         url = await _started(bridge)
         try:
             async with websockets.connect(f"{url}/ingest/video") as wsv:
@@ -672,14 +594,14 @@ async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
             await bridge.stop()
 
     by_path: dict[str, set[str]] = {}
-    for p in _recorder_leaks(writes):
+    for p in leaked_writes(recorder.writes, BANNED_EXTENSIONS):
         by_path.setdefault(str(p), set()).add("recorder")
-    for p in _scan(private_tmp):
+    for p in scan(private_tmp, BANNED_EXTENSIONS):
         by_path.setdefault(str(p), set()).add("tempdir-scan")
-    for p in (_scan(PROJECT_ROOT) - pre_project):
+    for p in (scan(PROJECT_ROOT, BANNED_EXTENSIONS) - pre_project):
         by_path.setdefault(str(p), set()).add("project-scan")
 
-    assert not by_path, _format_zero_persistence_failure(by_path)
+    assert not by_path, format_zero_persistence_failure(by_path)
 
 
 def test_leak_detector_catches_real_disk_writes(monkeypatch, tmp_path):
@@ -687,9 +609,9 @@ def test_leak_detector_catches_real_disk_writes(monkeypatch, tmp_path):
     leaks: a transient tempfile and a direct file in the private temp dir."""
     import tempfile
 
-    private = _redirect_temp(tmp_path, monkeypatch)
+    private = redirect_temp(tmp_path, monkeypatch)
 
-    with _WriteRecorder() as writes:
+    with WriteRecorder() as recorder:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True) as f:
             f.write(b"frame")
             transient_path = f.name
@@ -697,8 +619,11 @@ def test_leak_detector_catches_real_disk_writes(monkeypatch, tmp_path):
         with open(direct, "wb") as f:
             f.write(b"direct")
 
-    assert transient_path in writes, "audit recorder missed transient frame.jpg"
-    assert direct in _scan(private), "private temp scan missed frame.jpg"
+    assert transient_path in recorder.writes, "audit recorder missed transient frame.jpg"
+    assert transient_path in leaked_writes(recorder.writes, BANNED_EXTENSIONS), (
+        "banned-extension filter missed transient frame.jpg"
+    )
+    assert direct in scan(private, BANNED_EXTENSIONS), "private temp scan missed frame.jpg"
 
 
 # ---------------------------------------------------------------------------

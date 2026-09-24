@@ -458,6 +458,14 @@ def test_perception_preview_persists_nothing():
 async def test_topos_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
     """With the dev override ON, driving Topos.process_frame captures a single
     in-memory JPEG but leaves NO raw frame on disk (repo/state/data/tmp)."""
+    from tests.zero_persistence import (
+        WriteRecorder,
+        format_zero_persistence_failure,
+        leaked_writes,
+        redirect_temp,
+        scan,
+    )
+
     PILImage = pytest.importorskip("PIL.Image")
     fakeredis = pytest.importorskip("fakeredis.aioredis")
 
@@ -482,33 +490,70 @@ async def test_topos_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
     monkeypatch.setenv(perception_preview.DEV_ENV_VAR, "1")
     perception_preview.clear()
 
-    pre_repo = _scan_for_raw_sense_files(tmp_path)
-    pre_state = _scan_for_raw_sense_files(Path("state"))
-    pre_data = _scan_for_raw_sense_files(Path("data"))
-    pre_tmp = _scan_for_raw_sense_files(Path("/tmp"))
+    private_tmp = redirect_temp(tmp_path, monkeypatch)
+
+    pre_repo = scan(tmp_path, RAW_SENSE_EXTENSIONS)
+    pre_state = scan(Path("state"), RAW_SENSE_EXTENSIONS)
+    pre_data = scan(Path("data"), RAW_SENSE_EXTENSIONS)
+    pre_private = scan(private_tmp, RAW_SENSE_EXTENSIONS)
 
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     topos = Topos(bus, encoder=_Enc())
     try:
-        for _ in range(5):
-            await topos.process_frame(PILImage.new("RGB", (32, 24), (7, 7, 7)))
-        # The preview lives in memory only.
-        assert topos._preview_jpeg is not None
-        assert perception_preview.get_video_jpeg() == topos._preview_jpeg
+        with WriteRecorder() as recorder:
+            for _ in range(5):
+                await topos.process_frame(PILImage.new("RGB", (32, 24), (7, 7, 7)))
+            # The preview lives in memory only.
+            assert topos._preview_jpeg is not None
+            assert perception_preview.get_video_jpeg() == topos._preview_jpeg
+
+        post_repo = scan(tmp_path, RAW_SENSE_EXTENSIONS)
+        post_state = scan(Path("state"), RAW_SENSE_EXTENSIONS)
+        post_data = scan(Path("data"), RAW_SENSE_EXTENSIONS)
+        post_private = scan(private_tmp, RAW_SENSE_EXTENSIONS)
     finally:
         await bus.close()
         perception_preview.clear()
 
-    leaked = (
-        (set(_scan_for_raw_sense_files(tmp_path)) - set(pre_repo))
-        | (set(_scan_for_raw_sense_files(Path("state"))) - set(pre_state))
-        | (set(_scan_for_raw_sense_files(Path("data"))) - set(pre_data))
-        | (set(_scan_for_raw_sense_files(Path("/tmp"))) - set(pre_tmp))
+    by_path: dict[str, set[str]] = {}
+    for p in leaked_writes(recorder.writes, RAW_SENSE_EXTENSIONS):
+        by_path.setdefault(str(Path(p)), set()).add("recorder")
+    for p in post_repo - pre_repo:
+        by_path.setdefault(str(p), set()).add("repo")
+    for p in post_state - pre_state:
+        by_path.setdefault(str(p), set()).add("state")
+    for p in post_data - pre_data:
+        by_path.setdefault(str(p), set()).add("data")
+    for p in post_private - pre_private:
+        by_path.setdefault(str(p), set()).add("tmpdir")
+
+    assert not by_path, format_zero_persistence_failure(by_path)
+
+
+def test_preview_tap_leak_detector_catches_real_leak(tmp_path, monkeypatch):
+    """The write recorder and private-temp scan must catch transient and
+    on-disk raw frame leaks respectively."""
+    import tempfile
+
+    from tests.zero_persistence import WriteRecorder, leaked_writes, redirect_temp, scan
+
+    private = redirect_temp(tmp_path, monkeypatch)
+    with WriteRecorder() as recorder:
+        # Transient file: created and deleted while recording.
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True, dir=tmp_path) as f:
+            f.write(b"x")
+        # Lingering file under the private temp dir.
+        (private / "leak.jpg").write_bytes(b"x")
+
+    recorded = leaked_writes(recorder.writes, RAW_SENSE_EXTENSIONS)
+    scanned = scan(private, RAW_SENSE_EXTENSIONS)
+
+    assert any(Path(p).suffix.lower() == ".jpg" for p in recorded), (
+        "recorder missed transient .jpg write"
     )
-    assert leaked == set(), (
-        f"ZERO-PERSISTENCE INVARIANT VIOLATED by the preview tap: raw frame "
-        f"file(s) appeared on disk: {sorted(p.name for p in leaked)}"
+    assert any(p.name == "leak.jpg" for p in scanned), (
+        "scan missed .jpg in private temp dir"
     )
 
 

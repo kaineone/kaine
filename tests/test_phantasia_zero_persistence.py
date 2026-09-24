@@ -63,9 +63,24 @@ async def bus():
 
 
 @pytest.mark.asyncio
-async def test_training_pass_writes_no_disk_artifacts(bus: AsyncBus):
+async def test_training_pass_writes_no_disk_artifacts(
+    bus: AsyncBus, tmp_path, monkeypatch
+):
+    """A Phantasia training/imagination pass writes NO model-state files to disk.
+
+    Uses a private TMPDIR and an audit-hook write recorder so the test is
+    hermetic and not affected by concurrent machine-wide /tmp traffic.
+    """
+    from tests.zero_persistence import (
+        WriteRecorder,
+        format_zero_persistence_failure,
+        leaked_writes,
+        redirect_temp,
+        scan,
+    )
+
     project_root = Path(__file__).parent.parent
-    tmp_root = Path("/tmp")
+    private_tmp = redirect_temp(tmp_path, monkeypatch)
 
     ph = Phantasia(bus, backend="fake", training_enabled=True)
     await ph.initialize()
@@ -73,29 +88,60 @@ async def test_training_pass_writes_no_disk_artifacts(bus: AsyncBus):
         for i in range(20):
             await ph.on_workspace(_snapshot(i))
 
-        pre_tmp = _scan(tmp_root)
-        pre_project = _scan(project_root)
+        pre_project = scan(project_root, BANNED_EXTENSIONS)
+        pre_private = scan(private_tmp, BANNED_EXTENSIONS)
 
-        # Run the in-memory training pass (the operation under test).
-        outcome = ph.train_now()
-        assert outcome.steps > 0
-        assert not outcome.aborted
+        with WriteRecorder() as recorder:
+            # Run the in-memory training pass (the operation under test).
+            outcome = ph.train_now()
+            assert outcome.steps > 0
+            assert not outcome.aborted
 
-        # Also run scenario generation (imagination rollout) for good measure.
-        await ph._handle_peer_event(
-            "hypnos.out", _event("hypnos", "hypnos.sleep.started")
-        )
-        await ph.generate_scenario(seed_memory_id="m")
+            # Also run scenario generation (imagination rollout) for good measure.
+            await ph._handle_peer_event(
+                "hypnos.out", _event("hypnos", "hypnos.sleep.started")
+            )
+            await ph.generate_scenario(seed_memory_id="m")
 
-        post_tmp = _scan(tmp_root)
-        post_project = _scan(project_root)
+        post_project = scan(project_root, BANNED_EXTENSIONS)
+        post_private = scan(private_tmp, BANNED_EXTENSIONS)
     finally:
         await ph.shutdown()
 
-    leaked = (post_tmp - pre_tmp) | (post_project - pre_project)
-    assert leaked == set(), (
-        "ZERO-PERSISTENCE VIOLATED: training/imagination wrote disk artifacts: "
-        f"{sorted(str(p) for p in leaked)}"
+    by_path: dict[str, set[str]] = {}
+    for p in leaked_writes(recorder.writes, BANNED_EXTENSIONS):
+        by_path.setdefault(str(Path(p)), set()).add("recorder")
+    for p in post_project - pre_project:
+        by_path.setdefault(str(p), set()).add("project")
+    for p in post_private - pre_private:
+        by_path.setdefault(str(p), set()).add("tmpdir")
+
+    assert not by_path, format_zero_persistence_failure(by_path)
+
+
+def test_training_leak_detector_catches_real_leak(tmp_path, monkeypatch):
+    """The write recorder and private-temp scan must catch transient and
+    on-disk model-state leaks respectively."""
+    import tempfile
+
+    from tests.zero_persistence import WriteRecorder, leaked_writes, redirect_temp, scan
+
+    private = redirect_temp(tmp_path, monkeypatch)
+    with WriteRecorder() as recorder:
+        # Transient model-state file: created and deleted while recording.
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=True, dir=tmp_path) as f:
+            f.write(b"x")
+        # Lingering model-state file under the private temp dir.
+        (private / "leak.pt").write_bytes(b"x")
+
+    recorded = leaked_writes(recorder.writes, BANNED_EXTENSIONS)
+    scanned = scan(private, BANNED_EXTENSIONS)
+
+    assert any(Path(p).suffix.lower() == ".pt" for p in recorded), (
+        "recorder missed transient .pt write"
+    )
+    assert any(p.name == "leak.pt" for p in scanned), (
+        "scan missed .pt in private temp dir"
     )
 
 
