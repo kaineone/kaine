@@ -155,6 +155,12 @@ receives a snapshot taken with a different model. Chronos does not serialize
 its network (only its prediction head), so an injected network's state is the
 plugin's to keep.
 
+## Example
+
+[`plugins/kaine-cl1`](../plugins/kaine-cl1/) is an optional substrate plugin in
+this repository that fills `chronos.network` and `soma.forward_model`. See
+[cl1.md](cl1.md).
+
 ## Non-goal
 
 The workspace-mediation ablation runner constructs Chronos and Soma directly

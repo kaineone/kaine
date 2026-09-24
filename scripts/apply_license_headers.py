@@ -18,7 +18,7 @@ HEADER_LINE_2 = "# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>"
 HEADER = f"{HEADER_LINE_1}\n{HEADER_LINE_2}\n"
 
 # Directories to walk (relative to repo root).
-INCLUDE_DIRS = ["kaine", "scripts", "tests"]
+INCLUDE_DIRS = ["kaine", "plugins", "scripts", "tests"]
 
 # Exclusion patterns — matched against each path component.
 EXCLUDE_PARTS = {
