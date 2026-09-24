@@ -95,8 +95,8 @@ def test_missing_plugin_raises():
 
 
 def test_duplicate_entry_point_name_raises():
-    ep1 = FakeEP("dup", lambda: object(), FakeDist("a", "1"))
-    ep2 = FakeEP("dup", lambda: object(), FakeDist("b", "2"))
+    ep1 = FakeEP("dup", object, FakeDist("a", "1"))
+    ep2 = FakeEP("dup", object, FakeDist("b", "2"))
     with pytest.raises(PluginError, match="dup"):
         load_plugins(
             {"plugins": {"enabled": ["dup"]}},

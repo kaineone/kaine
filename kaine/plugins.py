@@ -58,7 +58,6 @@ class KainePlugin(Protocol):
         This method is not required for the protocol's runtime check; the
         loader calls it only when the plugin declares ``oscillator.<module>``.
         """
-        ...
 
 
 class LoadedPlugins:

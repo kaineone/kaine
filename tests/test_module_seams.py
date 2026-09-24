@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from kaine.boot import (
+    SIMPLE_FACTORIES,
     ConfigurationError,
     build_registry,
     construct_module,
@@ -197,10 +198,9 @@ class _FakeForwardModel:
 async def test_soma_injected_forward_model_tick_never_builds_substrate(
     bus: AsyncBus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import kaine.modules.soma.module as soma_module
-
     monkeypatch.setattr(
-        soma_module, "SubstrateForwardModel", _FailingCallable("SubstrateForwardModel")
+        "kaine.modules.soma.module.SubstrateForwardModel",
+        _FailingCallable("SubstrateForwardModel"),
     )
 
     fake_reader = _FakeMetricsReader()
@@ -352,25 +352,23 @@ def _recording_factory(name: str, capture: list[dict[str, Any]]) -> Any:
 
 
 def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.MonkeyPatch) -> None:
-    import kaine.boot as boot
-
     captured_registry: list[dict[str, Any]] = []
     captured_direct: list[dict[str, Any]] = []
 
     modules_under_test = ("topos", "soma", "praxis", "chronos")
     for name in modules_under_test:
         monkeypatch.setitem(
-            boot.SIMPLE_FACTORIES,
+            SIMPLE_FACTORIES,
             name,
             _recording_factory(name, captured_registry),
         )
 
-    monkeypatch.setattr(boot, "install_state_encryption", lambda cfg: None)
-    monkeypatch.setattr(boot, "_wire_self_hearing_gate", lambda reg: None)
-    monkeypatch.setattr(boot, "_wire_lingua_self_model", lambda reg: None)
-    monkeypatch.setattr(boot, "_wire_eidolon_capabilities", lambda reg: None)
-    monkeypatch.setattr(boot, "_log_device_assignments", lambda reg, cfg: None)
-    monkeypatch.setattr(boot, "_wire_oscillators", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot.install_state_encryption", lambda cfg: None)
+    monkeypatch.setattr("kaine.boot._wire_self_hearing_gate", lambda reg: None)
+    monkeypatch.setattr("kaine.boot._wire_lingua_self_model", lambda reg: None)
+    monkeypatch.setattr("kaine.boot._wire_eidolon_capabilities", lambda reg: None)
+    monkeypatch.setattr("kaine.boot._log_device_assignments", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot._wire_oscillators", lambda reg, cfg: None)
 
     kaine_config = {
         "modules": {
@@ -416,7 +414,7 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
         # Swap in a second set of recorders for direct construct_module calls.
         for name in modules_under_test:
             monkeypatch.setitem(
-                boot.SIMPLE_FACTORIES,
+                SIMPLE_FACTORIES,
                 name,
                 _recording_factory(name, captured_direct),
             )

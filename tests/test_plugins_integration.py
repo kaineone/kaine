@@ -3,6 +3,7 @@
 
 """Integration tests for KAINE plugin seams through real boot paths."""
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -103,13 +104,13 @@ async def _close_module(module: Any) -> None:
     for attr in ("close", "shutdown"):
         fn = getattr(module, attr, None)
         if callable(fn):
-            try:
+            # Best-effort teardown of a test module: a close/shutdown error must
+            # not mask the assertion that already ran.
+            with contextlib.suppress(Exception):
                 if asyncio.iscoroutinefunction(fn):
                     await fn()
                 else:
                     fn()
-            except Exception:
-                pass
             return
     stopped = getattr(module, "_stopped", None)
     if stopped is not None:
@@ -117,10 +118,8 @@ async def _close_module(module: Any) -> None:
     for task in list(getattr(module, "_tasks", [])):
         if not task.done():
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
 
 class _NoneInjectionPlugin:
@@ -347,7 +346,7 @@ def test_two_plugins_claim_same_oscillator_seam():
 
 
 def test_manifest_records_plugin_metadata():
-    plugin = _ChronosNetworkPlugin(lambda: _FakeNetwork())
+    plugin = _ChronosNetworkPlugin(_FakeNetwork)
     lp = load_plugins(
         {"plugins": {"enabled": ["chronosnet"]}},
         known_modules=known_module_names(),
