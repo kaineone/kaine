@@ -522,8 +522,8 @@ def test_session_and_login_fields_parse_with_defaults(monkeypatch, tmp_path):
 def test_main_explains_missing_bus_setup_without_traceback(monkeypatch, caplog):
     import logging
 
-    import kaine.nexus.__main__ as nexus_main
     from kaine.bus.errors import BusConfigError
+    from kaine.nexus import __main__ as nexus_main
 
     async def _broken():
         raise BusConfigError("no Redis password found")
@@ -541,7 +541,7 @@ def test_main_explains_missing_bus_setup_without_traceback(monkeypatch, caplog):
 def test_main_refuses_when_no_console_enabled(monkeypatch, caplog):
     import logging
 
-    import kaine.nexus.__main__ as nexus_main
+    from kaine.nexus import __main__ as nexus_main
 
     config = NexusConfig(conversation_enabled=False, diagnostics_enabled=False)
     fake_app = object()
@@ -565,7 +565,7 @@ def test_main_refuses_when_no_console_enabled(monkeypatch, caplog):
 
 
 def test_main_serves_with_diagnostics_only(monkeypatch):
-    import kaine.nexus.__main__ as nexus_main
+    from kaine.nexus import __main__ as nexus_main
 
     config = NexusConfig(conversation_enabled=False, diagnostics_enabled=True)
     fake_app = object()

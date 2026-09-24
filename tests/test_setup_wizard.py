@@ -677,7 +677,7 @@ def _isolate_secrets_path(monkeypatch, tmp_path) -> None:
     developer's real config/secrets.toml."""
     # Patch the module object: a dotted-string target ending in "__main__" does
     # not resolve to kaine.setup.__main__.
-    import kaine.setup.__main__ as setup_main_module
+    from kaine.setup import __main__ as setup_main_module
 
     monkeypatch.setattr(
         setup_main_module, "DEFAULT_SECRETS_PATH", tmp_path / "secrets.toml"

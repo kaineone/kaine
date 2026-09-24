@@ -91,29 +91,18 @@ def _write_private(path: Path | str, text: str) -> None:
         # Ensure the directory metadata is durable after the replace.
         dir_fd = os.open(str(path.parent), os.O_RDONLY)
         os.fsync(dir_fd)
-    except Exception:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-        try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except OSError:
-            pass
-        raise
     finally:
-        if dir_fd is not None:
-            try:
+        # Best-effort cleanup. Any error from the write itself is already
+        # propagating; a failure to close or remove leftovers must not mask it.
+        # After a successful replace the temp file no longer exists.
+        with contextlib.suppress(OSError):
+            if fd is not None:
+                os.close(fd)
+        with contextlib.suppress(OSError):
+            if dir_fd is not None:
                 os.close(dir_fd)
-            except OSError:
-                pass
-        try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except OSError:
-            pass
+        with contextlib.suppress(OSError):
+            tmp_path.unlink(missing_ok=True)
 
 
 @contextlib.contextmanager
@@ -126,14 +115,12 @@ def _exclusive_lock(path: Path):
             fcntl.flock(fd, fcntl.LOCK_EX)
             yield
         finally:
-            try:
+            # Closing the descriptor releases the lock even if the explicit
+            # unlock fails, and neither failure may mask the edit's own error.
+            with contextlib.suppress(OSError):
                 fcntl.flock(fd, fcntl.LOCK_UN)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
 
 
 def _lines_inside_ml_strings(lines: list[str]) -> list[bool]:
