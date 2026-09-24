@@ -7,7 +7,7 @@
 
 ## 2. Operator surface
 
-- [ ] 2.1 (After `first-run-service-fixes` merges.) Wizard: optional CL1 step, default no, skipped in defaults mode, prints install commands, writes `[plugins]`.
+- [ ] 2.1 Wizard (writes through `kaine.secrets_file`): optional CL1 step, default no, skipped in defaults mode, prints install commands, writes `[plugins]`.
 - [ ] 2.2 `docs/cl1.md`, `plugins/kaine-cl1/README.md`, `DEPENDENCIES.md`, `THIRD_PARTY_LICENSES.md`.
 
 ## 3. Boundaries and CI
