@@ -1,7 +1,11 @@
 # first-run-wizard Specification
 
 ## Purpose
-TBD - created by archiving change first-run-wizard. Update Purpose after archive.
+Guide a new operator from a fresh clone to a working, per-install configuration without
+hand-editing files: the CAL welfare acknowledgement, a hardware scan and device
+assignment, module and model choices, consented provisioning of dependencies, and the
+Nexus sign-in token. Choices go to the gitignored operator override only; the shipped
+config stays all-off, and the wizard never starts the entity.
 
 ## Requirements
 

@@ -1,7 +1,11 @@
 # nexus-dashboard Specification
 
 ## Purpose
-TBD - created by archiving change nexus-dashboard-polish. Update Purpose after archive.
+Nexus is the operator's local web dashboard for a running KAINE: service and
+dependency health, live metrics, and the supported operator controls, presented in one
+consistent visual design. It stays on loopback behind the operator token, never shows
+cognitive content past the privacy boundary, explains an incomplete setup instead of
+crashing, and only ever sends the operator to consoles that are mounted.
 
 ## Requirements
 
