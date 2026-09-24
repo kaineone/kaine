@@ -118,8 +118,9 @@ async def _close_module(module: Any) -> None:
     for task in list(getattr(module, "_tasks", [])):
         if not task.done():
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+            # Wait for the cancelled task to finish; its CancelledError is
+            # returned rather than raised.
+            await asyncio.gather(task, return_exceptions=True)
 
 
 class _NoneInjectionPlugin:
