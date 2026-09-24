@@ -16,6 +16,10 @@ It depends on `first-run-service-fixes`: re-runnable bootstraps, a generated sig
 ## What Changes
 
 - **`python -m kaine.setup --web`** starts a small local setup server and opens the browser on it. The same choices as the terminal wizard are presented as a sequence of plain-language pages, one per step, each with a short explanation and sensible defaults. Technical detail sits behind a "details" disclosure. The terminal wizard stays and remains fully supported.
+- **Same brand and styling as Nexus.** Setup looks and feels like Nexus:
+  - It serves Nexus's own stylesheet and bundled fonts from `kaine/nexus/static` (the same files, not copies).
+  - Its pages use the same rail layout and wordmark.
+  - Any setup-specific component styles use only Nexus's design tokens (`var(--…)`), with no new colours or fonts.
 - **One step model for both front ends.** The wizard's steps become declarative descriptions: title, explanation, fields, defaults, validation, and how each answer maps into the config. The terminal wizard and the browser both render these descriptions, so the two cannot drift. A parity test feeds the same answers to both and requires identical config.
 - **Private to this computer.** The setup server:
   - binds only to 127.0.0.1;
@@ -41,7 +45,7 @@ It depends on `first-run-service-fixes`: re-runnable bootstraps, a generated sig
   - `kaine/setup/web/` (new: the FastAPI app, templates and a job runner with progress streaming);
   - `kaine/setup/__main__.py` (`--web`);
   - `kaine/setup/tomlwriter.py` (merge);
-  - reuse of the Nexus stylesheet and fonts.
+  - the Nexus stylesheet, fonts and design tokens, served from `kaine/nexus/static`.
 - No new dependencies. FastAPI, uvicorn and Jinja are already required by Nexus.
 - Out of scope:
   - the launcher and the installer (phases 2 and 3);

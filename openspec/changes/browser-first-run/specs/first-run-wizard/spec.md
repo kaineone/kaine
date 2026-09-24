@@ -17,6 +17,20 @@ without activity.
 - **WHEN** the launch URL is opened a second time after the session was established
 - **THEN** the token is refused
 
+### Requirement: Browser setup shares the Nexus brand and styling
+The browser setup SHALL use the same brand guidelines and styling as Nexus:
+- it serves Nexus's stylesheet and fonts from the Nexus static assets rather than from copies;
+- it uses the same layout and wordmark;
+- it styles any setup-specific component only with Nexus's design tokens, introducing no new colours or font families.
+
+#### Scenario: Same stylesheet as Nexus
+- **WHEN** a setup page is loaded
+- **THEN** the stylesheet it links is byte-identical to the one Nexus serves
+
+#### Scenario: No off-brand styling
+- **WHEN** the setup-specific stylesheet is inspected
+- **THEN** it contains no literal colour values and no font families that Nexus does not use
+
 ### Requirement: One step model drives both setup front ends
 The terminal wizard and the browser setup SHALL be generated from the same
 declarative step definitions. Identical answers SHALL produce identical

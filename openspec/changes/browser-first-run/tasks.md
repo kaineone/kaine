@@ -14,7 +14,12 @@
 
 ## 3. Setup server
 
-- [ ] 3.1 Add `kaine/setup/web/` (FastAPI app and templates using the Nexus stylesheet), binding loopback only.
+- [ ] 3.1 Add `kaine/setup/web/` (FastAPI app and templates), binding loopback only.
+- [ ] 3.1a Nexus brand and styling:
+  - mount `kaine/nexus/static` read-only;
+  - a setup base template mirroring Nexus's `_base.html` rail and wordmark;
+  - `setup.css` limited to Nexus tokens;
+  - tests: the stylesheet is byte-identical to Nexus's, and `setup.css` has no literal colours or new fonts.
 - [ ] 3.2 Launch token exchanged for a session cookie. Host and Origin checks. Idle and finish shutdown.
 - [ ] 3.3 Step pages rendered from the step model, with server-side validation.
 - [ ] 3.4 A parity test: the same answers through the web driver and the terminal driver give identical config.

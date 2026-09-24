@@ -21,6 +21,14 @@ Nexus needs the event bus, and the event bus is one of the things setup creates.
 
 Alternative considered: a "setup mode" inside Nexus. Rejected, because it would make Nexus start without a bus and would mix pre-install administration into the entity's dashboard.
 
+### 1a. Same brand guidelines and styling as Nexus
+The setup server mounts `kaine/nexus/static` read-only at `/static`. Setup therefore uses the very same `style.css`:
+- the obsidian and gold tokens and the status palette;
+- the Inter, JetBrains Mono and Zen Dots fonts;
+- the rail layout and wordmark.
+
+Setup templates extend a setup base that mirrors Nexus's `_base.html` structure and classes, so a page in setup reads as part of the same product. Components that exist only in setup (step progress, job progress, the spawn gate) go in a small `setup.css` that may use only Nexus `var(--…)` tokens: no literal colours and no new font families. A test checks that the served stylesheet is byte-identical to Nexus's and that `setup.css` has no literal colour values. The operator directed this: "the browser based setup should use the same brand guidelines and styling as the nexus".
+
 ### 2. One declarative step model
 Each step is a `Step`: id, title, explanation, fields (type, default, choices, validator), `applies(config)` (whether the step is relevant) and `apply(config, answers)`. The terminal driver asks each field in order. The web driver renders each step as a form. `run_wizard` keeps its signature, so existing callers and tests keep working. A parity test runs both drivers on identical answers and compares the resulting configs.
 
