@@ -1324,3 +1324,24 @@ def test_no_override_refusal_warning_when_override_given():
         result = _OverridePatchResolveIndex(probes, override=url)
         for text in _override_patch_all_strings(result):
             assert "was not applied" not in text
+
+
+def test_probe_memory_state_reports_evidence_text(monkeypatch):
+    import types
+
+    import kaine.hostmem
+    import kaine.wheel_index
+
+    monkeypatch.setattr(
+        kaine.hostmem,
+        "classify_accelerator_memory",
+        lambda *, torch=None: types.SimpleNamespace(
+            state="unified",
+            unknown_reason=None,
+            evidence="rung 2: integrated GPU with carve-out signature",
+        ),
+    )
+    state, note = kaine.wheel_index._probe_memory_state(torch=None)
+    assert state == "unified"
+    assert "evidence: rung 2: integrated GPU with carve-out signature" in note
+    assert "evidence item" not in note
