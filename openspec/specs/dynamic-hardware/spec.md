@@ -18,7 +18,19 @@ Apple Silicon SHALL install the default PyPI wheel (which bundles the MPS
 backend) with no `--index-url`. The script SHALL install the exact torch version
 (and matching companions) resolved as described below from the chosen source,
 pin it in the torch constraints file, then install the rest of KAINE under those
-constraints. On re-run, the script SHALL classify the installed torch by its
+constraints. For the cpu and xpu flavors the resolver SHALL select the newest
+in-range torch that index publishes for the host architecture, with its recorded
+torchvision and torchaudio companions (preferring a version with a torchaudio
+companion when `torchaudio` is needed). When the recorded data covers the host
+architecture for that flavor but has no in-range torch, or the flavor is xpu and
+the architecture is not recorded, both installers SHALL refuse before installing
+torch with a message naming the flavor and the host architecture. When the flavor
+is cpu and the host architecture is not recorded at all (for example s390x), or
+when the resolver cannot run, the installers SHALL install from the CPU index
+within the tested range without an exact pin and print a warning naming the
+reason; for xpu a resolver that cannot run SHALL be refused with a message saying
+the resolver could not run. The mps flavor SHALL install torch within the tested range from the
+default PyPI index without an exact pin, because no MPS wheel data is recorded. On re-run, the script SHALL classify the installed torch by its
 build metadata (`torch.version.hip` → rocm, `torch.version.cuda` → cuda, an XPU
 build → xpu, an MPS build on macOS arm64 → mps, else cpu), compare it with the
 effective target flavor (cpu when the chosen index is the CPU index, for example
@@ -29,9 +41,9 @@ reinstall (untagged counts as cpu); for operator `--index-url` values that do no
 point to `download.pytorch.org/whl/<tag>`, tag checks are skipped. When any
 `torchaudio` wheel is installed and `--research` is not given, the script SHALL
 pass `--need-torchaudio` to the resolver, replace a `torchaudio` that does not
-match the resolved stack, and on flavors without a resolved `torchaudio` pin
-(cpu, xpu, mps) reinstall `torchaudio` from that flavor's index under the torch
-constraints. If `torchaudio` is installed and the
+match the resolved stack, keep one that matches it, and on the mps flavor, which
+has no resolved `torchaudio` pin, reinstall `torchaudio` from the default PyPI
+index under the torch constraints. If `torchaudio` is installed and the
 chosen index publishes no `torchaudio` for the resolved torch version, both
 installers SHALL refuse before installing torch.
 
@@ -104,14 +116,18 @@ resolution, and flag semantics.
 #### Scenario: Intel host installs XPU wheels
 - **WHEN** an operator runs `bash scripts/install.sh --xpu`, or on a host where
   `xpu-smi`/`sycl-ls` is present and no NVIDIA or AMD accelerator is detected
-- **THEN** the script invokes `pip install` from the XPU wheel index
-  (`https://download.pytorch.org/whl/xpu`) in the venv
+- **THEN** the script installs the exact newest in-range torch and its recorded
+  companions that the XPU wheel index (`https://download.pytorch.org/whl/xpu`)
+  publishes for the host architecture, or refuses with a message naming the XPU
+  flavor and the architecture when the index publishes none (for example on
+  aarch64)
 
 #### Scenario: Apple Silicon installs the default wheel for MPS
 - **WHEN** an operator runs `bash scripts/install.sh --mps`, or on macOS `arm64`
   with no other accelerator forced
-- **THEN** the script installs the exact newest in-range torch from the default PyPI index with no
-  `--index-url`, because the MPS backend ships in the standard macOS wheel
+- **THEN** the script installs torch within the tested range from the default
+  PyPI index with no `--index-url` and no exact pin, because the MPS backend ships
+  in the standard macOS wheel and no MPS wheel data is recorded
 
 #### Scenario: Idempotent re-run skips already-installed torch
 - **WHEN** the script is run twice in succession with no change in
@@ -124,8 +140,7 @@ resolution, and flag semantics.
 #### Scenario: Flavor change forces torch reinstallation
 - **WHEN** the script is re-run and the effective target flavor differs from the
   installed torch build (for example a `+cpu` wheel is installed but CUDA wheels
-  are wanted, or the operator passes an `--index-url` outside
-  `download.pytorch.org`)
+  are wanted)
 - **THEN** it force-reinstalls torch from the target source before writing the constraints file
 
 #### Scenario: Re-run keeps installed torchaudio when not researching
@@ -134,9 +149,9 @@ resolution, and flag semantics.
   example `cu132`)
 - **THEN** the resolver passes `--need-torchaudio` and keeps or installs the
   matching `torchaudio`, staying on an index that provides it (for example
-  `cu130`) instead of switching to `cu132` and losing `torchaudio`; on flavors
-  without a resolved `torchaudio` pin (cpu, xpu, mps) `torchaudio` is reinstalled
-  from that flavor's index under the torch constraints
+  `cu130`) instead of switching to `cu132` and losing `torchaudio`; on the mps
+  flavor, which has no resolved `torchaudio` pin, `torchaudio` is reinstalled from
+  the default PyPI index under the torch constraints
 
 #### Scenario: Coherent audio stack refuses an index without torchaudio
 - **WHEN** an operator runs `bash scripts/install.sh --cuda --index-url
@@ -221,6 +236,11 @@ resolution, and flag semantics.
 - **THEN** it logs the probed architecture, driver CUDA version, compute
   capability, unified-memory classification, and the wheel index it will use
   (resolved or operator override) before installing torch
+
+#### Scenario: CPU re-run keeps a matching torchaudio
+- **WHEN** the script is re-run with `--cpu` and the installed `torchaudio`
+  matches the resolved CPU pin's base version and build tag
+- **THEN** it keeps that `torchaudio` without uninstalling or downloading it again
 
 ### Requirement: Runtime device selection helper
 The `kaine.hardware` module SHALL expose `detect_device() -> str` returning
