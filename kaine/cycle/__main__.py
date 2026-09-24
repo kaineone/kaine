@@ -38,8 +38,10 @@ from kaine.boot import (
     MetricsCollector,
     build_registry,
     construct_module,
+    known_module_names,
     make_coherence_scorer,
     make_salience_factors,
+    plugin_injections,
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
@@ -673,6 +675,9 @@ def _make_rebuild_module(
             registry=registry,
             entity_clock=registry.entity_clock,
             intent_secret=intent_secret,
+            # A restarted module keeps its plugin substitution: the plugin is
+            # asked for a fresh object exactly as at boot.
+            injections=plugin_injections(registry.plugins, name),
         )
 
     return rebuild_module
@@ -760,6 +765,12 @@ async def _boot_and_run(
     seed = _resolve_seed(kaine_config)
     set_global_seed(seed)
     from kaine.boot import gather_perception_feed_descriptor
+    from kaine.plugins import load_plugins
+
+    # Module plugins load (and declare their seams) before the run manifest is
+    # written, so the manifest records every substitution. A named plugin that
+    # cannot load stops the boot (PluginError) rather than run on defaults.
+    plugins = load_plugins(kaine_config, known_modules=known_module_names())
 
     run_ctx = mint_run_context(
         seed=seed,
@@ -770,6 +781,7 @@ async def _boot_and_run(
         # Reproducible perception-feed covariate — gathered at the boot layer
         # (allowed to touch kaine.modules) and passed in as data.
         perception_feed=gather_perception_feed_descriptor(kaine_config),
+        plugins=plugins.manifest_entry(),
     )
     set_run_context(run_ctx)
     if bool(experiment_cfg.get("write_manifest", True)):
@@ -869,7 +881,7 @@ async def _boot_and_run(
     # any other bus writer fails verification and never reaches an effector.
     intent_secret = generate_intent_secret()
 
-    registry = build_registry(bus, kaine_config, intent_secret=intent_secret)
+    registry = build_registry(bus, kaine_config, intent_secret=intent_secret, plugins=plugins)
     if not len(registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
@@ -1413,10 +1425,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    from kaine.plugins import PluginError
+
     try:
         return asyncio.run(
             _boot_and_run(supervision_mode=supervision_mode, gate_checks=gate_checks)
         )
+    except PluginError as exc:
+        # A named plugin that cannot load or supply its seams stops the boot:
+        # running on the default models would misrepresent the run.
+        sys.stderr.write(f"kaine.cycle: plugin error: {exc}\n")
+        return 1
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")
         return 0

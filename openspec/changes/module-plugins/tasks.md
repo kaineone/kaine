@@ -2,7 +2,7 @@
 
 - [x] 1.1 `kaine/plugins.py`: `KainePlugin` protocol, `PluginError`, `INJECTABLE_SEAMS`, `load_plugins(kaine_config)` reading `[plugins].enabled` and loading only named `kaine.plugins` entry points; reject duplicate entry-point names; validate declared seams and conflicts at load; fail closed.
 - [x] 1.2 `LoadedPlugins.injections_for(module)` checking returned keys against the declared seams; `oscillator_for(module, defaults)`; `manifest_entry()` using distribution metadata.
-- [ ] 1.5 Load plugins in `cycle/__main__.py` before the manifest is written and pass them to `build_registry` and `rebuild_module`.
+- [x] 1.5 Load plugins in `cycle/__main__.py` before the manifest is written and pass them to `build_registry` and `rebuild_module`.
 - [x] 1.3 `validate_config_shape`: `plugins` must be a table and `plugins.enabled` a list of strings.
 - [x] 1.4 Import-linter contract: `kaine.modules` must not import `kaine.plugins`.
 
@@ -13,25 +13,25 @@
 - [x] 2.6 `make_nous`: skip building `PymdpEngine` when `engine` is injected; keep envelope validation.
 - [x] 2.2 `make_chronos`, `make_soma`, `make_nous` accept an `injections` mapping and pass it to the constructor.
 - [x] 2.3 `boot.construct_module(...)` shared by `build_registry` and `cycle.__main__.rebuild_module`.
-- [ ] 2.4 `_wire_oscillators` consults plugins for their declared `oscillator.<module>` seams before the snnTorch check; reject oscillator seams when the layer is disabled.
+- [x] 2.4 `_wire_oscillators` consults plugins for their declared `oscillator.<module>` seams before the snnTorch check; reject oscillator seams when the layer is disabled.
 
 ## 3. Recording
 
-- [ ] 3.1 `RunContext.plugins` field populated at boot; WARNING log per filled seam.
+- [x] 3.1 `RunContext.plugins` field populated at boot; WARNING log per filled seam.
 
 ## 4. Tests
 
-- [ ] 4.1 Not enabled: entry point never loaded (fake entry point whose load would fail the test).
+- [x] 4.1 Not enabled: entry point never loaded (fake entry point whose load would fail the test).
 - [x] 4.2 Enabled but missing, duplicate entry-point name, import error, and exception in `seams` or `injections`: `PluginError`.
 - [x] 4.3 Unknown seam, undeclared returned seam, and two-plugin conflict: `PluginError`, raised before construction where specified.
 - [x] 4.9 Chronos with an injected network of a width other than `cfc_units` runs a forward-prediction tick without error.
-- [ ] 4.10 Repeated `injections` calls across two Spot restarts each yield a working module.
-- [ ] 4.4 Chronos, Soma and Nous receive injected objects; defaults unchanged with no plugins.
-- [ ] 4.5 `rebuild_module` re-applies injections.
-- [ ] 4.6 Oscillator override and conflict.
-- [ ] 4.7 Manifest records name, version and seams; empty when no plugins.
+- [x] 4.10 Repeated `injections` calls across two Spot restarts each yield a working module.
+- [x] 4.4 Chronos, Soma and Nous receive injected objects; defaults unchanged with no plugins.
+- [x] 4.5 `rebuild_module` re-applies injections.
+- [x] 4.6 Oscillator override and conflict.
+- [x] 4.7 Manifest records name, version and seams; empty when no plugins.
 - [x] 4.8 Config shape: malformed `plugins.enabled` rejected.
 
 ## 5. Docs
 
-- [ ] 5.1 `docs/plugins.md`: how to write and enable a plugin, the seam table, the fail-closed rule.
+- [x] 5.1 `docs/plugins.md`: how to write and enable a plugin, the seam table, the fail-closed rule.

@@ -1671,12 +1671,30 @@ def install_state_encryption(kaine_config: dict[str, Any]) -> None:
 _CLOCKED_FACTORIES: frozenset[str] = frozenset({"soma", "topos", "mnemos", "thymos", "perception"})
 
 
+def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
+    """The constructor injections the loaded plugins supply for module ``name``
+    (``None`` when no plugins are loaded or the module has no plugin seams)."""
+    if not plugins:
+        return None
+    from kaine.plugins import INJECTABLE_SEAMS
+
+    if name not in INJECTABLE_SEAMS:
+        return None
+    return plugins.injections_for(name) or None
+
+
+def known_module_names() -> list[str]:
+    """Every module name boot can construct (for validating oscillator seams)."""
+    return [*SIMPLE_FACTORIES, "hypnos"]
+
+
 def build_registry(
     bus: AsyncBus,
     kaine_config: dict[str, Any],
     *,
     entity_clock: Optional[EntityClock] = None,
     intent_secret: Optional[bytes] = None,
+    plugins: Any = None,
 ) -> ModuleRegistry:
     """Construct every enabled module from kaine.toml and register it.
 
@@ -1700,6 +1718,9 @@ def build_registry(
         time_scale = float((kaine_config.get("cycle") or {}).get("time_scale", 1.0))
         entity_clock = EntityClock(scale=time_scale)
     registry.entity_clock = entity_clock
+    # Loaded module plugins (kaine.plugins); Spot's restart path and the
+    # oscillator wiring read them back from the registry.
+    registry.plugins = plugins
     # The unified perception feed is a single top-level [perception_feed] section
     # (unified-perception-feed) that parameterizes BOTH the vision surface
     # (Topos) and the hearing surface (Audition) from one source of truth. Read
@@ -1784,6 +1805,7 @@ def build_registry(
             registry=registry,
             entity_clock=entity_clock,
             intent_secret=intent_secret,
+            injections=plugin_injections(plugins, name),
         )
         registry.register(module)
         log.info("registered module %s", name)
@@ -2019,27 +2041,57 @@ def make_salience_factors(kaine_config: dict[str, Any], affect_provider: Any):
 
 def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
     """Attach a live `ModuleOscillator` to every registered module when the
-    oscillatory-binding layer is enabled. No-op when disabled. When snnTorch is
-    absent, `make_oscillator` returns None and the module keeps reporting the
-    neutral phase (graceful degradation)."""
+    oscillatory-binding layer is enabled. No-op when disabled. Plugin-declared
+    oscillators are attached first and do not require snnTorch; remaining
+    modules receive the default oscillator only when snnTorch is available.
+    When snnTorch is absent, those modules keep reporting the neutral phase
+    (graceful degradation)."""
     section = dict(kaine_config.get("oscillator") or {})
     if not bool(section.get("enabled", False)):
         return
     from kaine.oscillator import make_oscillator, snntorch_available
 
-    if not snntorch_available():
-        log.warning(
-            "[oscillator].enabled is true but snnTorch is unavailable; modules "
-            "report the neutral phase and the coherence factor degrades to 1.0 "
-            "(install the [oscillator] extra to activate)"
-        )
-        return
     population_size = int(section.get("population_size", _OSCILLATOR_MIN_POPULATION))
     plv_window = int(section.get("plv_window", _OSCILLATOR_MIN_PLV_WINDOW))
     beta = float(section.get("beta", 0.9))
     threshold = float(section.get("threshold", 1.0))
     base_drive = float(section.get("base_drive", 1.5))
+    defaults = {
+        "population_size": population_size,
+        "plv_window": plv_window,
+        "beta": beta,
+        "threshold": threshold,
+        "base_drive": base_drive,
+    }
+    # Plugin oscillators are attached before the snnTorch check so that a
+    # plugin can provide an oscillator without the snnTorch dependency.
+    plugins = getattr(registry, "plugins", None)
+    plugin_modules: set[str] = set()
+    if plugins:
+        for module in list(registry.all_modules()):
+            if plugins.declares_oscillator(module.name):
+                if not hasattr(module, "attach_oscillator"):
+                    # A declared seam is never dropped silently.
+                    raise ConfigurationError(
+                        f"a plugin declares oscillator.{module.name} but module "
+                        f"{module.name} cannot take an oscillator"
+                    )
+                osc = plugins.oscillator_for(module.name, defaults)
+                module.attach_oscillator(osc)
+                plugin_modules.add(module.name)
+                log.info("attached plugin oscillator to module %s", module.name)
+
+    if not snntorch_available():
+        log.warning(
+            "[oscillator].enabled is true but snnTorch is unavailable; modules "
+            "without a plugin oscillator report the neutral phase and the "
+            "coherence factor degrades to 1.0 "
+            "(install the [oscillator] extra to activate)"
+        )
+        return
     for module in list(registry.all_modules()):
+        if module.name in plugin_modules:
+            continue
         osc = make_oscillator(
             population_size=population_size,
             plv_window=plv_window,

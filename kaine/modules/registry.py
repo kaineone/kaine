@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from kaine.bus.schema import module_stream
 from kaine.entity_clock import EntityClock
@@ -29,6 +29,10 @@ class ModuleRegistry:
     def __init__(self) -> None:
         self._modules: dict[str, BaseModule] = {}
         self.entity_clock: Optional[EntityClock] = None
+        # The loaded module plugins (kaine.plugins.LoadedPlugins) for this boot,
+        # kept here so Spot's restart path re-applies the same substitutions.
+        # Typed Any: cognitive modules never import the plugin loader.
+        self.plugins: Any = None
 
     def register(self, module: BaseModule) -> None:
         if module.name in self._modules:
