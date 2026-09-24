@@ -341,7 +341,6 @@ def test_resolve_fixed_flavor_need_torchaudio_prefers_and_warns(monkeypatch):
 
 def test_cli_flavor_cpu_outputs_resolution_json(capsys, monkeypatch):
     """--flavor cpu prints the same JSON the installers consume."""
-    import json
     import platform
     import sys
 
@@ -359,7 +358,6 @@ def test_cli_flavor_cpu_outputs_resolution_json(capsys, monkeypatch):
 
 def test_cli_flavor_bogus_outputs_refusal_json(capsys, monkeypatch):
     """--flavor with an unsupported value refuses in JSON without crashing."""
-    import json
     import sys
 
     from kaine import wheel_index as wi
