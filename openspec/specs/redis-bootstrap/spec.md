@@ -1,7 +1,11 @@
 # redis-bootstrap Specification
 
 ## Purpose
-TBD - created by archiving change redis-bootstrap. Update Purpose after archive.
+Take KAINE's own authenticated Redis event bus from a fresh clone to a container that
+answers PING in one command that is safe to repeat: the password is created once and
+kept on re-runs (rotated only on request), recorded in `compose/.env` and the `[redis]`
+table of `config/secrets.toml` without disturbing any other entry, and the memory cap
+stays consistent across every deployment file.
 
 ## Requirements
 
