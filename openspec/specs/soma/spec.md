@@ -1,8 +1,10 @@
 # soma Specification
 
 ## Purpose
-TBD - created by archiving change soma. Update Purpose after archive.
+Soma, the interoceptive module: it reads the host substrate's metrics (and the cycle's latency) as the entity's body sense, scores wellness, predicts its own substrate state with a replaceable forward model, and reports on the bus without blocking the event loop.
+
 ## Requirements
+
 ### Requirement: Soma publishes interoception reports at a configurable interval
 Soma SHALL publish a `soma.report` event to its `soma.out` stream every
 `read_interval_s` seconds (default 1.0) carrying three fields: `metrics`
@@ -116,3 +118,13 @@ boot does not auto-register Soma without an operator opt-in.
 - **THEN** they find a `[soma]` section with `read_interval_s`,
   thresholds, and weights, and `[modules].soma == false`
 
+### Requirement: Soma accepts an injected forward model
+Soma's constructor SHALL accept an optional `forward_model` object. When it is `None`, Soma SHALL build its default `SubstrateForwardModel` with the configured `forward_model_units`, as before. When it is provided, Soma SHALL use it in place of the default and SHALL call only the interface Soma already uses on its forward model (`step`, `prediction_error_to_salience`, `suspended`, `adaptation_steps`, `state_dict`, `load_state_dict`).
+
+#### Scenario: Default unchanged
+- **WHEN** Soma is constructed without `forward_model`
+- **THEN** it builds a `SubstrateForwardModel` exactly as it does today
+
+#### Scenario: Injected model used
+- **WHEN** Soma is constructed with `forward_model=model`
+- **THEN** each interoceptive tick calls `model.step` and no `SubstrateForwardModel` is built
