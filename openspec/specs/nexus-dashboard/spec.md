@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change nexus-dashboard-polish. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Service and dependency health board
 
 The diagnostics surface SHALL present a health board that shows, at a glance,
@@ -119,3 +121,43 @@ without `dev_content_override`.
 - **THEN** the health board and metric visualizations still render (statuses,
   counts, and rates are not private content)
 
+### Requirement: Nexus reports incomplete setup without a traceback
+When the event bus cannot be configured, for example because no Redis password
+exists yet, `python -m kaine.nexus` SHALL exit with status 1. It SHALL log a
+single message that names the setup step that fixes the problem, and SHALL NOT
+print a traceback.
+
+#### Scenario: Fresh clone before Redis setup
+- **WHEN** Nexus is started before `scripts/redis-bootstrap.sh` has run
+- **THEN** it exits 1
+- **AND** it logs a message naming `bash scripts/redis-bootstrap.sh`
+- **AND** no traceback is printed
+
+### Requirement: Login lands on a mounted console
+After a successful sign-in, Nexus SHALL redirect the operator to a console
+that is mounted:
+
+- `/` when the conversation console is enabled;
+- otherwise `/diagnostics/`.
+
+Page navigation SHALL link only consoles that are mounted. Nexus SHALL refuse
+to start when neither console is enabled, since sign-in would lead nowhere.
+
+#### Scenario: Default configuration
+- **WHEN** conversation is disabled and diagnostics is enabled
+- **AND** the operator signs in
+- **THEN** the login response redirects to `/diagnostics/`
+
+#### Scenario: Conversation enabled
+- **WHEN** conversation is enabled
+- **AND** the operator signs in
+- **THEN** the login response redirects to `/`
+
+#### Scenario: Navigation links only mounted consoles
+- **WHEN** conversation is disabled
+- **THEN** the diagnostics and evaluation pages show no link to the conversation console
+- **AND** their brand link points to `/diagnostics/`
+
+#### Scenario: Nothing to serve
+- **WHEN** both the conversation console and diagnostics are disabled
+- **THEN** Nexus exits 1 with a message saying that no console is enabled
