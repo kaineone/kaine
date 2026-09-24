@@ -282,9 +282,6 @@ forbidden_modules = [
     "kaine.cycle.spot",
 ]
 
-# The evaluation sidecar observes the bus; it must not reach into Nexus
-# internals (the operator UI). Keeping these decoupled means evaluation can run
-# headless and Nexus stays a pure presentation seam.
 # Module plugins (module-plugins): cognitive modules receive plugin objects only
 # through their constructors, so they never import the loader; the loader is a
 # leaf that boot imports, so it must not import boot, the cycle or the modules.
@@ -300,6 +297,9 @@ type = "forbidden"
 source_modules = ["kaine.plugins"]
 forbidden_modules = ["kaine.boot", "kaine.cycle", "kaine.modules"]
 
+# The evaluation sidecar observes the bus; it must not reach into Nexus
+# internals (the operator UI). Keeping these decoupled means evaluation can run
+# headless and Nexus stays a pure presentation seam.
 [[tool.importlinter.contracts]]
 name = "Evaluation must not import Nexus internals"
 type = "forbidden"

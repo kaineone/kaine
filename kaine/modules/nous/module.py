@@ -86,7 +86,9 @@ class Nous(BaseModule):
             raise ValueError("timeout_salience must be in [0, 1]")
         # The pymdp engine is constructed lazily/eagerly here. Tests inject a
         # FakeEngine so they need neither pymdp nor JAX.
-        self._engine: ActiveInferenceEngine = engine or PymdpEngine()
+        # `is None`, not truthiness: an injected engine that happens to be falsy
+        # (e.g. defines __len__) must never be silently replaced by the default.
+        self._engine: ActiveInferenceEngine = engine if engine is not None else PymdpEngine()
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._timeout_salience = float(timeout_salience)

@@ -127,17 +127,17 @@ async def test_chronos_default_network_head_width_equals_cfc_units(bus: AsyncBus
 async def test_chronos_injected_network_without_units_rejects_forward_prediction(
     bus: AsyncBus,
 ) -> None:
+    # The chronos spec requires a construction error, so a bad plugin network
+    # stops boot before any module starts.
     featurizer = SnapshotFeaturizer()
-    chronos = Chronos(
-        bus,
-        featurizer=featurizer,
-        network=object(),  # injected, but no `units` attribute
-        forward_prediction=True,
-        prediction_error_window=4,
-    )
     with pytest.raises(ValueError, match="units"):
-        await chronos.initialize()
-    await chronos.shutdown()
+        Chronos(
+            bus,
+            featurizer=featurizer,
+            network=object(),  # injected, but no `units` attribute
+            forward_prediction=True,
+            prediction_error_window=4,
+        )
 
 
 # ---------------------------------------------------------------------------

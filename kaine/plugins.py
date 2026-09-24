@@ -107,6 +107,14 @@ class LoadedPlugins:
                         f"plugin {name} returned undeclared injection "
                         f"{module}.{key}"
                     )
+            for key, value in provided.items():
+                # A declared seam filled with None would make the module build
+                # its default model while the log and manifest say otherwise.
+                if value is None:
+                    raise PluginError(
+                        f"plugin {name} returned None for declared injection "
+                        f"{module}.{key}"
+                    )
             for key in declared_keys:
                 if key not in provided:
                     raise PluginError(
@@ -218,15 +226,6 @@ def load_plugins(
                 f"{', '.join(dists)}"
             )
 
-        ep = eps[0]
-        try:
-            factory = ep.load()
-            plugin = factory()
-        except Exception as exc:
-            raise PluginError(
-                f"plugin {name} failed to load: {type(exc).__name__}: {exc}"
-            ) from exc
-
         # The plugin reads only its own [plugins.<name>] table. An absent table
         # is empty; any other non-table value is a configuration error.
         plugin_cfg = plugins_cfg.get(name, {}) if isinstance(plugins_cfg, dict) else {}
@@ -235,6 +234,15 @@ def load_plugins(
                 f"plugin {name} configuration table must be a dict, got "
                 f"{type(plugin_cfg).__name__}"
             )
+
+        ep = eps[0]
+        try:
+            factory = ep.load()
+            plugin = factory()
+        except Exception as exc:
+            raise PluginError(
+                f"plugin {name} failed to load: {type(exc).__name__}: {exc}"
+            ) from exc
 
         try:
             seams = plugin.seams(plugin_cfg)

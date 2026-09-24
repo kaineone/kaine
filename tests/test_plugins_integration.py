@@ -123,6 +123,85 @@ async def _close_module(module: Any) -> None:
                 pass
 
 
+class _NoneInjectionPlugin:
+    def __init__(self, module: str, key: str):
+        self._module = module
+        self._key = key
+
+    def seams(self, config):
+        return frozenset({f"{self._module}.{self._key}"})
+
+    def injections(self, module, config):
+        if module == self._module:
+            return {self._key: None}
+        return {}
+
+
+class _BoomPymdpEngine:
+    def __init__(self, *args, **kwargs):
+        raise RuntimeError("PymdpEngine should not be instantiated")
+
+
+class _EngineResult:
+    def __init__(self):
+        self.error = False
+        self.timed_out = False
+        self.posterior = [[0.5, 0.5]]
+        self.policy = []
+        self.actions = []
+        self.efe = 0.0
+
+
+class _FakeNousEngine:
+    def __init__(self, call_id: int):
+        self.call_id = call_id
+        self.actions = ["no_op"]
+
+    def step(self, snapshot):
+        return _EngineResult()
+
+    def close(self):
+        pass
+
+
+class _NousEnginePlugin:
+    def __init__(self):
+        self.calls = 0
+
+    def seams(self, config):
+        return frozenset({"nous.engine"})
+
+    def injections(self, module, config):
+        if module == "nous":
+            self.calls += 1
+            return {"engine": _FakeNousEngine(self.calls)}
+        return {}
+
+
+class _CallCountingOscillator:
+    def __init__(self, call_id: int):
+        self.call_id = call_id
+
+
+class _FreshNousOscillatorPlugin:
+    def __init__(self):
+        self.calls = 0
+
+    def seams(self, config):
+        return frozenset({"oscillator.nous"})
+
+    def make_oscillator(self, module, config, defaults):
+        if module != "nous":
+            return None
+        self.calls += 1
+        return _CallCountingOscillator(self.calls)
+
+
+class _DummyForkManager:
+    def restore(self, last_good, registry):
+        pass
+
+
 # ---------------------------------------------------------------------------
 # 4.4  build_registry with a plugin filling chronos.network
 # ---------------------------------------------------------------------------
@@ -327,3 +406,139 @@ def test_cycle_main_catches_plugin_error(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert rc == 1
     assert "kaine.cycle: plugin error:" in captured.err
+
+
+@pytest.mark.parametrize(
+    "module,key",
+    [
+        ("chronos", "network"),
+        ("soma", "forward_model"),
+        ("nous", "engine"),
+    ],
+)
+async def test_none_injection_fails_closed(module, key, bus):
+    """A declared seam returned as None fails closed instead of letting the
+    module build its default model while the manifest records a substitution."""
+    plugin = _NoneInjectionPlugin(module, key)
+    loaded = load_plugins(
+        {"plugins": {"enabled": ["noneplugin"]}},
+        known_modules=known_module_names(),
+        entry_points=_eps(_FakeEP("noneplugin", lambda: plugin, dist=_FakeDist("x", "1"))),
+    )
+
+    with pytest.raises(PluginError) as exc:
+        loaded.injections_for(module)
+    msg = str(exc.value)
+    assert "None" in msg
+    assert f"{module}.{key}" in msg
+
+    with pytest.raises(PluginError):
+        build_registry(bus, {"modules": {module: True}}, plugins=loaded)
+
+
+@pytest.mark.asyncio
+async def test_nous_falsy_injected_engine_held_not_default(monkeypatch, bus):
+    """An injected engine that is falsy is still the engine Nous uses."""
+    monkeypatch.setattr("kaine.modules.nous.engine.PymdpEngine", _BoomPymdpEngine)
+
+    class FalsyEngine:
+        def __len__(self):
+            return 0
+
+        def step(self, snapshot):
+            return _EngineResult()
+
+        @property
+        def actions(self):
+            return []
+
+    engine = FalsyEngine()
+    assert not engine
+
+    from kaine.boot import make_nous
+
+    nous = make_nous(bus, {}, injections={"engine": engine})
+    assert nous.engine is engine
+
+
+def _spot(registry, config, bus):
+    from kaine.cycle.spot import IncidentLogConfig, Spot, SpotConfig
+
+    return Spot(
+        registry=registry,
+        fork_manager=_DummyForkManager(),
+        kaine_config=config,
+        config=SpotConfig(incident_log=IncidentLogConfig(enabled=False)),
+        rebuild_module=_make_rebuild_module(bus, config, registry, None),
+        bus=bus,
+    )
+
+
+@pytest.mark.asyncio
+async def test_spot_nous_heavy_restart_refreshes_engine_and_oscillator(monkeypatch, bus):
+    """Two real Spot heavy restarts of Nous each request a fresh engine and a
+    fresh plugin oscillator (tasks 4.5 / 4.10)."""
+    monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
+
+    engine_plugin = _NousEnginePlugin()
+    osc_plugin = _FreshNousOscillatorPlugin()
+    config = {
+        "modules": {"nous": True},
+        "oscillator": {"enabled": True},
+        "plugins": {"enabled": ["nousengine", "nousosc"]},
+    }
+    loaded = load_plugins(
+        config,
+        known_modules=known_module_names(),
+        entry_points=_eps(
+            _FakeEP("nousengine", lambda: engine_plugin, dist=_FakeDist("eng", "1")),
+            _FakeEP("nousosc", lambda: osc_plugin, dist=_FakeDist("osc", "1")),
+        ),
+    )
+
+    registry = build_registry(bus, config, plugins=loaded)
+    nous = registry.get("nous")
+    assert engine_plugin.calls == 1
+    assert nous.engine.call_id == 1
+    assert nous._oscillator is not None and nous._oscillator.call_id == 1
+
+    spot = _spot(registry, config, bus)
+    first = await spot._restart_module("nous")
+    second = await spot._restart_module("nous")
+    assert first.ok and first.path == "heavy"
+    assert second.ok and second.path == "heavy"
+
+    nous = registry.get("nous")
+    assert engine_plugin.calls == 3
+    assert nous.engine.call_id == 3
+    assert osc_plugin.calls == 3
+    assert nous._oscillator.call_id == 3
+
+    await _close_module(nous)
+
+
+@pytest.mark.asyncio
+async def test_spot_chronos_light_restart_keeps_same_network(bus):
+    """Chronos restarts in place: it keeps its injected network and the plugin
+    is not asked again."""
+    network_plugin = _ChronosNetworkPlugin(_FakeNetwork)
+    config = {"modules": {"chronos": True}, "plugins": {"enabled": ["chronosnet"]}}
+    loaded = load_plugins(
+        config,
+        known_modules=known_module_names(),
+        entry_points=_eps(
+            _FakeEP("chronosnet", lambda: network_plugin, dist=_FakeDist("c", "1"))
+        ),
+    )
+
+    registry = build_registry(bus, config, plugins=loaded)
+    before = registry.get("chronos")._network
+    assert network_plugin.calls == 1
+
+    spot = _spot(registry, config, bus)
+    result = await spot._restart_module("chronos")
+    assert result.ok and result.path == "light"
+    assert network_plugin.calls == 1
+    assert registry.get("chronos")._network is before
+
+    await _close_module(registry.get("chronos"))

@@ -66,6 +66,11 @@ class Chronos(BaseModule):
         # An injected network (a plugin substrate, or a test double) brings its
         # own hidden width; the prediction head must be sized from it.
         self._network_injected = network is not None
+        if self._network_injected and forward_prediction and getattr(network, "units", None) is None:
+            raise ValueError(
+                "Chronos: an injected network must expose `units` (its hidden "
+                "width) when forward prediction is enabled"
+            )
         self._cfc_units = int(cfc_units)
         # When no detector is injected, size it from config. An injected
         # detector (e.g. in tests) brings its own window/threshold settings.

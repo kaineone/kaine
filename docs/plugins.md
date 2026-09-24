@@ -107,10 +107,26 @@ and stops. There is no silent fallback to the default model.
 
 ## Restarts
 
-Spot's heavy restart path rebuilds a module by re-invoking the plugin's
-`injections` (and `make_oscillator` when declared) for that module. A plugin
-must therefore accept repeated requests for the same module and return a
-fresh object for each new module instance.
+Spot restarts a failing module in one of two ways:
+
+- **In place** (the default, used by Chronos and Soma): the same module object
+  is shut down and re-initialized, so it keeps the injected object it was built
+  with. The plugin is not asked again.
+- **Rebuilt** (modules that hold external resources, such as Nous): the module
+  is constructed afresh through the same path as at boot, so the plugin's
+  `injections` is called again for that module and must return a working, fresh
+  object. After any rebuild, every module's oscillator is re-created, so
+  `make_oscillator` is called again for every declared `oscillator.<module>`
+  seam.
+
+A plugin must therefore accept repeated requests for the same module, and an
+injected object must tolerate being shut down and re-initialized in place.
+
+## Disabled modules
+
+A plugin may declare a seam for a module that `[modules]` does not enable. The
+seam is accepted and recorded in the run manifest, but it is not filled because
+the module is not constructed.
 
 ## Oscillator seam rule
 
@@ -128,9 +144,13 @@ package metadata, and its declared seams.
 
 ## State snapshots
 
-A module's `state_dict` includes its model's state. A plugin model must
-implement `state_dict` and `load_state_dict`; restoring a snapshot taken with a
-different model is the plugin's responsibility to reject.
+Soma serializes its forward model through `state_dict()` and restores it with
+`load_state_dict(...)`, so an injected forward model must implement both. If
+restoring fails, Soma logs a warning and continues with the un-restored model,
+so a plugin model should restore what it can or keep a working state when it
+receives a snapshot taken with a different model. Chronos does not serialize
+its network (only its prediction head), so an injected network's state is the
+plugin's to keep.
 
 ## Non-goal
 
