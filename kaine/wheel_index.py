@@ -608,7 +608,6 @@ _NVML_LIB_NAME = "libnvidia-ml.so.1"
 
 _CUDA_VERSION_RE = re.compile(r"CUDA Version:\s*(\d+)\.(\d+)")
 _COMPUTE_CAP_LINE_RE = re.compile(r"^\s*(\d+)\.(\d)\s*$")
-_INDEX_VERSION_RE = re.compile(r"cu(\d+)/?$")
 
 
 def _shorten(text) -> str:
@@ -698,6 +697,9 @@ def _nvml_shutdown(lib) -> None:
     try:
         lib.nvmlShutdown()
     except Exception:
+        # Shutdown is best-effort. By the time this runs the probe has already
+        # produced its result (or failure note), and a failed NVML shutdown
+        # leaves nothing the probe can act on or report, so ignore it.
         pass
 
 
@@ -906,11 +908,8 @@ def _probe_memory_state(*, torch=None) -> tuple[str, str]:
         if reason:
             note += f" (unknown_reason: {_shorten(reason)})"
     evidence = getattr(classification, "evidence", None)
-    try:
-        if evidence:
-            note += f"; {len(evidence)} evidence item(s)"
-    except Exception:
-        pass
+    if isinstance(evidence, str) and evidence:
+        note += f"; evidence: {_shorten(evidence)}"
     return state, note
 
 
