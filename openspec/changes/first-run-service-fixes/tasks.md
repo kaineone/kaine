@@ -47,10 +47,10 @@
 
 ## 5. Docs
 
-- [ ] 5.1 `docs/getting-started.md`:
+- [x] 5.1 `docs/getting-started.md`:
   - Nexus sign-in with the generated token.
   - Remove the nonexistent `systemctl --user` unit commands in favour of the real launch steps.
   - Describe the Redis bootstrap's keep-by-default behaviour and `--rotate`.
-- [ ] 5.2 `SECURITY.md` and `docs/operations.md`: rotation is explicit (`--rotate`); a re-run keeps credentials.
-- [ ] 5.3 `config/secrets.example.toml`: say that `python -m kaine.setup` generates the operator token.
-- [ ] 5.4 `openspec validate first-run-service-fixes --strict` passes.
+- [x] 5.2 `SECURITY.md` and `docs/operations.md`: rotation is explicit (`--rotate`); a re-run keeps credentials.
+- [x] 5.3 `config/secrets.example.toml`: say that `python -m kaine.setup` generates the operator token.
+- [x] 5.4 `openspec validate first-run-service-fixes --strict` passes.

@@ -182,7 +182,7 @@ Provenance: `kaineone/Qwen3.5-4B-abliterated` is KAINE's own abliteration of the
 
 **Role.** Speech-to-text transcription via Speaches, a local server wrapping faster-Whisper.
 
-**Why Speaches.** Speaches is already installed on the operator host as a user systemd service (`speaches-stt.service`, port 8000). It wraps faster-Whisper (CTranslate2-optimized Whisper) and exposes a REST API that Audition calls. The reference note is important: Speaches must be run with `--model medium.en` on CPU (not GPU) to avoid a cuDNN crash that breaks the voice loop when the secondary GPU is also running Chatterbox TTS.
+**Why Speaches.** Speaches runs as a separate local service on port 8000 (the `kaine-speaches` Quadlet unit, or its own install). It wraps faster-Whisper (CTranslate2-optimized Whisper) and exposes a REST API that Audition calls. The reference note is important: Speaches must be run with `--model medium.en` on CPU (not GPU) to avoid a cuDNN crash that breaks the voice loop when the secondary GPU is also running Chatterbox TTS.
 
 **STT model.** `Systran/faster-distil-whisper-medium.en` is the default `stt_model` in `kaine.toml`, matching the recommended Speaches service launch (the service-level model load). The config model ID (what KAINE requests per-call) MUST match a model the Speaches instance has actually loaded — a mismatch returns 404 and silently breaks the voice loop. List served models with `curl -s http://127.0.0.1:8000/v1/models`.
 
