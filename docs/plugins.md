@@ -115,9 +115,12 @@ Spot restarts a failing module in one of two ways:
 - **Rebuilt** (modules that hold external resources, such as Nous): the module
   is constructed afresh through the same path as at boot, so the plugin's
   `injections` is called again for that module and must return a working, fresh
-  object. After any rebuild, every module's oscillator is re-created, so
-  `make_oscillator` is called again for every declared `oscillator.<module>`
-  seam.
+  object.
+
+Oscillators are never re-created by a restart: a rebuilt module receives the
+oscillator its predecessor held (the same object, phase history intact), and
+every other module keeps its own. A plugin's `make_oscillator` is therefore
+called once per declared `oscillator.<module>` seam, at boot.
 
 A plugin must therefore accept repeated requests for the same module, and an
 injected object must tolerate being shut down and re-initialized in place.

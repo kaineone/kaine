@@ -432,9 +432,16 @@ class Spot:
                 return Spot._RestartResult(False, "light", False)
         # Heavy rebuild path.
         last_good_restored = False
+        # The rebuilt module inherits its predecessor's oscillator (the same
+        # object, phase history intact): nothing about the oscillator failed,
+        # the rhythm stays continuous, and a plugin's make_oscillator is never
+        # re-requested mid-restart (oscillator-continuity-on-restart).
+        oscillator = getattr(module, "oscillator", None)
         try:
             await module.shutdown()
             new = self._rebuild_module(name)
+            if oscillator is not None and hasattr(new, "attach_oscillator"):
+                new.attach_oscillator(oscillator)
             await new.initialize()
             self._registry.replace(name, new)
             from kaine.boot import rewire_module
