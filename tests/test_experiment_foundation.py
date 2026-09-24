@@ -320,8 +320,13 @@ def test_manifest_is_content_free(tmp_path):
         # Reproducible perception-feed covariate (descriptor only — no frames,
         # no operator paths). Defaults to {"mode": "off"} when unconfigured.
         "perception_feed",
+        # Module plugins (module-plugins): plugin names, distribution, version
+        # and seam names only — never a plugin's configuration values. Empty
+        # when no plugin is enabled.
+        "plugins",
     }
     assert loaded["perception_feed"] == {"mode": "off"}
+    assert loaded["plugins"] == {}
     # The raw config is NEVER stored — only its digest.
     assert "redact-me" not in json.dumps(loaded)
 

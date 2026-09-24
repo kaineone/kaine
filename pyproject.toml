@@ -226,6 +226,7 @@ source_modules = [
     "kaine.perception_preview",
     "kaine.perception_preview_server",
     "kaine.perception_state",
+    "kaine.plugins",
     "kaine.preboot",
     "kaine.privacy_filter",
     "kaine.state_io",
@@ -280,6 +281,21 @@ forbidden_modules = [
     "kaine.cycle.research_gate",
     "kaine.cycle.spot",
 ]
+
+# Module plugins (module-plugins): cognitive modules receive plugin objects only
+# through their constructors, so they never import the loader; the loader is a
+# leaf that boot imports, so it must not import boot, the cycle or the modules.
+[[tool.importlinter.contracts]]
+name = "Modules must not import the plugin loader"
+type = "forbidden"
+source_modules = ["kaine.modules"]
+forbidden_modules = ["kaine.plugins"]
+
+[[tool.importlinter.contracts]]
+name = "The plugin loader must not import boot, the cycle or the modules"
+type = "forbidden"
+source_modules = ["kaine.plugins"]
+forbidden_modules = ["kaine.boot", "kaine.cycle", "kaine.modules"]
 
 # The evaluation sidecar observes the bus; it must not reach into Nexus
 # internals (the operator UI). Keeping these decoupled means evaluation can run

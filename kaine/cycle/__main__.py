@@ -34,14 +34,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from kaine.boot import _CLOCKED_FACTORIES as CLOCKED_FACTORIES
 from kaine.boot import (
-    SIMPLE_FACTORIES,
     MetricsCollector,
     build_registry,
+    construct_module,
+    known_module_names,
     make_coherence_scorer,
-    make_hypnos,
     make_salience_factors,
+    plugin_injections,
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
@@ -648,6 +648,41 @@ def _lifecycle_event(
     )
 
 
+def _make_rebuild_module(
+    bus: AsyncBus,
+    kaine_config: dict[str, Any],
+    registry: Any,
+    intent_secret: bytes | None,
+) -> Any:
+    """Return Spot's heavy-restart constructor, bound to this boot's bus,
+    configuration, registry and Praxis intent secret."""
+
+    def rebuild_module(name: str) -> Any:
+        """Rebuild a single module exactly as build_registry would, for Spot's
+        heavy restart path. Hypnos re-fetches its siblings from the registry.
+
+        A restarted cognitive module must keep timing on the SAME shared
+        subjective clock the rest of the mind uses, so the one EntityClock on
+        the registry is re-injected here exactly as build_registry injects it.
+        """
+        # One construction path with build_registry (boot.construct_module):
+        # the same clock, the same Praxis intent secret, the same perception
+        # feed for Topos/Audition, and Hypnos rebuilt with its siblings.
+        return construct_module(
+            name,
+            bus,
+            kaine_config,
+            registry=registry,
+            entity_clock=registry.entity_clock,
+            intent_secret=intent_secret,
+            # A restarted module keeps its plugin substitution: the plugin is
+            # asked for a fresh object exactly as at boot.
+            injections=plugin_injections(registry.plugins, name),
+        )
+
+    return rebuild_module
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
@@ -730,6 +765,12 @@ async def _boot_and_run(
     seed = _resolve_seed(kaine_config)
     set_global_seed(seed)
     from kaine.boot import gather_perception_feed_descriptor
+    from kaine.plugins import load_plugins
+
+    # Module plugins load (and declare their seams) before the run manifest is
+    # written, so the manifest records every substitution. A named plugin that
+    # cannot load stops the boot (PluginError) rather than run on defaults.
+    plugins = load_plugins(kaine_config, known_modules=known_module_names())
 
     run_ctx = mint_run_context(
         seed=seed,
@@ -740,6 +781,7 @@ async def _boot_and_run(
         # Reproducible perception-feed covariate — gathered at the boot layer
         # (allowed to touch kaine.modules) and passed in as data.
         perception_feed=gather_perception_feed_descriptor(kaine_config),
+        plugins=plugins.manifest_entry(),
     )
     set_run_context(run_ctx)
     if bool(experiment_cfg.get("write_manifest", True)):
@@ -839,7 +881,7 @@ async def _boot_and_run(
     # any other bus writer fails verification and never reaches an effector.
     intent_secret = generate_intent_secret()
 
-    registry = build_registry(bus, kaine_config, intent_secret=intent_secret)
+    registry = build_registry(bus, kaine_config, intent_secret=intent_secret, plugins=plugins)
     if not len(registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
@@ -998,38 +1040,7 @@ async def _boot_and_run(
     spot_cfg = SpotConfig.from_section(kaine_config.get("spot") or {})
     fork_manager = ForkManager(Path("state/forks"))
 
-    def rebuild_module(name: str) -> Any:
-        """Rebuild a single module exactly as build_registry would, for Spot's
-        heavy restart path. Hypnos re-fetches its siblings from the registry.
-
-        A restarted cognitive module must keep timing on the SAME shared
-        subjective clock the rest of the mind uses, so the one EntityClock on
-        the registry is re-injected here exactly as build_registry injects it.
-        """
-        section = dict(kaine_config.get(name) or {})
-        shared_clock = registry.entity_clock
-        if name == "hypnos":
-            mnemos = registry.get("mnemos") if "mnemos" in registry else None
-            thymos = registry.get("thymos") if "thymos" in registry else None
-            phantasia = registry.get("phantasia") if "phantasia" in registry else None
-            return make_hypnos(
-                bus,
-                dict(kaine_config.get("hypnos") or {}),
-                mnemos=mnemos,
-                nous_process=None,
-                thymos=thymos,
-                phantasia=phantasia,
-                kaine_config=kaine_config,
-                entity_clock=shared_clock,
-            )
-        if name in CLOCKED_FACTORIES:
-            return SIMPLE_FACTORIES[name](bus, section, entity_clock=shared_clock)
-        if name == "praxis":
-            # A restarted Praxis must keep verifying act-intent provenance, so
-            # re-inject the same per-boot secret build_registry used. Without it
-            # the fail-closed default would refuse every act intent post-restart.
-            return SIMPLE_FACTORIES[name](bus, section, intent_secret=intent_secret)
-        return SIMPLE_FACTORIES[name](bus, section)
+    rebuild_module = _make_rebuild_module(bus, kaine_config, registry, intent_secret)
 
     await _write_runtime_state(
         cycle,
@@ -1414,10 +1425,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    from kaine.plugins import PluginError
+
     try:
         return asyncio.run(
             _boot_and_run(supervision_mode=supervision_mode, gate_checks=gate_checks)
         )
+    except PluginError as exc:
+        # A named plugin that cannot load or supply its seams stops the boot:
+        # running on the default models would misrepresent the run.
+        sys.stderr.write(f"kaine.cycle: plugin error: {exc}\n")
+        return 1
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")
         return 0

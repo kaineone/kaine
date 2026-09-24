@@ -278,6 +278,31 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                 f"oscillator.enabled expected bool, got {type(enabled).__name__}"
             )
 
+    plugins = config.get("plugins")
+    if plugins is not None:
+        if not isinstance(plugins, dict):
+            raise ConfigShapeError(
+                f"plugins expected table, got {type(plugins).__name__}"
+            )
+        enabled = plugins.get("enabled")
+        if enabled is not None:
+            if not isinstance(enabled, list):
+                raise ConfigShapeError(
+                    f"plugins.enabled expected list, got {type(enabled).__name__}"
+                )
+            for idx, item in enumerate(enabled):
+                if not isinstance(item, str):
+                    raise ConfigShapeError(
+                        f"plugins.enabled[{idx}] expected string, got {type(item).__name__}"
+                    )
+        for key, value in plugins.items():
+            if key == "enabled":
+                continue
+            if not isinstance(value, dict):
+                raise ConfigShapeError(
+                    f"plugins.{key} expected table, got {type(value).__name__}"
+                )
+
     security = config.get("security")
     if security is not None:
         if not isinstance(security, dict):
