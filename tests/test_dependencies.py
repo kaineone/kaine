@@ -174,3 +174,63 @@ def test_provision_defaults_shows_but_does_not_run(monkeypatch):
     )
     assert ran == []
     assert "command:" in "".join(buf)
+
+
+def test_qdrant_probed_on_kaine_port_by_default(monkeypatch) -> None:
+    from kaine.setup.dependencies import detect_dependencies
+
+    probed = []
+
+    def fake(port, **kwargs):
+        probed.append(port)
+        return False
+
+    monkeypatch.setattr("kaine.setup.dependencies._port_listening", fake)
+    statuses = detect_dependencies({"mnemos": True})
+    assert 6533 in probed
+    assert 6333 not in probed
+    qdrant = next(s for s in statuses if s.spec.name == "qdrant")
+    assert qdrant.installed is True
+
+
+def test_qdrant_probed_on_configured_port(monkeypatch) -> None:
+    from kaine.setup.dependencies import detect_dependencies
+
+    probed = []
+
+    def fake(port, **kwargs):
+        probed.append(port)
+        return False
+
+    monkeypatch.setattr("kaine.setup.dependencies._port_listening", fake)
+    detect_dependencies({"mnemos": True}, qdrant_port=7000)
+    assert 7000 in probed
+    assert 6533 not in probed
+
+
+def test_provision_dependencies_reads_qdrant_port_from_config(monkeypatch) -> None:
+    from kaine.setup.__main__ import _provision_dependencies
+
+    probed = []
+
+    def fake(port, **kwargs):
+        probed.append(port)
+        return True
+
+    monkeypatch.setattr("kaine.setup.dependencies._port_listening", fake)
+    _provision_dependencies(
+        {"modules": {"mnemos": True}, "mnemos": {"qdrant": {"port": 7100}}},
+        input_fn=lambda _p: "",
+        out=lambda _s: None,
+        defaults=True,
+    )
+    assert 7100 in probed
+
+    probed.clear()
+    _provision_dependencies(
+        {"modules": {"empatheia": True}, "empatheia": {"qdrant": {"port": 7200}}},
+        input_fn=lambda _p: "",
+        out=lambda _s: None,
+        defaults=True,
+    )
+    assert 7200 in probed

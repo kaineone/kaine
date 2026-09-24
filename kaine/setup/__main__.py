@@ -23,6 +23,8 @@ from kaine.setup import tomlwriter
 from kaine.setup.wizard import WizardResult, run_wizard
 
 DEFAULT_OPERATOR_PATH = OPERATOR_CONFIG_PATH
+# Where Nexus reads its operator token (kaine.nexus.config.load_nexus_config).
+DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
 
 
 def _describe_host_with_cpu() -> dict[str, Any]:
@@ -289,7 +291,15 @@ def _provision_dependencies(
 
     modules = config.get("modules") or {}
     redis_port = (config.get("redis") or {}).get("port")
-    statuses = detect_dependencies(modules, redis_port=redis_port)
+    # Mnemos and Empatheia share KAINE's Qdrant; mnemos's port wins if both set.
+    qdrant_port = None
+    for owner in ("mnemos", "empatheia"):
+        qdrant_port = ((config.get(owner) or {}).get("qdrant") or {}).get("port")
+        if qdrant_port:
+            break
+    statuses = detect_dependencies(
+        modules, redis_port=redis_port, qdrant_port=qdrant_port
+    )
     if not statuses:
         return
 
@@ -336,6 +346,75 @@ def _provision_dependencies(
                 f"            {spec.name} provisioning failed ({exc}); "
                 f"run manually: {spec.command}\n"
             )
+
+
+def _ensure_nexus_token(
+    secrets_path: Path,
+    *,
+    out: Callable[[str], Any],
+    env: dict[str, str] | None = None,
+) -> str:
+    """Ensure a Nexus operator sign-in token exists.
+
+    Without a token, Nexus rejects every sign-in with 503. The environment
+    variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
+    from or written to ``[nexus] operator_token`` in the secrets file.
+    """
+    import secrets
+    import tomllib
+
+    from kaine import secrets_file
+
+    env = os.environ if env is None else env
+    out("\n")
+
+    if env.get("KAINE_NEXUS_TOKEN", "").strip():
+        out(
+            "Nexus sign-in token: provided by KAINE_NEXUS_TOKEN; nothing written.\n"
+        )
+        return "env"
+
+    try:
+        existing = secrets_file.read_toml_field(
+            secrets_path, "nexus", "operator_token"
+        )
+    except tomllib.TOMLDecodeError:
+        out(
+            f"{secrets_path} is not valid TOML; the Nexus sign-in token was NOT "
+            "generated. Fix the file, then re-run setup.\n"
+        )
+        return "malformed"
+    except OSError as exc:
+        out(
+            f"{secrets_path} could not be read ({exc}); the Nexus sign-in token "
+            "was NOT generated.\n"
+        )
+        return "error"
+
+    if isinstance(existing, str) and existing.strip():
+        out(
+            f"Nexus sign-in token: already set in {secrets_path} [nexus] "
+            "operator_token; kept.\n"
+        )
+        return "kept"
+
+    token = secrets.token_urlsafe(32)
+    try:
+        secrets_file.upsert_toml_field(
+            secrets_path, "nexus", "operator_token", token
+        )
+    except (OSError, ValueError) as exc:
+        out(
+            f"Could not save Nexus sign-in token to {secrets_path} ({exc}).\n"
+        )
+        return "error"
+
+    out(
+        f"Nexus sign-in token: generated and saved to {secrets_path} under "
+        "[nexus] operator_token (mode 600). It is not shown here; open that file "
+        "when Nexus asks for it.\n"
+    )
+    return "generated"
 
 
 def _print_next_steps(
@@ -417,6 +496,12 @@ def main(
         default=SHIPPED_CONFIG_PATH,
         help="path to the shipped config to read defaults from",
     )
+    parser.add_argument(
+        "--secrets-path",
+        type=Path,
+        default=None,
+        help="secrets file that receives a generated Nexus token (default: config/secrets.toml)",
+    )
     args = parser.parse_args(argv)
 
     sink: TextIO = out or sys.stdout
@@ -472,6 +557,9 @@ def main(
     _provision_dependencies(
         result.config, input_fn=_input, out=write, defaults=args.defaults
     )
+
+    # Resolved at call time (not as the argparse default) so tests can redirect it.
+    _ensure_nexus_token(args.secrets_path or DEFAULT_SECRETS_PATH, out=write)
 
     _print_next_steps(result.config, operator_path=operator_path, out=write)
     return 0

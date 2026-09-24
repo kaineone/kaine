@@ -28,9 +28,9 @@
 
 ## 3. Setup wizard
 
-- [ ] 3.1 Generate `[nexus].operator_token` when neither the secrets file nor `KAINE_NEXUS_TOKEN` provides one. Never overwrite an existing token, and never print it.
-- [ ] 3.2 Probe Qdrant on the configured port (mnemos, then empatheia, then 6533). Give Qdrant `binary=None`, like Redis.
-- [ ] 3.3 Tests:
+- [x] 3.1 Generate `[nexus].operator_token` when neither the secrets file nor `KAINE_NEXUS_TOKEN` provides one. Never overwrite an existing token, and never print it.
+- [x] 3.2 Probe Qdrant on the configured port (mnemos, then empatheia, then 6533). Give Qdrant `binary=None`, like Redis.
+- [x] 3.3 Tests:
   - The token is generated once and is at least 32 characters.
   - An existing token or environment token is kept.
   - A configured Qdrant port is probed.
