@@ -198,13 +198,11 @@ class UnattendedGateResult:
         ]
         for c in self.failed:
             lines.append(f"  {c.number}: {c.name} — {c.reason}")
-        lines.extend(
-            [
-                "",
-                "An unattended boot has no override. Fix the conditions above, "
-                "or start the entity supervised with KAINE_CYCLE_OPERATOR_PRESENT=1.",
-            ]
+        no_override = (
+            "An unattended boot has no override. Fix the conditions above, "
+            "or start the entity supervised with KAINE_CYCLE_OPERATOR_PRESENT=1."
         )
+        lines.extend(["", no_override])
         return "\n".join(lines)
 
 

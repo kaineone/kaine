@@ -194,7 +194,7 @@ def test_unattended_conflicts_with_operator_present(tmp_path):
 def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
     """A passing unattended gate threads supervision_mode and all eight
     gate_checks into _boot_and_run."""
-    import kaine.cycle.__main__ as m
+    from kaine.cycle import __main__ as m
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         CONDITION_NAMES,
@@ -245,7 +245,7 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
 
 def test_unattended_refusal_ignores_overrides(monkeypatch):
     """No override switch lets a failing unattended gate proceed."""
-    import kaine.cycle.__main__ as m
+    from kaine.cycle import __main__ as m
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         UNATTENDED_GATE_EXIT_CODE,
