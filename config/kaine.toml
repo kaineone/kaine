@@ -35,10 +35,9 @@ audit_required = true
 # workspace tick; 10.0 s^-1 → 100 ms/tick). experiential_rate_hz is the rate at
 # which a tick is promoted to a CONSCIOUS broadcast — held at the resting P3b
 # conscious-access band (~3.33 Hz) so the senses (10 Hz vision) genuinely outrun
-# awareness and several samples inform one conscious update. NOTE: in organic
-# brains this conscious-access rate is state-variable (arousal / fight-flight
-# raises it); modelling that variability (e.g. arousal-modulated via Thymos +
-# time_scale) is deliberate future work — a fixed resting baseline is used now.
+# awareness and several samples inform one conscious update. This is the RESTING
+# rate: with [cycle.access_rate] enabled, conscious access speeds up with arousal
+# and with salient module reports, toward one broadcast per processing tick.
 processing_rate_hz = 10.0
 experiential_rate_hz = 3.333
 # Global time dilation of the entity's subjective clock. 1.0 = real-time (the
@@ -51,6 +50,24 @@ experiential_rate_hz = 3.333
 # whole mind coherently because every cognitive timer reads the shared
 # EntityClock (clock injection into the other modules is Phase 2).
 time_scale = 1.0
+
+[cycle.access_rate]
+# Adaptive conscious access. The P3 is read as the cortical signature of the locus
+# coeruleus-noradrenaline (LC-NE) response to salient or unexpected events
+# (Nieuwenhuis, Aston-Jones & Cohen 2005); LC-NE has a tonic mode tracking arousal
+# and a phasic mode driven by salient events (Aston-Jones & Cohen 2005). Each tick:
+#   drive = max(tonic, phasic)
+#   tonic  = Thymos arousal above baseline_arousal, scaled to [0, 1]
+#            (Thymos arousal rises with perceptual prediction error)
+#   phasic = the most salient module report above salience_floor, scaled to
+#            [0, 1], held as a peak that decays over phasic_decay_s (subjective)
+#   rate   = experiential_rate_hz + (processing_rate_hz - experiential_rate_hz) * drive
+# The linear map is a modelling assumption bounded by the resting P3b rate and the
+# processing rate. enabled = false restores the fixed resting rate exactly.
+enabled = true
+salience_floor = 0.5       # routine module reports sit at or below this; alerts rise above
+phasic_decay_s = 1.0       # subjective seconds for a salient report's effect to decay by 1/e
+# baseline_arousal defaults to [thymos].baseline_arousal; set it here only to override.
 
 [syneidesis]
 top_k = 5

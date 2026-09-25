@@ -55,10 +55,17 @@
                  value="{{ metrics.processing_rate_hz or '' }}">
         </div>
         <div class="control-row">
-          <label for="exp-rate">experiential Hz</label>
+          <label for="exp-rate">resting experiential Hz</label>
           <input type="number" id="exp-rate" step="0.1" min="0.1"
                  value="{{ metrics.experiential_rate_hz or '' }}">
         </div>
+        {% if metrics.experiential_rate_effective_hz is not none %}
+        <p class="muted" id="exp-rate-effective">
+          conscious access now {{ "%.2f"|format(metrics.experiential_rate_effective_hz) }} Hz
+          (drive {{ "%.2f"|format(metrics.access_drive or 0) }}); it rises from the
+          resting rate with arousal and salient reports.
+        </p>
+        {% endif %}
         <button type="submit" class="primary" id="rate-submit">set rates</button>
         <span id="rate-status" class="muted"></span>
       </form>

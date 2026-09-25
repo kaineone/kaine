@@ -186,6 +186,8 @@ def test_experiential_accumulator_bounded_when_throttled():
     eng = CognitiveCycle.__new__(CognitiveCycle)
     eng._experience_acc = 0.0
     eng._experiential_rate = 4.0  # above the (throttled) processing rate
+    # Built without __init__; the rate used for promotion is the effective one.
+    eng._effective_experiential_rate = 4.0
     eng._processing_rate = 1.0
     for _ in range(500):
         eng._advance_experiential()

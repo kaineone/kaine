@@ -157,8 +157,19 @@ Cognitive cycle timing, read at startup.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `processing_rate_hz` | float | `10.0` | Processing loop rate (100 ms/tick; alpha-band sampling / workspace tick). Benchmarked-cleared on this host (RTX 4070 SUPER, ~17 Hz tick headroom). Independent of the experiential rate. |
-| `experiential_rate_hz` | float | `3.333` | Rate at which a tick is promoted to a CONSCIOUS broadcast. Held at the resting P3b conscious-access band (~3.33 Hz) so the senses (e.g. 10 Hz vision) genuinely outrun awareness and several samples inform one conscious update. In organic brains this rate is state-variable (arousal / fight-flight raises it); modelling that variability (e.g. arousal-modulated via Thymos + `time_scale`) is deliberate future work — a fixed resting baseline is used now. |
+| `experiential_rate_hz` | float | `3.333` | Rate at which a tick is promoted to a CONSCIOUS broadcast. This is the **resting** rate, the P3b conscious-access band (~3.33 Hz), so the senses (e.g. 10 Hz vision) outrun awareness and several samples inform one conscious update. With `[cycle.access_rate]` enabled the rate rises from here toward the processing rate with arousal and salient reports. |
 | `time_scale` | float | `1.0` | Global time dilation of the entity's subjective clock. `1.0` = real-time (the shipped default — behavior is byte-identical to no clock at all). `0` freezes the entity (the subjective clock stops; reuses the existing freeze/suspend path). Values `> 1` run the mind faster than wall-clock as an aspirational target: the cycle attempts the faster tick rate and, when the hardware cannot hold it, the existing slip measurement records the overrun honestly. One knob dilates the whole mind coherently because every cognitive timer reads the shared EntityClock. |
+
+### `[cycle.access_rate]`
+
+Adaptive conscious access. See [the cognitive cycle](processes/cognitive-cycle.md#adaptive-conscious-access--cycleaccess_rate).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Adapt the conscious-access rate between the resting `experiential_rate_hz` and `processing_rate_hz`. `false` gives the fixed resting rate. |
+| `salience_floor` | float | `0.5` | Module reports at or below this salience do not raise access; routine reports sit at or below it and alerts rise above it. `[0, 1)`. |
+| `phasic_decay_s` | float | `1.0` | Subjective seconds for a salient report's effect to decay by 1/e. |
+| `baseline_arousal` | float | `[thymos].baseline_arousal` | Arousal at which the tonic drive is zero. Set only to override Thymos's baseline. `[0, 1)`. |
 
 ---
 

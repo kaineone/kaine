@@ -446,6 +446,14 @@ def _load_kaine_config(
     return config
 
 
+def _numeric_or(value: Any, default: Any) -> Any:
+    """``value`` when it is a real number, else ``default`` (runtime.json must
+    stay JSON-serialisable even when a test double stands in for the cycle)."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return default
+
+
 async def _write_runtime_state(
     cycle: CognitiveCycle,
     registry,
@@ -474,6 +482,13 @@ async def _write_runtime_state(
         "tick_index": cycle.tick_index,
         "processing_rate_hz": cycle.processing_rate_hz,
         "experiential_rate_hz": cycle.experiential_rate_hz,
+        # Adaptive conscious access: the rate used on the latest tick and the
+        # drive behind it (the resting rate is experiential_rate_hz above).
+        "experiential_rate_effective_hz": _numeric_or(
+            getattr(cycle, "effective_experiential_rate_hz", None),
+            cycle.experiential_rate_hz,
+        ),
+        "access_drive": _numeric_or(getattr(cycle, "access_drive", None), 0.0),
         # Honest pacing report (biological-timing-and-dilation Phase 3): the
         # TARGET real processing rate (processing_rate_hz * time_scale) vs the
         # ACHIEVED rate measured from recent ticks, plus recent slip and an
@@ -928,11 +943,25 @@ async def _boot_and_run(
     # salience factors are the static negative control AND foveation / general
     # auditory perception are off, the engine stays byte-identical to the
     # pre-change behavior (no affect observation at all).
+    # Adaptive conscious access (adaptive-access-rate): the broadcast rate rises
+    # from the resting [cycle].experiential_rate_hz toward the processing rate
+    # with Thymos arousal (tonic) and salient module reports (phasic). The
+    # arousal baseline defaults to Thymos's own so the two cannot disagree.
+    from kaine.cycle.access_rate import AccessRateConfig, AccessRateController
+
+    access_rate_cfg = AccessRateConfig.from_section(
+        cycle_cfg.get("access_rate"),
+        default_baseline=float(
+            (kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
+        ),
+    )
+    access_rate = AccessRateController(access_rate_cfg) if access_rate_cfg.enabled else None
     reads_affect = (
         isinstance(thymos_modulator, StateModulator)
         or isinstance(goal_scorer, DriveRelevanceGoalScorer)
         or topos_reads_arousal
         or audition_reads_arousal
+        or access_rate is not None
     )
     affect_observer = affect_provider.observe if reads_affect else None
     syneidesis = Syneidesis(
@@ -1000,8 +1029,10 @@ async def _boot_and_run(
         syneidesis=syneidesis,
         registry=registry,
         processing_rate_hz=float(cycle_cfg.get("processing_rate_hz", 10.0)),
-        # Resting conscious-access (P3b) baseline; held below processing so the
-        # senses outrun awareness. Arousal-modulated variability is future work.
+        # Resting conscious-access (P3b) rate; held below processing so the
+        # senses outrun awareness. With [cycle.access_rate] enabled the rate used
+        # each tick rises from here toward the processing rate with arousal and
+        # salient reports; this value stays the resting rate.
         experiential_rate_hz=float(cycle_cfg.get("experiential_rate_hz", 3.333)),
         volition=volition,
         collect_phases=coherence_scorer is not None,
@@ -1032,6 +1063,12 @@ async def _boot_and_run(
         # drive snapshot from each tick's thymos.state. None when both factors are
         # the static negative control (then the tick is byte-identical).
         affect_observer=affect_observer,
+        access_rate=access_rate,
+        arousal_provider=(
+            (lambda: affect_provider.dimensional_state().arousal)
+            if access_rate is not None
+            else None
+        ),
     )
     # Make a live MetricsCollector reachable by Nexus.
     _ = MetricsCollector(cycle, registry)

@@ -132,3 +132,18 @@ async def test_invalid_rate_rejected(cycle_with_fakes):
         cycle.set_processing_rate(0.0)
     with pytest.raises(ValueError):
         cycle.set_experiential_rate(-1.0)
+
+
+@pytest.mark.asyncio
+async def test_resting_p3b_rate_keeps_the_fractional_carry(cycle_with_fakes):
+    """3.333 Hz over 10 Hz must broadcast ~100 times in 300 ticks. Clamping the
+    accumulator before subtracting dropped the carry and gave 75 (2.5 Hz)."""
+    cycle, _bus, _clock, _syn, _reg = cycle_with_fakes
+    cycle.set_processing_rate(10.0)
+    cycle.set_experiential_rate(3.333)
+
+    promoted = 0
+    for _ in range(300):
+        if (await cycle.tick()).is_experiential:
+            promoted += 1
+    assert 99 <= promoted <= 101, f"expected ~100 experiential ticks, got {promoted}"
