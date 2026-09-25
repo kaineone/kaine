@@ -29,7 +29,7 @@ dependencies = [
     # AES-256-GCM encryption-at-rest for persisted cognitive state
     # (kaine/security/crypto.py). Imported lazily, only when
     # [security.state_encryption].enabled = true.
-    "cryptography>=42,<49",
+    "cryptography>=49.0.0,<51",
 ]
 
 [project.optional-dependencies]
