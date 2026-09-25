@@ -270,3 +270,22 @@ def test_controller_resting_at_or_above_ceiling_returns_resting():
     )
     assert effective == pytest.approx(12.0)
     assert drive == pytest.approx(1.0)
+
+
+def test_research_log_keeps_the_adaptive_rate_fields():
+    """The curated research log allowlists cycle.tick fields; the adaptive-rate
+    fields must be on the list or they are silently dropped from research data."""
+    from kaine.evaluation.observers.research_event_observer import _TAXONOMY
+
+    assert {"experiential_rate_hz", "access_drive", "processing_rate_hz"} <= _TAXONOMY[
+        "cycle.tick"
+    ]
+
+
+def test_log_schema_bounds_the_access_drive():
+    from kaine.experiment.log_schema import _bound_for, _out_of_range
+
+    bound = _bound_for("cycle.tick", "access_drive")
+    assert bound is not None
+    assert _out_of_range(1.5, bound)
+    assert not _out_of_range(0.4, bound)

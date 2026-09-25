@@ -80,7 +80,18 @@ def _iso_now() -> str:
 _TAXONOMY: dict[str, frozenset[str]] = {
     # --- Cycle ---
     "cycle.tick": frozenset(
-        {"slip_ms", "wall_duration_ms", "target_duration_ms", "is_experiential", "error"}
+        {
+            "slip_ms",
+            "wall_duration_ms",
+            "target_duration_ms",
+            "is_experiential",
+            "error",
+            # Adaptive conscious access: the rate used on this tick, the drive
+            # behind it, and the processing rate it is bounded by.
+            "experiential_rate_hz",
+            "access_drive",
+            "processing_rate_hz",
+        }
     ),
     "cycle.rates": frozenset(
         {
