@@ -196,6 +196,29 @@ def test_full_run_accepting_cl1_round_trips():
     assert tomllib.loads(tomlwriter.dumps(result.config)) == result.config
 
 
+def test_wizard_block_parses_with_the_plugin_config():
+    """Contract test: the block the wizard records must parse with the plugin's own parser."""
+    plugin_config = pytest.importorskip(
+        "kaine_cl1.config", reason="the CL1 plugin is not installed"
+    )
+    out, sink = _collect_out()
+    result = run_wizard(
+        input_fn=_Answers(_full_run_answers("y")),
+        out=sink,
+        host=_host(cuda=1),
+        shipped_config=_shipped(),
+    )
+    assert result.acknowledged
+    assert result.config["plugins"]["enabled"] == ["cl1"]
+    overlay = plugin_config.overlay_from_mapping(result.config["plugins"]["cl1"])
+    assert overlay.cl1_modules() == ["chronos", "soma"]
+    assert overlay.territories == {"chronos": 12, "soma": 12}
+    assert overlay.substrate.target == "simulator"
+    assert overlay.substrate.accelerated_time is True
+    assert overlay.substrate.data_source == "reference_culture"
+    assert sum(overlay.territories.values()) <= 63
+
+
 # ----------------------------------------------------------------------------
 # TOML writer list support
 # ----------------------------------------------------------------------------
@@ -221,4 +244,3 @@ def test_tomlwriter_rejects_nested_lists_and_dicts_in_lists():
         tomlwriter.dumps({"t": {"x": [{"a": 1}]}})
     with pytest.raises(TypeError):
         tomlwriter.dumps({"t": {"x": [None]}})
-
