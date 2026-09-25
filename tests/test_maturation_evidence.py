@@ -23,7 +23,7 @@ from kaine.cycle.__main__ import _resolve_boot_stage
 from kaine.entity_clock import EntityClock
 from kaine.lifecycle.gate_runner import MaturationGateRunner
 from kaine.lifecycle.maturation_gate import MaturationConfig
-from kaine.lifecycle.stage import GESTATION, STAGE_PATH, StageState, read_stage
+from kaine.lifecycle.stage import GESTATION, StageState, read_stage
 
 
 class _FakeRegistry:
