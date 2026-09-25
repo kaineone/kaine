@@ -1,7 +1,7 @@
 # lingua Specification
 
 ## Purpose
-TBD - created by archiving change lingua. Update Purpose after archive.
+Lingua is the language organ: it turns the entity's speak and think intents into text through a local OpenAI-compatible model, conditioned on an assembled cognitive context, and publishes the result on the bus. It speaks only when an intent asks it to, never modifies its own model, keeps the A/B baseline and privacy intact, and leaves a content-free audit record when a realization fails.
 
 ## Requirements
 
@@ -276,3 +276,14 @@ privacy-bounded eval logs, never to the conversation surface.
 - **WHEN** an external response is produced from an assembled context
 - **THEN** the conversation surface payload contains only the produced external
   text, not the persona, the working-memory block, or any internal speech
+
+### Requirement: Failed realizations leave a content-free audit record
+When Lingua fails to realize a `speak` or `think` intent because generation raises (other than cancellation), it SHALL write one `realization_failed` record to `lingua.internal` in the same record format as its utterances, whose payload contains only `mode` (the intent kind) and `reason_class` (the exception class name). The record SHALL NOT contain the prompt, generated text, triggering input or exception message.
+
+#### Scenario: Language organ raises during a speak intent
+- **WHEN** a `speak` intent is realized and the chat client raises `ConnectionError`
+- **THEN** `lingua.internal` receives one record with type `realization_failed` and payload `{"mode": "speak", "reason_class": "ConnectionError"}`, and `lingua.external` receives nothing
+
+#### Scenario: The sleep-time audit counts the failure
+- **WHEN** Hypnos's ignition audit classifies the records read from `lingua.internal`
+- **THEN** the failure is counted in `realization_failed_count` and not as a realization

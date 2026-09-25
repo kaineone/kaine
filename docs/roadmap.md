@@ -19,13 +19,15 @@
 | stream-wiring-quality | 11/20 (55%) | architecture-boundaries, evaluation-observers, event-bus, lingua, stream-contract | ADDED, MODIFIED | `lingua.out` aggregate, observer consolidation and ruff enforcement landed; canonical stream names in observers and the per-stream maxlen key check remain... |
 | attention-driven-audition | 8/16 (50%) | audition, audition-predictive, auditory-perception | ADDED, MODIFIED | Hearing is currently **speech transcription for the language organ**,... |
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |
-| paracosmic-connector | 0/87 (0%) | kosmos | ADDED | > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper's ... |
 | unattended-boot-via-safety-net | 0/46 (0%) | spot-supervisor, unattended-boot | ADDED | Build deferred until research ends and Spot has a reviewed track record; eight-condition gate incl. caretaker notice and continuous input |
 
 ## Recently landed
 
 | Date | Change |
 | --- | --- |
+| 2026-09-25 | fix-lingua-realization-audit |
+| 2026-09-25 | torch-stack-coherence |
+| 2026-09-25 | paracosmic-connector (retired unbuilt; superseded by body-agnostic-embodiment-adapters) |
 | 2026-09-19 | developmental-maturation-gate (6 tasks reopened after review; see its tasks.md) |
 | 2026-09-17 | portability-tiers |
 | 2026-09-17 | condition-language-organ |
