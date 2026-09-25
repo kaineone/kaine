@@ -1493,3 +1493,29 @@ retention_days = 30
 
 [logging]
 level = "INFO"
+
+# [caretaker]
+# Used only by unattended boots. Sends content-free notices to the caretaker
+# over channels the operator controls locally. Condition 7 passes only if at
+# least one configured channel accepts the start notice.
+#
+# install_label = "kaine"          # Operator-chosen label for this install (1-64 chars).
+# reminder_interval_s = 14400.0    # Seconds between reminder notices (minimum 900).
+# input_loss_after_s = 60.0        # Seconds without input before the input-lost notice (later slice).
+# nexus_url = "http://127.0.0.1:8088/"  # Address shown in notices for Nexus.
+#
+# Desktop notification on the D-Bus session bus of the user running the unit.
+# [[caretaker.channels]]
+# kind = "desktop"
+#
+# HTTP POST to an operator-run private endpoint (ntfy, Gotify, etc.).
+# The destination must resolve to loopback, RFC 1918, fc00::/7, or 100.64.0.0/10.
+# [[caretaker.channels]]
+# kind = "http"
+# url = "https://ntfy.example.lan/kaine"
+# token_name = "ntfy"              # The bearer token value lives in config/secrets.toml.
+#
+# Tokens belong in config/secrets.toml under [caretaker.tokens], never here.
+# Example:
+# [caretaker.tokens]
+# ntfy = "your-bearer-token"

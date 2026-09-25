@@ -417,3 +417,55 @@ def test_eval_provider_factories_present_with_mnemos():
     cq = _cognitive_query_client_factory(reg, EvaluationConfig())
     assert hasattr(ms, "sample_old_memory")
     assert hasattr(cq, "query")
+
+
+def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
+    """An unattended gate refusal triggers a best-effort caretaker notice.
+
+    Even if that notice raises, the process still exits with the unattended
+    gate exit code.
+    """
+    import logging
+
+    from kaine.cycle.__main__ import main
+
+    # Keep this test hermetic: do not inherit mode selectors from the environment.
+    for key in (
+        "KAINE_CYCLE_UNATTENDED",
+        "KAINE_CYCLE_OPERATOR_PRESENT",
+        "KAINE_RESEARCH_MODE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setattr(
+        "kaine.cycle.__main__._load_kaine_config",
+        lambda **kwargs: {
+            "cycle": {"supervision_mode": "unattended"},
+            "caretaker": {"channels": [{"kind": "desktop"}]},
+        },
+    )
+
+    recorded: list[tuple[object, dict[str, bool]]] = []
+
+    def capture_and_raise(section, checks, **kwargs):
+        recorded.append((section, dict(checks)))
+        raise RuntimeError("caretaker notice failed on purpose")
+
+    monkeypatch.setattr(
+        "kaine.cycle.caretaker.send_refusal_notice",
+        capture_and_raise,
+    )
+
+    # Silence the refusal message and the exception log for this in-process call.
+    logging.disable(logging.CRITICAL)
+    try:
+        rc = main([])
+    finally:
+        logging.disable(logging.NOTSET)
+
+    assert rc == 6
+    assert len(recorded) == 1
+    checks = recorded[0][1]
+    # The result must include the not-built condition 8 and the caretaker condition 7.
+    assert checks.get("8_continuous_input") is False
+    assert checks.get("7_caretaker_told") is False
