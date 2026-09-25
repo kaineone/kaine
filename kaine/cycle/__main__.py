@@ -1152,6 +1152,7 @@ async def _boot_and_run(
         # Best-effort tick<->poll bridge: lets a spot.incident annotation be
         # located within the run by cycle tick, not just Spot's poll index.
         tick_index_provider=lambda: cycle.tick_index,
+        escalate_on_crash=(supervision_mode == "unattended"),
     )
 
     # Autonomous welfare safety-net monitors (cycle-layer, siblings to Spot):
@@ -1228,6 +1229,25 @@ async def _boot_and_run(
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
         while not stop_event.is_set() and not cycle_task.done():
+            if supervision_mode == "unattended":
+                if spot_task is None:
+                    log.critical(
+                        "Spot supervision task was never started; escalating"
+                    )
+                    await spot.escalate_supervision_lost(
+                        "supervision task never started"
+                    )
+                    stop_event.set()
+                    break
+                if spot_task.done() and not spot.escalated:
+                    log.critical(
+                        "Spot supervision task ended unexpectedly; escalating"
+                    )
+                    await spot.escalate_supervision_lost(
+                        "supervision task ended"
+                    )
+                    stop_event.set()
+                    break
             await _write_runtime_state(
                 cycle,
                 registry,
@@ -1337,13 +1357,16 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
 def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the eight-condition unattended gate over the resolved config.
 
-    Reuses the research safety net for conditions 1–5.  Conditions 6–8 are
-    supplied by later slices; until then the gate refuses every unattended boot.
+    Reuses the research safety net for conditions 1–5.  Condition 6 comes from
+    Spot's selftest.  Conditions 7–8 come from later slices; until then the
+    gate refuses every unattended boot for those two conditions.
     """
     net = _evaluate_research_safety_net(config)
+    from kaine.cycle.spot_selftest import check_spot_condition
     from kaine.cycle.unattended_gate import evaluate_unattended_gate
 
-    return evaluate_unattended_gate(net)
+    built = {6: check_spot_condition(config.get("spot") or {})}
+    return evaluate_unattended_gate(net, built=built)
 
 
 def main(argv: list[str] | None = None) -> int:

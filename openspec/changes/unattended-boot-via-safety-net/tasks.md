@@ -22,11 +22,11 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 
 ## 3. Spot selftest (condition 6)
 
-- [ ] 3.1 Add the config checks: enabled, `max_restart_attempts >= 1`, escalation path writable, incident log writable (canary append, then removed).
-- [ ] 3.2 Add `Spot` selftest in `kaine/cycle/spot.py`: scratch Spot from the same `[spot]` section, synthetic probe module, induced failure, bounded window (default 10 s, configurable), scratch directory removed in every outcome.
-- [ ] 3.3 Distinct reasons: "not enabled", "no restart ladder", "escalation path not writable", "incident log not writable", and the failing selftest step or "timed out".
-- [ ] 3.4 Tests: healthy pass; each config failure; freeze step broken; restart step broken; timeout; no entity module imported (import-hook assertion); scratch directory gone afterwards.
-- [ ] 3.5 In unattended mode, watch Spot's supervision task; on exit other than shutdown, run Spot's escalation and send a caretaker notice. Tests for unattended (escalates) and operator-present (unchanged).
+- [x] 3.1 Add the config checks: enabled, `max_restart_attempts >= 1`, escalation path writable, incident log writable (canary append, then removed).
+- [x] 3.2 Add the Spot selftest (`kaine/cycle/spot_selftest.py`; Spot gains injectable control and escalation paths): scratch Spot from the same `[spot]` section, synthetic probe module, induced failure, bounded window (default 10 s, configurable), scratch directory removed in every outcome.
+- [x] 3.3 Distinct reasons: "not enabled", "no restart ladder", "escalation path not writable", "incident log not writable", and the failing selftest step or "timed out".
+- [x] 3.4 Tests: healthy pass; each config failure; freeze step broken; restart step broken; timeout; no entity module imported (import-hook assertion); scratch directory gone afterwards.
+- [x] 3.5 In unattended mode, watch Spot's supervision task; on exit other than shutdown, run Spot's escalation (the caretaker notice for it is task 4.9). Tests for unattended (escalates) and operator-present (unchanged).
 
 ## 4. Caretaker notifier (condition 7)
 

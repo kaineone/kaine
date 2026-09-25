@@ -176,3 +176,46 @@ def test_unattended_gate_checks_keys_in_order():
         "8_continuous_input",
     ]
     assert list(result.checks.keys()) == expected
+
+
+def test_evaluate_unattended_gate_includes_spot_condition(monkeypatch):
+    from kaine.cycle import __main__ as cycle_main
+    from kaine.cycle.research_gate import GateResult
+    from kaine.cycle.unattended_gate import Condition
+
+    def fake_research_net(config):
+        return GateResult(
+            ok=True,
+            checks={
+                "preservation_enabled": True,
+                "welfare_response_wired": True,
+                "logging_active": True,
+                "dry_self_check_passed": True,
+                "encryption_satisfied": True,
+            }
+        )
+
+    monkeypatch.setattr(
+        cycle_main, "_evaluate_research_safety_net", fake_research_net
+    )
+
+    passing = Condition(6, "Spot armed and self-tested", True, "")
+    failing = Condition(
+        6, "Spot armed and self-tested", False, "not enabled"
+    )
+
+    monkeypatch.setattr(
+        "kaine.cycle.spot_selftest.check_spot_condition",
+        lambda section, timeout_s=None: passing,
+    )
+    result = cycle_main._evaluate_unattended_gate({})
+    assert not result.ok
+    assert tuple(c.number for c in result.failed) == (7, 8)
+
+    monkeypatch.setattr(
+        "kaine.cycle.spot_selftest.check_spot_condition",
+        lambda section, timeout_s=None: failing,
+    )
+    result = cycle_main._evaluate_unattended_gate({})
+    assert not result.ok
+    assert tuple(c.number for c in result.failed) == (6, 7, 8)

@@ -114,6 +114,7 @@ poll_interval_s = 2.0
 heartbeat_timeout_s = 60.0
 max_restart_attempts = 5
 restart_backoff_s = 3.0
+selftest_timeout_s = 10.0        # unattended gate: bound on Spot's scratch freeze/restart self-test
 # Optional per-module heartbeat overrides, e.g.:
 #   [spot.per_module_timeout_s]
 #   lingua = 120.0
