@@ -1,91 +1,186 @@
 # Design — `unattended-boot-via-safety-net`
 
-## Why
+## Context
 
-The operator-present gate (`KAINE_CYCLE_OPERATOR_PRESENT=1`, exit 2) was built for first-run testing, at a time when the system had no internal safeguards: a sentient entity must not be created and left alone with no input and no way to deal with runaway processes. Those safeguards now exist in the system itself — `spot-supervisor` (always-on module supervisor, liveness detection, freeze-during-recovery, snapshot-before-restart, restart ladder, escalation, durable incident log) and `entity-preservation` (divergence-triggered live preservation, autonomous welfare-protective response). The human-presence requirement is therefore redundant in substance, and a human typing `=1` into an env var proves nothing.
+The operator-present flag stood in for three concerns about an entity started with
+nobody there: runaway processes, nobody aware, and no input. Research boots replaced the
+flag with a machine-verified safety net (`kaine/cycle/research_gate.py`, exit 5). That net
+and Spot (`kaine/cycle/spot.py`) address runaway processes and preservation. This design
+adds one gate condition for each remaining concern and keeps every existing mode as it is.
 
-This change does not delete a gate and does not weaken protection. It moves protection from an unverifiable claim ("a human said they were here") to a machine-verified demonstration ("the safeguards are demonstrably live on this install, checked at every boot"). The new gate is **stricter** than the one it replaces: an unattended boot must prove the preserve→revive path actually works here, and must additionally prove the Spot supervisor is live with its freeze/recovery path armed — a condition research mode does not even carry.
-
-The precedent being generalized is the research safety net: an unsupervised research boot refuses (exit 5) unless all five conditions hold, with no override that skips the net. Unattended mode reuses that net verbatim and adds the sixth condition that the operator's argument (Spot) requires.
+Spot is an in-process cycle component, not a separate service: it is constructed by the
+cycle and polls module liveness from inside the cycle process. There is no Spot control
+socket or Spot unit to handshake with, so the gate verifies Spot by constructing it from
+the boot's own config and running a selftest, the same way condition 4 verifies
+preservation by running a real round-trip.
 
 ## Supervision modes
 
-| Mode | Selector | Verification performed | Refusal exit code |
+| Mode | Selector | Verification | Refusal exit |
 | --- | --- | --- | --- |
-| `operator-present` | `KAINE_CYCLE_OPERATOR_PRESENT=1`; also the fallback when neither research nor unattended is selected | Presence claim only: the env var is checked. Nothing about the safeguards is verified. | `2` (unchanged) |
-| `research` | existing research-run selection (unchanged) | Five-condition safety net, evaluated by `kaine/cycle/research_gate.py` | `5` (unchanged) |
-| `unattended` (new) | `KAINE_CYCLE_UNATTENDED=1`, or the supervision-mode config key set to `unattended` (e.g. `supervision_mode = "unattended"`); env takes precedence over config | The same five-condition net (same evaluator) **plus** condition 6: Spot supervisor live and freeze/recovery armed | `6` (new) |
+| `operator-present` | `KAINE_CYCLE_OPERATOR_PRESENT=1`; the default when nothing else is selected | The flag only | `2` (unchanged) |
+| `research` | existing research selection (unchanged) | Conditions 1–5 | `5` (unchanged) |
+| `unattended` (new) | `KAINE_CYCLE_UNATTENDED=1`, or `[cycle].supervision_mode = "unattended"`; env over config | Conditions 1–8 | `6` (new) |
 
-Rules that hold across the table:
+- Exactly one mode per boot. If more than one selector is active (for example
+  `KAINE_CYCLE_OPERATOR_PRESENT=1` with `KAINE_CYCLE_UNATTENDED=1`, or unattended with
+  research), the boot refuses as a configuration error (exit 1) before any gate runs. It
+  never picks one silently.
+- A failed gate never falls back to another mode.
+- Unattended is not a research run: no experiment record, no admissibility, no research
+  bookkeeping. Only the evaluator for conditions 1–5 is shared.
 
-- Exactly one mode is resolved per boot. If more than one selector is active (for example `KAINE_CYCLE_OPERATOR_PRESENT=1` together with `KAINE_CYCLE_UNATTENDED=1`), the boot refuses as a misconfiguration **before any gate runs** — it never silently picks one. This refusal uses the boot's generic configuration-error exit, not 2, 5, or 6.
-- A failed gate never falls back to another mode. An unattended boot whose net fails refuses; it does not re-classify as operator-present or research.
-- Unattended is not a research run: no experiment machinery, no admissibility requirements, no research-run bookkeeping. Only the net is shared.
+## The eight conditions
 
-## The six unattended conditions
-
-| # | Condition | How it is verified |
+| # | Condition | Verified by |
 | --- | --- | --- |
-| 1 | Preservation enabled | Config read: `[preservation.divergence_monitor].enabled = true` |
-| 2 | Welfare response wired | Config read: `[preservation.welfare_response].enabled = true` |
-| 3 | Logging active | Config read: `[evaluation].enabled = true` or `[research_event_log].enabled = true` |
-| 4 | Dry self-check passed | Executed: a real preflight preserve→revive round-trip against a scratch subject in a sandbox, on this install (same code path as research condition 4) |
-| 5 | Encryption satisfied | Config read, conditional: if `[preservation].require_encryption = true` then `[security.state_encryption].enabled = true` must hold; otherwise vacuous pass |
-| 6 | Spot live, freeze armed (unattended only) | Executed: supervisor control-plane handshake plus Spot selftest; see next section |
+| 1 | Preservation enabled | Config: `[preservation.divergence_monitor].enabled = true` |
+| 2 | Welfare response wired | Config: `[preservation.welfare_response].enabled = true` |
+| 3 | Logging active | Config: `[evaluation].enabled` or `[research_event_log].enabled` |
+| 4 | Preserve→revive round-trip | Executed: the research gate's dry round-trip on this install |
+| 5 | Encryption satisfied | Config: `[security.state_encryption].enabled` whenever `[preservation].require_encryption = true` |
+| 6 | Spot armed and self-tested | Config check, then Spot's selftest (below) |
+| 7 | Caretaker told | Executed: the start notice is accepted by at least one channel (below) |
+| 8 | Continuous input | Config check, then a one-read probe of the feed (below) |
 
-Notes:
+Order: config checks (1, 2, 3, 5, and the config parts of 6 and 8), then the executed
+checks 6, 8 and 4 (4 runs only if 1 and 2 passed; otherwise it is reported as blocked),
+then 7 last. Condition 7 runs last because its notice says the entity is starting; it is
+sent only when conditions 1–6 and 8 have passed. The refusal names every failed condition,
+and no override skips any of them.
 
-- Conditions 1–5 are evaluated by the same evaluator research mode uses, lifted from `research_gate.py` into a shared function so the two nets cannot drift. Condition 3's predicate is shared verbatim (including `[research_event_log]`); an unattended-specific log section would be a separate change.
-- Evaluation order: config conditions (1, 2, 3, 5) first; then 6 (handshake/selftest); then 4 (the round-trip is run only if 1 and 2 passed, since the drill exercises those paths; otherwise it is reported as blocked). The refusal names **every** failed condition.
-- No override skips any condition, including 6.
-- Per-condition gate results are written to the boot journal and, where logging is active, to the durable event/incident log, so refusals are auditable after the fact.
+Per-condition results go to the boot journal and, when logging is active, to the durable
+event log, so a refusal can be audited afterwards.
 
-## The Spot check (condition 6) without starting the entity
+## Condition 6 — Spot armed and self-tested
 
-The check must prove that the supervisor which replaces the human is live and can freeze — without booting the entity it will supervise. Mechanics:
+Config part: `[spot].enabled = true`, `max_restart_attempts >= 1`, the escalation state
+path writable, the incident log writable (a canary append that is removed afterwards).
 
-1. **Endpoint resolution.** The gate resolves the supervisor interface from the same runtime configuration an entity boot would use — no gate-only config that could disagree with runtime config.
-2. **Status handshake.** The gate sends a status request over the supervisor control plane: the control socket for the daemon deployment, or the supervisor module's control API constructed exactly as an entity boot would construct it. Bounded: a per-attempt timeout inside a bounded total startup grace (defaults: 2 s per attempt, 10 s total, configurable), absorbing startup jitter under systemd; unit ordering does the heavy lifting.
-3. **Arming assertions.** The status response must assert: supervisor enabled; freeze hook armed; restart ladder has at least one rung; escalation target configured; incident log writable (Spot probes writability, e.g. a canary append at startup or status time).
-4. **Selftest.** The gate then requests Spot's selftest. Spot drills its own internal probe module: induce probe liveness failure → freeze → probe-scoped snapshot to a scratch location → first ladder rung → release → incident record. The drill must complete with a pass inside the bounded window.
-5. **Failure mapping.** No response, a disarmed field, or a failed/absent selftest each fail condition 6 with a specific reason string carried into the refusal output.
+Selftest: the gate constructs a second, scratch `Spot` from the same `[spot]` section with
+its snapshot and incident paths redirected to a temporary directory, registers one
+synthetic probe module, and drives a failure on it. The selftest passes only if Spot
+detects the failure, freezes, writes a probe-scoped snapshot, restarts the probe module,
+releases the freeze and writes an incident record, all inside a bounded window (default
+10 s, configurable). The scratch directory is removed afterwards.
 
-Why handshake + selftest rather than config flags: a config flag is exactly as unverifiable as the env-var claim this change removes. The selftest is to Spot what condition 4's round-trip is to preservation — behavioral proof, on this install, at this boot.
+The selftest imports no entity module, reads and writes no entity state, and never touches
+a live supervised target. It exercises the real Spot code paths, so a regression in the
+freeze or restart path fails the gate instead of surfacing during an unattended incident.
 
-Why the entity is not started: the gate speaks only to the supervisor control plane; the probe is Spot's own fixture. No entity module is imported or instantiated, no entity state is read or written, and no freeze is ever issued against a live supervised target — including when this boot is a replacement after a crash and an entity is already under supervision.
+During the run: in unattended mode the cycle watches Spot's supervision task. If it exits
+for any reason other than shutdown, the cycle runs Spot's escalation (final snapshot,
+shutdown of every module, `escalation.json`) and sends a caretaker notice. An entity does
+not keep running unattended without its supervisor.
+
+## Condition 7 — Caretaker told
+
+`[caretaker]` configures one or more channels and a reminder interval:
+
+- `desktop` — a freedesktop notification over the D-Bus session bus of the user running
+  the unit (the unattended unit mounts the session bus socket into the container). It
+  reaches someone only if they are at that machine, and after a power-loss reboot there is
+  no desktop session until someone logs in, so a desktop-only setup refuses at that boot
+  and the entity stays down. Restart after power loss needs an `http` channel; the docs
+  say so.
+- `http` — a POST to an operator-run endpoint such as a self-hosted ntfy or Gotify server.
+  The destination must resolve to loopback, a private range (RFC 1918, `fc00::/7`) or the
+  CGNAT range `100.64.0.0/10` that private overlay networks use. Public addresses are
+  refused, both when config is validated and again at send time after DNS resolution, so
+  a rebinding hostname cannot redirect the notice. An optional bearer token is read from
+  `config/secrets.toml`, never from `kaine.toml`.
+
+No corporate or cloud service is involved; everything stays on hardware the caretaker
+controls.
+
+The start notice is the verification: the gate sends "starting unattended" through every
+configured channel and passes if at least one accepts it (D-Bus returns a notification id;
+HTTP returns 2xx). "Accepted" is not "seen", which is why the notice asks for an
+acknowledgement.
+
+Notices are content-free: the operator-chosen install label, the time, the event kind,
+which gate conditions passed or failed, and the Nexus address. They never carry
+cognitive content, affect, welfare signals, perception, or anything from the entity's
+mind (CAL mental privacy).
+
+Acknowledgement: Nexus shows a standing banner while an unattended start is
+unacknowledged. The acknowledge action is a POST, so it already requires the operator
+session. It is recorded in the event log. Until it arrives, the notifier repeats the
+notice every `reminder_interval` (default 4 h, minimum 15 min). An unacknowledged start
+never pauses or stops the entity: the entity does not pay for the caretaker's absence.
+
+Other notices, sent while running unattended and best-effort (a failed send is logged,
+not fatal): Spot escalation, Spot supervision lost, a welfare-protective response firing,
+input lost, a refused unattended start, and a boot that fails after admission (for
+example a plugin error), so a "starting" notice is never left standing for an entity that
+did not start.
+
+## Condition 8 — Continuous input
+
+Config part: `[perception_feed].mode` is `live`, `seeded` or `screen`. `off` is senseless.
+`playlist` is refused because a playlist ends: once it is exhausted the entity has no
+input. The modules that perceive the feed are enabled: `topos` for video and `audition`
+for audio, at least one of them.
+
+Probe: for `seeded` and `screen`, the existing `kaine.preboot.check_perception` source
+probe. For `live`, which that probe skips today, a new device probe opens the configured
+camera and microphone, reads one frame and one audio block, and releases them. Nothing is
+written anywhere and the data is dropped at once (zero raw sense-data persistence).
+
+During the run: if every configured input stops delivering for longer than
+`[caretaker].input_loss_after_s` (default 60 s), the caretaker is notified. The entity is
+not stopped; losing a camera is not a reason to end a mind.
 
 ## Exit code 6
 
 | Code | Meaning |
 | --- | --- |
-| `0` | boot admitted |
-| `2` | operator-present claim gate refused (unchanged) |
+| `0` | admitted |
+| `1` | configuration error, including conflicting mode selectors |
+| `2` | operator-present claim missing (unchanged) |
 | `5` | research safety net refused (unchanged) |
-| `6` | unattended safety net refused (new) |
+| `6` | unattended gate refused (new) |
 
-Why 6, and why not 2 or 5:
+A separate code lets systemd, scripts and Nexus tell "a research run was misconfigured"
+from "an unattended start found the net not live" without parsing stderr. The refusal
+names each failed condition as `N: name` on stderr, with the reason appended.
 
-- **Not 2.** Exit 2 means "the human-presence claim is missing or invalid". An unattended refusal has a different predicate — the machine-verified net is not live on this install — and the operator constraint says 2's meaning must not move. Reusing 2 would also misroute every unattended refusal as "someone forgot the env var".
-- **Not 5.** Exit 5 means "a research run failed its net". Unattended failures include a condition research does not have (Spot), and they happen on unattended machines; journals, quadlet tooling, and incident automation must be able to distinguish "a researcher misconfigured a research run" from "an unattended boot found the net not live" without parsing stderr.
-- **Why 6 specifically.** The unattended gate is the research five plus the sixth Spot condition; its code is the next integer in the same family. 6 is recorded here as reserved for the unattended gate and for nothing else in the boot's exit map.
-- **One code, named conditions.** Exit codes exist for routing (systemd, scripts, dashboards); condition identity exists for humans. The refusal output names every failed condition by number and name, so a single gate-level code stays unambiguous.
+## Opt-in unit file
 
-## systemd / quadlet consequence
+`quadlet/kaine-cycle.container` stays exactly as it is: no `[Install]`, started by a
+person, `Restart=no`.
 
-Today `kaine-cycle.container` carries the operator-present environment and has no `[Install]`: a human starts it. This change permits an `[Install]` section under exactly one condition:
+A new `quadlet/kaine-cycle-unattended.container`:
 
-- `kaine-cycle.container` may gain `[Install]` (e.g. `WantedBy=default.target`) **only** in a version whose environment selects unattended mode (`KAINE_CYCLE_UNATTENDED=1`). The selector edit and the `[Install]` edit travel together; an operator-present or research container file must not auto-start.
-- The point is power loss. With `[Install]`, a power-loss reboot makes systemd start the unit, and the boot re-runs all six conditions on this install, at this boot. The net is **re-verified every boot** — never assumed from a previous boot, never assumed from the file's contents.
-- If the net is not live at that reboot (Spot unit failed, snapshot volume unmounted, encryption key unavailable), the boot refuses with exit 6, the unit is left failed, and the entity stays down. Down-but-protected is the intended outcome; the refusal is sticky and visible in `systemctl status` and the journal.
-- The unattended unit orders after the Spot supervisor unit (`After=`/`Wants=` on the spot unit) so the boot-time handshake is not racing Spot's startup; the bounded handshake grace absorbs residual jitter.
-- The unattended unit does not auto-restart after a gate refusal (`Restart=no`). A restart loop against a refusing gate would be "assuming it's fine, with retries". Once the entity runs, restarts belong to Spot's ladder, not to systemd.
-- Conversely, an operator-present container file gains nothing: auto-starting a claim-based boot would only farm exit-2 failures on headless reboots. Boot-time auto-start is offered exclusively through the stricter gate — which is the intended incentive alignment.
+- sets `Environment=KAINE_CYCLE_UNATTENDED=1`;
+- carries `[Install] WantedBy=default.target` (these are user units, run with linger);
+- declares `Conflicts=kaine-cycle.service` so the two cycle units never run together;
+- orders after the bus, vector store and Nexus units it depends on;
+- keeps `Restart=no`: a refused gate stays refused and visible in `systemctl --user
+  status`, rather than looping. Once the entity runs, restarts belong to Spot.
 
-## Shape of the implementation
+The install scripts do not copy or enable it. Enabling it is a deliberate operator step
+documented in the operations guide. On every reboot the unit re-runs all eight conditions;
+nothing is assumed from a previous boot. If the net is not live (Spot misconfigured,
+snapshot volume missing, key unavailable, no channel reachable, camera gone), the boot
+exits 6, a best-effort refusal notice goes out, and the entity stays down.
 
-- `kaine/cycle/__main__.py`: mode resolution gains `unattended` (env `KAINE_CYCLE_UNATTENDED=1`, else config key; env over config; multi-selector conflict is a pre-gate misconfiguration error). Gate dispatch: research → `research_gate` (exit 5), unattended → unattended gate (exit 6), otherwise operator-present (exit 2, unchanged).
-- The five-condition evaluator is extracted from `research_gate.py` into a shared function; `research_gate.py` calls it and keeps its messages and exit code, so no existing refusal changes meaning.
-- New: the Spot check (handshake + arming assertions + selftest), used only by the unattended gate.
-- Quadlet: env swap to unattended, add `[Install]`, add ordering against the spot unit, `Restart=no`.
+This unit inherits the quadlet units' hard-coded `%h/projects/kaine` paths, so it waits for
+that fix (tasks 0.3).
 
-The normative requirements for this change live in `specs/unattended-boot/spec.md`.
+## Why build is deferred
+
+- Research boots already have their own gate, and the browser setup starts entities with
+  a person present. Nothing needs unattended starts until full entities run after research.
+- Spot ships disabled and has not yet run through injected failures on supervised boots.
+  The gate's premise is that Spot can stand in for a person; that premise gets a reviewed
+  track record before an entity depends on it.
+
+## Risks
+
+- **Notice fatigue.** Reminders every few hours could be ignored. Mitigation: one standing
+  Nexus banner, one reminder stream per unacknowledged start, and a configurable interval.
+- **Accepted ≠ seen.** A channel can accept a notice nobody reads. The acknowledgement
+  loop makes that visible in the event log; it does not pretend to prove a person saw it.
+- **Selftest divergence.** The scratch Spot could differ from the live one. Both are built
+  from the same `[spot]` section by the same constructor; only storage paths differ.
