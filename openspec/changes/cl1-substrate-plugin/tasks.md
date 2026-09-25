@@ -7,7 +7,7 @@
 
 ## 2. Operator surface
 
-- [ ] 2.1 Wizard (writes through `kaine.secrets_file`): optional CL1 step, default no, skipped in defaults mode, prints install commands, writes `[plugins]`.
+- [x] 2.1 Wizard (writes through `kaine.secrets_file`): optional CL1 step, default no, skipped in defaults mode, prints install commands, writes `[plugins]`.
 - [x] 2.2 `docs/cl1.md`, `plugins/kaine-cl1/README.md`, and the `cl-sdk` note in `docs/licenses.md` (the dependency license manifest that `DEPENDENCIES.md` points to; `THIRD_PARTY_LICENSES.md` lists only bundled assets, and `cl-sdk` is not bundled).
 
 ## 3. Boundaries and CI
@@ -21,7 +21,7 @@
 - [x] 4.1 Enabled without `cl-sdk`: `PluginError` with the required wording.
 - [x] 4.2 `target` `"cloud"` / `"hardware"` refused.
 - [x] 4.3 Each `data_source`, including replay without a path.
-- [ ] 4.4 Wizard: defaults mode writes nothing; accepting writes the block and prints but does not run the install commands. Tests redirect `--secrets-path` (from `first-run-service-fixes`), since `main()` writes a Nexus token.
+- [x] 4.4 Wizard: defaults mode writes nothing; accepting writes the block and prints but does not run the install commands. Tests redirect `--secrets-path` (from `first-run-service-fixes`), since `main()` writes a Nexus token.
 - [x] 4.5 Existing kaine-cl1 suite passes against the in-repo KAINE.
 
 ## 5. Afterwards

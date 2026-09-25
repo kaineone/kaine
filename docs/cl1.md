@@ -61,7 +61,10 @@ pip install ./plugins/kaine-cl1
 pip install cl-sdk
 ```
 
-Then add to your KAINE configuration:
+The setup wizard (`python -m kaine.setup`) offers this as an optional step,
+off by default: answering yes records the configuration below for whichever of
+Chronos and Soma you enabled and prints the two install commands; it never runs
+them. To configure it by hand instead, add to your KAINE configuration:
 
 ```toml
 [plugins]
