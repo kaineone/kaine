@@ -9,8 +9,8 @@ import pytest
 from kaine.cycle.research_gate import evaluate_research_gate
 from kaine.cycle.unattended_gate import (
     CONDITION_NAMES,
-    Condition,
     NOT_BUILT_REASON,
+    Condition,
     SupervisionConfigError,
     evaluate_unattended_gate,
     resolve_supervision_mode,
