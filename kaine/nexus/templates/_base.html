@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ asset('/static/vendor/uPlot.min.css') }}">
   <link rel="stylesheet" href="{{ asset('/static/style.css') }}">
   <script src="{{ asset('/static/nexus_auth.js') }}"></script>
+  <script src="{{ asset('/static/nexus_caretaker.js') }}" defer></script>
 </head>
 <body data-nexus-layout="dashboard">
   {# Fixed full-window alert border — JS drives data-state; CSS paints it. #}
@@ -23,6 +24,7 @@
   </div>
   {% include "_freeze_banner.html" %}
   {% include "_spot_banner.html" %}
+  {% include "_caretaker_banner.html" %}
   {% set _path = request.url.path if request is defined and request else "" %}
   {# Only link consoles that are mounted: "/" exists only with conversation on. #}
   {% set _conversation = request.app.state.config.conversation_enabled if request is defined and request and request.app.state.config is defined else true %}

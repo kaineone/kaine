@@ -71,7 +71,10 @@ a duty of care. Booting is therefore **gated**. A run is **either**:
   notice must be accepted by at least one `[caretaker]` channel (a desktop
   notification, or an HTTP POST to a server on your own network; public addresses
   are refused). It is sent only when every other condition has passed, and a refused
-  boot sends a best-effort refusal notice. The input check is not built yet, so an
+  boot sends a best-effort refusal notice. While a start is unacknowledged, every Nexus
+  page shows a banner with an Acknowledge button (operator session required) and the
+  caretaker gets a reminder every `reminder_interval_s`; an unacknowledged start never
+  changes the entity. The input check is not built yet, so an
   unattended boot currently always refuses (exit `6`) and names it. Selecting unattended together with another mode is a configuration
   error (exit `1`),
 

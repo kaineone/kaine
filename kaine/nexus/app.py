@@ -24,6 +24,7 @@ from kaine.nexus.auth import (
     require_operator_token,
 )
 from kaine.nexus.bridge import BusBridge
+from kaine.nexus.caretaker import build_caretaker_router
 from kaine.nexus.config import NexusConfig
 from kaine.nexus.conversation import (
     ConversationState,
@@ -193,6 +194,7 @@ def create_app(
         app.include_router(build_health_router(health_prober))
         app.include_router(build_perception_router(), dependencies=state_change_dep)
         app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
+        app.include_router(build_caretaker_router(), dependencies=state_change_dep)
     return app
 
 

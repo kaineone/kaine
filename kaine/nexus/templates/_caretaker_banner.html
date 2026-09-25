@@ -1,0 +1,13 @@
+{# Caretaker unattended-start alert banner.
+   Shown when an unattended boot wrote a caretaker start record and the
+   operator has not yet acknowledged it. Hidden by default; JS polls
+   /diagnostics/caretaker.json and reveals it. NEVER contains sensory content. #}
+<div id="caretaker-banner" class="caretaker-banner" role="alert" hidden>
+  <span class="caretaker-banner__label">UNATTENDED START</span>
+  <span class="caretaker-banner__msg">
+    no one has acknowledged that this entity started with nobody present.
+    <span id="caretaker-banner-since"></span>
+  </span>
+  <button type="button" id="caretaker-ack">Acknowledge</button>
+  <span id="caretaker-ack-msg" aria-live="polite"></span>
+</div>
