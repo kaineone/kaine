@@ -26,4 +26,4 @@
 
 ## 5. Afterwards
 
-- [ ] 5.1 Operator decides the fate of the private `kaineone/kaine-CL1` repository (archive or delete).
+- [x] 5.1 Operator decides the fate of the private `kaineone/kaine-CL1` repository (archive or delete): archived read-only 2026-09-24, README points to `plugins/kaine-cl1`.
