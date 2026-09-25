@@ -1319,12 +1319,9 @@ def _research_logging_active(config: dict[str, Any]) -> bool:
     event log (the curated annotation stream / raw archive) being enabled
     satisfies the "logging/admissibility active" condition of the research gate.
     """
-    evaluation_on = bool((config.get("evaluation") or {}).get("enabled", False))
-    rel = config.get("research_event_log") or {}
-    rel_on = bool(rel.get("enabled", False)) or bool(
-        (rel.get("raw_archive") or {}).get("enabled", False)
-    )
-    return evaluation_on or rel_on
+    from kaine.cycle.research_gate import _logging_active
+
+    return _logging_active(config)
 
 
 def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
@@ -1333,32 +1330,21 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
     Reads the [preservation] toggles + the logging toggles, then performs the
     real dry preserve→revive self-check, and returns the combined GateResult.
     """
-    from kaine.cycle.preservation_monitor import PreservationConfig
-    from kaine.cycle.research_gate import (
-        evaluate_research_gate,
-        run_preflight_self_check,
-    )
+    from kaine.cycle.research_gate import evaluate_safety_net
 
-    preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
-    self_check_ok, self_check_reason = run_preflight_self_check()
-    if not self_check_ok and self_check_reason:
-        log.error("research-gate self-check failed: %s", self_check_reason)
-    # require_encryption is enforced at the runtime write boundary (preserve_live
-    # fails closed). The gate additionally refuses the boot up-front when
-    # encryption is required but [security.state_encryption] is off, so the run
-    # never starts with a net that cannot persist. The key-present half is
-    # enforced separately by install_state_encryption (fail-closed at boot).
-    encryption_enabled = bool(
-        ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
-    )
-    encryption_satisfied = (not preservation_cfg.require_encryption) or encryption_enabled
-    return evaluate_research_gate(
-        preservation_enabled=preservation_cfg.divergence_monitor.enabled,
-        welfare_response_wired=preservation_cfg.welfare_response.enabled,
-        logging_active=_research_logging_active(config),
-        self_check_passed=self_check_ok,
-        encryption_satisfied=encryption_satisfied,
-    )
+    return evaluate_safety_net(config)
+
+
+def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
+    """Run the eight-condition unattended gate over the resolved config.
+
+    Reuses the research safety net for conditions 1–5.  Conditions 6–8 are
+    supplied by later slices; until then the gate refuses every unattended boot.
+    """
+    net = _evaluate_research_safety_net(config)
+    from kaine.cycle.unattended_gate import evaluate_unattended_gate
+
+    return evaluate_unattended_gate(net)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1367,9 +1353,11 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     from kaine.config import ProfileError
-    from kaine.cycle.research_gate import (
-        RESEARCH_GATE_EXIT_CODE,
-        research_mode_requested,
+    from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE
+    from kaine.cycle.unattended_gate import (
+        UNATTENDED_GATE_EXIT_CODE,
+        SupervisionConfigError,
+        resolve_supervision_mode,
     )
 
     # --profile selects a named deployment-tier overlay (openspec
@@ -1397,12 +1385,31 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
         return 1
 
+    # Exactly one mode per boot. Conflicting selectors refuse before any gate.
+    try:
+        mode = resolve_supervision_mode(config)
+    except SupervisionConfigError as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
+        return 1
+
     # The gate is evaluated EXACTLY ONCE here (sync, before the event loop, so
     # the self-check's asyncio.run() does not nest) and threaded into
     # _boot_and_run for runtime.json — never recomputed inside the loop.
     supervision_mode = "operator"
     gate_checks: dict[str, bool] | None = None
-    if research_mode_requested(config):
+    if mode == "unattended":
+        # Unattended boot: the eight-condition safety net must be satisfied.
+        result = _evaluate_unattended_gate(config)
+        for c in result.conditions:
+            status = "pass" if c.ok else f"FAIL — {c.reason}"
+            log.info("unattended gate %d: %s: %s", c.number, c.name, status)
+        if not result.ok:
+            sys.stderr.write(result.message() + "\n")
+            return UNATTENDED_GATE_EXIT_CODE
+        log.info(result.message())
+        supervision_mode = "unattended"
+        gate_checks = dict(result.checks)
+    elif mode == "research":
         # Unsupervised research boot: the operator-present requirement is
         # REPLACED by the safety-net-present gate (preservation + welfare
         # response + logging + a passing dry preserve→revive self-check).

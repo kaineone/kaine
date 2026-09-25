@@ -60,9 +60,16 @@ a duty of care. Booting is therefore **gated**. A run is **either**:
 - **operator-present** — a human is supervising at the keyboard
   (`KAINE_CYCLE_OPERATOR_PRESENT=1`), **or**
 - **research-safety-net-verified** — an unsupervised research run whose
-  autonomous safety net is live and verified (see below),
+  autonomous safety net is live and verified (see below), **or**
+- **unattended** — a full entity started with no person present
+  (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`), gated
+  by the research safety net plus three more conditions: Spot armed and self-tested,
+  a caretaker told over a local channel, and a continuous input source. Those three
+  are not built yet, so an unattended boot currently always refuses (exit `6`) and
+  names them. Selecting unattended together with another mode is a configuration
+  error (exit `1`),
 
-and **never neither**. If neither condition holds, the cycle refuses to boot.
+and **never none of these**. If no condition holds, the cycle refuses to boot.
 
 → Read **[Before you boot](#before-you-boot)** below, then
 **[Getting Started](getting-started.md)**.
@@ -156,6 +163,7 @@ wrapper or operator can tell *why* a boot was refused:
 | `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
 | `5` | Research safety net not live and verified (one or more of the five conditions failed) |
+| `6` | Unattended gate: one or more of its eight conditions failed (each is named on stderr) |
 
 ---
 

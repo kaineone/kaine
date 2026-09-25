@@ -168,7 +168,10 @@ exits 6, a best-effort refusal notice goes out, and the entity stays down.
 This unit inherits the quadlet units' hard-coded `%h/projects/kaine` paths, so it waits for
 that fix (tasks 0.3).
 
-## Why build is deferred
+## Why enabling waits
+
+The operator chose to build this now; the code is inert until an operator selects
+unattended mode and enables the opt-in unit. Enabling it for a real entity waits because:
 
 - Research boots already have their own gate, and the browser setup starts entities with
   a person present. Nothing needs unattended starts until full entities run after research.

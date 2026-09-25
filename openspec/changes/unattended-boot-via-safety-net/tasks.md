@@ -1,21 +1,24 @@
-## 0. Build prerequisites (do not start section 1 until all hold)
+## 0. Prerequisites
 
-- [ ] 0.1 The research phase has ended, confirmed by the operator.
-- [ ] 0.2 Spot track record: Spot has run enabled on supervised boots; at least one injected module failure was handled end to end (detect, freeze, snapshot, restart, release, incident record) and one escalation drill completed; the operator has reviewed the incident logs and signed off.
-- [ ] 0.3 The quadlet units no longer hard-code `%h/projects/kaine` (separate change), so the unattended unit does not inherit that path.
+The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 0.1 and 0.2 gate *enabling* the unattended unit for a real entity, not building it.
+
+- [ ] 0.1 Before enabling on a real entity: the research phase has ended, confirmed by the operator.
+- [ ] 0.2 Before enabling on a real entity: Spot has run enabled on supervised boots; at least one injected module failure was handled end to end (detect, freeze, snapshot, restart, release, incident record) and one escalation drill completed; the operator has reviewed the incident logs and signed off.
+- [ ] 0.3 Before section 7: the quadlet units no longer hard-code `%h/projects/kaine` (change `quadlet-install`), so the unattended unit does not inherit that path.
+- [x] 0.4 Until every condition is built, an unattended boot refuses and names each unbuilt condition; no partial gate can admit a boot.
 
 ## 1. Mode selection
 
-- [ ] 1.1 Resolve `unattended` from `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` in `kaine/cycle/__main__.py`, env over config; validate the config key's allowed values.
-- [ ] 1.2 Refuse with exit 1 before any gate when more than one mode selector is active (operator-present flag, research selection, unattended selection).
-- [ ] 1.3 Dispatch: research → research gate (exit 5, unchanged); unattended → unattended gate (exit 6); otherwise operator-present (exit 2, unchanged).
-- [ ] 1.4 Unit tests: env-only, config-only, env over config, each conflicting pair, default path unchanged.
+- [x] 1.1 Resolve `unattended` from `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` in `kaine/cycle/__main__.py`, env over config; validate the config key's allowed values.
+- [x] 1.2 Refuse with exit 1 before any gate when more than one mode selector is active (operator-present flag, research selection, unattended selection).
+- [x] 1.3 Dispatch: research → research gate (exit 5, unchanged); unattended → unattended gate (exit 6); otherwise operator-present (exit 2, unchanged).
+- [x] 1.4 Unit tests: env-only, config-only, env over config, each conflicting pair, default path unchanged.
 - [ ] 1.5 Test that an unattended boot initializes no experiment registry or admissibility machinery.
 
 ## 2. Shared net (conditions 1–5)
 
-- [ ] 2.1 Extract the five-condition evaluator from `kaine/cycle/research_gate.py` into a shared function; the research gate keeps its messages and exit code.
-- [ ] 2.2 Existing research-gate tests pass unmodified.
+- [x] 2.1 Extract the five-condition evaluator from `kaine/cycle/research_gate.py` into a shared function; the research gate keeps its messages and exit code.
+- [x] 2.2 Existing research-gate tests pass unmodified.
 
 ## 3. Spot selftest (condition 6)
 
@@ -48,11 +51,11 @@
 
 ## 6. Exit code and refusal output
 
-- [ ] 6.1 Confirm exit 6 is unused, then add `UNATTENDED_GATE_EXIT_CODE = 6` beside the existing gate constants.
+- [x] 6.1 Confirm exit 6 is unused, then add `UNATTENDED_GATE_EXIT_CODE = 6` beside the existing gate constants.
 - [ ] 6.2 Refusal output: one `N: name — reason` line per failed condition on stderr; results also written to the boot journal and, when logging is active, the event log.
-- [ ] 6.3 Refusal matrix tests: each of 1–8 broken alone → exit 6 naming exactly that condition; all broken → all named.
-- [ ] 6.4 Regression tests: research failure → 5 with its old message; operator-present failure → 2 with its old message.
-- [ ] 6.5 Test that no skip, force or override switch lets a failing unattended boot through.
+- [x] 6.3 Refusal matrix tests: each of 1–8 broken alone → exit 6 naming exactly that condition; all broken → all named.
+- [x] 6.4 Regression tests: research failure → 5 with its old message; operator-present failure → 2 with its old message.
+- [x] 6.5 Test that no skip, force or override switch lets a failing unattended boot through.
 
 ## 7. Opt-in unit file
 
@@ -63,7 +66,7 @@
 
 ## 8. Documentation
 
-- [ ] 8.1 `docs/for-researchers.md`: add the exit-6 row to the refusal table; rows 2 and 5 unchanged.
+- [x] 8.1 `docs/for-researchers.md`: add the exit-6 row to the refusal table; rows 2 and 5 unchanged.
 - [ ] 8.2 `docs/operations.md`: an "Unattended starts" section — when to use it, the eight conditions, setting up a caretaker channel (desktop, self-hosted HTTP), acknowledging in Nexus, enabling the opt-in unit, and what a refusal looks like.
 - [ ] 8.3 Every page that lists `KAINE_CYCLE_*` variables or exit codes includes `KAINE_CYCLE_UNATTENDED` and exit 6.
 - [ ] 8.4 A docs-consistency test asserts rows 2, 5 and 6 exist in the refusal table and rows 2 and 5 match their previous text.

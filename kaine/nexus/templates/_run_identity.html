@@ -24,6 +24,20 @@
         </ul>
       {% endif %}
     </div>
+  {% elif metrics.supervision_mode == "unattended" %}
+    <div class="supervision-badge supervision-badge--unattended" role="status">
+      <strong>UNATTENDED</strong>
+      <span class="muted">no person present — gated by the eight-condition safety net</span>
+      {% if metrics.gate_checks %}
+        <ul class="gate-checks">
+          {% for name, ok in metrics.gate_checks.items() %}
+            <li class="gate-check {{ 'ok' if ok else 'fail' }}">
+              {{ "✓" if ok else "✗" }} {{ name.replace("_", " ") }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
   {% elif metrics.supervision_mode == "operator" %}
     <div class="supervision-badge supervision-badge--operator" role="status">
       <strong>operator-supervised</strong>
