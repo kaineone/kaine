@@ -309,6 +309,9 @@ def send_desktop(
         "/org/freedesktop/Notifications",
         "--method",
         "org.freedesktop.Notifications.Notify",
+        # End of gdbus options: without it the trailing "-1" timeout is parsed
+        # as an option and gdbus prints its usage instead of calling Notify.
+        "--",
         _gvariant_string("KAINE"),
         "0",
         _gvariant_string(""),

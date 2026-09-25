@@ -260,9 +260,21 @@ def test_send_desktop_argv_carries_gvariant_quoted_title():
 
     send_desktop(notice, runner=runner)
     title, message = render_text(notice)
-    # Title is at argv index 12; message is at index 13.
-    assert captured[0][12] == _gvariant_string(title)
-    assert captured[0][13] == _gvariant_string(message)
+    argv = captured[0]
+    # Every Notify argument follows the "--" end-of-options marker; without it
+    # gdbus parses the trailing "-1" timeout as an option and never calls Notify.
+    assert "--" in argv
+    positional = argv[argv.index("--") + 1 :]
+    assert positional == [
+        _gvariant_string("KAINE"),
+        "0",
+        _gvariant_string(""),
+        _gvariant_string(title),
+        _gvariant_string(message),
+        "[]",
+        "{}",
+        "-1",
+    ]
 
 
 def test_send_desktop_gdbus_missing(monkeypatch):
