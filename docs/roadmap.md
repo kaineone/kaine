@@ -20,7 +20,7 @@
 | attention-driven-audition | 8/16 (50%) | audition, audition-predictive, auditory-perception | ADDED, MODIFIED | Hearing is currently **speech transcription for the language organ**,... |
 | module-residency-and-speech-tiers | 0/43 (0%) | module-residency, speech-backend-tiers | ADDED | KAINE is meant to be hyper-portable and hyper-scalable. Today, when t... |
 | paracosmic-connector | 0/87 (0%) | kosmos | ADDED | > **SUPERSEDED BY `body-agnostic-embodiment-adapters`.** The paper's ... |
-| unattended-boot-via-safety-net | 0/27 (0%) | entity-preservation, spot-supervisor, unattended-boot | ADDED, MODIFIED, RENAMED | The operator-present gate was designed for the first run. At that tim... |
+| unattended-boot-via-safety-net | 0/46 (0%) | spot-supervisor, unattended-boot | ADDED | Build deferred until research ends and Spot has a reviewed track record; eight-condition gate incl. caretaker notice and continuous input |
 
 ## Recently landed
 
