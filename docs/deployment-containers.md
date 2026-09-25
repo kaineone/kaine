@@ -173,9 +173,10 @@ Neither profile changes the shipped-all-off default.
 
 `podman compose -f compose/kaine.yml up -d` consumes the same file. For a
 continuously-running research instrument, install the Quadlet units in
-`quadlet/` (systemd services with dependency ordering, restart, reboot
-survival). The `kaine-cycle` unit has **no `[Install]` section** — the entity is
-never auto-started. See `quadlet/README.md`.
+`quadlet/` with `bash scripts/install-quadlet.sh` (systemd services with dependency
+ordering, restart, reboot survival). The script writes the checkout's path into the units;
+secrets reach them from `compose/.env`. The `kaine-cycle` unit has **no `[Install]`
+section** — the entity is never auto-started. See `quadlet/README.md`.
 
 ## Zero raw-sense-data persistence
 

@@ -299,6 +299,30 @@ Linger=yes
 If this shows `Linger=no`, stop and fix it — nothing past this point survives a power
 cut without it.
 
+**Install the units.** The units need the bus and vector-store credentials and the
+checkout's location. Create the credentials first; the bootstrap scripts write them to
+`compose/.env` (mode 0600), which the units read at every start:
+
+```bash
+bash scripts/redis-bootstrap.sh
+bash scripts/qdrant-bootstrap.sh
+```
+
+Then render the units into `~/.config/containers/systemd/`:
+
+```bash
+bash scripts/install-quadlet.sh
+systemctl --user daemon-reload
+systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+```
+
+The script writes this checkout's absolute path into the units, refuses a path containing
+spaces or other characters that break a unit line, refuses if `config/kaine.operator.toml`,
+`config/secrets.toml` or `compose/.env` is missing, and checks the rendered units with
+Podman's quadlet generator before installing them. It never enables or starts anything,
+and it never installs the entity unit's unattended variant. Re-run it after moving the
+checkout.
+
 ## 6. Switch to headless — only after step 2 was verified
 
 **Gate: do not run this step unless the SSH login in step 2 succeeded from another
@@ -453,7 +477,8 @@ nvpmodel -q                                        # expect: NV Power Mode: MAXN
 swapon --show                                      # expect: /swapfile  file  16G
 cat /proc/sys/vm/swappiness                        # expect: 10
 loginctl show-user "$USER" | grep Linger           # expect: Linger=yes
-systemctl --user list-units 'kaine-*' --no-pager   # expect: every unit active (running)
+systemctl --user list-units 'kaine-*' --no-pager   # expect: every service unit active (running)
+                                                   #         except kaine-cycle, which only a person starts
 tailscale serve status                             # expect: https://<host>.<tailnet>.ts.net
                                                    #         proxying to http://127.0.0.1:8088
 ```
