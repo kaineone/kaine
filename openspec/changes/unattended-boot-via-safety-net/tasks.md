@@ -36,7 +36,7 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 - [x] 4.4 Content-free notice builder with a fixed field set (install label, time, event kind, condition results, Nexus address); a test asserts the field set and that no entity content can reach it.
 - [x] 4.5 Gate condition 7: sent last, only when 1–6 and 8 passed; passes if at least one channel accepts; the refusal names each channel and its error.
 - [x] 4.6 Best-effort refusal notice on exit 6 that never changes the exit code.
-- [ ] 4.7 Reminders until acknowledged; unacknowledged starts never alter the entity.
+- [x] 4.7 Reminders until acknowledged; unacknowledged starts never alter the entity.
 - [ ] 4.8 Nexus: standing banner while unacknowledged; acknowledge POST behind the operator session; acknowledgement written to the event log; tests for auth, banner and reminder stop.
 - [ ] 4.9 Running notices: Spot escalation, supervision lost, welfare-protective response, input loss, and a boot that fails after admission; failed sends are logged and never stop the entity.
 - [x] 4.10 Tests: no channel configured; all channels fail; one of two accepts; public address refused at config time; hostname resolving to a public address refused at send time; token never logged.

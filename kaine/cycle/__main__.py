@@ -1225,6 +1225,31 @@ async def _boot_and_run(
             observations_provider=lambda: cycle.tick_index,
             require_encryption=preservation_cfg.require_encryption,
         )
+    if supervision_mode == "unattended":
+        from kaine.cycle.caretaker import CaretakerConfig
+        from kaine.cycle.caretaker_runtime import CaretakerNotifier
+
+        caretaker = CaretakerNotifier(
+            CaretakerConfig.from_section(kaine_config.get("caretaker") or {})
+        )
+        await caretaker.start()
+    else:
+        caretaker = None
+
+    _caretaker_tasks: set[asyncio.Task] = set()
+
+    def _on_welfare_response(action: str) -> None:
+        if caretaker is None:
+            return
+        try:
+            task = asyncio.get_running_loop().create_task(
+                caretaker.send_event("welfare_response")
+            )
+        except RuntimeError:
+            return
+        _caretaker_tasks.add(task)
+        task.add_done_callback(_caretaker_tasks.discard)
+
     if preservation_cfg.welfare_response.enabled:
         welfare_monitor = WelfareProtectiveMonitor(
             registry=registry,
@@ -1238,6 +1263,7 @@ async def _boot_and_run(
             ),
             on_end=lambda: stop_event.set(),
             require_encryption=preservation_cfg.require_encryption,
+            on_response=_on_welfare_response,
         )
 
     cycle_task = asyncio.create_task(cycle.run_forever(), name="cycle.run_forever")
@@ -1260,6 +1286,11 @@ async def _boot_and_run(
     gate_task = (
         asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
         if staging_enabled and stage_state.is_gestating
+        else None
+    )
+    caretaker_task = (
+        asyncio.create_task(caretaker.run(stop_event), name="cycle.caretaker")
+        if caretaker is not None
         else None
     )
     try:
@@ -1298,6 +1329,37 @@ async def _boot_and_run(
             except asyncio.TimeoutError:
                 continue
     finally:
+        if caretaker is not None:
+            try:
+                if spot.escalated:
+                    from kaine.cycle.escalation_state import read_escalation
+
+                    rec = read_escalation()
+                    await caretaker.send_event(
+                        "supervision_lost" if rec.module == "spot" else "spot_escalation"
+                    )
+            except Exception:
+                log.warning("caretaker escalation notice failed", exc_info=True)
+            try:
+                if _caretaker_tasks:
+                    await asyncio.gather(*_caretaker_tasks, return_exceptions=True)
+            except Exception:
+                log.warning("caretaker welfare tasks shutdown failed", exc_info=True)
+            try:
+                if caretaker_task is not None and not caretaker_task.done():
+                    caretaker_task.cancel()
+                    try:
+                        await caretaker_task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception:
+                        log.warning("caretaker task raised during shutdown", exc_info=True)
+            except Exception:
+                log.warning("caretaker task cancellation failed", exc_info=True)
+            try:
+                await caretaker.stop()
+            except Exception:
+                log.warning("caretaker stop failed", exc_info=True)
         if not freeze_task.done():
             freeze_task.cancel()
         try:
@@ -1423,6 +1485,7 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     from kaine.config import ProfileError
+    from kaine.cycle.caretaker_runtime import send_event_best_effort
     from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE
     from kaine.cycle.unattended_gate import (
         UNATTENDED_GATE_EXIT_CODE,
@@ -1518,8 +1581,20 @@ def main(argv: list[str] | None = None) -> int:
     except PluginError as exc:
         # A named plugin that cannot load or supply its seams stops the boot:
         # running on the default models would misrepresent the run.
+        if supervision_mode == "unattended":
+            try:
+                send_event_best_effort(config.get("caretaker"), "boot_failed")
+            except Exception:
+                log.exception("failed to send caretaker boot_failed notice")
         sys.stderr.write(f"kaine.cycle: plugin error: {exc}\n")
         return 1
+    except Exception:
+        if supervision_mode == "unattended":
+            try:
+                send_event_best_effort(config.get("caretaker"), "boot_failed")
+            except Exception:
+                log.exception("failed to send caretaker boot_failed notice")
+        raise
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")
         return 0
