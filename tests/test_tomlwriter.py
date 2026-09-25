@@ -62,8 +62,12 @@ def test_quoted_keys_and_string_escapes():
 
 
 def test_rejects_unsupported_value_type():
+    # Flat lists of scalars are supported (see test_setup_wizard_cl1.py); a nested
+    # list, a dict inside a list and None are still unsupported.
     with pytest.raises(TypeError):
-        tomlwriter.dumps({"t": {"bad": [1, 2, 3]}})
+        tomlwriter.dumps({"t": {"bad": [[1, 2, 3]]}})
+    with pytest.raises(TypeError):
+        tomlwriter.dumps({"t": {"bad": [{"a": 1}]}})
     with pytest.raises(TypeError):
         tomlwriter.dumps({"t": {"bad": None}})
 
