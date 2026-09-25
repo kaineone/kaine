@@ -1202,13 +1202,7 @@
     var admiss = health ? health.admissibility : null;
     var frag = document.createDocumentFragment();
 
-    var mode = metrics.supervision_mode;
-    if (mode === "research") {
-      var badge = el("div", "supervision-badge supervision-badge--research");
-      badge.setAttribute("role", "status");
-      badge.appendChild(el("strong", null, "RESEARCH MODE"));
-      badge.appendChild(el("span", "muted", "unsupervised — gated by the autonomous safety net"));
-      var checks = metrics.gate_checks;
+    function appendGateChecks(badge, checks) {
       if (checks && typeof checks === "object") {
         var ul = el("ul", "gate-checks");
         Object.keys(checks).forEach(function (name) {
@@ -1219,7 +1213,23 @@
         });
         badge.appendChild(ul);
       }
+    }
+
+    var mode = metrics.supervision_mode;
+    if (mode === "research") {
+      var badge = el("div", "supervision-badge supervision-badge--research");
+      badge.setAttribute("role", "status");
+      badge.appendChild(el("strong", null, "RESEARCH MODE"));
+      badge.appendChild(el("span", "muted", "unsupervised — gated by the autonomous safety net"));
+      appendGateChecks(badge, metrics.gate_checks);
       frag.appendChild(badge);
+    } else if (mode === "unattended") {
+      var ubadge = el("div", "supervision-badge supervision-badge--unattended");
+      ubadge.setAttribute("role", "status");
+      ubadge.appendChild(el("strong", null, "UNATTENDED"));
+      ubadge.appendChild(el("span", "muted", "no person present — gated by the eight-condition safety net"));
+      appendGateChecks(ubadge, metrics.gate_checks);
+      frag.appendChild(ubadge);
     } else if (mode === "operator") {
       var ob = el("div", "supervision-badge supervision-badge--operator");
       ob.setAttribute("role", "status");

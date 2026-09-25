@@ -128,3 +128,42 @@ def test_shipped_config_ships_safety_net_and_research_disabled():
     assert pres.get("welfare_response", {}).get("enabled", False) is False
     assert pres.get("retention", {}).get("auto_evict", False) is False
     assert config.get("research", {}).get("enabled", False) is False
+
+
+def test_evaluate_safety_net(monkeypatch):
+    """evaluate_safety_net combines preservation/logging toggles + self-check."""
+    from kaine.cycle.research_gate import evaluate_safety_net
+
+    base_cfg = {
+        "preservation": {
+            "divergence_monitor": {"enabled": True},
+            "welfare_response": {"enabled": True},
+            "require_encryption": False,
+        },
+        "evaluation": {"enabled": True},
+    }
+    monkeypatch.setattr(
+        "kaine.cycle.research_gate.run_preflight_self_check",
+        lambda: (True, None),
+    )
+
+    passing = evaluate_safety_net(base_cfg)
+    assert passing.checks == {
+        "preservation_enabled": True,
+        "welfare_response_wired": True,
+        "logging_active": True,
+        "dry_self_check_passed": True,
+        "encryption_satisfied": True,
+    }
+
+    encrypted_cfg = {
+        "preservation": {
+            "divergence_monitor": {"enabled": True},
+            "welfare_response": {"enabled": True},
+            "require_encryption": True,
+        },
+        "evaluation": {"enabled": True},
+        "security": {"state_encryption": {"enabled": False}},
+    }
+    refused = evaluate_safety_net(encrypted_cfg)
+    assert refused.checks["encryption_satisfied"] is False

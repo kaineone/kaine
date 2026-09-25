@@ -1269,13 +1269,16 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   color: var(--up);
   border: 1px solid #1d5436;
 }
-.supervision-badge--research {
+.supervision-badge--research,
+.supervision-badge--unattended {
   background: var(--degraded-bg);
   color: var(--degraded);
   border: 1px solid var(--degraded);
   font-size: var(--fs-sm);
 }
-.supervision-badge--research strong { letter-spacing: 0.08em; }
+
+.supervision-badge--research strong,
+.supervision-badge--unattended strong { letter-spacing: 0.08em; }
 .gate-checks { list-style: none; margin: 0.4rem 0 0; padding: 0; }
 .gate-checks .gate-check.ok   { color: var(--up); }
 .gate-checks .gate-check.fail { color: var(--down); font-weight: bold; }

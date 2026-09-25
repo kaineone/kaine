@@ -1,9 +1,9 @@
 ## Status
 
-Direction approved by the operator on 2026-09-25. **Build is deferred**: implementation
-starts only when the prerequisites in `tasks.md` section 0 hold — the research phase has
-ended, Spot has a reviewed track record on supervised boots, and the quadlet units no
-longer hard-code the install path. Until then this change is design only.
+Approved by the operator on 2026-09-25 and being built. The code ships opt-in and inert.
+Enabling the unattended unit for a real entity waits for the prerequisites in `tasks.md`
+section 0: the research phase has ended and Spot has a reviewed track record on supervised
+boots. Until every gate condition is built, an unattended boot refuses.
 
 ## Why
 

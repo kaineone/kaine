@@ -130,6 +130,165 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
     }
 
 
+def test_unattended_gate_refuses_in_subprocess(tmp_path):
+    """KAINE_CYCLE_UNATTENDED=1 with the shipped disabled net refuses with
+    exit code 6 and names the not-yet-built conditions, without a traceback."""
+    from kaine.cycle.unattended_gate import UNATTENDED_GATE_EXIT_CODE
+
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("KAINE_CYCLE_OPERATOR_PRESENT", "KAINE_RESEARCH_MODE")
+    }
+    env["KAINE_CYCLE_UNATTENDED"] = "1"
+    # Import this checkout's kaine in the child, not whatever the venv's
+    # editable install points at.
+    env["PYTHONPATH"] = str(_REPO_ROOT)
+    py = sys.executable
+    result = subprocess.run(
+        [py, "-m", "kaine.cycle"],
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=str(_hermetic_cwd(tmp_path)),
+        timeout=30,
+    )
+    assert result.returncode == UNATTENDED_GATE_EXIT_CODE, (
+        f"expected exit {UNATTENDED_GATE_EXIT_CODE}, got {result.returncode}; "
+        f"stderr={result.stderr!r}"
+    )
+    assert "6: Spot armed and self-tested" in result.stderr
+    assert "7: caretaker told" in result.stderr
+    assert "8: continuous input" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_unattended_conflicts_with_operator_present(tmp_path):
+    """Unattended and operator-present together are a config error (exit 1),
+    evaluated before any gate."""
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("KAINE_RESEARCH_MODE",)
+    }
+    env["KAINE_CYCLE_UNATTENDED"] = "1"
+    # Import this checkout's kaine in the child, not whatever the venv's
+    # editable install points at.
+    env["PYTHONPATH"] = str(_REPO_ROOT)
+    env["KAINE_CYCLE_OPERATOR_PRESENT"] = "1"
+    py = sys.executable
+    result = subprocess.run(
+        [py, "-m", "kaine.cycle"],
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=str(_hermetic_cwd(tmp_path)),
+        timeout=15,
+    )
+    assert result.returncode == 1, (
+        f"expected exit 1, got {result.returncode}; stderr={result.stderr!r}"
+    )
+    assert "configuration error" in result.stderr.lower()
+
+
+def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
+    """A passing unattended gate threads supervision_mode and all eight
+    gate_checks into _boot_and_run."""
+    from kaine.cycle import __main__ as m
+    from kaine.cycle.research_gate import evaluate_research_gate
+    from kaine.cycle.unattended_gate import (
+        CONDITION_NAMES,
+        Condition,
+        evaluate_unattended_gate,
+    )
+
+    for var in (
+        "KAINE_CYCLE_UNATTENDED",
+        "KAINE_CYCLE_OPERATOR_PRESENT",
+        "KAINE_RESEARCH_MODE",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    net = evaluate_research_gate(
+        preservation_enabled=True,
+        welfare_response_wired=True,
+        logging_active=True,
+        self_check_passed=True,
+        encryption_satisfied=True,
+    )
+    built = {
+        6: Condition(6, CONDITION_NAMES[6], True),
+        7: Condition(7, CONDITION_NAMES[7], True),
+        8: Condition(8, CONDITION_NAMES[8], True),
+    }
+    passing = evaluate_unattended_gate(net, built=built)
+
+    captured: dict[str, object] = {}
+
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+        captured["supervision_mode"] = supervision_mode
+        captured["gate_checks"] = gate_checks
+        return 0
+
+    monkeypatch.setattr(
+        m, "_load_kaine_config", lambda: {"cycle": {"supervision_mode": "unattended"}}
+    )
+    monkeypatch.setattr(m, "_evaluate_unattended_gate", lambda config: passing)
+    monkeypatch.setattr(m, "_boot_and_run", _fake_boot)
+
+    rc = m.main([])
+    assert rc == 0
+    assert captured["supervision_mode"] == "unattended"
+    assert captured["gate_checks"] == dict(passing.checks)
+    assert all(captured["gate_checks"].values())
+
+
+def test_unattended_refusal_ignores_overrides(monkeypatch):
+    """No override switch lets a failing unattended gate proceed."""
+    from kaine.cycle import __main__ as m
+    from kaine.cycle.research_gate import evaluate_research_gate
+    from kaine.cycle.unattended_gate import (
+        UNATTENDED_GATE_EXIT_CODE,
+        evaluate_unattended_gate,
+    )
+
+    for var in (
+        "KAINE_CYCLE_UNATTENDED",
+        "KAINE_CYCLE_OPERATOR_PRESENT",
+        "KAINE_RESEARCH_MODE",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    monkeypatch.setenv("KAINE_UNATTENDED_OVERRIDE", "1")
+    monkeypatch.setenv("KAINE_SKIP_SAFETY_NET", "1")
+    monkeypatch.setenv("KAINE_FORCE_BOOT", "1")
+
+    net = evaluate_research_gate(
+        preservation_enabled=True,
+        welfare_response_wired=True,
+        logging_active=True,
+        self_check_passed=True,
+        encryption_satisfied=True,
+    )
+    failing = evaluate_unattended_gate(net)
+
+    boot_called = {"n": 0}
+
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+        boot_called["n"] += 1
+        return 0
+
+    monkeypatch.setattr(
+        m, "_load_kaine_config", lambda: {"cycle": {"supervision_mode": "unattended"}}
+    )
+    monkeypatch.setattr(m, "_evaluate_unattended_gate", lambda config: failing)
+    monkeypatch.setattr(m, "_boot_and_run", _fake_boot)
+
+    rc = m.main([])
+    assert rc == UNATTENDED_GATE_EXIT_CODE
+    assert boot_called["n"] == 0
+
+
 _KAINE_TOML_QDRANT = """\
 [mnemos]
 backend = "qdrant"

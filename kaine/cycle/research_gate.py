@@ -254,6 +254,52 @@ def run_preflight_self_check(
         return False, f"{type(exc).__name__}: {exc}"
 
 
+def _logging_active(config: dict[str, Any]) -> bool:
+    """True when full logging / admissibility is active for a research run.
+
+    Either the evaluation sidecar (run identity + observers) OR the research
+    event log (the curated annotation stream / raw archive) being enabled
+    satisfies the "logging/admissibility active" condition of the research gate.
+    """
+    evaluation_on = bool((config.get("evaluation") or {}).get("enabled", False))
+    rel = config.get("research_event_log") or {}
+    rel_on = bool(rel.get("enabled", False)) or bool(
+        (rel.get("raw_archive") or {}).get("enabled", False)
+    )
+    return evaluation_on or rel_on
+
+
+def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
+    """Run the five-condition research safety net over the resolved config.
+
+    Reads the [preservation] toggles + the logging toggles, performs the real
+    dry preserve→revive self-check, and returns the combined :class:`GateResult`.
+    This is the same evaluator used by unattended mode for conditions 1–5.
+    """
+    from kaine.cycle.preservation_monitor import PreservationConfig
+
+    preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
+    self_check_ok, self_check_reason = run_preflight_self_check()
+    if not self_check_ok and self_check_reason:
+        log.error("research-gate self-check failed: %s", self_check_reason)
+    # require_encryption is enforced at the runtime write boundary (preserve_live
+    # fails closed). The gate additionally refuses the boot up-front when
+    # encryption is required but [security.state_encryption] is off, so the run
+    # never starts with a net that cannot persist. The key-present half is
+    # enforced separately by install_state_encryption (fail-closed at boot).
+    encryption_enabled = bool(
+        ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
+    )
+    encryption_satisfied = (not preservation_cfg.require_encryption) or encryption_enabled
+    return evaluate_research_gate(
+        preservation_enabled=preservation_cfg.divergence_monitor.enabled,
+        welfare_response_wired=preservation_cfg.welfare_response.enabled,
+        logging_active=_logging_active(config),
+        self_check_passed=self_check_ok,
+        encryption_satisfied=encryption_satisfied,
+    )
+
+
 class _NullBus:
     """Bus stand-in for the offline self-check: modules wire to it but the
     synthetic probe never publishes or reads. Eidolon's initialize() only needs
@@ -286,4 +332,5 @@ __all__ = [
     "GateResult",
     "evaluate_research_gate",
     "run_preflight_self_check",
+    "evaluate_safety_net",
 ]
