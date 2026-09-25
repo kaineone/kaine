@@ -11,8 +11,8 @@ once and never regresses).
 The stage is a small file-backed per-fork state (mirroring
 ``kaine.perception_state``'s desired/runtime split): it lives under the per-fork
 state root at ``state/lifecycle/stage.json`` so a fork inherits its parent's
-stage and only ever advances it. It is read at boot and written only on the
-birth transition.
+stage and only ever advances it. It is read at boot and written only by the
+gate runner (first tick, when evidence changes, and at birth).
 
 Boot defaults encode a NORMATIVE invariant (spec: *A first-class, monotonic
 developmental stage*):
@@ -31,6 +31,8 @@ wired anywhere without an import cycle.
 from __future__ import annotations
 
 import json
+import math
+import re
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -108,6 +110,37 @@ def _coerce_stage(value: Any) -> str:
     return value if value in STAGES else EMBODIED
 
 
+def _coerce_lived_seconds(value: Any) -> float:
+    """Defensive coerce: a corrupt value can only delay birth."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(value) or value < 0:
+        return 0.0
+    return value
+
+
+def _coerce_sleep_count(value: Any) -> int:
+    """Defensive coerce: a corrupt value can only delay birth."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    if value < 0:
+        return 0
+    return value
+
+
+def _coerce_hypnos_cursor(value: Any) -> str | None:
+    """Defensive coerce: a corrupt cursor is treated as a fresh gestation."""
+    if not isinstance(value, str):
+        return None
+    if not re.fullmatch(r"^\d+-\d+$", value):
+        return None
+    return value
+
+
 @dataclass(frozen=True)
 class StageState:
     """The persisted developmental stage.
@@ -115,11 +148,17 @@ class StageState:
     ``stage``               — ``gestation`` | ``embodied``.
     ``gestation_started_at``— ISO time gestation began (the C3 lived-time anchor).
     ``born_at``             — ISO time of the birth transition (None until born).
+    ``lived_seconds``       — cumulative subjective lived time in gestation.
+    ``sleep_count``         — cumulative Hypnos sleep completions.
+    ``hypnos_cursor``       — last scanned ``hypnos.out`` stream id.
     """
 
     stage: str = GESTATION
     gestation_started_at: str | None = None
     born_at: str | None = None
+    lived_seconds: float = 0.0
+    sleep_count: int = 0
+    hypnos_cursor: str | None = None
 
     @property
     def is_gestating(self) -> bool:
@@ -139,6 +178,9 @@ class StageState:
             stage=_coerce_stage(data.get("stage", GESTATION)),
             gestation_started_at=data.get("gestation_started_at"),
             born_at=data.get("born_at"),
+            lived_seconds=_coerce_lived_seconds(data.get("lived_seconds", 0.0)),
+            sleep_count=_coerce_sleep_count(data.get("sleep_count", 0)),
+            hypnos_cursor=_coerce_hypnos_cursor(data.get("hypnos_cursor")),
         )
 
 

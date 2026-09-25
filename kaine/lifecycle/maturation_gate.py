@@ -124,6 +124,7 @@ class MaturationConfig:
     min_consolidation_passes: int = 3
     min_lived_seconds: float = 86400.0
     gate_cadence_seconds: float = 60.0
+    readout_max_age_cadences: float = 3.0
     require_operator_ack_for_birth: bool = False
     regulation_thresholds: RegulationThresholds = field(
         default_factory=RegulationThresholds
@@ -142,6 +143,9 @@ class MaturationConfig:
             min_lived_seconds=float(d.get("min_lived_seconds", base.min_lived_seconds)),
             gate_cadence_seconds=float(
                 d.get("gate_cadence_seconds", base.gate_cadence_seconds)
+            ),
+            readout_max_age_cadences=float(
+                d.get("readout_max_age_cadences", base.readout_max_age_cadences)
             ),
             require_operator_ack_for_birth=bool(
                 d.get(

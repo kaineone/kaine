@@ -490,3 +490,136 @@ def test_decommission_backup_includes_phantasia_checkpoint(tmp_path: Path, monke
     )
     assert str(state_root / "phantasia") in deletion.removed_paths
     assert not (state_root / "phantasia").exists()
+
+
+@pytest.mark.asyncio
+async def test_pass_count_restored_with_weights(
+    bus: AsyncBus, tmp_path: Path, plaintext_encryptor
+) -> None:
+    ckpt = tmp_path / "wm.ckpt"
+    wm1 = _PersistableFake(obs_dim=observation_dim())
+    ph1 = Phantasia(
+        bus,
+        world_model=wm1,
+        backend="dreamerv3",
+        persist_weights=True,
+        checkpoint_path=str(ckpt),
+    )
+    await ph1.initialize()
+    assert wm1.imported is None  # no checkpoint existed yet
+    ph1._successful_training_passes = 4
+    await ph1.shutdown()
+    assert ckpt.is_file()
+
+    wm2 = _PersistableFake(obs_dim=observation_dim())
+    ph2 = Phantasia(
+        bus,
+        world_model=wm2,
+        backend="dreamerv3",
+        persist_weights=True,
+        checkpoint_path=str(ckpt),
+    )
+    await ph2.initialize()
+    try:
+        assert ph2._successful_training_passes == 4
+    finally:
+        await ph2.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pass_count_not_restored_without_weights(
+    bus: AsyncBus, tmp_path: Path, plaintext_encryptor
+) -> None:
+    """Persisted pass count is tied to weight persistence; opting out resets it."""
+    ckpt = tmp_path / "wm.ckpt"
+
+    wm1 = _PersistableFake(obs_dim=observation_dim())
+    ph1 = Phantasia(
+        bus,
+        world_model=wm1,
+        backend="dreamerv3",
+        persist_weights=True,
+        checkpoint_path=str(ckpt),
+    )
+    await ph1.initialize()
+    ph1._successful_training_passes = 4
+    await ph1.shutdown()
+
+    sidecar = Path(str(ckpt) + ".passes.json")
+    assert sidecar.exists()
+    assert json.loads(sidecar.read_text())["successful_training_passes"] == 4
+
+    wm2 = _PersistableFake(obs_dim=observation_dim())
+    ph2 = Phantasia(
+        bus,
+        world_model=wm2,
+        backend="dreamerv3",
+        persist_weights=False,
+        checkpoint_path=str(ckpt),
+    )
+    await ph2.initialize()
+    assert ph2._successful_training_passes == 0
+    await ph2.shutdown()
+
+
+@pytest.mark.parametrize(
+    "sidecar_payload",
+    [
+        {"successful_training_passes": "x"},
+        {"successful_training_passes": True},
+    ],
+)
+@pytest.mark.asyncio
+async def test_corrupt_pass_count_sidecar_ignored(
+    bus: AsyncBus, tmp_path: Path, plaintext_encryptor, sidecar_payload: dict[str, Any]
+) -> None:
+    ckpt = tmp_path / "wm.ckpt"
+    wm1 = _PersistableFake(obs_dim=observation_dim())
+    ph1 = Phantasia(
+        bus,
+        world_model=wm1,
+        backend="dreamerv3",
+        persist_weights=True,
+        checkpoint_path=str(ckpt),
+    )
+    await ph1.initialize()
+    ph1._successful_training_passes = 4
+    await ph1.shutdown()
+
+    sidecar = Path(str(ckpt) + ".passes.json")
+    sidecar.write_text(json.dumps(sidecar_payload))
+
+    wm2 = _PersistableFake(obs_dim=observation_dim())
+    ph2 = Phantasia(
+        bus,
+        world_model=wm2,
+        backend="dreamerv3",
+        persist_weights=True,
+        checkpoint_path=str(ckpt),
+    )
+    await ph2.initialize()
+    try:
+        assert ph2._successful_training_passes == 0
+    finally:
+        await ph2.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pass_count_sidecar_without_checkpoint_is_ignored(
+    bus: AsyncBus, tmp_path: Path, plaintext_encryptor
+) -> None:
+    ckpt = tmp_path / "missing.ckpt"
+    sidecar = Path(str(ckpt) + ".passes.json")
+    sidecar.write_text(json.dumps({"successful_training_passes": 7}))
+
+    wm = _PersistableFake(obs_dim=observation_dim())
+    ph = Phantasia(
+        bus,
+        world_model=wm,
+        backend="dreamerv3",
+        persist_weights=True,
+        checkpoint_path=str(ckpt),
+    )
+    await ph.initialize()
+    assert ph._successful_training_passes == 0
+    await ph.shutdown()

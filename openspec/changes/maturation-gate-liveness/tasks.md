@@ -1,8 +1,8 @@
 ## 1. Accounting
 
-- [ ] 1.1 Lived time from entity-clock deltas between runner ticks (first tick per boot sets the baseline); persist in the stage file.
-- [ ] 1.2 Count Hypnos and Phantasia completions from durable completion events by persisted stream ID (exactly once); persist in the stage file; runner is the only writer.
-- [ ] 1.3 Tests with the real `EntityClock`: restart, downtime gap, crash after a completion.
+- [x] 1.1 Lived time from entity-clock deltas between runner ticks (first tick per boot sets the baseline); persist in the stage file.
+- [x] 1.2 Count Hypnos completions from durable `hypnos.sleep.completed` events by persisted stream ID (exactly once); Phantasia persists its pass count beside its checkpoint (see design); runner is the only stage-file writer.
+- [x] 1.3 Tests with the real `EntityClock`: restart, downtime gap, crash after a completion.
 
 ## 2. Womb, locus and embodiment
 
@@ -13,7 +13,7 @@
 
 ## 3. Readouts, acknowledgement, visibility
 
-- [ ] 3.1 Decode readouts with the bus codec, filter on `event.type`, reject pre-boot (Redis `TIME`) and stale readouts.
+- [x] 3.1 Decode readouts with the bus codec, filter on `event.type`, reject pre-boot (Redis `TIME`) and stale readouts.
 - [ ] 3.2 Acknowledgement request file written by an authenticated Nexus control and consumed by the runner; Nexus panel for stage, evidence and hold.
 - [ ] 3.3 Lineage-scoped prior-history check with the unknown-lineage-counts-as-lived rule; shared entity-ID source.
 

@@ -20,7 +20,10 @@ import pytest
 
 from kaine.bus.schema import Event
 from kaine.lifecycle import stage as lifecycle_stage
-from kaine.lifecycle.gate_runner import MaturationGateRunner
+from kaine.lifecycle.gate_runner import (
+    DEFAULT_WOMB_READOUT_STREAM,
+    MaturationGateRunner,
+)
 from kaine.lifecycle.maturation_gate import (
     STAGE_BIRTH,
     STAGE_BIRTH_READY,
@@ -30,8 +33,23 @@ from kaine.lifecycle.maturation_gate import (
 from kaine.perception_state import read_desired
 
 
-def _make_bus(published: list[Event] | None = None, readout: dict[str, Any] | None = None) -> Any:
-    """Return a minimal async bus double."""
+@pytest.fixture(autouse=True)
+def _patch_stage_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Isolate the stage file path so no test leaks STAGE_PATH globally."""
+    monkeypatch.setattr(
+        "kaine.lifecycle.stage.STAGE_PATH", tmp_path / "stage.json"
+    )
+
+
+def _make_bus(
+    published: list[Event] | None = None,
+    readout: dict[str, Any] | None = None,
+    sleep_count: int = 0,
+    boot_ms: int = 1_000_000,
+    womb_stream: str = DEFAULT_WOMB_READOUT_STREAM,
+    hypnos_stream: str = "hypnos.out",
+) -> Any:
+    """Return a minimal async bus double with the new cursor API surface."""
     bus = MagicMock()
 
     async def _publish(event: Event) -> str:
@@ -40,17 +58,65 @@ def _make_bus(published: list[Event] | None = None, readout: dict[str, Any] | No
         return "fake-id"
 
     bus.publish = _publish
-    client = MagicMock()
-    client.xrevrange = AsyncMock(return_value=_readout_entries(readout))
-    bus.client = client
+
+    async def _latest(stream: str) -> tuple[str, Event] | None:
+        if stream == womb_stream and readout is not None:
+            return (
+                f"{boot_ms + 1}-0",
+                Event(
+                    source="womb",
+                    type="gestation.readiness",
+                    payload={"readout": readout},
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        return None
+
+    bus.latest = AsyncMock(side_effect=_latest)
+
+    async def _server_time_ms() -> int:
+        return boot_ms
+
+    bus.server_time_ms = AsyncMock(side_effect=_server_time_ms)
+
+    sleep_events = [
+        (
+            f"{i + 1}-0",
+            Event(
+                source="hypnos",
+                type="hypnos.sleep.completed",
+                payload={},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        for i in range(sleep_count)
+    ]
+
+    async def _read_entries(
+        stream: str, last_id: str = "0", count: int = 100, block_ms: int = 0
+    ) -> tuple[list[tuple[str, Event]], str | None]:
+        if stream != hypnos_stream:
+            return [], None
+
+        start: tuple[int, int]
+        if last_id in ("0", "0-0"):
+            start = (0, 0)
+        else:
+            start = tuple(int(part) for part in last_id.split("-"))  # type: ignore[assignment]
+
+        def _key(entry: tuple[str, Event]) -> tuple[int, int]:
+            return tuple(int(part) for part in entry[0].split("-"))  # type: ignore[return-value]
+
+        filtered = [entry for entry in sleep_events if _key(entry) > start]
+        if not filtered:
+            return [], None
+        return filtered, filtered[-1][0]
+
+    bus.read_entries = AsyncMock(side_effect=_read_entries)
+    bus.client = MagicMock()
     return bus
-
-
-def _readout_entries(readout: dict[str, Any] | None) -> list:
-    if readout is None:
-        return []
-    payload = {"type": "gestation.readiness", "readout": readout}
-    return [("1-0", {b"payload": json.dumps(payload).encode()})]
 
 
 def _make_registry(
@@ -63,8 +129,6 @@ def _make_registry(
 ) -> Any:
     registry = MagicMock()
 
-    hypnos = MagicMock()
-    hypnos.sleep_count = sleep_count
     phantasia = MagicMock()
     phantasia.successful_training_passes = consolidation_passes
     mundus = MagicMock()
@@ -73,23 +137,22 @@ def _make_registry(
     mundus._tasks = ["task"] if mundus_reachable else []
 
     def _get(name: str):
-        return {"hypnos": hypnos, "phantasia": phantasia, "mundus": mundus}[name]
+        return {"phantasia": phantasia, "mundus": mundus}[name]
 
     registry.get.side_effect = _get
     registry.__contains__.return_value = True
     return registry
 
 
-def _make_clock(now: datetime | None = None) -> Any:
+def _make_clock(now: float = 0.0) -> Any:
     clock = MagicMock()
-    target = now if now is not None else datetime.now(timezone.utc)
-    clock.now = MagicMock(return_value=target)
+    clock.now = MagicMock(return_value=now)
     return clock
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
+    """Build a fresh gestation state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
-    lifecycle_stage.STAGE_PATH = p  # type: ignore[misc]
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 
 
@@ -102,7 +165,7 @@ async def test_no_stimulus_when_gestating_without_womb_feed(tmp_path: Path) -> N
         bus=bus,
         config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
         registry=_make_registry(),
-        entity_clock=_make_clock(datetime.now(timezone.utc)),
+        entity_clock=_make_clock(0.0),
         stage_state=state,
         staging_enabled=True,
         womb_feed_configured=False,
@@ -119,7 +182,7 @@ async def test_no_stimulus_when_gestating_without_womb_feed(tmp_path: Path) -> N
 @pytest.mark.asyncio
 async def test_gate_keeps_gestating_when_conditions_unmet(tmp_path: Path) -> None:
     published: list[Event] = []
-    bus = _make_bus(published=published, readout={"endogenous_self_sustain": True})
+    bus = _make_bus(published=published, readout={"endogenous_self_sustain": True}, sleep_count=1)
     state = _fresh_gestation_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
@@ -130,15 +193,15 @@ async def test_gate_keeps_gestating_when_conditions_unmet(tmp_path: Path) -> Non
             min_lived_seconds=86400,
             gate_cadence_seconds=0.01,
         ),
-        registry=_make_registry(sleep_count=1, consolidation_passes=1),
-        entity_clock=_make_clock(datetime.now(timezone.utc)),
+        registry=_make_registry(consolidation_passes=1),
+        entity_clock=_make_clock(0.0),
         stage_state=state,
         staging_enabled=True,
         womb_feed_configured=True,
     )
-    stop = asyncio.Event()
-    asyncio.get_running_loop().call_later(0.05, stop.set)
-    await runner.run(stop)
+
+    await runner._evaluate_once()
+    await runner._evaluate_once()
 
     assert not published
     assert runner.stage.is_gestating
@@ -156,7 +219,7 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_mundus_unavailable(
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
-    bus = _make_bus(published=published, readout=readout)
+    bus = _make_bus(published=published, readout=readout, sleep_count=1)
     state = _fresh_gestation_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
@@ -167,15 +230,15 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_mundus_unavailable(
             min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
-        registry=_make_registry(sleep_count=1, consolidation_passes=1, mundus_enabled=False),
+        registry=_make_registry(consolidation_passes=1, mundus_enabled=False),
         entity_clock=_make_clock(),
         stage_state=state,
         staging_enabled=True,
         womb_feed_configured=True,
     )
-    stop = asyncio.Event()
-    asyncio.get_running_loop().call_later(0.05, stop.set)
-    await runner.run(stop)
+
+    await runner._evaluate_once()
+    await runner._evaluate_once()
 
     assert len(published) == 1
     assert published[0].type == STAGE_BIRTH_READY
@@ -193,7 +256,7 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path) -
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
-    bus = _make_bus(published=published, readout=readout)
+    bus = _make_bus(published=published, readout=readout, sleep_count=1)
     state = _fresh_gestation_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
@@ -205,7 +268,6 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path) -
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
-            sleep_count=1,
             consolidation_passes=1,
             mundus_enabled=True,
             mundus_approved=True,
@@ -216,9 +278,9 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path) -
         staging_enabled=True,
         womb_feed_configured=True,
     )
-    stop = asyncio.Event()
-    asyncio.get_running_loop().call_later(0.05, stop.set)
-    await runner.run(stop)
+
+    await runner._evaluate_once()
+    await runner._evaluate_once()
 
     assert len(published) == 1
     assert published[0].type == STAGE_BIRTH
@@ -239,7 +301,7 @@ async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> Non
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
-    bus = _make_bus(published=published, readout=readout)
+    bus = _make_bus(published=published, readout=readout, sleep_count=1)
     state = _fresh_gestation_state(tmp_path)
 
     desired_path = tmp_path / "desired.json"
@@ -258,7 +320,6 @@ async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> Non
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
-            sleep_count=1,
             consolidation_passes=1,
             mundus_enabled=True,
             mundus_approved=True,
@@ -269,9 +330,9 @@ async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> Non
         staging_enabled=True,
         womb_feed_configured=True,
     )
-    stop = asyncio.Event()
-    asyncio.get_running_loop().call_later(0.05, stop.set)
-    await runner.run(stop)
+
+    await runner._evaluate_once()
+    await runner._evaluate_once()
 
     desired = read_desired(desired_path)
     assert desired.locus == "virtual"

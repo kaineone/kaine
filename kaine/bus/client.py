@@ -279,6 +279,20 @@ class AsyncBus:
                 out.append(decoded)
         return out
 
+    async def latest(self, stream: str) -> Optional[tuple[str, Event]]:
+        """Return the newest decoded entry on ``stream``, or ``None`` if empty."""
+        entries = await self._client.xrevrange(stream, count=1)
+        if not entries:
+            return None
+        entry_id, fields = entries[0]
+        return _decode_entry(entry_id, fields)
+
+    async def server_time_ms(self) -> int:
+        """Return the Redis server time as milliseconds since the Unix epoch."""
+        raw = await self._client.execute_command("TIME")
+        seconds, microseconds = raw
+        return int(seconds) * 1000 + int(microseconds) // 1000
+
     async def read_workspace_entries(
         self, last_id: str = "0", count: int = 64
     ) -> tuple[list[tuple[str, dict[str, Any]]], Optional[str]]:
