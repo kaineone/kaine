@@ -12,7 +12,8 @@ module registry exist. It runs a periodic task during gestation that:
   3. Decides whether to birth, hold awaiting embodiment, hold awaiting operator
      ack, or keep gestating.
   4. Emits observable lifecycle events on ``lifecycle.out`` and writes the
-     stage file only on the birth transition.
+     stage file on its first tick, when accumulated evidence changes, and at
+     birth.
 
 The runner itself changes no cognitive-module state; it only reads signals and
 triggers the monotonic stage transition. Development remains emergent and is
@@ -24,6 +25,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -70,6 +73,7 @@ class MaturationGateRunner:
         womb_feed_configured: bool = False,
         womb_readout_stream: str = DEFAULT_WOMB_READOUT_STREAM,
         womb_readout_type: str = DEFAULT_WOMB_READOUT_TYPE,
+        hypnos_stream: str = "hypnos.out",
     ) -> None:
         self._bus = bus
         self._config = config
@@ -80,8 +84,15 @@ class MaturationGateRunner:
         self._womb_feed_configured = bool(womb_feed_configured)
         self._womb_stream = womb_readout_stream
         self._womb_type = womb_readout_type
+        self._hypnos_stream = hypnos_stream
         self._task: asyncio.Task | None = None
         self._stop_event: asyncio.Event | None = None
+        # Redis server time at the first evaluation, anchoring readout age.
+        self._boot_ms: int | None = None
+        # EntityClock baseline for per-boot subjective lived-time accumulation.
+        self._clock_baseline: float | None = None
+        # Ensure the first tick anchors the stage file.
+        self._stage_written = False
         # Track whether we have already emitted the birth-ready "awaiting
         # embodiment" signal so the log is not spammed every cadence tick.
         self._awaiting_embodiment_logged = False
@@ -108,15 +119,6 @@ class MaturationGateRunner:
         except Exception:
             log.warning("could not publish %s", type, exc_info=True)
 
-    def _hypnos_sleep_count(self) -> int | None:
-        if "hypnos" not in self._registry:
-            return None
-        try:
-            hypnos = self._registry.get("hypnos")
-            return int(getattr(hypnos, "sleep_count", 0))
-        except Exception:
-            return None
-
     def _phantasia_consolidation_passes(self) -> int | None:
         if "phantasia" not in self._registry:
             return None
@@ -142,52 +144,137 @@ class MaturationGateRunner:
         except Exception:
             return False, False, False
 
+    async def _begin_boot(self) -> None:
+        """Anchor the boot timestamp from Redis; defer evaluation on failure."""
+        if self._boot_ms is not None:
+            return
+        try:
+            self._boot_ms = await self._bus.server_time_ms()
+        except Exception:
+            log.warning(
+                "maturation gate: could not read server time; deferring evaluation",
+                exc_info=True,
+            )
+
+    async def _count_new_sleeps(self) -> None:
+        """Count hypnos sleep completions from the bus, idempotently.
+
+        A fresh cursor is anchored at the stream tail on the first tick.
+        Thereafter we scan forward from the persisted cursor, counting each
+        ``hypnos.sleep.completed`` event from ``hypnos`` exactly once.
+        Bus errors fail closed for this tick: they leave the stage unchanged.
+        """
+        stream = self._hypnos_stream
+        cursor = self._stage.hypnos_cursor
+        try:
+            if cursor is None:
+                latest = await self._bus.latest(stream)
+                new_cursor = latest[0] if latest is not None else "0-0"
+                self._stage = replace(self._stage, hypnos_cursor=new_cursor)
+                return
+
+            total = self._stage.sleep_count
+            while True:
+                entries, last_scanned = await self._bus.read_entries(
+                    stream, last_id=cursor, count=100
+                )
+                for _, event in entries:
+                    if event.type == "hypnos.sleep.completed" and event.source == "hypnos":
+                        total += 1
+                if last_scanned is None:
+                    break
+                cursor = last_scanned
+
+            self._stage = replace(self._stage, sleep_count=total, hypnos_cursor=cursor)
+        except Exception:
+            log.warning("maturation gate: failed to count hypnos sleeps", exc_info=True)
+
+    def _accumulate_lived_time(self) -> None:
+        """Add subjective elapsed time since the last tick.
+
+        The first tick of a runner instance anchors the baseline and adds
+        nothing, so downtime between boots never counts. A frozen clock
+        (scale 0) produces no positive delta.
+        """
+        if self._entity_clock is None:
+            return
+        try:
+            now = self._entity_clock.now()
+            if now is None:
+                return
+            now = float(now)
+        except Exception:
+            return
+
+        if self._clock_baseline is None:
+            self._clock_baseline = now
+            return
+
+        delta = now - self._clock_baseline
+        if delta > 0 and math.isfinite(delta):
+            self._stage = replace(
+                self._stage, lived_seconds=self._stage.lived_seconds + delta
+            )
+        self._clock_baseline = now
+
     async def _womb_readiness_readout(self) -> Mapping[str, Any] | None:
         """Read the latest womb ``gestation.readiness`` event from the bus.
 
-        Returns ``None`` when the womb module is absent or the readout is stale,
-        so C1 fails closed.
+        Returns ``None`` when the readout is absent, of the wrong type, older
+        than this boot, or stale, so C1 fails closed. Stream ids and Redis
+        ``TIME`` share the same clock, so host clock skew does not matter.
         """
         try:
-            latest = await self._bus.client.xrevrange(self._womb_stream, count=1)
-        except Exception:
-            return None
-        if not latest:
-            return None
-        try:
-            _id, fields = latest[0]
-            raw = fields.get(b"payload") or fields.get("payload")
-            if isinstance(raw, bytes):
-                import json
-
-                payload = json.loads(raw)
-            else:
-                payload = raw
-            if not isinstance(payload, dict):
+            entry = await self._bus.latest(self._womb_stream)
+            if entry is None:
                 return None
-            if payload.get("type") != self._womb_type:
-                # If the event stores type separately, fall through to the
-                # payload dict itself (some bus layouts embed type in payload).
-                pass
-            return payload.get("readout") or payload
+            entry_id, event = entry
+            if event.type != self._womb_type:
+                return None
+            if self._boot_ms is None:
+                return None
+            id_ms = int(entry_id.split("-")[0])
+            if id_ms < self._boot_ms:
+                return None
+
+            now_ms = await self._bus.server_time_ms()
+            max_age_ms = (
+                self._config.readout_max_age_cadences
+                * self._config.gate_cadence_seconds
+                * 1000
+            )
+            if now_ms - id_ms > max_age_ms:
+                return None
+
+            readout = event.payload.get("readout")
+            if isinstance(readout, dict):
+                return readout
+            if isinstance(event.payload, dict):
+                return event.payload
+            return None
         except Exception:
+            log.debug("maturation gate: womb readiness readout failed closed", exc_info=True)
             return None
 
-    def _lived_seconds(self) -> float | None:
-        if self._entity_clock is None or self._stage.gestation_started_at is None:
-            return None
+    def _persist_if_changed(self, before: lifecycle_stage.StageState) -> None:
+        """Persist the stage if evidence changed or it has never been written."""
+        if self._stage == before and self._stage_written:
+            return
         try:
-            start = datetime.fromisoformat(self._stage.gestation_started_at)
-            now = self._entity_clock.now()
-            if now is None or start.tzinfo is None:
-                return None
-            return (now - start).total_seconds()
-        except Exception:
-            return None
+            lifecycle_stage.write_stage(self._stage)
+            self._stage_written = True
+        except OSError:
+            log.warning("maturation gate: could not persist stage file", exc_info=True)
 
     async def _evaluate_once(self) -> None:
         """One gate evaluation: gather signals, decide, act, emit."""
         if not self._staging_enabled or not self._stage.is_gestating:
+            return
+
+        before = self._stage
+
+        await self._begin_boot()
+        if self._boot_ms is None:
             return
 
         if not self._womb_feed_configured:
@@ -200,10 +287,14 @@ class MaturationGateRunner:
             )
             return
 
+        self._accumulate_lived_time()
+        await self._count_new_sleeps()
+        self._persist_if_changed(before)
+
         readiness_readout = await self._womb_readiness_readout()
-        sleep_count = self._hypnos_sleep_count()
+        sleep_count = self._stage.sleep_count
         consolidation_passes = self._phantasia_consolidation_passes()
-        lived_seconds = self._lived_seconds()
+        lived_seconds = self._stage.lived_seconds
 
         readiness = evaluate_readiness(
             readiness_readout=readiness_readout,
@@ -238,7 +329,7 @@ class MaturationGateRunner:
         )
 
         if decision.action == ACTION_BIRTH:
-            await self._do_birth(readiness, sleep_count, lived_seconds)
+            await self._do_birth(readiness, self._stage.sleep_count, self._stage.lived_seconds)
         elif decision.action == ACTION_HOLD_AWAITING_EMBODIMENT:
             if not self._awaiting_embodiment_logged:
                 log.warning("stage.birth.ready: awaiting embodiment (Mundus not available)")

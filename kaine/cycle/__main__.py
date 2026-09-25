@@ -614,9 +614,8 @@ def _resolve_boot_stage(
         return existing, True, False
     prior = lifecycle_stage.has_prior_lived_history()
     resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
-    # Persist the resolved stage so the gestation clock is anchored and forks
-    # inherit it verbatim.
-    lifecycle_stage.write_stage(resolved)
+    # The gate runner persists the resolved stage on its first tick so the
+    # gestation clock is anchored and evidence is owned by one writer.
     fresh = resolved.is_gestating
     return resolved, True, fresh
 

@@ -213,6 +213,12 @@ class Phantasia(BaseModule):
     # Weight persistence (opt-in; weights only — NEVER the buffer)
     # ------------------------------------------------------------------
 
+    def _passes_sidecar_path(self) -> Optional[Path]:
+        """Return the path to the pass-count sidecar, if a checkpoint path is set."""
+        if not self._checkpoint_path:
+            return None
+        return Path(self._checkpoint_path + ".passes.json")
+
     def _load_weights_if_present(self) -> None:
         if not (self._persist_weights and self._checkpoint_path):
             return
@@ -239,10 +245,40 @@ class Phantasia(BaseModule):
             ) from exc
         log.info("phantasia: loaded world-model weights from %s", path)
 
+        sidecar = self._passes_sidecar_path()
+        if sidecar and sidecar.is_file():
+            import json
+
+            try:
+                data = json.loads(sidecar.read_text())
+            except Exception:
+                log.warning(
+                    "phantasia: corrupt pass-count sidecar %s — resetting to 0",
+                    sidecar,
+                    exc_info=True,
+                )
+                return
+            if not isinstance(data, dict):
+                log.warning(
+                    "phantasia: invalid pass-count sidecar %s — resetting to 0", sidecar
+                )
+                return
+            passes = data.get("successful_training_passes")
+            if isinstance(passes, bool) or not isinstance(passes, int) or passes < 0:
+                log.warning(
+                    "phantasia: invalid pass count %r in sidecar %s — resetting to 0",
+                    passes,
+                    sidecar,
+                )
+                return
+            self._successful_training_passes = passes
+
     def _save_weights(self, *, reason: str) -> bool:
         """Checkpoint the learned weights (atomic; encrypted at rest when
         state encryption is on). Returns True on success; failures are logged
-        as errors, never silently swallowed."""
+        as errors, never silently swallowed. After a successful save, the
+        cumulative successful-training-pass count is written to a sidecar next
+        to the checkpoint."""
         if not (self._persist_weights and self._checkpoint_path):
             return False
         try:
@@ -262,6 +298,23 @@ class Phantasia(BaseModule):
             self._checkpoint_path,
             reason,
         )
+
+        sidecar = self._passes_sidecar_path()
+        if sidecar is not None:
+            from kaine.state_io import write_json_atomic
+
+            try:
+                write_json_atomic(
+                    sidecar,
+                    {"successful_training_passes": self._successful_training_passes},
+                )
+            except Exception:
+                log.error(
+                    "phantasia: FAILED to write pass-count sidecar %s — "
+                    "the saved pass count is stale until the next successful save",
+                    sidecar,
+                    exc_info=True,
+                )
         return True
 
     # ------------------------------------------------------------------

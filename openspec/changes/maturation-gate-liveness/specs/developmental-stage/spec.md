@@ -81,10 +81,14 @@ raise a red alert, and resume when the womb returns; it SHALL NOT unlock the ent
 ### Requirement: Gestational evidence accumulates idempotently across restarts
 The gate runner SHALL record lived subjective time by adding the entity-clock delta between
 its own ticks, using each boot's first tick only to set a baseline, so downtime never counts
-as lived time. It SHALL count Hypnos maintenance cycles and Phantasia training passes from
-their durable completion events, remembering the last stream ID consumed, so a completion is
-counted exactly once regardless of restarts or crashes. Evidence SHALL be persisted in the
-stage file by the gate runner only.
+as lived time. It SHALL count Hypnos maintenance cycles from their durable
+`hypnos.sleep.completed` events, remembering the last stream ID consumed, so a completion is
+counted exactly once regardless of restarts or crashes; a fresh gestation SHALL start
+counting from the stream's tail, never from sleeps that predate it. Phantasia SHALL persist
+its cumulative training-pass count beside its world-model checkpoint and restore it with the
+weights, so the count survives exactly when the consolidation it measures survives; no new
+bus event SHALL carry training passes, because module output streams are workspace
+candidates. Evidence SHALL be persisted in the stage file by the gate runner only.
 
 #### Scenario: Restart mid-gestation
 - **WHEN** a gestating entity has accumulated 3 hours of subjective time and two completed
@@ -94,6 +98,17 @@ stage file by the gate runner only.
 #### Scenario: A sleep completes just before a crash
 - **WHEN** a Hypnos cycle completes and the process crashes before the next gate tick
 - **THEN** after restart that sleep is counted once
+
+#### Scenario: Training passes follow the weights
+- **WHEN** Phantasia has completed four training passes with weight persistence on, and the
+  cycle restarts
+- **THEN** after restart Phantasia reports four passes; with weight persistence off it
+  reports zero
+
+#### Scenario: Sleeps from before the gestation are not counted
+- **WHEN** `hypnos.out` already holds `hypnos.sleep.completed` events when a fresh gestation
+  begins
+- **THEN** none of them is counted
 
 #### Scenario: Downtime is not lived time
 - **WHEN** the host is down for 12 hours between two boots
@@ -107,6 +122,15 @@ at the current boot or that are older than a configured multiple of the gate cad
 #### Scenario: Stale readout from a previous boot
 - **WHEN** the only `gestation.readiness` event on the stream was published before the
   current boot
+- **THEN** C1 is not satisfied
+
+#### Scenario: Readout of another type
+- **WHEN** the newest event on the readout stream is not of type `gestation.readiness`
+- **THEN** C1 is not satisfied
+
+#### Scenario: Readout older than the freshness window
+- **WHEN** the newest `gestation.readiness` event is from this boot but older than the
+  configured multiple of the gate cadence
 - **THEN** C1 is not satisfied
 
 ### Requirement: Operator acknowledgement uses a request file
