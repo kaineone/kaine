@@ -10,7 +10,10 @@
 #
 # The cycle ALSO refuses to boot at the application layer unless
 # KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net is verified), so
-# even a stray start does not birth an entity. No boot-gate variable is set here.
+# even a stray start does not birth an entity. This unit only FORWARDS the
+# operator's set-environment claim; it never sets the variable itself, so an
+# unset claim reaches the container empty and the cycle refuses with exit 2.
+# The host path @KAINE_ROOT@ is written by scripts/install-quadlet.sh.
 [Unit]
 Description=KAINE cognitive cycle (the entity — manually started, never auto)
 Requires=kaine-redis.service kaine-qdrant.service
@@ -23,8 +26,8 @@ Network=kaine.network
 Exec=python -m kaine.cycle
 AddDevice=nvidia.com/gpu=1
 SecurityLabelDisable=true
-Volume=%h/projects/kaine/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
-Volume=%h/projects/kaine/config/secrets.toml:/app/config/secrets.toml:ro,Z
+Volume=@KAINE_ROOT@/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
+Volume=@KAINE_ROOT@/config/secrets.toml:/app/config/secrets.toml:ro,Z
 # Durable entity state mounts at /app/state — the app writes state CWD-relative
 # under WORKDIR /app, so /state would not persist anything the entity writes.
 Volume=kaine-state.volume:/app/state
@@ -33,8 +36,9 @@ Volume=kaine-models.volume:/models:ro
 # Evaluation outputs — shared with the Nexus reader, matching the compose
 # kaine-eval-data named volume (subsumes the old /app/data/evaluation/runs
 # mount). Requires sibling kaine-eval-data.volume / kaine-trajectory.volume
-# quadlet units. Host paths (%h/projects/kaine) mirror the compose binds so a
-# quadlet boot sees the same manifest/output state as compose.
+# quadlet units. Host paths (@KAINE_ROOT@, rendered by the install script)
+# mirror the compose binds so a quadlet boot sees the same manifest/output
+# state as compose.
 Volume=kaine-eval-data.volume:/app/data/evaluation
 Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
 # Perception scratch is RAM-backed and ephemeral — zero raw-sense-data
@@ -45,8 +49,13 @@ Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
 Environment=KAINE_STATE_KEY=${KAINE_STATE_KEY}
 Environment=KAINE_MODELS_DIR=/models
+# Forward the operator's systemctl --user set-environment claim. An unset
+# claim reaches the container empty, so the cycle refuses with exit 2.
+Environment=KAINE_CYCLE_OPERATOR_PRESENT=${KAINE_CYCLE_OPERATOR_PRESENT}
 
 [Service]
+# Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).
+EnvironmentFile=@KAINE_ROOT@/compose/.env
 # One-shot supervised run; do NOT auto-restart the entity.
 Restart=no
 

@@ -409,6 +409,55 @@ def test_quadlet_cycle_and_nexus_have_redis_url():
     assert url in (_QUADLET / "kaine-nexus.container").read_text()
 
 
+def _section(text: str, section: str) -> str:
+    """Return the body of `section` (without the header line)."""
+    lines = text.splitlines()
+    target = f"[{section}]"
+    in_section = False
+    body: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == target:
+            in_section = True
+            continue
+        if in_section and stripped.startswith("[") and stripped.endswith("]"):
+            break
+        if in_section:
+            body.append(line)
+    return "\n".join(body)
+
+
+def test_quadlet_units_never_embed_host_checkout_path():
+    for path in _QUADLET.glob("*"):
+        text = path.read_text()
+        assert "projects/kaine" not in text, f"{path.name} embeds old host path"
+        assert "%h/" not in text, f"{path.name} embeds unrendered home path"
+
+
+def test_quadlet_secret_units_load_bootstrap_env_file():
+    for path in _QUADLET.glob("*.container"):
+        text = path.read_text()
+        if "${" not in text:
+            continue
+        service = _section(text, "Service")
+        assert (
+            "EnvironmentFile=@KAINE_ROOT@/compose/.env" in service
+        ), f"{path.name} expands secrets but does not load compose/.env in [Service]"
+
+
+def test_quadlet_cycle_forwards_operator_presence_and_has_no_install():
+    text = (_QUADLET / "kaine-cycle.container").read_text()
+    container = _section(text, "Container")
+    assert (
+        "Environment=KAINE_CYCLE_OPERATOR_PRESENT=${KAINE_CYCLE_OPERATOR_PRESENT}"
+        in container
+    )
+    assert not _has_section(text, "[Install]"), (
+        "the entity must never be enabled/auto-started"
+    )
+    assert "Restart=no" in text
+
+
 # --------------------------------------------------------------------------
 # 3.1 — setup provisioner plans every model weight (no network in the test)
 # --------------------------------------------------------------------------

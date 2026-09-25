@@ -9,16 +9,37 @@ service stays down until a human logs in.
 
 ## Install (rootless, per-user)
 
+Run the install script from the checkout. It renders the units into the
+user's quadlet directory, substituting `@KAINE_ROOT@` with the checkout's
+absolute path:
+
 ```bash
-mkdir -p ~/.config/containers/systemd
-cp quadlet/*.container quadlet/*.network quadlet/*.volume ~/.config/containers/systemd/
-# secrets + gate flags — never in a unit file:
-export KAINE_REDIS_PASSWORD=... KAINE_QDRANT_API_KEY=... KAINE_MODEL_SERVER_API_KEY=...
+bash scripts/install-quadlet.sh
+```
+
+The default destination is `${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd`.
+Use `--dest DIR` to choose another directory, `--root DIR` to point at a checkout
+other than the one containing the script, and `--dry-run` to render and verify
+without writing anything:
+
+```bash
+bash scripts/install-quadlet.sh --dry-run
+bash scripts/install-quadlet.sh --root /srv/kaine --dest ~/.config/containers/systemd
+```
+
+Secrets are read by systemd at every start from `compose/.env` (created and
+kept up to date by `scripts/redis-bootstrap.sh` and
+`scripts/qdrant-bootstrap.sh`). Each unit that expands a `${...}` secret
+loads that file through `[Service] EnvironmentFile=`. Never export secrets in a
+shell; the systemd user manager does not inherit shell environment.
+
+Enable linger so the services survive logout and reboot:
+
+```bash
 sudo loginctl enable-linger $USER
 loginctl show-user $USER | grep Linger    # expect Linger=yes
 systemctl --user daemon-reload
-systemctl --user start kaine-redis kaine-qdrant kaine-model-server \
-                       kaine-speaches kaine-chatterbox kaine-nexus
+systemctl --user start kaine-redis kaine-qdrant kaine-nexus
 ```
 
 The data/model/Nexus units carry `[Install] WantedBy=default.target` so they

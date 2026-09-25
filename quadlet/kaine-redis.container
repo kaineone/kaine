@@ -16,6 +16,8 @@ HealthInterval=10s
 HealthRetries=5
 
 [Service]
+# Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).
+EnvironmentFile=@KAINE_ROOT@/compose/.env
 Restart=always
 
 [Install]
