@@ -365,11 +365,13 @@ def test_manifest_entry_lists_metadata_and_sorted_seams():
             "distribution": "dist-one",
             "version": "1.2.3",
             "seams": ["chronos.network", "soma.forward_model"],
+            "observes_cycle": False,
         },
         "p2": {
             "distribution": "dist-two",
             "version": "4.5.6",
             "seams": ["nous.engine"],
+            "observes_cycle": False,
         },
     }
     assert bool(lp) is True

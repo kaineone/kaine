@@ -133,14 +133,27 @@ the plugin filled. A simulated run is never evidence about living neurons.
 - **Hardware.** `target = "hardware"` is refused. Running on living tissue is a
   deliberate step with its own welfare review, described in
   [`plugins/kaine-cl1/docs/biological-welfare.md`](../plugins/kaine-cl1/docs/biological-welfare.md).
-- **Real time and a shared clock.** Each converted module step, and each publish
-  of an oscillated module, runs its own substrate window and blocks the caller
-  while it does, so the plugin requires the simulator's accelerated time. It also
-  means substrate time runs faster than KAINE's cognitive time, and a territory
-  records only the windows its own module runs (each module reads the response to
-  its own stimulus). A non-blocking substrate with one shared window per cognitive
-  tick, paced by KAINE's live broadcast rate, is planned and is required before any
-  run on real hardware.
+- **Hardware.** See above: the timing is ready for it (next section), but the
+  plugin does not yet accept a hardware target.
+
+## Timing: one substrate window per cycle tick
+
+KAINE calls the plugin once per processing tick (10 Hz by default). Each call
+closes one substrate window, one processing period long, however many converted
+modules and oscillators share the substrate. A background thread runs the
+substrate, so the cognitive cycle never waits for it:
+
+- **Accelerated simulator** (`accelerated_time = true`): the thread runs one
+  window per tick.
+- **Real time** (`accelerated_time = false`, the simulator's real-time mode, and
+  the mode real tissue would need): the thread runs the substrate loop
+  continuously and each tick marks a window boundary.
+
+A module's step queues its stimulation for the next window and reads its
+territory's latest completed window, so the response to a stimulus arrives one
+tick later (about 100 ms). If two steps of the same module queue stimulation
+before a window starts, the later one wins. Outside KAINE, or before the first
+tick, each step runs its own window instead.
 
 ## Testing
 

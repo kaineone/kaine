@@ -368,6 +368,7 @@ def test_manifest_records_plugin_metadata():
             "distribution": "my-dist",
             "version": "1.2.3",
             "seams": ["chronos.network"],
+            "observes_cycle": False,
         }
     }
 

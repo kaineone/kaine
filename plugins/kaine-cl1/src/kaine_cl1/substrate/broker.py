@@ -8,32 +8,29 @@ multiplexer:
 
 - **Channel allocation.** Each module leases a disjoint block of the 64 channels,
   fixed for the run. The sum cannot exceed 64 (enforced at allocation).
-- **One closed loop.** The broker runs the single `neurons.loop(...)`. Each call
-  to `run_cognitive_tick()` delivers all queued stim at the start of one window
-  of `nesting_factor` substrate sub-ticks, reads the resulting spikes, and routes
-  each territory only the spikes on its own channels.
-- **One window per consumer step, not per cognitive tick.** Every converted
-  model (and every wetware oscillator, once per publish) queues its stim and
-  calls `run_cognitive_tick()` with no await in between, so each consumer reads
-  the window that contains the response to its own stimulus. The substrate
-  timeline therefore advances by one window per consumer step, and a
-  territory's activity in windows run by other consumers is not attributed to
-  it. The window length is sized from the resting cognitive rate
-  (`nesting_factor_for`), which is a window size, not a promise that one window
-  runs per KAINE cycle. On the accelerated simulator this is harmless; on real
-  time it serialises consumers on one loop, which the non-blocking substrate
-  (foundation task 3.3) must replace with a single cycle-driven beat before any
-  hardware run.
+- **One closed loop.** The broker runs the single `neurons.loop(...)`.
+- **Windows.** Before beat mode, each consumer step runs one `_span`-frame window,
+  delivering queued stim at the start and returning one observation per territory.
+  In beat mode (KAINE's cycle hook), exactly one window closes per processing tick
+  on a background thread. Consumers queue stim for the next window through
+  `exchange()` and read their territory's latest window; the cycle hook never waits
+  on the substrate.
+- **Health.** `coalesced_beats`, `failed`, and `broken` expose the beat thread state
+  for diagnostics.
 
 See `openspec/changes/wetware-substrate-foundation/`.
 """
 from __future__ import annotations
 
+import logging
 import math
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
 from kaine_cl1.substrate.codec import StimRequest
+
+log = logging.getLogger(__name__)
 
 _CHANNELS_TOTAL = 64  # matches cl.ChannelSet._CHANNELS_TOTAL in the simulator
 
@@ -94,6 +91,20 @@ class SubstrateBroker:
     _span: int = 0
     _cursor: Any = None
     _spillover: list[Any] = field(default_factory=list)
+    _beat_mode: bool = field(default=False, repr=False)
+    _accelerated: bool = field(default=True, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _latest: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
+    _next: dict[str, list[StimRequest]] = field(default_factory=dict, repr=False)
+    _pending_frames: int | None = field(default=None, repr=False)
+    _coalesced: int = field(default=0, repr=False)
+    _beat_signal: threading.Event = field(default_factory=threading.Event, repr=False)
+    _boundary: threading.Event = field(default_factory=threading.Event, repr=False)
+    _stop: threading.Event = field(default_factory=threading.Event, repr=False)
+    _failed: bool = field(default=False, repr=False)
+    _broken: bool = field(default=False, repr=False)
+    _thread: Any = None
+    _fps: int = field(default=25000, repr=False)
 
     def __post_init__(self) -> None:
         if not self._free:
@@ -148,6 +159,7 @@ class SubstrateBroker:
     def open(self, neurons: Any) -> None:
         self._neurons = neurons
         fps = int(neurons.get_frames_per_second())
+        self._fps = fps
         frames_per_subtick = max(1, fps // self.ticks_per_second)
         # A cognitive tick spans exactly this many frames of the substrate
         # timeline. Aggregating by timestamp span (not by counting loop ticks)
@@ -159,7 +171,7 @@ class SubstrateBroker:
         self._spillover = []
         self._loop_it = iter(neurons.loop(ticks_per_second=self.ticks_per_second))
 
-    def queue_stim(self, module: str, requests: Sequence[StimRequest]) -> None:
+    def _validate(self, module: str, requests: Sequence[StimRequest]) -> list[StimRequest]:
         if module not in self._territories:
             raise KeyError(f"module {module!r} has no territory")
         requests = list(requests)
@@ -175,7 +187,11 @@ class SubstrateBroker:
                     f"module {module!r} queued a non-finite amplitude "
                     f"{req.amplitude_uA!r} on channel {req.channel}"
                 )
-        self._pending.setdefault(module, []).extend(requests)
+        return requests
+
+    def queue_stim(self, module: str, requests: Sequence[StimRequest]) -> None:
+        reqs = self._validate(module, requests)
+        self._pending.setdefault(module, []).extend(reqs)
 
     def _deliver_pending(self) -> None:
         if not self._pending:
@@ -186,13 +202,7 @@ class SubstrateBroker:
                 self._neurons.stim(channel_set, design)
         self._pending.clear()
 
-    def run_cognitive_tick(self) -> dict[str, TerritoryObservation]:
-        """Advance one cognitive tick (a fixed `_span`-frame window), delivering
-        queued stim at the window start, and return one aggregated observation per
-        territory. Spikes past the window boundary are buffered for the next tick,
-        so the per-tick spike set is a deterministic function of the timeline."""
-        if self._loop_it is None:
-            raise RuntimeError("broker is not open; call open(neurons) first")
+    def _run_window(self, frames: int) -> dict[str, TerritoryObservation]:
         collected: list[Any] = list(self._spillover)
         self._spillover = []
         delivered = False
@@ -204,9 +214,9 @@ class SubstrateBroker:
                 self._deliver_pending()  # stim at the window start, inside the loop
                 delivered = True
             collected.extend(tick.analysis.spikes)
-            if int(tick.analysis.stop_timestamp) >= self._cursor + self._span:
+            if int(tick.analysis.stop_timestamp) >= self._cursor + frames:
                 break
-        window_end = self._cursor + self._span
+        window_end = self._cursor + frames
         in_window = [s for s in collected if int(s.timestamp) < window_end]
         self._spillover = [s for s in collected if int(s.timestamp) >= window_end]
         from_ts = self._cursor
@@ -218,7 +228,186 @@ class SubstrateBroker:
                 channels=t.channels,
                 spikes=routed[module],
                 from_timestamp=from_ts,
-                frame_count=self._span,
+                frame_count=frames,
             )
             for module, t in self._territories.items()
         }
+
+    def run_cognitive_tick(self) -> dict[str, TerritoryObservation]:
+        """Advance one cognitive tick (a fixed `_span`-frame window), delivering
+        queued stim at the window start, and return one aggregated observation per
+        territory. Spikes past the window boundary are buffered for the next tick,
+        so the per-tick spike set is a deterministic function of the timeline."""
+        self._check_usable()
+        if self._loop_it is None:
+            raise RuntimeError("broker is not open; call open(neurons) first")
+        return self._run_window(self._span)
+
+    # -- beat mode --------------------------------------------------------------
+    def exchange(self, module: str, requests: Sequence[StimRequest]) -> TerritoryObservation:
+        self._check_usable()
+        reqs = self._validate(module, requests)
+        if not self._beat_mode:
+            self.queue_stim(module, reqs)
+            return self.run_cognitive_tick()[module]
+        with self._lock:
+            self._next[module] = reqs
+            latest = self._latest.get(module)
+        if latest is None:
+            return TerritoryObservation(
+                module=module,
+                channels=self._territories[module].channels,
+                spikes=[],
+                from_timestamp=-1,
+                frame_count=0,
+            )
+        return TerritoryObservation(
+            module=latest.module,
+            channels=latest.channels,
+            spikes=list(latest.spikes),
+            from_timestamp=latest.from_timestamp,
+            frame_count=latest.frame_count,
+        )
+
+    def start_beat(self, *, accelerated: bool) -> None:
+        if self._loop_it is None:
+            raise RuntimeError("broker is not open; call open(neurons) first")
+        self._check_usable()
+        if self._beat_mode and self._thread is not None and self._thread.is_alive():
+            return
+        if self._thread is not None and self._thread.is_alive():
+            raise RuntimeError("CL1 substrate beat thread is already running")
+        self._stop.clear()
+        self._failed = False
+        self._beat_signal.clear()
+        self._beat_mode = True
+        self._accelerated = accelerated
+        with self._lock:
+            for module, reqs in list(self._pending.items()):
+                self._next[module] = list(reqs)
+            self._pending.clear()
+        self._thread = threading.Thread(
+            target=self._beat_loop,
+            name="cl1-substrate-beat",
+            daemon=True,
+        )
+        self._thread.start()
+        mode = "accelerated" if accelerated else "real time"
+        log.info("CL1 substrate switched to beat mode (%s): one window per cycle tick", mode)
+
+    def beat(self, period_s: float) -> None:
+        self._check_usable()
+        if not self._beat_mode:
+            raise RuntimeError("broker is not in beat mode")
+        if self._accelerated:
+            frames = max(1, int(round(period_s * self._fps)))
+            with self._lock:
+                if self._pending_frames is not None:
+                    self._coalesced += 1
+                    if self._coalesced == 1 or self._coalesced % 100 == 0:
+                        log.warning(
+                            "CL1 substrate is behind the cycle: coalesced %d beat(s) so far; "
+                            "substrate time is running slower than cognitive time",
+                            self._coalesced,
+                        )
+                self._pending_frames = frames
+                self._beat_signal.set()
+        else:
+            self._boundary.set()
+
+    def _beat_loop(self) -> None:
+        try:
+            if self._accelerated:
+                while not self._stop.is_set():
+                    if not self._beat_signal.wait(timeout=0.1):
+                        continue
+                    self._beat_signal.clear()
+                    with self._lock:
+                        frames = self._pending_frames
+                        self._pending_frames = None
+                        if frames is None:
+                            continue
+                        self._pending = {m: list(r) for m, r in self._next.items()}
+                        self._next.clear()
+                    obs = self._run_window(frames)
+                    with self._lock:
+                        self._latest.update(obs)
+            else:
+                collected: list[Any] = []
+                window_start: int | None = None
+                for tick in self._loop_it:
+                    if self._stop.is_set():
+                        break
+                    collected.extend(tick.analysis.spikes)
+                    if window_start is None:
+                        window_start = int(tick.analysis.start_timestamp)
+                    if self._boundary.is_set():
+                        self._boundary.clear()
+                        stop_ts = int(tick.analysis.stop_timestamp)
+                        assert window_start is not None
+                        routed = self.route(collected)
+                        obs = {
+                            module: TerritoryObservation(
+                                module=module,
+                                channels=t.channels,
+                                spikes=routed.get(module, []),
+                                from_timestamp=window_start,
+                                frame_count=stop_ts - window_start,
+                            )
+                            for module, t in self._territories.items()
+                        }
+                        with self._lock:
+                            self._latest.update(obs)
+                            snapshot = {m: list(r) for m, r in self._next.items()}
+                            self._next.clear()
+                        for requests in snapshot.values():
+                            for req in requests:
+                                self._neurons.stim(*req.to_cl())
+                        collected = []
+                        window_start = stop_ts
+        except Exception:
+            log.exception("CL1 substrate beat loop stopped")
+            self._failed = True
+
+    def stop_beat(self, timeout: float = 2.0) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout)
+            if self._thread.is_alive():
+                log.warning(
+                    "CL1 substrate beat thread did not stop within %.1f s; "
+                    "the broker is now unusable",
+                    timeout,
+                )
+                self._broken = True
+                return
+        self._thread = None
+        self._beat_mode = False
+
+    def _check_usable(self) -> None:
+        if self._failed:
+            raise RuntimeError(
+                "CL1 substrate beat loop has stopped after an error; see the earlier log"
+            )
+        if self._broken:
+            raise RuntimeError("CL1 substrate broker is broken; open a new session")
+
+    @property
+    def beat_mode(self) -> bool:
+        """Whether the broker is currently running in beat mode."""
+        return self._beat_mode
+
+    @property
+    def coalesced_beats(self) -> int:
+        """Number of accelerated beats coalesced because a window was pending."""
+        return self._coalesced
+
+    @property
+    def failed(self) -> bool:
+        """Whether the beat loop stopped after an unhandled exception."""
+        return self._failed
+
+    @property
+    def broken(self) -> bool:
+        """Whether stop_beat timed out and the broker is no longer usable."""
+        return self._broken

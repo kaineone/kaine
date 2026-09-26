@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
+import time
 from typing import Any, Callable, Iterable, Mapping, Protocol
 
 __all__ = [
@@ -35,6 +36,11 @@ INJECTABLE_SEAMS: dict[str, frozenset[str]] = {
     "nous": frozenset({"engine"}),
 }
 
+# Log a warning on the 1st and every Nth cycle-tick failure or slow call.
+_CYCLE_WARN_EVERY = 100
+# Fraction of the tick period that counts as a slow cycle-tick hook.
+_CYCLE_BUDGET_FRACTION = 0.1
+
 
 class KainePlugin(Protocol):
     """Interface for objects returned by plugin factories.
@@ -42,6 +48,10 @@ class KainePlugin(Protocol):
     The entry point must resolve to a zero-argument callable that returns an
     object matching this protocol. ``make_oscillator`` is optional; the loader
     checks for it with ``hasattr`` rather than requiring it at runtime.
+
+    Plugins MAY also implement ``on_cycle_tick(tick)``. It is called once per
+    cycle tick with a read-only copy of the ``cycle.tick`` payload and must
+    return quickly.
     """
 
     def seams(self, config: dict) -> frozenset[str]:
@@ -65,9 +75,54 @@ class LoadedPlugins:
 
     def __init__(self, plugins: dict[str, dict[str, Any]]) -> None:
         self._plugins = plugins
+        self._cycle_failures: dict[str, int] = {}
+        self._cycle_slow: dict[str, int] = {}
 
     def __bool__(self) -> bool:
         return bool(self._plugins)
+
+    def cycle_observer(self) -> Callable[[Mapping[str, Any], float], None] | None:
+        if any(
+            callable(getattr(info["plugin"], "on_cycle_tick", None))
+            for info in self._plugins.values()
+        ):
+            return self.dispatch_cycle_tick
+        return None
+
+    def dispatch_cycle_tick(self, payload: Mapping[str, Any], target_ms: float) -> None:
+        for name, info in self._plugins.items():
+            tick_hook = getattr(info["plugin"], "on_cycle_tick", None)
+            if not callable(tick_hook):
+                continue
+            tick_copy = dict(payload)
+            start = time.perf_counter()
+            try:
+                tick_hook(tick_copy)
+            except Exception as exc:
+                count = self._cycle_failures[name] = self._cycle_failures.get(name, 0) + 1
+                if count == 1 or count % _CYCLE_WARN_EVERY == 0:
+                    logger.warning(
+                        "plugin %s on_cycle_tick raised %s (%d failure(s) so far): %s",
+                        name,
+                        type(exc).__name__,
+                        count,
+                        exc,
+                    )
+                continue
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            if target_ms > 0:
+                budget = _CYCLE_BUDGET_FRACTION * target_ms
+                if elapsed_ms > budget:
+                    count = self._cycle_slow[name] = self._cycle_slow.get(name, 0) + 1
+                    if count == 1 or count % _CYCLE_WARN_EVERY == 0:
+                        logger.warning(
+                            "plugin %s on_cycle_tick took %.1f ms, over %.1f ms "
+                            "(10%% of the tick period); %d slow call(s) so far",
+                            name,
+                            elapsed_ms,
+                            budget,
+                            count,
+                        )
 
     def declares_oscillator(self, module: str) -> bool:
         target = f"oscillator.{module}"
@@ -161,6 +216,9 @@ class LoadedPlugins:
                 "distribution": info["distribution"],
                 "version": info["version"],
                 "seams": sorted(info["seams"]),
+                "observes_cycle": callable(
+                    getattr(info["plugin"], "on_cycle_tick", None)
+                ),
             }
             for name, info in self._plugins.items()
         }

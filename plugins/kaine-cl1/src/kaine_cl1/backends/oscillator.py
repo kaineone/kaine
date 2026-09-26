@@ -89,7 +89,11 @@ class WetwareOscillator:
         return self._failures
 
     def step(self, drive: float) -> None:
-        """Convert salience drive into a stimulation level and record firing."""
+        """Convert salience drive into a stimulation level and record firing.
+
+        In beat mode the returned observation is the territory's latest completed
+        window, so the response to this step's stimulation arrives one tick later.
+        """
         d = float(drive)
         if not math.isfinite(d) or d < 0.0:
             d = 0.0
@@ -104,9 +108,10 @@ class WetwareOscillator:
             if level > 0.0:
                 amp = self._min_uA + level * (self._max_uA - self._min_uA)
                 requests = [StimRequest(int(ch), amp) for ch in self._channels]
-                self._broker.queue_stim(self._module, requests)
+            else:
+                requests = []
 
-            obs = self._broker.run_cognitive_tick()[self._module]
+            obs = self._broker.exchange(self._module, requests)
             fired = {spike.channel for spike in obs.spikes if spike.channel in self._channel_set}
             fraction = len(fired) / len(self._channels) if self._channels else 0.0
             self._history.append(fraction)

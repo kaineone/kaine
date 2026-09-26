@@ -122,7 +122,9 @@ def test_set_frequency_halves_the_drive(monkeypatch):
     requests_log = []
 
     def queue_stim(module, requests):
-        requests_log.append(requests)
+        # The oscillator makes one exchange per step; an empty list queues nothing.
+        if requests:
+            requests_log.append(requests)
 
     def run_tick():
         return {"x": types.SimpleNamespace(spikes=[])}
@@ -155,7 +157,9 @@ def test_bad_drive_is_clamped(monkeypatch):
     requests_log = []
 
     def queue_stim(module, requests):
-        requests_log.append(requests)
+        # The oscillator makes one exchange per step; an empty list queues nothing.
+        if requests:
+            requests_log.append(requests)
 
     monkeypatch.setattr(b, "queue_stim", queue_stim)
     monkeypatch.setattr(
@@ -237,7 +241,8 @@ def test_plugin_channel_budget():
         plugin.seams(cfg)
 
 
-def test_plugin_requires_accelerated_time_for_oscillators():
+def test_real_time_oscillators_warn_instead_of_refusing(caplog):
+    """Real time is supported through KAINE's cycle hook; the plugin warns once."""
     plugin = Cl1Plugin()
     cfg = _cfg(
         substrate={
@@ -248,8 +253,11 @@ def test_plugin_requires_accelerated_time_for_oscillators():
             "territories": {},
         },
     )
-    with pytest.raises(ValueError, match="accelerated_time"):
+    with caplog.at_level(logging.WARNING, logger="kaine_cl1.plugin"):
+        assert plugin.seams(cfg) == frozenset({"oscillator.chronos"})
         plugin.seams(cfg)
+    warnings = [r for r in caplog.records if "real time" in r.getMessage()]
+    assert len(warnings) == 1
 
 
 def test_make_oscillator_reuses_its_territory():

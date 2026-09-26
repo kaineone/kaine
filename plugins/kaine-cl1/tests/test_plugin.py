@@ -6,6 +6,7 @@ import os
 os.environ.setdefault("CL_SDK_ACCELERATED_TIME", "1")
 os.environ.setdefault("CL_SDK_VISUALISATION", "0")
 
+import logging
 import math
 import tomllib
 from pathlib import Path
@@ -118,10 +119,11 @@ def test_missing_territory_rejected():
     assert not msg.startswith(('"', "'"))
 
 
-def test_real_time_substrate_rejected():
-    with pytest.raises(ValueError) as excinfo:
-        Cl1Plugin().seams(_cfg(accelerated_time=False))
-    assert "accelerated_time" in str(excinfo.value)
+def test_real_time_substrate_warns(caplog):
+    """Real time is supported through KAINE's cycle hook, so it warns instead of refusing."""
+    with caplog.at_level(logging.WARNING, logger="kaine_cl1.plugin"):
+        assert Cl1Plugin().seams(_cfg(accelerated_time=False)) == frozenset({"chronos.network"})
+    assert any("cycle hook" in r.getMessage() for r in caplog.records)
 
 
 def test_hardware_target_rejected():
