@@ -126,6 +126,12 @@ class MaturationConfig:
     gate_cadence_seconds: float = 60.0
     readout_max_age_cadences: float = 3.0
     require_operator_ack_for_birth: bool = False
+    # Womb timing knobs.
+    womb_ready_retry_seconds: float = 5.0
+    womb_check_seconds: float = 1.0
+    womb_loss_after_seconds: float = 5.0
+    womb_arm_timeout_seconds: float = 120.0
+    womb_presence_window_seconds: float = 3.0
     regulation_thresholds: RegulationThresholds = field(
         default_factory=RegulationThresholds
     )
@@ -151,6 +157,24 @@ class MaturationConfig:
                 d.get(
                     "require_operator_ack_for_birth",
                     base.require_operator_ack_for_birth,
+                )
+            ),
+            womb_ready_retry_seconds=float(
+                d.get("womb_ready_retry_seconds", base.womb_ready_retry_seconds)
+            ),
+            womb_check_seconds=float(
+                d.get("womb_check_seconds", base.womb_check_seconds)
+            ),
+            womb_loss_after_seconds=float(
+                d.get("womb_loss_after_seconds", base.womb_loss_after_seconds)
+            ),
+            womb_arm_timeout_seconds=float(
+                d.get("womb_arm_timeout_seconds", base.womb_arm_timeout_seconds)
+            ),
+            womb_presence_window_seconds=float(
+                d.get(
+                    "womb_presence_window_seconds",
+                    base.womb_presence_window_seconds,
                 )
             ),
             regulation_thresholds=RegulationThresholds.from_dict(

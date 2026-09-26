@@ -147,10 +147,12 @@ def test_spot_selftest_unfreeze_never_released(tmp_path, monkeypatch):
     monkeypatch.setattr(control_state, "CONTROL_PATH", real_control)
     monkeypatch.setattr(escalation_state, "ESCALATION_PATH", real_escalation)
 
-    def fake_unfreeze(path=None):
+    # Spot releases only its own freeze (pop_freeze with source "spot");
+    # break that release so the self-test must report it.
+    def fake_pop_freeze(path=None, *, source=None):
         return None
 
-    monkeypatch.setattr(control_state, "unfreeze", fake_unfreeze)
+    monkeypatch.setattr(control_state, "pop_freeze", fake_pop_freeze)
 
     result = asyncio.run(run_spot_selftest({"enabled": True}, timeout_s=2.0))
     assert not result.ok

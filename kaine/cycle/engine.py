@@ -198,6 +198,10 @@ class CognitiveCycle:
         self._control_cursor: str = "0"
         self._paused = asyncio.Event()
         self._paused.set()
+        # Subjective (entity-clock) seconds spent paused: the running total of
+        # finished pauses and the start of the current one, if any.
+        self._paused_total = 0.0
+        self._paused_at: float | None = None
         self._stopped = False
         self.hooks = CycleHooks()
 
@@ -408,12 +412,29 @@ class CognitiveCycle:
             return
         await self.hooks.fire("pause")
         self._paused.clear()
+        self._paused_at = self._entity_clock.now()
 
     async def resume(self) -> None:
         if self._paused.is_set():
             return
+        if self._paused_at is not None:
+            self._paused_total += max(
+                0.0, self._entity_clock.now() - self._paused_at
+            )
+            self._paused_at = None
         self._paused.set()
         await self.hooks.fire("resume")
+
+    def paused_subjective_seconds(self) -> float:
+        """Return subjective seconds spent paused, including a pause in progress.
+
+        The maturation gate subtracts this so frozen time never counts as
+        lived time.
+        """
+        total = self._paused_total
+        if self._paused_at is not None:
+            total += max(0.0, self._entity_clock.now() - self._paused_at)
+        return total
 
     async def shutdown(self) -> None:
         self._stopped = True

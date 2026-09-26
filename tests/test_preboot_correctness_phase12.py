@@ -149,10 +149,12 @@ def test_c1_freeze_resume_restores_desired_perception_flags(monkeypatch):
         async def resume(self) -> None:
             self.is_paused = False
 
-    class _Control:
-        def __init__(self, frozen: bool, reason: str | None = None) -> None:
-            self.frozen = frozen
-            self.reason = reason
+    # The real control record: an operator freeze (legacy single-slot form,
+    # source "operator", empty stack) switches perception off.
+    from kaine.cycle.control_state import CycleControl
+
+    def _Control(frozen: bool, reason: str | None = None) -> CycleControl:
+        return CycleControl(frozen=frozen, reason=reason)
 
     controls = [_Control(True, "repair")]
     monkeypatch.setattr(cycle_main, "read_control", lambda: controls[0])

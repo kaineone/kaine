@@ -587,12 +587,24 @@ class Spot:
             return
         self.poll_index += 1
         control = control_state.read_control(path=self._control_path)
-        if control.frozen and control.source != "spot":
+        gestation_only = (
+            control.frozen
+            and bool(control.stack)
+            and all(entry.get("source") == "gestation" for entry in control.stack)
+        )
+        # Any gestation entry means the cycle is paused for a lost womb, so
+        # heartbeats stay stale even while Spot's own entry sits on top of it.
+        under_gestation = control.frozen and any(
+            entry.get("source") == "gestation" for entry in control.stack
+        )
+        if control.frozen and control.source != "spot" and not gestation_only:
             # A frozen cycle's modules are silent by design, so heartbeat
             # staleness is not a valid liveness signal for a freeze Spot does
-            # not own. Spot keeps working only for its OWN recovery freeze
-            # (on recovery it pops only its own entry — it never lifts a
-            # welfare or operator freeze).
+            # not own. Spot keeps working for its OWN recovery freeze (on
+            # recovery it pops only its own entry) and for a gestation-only
+            # freeze, where crashes can still be repaired while perception is
+            # paused. Spot stays out of operator/welfare freezes and of any
+            # mixed stack that contains them.
             return
         for module in list(self._registry.all_modules()):
             result = self.assess(module)
@@ -600,6 +612,10 @@ class Spot:
             name = module.name
             if state == "alive":
                 self._incidents.pop(name, None)
+                continue
+            if under_gestation and state == "hung":
+                # Heartbeats are unreliable while the cycle is paused for
+                # gestation; only crashes are actionable.
                 continue
             incident = self._incidents.setdefault(name, _Incident())
             if incident.incident_id is None:
@@ -682,8 +698,12 @@ class Spot:
                     },
                 )
                 self._incidents.pop(name, None)
-                if control_state.read_control(path=self._control_path).source == "spot":
-                    control_state.unfreeze(path=self._control_path)
+                # Spot only ever lifts its own freeze. If any spot entry is
+                # present in the stack, pop the newest one; other sources
+                # remain frozen.
+                control = control_state.read_control(path=self._control_path)
+                if any(entry.get("source") == "spot" for entry in control.stack):
+                    control_state.pop_freeze(path=self._control_path, source="spot")
                 return  # one incident per poll
             if incident.attempts >= self._config.max_restart_attempts:
                 final_snap = await self._snapshot(

@@ -46,6 +46,7 @@ _EVENT_TITLE = {
     "supervision_lost": "supervision lost",
     "welfare_response": "welfare response fired",
     "input_lost": "input lost",
+    "womb_lost": "womb lost",
     "boot_failed": "boot failed",
 }
 

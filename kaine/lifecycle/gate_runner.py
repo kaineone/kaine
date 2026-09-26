@@ -28,7 +28,7 @@ import logging
 import math
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from kaine.bus.schema import Event
 from kaine.lifecycle import stage as lifecycle_stage
@@ -74,6 +74,7 @@ class MaturationGateRunner:
         womb_readout_stream: str = DEFAULT_WOMB_READOUT_STREAM,
         womb_readout_type: str = DEFAULT_WOMB_READOUT_TYPE,
         hypnos_stream: str = "hypnos.out",
+        paused_seconds: Callable[[], float] | None = None,
     ) -> None:
         self._bus = bus
         self._config = config
@@ -85,18 +86,40 @@ class MaturationGateRunner:
         self._womb_stream = womb_readout_stream
         self._womb_type = womb_readout_type
         self._hypnos_stream = hypnos_stream
+        self._paused_seconds: Callable[[], float] | None = paused_seconds
+        self._is_paused: Callable[[], bool] | None = None
         self._task: asyncio.Task | None = None
         self._stop_event: asyncio.Event | None = None
         # Redis server time at the first evaluation, anchoring readout age.
         self._boot_ms: int | None = None
         # EntityClock baseline for per-boot subjective lived-time accumulation.
         self._clock_baseline: float | None = None
+        # Paused-time baseline paired with _clock_baseline for exact subtraction.
+        self._paused_baseline: float | None = None
         # Ensure the first tick anchors the stage file.
         self._stage_written = False
         # Track whether we have already emitted the birth-ready "awaiting
         # embodiment" signal so the log is not spammed every cadence tick.
         self._awaiting_embodiment_logged = False
         self._awaiting_ack_logged = False
+        # Track whether we have already logged the single "birth deferred"
+        # info line for the current frozen spell.
+        self._birth_deferred_logged = False
+
+    def set_pause_sources(
+        self,
+        *,
+        paused_seconds: Callable[[], float] | None,
+        is_paused: Callable[[], bool] | None,
+    ) -> None:
+        """Hand over the cycle's paused-time total and paused flag.
+
+        The cycle is built after the runner, so the entrypoint hands over
+        the cycle's paused-time total and its paused flag here.
+        """
+        self._paused_seconds = paused_seconds
+        self._is_paused = is_paused
+        self._paused_baseline = None
 
     @property
     def stage(self) -> lifecycle_stage.StageState:
@@ -193,7 +216,9 @@ class MaturationGateRunner:
 
         The first tick of a runner instance anchors the baseline and adds
         nothing, so downtime between boots never counts. A frozen clock
-        (scale 0) produces no positive delta.
+        (scale 0) produces no positive delta. Frozen (paused) time is
+        measured by the cycle and subtracted exactly so a suspended span does
+        not count toward maturation.
         """
         if self._entity_clock is None:
             return
@@ -205,16 +230,40 @@ class MaturationGateRunner:
         except Exception:
             return
 
+        paused: float | None = None
+        if self._paused_seconds is not None:
+            try:
+                paused = float(self._paused_seconds())
+                if not math.isfinite(paused):
+                    raise ValueError("non-finite paused time")
+            except Exception:
+                # Source failed: drop both baselines so the next good tick
+                # re-anchors and adds nothing. The pauses inside this span are
+                # unknown, so it must not count; this fails toward counting less.
+                self._clock_baseline = None
+                self._paused_baseline = None
+                return
+
         if self._clock_baseline is None:
             self._clock_baseline = now
+            self._paused_baseline = paused if paused is not None else 0.0
             return
 
-        delta = now - self._clock_baseline
+        if paused is None:
+            delta = now - self._clock_baseline
+        else:
+            if self._paused_baseline is None:
+                self._paused_baseline = paused
+            delta = (now - self._clock_baseline) - (paused - self._paused_baseline)
+
         if delta > 0 and math.isfinite(delta):
             self._stage = replace(
                 self._stage, lived_seconds=self._stage.lived_seconds + delta
             )
+
         self._clock_baseline = now
+        if paused is not None:
+            self._paused_baseline = paused
 
     async def _womb_readiness_readout(self) -> Mapping[str, Any] | None:
         """Read the latest womb ``gestation.readiness`` event from the bus.
@@ -312,6 +361,19 @@ class MaturationGateRunner:
             "maturation gate: developmental readiness reached (%s)",
             ", ".join(readiness.passed_markers),
         )
+
+        # Fail closed: no birth while the entity is paused/frozen.
+        if self._is_paused is not None:
+            try:
+                paused = self._is_paused()
+            except Exception:
+                paused = True
+            if paused:
+                if not self._birth_deferred_logged:
+                    log.info("birth deferred: the entity is frozen")
+                    self._birth_deferred_logged = True
+                return
+        self._birth_deferred_logged = False
 
         mundus_enabled, operator_approved, reachable = await self._mundus_availability()
         embodiment_ready = embodiment_available(
