@@ -132,9 +132,20 @@ def make_soma(
         if feed_section.get("mode") == "womb":
             params = _womb_params(feed_section)
             if params.external_drive_to_self_rhythm:
+                from kaine.cycle.gestation import GestationReadoutConfig
+
                 clock, _ = _shared_womb_objects(feed_section)
+                # Start at the usual drive, validated from the readout settings
+                # at boot; the gestation owner only ever moves it for bounded,
+                # announced probes.
+                readout = GestationReadoutConfig.from_dict(
+                    (feed_section.get("womb") or {}).get("readout")
+                )
                 kw["maternal_drive"] = MaternalDriveProvider(
-                    clock, params, seed=int(feed_section.get("seed", 0))
+                    clock,
+                    params,
+                    seed=int(feed_section.get("seed", 0)),
+                    scale=readout.baseline_drive_fraction,
                 )
     else:
         kw.pop("self_rhythm_enabled", None)
@@ -380,6 +391,11 @@ def _womb_params(feed: dict[str, Any]) -> WombParams:
     audio = womb.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
         raise ValueError("[perception_feed.womb.audio] must be a table")
+    # [perception_feed.womb.readout] belongs to the gestation owner, which
+    # validates it itself (GestationReadoutConfig).
+    readout = womb.pop("readout", None)
+    if readout is not None and not isinstance(readout, dict):
+        raise ValueError("[perception_feed.womb.readout] must be a table")
     return WombParams.from_sections(womb, video or {}, audio or {})
 
 

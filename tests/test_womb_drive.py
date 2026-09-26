@@ -42,7 +42,7 @@ def _params(max_amp=0.5, drive_to_self=True):
 def test_first_call_is_point_value():
     params = _params(0.5)
     clock = QueueClock([0.0, 0.01])
-    provider = MaternalDriveProvider(clock, params, seed=1)
+    provider = MaternalDriveProvider(clock, params, seed=1, scale=1.0)
     first = provider()
     expected = 0.5 * float(beat_pulse(heartbeat_phase(1, np.array([0.0]), params))[0])
     assert first == pytest.approx(expected, abs=1e-12)
@@ -51,7 +51,7 @@ def test_first_call_is_point_value():
 def test_interval_call_averages_over_linspace():
     params = _params(0.7)
     clock = QueueClock([0.0, 0.05])
-    provider = MaternalDriveProvider(clock, params, seed=2)
+    provider = MaternalDriveProvider(clock, params, seed=2, scale=1.0)
     provider()
     val = provider()
     dt = 0.05
@@ -64,7 +64,7 @@ def test_interval_call_averages_over_linspace():
 def test_scale_zero_mutes_drive():
     params = _params(0.6)
     clock = QueueClock([0.0, 0.03])
-    provider = MaternalDriveProvider(clock, params, seed=3)
+    provider = MaternalDriveProvider(clock, params, seed=3, scale=1.0)
     provider.scale = 0.0
     assert provider() == 0.0
     assert provider() == 0.0
@@ -74,7 +74,7 @@ def test_values_stay_within_bounds():
     params = _params(0.9)
     rng = np.random.default_rng(0)
     clock = MutableClock()
-    provider = MaternalDriveProvider(clock, params, seed=4)
+    provider = MaternalDriveProvider(clock, params, seed=4, scale=1.0)
     prev = 0.0
     for _ in range(2000):
         clock.t = prev + rng.random() * 0.1
@@ -87,7 +87,7 @@ def test_values_stay_within_bounds():
 def test_scale_clamps_to_unit_interval():
     params = _params(1.0)
     clock = MutableClock()
-    provider = MaternalDriveProvider(clock, params, seed=5)
+    provider = MaternalDriveProvider(clock, params, seed=5, scale=1.0)
     provider.scale = 1.5
     assert provider.scale == 1.0
     provider.scale = -0.2

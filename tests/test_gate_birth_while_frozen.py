@@ -50,21 +50,34 @@ def _make_bus(
 
     bus.publish = _publish
 
+    def _readout_entry() -> tuple[str, Event]:
+        return (
+            f"{boot_ms + 1}-0",
+            Event(
+                source="gestation",
+                type="gestation.readiness",
+                payload={"readout": readout},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+
     async def _latest(stream: str) -> tuple[str, Event] | None:
         if stream == womb_stream and readout is not None:
-            return (
-                f"{boot_ms + 1}-0",
-                Event(
-                    source="womb",
-                    type="gestation.readiness",
-                    payload={"readout": readout},
-                    salience=0.5,
-                    timestamp=datetime.now(timezone.utc),
-                ),
-            )
+            return _readout_entry()
         return None
 
     bus.latest = AsyncMock(side_effect=_latest)
+
+    # The runner scans the readout stream over a time window.
+    async def _range(
+        stream: str, start: str = "-", end: str = "+", count: int | None = None
+    ) -> list[tuple[str, Event]]:
+        if stream == womb_stream and readout is not None:
+            return [_readout_entry()]
+        return []
+
+    bus.range = AsyncMock(side_effect=_range)
 
     async def _server_time_ms() -> int:
         return boot_ms

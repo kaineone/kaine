@@ -300,6 +300,11 @@ class Soma(BaseModule):
         except Exception:
             return None
 
+    @property
+    def maternal_drive(self):
+        """Read-only access to the maternal drive provider."""
+        return self._maternal_drive
+
     async def tick_once(self) -> dict[str, Any]:
         """Read metrics, evaluate, update forward model / fatigue / regulation, publish."""
         metrics = await self._reader.read_metrics()

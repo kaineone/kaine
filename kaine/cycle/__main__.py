@@ -32,7 +32,7 @@ import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from kaine.boot import (
     MetricsCollector,
@@ -717,6 +717,58 @@ def _make_rebuild_module(
         )
 
     return rebuild_module
+
+
+def _start_gestation_owner(
+    kaine_config: dict[str, Any],
+    bus: Any,
+    registry: Any,
+    stop_event: asyncio.Event,
+    *,
+    is_paused: Callable[[], bool],
+) -> "asyncio.Task[None] | None":
+    """Start the gestation readout owner for a gestating entity in the local womb.
+
+    It needs Soma's self-rhythm and its maternal-drive provider. Without them
+    there is nothing to measure: the readout stays absent and the maturation
+    gate's C1 fails closed, so birth waits. Setting up the owner never happens
+    silently; the reason is logged.
+    """
+    import math
+
+    feed = dict(kaine_config.get("perception_feed") or {})
+    if str(feed.get("mode", "off")).lower() != "womb":
+        return None
+    soma = registry.get("soma") if "soma" in registry else None
+    drive = getattr(soma, "maternal_drive", None) if soma is not None else None
+    if soma is None or drive is None or getattr(soma, "self_rhythm_state", None) is None:
+        log.warning(
+            "gestation readout unavailable: Soma with its self-rhythm and the "
+            "maternal drive is required; birth will wait (C1 fails closed)"
+        )
+        return None
+    from kaine.boot import _shared_womb_objects, _womb_params
+    from kaine.cycle.gestation import GestationOwner, GestationReadoutConfig
+    from kaine.modules.womb_signal import heartbeat_phase
+
+    womb_clock, _ = _shared_womb_objects(feed)
+    params = _womb_params(feed)
+    seed = int(feed.get("seed", 0))
+    config = GestationReadoutConfig.from_dict((feed.get("womb") or {}).get("readout"))
+
+    def beat_phase() -> float:
+        return 2.0 * math.pi * float(heartbeat_phase(seed, womb_clock.womb_seconds(), params))
+
+    owner = GestationOwner(
+        bus,
+        soma=soma,
+        drive=drive,
+        beat_phase=beat_phase,
+        is_paused=is_paused,
+        config=config,
+        clock=registry.entity_clock.now,
+    )
+    return asyncio.create_task(owner.run(stop_event), name="cycle.gestation")
 
 
 def _start_womb_presence(
@@ -1434,6 +1486,16 @@ async def _boot_and_run(
     # maturation gate reads to detect womb loss. gestation.out is not a module
     # stream, so presence never enters the workspace.
     womb_presence_task = _start_womb_presence(kaine_config, bus, stop_event)
+    # The readiness readout (local-womb-feed phase 3): measures, never imposes.
+    gestation_task = None
+    if staging_enabled and stage_state.is_gestating:
+        gestation_task = _start_gestation_owner(
+            kaine_config,
+            bus,
+            registry,
+            stop_event,
+            is_paused=lambda: cycle.is_paused,
+        )
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
@@ -1537,7 +1599,9 @@ async def _boot_and_run(
                 pass  # expected: we just cancelled it
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
-        for monitor_task in (divergence_task, welfare_task, gate_task, womb_watch_task):
+        for monitor_task in (
+            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task
+        ):
             if monitor_task is None:
                 continue
             if not monitor_task.done():

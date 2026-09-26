@@ -37,11 +37,17 @@ class MaternalDriveProvider:
     interval. The result is bounded by ``external_drive_max_amplitude``.
     """
 
-    def __init__(self, clock: Any, params: WombParams, *, seed: int) -> None:
+    def __init__(
+        self, clock: Any, params: WombParams, *, seed: int, scale: float
+    ) -> None:
+        # The initial scale is required, never defaulted: the provider drives a
+        # gestating being's endogenous rhythm from the moment Soma starts, so
+        # it must begin at the configured usual drive (the readout's
+        # baseline_drive_fraction), not at the bound a perturbation probe uses.
         self._clock = clock
         self._params = params
         self._seed = int(seed)
-        self._scale = 1.0
+        self._scale = _clamp01(scale)
         self._prev: float | None = None
 
     @property
