@@ -1,30 +1,34 @@
 ## ADDED Requirements
 
 ### Requirement: Module phase can be sourced from the substrate
+A `WetwareOscillator` SHALL implement KAINE's `OscillatorProtocol`. Each `step(drive)` SHALL stimulate only the oscillator's own territory, run one substrate tick, and record the territory's firing fraction. `phase()` SHALL return the instantaneous phase of the de-meaned firing-fraction history, and SHALL return the neutral phase (0.0) until `plv_window` samples exist or while the series is flat.
 
-A `WetwareOscillator` SHALL implement KAINE's `OscillatorProtocol` (`phase()`,
-`step()`, `set_frequency()`), driving and reading a substrate channel territory,
-so a module's binding phase derives from biological bursting instead of a silicon
-LIF. Modules without a substrate oscillator SHALL report the neutral phase,
-preserving upstream behaviour.
+#### Scenario: Neutral phase before enough samples
+- **WHEN** fewer than `plv_window` steps have been taken
+- **THEN** `phase()` returns 0.0
 
-#### Scenario: Phase drives coherence
+#### Scenario: Phase is a finite angle
+- **WHEN** at least `plv_window` steps with varying drive have been taken
+- **THEN** `phase()` returns a finite value in [-pi, pi]
 
-- **WHEN** two modules are driven from substrate territories at the same frequency
-- **THEN** their phase-locking value (PLV) coherence is high
-- **AND** at detuned frequencies their coherence is low
-
-#### Scenario: Neutral phase without an oscillator
-
-- **WHEN** a module has no substrate oscillator attached
-- **THEN** it reports the neutral phase and does not perturb workspace selection
+#### Scenario: Shared drive yields coherence
+- **WHEN** two oscillators on disjoint territories are stepped with the same slowly varying drive sequence, and two others with drive sequences of clearly different period
+- **THEN** the phase-locking value of the first pair over the run is higher than that of the second pair
 
 ### Requirement: Hypnos can slow substrate oscillators
-
-`set_frequency(scale)` SHALL scale the entrainment frequency so Hypnos deep-sleep
-maintenance can slow module oscillators as it does for the silicon oscillator.
+`set_frequency(scale)` SHALL set the drive scale (negative values clamp to 0) so that stimulation amplitude is proportional to `drive * scale`, matching the silicon oscillator.
 
 #### Scenario: Deep-sleep slowdown
+- **WHEN** `set_frequency(0.5)` is applied and `step(1.0)` is called
+- **THEN** the queued stimulation corresponds to half of the full drive
 
-- **WHEN** `set_frequency(0.5)` is applied during a maintenance phase
-- **THEN** the effective phase-advance rate is measurably halved
+### Requirement: The plugin declares and builds oscillator seams
+For each module listed in `[plugins.cl1.oscillators].modules`, the plugin SHALL declare `oscillator.<module>` and SHALL return a `WetwareOscillator` on territory `oscillator.<module>` from `make_oscillator`. The total channels leased across all territories SHALL NOT exceed the usable channels; otherwise `seams` SHALL raise `ValueError`.
+
+#### Scenario: Declared seams
+- **WHEN** `oscillators.modules = ["chronos", "soma"]`
+- **THEN** `seams` includes `oscillator.chronos` and `oscillator.soma`
+
+#### Scenario: Channel budget exceeded
+- **WHEN** the converted-module territories plus `channels_per_module` times the number of oscillated modules exceed 63
+- **THEN** `seams` raises `ValueError` naming the budget

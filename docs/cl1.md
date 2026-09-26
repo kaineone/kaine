@@ -21,8 +21,9 @@ forward model:
 |---|---|---|
 | Chronos | `chronos.network` | The recurrent network whose hidden state feeds Chronos' prediction head |
 | Soma | `soma.forward_model` | The reservoir under Soma's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units |
+| Any module's oscillator | `oscillator.<module>` | The oscillatory-binding oscillator: each time the module publishes, its own small territory is stimulated in proportion to the event's salience, and the binding phase is read from that territory's firing, exactly as the silicon oscillator reads its simulated population |
 
-Oscillator, Nous and several partial conversions are planned; their designs are
+Nous and several partial conversions are planned; their designs are
 in [`plugins/kaine-cl1/openspec/`](../plugins/kaine-cl1/openspec/).
 
 ## What it needs
@@ -83,6 +84,23 @@ soma = "cl1"
 chronos = 12
 soma = 12
 ```
+
+To source the oscillatory-binding phase of some modules from the substrate as
+well, list them; each gets its own territory, and KAINE's `[oscillator].enabled`
+must be true (KAINE refuses oscillator seams otherwise):
+
+```toml
+[oscillator]
+enabled = true
+
+[plugins.cl1.oscillators]
+modules = ["chronos", "soma"]
+channels_per_module = 4
+```
+
+All territories together must fit in the 63 usable channels (64 electrodes, with
+channel 0 reserved); the plugin refuses to load otherwise. Each publish of an
+oscillated module costs one substrate tick.
 
 With `cl1` absent from `[plugins].enabled`, or every module set to `"silicon"`,
 KAINE runs exactly as it does without the plugin. The full set of keys is in

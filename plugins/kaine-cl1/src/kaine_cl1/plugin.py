@@ -14,6 +14,7 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from kaine_cl1.backends.oscillator import WetwareOscillator
 from kaine_cl1.boot import WETWARE_BACKENDS
 from kaine_cl1.config import OverlayConfig, overlay_from_mapping
 from kaine_cl1.substrate.broker import SubstrateBroker, nesting_factor_for
@@ -31,6 +32,9 @@ PENDING_CONVERSIONS: dict[str, str] = {
     "volition": "hybrid-wetware-conversions",
     "thymos": "hybrid-wetware-conversions",
 }
+
+#: 64 electrodes, channel 0 reserved.
+_USABLE_CHANNELS = 63
 
 REQUIREMENTS_MESSAGE = (
     "The cl1 plugin needs Cortical Labs' cl-sdk, which KAINE does not ship. "
@@ -107,7 +111,17 @@ class Cl1Plugin:
             except KeyError as exc:
                 raise ValueError(exc.args[0] if exc.args else str(exc)) from None
 
-        if converted and overlay.substrate.accelerated_time is not True:
+        total = (
+            sum(overlay.territory_for(m) for m in converted)
+            + overlay.oscillator_channels * len(overlay.oscillator_modules)
+        )
+        if total > _USABLE_CHANNELS:
+            raise ValueError(
+                f"the CL1 plugin needs {total} channels but only {_USABLE_CHANNELS} are usable "
+                f"(64 electrodes, channel 0 reserved); reduce territories or oscillator channels"
+            )
+
+        if (converted or overlay.oscillator_modules) and overlay.substrate.accelerated_time is not True:
             raise ValueError(
                 "the CL1 substrate tick blocks the caller for one cognitive tick; "
                 "a real-time substrate would stall kaine's cognitive loop, so "
@@ -115,7 +129,7 @@ class Cl1Plugin:
                 "(foundation task 3.3) lands"
             )
 
-        if converted:
+        if converted or overlay.oscillator_modules:
             nesting_factor_for(overlay.substrate.ticks_per_second, overlay.cognitive_rate)
 
         return overlay
@@ -123,17 +137,22 @@ class Cl1Plugin:
     def seams(self, config: Mapping[str, Any]) -> frozenset[str]:
         overlay = self._validated(config)
         converted = overlay.cl1_modules()
-        if converted:
+        oscillators = overlay.oscillator_modules
+        if converted or oscillators:
             log.warning(
                 "CL1 substrate is SIMULATED (Cortical Labs cl-sdk simulator, "
-                "data_source=%s); results are not biological. Converted modules: %s",
+                "data_source=%s); results are not biological. Converted modules: %s; "
+                "oscillators: %s",
                 overlay.substrate.data_source,
-                ", ".join(converted),
+                ", ".join(converted) if converted else "none",
+                ", ".join(oscillators) if oscillators else "none",
             )
-        return frozenset(
+        module_seams = frozenset(
             f"{module}.{WETWARE_BACKENDS[module].inject_kwarg}"
             for module in converted
         )
+        oscillator_seams = frozenset(f"oscillator.{m}" for m in oscillators)
+        return module_seams | oscillator_seams
 
     def injections(self, module: str, config: Mapping[str, Any]) -> dict[str, Any]:
         overlay = self._validated(config)
@@ -151,6 +170,29 @@ class Cl1Plugin:
 
         spec = WETWARE_BACKENDS[module]
         return {spec.inject_kwarg: spec.make(broker, territory)}
+
+    def make_oscillator(
+        self, module: str, config: Mapping[str, Any], defaults: Mapping[str, Any]
+    ) -> Any:
+        """KAINE's oscillator hook; returns a WetwareOscillator on this module's own
+        territory ``oscillator.<module>``; called once per declared seam at boot."""
+        overlay = self._validated(config)
+
+        if module not in overlay.oscillator_modules:
+            raise ValueError(f"module {module!r} is not listed in [oscillators].modules")
+
+        broker = self._ensure_broker(overlay)
+
+        name = f"oscillator.{module}"
+        if broker.has_territory(name):
+            territory = broker.territory(name)
+            broker.discard_pending(name)
+        else:
+            territory = broker.allocate(name, overlay.oscillator_channels)
+
+        return WetwareOscillator(
+            broker, territory, plv_window=max(10, int(defaults.get("plv_window", 10)))
+        )
 
     def _ensure_broker(self, overlay: OverlayConfig) -> SubstrateBroker:
         if self._broker is not None:
@@ -198,4 +240,3 @@ class Cl1Plugin:
 def make_plugin() -> Cl1Plugin:
     """The ``kaine.plugins`` entry point."""
     return Cl1Plugin()
-
