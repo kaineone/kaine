@@ -27,6 +27,13 @@
 | --- | --- |
 | 2026-09-26 | plugin-engine-wrapper |
 | 2026-09-26 | cl1 hardware-target (plugins/kaine-cl1) |
+| 2026-09-26 | plugin-cycle-hook |
+| 2026-09-26 | cl1 substrate-beat (plugins/kaine-cl1) |
+| 2026-09-26 | cl1 oscillator-on-wetware (plugins/kaine-cl1) |
+| 2026-09-26 | cl1 soma-on-wetware (plugins/kaine-cl1) |
+| 2026-09-26 | cl1 chronos-on-wetware (plugins/kaine-cl1) |
+| 2026-09-26 | cl1 kaine-plugin-package (plugins/kaine-cl1) |
+| 2026-09-26 | cl1 wetware-substrate-foundation (plugins/kaine-cl1) |
 | 2026-09-26 | local-womb-feed |
 | 2026-09-25 | cl1-substrate-plugin |
 | 2026-09-25 | adaptive-access-rate |
