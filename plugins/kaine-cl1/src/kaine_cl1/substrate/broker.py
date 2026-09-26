@@ -317,15 +317,25 @@ class SubstrateBroker:
             tag=latest.tag,
         )
 
-    def start_beat(self, *, accelerated: bool) -> None:
+    def start_beat(self, *, accelerated: bool, blocking: bool = True) -> bool:
+        """Switch to beat mode: one window per cycle tick on a background thread.
+
+        Returns True once beat mode is running. With ``blocking=False`` it returns False instead
+        of waiting when a synchronous window holds the substrate, so a caller on KAINE's event
+        loop never waits for one.
+        """
         if self._loop_it is None:
             raise RuntimeError("broker is not open; call open(neurons) first")
         self._check_usable()
         if self._beat_mode and self._thread is not None and self._thread.is_alive():
-            return
+            return True
         if self._thread is not None and self._thread.is_alive():
             raise RuntimeError("CL1 substrate beat thread is already running")
-        with self._sync_lock:
+        if not self._sync_lock.acquire(blocking=blocking):
+            return False
+        try:
+            if self._beat_mode and self._thread is not None and self._thread.is_alive():
+                return True
             self._stop.clear()
             self._failed = False
             self._beat_signal.clear()
@@ -343,8 +353,11 @@ class SubstrateBroker:
                 daemon=True,
             )
             self._thread.start()
+        finally:
+            self._sync_lock.release()
         mode = "accelerated" if accelerated else "real time"
         log.info("CL1 substrate switched to beat mode (%s): one window per cycle tick", mode)
+        return True
 
     def beat(self, period_s: float) -> None:
         self._check_usable()
