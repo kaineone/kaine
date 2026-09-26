@@ -1053,6 +1053,9 @@ async def _boot_and_run(
         # registry was built without one (then the cycle constructs its own from
         # time_scale, identical at 1.0).
         entity_clock=registry.entity_clock,
+        # Plugins that implement on_cycle_tick observe each tick (plugin-cycle-hook);
+        # None when no loaded plugin does, which leaves the cycle unchanged.
+        tick_observer=plugins.cycle_observer(),
         # Deterministic mode (opt-in, [experiment].deterministic; default false).
         # When true the engine stamps events from a logical clock and the seed
         # A1 already pinned makes the run bit-for-bit reproducible. Production

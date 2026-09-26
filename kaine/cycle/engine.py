@@ -99,6 +99,7 @@ class CognitiveCycle:
         seed_cursors_to_tail: bool = False,
         access_rate: Optional["AccessRateController"] = None,
         arousal_provider: Optional[Callable[[], Optional[float]]] = None,
+        tick_observer: Optional[Callable[[dict[str, Any], float], None]] = None,
     ) -> None:
         if processing_rate_hz <= 0:
             raise ValueError("processing_rate_hz must be positive")
@@ -125,6 +126,9 @@ class CognitiveCycle:
         # salience of module reports, between the resting rate and the
         # processing rate. None keeps the fixed-rate cycle exactly.
         self._access_rate = access_rate
+        # Optional plugin cycle observer (plugin-cycle-hook); None means no plugin
+        # observes ticks and the call site in _publish_latency is a no-op.
+        self._tick_observer = tick_observer
         self._arousal_provider = arousal_provider
         self._effective_experiential_rate = self._experiential_rate
         self._access_drive = 0.0
@@ -1005,24 +1009,33 @@ class CognitiveCycle:
         is_experiential: bool,
         error: bool,
     ) -> None:
+        payload = {
+            "tick_index": self._tick_index,
+            "wall_duration_ms": wall_ms,
+            "target_duration_ms": target_ms,
+            "slip_ms": slip_ms,
+            "is_experiential": is_experiential,
+            "error": error,
+            "processing_rate_hz": self._processing_rate,
+            "experiential_rate_hz": self._effective_experiential_rate,
+            "access_drive": self._access_drive,
+        }
         try:
             event = Event(
                 source="cycle",
                 type="cycle.tick",
-                payload={
-                    "tick_index": self._tick_index,
-                    "wall_duration_ms": wall_ms,
-                    "target_duration_ms": target_ms,
-                    "slip_ms": slip_ms,
-                    "is_experiential": is_experiential,
-                    "error": error,
-                    "processing_rate_hz": self._processing_rate,
-                    "experiential_rate_hz": self._effective_experiential_rate,
-                    "access_drive": self._access_drive,
-                },
+                payload=payload,
                 salience=0.5 if error else 0.05,
                 timestamp=self._now(),
             )
             await self._bus.publish(event)
         except Exception:
             log.exception("failed to publish cycle latency event")
+
+        # Plugins may observe each tick (plugin-cycle-hook). The observer gets a copy and never
+        # affects the cycle; with no observer this is a no-op so deterministic runs are unchanged.
+        if self._tick_observer is not None:
+            try:
+                self._tick_observer(dict(payload), target_ms)
+            except Exception:
+                log.warning("cycle tick observer raised", exc_info=True)

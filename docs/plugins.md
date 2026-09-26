@@ -143,7 +143,38 @@ plugin oscillator does not require snnTorch to be installed.
 
 Boot logs one WARNING line for each filled seam. The run manifest records,
 for each enabled plugin, its name, the distribution name and version from
-package metadata, and its declared seams.
+package metadata, its declared seams, and `observes_cycle` (whether it
+implements `on_cycle_tick`).
+
+## Observing the cycle
+
+A plugin whose models depend on an external clock (for example a substrate that
+advances in windows) can follow the cognitive cycle by implementing an optional
+method:
+
+```python
+class MyPlugin:
+    def on_cycle_tick(self, tick):
+        ...
+```
+
+KAINE calls it once per cycle tick, after the tick's `cycle.tick` event is
+published, with a copy of that event's payload: `tick_index`,
+`wall_duration_ms`, `target_duration_ms`, `slip_ms`, `is_experiential`,
+`error`, `processing_rate_hz`, `experiential_rate_hz` (effective for that tick)
+and `access_drive`. Ticks that do not run, such as while the entity is frozen,
+do not call it.
+
+The hook is observation only. Changing the mapping it receives changes nothing
+in the cycle or the published event, and its return value is ignored.
+
+It runs inside the tick on the cycle's event loop, so it must return quickly and
+hand any heavy work to a thread or task of its own. KAINE times every call and
+logs a WARNING naming the plugin, on the first slow call and every 100th after
+it, when a call takes longer than 10% of the tick's target period (10 ms at the
+default 10 Hz). An exception from the hook is logged the same way and never
+stops the cycle. When no loaded plugin implements the hook, the cycle makes no
+call at all, so deterministic runs are unchanged.
 
 ## State snapshots
 
