@@ -181,9 +181,9 @@ copy GGUFs from Ollama's blob store for use outside Ollama.
 
 ## Lighter and larger hardware
 
-Today every tier still depends on torch: Soma and Chronos run torch+ncps CfC
-networks, Mnemos/Empatheia/Hypnos each build a sentence-transformers MiniLM
-embedder, and the edge profiles only reduce the module set rather than remove
+Today every tier with memory still depends on torch: Mnemos, Empatheia and
+Hypnos each build a sentence-transformers MiniLM embedder (Soma and Chronos run
+their CfC networks on NumPy by default), and the edge profiles only reduce the module set rather than remove
 the torch requirement — `tier0.toml` disables Topos, Audition, Vox, Empatheia
 and Phantasia, while `tier1.toml` disables Vox and vocal emotion. Tier 2 and
 Tier 3 remain the workstation defaults that pin Ollama and Qdrant. Smaller

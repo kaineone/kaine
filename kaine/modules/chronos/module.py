@@ -39,6 +39,8 @@ class Chronos(BaseModule):
         anomaly: Optional[AnomalyDetector] = None,
         rumination: Optional[RuminationDetector] = None,
         cfc_units: int = 32,
+        cfc_backend: str = "numpy",
+        reservoir_seed: Optional[int] = None,
         baseline_salience: float = 0.1,
         alert_salience: float = 0.7,
         anomaly_alert_threshold: float = 3.0,
@@ -72,6 +74,8 @@ class Chronos(BaseModule):
                 "width) when forward prediction is enabled"
             )
         self._cfc_units = int(cfc_units)
+        self._cfc_backend = cfc_backend
+        self._reservoir_seed = reservoir_seed
         # When no detector is injected, size it from config. An injected
         # detector (e.g. in tests) brings its own window/threshold settings.
         self._anomaly = anomaly or RollingZScoreAnomaly(window=int(anomaly_window))
@@ -112,6 +116,8 @@ class Chronos(BaseModule):
             self._network = CfCNetwork(
                 input_size=self._featurizer.feature_dim,
                 units=self._cfc_units,
+                backend=self._cfc_backend,
+                seed=self._reservoir_seed,
             )
 
         if self._forward_prediction and self._pred_head is None:
@@ -129,9 +135,16 @@ class Chronos(BaseModule):
                 head_units = int(units)
             else:
                 head_units = self._cfc_units
+            # A built-in network shares its seed so the head's initial readout
+            # follows the reservoir draws; an injected network has no seed, so
+            # the head draws its own (from the ambient NumPy state, reproducible
+            # under experiment seeding), and its trained weights persist with
+            # the head's state either way.
             self._pred_head = ForwardPredictionHead(
                 input_size=self._featurizer.feature_dim,
                 units=head_units,
+                backend=self._cfc_backend,
+                seed=getattr(self._network, "reservoir_seed", None),
             )
 
         # Resolve cursors before starting tasks so initial events aren't missed
@@ -285,6 +298,8 @@ class Chronos(BaseModule):
             "last_interaction_at": self._last_interaction_at,
             "user_input_cursors": dict(self._user_input_cursors),
         }
+        if self._network is not None and hasattr(self._network, "reservoir_seed"):
+            state["reservoir_seed"] = self._network.reservoir_seed
         if self._pred_head is not None:
             state["pred_head"] = self._pred_head.state_dict()
         return state
@@ -299,5 +314,20 @@ class Chronos(BaseModule):
             self._user_input_cursors.update(
                 {str(k): str(v) for k, v in state["user_input_cursors"].items()}
             )
+
+        if "reservoir_seed" in state:
+            # Kept on the module too, so a network built later by initialize()
+            # uses the preserved reservoir whatever the call order.
+            self._reservoir_seed = int(state["reservoir_seed"])
+        if self._network is not None and hasattr(self._network, "reservoir_seed"):
+            if "reservoir_seed" in state:
+                self._network.load_state(
+                    {"reservoir_seed": int(state["reservoir_seed"])}
+                )
+            else:
+                log.warning(
+                    "chronos: snapshot has no reservoir seed; the reservoir is new"
+                )
+
         if "pred_head" in state and self._pred_head is not None:
             self._pred_head.load_state_dict(state["pred_head"])

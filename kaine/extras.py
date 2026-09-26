@@ -109,19 +109,27 @@ def _phantasia_dreamerv3(config: dict) -> bool:
     return (config.get("phantasia") or {}).get("backend", "dreamerv3") == "dreamerv3"
 
 
+def _soma_torch_needed(config: dict) -> bool:
+    return (config.get("soma") or {}).get("cfc_backend", "numpy") == "torch"
+
+
+def _chronos_torch_needed(config: dict) -> bool:
+    return (config.get("chronos") or {}).get("cfc_backend", "numpy") == "torch"
+
+
 #: Maps a module/service name to the requirements that must be satisfied when
 #: it is enabled.  The keys are the public names used by the config table
 #: ``[modules].<name>``; ``"nexus"`` is a service and is only checked when
 #: explicitly requested.
 REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     "soma": (
-        Requirement("torch", "core"),
-        Requirement("ncps", "core"),
+        Requirement("torch", "core", predicate=_soma_torch_needed),
+        Requirement("ncps", "core", predicate=_soma_torch_needed),
         Requirement("pynvml", "nvidia", severity="warning"),
     ),
     "chronos": (
-        Requirement("torch", "core"),
-        Requirement("ncps", "core"),
+        Requirement("torch", "core", predicate=_chronos_torch_needed),
+        Requirement("ncps", "core", predicate=_chronos_torch_needed),
     ),
     "mnemos": (
         Requirement("sentence_transformers", "memory"),

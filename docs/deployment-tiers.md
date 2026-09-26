@@ -123,9 +123,9 @@ Explicit **absences** (stated so a tier is never oversold):
 - **A ≥2B language model does not fit a ~512 MB Tier-0 host.** Tier 0 is a
   symbolic-reasoning + episodic-memory + perception node, not a conversational
   host.
-- **Torch is required at every tier today.** Even Tier 0 and Tier 1 need the
-  torch stack because Soma and Chronos run torch+ncps CfC networks and Mnemos,
-  Empatheia, and Hypnos build sentence-transformers MiniLM embedders.
+- **Torch is required wherever memory or vision runs today.** Topos needs it, and Mnemos, Empatheia and Hypnos
+  build sentence-transformers MiniLM embedders. Soma and Chronos do not need it:
+  their CfC networks run on NumPy by default.
 
 ## Per-tier install notes
 
@@ -159,12 +159,12 @@ when that backend is selected, so you install a tier's extras and no others.
 
 Shipped today: the backend-selection framework, Tier-2-preserving defaults, the
 `llama.cpp`/GGUF Lingua backend, the `sqlite-vec` Mnemos backend, the four tier
-profiles, and the host probe. The core also ships torch-backed backends used by
-every tier: torch+ncps CfC networks for Soma and Chronos, and
-sentence-transformers MiniLM embedders for Mnemos, Empatheia, and Hypnos.
+profiles, the host probe, and a NumPy CfC for Soma and Chronos (the default;
+their torch+ncps backend remains available). The memory modules still use
+torch-backed sentence-transformers MiniLM embedders.
 
 Not yet built: whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision, ONNX/static
-embeddings, NumPy CfC, and JAX-free Nous/Phantasia. Those backends are the focus
+embeddings, and JAX-free Nous/Phantasia. Those backends are the focus
 of the `portability-program` change (Phase 2 removes the torch requirement from
 the core, Phase 3 brings Termux and JAX-free reasoning, Phase 4 adds residency,
 arm64 images, and multi-node). Each backend is lazy-imported: a host that
