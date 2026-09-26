@@ -40,23 +40,43 @@ cd "$PROJECT_ROOT"
 echo "==> KAINE first-boot precondition checks"
 echo
 
-echo "[1/4] Verifying compose stacks..."
-if ! command -v docker >/dev/null 2>&1; then
-  echo "  docker not on PATH. Install Docker and re-run." >&2
-  exit 3
+echo "[1/4] Verifying bus and memory store are reachable..."
+
+PW=""
+KEY=""
+if [[ -f compose/.env ]]; then
+  PW=$(grep -E '^KAINE_REDIS_PASSWORD=' compose/.env | tail -n1 | cut -d= -f2- || true)
+  PW=${PW%$'\r'}
+  KEY=$(grep -E '^KAINE_QDRANT_API_KEY=' compose/.env | tail -n1 | cut -d= -f2- || true)
+  KEY=${KEY%$'\r'}
 fi
 
-if ! docker ps --format '{{.Names}}' | grep -q '^kaine-redis$'; then
-  echo "  Bring up Redis: scripts/redis-bootstrap.sh" >&2
-  exit 3
+REDIS_OK=0
+if [[ -n "$PW" ]] && command -v redis-cli >/dev/null 2>&1; then
+  if REDISCLI_AUTH="$PW" redis-cli -h 127.0.0.1 -p 6479 --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+    REDIS_OK=1
+    echo "  Redis answers PONG."
+  fi
 fi
-echo "  Redis container present."
 
-if ! docker ps --format '{{.Names}}' | grep -q '^kaine-qdrant$'; then
-  echo "  Bring up Qdrant: scripts/qdrant-bootstrap.sh" >&2
+QDRANT_OK=0
+PORT="${KAINE_QDRANT_HOST_PORT:-6533}"
+if [[ -n "$KEY" ]] && command -v curl >/dev/null 2>&1; then
+  if printf 'api-key: %s\n' "$KEY" | curl -fsS -H @- "http://127.0.0.1:${PORT}/readyz" >/dev/null 2>&1; then
+    QDRANT_OK=1
+    echo "  Qdrant /readyz is healthy."
+  fi
+fi
+
+if [[ "$REDIS_OK" -eq 0 ]]; then
+  echo "  Redis is not reachable. Bring it up with: scripts/redis-bootstrap.sh" >&2
+fi
+if [[ "$QDRANT_OK" -eq 0 ]]; then
+  echo "  Qdrant is not reachable. Bring it up with: scripts/qdrant-bootstrap.sh" >&2
+fi
+if [[ "$REDIS_OK" -eq 0 || "$QDRANT_OK" -eq 0 ]]; then
   exit 3
 fi
-echo "  Qdrant container present."
 
 echo "[2/4] Verifying loopback-only URLs in config..."
 config="$PROJECT_ROOT/config/kaine.toml"
