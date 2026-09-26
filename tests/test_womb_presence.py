@@ -122,7 +122,7 @@ async def test_run_publishes_presence_events_while_fresh(bus):
 
     await asyncio.sleep(0.05)
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=2.0)
 
     entries = await bus.range("gestation.out", start="-", end="+", count=None)
     presence_entries = [
@@ -152,7 +152,7 @@ async def test_run_survives_publish_exception_and_stops_on_event():
 
     await asyncio.sleep(0.02)
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=2.0)
 
     assert task.done()
     assert task.exception() is None

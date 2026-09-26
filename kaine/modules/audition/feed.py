@@ -358,8 +358,8 @@ class WombProceduralAudioStream:
         self,
         schedule: WombAudioSchedule,
         *,
-        params: "WombParams",
-        clock: "WombClock",
+        params: WombParams,
+        clock: WombClock,
         callback: Callable[[bytes], None],
     ) -> None:
         self._schedule = schedule

@@ -409,7 +409,7 @@ class WombProceduralSource:
         self,
         schedule: WombSchedule,
         *,
-        params: "WombParams",
+        params: WombParams,
         clock: WombClock,
         lived_seconds: Callable[[], float],
     ) -> None:

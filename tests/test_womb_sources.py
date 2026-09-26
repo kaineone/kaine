@@ -151,7 +151,8 @@ def test_video_open_read_release_protocol() -> None:
         clock=clock,
         lived_seconds=lambda: 0.0,
     )
-    assert src.open() is True
+    opened = src.open()
+    assert opened is True
     ok, frame = src.read()
     assert ok is True
     assert frame.shape == (24, 32, 3)
@@ -520,10 +521,9 @@ def test_no_entity_state_feeds_the_womb() -> None:
     # shared womb clock and (for the colour-onset schedule only) lived time.
     # Nothing from the entity's affect, workspace or modules may reach it.
     import ast
+    import importlib.util
     import inspect
     from pathlib import Path
-
-    import kaine.modules.womb_signal as ws
 
     assert list(inspect.signature(WombProceduralSource.__init__).parameters) == [
         "self", "schedule", "params", "clock", "lived_seconds",
@@ -531,7 +531,9 @@ def test_no_entity_state_feeds_the_womb() -> None:
     assert list(inspect.signature(WombProceduralAudioStream.__init__).parameters) == [
         "self", "schedule", "params", "clock", "callback",
     ]
-    tree = ast.parse(Path(ws.__file__).read_text())
+    spec = importlib.util.find_spec("kaine.modules.womb_signal")
+    assert spec is not None and spec.origin is not None
+    tree = ast.parse(Path(spec.origin).read_text())
     kaine_imports = {
         node.module
         for node in ast.walk(tree)

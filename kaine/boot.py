@@ -342,7 +342,7 @@ def make_topos(
     return Topos(bus, entity_clock=entity_clock, **kwargs)
 
 
-def _womb_params(feed: dict[str, Any]) -> "WombParams":
+def _womb_params(feed: dict[str, Any]) -> WombParams:
     from kaine.modules.womb_signal import WombParams
 
     womb = dict(feed.get("womb") or {})
@@ -369,7 +369,7 @@ def _womb_lived_offset(stage_path: Path | None = None) -> float:
     return value
 
 
-def _shared_womb_objects(feed: dict[str, Any]) -> tuple["WombClock", Callable[[], float]]:
+def _shared_womb_objects(feed: dict[str, Any]) -> tuple[WombClock, Callable[[], float]]:
     from kaine.modules.topos.feed import WombClock
 
     clock = feed.get("_shared_womb_clock")
@@ -751,7 +751,6 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
         from kaine.modules.topos.feed import WombSchedule
 
         seed = int(feed.get("seed", 0))
-        video = dict(feed.get("video") or {})
         audio = dict(feed.get("audio") or {})
         descriptor["seed"] = seed
         try:

@@ -31,7 +31,7 @@ class WombPresencePublisher:
     def __init__(
         self,
         bus: Any,
-        clock: "WombClock",
+        clock: WombClock,
         *,
         period_s: float = 1.0,
         max_staleness_s: float = 2.0,
@@ -79,4 +79,5 @@ class WombPresencePublisher:
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._period_s)
             except asyncio.TimeoutError:
-                pass
+                # One period passed with no stop request: announce again.
+                continue
