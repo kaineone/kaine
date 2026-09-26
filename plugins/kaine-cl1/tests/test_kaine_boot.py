@@ -150,8 +150,8 @@ async def test_not_enabled_loads_nothing():
 
 
 def test_unimplemented_backend_fails_the_boot():
-    cfg = _config(backends={"nous": "cl1"}, territories={"nous": 4})
-    with pytest.raises(PluginError, match="nous-on-wetware"):
+    cfg = _config(backends={"volition": "cl1"}, territories={"volition": 4})
+    with pytest.raises(PluginError, match="hybrid-wetware-conversions"):
         _load(cfg)
 
 

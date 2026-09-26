@@ -26,8 +26,6 @@ log = logging.getLogger(__name__)
 
 #: Modules awaiting a wetware seam conversion.
 PENDING_CONVERSIONS: dict[str, str] = {
-    "oscillator": "oscillator-on-wetware",
-    "nous": "nous-on-wetware",
     "audition_frontend": "hybrid-wetware-conversions",
     "phantasia_surprise": "hybrid-wetware-conversions",
     "volition": "hybrid-wetware-conversions",
@@ -189,6 +187,17 @@ class Cl1Plugin:
                     ", ".join(converted) if converted else "none",
                     ", ".join(oscillators) if oscillators else "none",
                 )
+            if "nous" in converted:
+                if overlay.nous_mode == "drive":
+                    log.warning(
+                        "CL1 Nous runs in DRIVE mode: the substrate's policy proposal chooses "
+                        "Nous's action; beliefs and expected free energy stay on silicon"
+                    )
+                else:
+                    log.info(
+                        "CL1 Nous runs in shadow mode: the substrate proposes a policy and "
+                        "Nous's action is unchanged"
+                    )
         module_seams = frozenset(
             f"{module}.{WETWARE_BACKENDS[module].inject_kwarg}"
             for module in converted
@@ -211,7 +220,9 @@ class Cl1Plugin:
             territory = broker.allocate(module, overlay.territory_for(module))
 
         spec = WETWARE_BACKENDS[module]
-        return {spec.inject_kwarg: spec.make(broker, territory)}
+        return {
+            spec.inject_kwarg: spec.make(broker, territory, **overlay.backend_options(module))
+        }
 
     def make_oscillator(
         self, module: str, config: Mapping[str, Any], defaults: Mapping[str, Any]

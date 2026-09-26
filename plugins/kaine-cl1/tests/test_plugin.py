@@ -100,15 +100,15 @@ def test_unimplemented_backend_rejected():
             "accelerated_time": True,
             "ticks_per_second": 100,
             "cognitive_rate": 3.333,
-            "territories": {"nous": 8},
+            "territories": {"volition": 8},
         },
-        "backends": {"nous": "cl1"},
+        "backends": {"volition": "cl1"},
     }
     with pytest.raises(ValueError) as excinfo:
         Cl1Plugin().seams(config)
     msg = str(excinfo.value)
-    assert "nous" in msg
-    assert "nous-on-wetware" in msg
+    assert "volition" in msg
+    assert "hybrid-wetware-conversions" in msg
 
 
 def test_missing_territory_rejected():
