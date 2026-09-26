@@ -214,9 +214,6 @@ async def test_timeout_freezes_logs_critical_and_notifies(caplog):
     freezes = []
     notifies = []
 
-    async def notify(event: str) -> None:
-        notifies.append(event)
-
     watcher = _watcher(
         clock,
         2,
@@ -333,7 +330,8 @@ async def test_start_programme_end_watcher_with_clock_and_manifest(tmp_path):
     assert task is not None
     assert task.get_name() == "cycle.programme_end"
 
-    await task
+    # The stop event is already set, so the watcher returns without acting.
+    assert await asyncio.wait_for(task, timeout=5) is None
 
 
 @pytest.mark.asyncio
