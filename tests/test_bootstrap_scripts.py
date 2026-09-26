@@ -57,10 +57,7 @@ def guard_real_systemd():
     leaked = after - before
     if leaked:
         for p in leaked:
-            try:
-                p.unlink()
-            except Exception:
-                pass
+            p.unlink(missing_ok=True)
         pytest.fail(f"test touched real systemd user units: {leaked}")
 
 
@@ -187,8 +184,10 @@ def fake_repo(tmp_path, request):
                 try:
                     pid = int(pidfile.read_text().strip().split()[0])
                     os.kill(pid, signal.SIGTERM)
-                except Exception:
-                    pass
+                except (OSError, ValueError, IndexError):
+                    # Best-effort teardown: the stand-in service may already
+                    # have exited, or its pidfile may be empty.
+                    continue
 
     request.addfinalizer(cleanup)
     return root
@@ -329,11 +328,15 @@ def _qdrant_fixture_hash(root, fixture):
 
 def _qdrant_sha_env(root, fixture):
     machine = platform.machine()
-    if machine in ("aarch64", "arm64"):
-        return {"QDRANT_AARCH64_SHA256": _qdrant_fixture_hash(root, fixture)}
-    elif machine in ("x86_64", "AMD64"):
-        return {"QDRANT_X86_64_SHA256": _qdrant_fixture_hash(root, fixture)}
-    pytest.skip(f"unsupported test architecture: {machine}")
+    keys = {
+        "aarch64": "QDRANT_AARCH64_SHA256",
+        "arm64": "QDRANT_AARCH64_SHA256",
+        "x86_64": "QDRANT_X86_64_SHA256",
+        "AMD64": "QDRANT_X86_64_SHA256",
+    }
+    if machine not in keys:
+        pytest.skip(f"unsupported test architecture: {machine}")
+    return {keys[machine]: _qdrant_fixture_hash(root, fixture)}
 
 
 def _logging_docker_stub(log_path):
