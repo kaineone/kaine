@@ -41,12 +41,15 @@ import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
+    from kaine.modules.womb_signal import WombParams
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +82,29 @@ class SeededSchedule:
             "height": int(self.height),
             "surprise_interval": int(self.surprise_interval),
             "surprise_strength": float(self.surprise_strength),
+        }
+
+
+@dataclass(frozen=True)
+class WombSchedule:
+    """Reproducible womb video schedule.
+
+    The rendered frame stream is a pure function of
+    ``(seed, frame_index, params, lived_seconds)``.  Only these knobs are kept;
+    no pixels persist.
+    """
+
+    seed: int = 0
+    width: int = 640
+    height: int = 480
+    frame_rate_hz: float = 30.0
+
+    def as_descriptor(self) -> dict[str, Any]:
+        return {
+            "seed": int(self.seed),
+            "width": int(self.width),
+            "height": int(self.height),
+            "frame_rate_hz": float(self.frame_rate_hz),
         }
 
 
@@ -291,6 +317,133 @@ class SeededProceduralSource:
         """The frame indices in ``[0, count)`` on which a surprise fires —
         used by tests to assert cadence and seed-decorrelation."""
         return [i for i in range(count) if self._is_surprise_frame(i)]
+
+
+class WombProceduralSource:
+    """A ``_VideoSource`` that renders the womb visual feed.
+
+    The frame is a dim, low-contrast, seed-keyed luminance field pulsed by the
+    external maternal heartbeat and tinted by the external maternal state.
+    It is deliberately *not* a high-fidelity reproduction of a womb interior;
+    the pulsing light is a cross-modal rhythmic drive, not a biological womb
+    feature (Notbohm 2016 vs Duecker 2021; Frontiers 2022).  The maternal hue/
+    flow is the external mother's emotional weather (Feldman 2007).  Colour
+    saturation follows the biological sense-onset schedule (Hepper &
+    Shahidullah 1994; Teller / Bornstein).
+
+    Persists only ``(seed, schedule, params, lived_seconds provider)``;
+    never a rendered frame.
+    """
+
+    def __init__(
+        self,
+        schedule: WombSchedule,
+        *,
+        params: "WombParams",
+        lived_seconds: Callable[[], float] | None = None,
+    ) -> None:
+        self._schedule = schedule
+        self._params = params
+        self._lived = lived_seconds if lived_seconds is not None else lambda: 0.0
+        self._index = 0
+        self._opened = False
+
+    @property
+    def schedule(self) -> WombSchedule:
+        return self._schedule
+
+    def open(self) -> bool:
+        self._index = 0
+        self._opened = True
+        return True
+
+    def read(self) -> tuple[bool, Any]:
+        if not self._opened:
+            return False, None
+        frame = self.frame_at(self._index)
+        self._index += 1
+        return True, frame
+
+    def release(self) -> None:
+        self._opened = False
+
+    def frame_at(self, frame_index: int) -> Any:
+        """Render ``frame(seed, i)`` as a BGR uint8 ndarray.
+
+        Pure function of ``(seed, frame_index, params, lived_seconds)``.
+        """
+        import colorsys
+        import math
+
+        import numpy as np
+
+        from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
+        from kaine.modules.perception_prng import unit_float as _unit_float
+        from kaine.modules.womb_signal import (
+            SEED_SALT_VIDEO,
+            beat_pulse,
+            colour_saturation,
+            heartbeat_phase,
+            maternal_state,
+        )
+
+        s = self._schedule
+        p = self._params
+        h = int(s.height)
+        w = int(s.width)
+        t = frame_index / float(s.frame_rate_hz)
+
+        ys = (np.arange(h, dtype=np.float32) / max(1, h - 1)).reshape(h, 1)
+        xs = (np.arange(w, dtype=np.float32) / max(1, w - 1)).reshape(1, w)
+
+        seed = int(s.seed)
+        two_pi = np.float32(2.0 * math.pi)
+
+        # Seed-keyed slow spatial frequencies and phases for the dim luminance
+        # field (Reid 2017: dim, low-contrast fetal patterned vision).
+        fx = 1.0 + 2.0 * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x10))
+        fy = 1.0 + 2.0 * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x11))
+        px = two_pi * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x12))
+        py = two_pi * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x13))
+        flow_base = 0.01 + 0.03 * _unit_float(
+            _keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x14)
+        )
+
+        # The external maternal state drives hue and flow speed (Feldman 2007).
+        valence, arousal = maternal_state(seed, t, p)
+        flow_speed = flow_base * (1.0 + 2.0 * float(arousal))
+        time_drift = flow_speed * t
+
+        field = (
+            np.sin(two_pi * (fx * xs + time_drift) + px)
+            + np.sin(two_pi * (fy * ys + time_drift * 0.7) + py)
+        ) * 0.5
+
+        mean = float(p.luminance_mean)
+        contrast = float(p.luminance_contrast)
+        luminance = mean + contrast * field
+
+        # Cross-modal luminance pulse locked to the maternal heartbeat.
+        phase = heartbeat_phase(seed, t, p)
+        pulse = 1.0 + float(p.luminance_pulse_depth) * beat_pulse(phase)
+        luminance = np.clip(luminance * pulse, 0.0, 1.0)
+
+        # Colour onset schedule (Teller / Bornstein): near-grey early.
+        saturation = float(colour_saturation(self._lived(), p)) * float(
+            p.maternal_state_hue_gain
+        )
+        hue_angle = math.pi * (float(valence) + 1.0)  # 0..2π
+        r, g, b = colorsys.hsv_to_rgb(hue_angle / (2.0 * math.pi), 1.0, 1.0)
+        hue_rgb = np.array([r, g, b], dtype=np.float32)
+
+        # Multiplicative chroma so saturation 0 gives exactly grey and the
+        # colour offset stays proportional to the dim luminance field.
+        rgb = luminance[..., None] * (1.0 + saturation * (hue_rgb - 0.5))
+        rgb = np.clip(rgb, 0.0, 1.0)
+
+        # Downstream expects BGR uint8, matching the cv2 camera path.
+        bgr = rgb[:, :, ::-1]
+        return (bgr * 255.0).astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
