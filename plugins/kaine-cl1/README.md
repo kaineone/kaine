@@ -1,8 +1,8 @@
 # kaine-cl1
 
 An optional KAINE plugin that runs the forward models of selected modules on
-Cortical Labs' CL1 biological neural compute. Today it runs only against
-Cortical Labs' simulator. The operator guide, including requirements, licenses
+Cortical Labs' CL1 biological neural compute. It runs on Cortical Labs'
+simulator, and on a real CL1 only through a welfare gate. The operator guide, including requirements, licenses
 and what is not supported yet, is [`docs/cl1.md`](../../docs/cl1.md).
 
 ## Quick start

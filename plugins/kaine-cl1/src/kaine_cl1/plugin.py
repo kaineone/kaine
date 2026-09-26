@@ -43,7 +43,8 @@ REQUIREMENTS_MESSAGE = (
     "(non-commercial use only). Its simulator is non-learning: Cortical Labs describes "
     "its data as control data that does not respond to stimulation and must not be "
     "relied upon for experiments. Real neurons need a paid Cortical Cloud account or a "
-    "CL1 device, which this plugin does not support yet. See docs/cl1.md."
+    "CL1 device; the plugin supports a CL1 device only through its welfare gate, and not "
+    "Cortical Cloud. See docs/cl1.md."
 )
 
 CLOUD_MESSAGE = (

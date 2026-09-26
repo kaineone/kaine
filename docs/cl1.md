@@ -44,7 +44,8 @@ Before you do, note three things about it:
   runs on today. Cortical Labs describes its data as non-learning control data that
   does not respond to stimulation and must not be relied upon for experiments.
 - **Real neurons are a paid service.** Running on living cultures needs a Cortical
-  Cloud account or a CL1 device. The plugin does not support either yet (see
+  Cloud account or a CL1 device. The plugin supports a CL1 device only through a
+  welfare gate (see "Running on a CL1") and does not support Cortical Cloud yet (see
   below).
 
 If the plugin is enabled and `cl-sdk` is not installed, KAINE refuses to boot and
@@ -130,11 +131,6 @@ the plugin filled. A simulated run is never evidence about living neurons.
   `target = "cloud"` is refused with that explanation. When a supported path
   exists, credentials will be kept out of the KAINE configuration file and out of
   logs.
-- **Hardware.** `target = "hardware"` is refused. Running on living tissue is a
-  deliberate step with its own welfare review, described in
-  [`plugins/kaine-cl1/docs/biological-welfare.md`](../plugins/kaine-cl1/docs/biological-welfare.md).
-- **Hardware.** See above: the timing is ready for it (next section), but the
-  plugin does not yet accept a hardware target.
 
 ## Timing: one substrate window per cycle tick
 
@@ -154,6 +150,53 @@ territory's latest completed window, so the response to a stimulus arrives one
 tick later (about 100 ms). If two steps of the same module queue stimulation
 before a window starts, the later one wins. Outside KAINE, or before the first
 tick, each step runs its own window instead.
+
+## Running on a CL1
+
+Real CL1 hardware is not available to this project, so this path has been
+exercised only against a fake device in the tests. It exists so that anyone with
+a CL1 can try KAINE's forward models on a living culture without rebuilding the
+plumbing.
+
+**Where it runs.** The plugin drives the device through Cortical Labs' own SDK,
+in the same process. KAINE and the plugin therefore run on the machine that has
+the device SDK installed; with the simulator SDK the plugin refuses the hardware
+target.
+
+**Configuration.** Set the target and answer the welfare gate:
+
+```toml
+[plugins.cl1.substrate]
+target = "hardware"
+accelerated_time = false        # accelerated time is simulator-only
+# no data_source on hardware: the culture is the data
+
+[plugins.cl1.hardware]
+welfare_acknowledgement = "I have read plugins/kaine-cl1/docs/biological-welfare.md and hold institutional approval for work with this culture"
+ethics_reference = "your approval or protocol reference"
+```
+
+**What the gate checks.** The plugin refuses the hardware target, listing every
+unmet condition, unless the acknowledgement matches exactly, the ethics
+reference is filled in, accelerated time is off and no simulated data source is
+set. Opening the session also refuses if the SDK reports the simulator. Every
+boot with a hardware target logs a warning that a living culture is in the loop,
+naming the ethics reference.
+
+**What it does while running.** On hardware the substrate follows KAINE's cycle
+from the moment it opens: stimulation is delivered only on cycle ticks, never on
+a module's own step. So a frozen cycle, including a welfare freeze, delivers no
+stimulation, and stimulation queued before a freeze is discarded rather than
+delivered when the cycle resumes. Stimulation stays inside the SDK's current and
+charge ceilings and inside each module's own electrodes, and a lagging substrate
+or a crashed substrate loop is logged.
+
+**What remains yours.** The plugin records your acknowledgement and reference; it
+cannot verify them. Institutional approval, the culture's care, and
+characterising every stimulation pattern in the simulator before it reaches
+tissue are the operator's responsibility, as
+[`plugins/kaine-cl1/docs/biological-welfare.md`](../plugins/kaine-cl1/docs/biological-welfare.md)
+sets out.
 
 ## Testing
 
