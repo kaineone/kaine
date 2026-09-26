@@ -34,3 +34,10 @@ A silicon result that timed out or errored SHALL be returned unchanged with no s
 #### Scenario: Revive seeding
 - **WHEN** Nous calls `seed_posterior` on the wrapped engine after a revive
 - **THEN** the call reaches the inner engine and returns its result
+
+### Requirement: Synchronous substrate windows run one at a time
+Before the substrate follows KAINE's cycle, each step runs its own substrate window. The broker SHALL serialise those windows, and the switch to following the cycle, across threads, because Nous steps its engine in a worker thread while other converted modules step on the event loop.
+
+#### Scenario: Nous and Chronos step at once before the first tick
+- **WHEN** Nous' worker thread and Chronos on the event loop each exchange with the broker before the first cycle tick
+- **THEN** their windows run one after the other on the substrate, never interleaved

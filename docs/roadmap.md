@@ -25,6 +25,7 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-26 | cl1 nous-on-wetware (plugins/kaine-cl1) |
 | 2026-09-26 | plugin-engine-wrapper |
 | 2026-09-26 | cl1 hardware-target (plugins/kaine-cl1) |
 | 2026-09-26 | local-womb-feed |

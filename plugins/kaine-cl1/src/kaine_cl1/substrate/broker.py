@@ -95,6 +95,9 @@ class SubstrateBroker:
     _beat_mode: bool = field(default=False, repr=False)
     _accelerated: bool = field(default=True, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    #: Serialises synchronous (pre-beat) windows and the switch to beat mode across threads:
+    #: Nous steps its engine in a worker thread while Chronos and Soma step on the event loop.
+    _sync_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _latest: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _next: dict[str, list[StimRequest]] = field(default_factory=dict, repr=False)
     _pending_frames: int | None = field(default=None, repr=False)
@@ -255,15 +258,18 @@ class SubstrateBroker:
         self._check_usable()
         if self._loop_it is None:
             raise RuntimeError("broker is not open; call open(neurons) first")
-        return self._run_window(self._span)
+        with self._sync_lock:
+            return self._run_window(self._span)
 
     # -- beat mode --------------------------------------------------------------
     def exchange(self, module: str, requests: Sequence[StimRequest]) -> TerritoryObservation:
         self._check_usable()
         reqs = self._validate(module, requests)
         if not self._beat_mode:
-            self.queue_stim(module, reqs)
-            return self.run_cognitive_tick()[module]
+            with self._sync_lock:
+                if not self._beat_mode:
+                    self.queue_stim(module, reqs)
+                    return self.run_cognitive_tick()[module]
         with self._lock:
             self._next[module] = reqs
             latest = self._latest.get(module)
@@ -291,23 +297,24 @@ class SubstrateBroker:
             return
         if self._thread is not None and self._thread.is_alive():
             raise RuntimeError("CL1 substrate beat thread is already running")
-        self._stop.clear()
-        self._failed = False
-        self._beat_signal.clear()
-        # Treat a long gap from start (for example a boot-time freeze) like any other gap.
-        self._last_beat_at = time.monotonic()
-        self._beat_mode = True
-        self._accelerated = accelerated
-        with self._lock:
-            for module, reqs in list(self._pending.items()):
-                self._next[module] = list(reqs)
-            self._pending.clear()
-        self._thread = threading.Thread(
-            target=self._beat_loop,
-            name="cl1-substrate-beat",
-            daemon=True,
-        )
-        self._thread.start()
+        with self._sync_lock:
+            self._stop.clear()
+            self._failed = False
+            self._beat_signal.clear()
+            # Treat a long gap from start (for example a boot-time freeze) like any other gap.
+            self._last_beat_at = time.monotonic()
+            self._beat_mode = True
+            self._accelerated = accelerated
+            with self._lock:
+                for module, reqs in list(self._pending.items()):
+                    self._next[module] = list(reqs)
+                self._pending.clear()
+            self._thread = threading.Thread(
+                target=self._beat_loop,
+                name="cl1-substrate-beat",
+                daemon=True,
+            )
+            self._thread.start()
         mode = "accelerated" if accelerated else "real time"
         log.info("CL1 substrate switched to beat mode (%s): one window per cycle tick", mode)
 
