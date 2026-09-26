@@ -87,7 +87,7 @@ While an unattended start is unacknowledged, Nexus SHALL show a standing banner 
 - **THEN** reminders continue and the entity keeps running unchanged
 
 ### Requirement: Condition eight — continuous input
-An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seeded`, or `screen`; that `topos` or `audition` is enabled to perceive it; and that a probe reads one frame or audio block from the configured source. `off` SHALL fail because the entity would be senseless, and `playlist` SHALL fail because a playlist ends. The probe SHALL write nothing and SHALL drop the data it reads.
+An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seeded`, `womb`, or `screen`; that `topos` or `audition` is enabled to perceive it; and that a probe reads one frame or audio block from the configured source. `off` SHALL fail because the entity would be senseless, and `playlist` SHALL fail because a playlist ends. The probe SHALL write nothing and SHALL drop the data it reads.
 
 #### Scenario: Feed off
 - **WHEN** an unattended boot finds `[perception_feed].mode = "off"`
@@ -106,7 +106,7 @@ An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seede
 - **THEN** nothing is written to disk and the data is dropped before the gate continues
 
 ### Requirement: Notices while running unattended
-While the entity runs unattended, the cycle SHALL send a best-effort caretaker notice on Spot escalation, on loss of Spot's supervision task, on a welfare-protective response, on a boot failure after admission, and when every configured input has delivered nothing for `[caretaker].input_loss_after_s` (default 60). A failed send SHALL be logged and SHALL NOT stop the entity. Input loss SHALL NOT stop the entity.
+While the entity runs unattended, the cycle SHALL send a best-effort caretaker notice on Spot escalation, on loss of Spot's supervision task, on a welfare-protective response, on a boot failure after admission, when a gestating entity's womb is lost, and when every configured input has delivered nothing for `[caretaker].input_loss_after_s` (default 60). A failed send SHALL be logged and SHALL NOT stop the entity. Input loss SHALL NOT stop the entity; a lost womb freezes a gestating entity under the developmental-stage rules, not under this requirement.
 
 #### Scenario: Spot escalates
 - **WHEN** Spot escalates during an unattended run

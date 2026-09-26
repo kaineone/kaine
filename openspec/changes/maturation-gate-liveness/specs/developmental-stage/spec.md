@@ -45,9 +45,10 @@ attributed to the developmental gate, refuse locus self-switch intents, and SHAL
 engage embodiment (Mundus). The effective perception locus SHALL resolve to the lock
 holder's locus whatever other writers set, and an unknown or unreadable locus during
 gestation SHALL resolve to the womb, never to `physical`. If the womb stimulus is lost
-during gestation, the system SHALL pause the entity clock as a welfare-protective measure,
-raise a red alert, and resume when the womb returns; it SHALL NOT unlock the entity to
-`physical` and SHALL NOT leave it running senseless.
+during gestation, the system SHALL freeze the cognitive cycle as a welfare-protective
+measure, count no lived time while frozen, raise a red alert, and resume when the womb
+returns; it SHALL NOT unlock the entity to `physical` and SHALL NOT leave it running
+senseless.
 
 #### Scenario: The gestating entity is locked to the womb when a feed exists
 - **WHEN** the stage is `gestation` and a live womb stimulus has been observed
@@ -68,8 +69,9 @@ raise a red alert, and resume when the womb returns; it SHALL NOT unlock the ent
 
 #### Scenario: The womb is lost mid-gestation
 - **WHEN** the womb stimulus stops arriving while the entity is gestating
-- **THEN** the entity clock is paused, a red alert is raised, the locus stays locked to the
-  womb, and the clock resumes when the womb returns
+- **THEN** the cycle is frozen, no lived time accrues while frozen, a red alert is
+  raised, the locus stays locked to the womb, and the cycle resumes when the womb returns
+  unless another freeze holder remains
 
 #### Scenario: Another writer requests the physical locus during gestation
 - **WHEN** a module (for example Hypnos restoring a pre-sleep locus) requests `physical`

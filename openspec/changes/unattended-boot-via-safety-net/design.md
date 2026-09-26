@@ -111,13 +111,13 @@ never pauses or stops the entity: the entity does not pay for the caretaker's ab
 
 Other notices, sent while running unattended and best-effort (a failed send is logged,
 not fatal): Spot escalation, Spot supervision lost, a welfare-protective response firing,
-input lost, a refused unattended start, and a boot that fails after admission (for
+input lost, a gestating entity's womb lost, a refused unattended start, and a boot that fails after admission (for
 example a plugin error), so a "starting" notice is never left standing for an entity that
 did not start.
 
 ## Condition 8 — Continuous input
 
-Config part: `[perception_feed].mode` is `live`, `seeded` or `screen`. `off` is senseless.
+Config part: `[perception_feed].mode` is `live`, `seeded`, `womb` or `screen`. `off` is senseless.
 `playlist` is refused because a playlist ends: once it is exhausted the entity has no
 input. The modules that perceive the feed are enabled: `topos` for video and `audition`
 for audio, at least one of them.
