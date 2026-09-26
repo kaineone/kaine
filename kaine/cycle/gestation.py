@@ -99,9 +99,8 @@ class GestationReadoutConfig:
                 raise ValueError(
                     f"{name} must be <= {PERTURBATION_MAX_SECONDS}"
                 )
-            if name == "baseline_drive_fraction" and not (0.0 < fv <= 1.0):
-                raise ValueError(f"{name} must be in (0, 1]")
-            if name == "entrainment_plv_floor" and not (0.0 < fv <= 1.0):
+            # fv > 0 is already enforced above; these fractions also cap at 1.
+            if name in ("baseline_drive_fraction", "entrainment_plv_floor") and fv > 1.0:
                 raise ValueError(f"{name} must be in (0, 1]")
             kwargs[name] = fv
 
@@ -381,13 +380,17 @@ class GestationOwner:
                 phase = float(state[0])
                 amplitude = float(state[1])
         except Exception:
-            pass
+            # No self-rhythm reading this tick: the sample records None and the
+            # marker windows skip it.
+            log.debug("gestation: self-rhythm read failed", exc_info=True)
 
         beat: float | None = None
         try:
             beat = float(self._beat_phase())
         except Exception:
-            pass
+            # No maternal beat phase this tick: the sample records None and the
+            # phase-locking pairs skip it.
+            log.debug("gestation: beat phase read failed", exc_info=True)
 
         self._samples.append((now, phase, amplitude, beat, self._probe_state))
 
