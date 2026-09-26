@@ -95,7 +95,4 @@ def test_start_beat_waits_for_an_inflight_window():
         assert beat_started.wait(1.0)
     finally:
         exchange_thread.join()
-        try:
-            broker.stop_beat()
-        except Exception:
-            pass
+        broker.stop_beat()
