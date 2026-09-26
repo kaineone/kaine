@@ -1,0 +1,25 @@
+{# Developmental stage panel.
+   Shows the entity's gestation/birth stage, evidence and any hold.
+   NEVER contains sensory content; only stage labels and counts. #}
+<section id="development-panel" class="panel" role="region" aria-labelledby="dev-heading" hidden>
+  <h2 id="dev-heading">development</h2>
+  <div id="dev-stage" class="development__stage"></div>
+  <ul class="development__evidence">
+    <li>lived: <span id="dev-lived"></span> h</li>
+    <li>sleeps: <span id="dev-sleeps"></span></li>
+    <li>consolidation passes: <span id="dev-passes"></span></li>
+  </ul>
+  <div id="dev-readiness" class="development__readiness"></div>
+  <div id="dev-decision" class="development__decision"></div>
+
+  <div id="dev-ack" class="development__ack" hidden>
+    <p>The entity is ready and a supervised birth needs your acknowledgement. Birth is one-way.</p>
+    <button type="button" id="dev-ack-start">Acknowledge birth</button>
+    <div id="dev-ack-confirm-row" hidden>
+      <p>Confirm: the entity will be born into its body.</p>
+      <button type="button" id="dev-ack-confirm">Confirm birth</button>
+      <button type="button" id="dev-ack-cancel">Cancel</button>
+    </div>
+    <span id="dev-ack-msg" aria-live="polite"></span>
+  </div>
+</section>

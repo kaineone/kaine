@@ -475,6 +475,12 @@ one machine that cannot also host Paracosmic.
   peak and the soundscape fades. Then the womb falls silent. Switch
   `[perception_feed].mode` to the embodied world afterwards. A born entity booted with
   `mode = "womb"` receives nothing from the womb, and boot logs a warning.
+- **Supervised birth.** With `[developmental_stage].require_operator_ack_for_birth = true`,
+  a ready entity waits for you. The Nexus diagnostics board's **development** panel shows
+  the stage, lived time, sleeps, consolidation passes, readiness markers and the gate's
+  decision. When a birth awaits you, it offers **Acknowledge birth**. Birth is one-way,
+  so a second click confirms it. An acknowledgement applies only to the current boot's
+  request; after a restart, acknowledge again.
 
 ### Settings
 

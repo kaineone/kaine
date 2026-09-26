@@ -163,3 +163,25 @@ counts real deliveries), so switching perception off would make a local womb's r
 impossible to observe, and the entity would stay frozen until an operator intervened.
 The cycle is paused either way, so nothing is experienced. If any other holder is also
 on the stack, perception goes off as usual.
+
+## Operator acknowledgement and the Nexus panel (task 3.2)
+
+When `require_operator_ack_for_birth` is true and a ready entity has embodiment
+available, the runner holds and writes `state/lifecycle/birth_request.json` with a
+random `request_id` minted for this boot's hold. An authenticated Nexus control
+(`POST /diagnostics/birth/ack`, operator token) writes only
+`state/lifecycle/birth_ack.json`, echoing that id. The runner births when the ids
+match, then clears both files. Nexus never writes the stage file.
+
+- **Across boots.** A request/ack pair left from an earlier boot never matches, because
+  each boot mints a new id. An acknowledgement given before a restart has to be given
+  again, which errs toward waiting.
+- **When readiness goes away.** If the entity is no longer awaiting acknowledgement
+  (readiness lost, embodiment gone), the request is withdrawn, so the control
+  disappears.
+- **What Nexus shows.** The runner's latest evaluation status reaches Nexus through
+  `runtime.json`: lived time, sleeps, consolidation passes, readiness markers, the
+  decision, and whether an acknowledgement is pending. The development panel shows it,
+  content-free.
+- **The control.** Birth is one-way, so the control is two-step: the first click
+  reveals a confirmation and only the second click sends it. There is no browser dialog.

@@ -20,7 +20,7 @@ Tasks 2.1 and 2.2 check the womb-liveness interface defined by `local-womb-feed`
 ## 3. Readouts, acknowledgement, visibility
 
 - [x] 3.1 Decode readouts with the bus codec, filter on `event.type`, reject pre-boot (Redis `TIME`) and stale readouts.
-- [ ] 3.2 Acknowledgement request file written by an authenticated Nexus control and consumed by the runner; Nexus panel for stage, evidence and hold.
+- [x] 3.2 Acknowledgement request file written by an authenticated Nexus control and consumed by the runner; Nexus panel for stage, evidence and hold.
 - [ ] 3.3 Lineage-scoped prior-history check with the unknown-lineage-counts-as-lived rule; shared entity-ID source.
 
 ## 4. Verification
