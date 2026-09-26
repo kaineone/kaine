@@ -430,6 +430,7 @@ def _install_shared_womb_clock(
     entity_clock: EntityClock | None,
     *,
     stage_path: Path | None = None,
+    stage_state: Any | None = None,
 ) -> None:
     """Install one shared womb clock for both A/V surfaces.
 
@@ -443,16 +444,28 @@ def _install_shared_womb_clock(
     from kaine.lifecycle import stage as _lifecycle_stage
     from kaine.modules.topos.feed import WombClock
 
-    offset = _womb_lived_offset(stage_path)
+    if stage_state is not None:
+        lived = float(stage_state.lived_seconds)
+        offset = lived if math.isfinite(lived) and lived >= 0.0 else 0.0
+    else:
+        offset = _womb_lived_offset(stage_path)
     clock = WombClock(lived_offset_seconds=offset)
 
-    stage_state = _lifecycle_stage.read_stage(stage_path)
-    if stage_state is not None and stage_state.is_embodied:
-        clock.mark_born()
-        log.warning(
-            "perception_feed mode is womb but the entity is already born; "
-            "the womb delivers nothing. Choose another perception mode."
-        )
+    if stage_state is not None:
+        if stage_state.is_embodied:
+            clock.mark_born()
+            log.warning(
+                "perception_feed mode is womb but the entity is already born; "
+                "the womb delivers nothing. Choose another perception mode."
+            )
+    else:
+        file_stage_state = _lifecycle_stage.read_stage(stage_path)
+        if file_stage_state is not None and file_stage_state.is_embodied:
+            clock.mark_born()
+            log.warning(
+                "perception_feed mode is womb but the entity is already born; "
+                "the womb delivers nothing. Choose another perception mode."
+            )
 
     if entity_clock is None:
         def lived_provider() -> float:
@@ -1918,6 +1931,7 @@ def build_registry(
     entity_clock: Optional[EntityClock] = None,
     intent_secret: Optional[bytes] = None,
     plugins: Any = None,
+    boot_stage: Any | None = None,
 ) -> ModuleRegistry:
     """Construct every enabled module from kaine.toml and register it.
 
@@ -2001,7 +2015,9 @@ def build_registry(
     if _feed_mode == "womb" and (
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
     ):
-        _install_shared_womb_clock(perception_feed, kaine_config, entity_clock)
+        _install_shared_womb_clock(
+            perception_feed, kaine_config, entity_clock, stage_state=boot_stage
+        )
     if _feed_mode in ("seeded", "playlist", "womb") and (
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
     ):

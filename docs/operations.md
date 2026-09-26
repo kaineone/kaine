@@ -522,6 +522,38 @@ its gestating entity cannot pass the gate's regulation condition, so it is not b
 
 ---
 
+## Preserving and reviving an entity
+
+An operator can request a live preservation:
+
+```bash
+python -m kaine.cycle.control preserve --reason "<why>" [--stop] [--wait 120]
+```
+
+The cycle freezes itself under holder `preserve`, writes a bundle under
+`[preservation.divergence_monitor].out_root`, and prints the result.
+Exit codes are `0` on success, `1` on a recorded failure, and `2` on timeout.
+A failed preservation releases the freeze and the entity keeps running.
+If `--stop` is given, the cycle stops cleanly once preserved.
+`[preservation].require_encryption` applies and defaults to `true`, so state
+encryption must be configured or preservation will fail closed.
+
+An operator can revive a preserved entity:
+
+```bash
+python -m kaine.cycle --revive <bundle_dir>
+```
+
+The preserved developmental stage is restored before the stage is resolved,
+captured modules are revived after they initialise and before the cognitive
+cycle starts, and modules enabled now but absent from the bundle start fresh
+and are logged as new faculties. `revived_from` is recorded in
+`state/cycle/runtime.json` and in the run manifest. If the bundle cannot be
+read or captured a module that is not enabled, the start exits with code `7`.
+The stage file is written only after the revive has landed, so a refused or
+interrupted start leaves it unchanged. If a start is interrupted after the
+revive began, run the same revive again to complete it.
+
 ## Entity decommission
 
 The decommission CLI implements the CAL Article 4.2 ("Do Not Shut Them Down Without Care") and 4.3 (privacy) care duties. It never runs automatically and never boots or touches the running cognitive cycle.
