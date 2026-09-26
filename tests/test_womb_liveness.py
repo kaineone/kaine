@@ -22,6 +22,14 @@ from kaine.lifecycle.womb_liveness import (
 from kaine.preboot import CheckResult
 
 
+@pytest.fixture(autouse=True)
+def _oscillator_extra_present(monkeypatch):
+    # The local-womb readiness also requires the oscillator extra; these tests
+    # are about the perception probe, so pin its availability rather than
+    # depending on whether the test host has snnTorch.
+    monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)
+
+
 @pytest.mark.asyncio
 async def test_ready_local_womb_live_when_probe_passes():
     async def fake_check(config):
@@ -31,7 +39,8 @@ async def test_ready_local_womb_live_when_probe_passes():
         ]
 
     config = {
-        "modules": {"topos": True, "audition": True},
+        "modules": {"topos": True, "audition": True, "soma": True},
+        "soma": {"self_rhythm_enabled": True},
         "perception_feed": {"mode": "womb"},
     }
     result = await check_womb_ready(config, None, perception_check=fake_check)
@@ -47,7 +56,8 @@ async def test_ready_local_womb_not_live_when_audio_fails():
         ]
 
     config = {
-        "modules": {"topos": True, "audition": True},
+        "modules": {"topos": True, "audition": True, "soma": True},
+        "soma": {"self_rhythm_enabled": True},
         "perception_feed": {"mode": "womb"},
     }
     result = await check_womb_ready(config, None, perception_check=fake_check)
@@ -62,7 +72,8 @@ async def test_ready_local_womb_not_live_when_probe_raises():
         raise RuntimeError("synthesis failed")
 
     config = {
-        "modules": {"topos": True, "audition": True},
+        "modules": {"topos": True, "audition": True, "soma": True},
+        "soma": {"self_rhythm_enabled": True},
         "perception_feed": {"mode": "womb"},
     }
     result = await check_womb_ready(config, None, perception_check=fake_check)
@@ -90,7 +101,8 @@ async def test_ready_local_womb_not_live_when_probe_returns_no_rows():
         return []
 
     config = {
-        "modules": {"topos": True, "audition": True},
+        "modules": {"topos": True, "audition": True, "soma": True},
+        "soma": {"self_rhythm_enabled": True},
         "perception_feed": {"mode": "womb"},
     }
     result = await check_womb_ready(config, None, perception_check=fake_check)
