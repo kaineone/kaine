@@ -926,8 +926,6 @@ def _probe_target(repo_root: Path, python_bin: str) -> dict | None:
     Exits the process on unsupported targets so the installer never touches a
     host it cannot classify.
     """
-    import json
-
     env = {**os.environ, "PYTHONPATH": str(repo_root)}
     try:
         result = subprocess.run(

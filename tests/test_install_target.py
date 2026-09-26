@@ -263,3 +263,64 @@ def test_an_accelerator_cannot_make_an_unsupported_arch_installable():
     )
     assert t.name == "unsupported"
     assert "riscv64" in t.reason
+
+
+def test_jetson_nvidia_smi_timeout_still_jetson_without_cuda_detail():
+    def raising_run(args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=10)
+
+    t = detect_target(
+        dir_exists=lambda _p: False,
+        machine=lambda: "aarch64",
+        system=lambda: "Linux",
+        is_tegra=lambda: (True, "device-tree model contains 'Jetson'"),
+        which=_fake_which({"nvidia-smi": "/usr/bin/nvidia-smi"}),
+        run=raising_run,
+        read_text=lambda _: None,
+    )
+    assert t.name == "jetson"
+    assert t.flavor == "cuda"
+    assert "nvidia_cuda" not in t.details
+
+
+def test_desktop_nvidia_smi_oserror_falls_through():
+    def raising_run(args, **kwargs):
+        raise OSError("exec format error")
+
+    t = detect_target(
+        dir_exists=lambda _p: False,
+        machine=lambda: "x86_64",
+        system=lambda: "Linux",
+        is_tegra=lambda: (False, "no tegra marker"),
+        which=_fake_which({"nvidia-smi": "/usr/bin/nvidia-smi"}),
+        run=raising_run,
+    )
+    assert t.name != "desktop-cuda"
+    assert t.name == "desktop-cpu"
+
+
+def test_nvidia_smi_calls_pass_a_timeout():
+    calls = []
+
+    def recording_run(args, **kwargs):
+        calls.append(kwargs)
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    t = detect_target(
+        dir_exists=lambda _p: False,
+        machine=lambda: "x86_64",
+        system=lambda: "Linux",
+        is_tegra=lambda: (False, "no tegra marker"),
+        which=_fake_which({"nvidia-smi": "/usr/bin/nvidia-smi"}),
+        run=recording_run,
+    )
+    assert t.name == "desktop-cuda"
+    assert calls
+    for kwargs in calls:
+        assert kwargs.get("timeout") == 10

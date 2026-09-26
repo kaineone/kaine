@@ -154,6 +154,7 @@ def detect_target(
                         capture_output=True,
                         text=True,
                         check=False,
+                        timeout=10,
                     )
                     if list_result.returncode == 0:
                         top_result = run(
@@ -161,10 +162,14 @@ def detect_target(
                             capture_output=True,
                             text=True,
                             check=False,
+                            timeout=10,
                         )
                         if top_result.returncode == 0:
                             nvidia_cuda_ver = _parse_cuda_version(top_result.stdout)
-                except Exception:
+                except (OSError, subprocess.SubprocessError):
+                    # nvidia-smi missing, not executable, or hung (timeout): the
+                    # host is still a Jetson by its Tegra marker, so only the
+                    # CUDA version detail is omitted.
                     pass
             details: dict[str, Any] = {"tegra": tegra_reason}
             if tegra_release:
@@ -189,6 +194,7 @@ def detect_target(
                     capture_output=True,
                     text=True,
                     check=False,
+                    timeout=10,
                 )
                 if result.returncode == 0:
                     return Target(
@@ -198,7 +204,10 @@ def detect_target(
                         reason="nvidia-smi -L succeeded",
                         details={"nvidia_smi": "available"},
                     )
-            except Exception:
+            except (OSError, subprocess.SubprocessError):
+                # nvidia-smi missing, not executable, or hung: this host is not
+                # classified as desktop-cuda and detection falls through to the
+                # next rung.
                 pass
 
     # 5. Desktop AMD ROCm.
