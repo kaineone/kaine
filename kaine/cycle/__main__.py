@@ -772,6 +772,9 @@ def _start_gestation_owner(
         is_paused=is_paused,
         config=config,
         clock=registry.entity_clock.now,
+        # Probe jitter is drawn from the run's perception seed: reproducible for
+        # the experimenter, unpredictable to the being.
+        seed=seed,
     )
     return asyncio.create_task(owner.run(stop_event), name="cycle.gestation")
 

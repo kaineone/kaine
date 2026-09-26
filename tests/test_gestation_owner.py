@@ -110,6 +110,8 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
         "hrv_window_seconds": 10.0,
         "recovery_tolerance": 0.25,
         "recovery_cap_seconds": 30.0,
+        # These tests exercise the fixed schedule; jitter is tested separately.
+        "probe_jitter_fraction": 0.0,
     }
     defaults.update(overrides)
     return GestationReadoutConfig.from_dict(defaults)
@@ -513,7 +515,7 @@ async def test_perturbation_sets_full_drive(owner_factory):
         await owner.step()
         if owner._probe_state == "perturbation" and not in_perturbation:
             in_perturbation = True
-            assert drive.scale == 1.0
+            assert drive.scale == config.perturbation_drive_fraction
             starts = [
                 e
                 for e in _events(bus, f"{SOURCE}.out", PROBE_TYPE)

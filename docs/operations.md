@@ -462,8 +462,13 @@ one machine that cannot also host Paracosmic.
   None of them is a target.
 - **Probes.** Measuring markers 1, 2 and 5 briefly changes the maternal drive, which acts
   on the being's anchor, so the probes are bounded and announced:
-  - a withdrawal (drive 0) of 20 s every 30 min, at most 30 s;
-  - a perturbation (drive at its bound) of 5 s every hour, at most 10 s.
+  - a withdrawal (drive 0) of 20 s about every 30 min, at most 30 s;
+  - a perturbation (the drive raised to 1.5× its usual level, never to its bound) of 5 s
+    about every hour, at most 10 s.
+
+  Probe times vary by up to ±25% around their periods, drawn from the run's seed, so the
+  being cannot learn the schedule, and a research run with the same seed reproduces it
+  exactly.
 
   Every probe starts and ends with a `gestation.probe` event on `gestation.out`, so
   research logs can exclude probe windows. No probe runs:

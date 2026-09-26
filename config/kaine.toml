@@ -783,13 +783,18 @@ lowpass_hz = 500                # soundscape low-pass corner (100-2000)
 # they are bounded, announced on gestation.out (gestation.probe events), and
 # never run while the entity is frozen (including a welfare response), within
 # a readout period of boot or of a thaw, or within 60 s of another probe.
+# Their timing is jittered from the run seed so the being cannot learn the
+# schedule (an exactly periodic probe would shape what it measures), while a
+# research run with the same seed reproduces it exactly.
 # All durations are subjective seconds (the entity clock).
 readout_period_seconds = 60       # how often gestation.readiness is published
 sample_hz = 10                    # self-rhythm sampling rate
 withdrawal_period_seconds = 1800  # drive withdrawn (0) once per this period
 withdrawal_seconds = 20           # hard maximum 30
 perturbation_period_seconds = 3600
-perturbation_seconds = 5          # drive raised to its bound; hard maximum 10
+perturbation_seconds = 5          # drive raised gently (see below); hard maximum 10
+perturbation_drive_fraction = 0.75  # the raised drive, as a fraction of its bound (1.5x the usual 0.5)
+probe_jitter_fraction = 0.25      # each probe time varies +/-25% around its period (0 = fixed)
 baseline_drive_fraction = 0.5     # usual drive, as a fraction of external_drive_max_amplitude
 entrainment_plv_floor = 0.5       # phase locking counted as entrainment (marker 2)
 hrv_window_seconds = 300          # window for the HRV-analog variability (marker 3)
