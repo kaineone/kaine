@@ -103,6 +103,7 @@ class SpotConfig:
     restart_backoff_s: float = 3.0
     per_module_timeout_s: dict[str, float] = field(default_factory=dict)
     incident_log: IncidentLogConfig = field(default_factory=IncidentLogConfig)
+    selftest_timeout_s: float = 10.0
 
     @classmethod
     def from_section(cls, section: dict[str, Any]) -> "SpotConfig":
@@ -114,6 +115,7 @@ class SpotConfig:
             "restart_backoff_s",
             "per_module_timeout_s",
             "incident_log",
+            "selftest_timeout_s",
         }
         require_known_keys(section, allowed, "[spot]")
         per_module = {
@@ -130,6 +132,7 @@ class SpotConfig:
             incident_log=IncidentLogConfig.from_section(
                 section.get("incident_log") or {}
             ),
+            selftest_timeout_s=float(section.get("selftest_timeout_s", 10.0)),
         )
 
 
@@ -169,6 +172,9 @@ class Spot:
         clock: Callable[[], float] = time.monotonic,
         on_halt: Optional[Callable[[], None]] = None,
         tick_index_provider: Optional[Callable[[], Optional[int]]] = None,
+        control_path: Optional[Path] = None,
+        escalation_path: Optional[Path] = None,
+        escalate_on_crash: bool = False,
     ) -> None:
         self._registry = registry
         self._fork_manager = fork_manager
@@ -186,6 +192,14 @@ class Spot:
         self._incidents: dict[str, _Incident] = {}
         self.escalated: bool = False
         self.poll_index: int = 0
+        # Where freeze and escalation state live. None means the process-wide
+        # defaults (state/cycle/...); the unattended selftest passes scratch
+        # paths so it can never freeze or escalate a live entity.
+        self._control_path = control_path
+        self._escalation_path = escalation_path
+        # Unattended runs escalate (preserve, shut down, escalation.json) when
+        # the supervision loop itself crashes: no supervisor, no unattended run.
+        self._escalate_on_crash = escalate_on_crash
         self._incident_log = IncidentLog(
             enabled=config.incident_log.enabled,
             path=config.incident_log.path,
@@ -463,13 +477,16 @@ class Spot:
         attempts: int,
         snapshot_id: Optional[str],
         incident_id: Optional[str] = None,
+        *,
+        message: Optional[str] = None,
     ) -> None:
         now_iso = datetime.now(timezone.utc).isoformat()
-        message = (
-            f"Module '{name}' failed to recover after {attempts} attempts. "
-            f"Entity state saved (snapshot {snapshot_id}). Reboot the machine, "
-            f"then restart the cycle. Do NOT auto-retry."
-        )
+        if message is None:
+            message = (
+                f"Module '{name}' failed to recover after {attempts} attempts. "
+                f"Entity state saved (snapshot {snapshot_id}). Reboot the machine, "
+                f"then restart the cycle. Do NOT auto-retry."
+            )
         try:
             escalation_state.write_escalation(
                 EscalationRecord(
@@ -479,7 +496,8 @@ class Spot:
                     snapshot_id=snapshot_id,
                     escalated_at=now_iso,
                     message=message,
-                )
+                ),
+                path=self._escalation_path,
             )
         except Exception:
             log.critical("spot failed to write escalation.json", exc_info=True)
@@ -519,6 +537,33 @@ class Spot:
                     "spot shutdown of %s failed", module.name, exc_info=True
                 )
 
+    async def escalate_supervision_lost(self, reason: str) -> None:
+        """Escalate because Spot itself stopped supervising (unattended runs).
+
+        Takes a final snapshot, shuts every module down and writes
+        ``escalation.json`` with a supervision-lost message. An unattended
+        entity does not keep running without the supervisor that stands in for
+        a person. Never raises: a failure here is logged at CRITICAL.
+        """
+        snapshot_id: Optional[str] = None
+        try:
+            snapshot_id = await self._snapshot("spot-supervision-lost", "spot", None)
+            await self._shutdown_all()
+            await self._escalate(
+                "spot",
+                0,
+                snapshot_id,
+                None,
+                message=(
+                    f"Spot's supervision stopped ({reason}). Entity state saved "
+                    f"(snapshot {snapshot_id}). An unattended entity does not run "
+                    f"without its supervisor. Restart the cycle once Spot is healthy."
+                ),
+            )
+            self.escalated = True
+        except Exception:
+            log.critical("spot failed to escalate supervision loss", exc_info=True)
+
     # --- recovery (one incident per poll) ---------------------------------
 
     @staticmethod
@@ -541,7 +586,7 @@ class Spot:
         if not self._config.enabled:
             return
         self.poll_index += 1
-        control = control_state.read_control()
+        control = control_state.read_control(path=self._control_path)
         if control.frozen and control.source != "spot":
             # A frozen cycle's modules are silent by design, so heartbeat
             # staleness is not a valid liveness signal for a freeze Spot does
@@ -577,7 +622,9 @@ class Spot:
                 }
             )
             freeze_reason = f"spot: {name} {state}"
-            control_state.freeze(reason=freeze_reason, source="spot")
+            control_state.freeze(
+                reason=freeze_reason, path=self._control_path, source="spot"
+            )
             await self._write_incident_record(
                 {
                     "incident_id": incident_id,
@@ -635,8 +682,8 @@ class Spot:
                     },
                 )
                 self._incidents.pop(name, None)
-                if control_state.read_control().source == "spot":
-                    control_state.unfreeze()
+                if control_state.read_control(path=self._control_path).source == "spot":
+                    control_state.unfreeze(path=self._control_path)
                 return  # one incident per poll
             if incident.attempts >= self._config.max_restart_attempts:
                 final_snap = await self._snapshot(
@@ -679,6 +726,8 @@ class Spot:
                     # Who watches the watchdog: an internal error must halt
                     # loudly, not die silently.
                     log.critical("spot poll crashed; halting", exc_info=True)
+                    if self._escalate_on_crash:
+                        await self.escalate_supervision_lost("supervision loop crashed")
                     self.escalated = True
                     if self._on_halt is not None:
                         try:

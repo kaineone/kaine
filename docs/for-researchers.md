@@ -64,9 +64,11 @@ a duty of care. Booting is therefore **gated**. A run is **either**:
 - **unattended** — a full entity started with no person present
   (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`), gated
   by the research safety net plus three more conditions: Spot armed and self-tested,
-  a caretaker told over a local channel, and a continuous input source. Those three
-  are not built yet, so an unattended boot currently always refuses (exit `6`) and
-  names them. Selecting unattended together with another mode is a configuration
+  a caretaker told over a local channel, and a continuous input source. The Spot
+  check is built: Spot must be enabled and pass a self-test that drives a
+  synthetic module through freeze, snapshot, restart and release in a scratch
+  directory. The caretaker and input checks are not built yet, so an unattended
+  boot currently always refuses (exit `6`) and names them. Selecting unattended together with another mode is a configuration
   error (exit `1`),
 
 and **never none of these**. If no condition holds, the cycle refuses to boot.
