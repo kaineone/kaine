@@ -125,6 +125,7 @@ async def preserve_live(
     reason: str,
     label: str = "",
     require_encryption: bool = False,
+    stage_path: Path | None = None,
 ) -> PreservationResult:
     """Preserve the whole individual from a LIVE registry. Read-only; fail-loud.
 
@@ -170,6 +171,12 @@ async def preserve_live(
                 "[security.state_encryption] with a key, or set "
                 "[preservation].require_encryption = false."
             )
+
+    # Resolve the stage file path at call time so tests can monkeypatch it.
+    if stage_path is None:
+        from kaine.lifecycle import stage as _stage_module
+
+        stage_path = _stage_module.STAGE_PATH
 
     modules = list(registry.all_modules())
 
@@ -244,7 +251,7 @@ async def preserve_live(
     # to encrypt at rest. S8: the operator-supplied label is sanitised before it
     # is written into the manifest.
     safe_label = _safe(label) if label else ""
-    bundle_dir = out_root / f"preservation_{preservation_id}_{_safe(entity_name)}"
+    bundle_dir = bundle_dir_for(out_root, preservation_id, entity_name)
 
     def _write_bundle() -> tuple[list[str], bool, dict[str, Any]]:
         """Stage → tar → (optionally) encrypt → write bundle + manifest.
@@ -284,6 +291,14 @@ async def preserve_live(
                 f"phantasia/{phantasia_checkpoint.name} (world-model weights)"
             )
 
+        # Developmental stage: when present, copy it into the bundle so revive
+        # can restore gestation/embodied state before stage resolution runs.
+        stage_source_path = stage_path
+        if stage_source_path is not None and stage_source_path.is_file():
+            shutil.copy2(stage_source_path, bundle_dir / "stage.json")
+            _chmod_quietly(bundle_dir / "stage.json", 0o600)
+            inventory.append("stage.json (developmental stage)")
+
         # Tar the staged content and (when enabled) encrypt the tar via the same
         # StateEncryptor path the decommission backup uses, then remove the
         # plaintext originals. The manifest is excluded (stays loose + readable).
@@ -294,6 +309,8 @@ async def preserve_live(
         tar_member_names = ["snapshot.json"]
         if (bundle_dir / "phantasia").is_dir():
             tar_member_names.append("phantasia")
+        if (bundle_dir / "stage.json").is_file():
+            tar_member_names.append("stage.json")
         tar_bytes_path = bundle_dir / "_bundle.tar"
         with tarfile.open(tar_bytes_path, "w") as tar:
             for name in tar_member_names:
@@ -496,6 +513,93 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
     return snap
 
 
+def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
+    """Decrypt/open the bundle tar (or a legacy loose layout) and return raw
+    ``stage.json`` bytes, if present.  Mirrors the tar handling in
+    :func:`_read_bundle_members` so :func:`read_bundle_stage` can inspect the
+    stage member even though the generic member reader is only interested in
+    snapshot.json and phantasia/ weights.
+    """
+    import io
+    import tarfile
+
+    from kaine.security.crypto import get_state_encryptor
+
+    encryptor = get_state_encryptor()
+
+    enc_tar = bundle / "bundle.tar.enc"
+    plain_tar = bundle / "bundle.tar"
+    raw_tar: bytes | None = None
+    if enc_tar.is_file():
+        try:
+            raw_tar = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
+        except Exception as exc:
+            raise ReviveError(
+                f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+            ) from exc
+    elif plain_tar.is_file():
+        raw_tar = plain_tar.read_bytes()
+
+    if raw_tar is not None:
+        try:
+            with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tf:
+                for member in tf.getmembers():
+                    if not member.isfile():
+                        continue
+                    if member.name == "stage.json":
+                        fh = tf.extractfile(member)
+                        if fh is None:
+                            continue
+                        return fh.read()
+        except ReviveError:
+            raise
+        except Exception as exc:
+            raise ReviveError(
+                f"revive: could not open preservation bundle tar {bundle} "
+                f"({type(exc).__name__}: {exc})"
+            ) from exc
+        return None
+
+    # Legacy loose layout.
+    loose_stage = bundle / "stage.json"
+    if loose_stage.is_file():
+        return encryptor.maybe_decrypt(loose_stage.read_bytes())
+    return None
+
+
+def read_bundle_stage(bundle: Path) -> dict | None:
+    """Read and parse the ``stage.json`` member of a preservation bundle.
+
+    Returns ``None`` when the bundle carries no stage member (older bundles).
+    Invalid JSON raises :class:`ReviveError`.
+    """
+    bundle = Path(bundle)
+
+    # Use the generic member reader first; it may return stage.json as text or
+    # bytes depending on the bundle layout.  If it does not surface the stage
+    # member, fall back to a dedicated extraction so we do not miss it.
+    members = _read_bundle_members(bundle)
+    raw: Any = members.get("stage.json")
+    if raw is None:
+        raw = _extract_stage_from_bundle(bundle)
+
+    if raw is None:
+        return None
+
+    if isinstance(raw, str):
+        text = raw
+    else:
+        text = raw.decode("utf-8")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ReviveError(
+            f"bundle {bundle.name}/stage.json is not valid JSON: {exc}"
+        ) from exc
+
+
 def _read_bundle_members(bundle: Path) -> dict[str, Any]:
     """Return the bundle's entity-interior members from bundle.tar(.enc) or loose.
 
@@ -603,6 +707,11 @@ def _load_bundle_phantasia_weights(
         tmp.write(blob_bytes)
         tmp.flush()
         return load_checkpoint(Path(tmp.name))
+
+
+def bundle_dir_for(out_root: Path | str, preservation_id: str, entity_name: str) -> Path:
+    """Return the bundle directory path for a preservation id and entity name."""
+    return Path(out_root) / f"preservation_{preservation_id}_{_safe(entity_name)}"
 
 
 def _safe(name: str) -> str:

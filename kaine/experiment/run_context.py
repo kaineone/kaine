@@ -56,6 +56,8 @@ class RunContext:
     perception_feed: dict[str, Any] = field(default_factory=dict)
     # Enabled plugin manifest (non-content: names, distribution, version, seams).
     plugins: dict[str, Any] = field(default_factory=dict)
+    # Non-content preservation id that this run was revived from, if any.
+    revived_from: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view suitable for JSON serialization (manifest, stamping)."""
@@ -114,6 +116,7 @@ def mint_run_context(
     version: str,
     perception_feed: Mapping[str, Any] | None = None,
     plugins: Mapping[str, Any] | None = None,
+    revived_from: str | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
 
@@ -130,6 +133,9 @@ def mint_run_context(
     ``plugins`` is the plugin manifest entry, passed in BY THE CALLER as data
     (gathered at the cycle/boot layer via ``kaine.plugins``) — this keeps
     ``kaine.experiment`` boundary-neutral and off the plugin mechanism.
+
+    ``revived_from`` is the preservation id (or bundle name) when the run is
+    started by reviving a preserved individual.
     """
     return RunContext(
         run_id=uuid.uuid4().hex,
@@ -141,6 +147,7 @@ def mint_run_context(
         kaine_version=str(version),
         perception_feed=dict(perception_feed or {"mode": "off"}),
         plugins=dict(plugins or {}),
+        revived_from=revived_from,
     )
 
 

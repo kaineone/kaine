@@ -32,7 +32,7 @@ import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from kaine.boot import (
     MetricsCollector,
@@ -87,6 +87,9 @@ from kaine.workspace import (
 )
 from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
 from kaine.workspace.volition import Volition
+
+if TYPE_CHECKING:
+    from kaine.cycle.revive_boot import ReviveSession
 
 log = logging.getLogger("kaine.cycle")
 
@@ -496,6 +499,7 @@ async def _write_runtime_state(
     stage_state: lifecycle_stage.StageState | None = None,
     staging_enabled: bool = False,
     gate_status: dict | None = None,
+    revived_from: str | None = None,
 ) -> None:
     RUNTIME_PATH.parent.mkdir(parents=True, exist_ok=True)
     control = read_control()
@@ -561,6 +565,8 @@ async def _write_runtime_state(
             })
         if gate_status is not None:
             payload["developmental_stage"].update(gate_status)
+    if revived_from is not None:
+        payload["revived_from"] = revived_from
     # Per-run identity (RunContext) — non-content run metadata. Read via the
     # process-global accessor; inert (no fields added) when no run is set.
     try:
@@ -798,10 +804,76 @@ def _start_womb_presence(
     )
 
 
+async def _revive_or_refuse(revive, registry, bus) -> int | None:
+    """Apply a revive plan to the registry, or shut the boot down on refusal.
+
+    Returns None when the revive landed, else the revive-refused exit code.
+
+    Initialisation happens first because Eidolon's initialize() reloads its
+    disk file. Module background loops run briefly on fresh state before the
+    revive lands, which is safe because the cognitive cycle (and so the
+    workspace) has not started.
+    """
+    from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT, ReviveRefused
+
+    try:
+        await revive.revive(registry)
+        return None
+    except ReviveRefused as exc:
+        log.error("revive refused after module initialisation: %s", exc)
+        for module in list(registry.all_modules()):
+            try:
+                await module.shutdown()
+            except Exception:
+                log.warning(
+                    "module %s shutdown failed during revive refusal",
+                    module.name,
+                    exc_info=True,
+                )
+        await bus.close()
+        return REVIVE_REFUSED_EXIT
+
+
+def _start_preserve_watcher(
+    registry, fork_manager, preservation_cfg, *, is_paused, request_stop, stop_event
+) -> asyncio.Task:
+    """Start the operator-requested live-preservation watcher task."""
+    from kaine.cycle.preserve_watch import PreserveRequestWatcher
+    from kaine.lifecycle.preservation import bundle_dir_for
+
+    async def _preserve(reason):
+        return await fork_manager.preserve_live(
+            registry,
+            reason=reason,
+            label="operator",
+            out_root=Path(preservation_cfg.divergence_monitor.out_root),
+            entity_name=preservation_cfg.divergence_monitor.entity_name,
+            require_encryption=preservation_cfg.require_encryption,
+        )
+
+    def _bundle_for(result):
+        return str(
+            bundle_dir_for(
+                preservation_cfg.divergence_monitor.out_root,
+                result.preservation_id,
+                preservation_cfg.divergence_monitor.entity_name,
+            )
+        )
+
+    watcher = PreserveRequestWatcher(
+        preserve=_preserve,
+        bundle_for=_bundle_for,
+        is_paused=is_paused,
+        request_stop=request_stop,
+    )
+    return asyncio.create_task(watcher.run(stop_event), name="cycle.preserve_watch")
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
     gate_checks: dict[str, bool] | None = None,
+    revive: "ReviveSession | None" = None,
 ) -> int:
     kaine_config = _load_kaine_config()
 
@@ -883,6 +955,7 @@ async def _boot_and_run(
         # (allowed to touch kaine.modules) and passed in as data.
         perception_feed=gather_perception_feed_descriptor(kaine_config),
         plugins=plugins.manifest_entry(),
+        revived_from=revive.revived_from if revive is not None else None,
     )
     set_run_context(run_ctx)
     if bool(experiment_cfg.get("write_manifest", True)):
@@ -1041,6 +1114,15 @@ async def _boot_and_run(
 
     for module in list(registry.all_modules()):
         await module.initialize()
+
+    # Revive the preserved individual after modules initialise (so Eidolon's
+    # initialize() reloads its disk file) and before the cognitive cycle starts.
+    # Module background loops run briefly on fresh state before the revive lands,
+    # which is safe because the cognitive cycle (and so the workspace) has not started.
+    if revive is not None:
+        refused = await _revive_or_refuse(revive, registry, bus)
+        if refused is not None:
+            return refused
 
     # Developmental maturation gate. Constructed after modules exist so it can
     # read Hypnos/Phantasia/Mundus signals; started as a background task once
@@ -1228,6 +1310,7 @@ async def _boot_and_run(
         gate_checks=gate_checks,
         stage_state=stage_state,
         staging_enabled=staging_enabled,
+        revived_from=revive.revived_from if revive is not None else None,
     )
 
     # Optional evaluation sidecar. NO core module imports kaine.evaluation;
@@ -1513,6 +1596,16 @@ async def _boot_and_run(
             stop_event,
             is_paused=lambda: cycle.is_paused,
         )
+
+    preserve_task = _start_preserve_watcher(
+        registry,
+        fork_manager,
+        preservation_cfg,
+        is_paused=lambda: cycle.is_paused,
+        request_stop=stop_event.set,
+        stop_event=stop_event,
+    )
+
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
@@ -1544,6 +1637,7 @@ async def _boot_and_run(
                 stage_state=gate_runner.stage if staging_enabled else None,
                 gate_status=gate_runner.status if staging_enabled else None,
                 staging_enabled=staging_enabled,
+                revived_from=revive.revived_from if revive is not None else None,
             )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=1.0)
@@ -1618,7 +1712,7 @@ async def _boot_and_run(
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
         for monitor_task in (
-            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task
+            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task
         ):
             if monitor_task is None:
                 continue
@@ -1783,6 +1877,7 @@ def main(argv: list[str] | None = None) -> int:
     # flags are left for the existing downstream handling (parse_known_args).
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--profile", default=None)
+    parser.add_argument("--revive", default=None)
     known, _ = parser.parse_known_args(argv)
 
     # Load config early enough to decide the boot mode. A run is EITHER
@@ -1858,12 +1953,42 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    revive = None
+    if known.revive is not None:
+        from kaine.cycle.revive_boot import (
+            REVIVE_REFUSED_EXIT,
+            ReviveRefused,
+            ReviveSession,
+            prepare_revive,
+        )
+
+        try:
+            plan = prepare_revive(known.revive)
+        except ReviveRefused as exc:
+            sys.stderr.write(f"kaine.cycle: revive refused: {exc}\n")
+            return REVIVE_REFUSED_EXIT
+
+        revive = ReviveSession(plan)
+        try:
+            revive.apply()
+        except OSError as exc:
+            revive.rollback()
+            sys.stderr.write(
+                f"kaine.cycle: revive refused: could not write the stage file: {exc}\n"
+            )
+            return REVIVE_REFUSED_EXIT
+
     from kaine.plugins import PluginError
 
+    kwargs = {
+        "supervision_mode": supervision_mode,
+        "gate_checks": gate_checks,
+    }
+    if revive is not None:
+        kwargs["revive"] = revive
+
     try:
-        return asyncio.run(
-            _boot_and_run(supervision_mode=supervision_mode, gate_checks=gate_checks)
-        )
+        return asyncio.run(_boot_and_run(**kwargs))
     except PluginError as exc:
         # A named plugin that cannot load or supply its seams stops the boot:
         # running on the default models would misrepresent the run.
@@ -1884,6 +2009,9 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")
         return 0
+    finally:
+        if revive is not None:
+            revive.rollback()
 
 
 if __name__ == "__main__":

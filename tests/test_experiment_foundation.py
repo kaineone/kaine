@@ -324,9 +324,13 @@ def test_manifest_is_content_free(tmp_path):
         # and seam names only — never a plugin's configuration values. Empty
         # when no plugin is enabled.
         "plugins",
+        # Operator revive (operator-revive-and-preserve): the preservation id
+        # this run was revived from, or None for a fresh start. An id only.
+        "revived_from",
     }
     assert loaded["perception_feed"] == {"mode": "off"}
     assert loaded["plugins"] == {}
+    assert loaded["revived_from"] is None
     # The raw config is NEVER stored — only its digest.
     assert "redact-me" not in json.dumps(loaded)
 
