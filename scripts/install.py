@@ -63,6 +63,34 @@ VALID_FLAVORS = set(_INDEX_BY_FLAVOR) | {"rocm"}
 _TORCH_DEP_RE = re.compile(r'^\s*"(torch[<>=!~][^"]*)"')
 
 
+def _extras_need_torch(extras: str) -> bool:
+    """Return True when the selected extras require the torch wheel logic."""
+    selected = {part.strip() for part in extras.split(",") if part.strip()}
+    return "core" in selected or "full" in selected
+
+
+def _verify_non_torch_install(py: Path) -> None:
+    """Verify that the installed extras satisfy the shipped config."""
+    snippet = '''import os, sys
+from kaine.config import load_runtime_config
+from kaine.extras import check, format_missing
+# The repository root: config/kaine.toml, profiles and the operator overlay
+# resolve from here exactly as they do at boot. A config that cannot load fails
+# the verification; it is never replaced by an empty one.
+os.chdir(sys.argv[1])
+config = load_runtime_config()
+missing = check(config)
+errors = [m for m in missing if m.severity == "error"]
+if errors:
+    print(format_missing(missing), file=sys.stderr)
+    sys.exit(1)
+for m in missing:
+    print(f"note: {m.module} can use {m.import_name!r} (extra {m.extra!r}); not installed")
+print("extras support OK")
+'''
+    run([str(py), "-c", snippet, str(_repo_root())])
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
@@ -84,7 +112,12 @@ def torch_spec(repo_root: Path) -> str:
                 data = tomllib.load(f)
         except Exception as exc:
             raise SystemExit(f"install.py: could not parse {pyproject}: {exc}") from exc
-        for dep in data.get("project", {}).get("dependencies") or []:
+        project = data.get("project", {})
+        core = (project.get("optional-dependencies") or {}).get("core") or []
+        for dep in core:
+            if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep):
+                return dep
+        for dep in project.get("dependencies") or []:
             if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep):
                 return dep
 
@@ -940,6 +973,15 @@ def main() -> None:
             "host-resolved CUDA index (only useful with the CUDA flavor)"
         ),
     )
+    parser.add_argument(
+        "--extras",
+        default="full",
+        metavar="LIST",
+        help=(
+            "comma-separated optional-dependency set to install "
+            "(default: full). Use core,memory,nexus etc. to stay lean."
+        ),
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -975,10 +1017,12 @@ def main() -> None:
     run([str(pip), "install", "--quiet", "--upgrade", "pip"])
 
     flavor = detect_flavor(args.force)
+    need_torch = _extras_need_torch(args.extras)
 
-    # Audio-stack coherence: if torchaudio is already installed and this is
-    # not a --research run, keep the audio stack coherent on every flavor.
-    installed_ta = _installed_package_version(py, "torchaudio")
+    if need_torch:
+        # Audio-stack coherence: if torchaudio is already installed and this is
+        # not a --research run, keep the audio stack coherent on every flavor.
+        installed_ta = _installed_package_version(py, "torchaudio")
     need_torchaudio_coherent = not args.research and installed_ta is not None
     if need_torchaudio_coherent:
         print(
@@ -1258,72 +1302,85 @@ def main() -> None:
     pinned = write_torch_constraints(py, constraints)
     print(f"==> pinned torch stack: {pinned}")
 
-    run(
-        [
-            str(pip),
-            "install",
-            "--quiet",
-            "-c",
-            str(constraints),
-            "-e",
-            ".[test]",
-        ]
-    )
-
-    # Audio-stack coherence for a pre-existing torchaudio on any flavor:
-    # make the installed torchaudio follow the selected torch stack even when
-    # --research was not requested.
-    if need_torchaudio_coherent:
-        _install_torchaudio(
-            pip, index_url, ta_pin, constraints, research=False, force_reinstall=False
-        )
-        pinned = write_torch_constraints(py, constraints)
-        print(f"==> pinned torch stack: {pinned}")
-
-    # --research: ALSO provision the perception extras (audio+vision incl. PyAV)
-    # so the reproducible perception feed can decode playlist media (cv2 video +
-    # av audio) on a fresh research machine. The default install stays lean.
-    if args.research:
-        _install_torchaudio(
-            pip, index_url, ta_pin, constraints, research=True, force_reinstall=force_reinstall
-        )
-        pinned = write_torch_constraints(py, constraints)
-        print(f"==> pinned torch stack: {pinned}")
-        print(
-            f"==> [--research] installing perception extras: "
-            f"pip install -c {constraints} -e .[perception]"
-        )
-        print(
-            "    (audio: sounddevice, webrtcvad, funasr, librosa, av;  "
-            "vision: opencv-python-headless)"
-        )
-        run([str(pip), "install", "-c", str(constraints), "-e", ".[perception]"])
-        print(
-            "==> [--research] perception extras installed "
-            "(playlist audio/video decode ready)"
+    if need_torch:
+        run(
+            [
+                str(pip),
+                "install",
+                "--quiet",
+                "-c",
+                str(constraints),
+                "-e",
+                f".[test,{args.extras}]",
+            ]
         )
 
-    print("==> verifying")
-    run(
-        [
-            str(py),
-            "-c",
-            "import torch, json; from kaine.hardware import describe_host; "
-            + "print('torch', torch.__version__); "
-            + "print('cuda.is_available', torch.cuda.is_available()); "
-            + "print(json.dumps(describe_host(), indent=2, default=str))",
-        ]
-    )
-    run(
-        [
-            str(py),
-            "-c",
-            "import sys; from kaine.torch_stack import check_torch_stack; "
-            + "problems = check_torch_stack(); "
-            + "[print('TORCH STACK MISMATCH:', p, file=sys.stderr) for p in problems]; "
-            + "sys.exit(1 if problems else 0)",
-        ]
-    )
+        # Audio-stack coherence for a pre-existing torchaudio on any flavor:
+        # make the installed torchaudio follow the selected torch stack even when
+        # --research was not requested.
+        if need_torchaudio_coherent:
+            _install_torchaudio(
+                pip, index_url, ta_pin, constraints, research=False, force_reinstall=False
+            )
+            pinned = write_torch_constraints(py, constraints)
+            print(f"==> pinned torch stack: {pinned}")
+
+        # --research: ALSO provision the perception extras (audio+vision incl. PyAV)
+        # so the reproducible perception feed can decode playlist media (cv2 video +
+        # av audio) on a fresh research machine. The default install stays lean.
+        if args.research:
+            _install_torchaudio(
+                pip, index_url, ta_pin, constraints, research=True, force_reinstall=force_reinstall
+            )
+            pinned = write_torch_constraints(py, constraints)
+            print(f"==> pinned torch stack: {pinned}")
+            print(
+                f"==> [--research] installing perception extras: "
+                f"pip install -c {constraints} -e .[perception]"
+            )
+            print(
+                "    (audio: sounddevice, webrtcvad, funasr, librosa, av;  "
+                "vision: opencv-python-headless)"
+            )
+            run([str(pip), "install", "-c", str(constraints), "-e", ".[perception]"])
+            print(
+                "==> [--research] perception extras installed "
+                "(playlist audio/video decode ready)"
+            )
+
+        print("==> verifying")
+        run(
+            [
+                str(py),
+                "-c",
+                "import torch, json; from kaine.hardware import describe_host; "
+                + "print('torch', torch.__version__); "
+                + "print('cuda.is_available', torch.cuda.is_available()); "
+                + "print(json.dumps(describe_host(), indent=2, default=str))",
+            ]
+        )
+        run(
+            [
+                str(py),
+                "-c",
+                "import sys; from kaine.torch_stack import check_torch_stack; "
+                + "problems = check_torch_stack(); "
+                + "[print('TORCH STACK MISMATCH:', p, file=sys.stderr) for p in problems]; "
+                + "sys.exit(1 if problems else 0)",
+            ]
+        )
+    else:
+        run(
+            [
+                str(pip),
+                "install",
+                "--quiet",
+                "-e",
+                f".[test,{args.extras}]",
+            ]
+        )
+        print("==> verifying extras support (no torch requested)")
+        _verify_non_torch_install(py)
     print("==> install complete")
 
     # GPU trainer note: this script sets up the KAINE runtime venv only. The

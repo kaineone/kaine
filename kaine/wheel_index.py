@@ -138,7 +138,11 @@ def project_torch_spec(pyproject_path=None) -> str:
     if tomllib is not None:
         try:
             data = tomllib.loads(text)
-            for dep in data.get("project", {}).get("dependencies", []):
+            project = data.get("project", {})
+            # torch lives in the `core` extra; older layouts kept it in the base.
+            candidates = list((project.get("optional-dependencies") or {}).get("core", []))
+            candidates += list(project.get("dependencies", []))
+            for dep in candidates:
                 dep = str(dep).strip()
                 if dep.startswith("torch"):
                     spec = _strip_torch_prefix(dep)
