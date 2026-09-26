@@ -932,8 +932,13 @@ async def _boot_and_run(
             except NotImplementedError:
                 pass
         try:
+            _womb_cfg = MaturationConfig.from_dict(kaine_config.get("developmental_stage"))
             womb_ready = await hold_until_womb_ready(
-                kaine_config, bus, hold_stop, publish=_publish_lifecycle
+                kaine_config,
+                bus,
+                hold_stop,
+                publish=_publish_lifecycle,
+                retry_seconds=_womb_cfg.womb_ready_retry_seconds,
             )
         finally:
             for sig in (signal.SIGINT, signal.SIGTERM):
@@ -1360,7 +1365,11 @@ async def _boot_and_run(
     )
     # Frozen time is not lived time: the runner subtracts the subjective time
     # the cycle spends paused (maturation-gate-liveness 2.5).
-    gate_runner.set_paused_seconds_source(cycle.paused_subjective_seconds)
+    # A frozen entity is never born, whoever froze it.
+    gate_runner.set_pause_sources(
+        paused_seconds=cycle.paused_subjective_seconds,
+        is_paused=lambda: cycle.is_paused,
+    )
     gate_task = (
         asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
         if staging_enabled and stage_state.is_gestating
@@ -1379,6 +1388,10 @@ async def _boot_and_run(
                 publish=_publish_lifecycle,
                 is_gestating=lambda: gate_runner.stage.is_gestating,
                 notify=caretaker.send_event if caretaker is not None else None,
+                check_seconds=ds_config.womb_check_seconds,
+                loss_after_seconds=ds_config.womb_loss_after_seconds,
+                window_s=ds_config.womb_presence_window_seconds,
+                arm_timeout_seconds=ds_config.womb_arm_timeout_seconds,
             ).run(stop_event),
             name="cycle.womb_watch",
         )

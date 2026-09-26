@@ -682,8 +682,12 @@ class Spot:
                     },
                 )
                 self._incidents.pop(name, None)
-                if control_state.read_control(path=self._control_path).source == "spot":
-                    control_state.unfreeze(path=self._control_path)
+                # Spot only ever lifts its own freeze. If any spot entry is
+                # present in the stack, pop the newest one; other sources
+                # remain frozen.
+                control = control_state.read_control(path=self._control_path)
+                if any(entry.get("source") == "spot" for entry in control.stack):
+                    control_state.pop_freeze(path=self._control_path, source="spot")
                 return  # one incident per poll
             if incident.attempts >= self._config.max_restart_attempts:
                 final_snap = await self._snapshot(

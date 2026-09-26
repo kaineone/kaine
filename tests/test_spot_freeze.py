@@ -134,3 +134,39 @@ async def test_spot_unfreezes_only_its_own_freeze_on_recovery(bus, tmp_path):
     assert control.frozen is False
     assert "light" not in spot._incidents
     await registry.get("light").shutdown()
+
+
+async def test_spot_unfreezes_only_its_own_freeze_when_other_entries_present(
+    bus, tmp_path
+):
+    # A pure module whose only task crashed; a light restart recreates a healthy
+    # workspace task, so Spot recovers and clears only its OWN freeze.
+    mod = _LightMod(bus)
+
+    async def _boom():
+        raise RuntimeError("crash")
+
+    mod._tasks = [await _finished_task(_boom())]
+    registry = ModuleRegistry()
+    registry.register(mod)
+    fm = ForkManager(tmp_path / "forks")
+    spot = _spot(registry, fm, bus)
+
+    # Welfare and gestation freezes are already on the stack before Spot's.
+    control_state.push_freeze(
+        reason="welfare hold", path=control_state.CONTROL_PATH, source="welfare"
+    )
+    control_state.push_freeze(
+        reason="gestation hold", path=control_state.CONTROL_PATH, source="gestation"
+    )
+
+    stop = asyncio.Event()
+    await spot._poll_once(stop)
+    # Spot's recovery removes only the spot entry; the other freezes remain.
+    control = control_state.read_control()
+    assert control.frozen is True
+    assert control.source == "gestation"
+    assert [entry["source"] for entry in control.stack] == ["welfare", "gestation"]
+    assert "spot" not in {entry["source"] for entry in control.stack}
+    assert "light" not in spot._incidents
+    await registry.get("light").shutdown()

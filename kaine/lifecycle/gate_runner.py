@@ -87,6 +87,7 @@ class MaturationGateRunner:
         self._womb_type = womb_readout_type
         self._hypnos_stream = hypnos_stream
         self._paused_seconds: Callable[[], float] | None = paused_seconds
+        self._is_paused: Callable[[], bool] | None = None
         self._task: asyncio.Task | None = None
         self._stop_event: asyncio.Event | None = None
         # Redis server time at the first evaluation, anchoring readout age.
@@ -101,9 +102,23 @@ class MaturationGateRunner:
         # embodiment" signal so the log is not spammed every cadence tick.
         self._awaiting_embodiment_logged = False
         self._awaiting_ack_logged = False
+        # Track whether we have already logged the single "birth deferred"
+        # info line for the current frozen spell.
+        self._birth_deferred_logged = False
 
-    def set_paused_seconds_source(self, fn: Callable[[], float] | None) -> None:
-        self._paused_seconds = fn
+    def set_pause_sources(
+        self,
+        *,
+        paused_seconds: Callable[[], float] | None,
+        is_paused: Callable[[], bool] | None,
+    ) -> None:
+        """Hand over the cycle's paused-time total and paused flag.
+
+        The cycle is built after the runner, so the entrypoint hands over
+        the cycle's paused-time total and its paused flag here.
+        """
+        self._paused_seconds = paused_seconds
+        self._is_paused = is_paused
         self._paused_baseline = None
 
     @property
@@ -346,6 +361,19 @@ class MaturationGateRunner:
             "maturation gate: developmental readiness reached (%s)",
             ", ".join(readiness.passed_markers),
         )
+
+        # Fail closed: no birth while the entity is paused/frozen.
+        if self._is_paused is not None:
+            try:
+                paused = self._is_paused()
+            except Exception:
+                paused = True
+            if paused:
+                if not self._birth_deferred_logged:
+                    log.info("birth deferred: the entity is frozen")
+                    self._birth_deferred_logged = True
+                return
+        self._birth_deferred_logged = False
 
         mundus_enabled, operator_approved, reachable = await self._mundus_availability()
         embodiment_ready = embodiment_available(
