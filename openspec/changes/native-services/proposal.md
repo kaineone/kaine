@@ -22,6 +22,9 @@ This is phase 1 of the portability program ("bootstrap Redis without Docker").
 - **The bootstrap chooses.** Without a flag, the scripts use Docker when it is present and fall back to native otherwise. `--container` forces the container path.
 - **`first-boot.sh`** accepts either the containers or the native services, checked by the same loopback, authentication and health rules.
 - **Status.** `scripts/services.sh status|start|stop` covers both kinds.
+  - A checkout's own native services take precedence over the host's shared containers.
+  - The containers have fixed names, so every checkout sees the same ones, and the running entity's bus and memory may live in them. `stop` therefore acts on a container only with an explicit `--container`, and then stops it without removing it.
+- **Offline hosts.** `KAINE_QDRANT_ARCHIVE` names a pre-downloaded release archive. It is checked against the same pinned sha256 as a download.
 
 ## Out of scope
 

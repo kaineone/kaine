@@ -920,6 +920,66 @@ def _install_torchaudio(
     run(cmd)
 
 
+def _probe_target(repo_root: Path, python_bin: str) -> dict | None:
+    """Run the target probe and return its JSON payload, or None if it fails.
+
+    Exits the process on unsupported targets so the installer never touches a
+    host it cannot classify.
+    """
+    env = {**os.environ, "PYTHONPATH": str(repo_root)}
+    try:
+        result = subprocess.run(
+            [python_bin, "-m", "kaine.install_target", "--json"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+    except Exception as exc:
+        print(f"==> target probe failed: {exc}; falling back to legacy detection", file=sys.stderr)
+        return None
+
+    if result.returncode == 3:
+        try:
+            data = json.loads(result.stdout)
+        except Exception:
+            print(result.stdout, file=sys.stderr)
+            sys.exit("unsupported target")
+        reason = data.get("target", {}).get("reason", "unsupported target")
+        print(f"==> unsupported target: {reason}", file=sys.stderr)
+        sys.exit(1)
+
+    if result.returncode != 0:
+        print(f"==> target probe failed (rc={result.returncode}); falling back to legacy detection", file=sys.stderr)
+        return None
+
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        print(f"==> target probe returned invalid JSON: {exc}; falling back to legacy detection", file=sys.stderr)
+        return None
+
+
+def _print_plan(data: dict) -> None:
+    target = data.get("target", {})
+    plan = data.get("plan", {})
+    print("==> KAINE install plan")
+    print(f"    target: {target.get('name')} (flavor: {target.get('flavor')}, arch: {target.get('arch')})")
+    print(f"    extras: {plan.get('extras', 'full')}")
+    runs = plan.get("runs", [])
+    if runs:
+        print("    will run:")
+        for item in runs:
+            print(f"      - {item}")
+    wnr = plan.get("will_not_run", [])
+    if wnr:
+        print("    will NOT run:")
+        for item in wnr:
+            print(f"      - {item['module']}: {item['reason']}")
+    for note in plan.get("notes", []):
+        print(f"    note: {note}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
@@ -975,11 +1035,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--extras",
-        default="full",
+        default=None,
         metavar="LIST",
         help=(
             "comma-separated optional-dependency set to install "
-            "(default: full). Use core,memory,nexus etc. to stay lean."
+            "(default chosen from the target probe: full on desktops, "
+            "memory-edge on Termux). Use core,memory,nexus etc. to stay lean."
         ),
     )
     args = parser.parse_args()
@@ -996,6 +1057,22 @@ def main() -> None:
         index_url = torch_index_url(args.print_index)
         print(index_url if index_url is not None else "")
         return
+
+    # Use the target probe for flavor and/or extras unless the operator forced
+    # them.  Unsupported targets stop here.
+    if args.force is None or args.extras is None:
+        probe_data = _probe_target(repo_root, args.python)
+        if probe_data is not None:
+            _print_plan(probe_data)
+            target = probe_data.get("target", {})
+            plan = probe_data.get("plan", {})
+            if args.force is None:
+                args.force = target.get("flavor")
+            if args.extras is None:
+                args.extras = plan.get("extras", "full")
+
+    if args.extras is None:
+        args.extras = "full"
 
     venv_dir = Path(os.environ.get("KAINE_VENV_DIR", ".venv"))
     if not venv_dir.is_absolute():

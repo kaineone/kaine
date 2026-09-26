@@ -33,6 +33,34 @@ boot.** Read every section before running anything. First boot is a one-way door
 
 ---
 
+## One command on any host
+
+Clone and bootstrap KAINE with a single shell command:
+
+```bash
+bash <(curl -fsSL https://your-repo.example/kaine/scripts/bootstrap.sh) --repo https://your-repo.example/kaine.git --yes
+```
+
+> Replace the URL with your own fork of the repository. The bootstrap script
+> never starts the entity; it only prepares the host, installs KAINE, and
+> offers the first-run setup wizard.
+
+| Target | Detected by | Flavor | Extras | What runs |
+|---|---|---|---|---|
+| Desktop NVIDIA | working `nvidia-smi -L` | `cuda` | `full` | all modules |
+| Desktop AMD | `rocm-smi` on PATH or `/opt/rocm` | `rocm` | `full` | all modules |
+| Desktop Intel | `xpu-smi` or `sycl-ls` | `xpu` | `full` | all modules |
+| Desktop CPU | x86_64 Linux, no accelerator | `cpu` | `full` | all modules |
+| Jetson / Tegra | `/etc/nv_tegra_release` or device-tree Tegra markers (works without `nvidia-smi`) | `cuda` | `full` | all modules; aarch64 cu13x wheel |
+| Generic aarch64 CPU | aarch64 Linux, not Tegra | `cpu` | `full` | all modules |
+| macOS | Darwin | `mps` on Apple Silicon, `cpu` otherwise | `full` | all modules |
+| Termux / Android | `TERMUX_VERSION` or a `com.termux` prefix | `cpu` | `memory-edge` | memory + edge only; Soma, Chronos, Topos need torch (phase 2); Nous, Phantasia need JAX (phase 3); use `sqlite_vec` for Mnemos |
+
+The bootstrap script prints the system-package command for your package manager
+(`apt`, `dnf`, `pacman`, `pkg`, or `brew`) and only runs it when you pass
+`--yes`. It never starts the entity and it never assumes root: `sudo` commands
+prompt the operator.
+
 ## Prerequisites
 
 ### Host software
@@ -405,6 +433,40 @@ replaces it. Verify:
 ```bash
 curl -s http://127.0.0.1:6533/readyz
 ```
+
+### Without Docker
+
+Redis and Qdrant can also run as user-level native services with no
+container runtime and no root. This is the default on hosts without Docker,
+and you can force it with `--native`:
+
+```bash
+bash scripts/redis-bootstrap.sh --native
+bash scripts/qdrant-bootstrap.sh --native
+```
+
+The native Redis server stores its config, AOF and pid file under
+`state/services/redis/` and listens on `127.0.0.1:6479`. The native Qdrant
+server downloads the pinned v1.19.1 release binary, verifies its sha256, and
+runs from `state/services/qdrant/` on `127.0.0.1:6533`. Both are supervised
+by `systemd --user` when available, otherwise by a pid file under
+`state/services/<svc>/`.
+
+Control either kind with:
+
+```bash
+scripts/services.sh status
+scripts/services.sh start redis
+scripts/services.sh stop
+```
+
+`stop` acts on this checkout's native services. The containers are shared by every checkout on the host and may hold a running entity's bus and memory, so stopping one needs `--container` (`scripts/services.sh stop redis --container`). It stops the container and never removes it.
+
+On a host without internet access, download the release archive elsewhere and point the bootstrap at it with `KAINE_QDRANT_ARCHIVE=/path/to/qdrant-<arch>.tar.gz`. It is checked against the same pinned sha256.
+
+On Termux, `bash scripts/redis-bootstrap.sh --native` uses the Redis package
+(`pkg install redis` if it is missing). Qdrant has no Android build; set
+`[mnemos].backend = "sqlite_vec"` in `config/kaine.operator.toml` and skip Qdrant.
 
 ### Model server (language organ)
 

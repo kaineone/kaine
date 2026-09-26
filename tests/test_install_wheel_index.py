@@ -448,6 +448,7 @@ def _run_install(
     fake_torchaudio: str | None = None,
     marker: dict | None = None,
     extra_env: dict[str, str] | None = None,
+    probe_target: str | None = None,
 ) -> tuple[subprocess.CompletedProcess, str]:
     """Run ``bash scripts/install.sh <flags>`` or ``python scripts/install.py
     <flags>`` with a shimmed PATH.
@@ -495,6 +496,43 @@ def _run_install(
     log_path = tmp_path / "pip_argv.log"
 
     real_python3 = shutil.which("python3") or sys.executable
+
+    if probe_target is not None:
+        # Intercept the install-target probe before it imports the real kaine
+        # tree (which may need torch).  All other python3 calls delegate to
+        # the host interpreter so venv creation keeps working.
+        probe_flavor = "cuda" if probe_target == "jetson" else "cpu"
+        probe_json = {
+            "target": {
+                "name": probe_target,
+                "flavor": probe_flavor,
+                "arch": "aarch64",
+                "reason": "probe stub",
+                "details": {},
+            },
+            "plan": {
+                "extras": "full",
+                "runs": ["all modules"],
+                "will_not_run": [],
+                "system_packages": {},
+                "notes": [],
+            },
+        }
+        probe_body = f"""\
+#!/usr/bin/env bash
+if [[ "$1" == "-m" && "$2" == "kaine.install_target" ]]; then
+  if [[ "$3" == "--flavor-only" ]]; then
+    echo "{probe_flavor}"
+  else
+    cat <<'PYJSON'
+{json.dumps(probe_json)}
+PYJSON
+  fi
+  exit 0
+fi
+exec {real_python3} "$@"
+"""
+        _write_shim(shim_dir / "python3", probe_body)
 
     pip_body = _PIP_SHIM.replace("@LOG@", str(log_path)).replace("@SHIM_DIR@", str(shim_dir))
     _write_shim(shim_dir / "pip", pip_body)
