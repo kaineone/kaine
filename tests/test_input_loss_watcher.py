@@ -183,7 +183,7 @@ async def test_run_loop_respects_stop_event(fake_async_bus, monkeypatch, _watche
     assert not calls
 
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=5)
 
 
 async def test_entry_older_than_start_gets_the_boot_grace(

@@ -94,7 +94,8 @@ def clear_start(path: Path | None = None) -> None:
     try:
         target.unlink()
     except FileNotFoundError:
-        pass
+        # Already absent: clearing a missing start record is a no-op.
+        return
 
 
 def is_acknowledged(

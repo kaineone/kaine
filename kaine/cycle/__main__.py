@@ -1360,7 +1360,8 @@ async def _boot_and_run(
             try:
                 await input_watch_task
             except asyncio.CancelledError:
-                pass
+                # Expected: we just cancelled it.
+                log.debug("input watch task cancelled at shutdown")
             except Exception:
                 log.exception("input watch task shutdown failed")
         if caretaker is not None:
@@ -1385,7 +1386,8 @@ async def _boot_and_run(
                     try:
                         await caretaker_task
                     except asyncio.CancelledError:
-                        pass
+                        # Expected: we just cancelled it.
+                        log.debug("caretaker task cancelled at shutdown")
                     except Exception:
                         log.warning("caretaker task raised during shutdown", exc_info=True)
             except Exception:

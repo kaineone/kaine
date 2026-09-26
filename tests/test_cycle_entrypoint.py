@@ -472,7 +472,7 @@ def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
 
 
 def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypatch):
-    import kaine.cycle.__main__ as m
+    from kaine.cycle import __main__ as m
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         CONDITION_NAMES,
@@ -532,7 +532,7 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
 
 
 def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
-    import kaine.cycle.__main__ as m
+    from kaine.cycle import __main__ as m
     from kaine.plugins import PluginError
 
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")

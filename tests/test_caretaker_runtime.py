@@ -93,7 +93,7 @@ async def test_no_reminder_before_deadline(tmp_path):
     clock.value = 9.0
     await asyncio.sleep(0.05)
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=5)
     await notifier.stop()
     assert captured == []
 
@@ -121,7 +121,7 @@ async def test_reminder_at_deadline_and_next_interval(tmp_path):
     assert captured == ["reminder", "reminder"]
 
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=5)
     await notifier.stop()
 
 
@@ -151,7 +151,7 @@ async def test_acknowledgement_stops_reminders_and_logs_once(tmp_path):
     assert captured == ["reminder"]
 
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=5)
     await notifier.stop()
 
     log = _read_log(tmp_path / "caretaker")
@@ -183,7 +183,7 @@ async def test_ack_with_wrong_id_does_not_stop_reminders(tmp_path):
     assert captured == ["reminder", "reminder"]
 
     stop.set()
-    await task
+    await asyncio.wait_for(task, timeout=5)
     await notifier.stop()
 
 
