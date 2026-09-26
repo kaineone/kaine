@@ -108,6 +108,9 @@ class WombSchedule:
         }
 
 
+BIRTH_BLOOM_PEAK = 0.8
+
+
 class WombClock:
     """Shared womb-time clock.
 
@@ -139,6 +142,11 @@ class WombClock:
         self._origin: float | None = None
         self._lock = threading.Lock()
         self._deliveries: dict[str, tuple[float, int]] = {}
+        # Birth transition state.  None before any birth; _born short-circuits
+        # progress to 1.0 once the transition is acknowledged complete.
+        self._birth_start: float | None = None
+        self._birth_duration: float | None = None
+        self._born = False
 
     def start(self) -> None:
         """Fix the origin once.  Idempotent and thread-safe."""
@@ -176,6 +184,50 @@ class WombClock:
         Staleness is measured in the same time base as delivery marks.
         """
         return self._clock()
+
+    def begin_birth(self, transition_seconds: float = 5.0) -> None:
+        """Record the start of the bounded birth transition.
+
+        One-shot: further calls are ignored.
+        """
+        import math
+
+        value = float(transition_seconds)
+        if not math.isfinite(value) or value <= 0.0 or value > 30.0:
+            raise ValueError("transition_seconds must be finite and in (0, 30]")
+        # womb_seconds() takes the same lock, so read it before locking.
+        start = self.womb_seconds()
+        with self._lock:
+            if self._birth_start is not None or self._born:
+                return
+            self._birth_start = start
+            self._birth_duration = value
+
+    def mark_born(self) -> None:
+        """Acknowledge that the birth transition is already complete."""
+        with self._lock:
+            self._born = True
+
+    def birth_progress(self) -> float | None:
+        """Return the birth transition progress in [0, 1], or None before birth."""
+        with self._lock:
+            if self._born:
+                return 1.0
+            if self._birth_start is None:
+                return None
+            start = self._birth_start
+            duration = self._birth_duration
+        current = self.womb_seconds()
+        progress = (current - start) / duration
+        if progress < 0.0:
+            return 0.0
+        if progress > 1.0:
+            return 1.0
+        return progress
+
+    def born(self) -> bool:
+        """True once the birth transition is finished or was already complete."""
+        return self.birth_progress() == 1.0
 
 
 @dataclass(frozen=True)
@@ -430,23 +482,28 @@ class WombProceduralSource:
     def read(self) -> tuple[bool, Any]:
         if not self._opened:
             return False, None
+        if self._clock.born():
+            return False, None
         import math
 
         s = self._schedule
         i = int(
             math.floor(self._clock.womb_seconds() * float(s.frame_rate_hz))
         )
-        frame = self.frame_at(i)
+        frame = self.frame_at(i, birth_progress=self._clock.birth_progress())
         self._clock.mark_delivered("video", i)
         return True, frame
 
     def release(self) -> None:
         self._opened = False
 
-    def frame_at(self, frame_index: int) -> Any:
+    def frame_at(
+        self, frame_index: int, *, birth_progress: float | None = None
+    ) -> Any:
         """Render ``frame(seed, i)`` as a BGR uint8 ndarray.
 
-        Pure function of ``(seed, frame_index, params, lived_seconds)``.
+        Pure function of ``(seed, frame_index, params, lived_seconds,
+        birth_progress)``.
         """
         import colorsys
         import math
@@ -494,19 +551,37 @@ class WombProceduralSource:
             + np.sin(two_pi * (fy * ys + drift * 0.7) + py)
         ) * 0.5
 
-        mean = float(p.luminance_mean)
+        # Birth bloom: a bounded, one-shot photic activation transition cue.
+        # The dim field rises toward a warm peak over the transition duration
+        # (Frontiers 2022), the heartbeat pulse fades, and colour saturation
+        # rises to full.  The result is clipped to BIRTH_BLOOM_PEAK so the
+        # bloom is bounded and cannot startle.
+        schedule_saturation = float(colour_saturation(self._lived(), p)) * float(
+            p.maternal_state_hue_gain
+        )
+        if birth_progress is None:
+            mean = float(p.luminance_mean)
+            pulse_depth = float(p.luminance_pulse_depth)
+            saturation = schedule_saturation
+            clip_limit = 1.0
+        else:
+            progress = float(birth_progress)
+            mean = float(p.luminance_mean) + progress * (
+                BIRTH_BLOOM_PEAK - float(p.luminance_mean)
+            )
+            pulse_depth = (1.0 - progress) * float(p.luminance_pulse_depth)
+            saturation = max(schedule_saturation, progress)
+            clip_limit = BIRTH_BLOOM_PEAK
+
         contrast = float(p.luminance_contrast)
         luminance = mean + contrast * field
 
         # Cross-modal luminance pulse locked to the maternal heartbeat.
         phase = heartbeat_phase(seed, t, p)
-        pulse = 1.0 + float(p.luminance_pulse_depth) * beat_pulse(phase)
+        pulse = 1.0 + pulse_depth * beat_pulse(phase)
         luminance = np.clip(luminance * pulse, 0.0, 1.0)
 
         # Colour onset schedule (Teller / Bornstein): near-grey early.
-        saturation = float(colour_saturation(self._lived(), p)) * float(
-            p.maternal_state_hue_gain
-        )
         hue = maternal_hue(float(valence))
         r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
         hue_rgb = np.array([r, g, b], dtype=np.float32)
@@ -514,7 +589,7 @@ class WombProceduralSource:
         # Multiplicative chroma so saturation 0 gives exactly grey and the
         # colour offset stays proportional to the dim luminance field.
         rgb = luminance[..., None] * (1.0 + saturation * (hue_rgb - 0.5))
-        rgb = np.clip(rgb, 0.0, 1.0)
+        rgb = np.clip(rgb, 0.0, clip_limit)
 
         # Downstream expects BGR uint8, matching the cv2 camera path.
         bgr = rgb[:, :, ::-1]

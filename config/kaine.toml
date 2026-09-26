@@ -766,6 +766,7 @@ maternal_distress_max_magnitude = 0.3
 maternal_distress_max_seconds = 30
 external_drive_to_self_rhythm = true    # read by the self-rhythm oscillator once built
 external_drive_max_amplitude = 0.4
+birth_transition_seconds = 5        # the bounded birth bloom, then the womb falls silent (max 30)
 
 [perception_feed.womb.video]
 luminance_mean = 0.15           # dim field

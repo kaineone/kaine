@@ -409,19 +409,24 @@ class WombProceduralAudioStream:
         bs = max(1, s.frames_per_block) / float(max(1, s.sample_rate))
         k = None
         while not self._stopped.is_set():
+            if self._clock.born():
+                log.info("womb audio: birth transition complete; the womb falls silent")
+                return
             now_k = int(self._clock.womb_seconds() / bs)
             k = self._advance(k, now_k)
             if k > now_k:
                 self._stopped.wait(timeout=(k - now_k) * bs)
                 continue
             try:
-                pcm = self.pcm_at(k)
+                pcm = self.pcm_at(k, birth_progress=self._clock.birth_progress())
             except Exception:
                 log.error(
                     "womb audio: synthesis failed at block %d; the womb audio stream stops",
                     k,
                     exc_info=True,
                 )
+                return
+            if self._clock.born():
                 return
             try:
                 self._callback(pcm)
@@ -431,10 +436,12 @@ class WombProceduralAudioStream:
                 self._clock.mark_delivered("audio", k)
             k += 1
 
-    def pcm_at(self, block_index: int) -> bytes:
+    def pcm_at(
+        self, block_index: int, *, birth_progress: float | None = None
+    ) -> bytes:
         """Synthesize the int16 LE PCM block at ``block_index``.
 
-        Pure function of ``(seed, block_index, params)``.
+        Pure function of ``(seed, block_index, params, birth_progress)``.
         """
         import math
 
@@ -503,6 +510,9 @@ class WombProceduralAudioStream:
         samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
 
         q = np.rint(samples).astype(np.int16)
+        if birth_progress is not None:
+            scale = 1.0 - float(birth_progress)
+            q = (q.astype(np.float64) * scale).astype(np.int16)
         if channels > 1:
             q = np.repeat(q, channels)
         return q.tobytes()

@@ -440,10 +440,19 @@ def _install_shared_womb_clock(
     """
     import math
 
+    from kaine.lifecycle import stage as _lifecycle_stage
     from kaine.modules.topos.feed import WombClock
 
     offset = _womb_lived_offset(stage_path)
     clock = WombClock(lived_offset_seconds=offset)
+
+    stage_state = _lifecycle_stage.read_stage(stage_path)
+    if stage_state is not None and stage_state.is_embodied:
+        clock.mark_born()
+        log.warning(
+            "perception_feed mode is womb but the entity is already born; "
+            "the womb delivers nothing. Choose another perception mode."
+        )
 
     if entity_clock is None:
         def lived_provider() -> float:

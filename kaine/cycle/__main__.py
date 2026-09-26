@@ -1425,6 +1425,15 @@ async def _boot_and_run(
         paused_seconds=cycle.paused_subjective_seconds,
         is_paused=lambda: cycle.is_paused,
     )
+    # Birth transition (local-womb-feed 3.6): at birth the local womb blooms
+    # once over birth_transition_seconds, then falls silent.
+    _womb_feed = kaine_config.get("perception_feed") or {}
+    _birth_clock = _womb_feed.get("_shared_womb_clock")
+    if _birth_clock is not None:
+        from kaine.boot import _womb_params
+
+        _birth_seconds = _womb_params(_womb_feed).birth_transition_seconds
+        gate_runner.set_birth_hook(lambda: _birth_clock.begin_birth(_birth_seconds))
     gate_task = (
         asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
         if staging_enabled and stage_state.is_gestating

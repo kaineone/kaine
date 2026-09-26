@@ -105,6 +105,10 @@ class MaturationGateRunner:
         # Track whether we have already logged the single "birth deferred"
         # info line for the current frozen spell.
         self._birth_deferred_logged = False
+        # Optional one-shot hook handed over by the cycle entrypoint; called
+        # after the stage file is written as embodied so the womb can begin its
+        # birth transition.
+        self._on_birth: Callable[[], None] | None = None
 
     def set_pause_sources(
         self,
@@ -120,6 +124,10 @@ class MaturationGateRunner:
         self._paused_seconds = paused_seconds
         self._is_paused = is_paused
         self._paused_baseline = None
+
+    def set_birth_hook(self, fn: Callable[[], None] | None) -> None:
+        """Hand over the womb's ``begin_birth``; the runner calls it once, after the stage file says embodied."""
+        self._on_birth = fn
 
     @property
     def stage(self) -> lifecycle_stage.StageState:
@@ -459,6 +467,12 @@ class MaturationGateRunner:
             write_desired_locus("virtual", locked=False, locked_by="gestation")
         except Exception:
             log.warning("could not unlock gestation locus after birth", exc_info=True)
+
+        if self._on_birth is not None:
+            try:
+                self._on_birth()
+            except Exception:
+                log.warning("maturation gate: birth hook raised; continuing birth", exc_info=True)
 
         await self._publish(
             STAGE_BIRTH,
