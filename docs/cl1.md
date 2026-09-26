@@ -129,8 +129,11 @@ Nous is off the substrate unless you set `nous = "cl1"`. When it is on, KAINE
 builds its usual active-inference engine and the plugin wraps it. Each step runs
 the silicon engine first, then stimulates one group of electrodes per action,
 harder for actions with lower expected free energy, and reads the tissue's
-proposed action from whichever group fires most in the returned window. When no
-group fires, or the top groups tie, the proposal is the silicon engine's choice.
+proposed action from whichever group fires most in the window that answers its
+stimulation. When no group fires, or the top groups tie, the proposal is the
+silicon engine's choice and the answer counts as a disagreement. Once the
+substrate follows KAINE's cycle, that answer arrives one Nous step later, so it is
+scored against the silicon choice it was stimulated with, not the current one.
 The last two electrodes of the territory carry feedback in the manner of Cortical
 Labs' DishBrain experiment: a fixed pulse after a proposal that agreed with the
 silicon engine, and a random amplitude after one that did not.

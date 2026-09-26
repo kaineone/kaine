@@ -9,6 +9,7 @@
 - [x] 2.2 `config.py`: optional `[nous]` table (`mode`, default `"shadow"`).
 - [x] 2.3 `plugin.py`: `nous.engine_wrapper` seam; territory minimum (two channels per action plus two feedback channels, action count taken from the wrapped engine at construction); WARNING on every boot in drive mode; Nous leaves the pending-conversion list.
 - [x] 2.4 `substrate/broker.py`: synchronous (pre-beat) windows and `start_beat` serialised by a re-entrant lock, since Nous steps in a worker thread.
+- [x] 2.5 `substrate/broker.py`: tagged exchange; a module reads the response window to its own most recent tagged stimulation, labelled with that tag, so Nous scores the tissue against the silicon choice it encoded even when it steps less often than the cycle ticks.
 
 ## 3. Tests
 

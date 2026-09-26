@@ -82,7 +82,8 @@ class FakeBroker:
         self.calls = []
         self.spike_channels = spike_channels or []
 
-    def exchange(self, module, requests):
+    def exchange(self, module, requests, tag=None):
+        # Answers at once, like the broker before beat mode: the window carries this call's tag.
         self.calls.append((module, list(requests)))
         return TerritoryObservation(
             module=module,
@@ -90,6 +91,7 @@ class FakeBroker:
             spikes=[types.SimpleNamespace(channel=c) for c in self.spike_channels],
             from_timestamp=0,
             frame_count=1,
+            tag=tag,
         )
 
 
@@ -172,6 +174,9 @@ def test_no_spikes_and_tie_fall_back_to_silicon():
     wrapper = WetwarePolicyEngine(engine, broker, TERRITORY, mode="shadow")
     wrapper.step(None)
     assert wrapper.last_proposal == 0
+    # A silent window is not the tissue choosing: it counts as a disagreement.
+    assert wrapper.proposal_count == 1
+    assert wrapper.agreement_rate == 0.0
 
     broker = FakeBroker(spike_channels=[3, 7])
     wrapper = WetwarePolicyEngine(engine, broker, TERRITORY, mode="shadow")
@@ -229,7 +234,7 @@ def test_all_non_finite_efe_gets_minimum_everywhere():
 
 def test_feedback_after_agreement():
     engine = FakeEngine()
-    broker = FakeBroker(spike_channels=[])
+    broker = FakeBroker(spike_channels=[1, 2])
     wrapper = WetwarePolicyEngine(engine, broker, TERRITORY, mode="shadow")
     wrapper.step(None)
     first_feedback = [r for r in broker.calls[0][1] if r.channel in (9, 10)]
@@ -331,7 +336,7 @@ def test_territory_and_mode_validation():
 
 def test_agreement_log(caplog):
     engine = FakeEngine()
-    broker = FakeBroker(spike_channels=[])
+    broker = FakeBroker(spike_channels=[1, 2])
     wrapper = WetwarePolicyEngine(engine, broker, TERRITORY, mode="shadow")
     with caplog.at_level(logging.INFO, logger="kaine_cl1.backends.nous"):
         for _ in range(LOG_EVERY):
