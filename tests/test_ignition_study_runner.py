@@ -64,6 +64,21 @@ STANDIN_SCRIPT = textwrap.dedent(
         print("Stand-in cycle timed out waiting for preserve request", file=sys.stderr)
         sys.exit(1)
 
+    def maybe_write_manifest(bundle_dir):
+        manifest = os.environ.get("IGNITION_STANDIN_MANIFEST")
+        if not manifest or manifest == "missing":
+            return
+        if manifest == "true":
+            data = {"world_model_captured": True}
+        elif manifest == "false":
+            data = {"world_model_captured": False}
+        elif manifest == "unreadable":
+            (bundle_dir / "manifest.json").write_text("not json")
+            return
+        else:
+            data = {"world_model_captured": False}
+        (bundle_dir / "manifest.json").write_text(json.dumps(data))
+
     def cycle(args):
         cwd = Path.cwd()
         line = cwd.name
@@ -74,6 +89,7 @@ STANDIN_SCRIPT = textwrap.dedent(
         backups_dir.mkdir(parents=True, exist_ok=True)
         bundle_dir = backups_dir / secrets.token_hex(8)
         bundle_dir.mkdir()
+        maybe_write_manifest(bundle_dir)
 
         env_log = study_dir / "env_log.jsonl"
         with open(env_log, "a") as f:
@@ -253,6 +269,7 @@ def _create_study(
     tmp_path: Path,
     viewings: int = 2,
     *,
+    order: list[str] = ORDER,
     viewing_budget_seconds: float = 5.0,
     gestation_budget_seconds: float = 5.0,
 ) -> Path:
@@ -265,7 +282,7 @@ def _create_study(
         "study_id": "runner-test",
         "repo_root": str(repo_root),
         "base_modules": BASE_MODULES,
-        "order": ORDER,
+        "order": order,
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
@@ -643,3 +660,107 @@ def test_outcome_refuses_the_start_bundle_as_result(tmp_path: Path, known_module
         runner._determine_outcome("viewing", 0, req, res, False, revived_from="/b/same")
         == "complete"
     )
+
+
+def test_phantasia_world_model_true(tmp_path: Path, known_modules, monkeypatch):
+    study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "true")
+
+    result = _run(_runner(study_dir, script))
+    steps = _load_steps(study_dir)
+
+    assert result == "complete"
+    assert len(steps) == 5
+
+    phantasia_step = next(s for s in steps if "phantasia" in s["modules"])
+    assert phantasia_step["line"] == "main" and phantasia_step["step"] == 1
+    assert phantasia_step["outcome"] == "complete"
+    assert phantasia_step["world_model_captured"] is True
+
+    for s in steps:
+        if "phantasia" not in s["modules"]:
+            assert s["world_model_captured"] is None
+
+    _all_bundles_exist(steps)
+
+
+def test_phantasia_world_model_false(tmp_path: Path, known_modules, monkeypatch):
+    study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "false")
+
+    result = _run(_runner(study_dir, script))
+    steps = _load_steps(study_dir)
+
+    assert isinstance(result, dict)
+    assert result["outcome"] == "failed:world_model_not_captured"
+    assert len(steps) == 4
+
+    phantasia_step = steps[3]
+    assert phantasia_step["line"] == "main" and phantasia_step["step"] == 1
+    assert "phantasia" in phantasia_step["modules"]
+    assert phantasia_step["outcome"] == "failed:world_model_not_captured"
+    assert phantasia_step["world_model_captured"] is False
+
+    _all_bundles_exist(steps)
+
+
+def test_phantasia_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
+    study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "missing")
+
+    result = _run(_runner(study_dir, script))
+    steps = _load_steps(study_dir)
+
+    assert isinstance(result, dict)
+    assert result["outcome"] == "failed:manifest_unreadable"
+    assert len(steps) == 4
+
+    phantasia_step = steps[3]
+    assert phantasia_step["line"] == "main" and phantasia_step["step"] == 1
+    assert "phantasia" in phantasia_step["modules"]
+    assert phantasia_step["outcome"] == "failed:manifest_unreadable"
+    assert phantasia_step["world_model_captured"] is False
+
+    _all_bundles_exist(steps)
+
+
+def test_no_phantasia_completes_without_manifest(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=2)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "missing")
+
+    result = _run(_runner(study_dir, script))
+    steps = _load_steps(study_dir)
+
+    assert result == "complete"
+    assert len(steps) == 5
+    assert all(s["world_model_captured"] is None for s in steps)
+
+    _all_bundles_exist(steps)
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ('{"world_model_captured": true}', (None, True)),
+        ('{"world_model_captured": false}', ("failed:world_model_not_captured", False)),
+        ('{"world_model_captured": "yes"}', ("failed:world_model_not_captured", False)),
+        ("{}", ("failed:world_model_not_captured", False)),
+        ("not json", ("failed:manifest_unreadable", False)),
+        ("[true]", ("failed:manifest_unreadable", False)),
+    ],
+)
+def test_check_phantasia_manifest(tmp_path: Path, text: str, expected):
+    from kaine.research.ignition_study.runner import _check_phantasia_manifest
+
+    (tmp_path / "manifest.json").write_text(text)
+    assert _check_phantasia_manifest(str(tmp_path)) == expected

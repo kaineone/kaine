@@ -606,7 +606,12 @@ completed step is appended to `steps.jsonl`.
 
 If a step ends for any reason other than a successful preservation, the
 runner records it as `failed:<reason>` and stops.  It never retries on its own
-and never deletes a preservation, state directory, or line.  Resume from the
+and never deletes a preservation, state directory, or line.  A step with
+Phantasia enabled also needs its bundle's `manifest.json` to report
+`world_model_captured: true`; otherwise it fails as
+`failed:world_model_not_captured` (or `failed:manifest_unreadable`), so a line
+never continues from a being that lost its learned world model.  Each step
+record carries `world_model_captured` (null when Phantasia is off).  Resume from the
 last successful preservation, or re-run the failed step from the same start
 bundle with:
 

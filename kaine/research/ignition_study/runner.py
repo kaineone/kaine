@@ -321,6 +321,10 @@ class StudyRunner:
         request, result = self._read_preserve_pair(
             line_dir, prior_request_id=prior_request_id
         )
+
+        bundle = result.get("bundle") if result else None
+        preservation_id = result.get("preservation_id") if result else None
+
         outcome = self._determine_outcome(
             step_kind,
             exit_code,
@@ -330,13 +334,20 @@ class StudyRunner:
             revived_from=step.get("revived_from"),
         )
 
-        bundle = result.get("bundle") if result else None
-        preservation_id = result.get("preservation_id") if result else None
+        world_model_captured: bool | None = None
+        if "phantasia" in modules_set:
+            world_model_captured = False
+            if outcome == "complete" and bundle:
+                extra_outcome, captured = _check_phantasia_manifest(bundle)
+                if extra_outcome:
+                    outcome = extra_outcome
+                world_model_captured = captured
 
         record: dict[str, Any] = {
             "line": line,
             "step": k,
             "modules": sorted(modules_set),
+            "world_model_captured": world_model_captured,
             "started_at": started_at,
             "ended_at": ended_at,
             "exit_code": exit_code,
@@ -520,6 +531,25 @@ class StudyRunner:
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _check_phantasia_manifest(bundle_path: str) -> tuple[str | None, bool | None]:
+    """Return an extra outcome and captured flag for a Phantasia bundle."""
+    manifest_path = Path(bundle_path) / "manifest.json"
+    try:
+        text = manifest_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return "failed:manifest_unreadable", False
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return "failed:manifest_unreadable", False
+    if not isinstance(data, dict):
+        return "failed:manifest_unreadable", False
+    captured = data.get("world_model_captured")
+    if captured is True:
+        return None, True
+    return "failed:world_model_not_captured", False
 
 
 def _write_text_atomic(path: Path, text: str) -> None:
