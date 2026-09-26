@@ -56,7 +56,7 @@ def check_input_condition(
                     "playlist ends: a playlist runs out, leaving the entity without input"
                 ),
             )
-        if mode not in ("live", "seeded", "screen"):
+        if mode not in ("live", "seeded", "womb", "screen"):
             return Condition(
                 number=8,
                 name=CONDITION_NAMES[8],

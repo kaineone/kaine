@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 
 if TYPE_CHECKING:
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+    from kaine.modules.topos.feed import WombClock
+    from kaine.modules.womb_signal import WombParams
 
 from kaine.bus.client import AsyncBus
 from kaine.config import require_known_keys
@@ -302,16 +304,16 @@ def make_topos(
     # source_factory and force capture on so LiveCamera reads from the
     # deterministic source.
     mode = str(feed_section.get("mode", "off")).lower()
-    if mode not in ("off", "seeded", "playlist", "live", "screen"):
+    if mode not in ("off", "seeded", "playlist", "womb", "live", "screen"):
         raise ValueError(
-            f"[perception_feed].mode must be off/seeded/playlist/live/screen, got {mode!r}"
+            f"[perception_feed].mode must be off/seeded/playlist/womb/live/screen, got {mode!r}"
         )
     width = int(section.get("capture_width", 640))
     height = int(section.get("capture_height", 480))
     if mode == "live":
         # Real camera path: honour the existing live-camera config below.
         kwargs["capture_enabled"] = True
-    elif mode in ("seeded", "playlist", "screen"):
+    elif mode in ("seeded", "playlist", "womb", "screen"):
         kwargs["source_factory"] = _build_perception_feed_video_factory(
             mode, feed_section, width=width, height=height
         )
@@ -340,6 +342,86 @@ def make_topos(
     return Topos(bus, entity_clock=entity_clock, **kwargs)
 
 
+def _womb_params(feed: dict[str, Any]) -> "WombParams":
+    from kaine.modules.womb_signal import WombParams
+
+    womb = dict(feed.get("womb") or {})
+    video = womb.pop("video", None)
+    if video is not None and not isinstance(video, dict):
+        raise ValueError("[perception_feed.womb.video] must be a table")
+    audio = womb.pop("audio", None)
+    if audio is not None and not isinstance(audio, dict):
+        raise ValueError("[perception_feed.womb.audio] must be a table")
+    return WombParams.from_sections(womb, video or {}, audio or {})
+
+
+def _womb_lived_offset(stage_path: Path | None = None) -> float:
+    import math
+
+    from kaine.lifecycle.stage import read_stage
+
+    state = read_stage(stage_path)
+    if state is None:
+        return 0.0
+    value = float(state.lived_seconds)
+    if not math.isfinite(value) or value < 0.0:
+        return 0.0
+    return value
+
+
+def _shared_womb_objects(feed: dict[str, Any]) -> tuple["WombClock", Callable[[], float]]:
+    from kaine.modules.topos.feed import WombClock
+
+    clock = feed.get("_shared_womb_clock")
+    lived = feed.get("_womb_lived_seconds")
+    if clock is not None and lived is not None:
+        return (clock, lived)
+    offset = _womb_lived_offset()
+    return (WombClock(lived_offset_seconds=offset), lambda: offset)
+
+
+def _install_shared_womb_clock(
+    perception_feed: dict[str, Any],
+    kaine_config: dict[str, Any] | None,
+    entity_clock: EntityClock | None,
+    *,
+    stage_path: Path | None = None,
+) -> None:
+    """Install one shared womb clock for both A/V surfaces.
+
+    One clock for both surfaces so the beat is seen and heard together; the
+    offset continues the maternal trajectory across boots; womb time runs on
+    the real monotonic clock (the mother is external), while the colour schedule
+    follows lived subjective time.
+    """
+    import math
+
+    from kaine.modules.topos.feed import WombClock
+
+    offset = _womb_lived_offset(stage_path)
+    clock = WombClock(lived_offset_seconds=offset)
+
+    if entity_clock is None:
+        def lived_provider() -> float:
+            return offset
+    else:
+        baseline_raw = entity_clock.now()
+        baseline = float(baseline_raw) if math.isfinite(baseline_raw) else 0.0
+
+        def lived_provider() -> float:
+            reading = entity_clock.now()
+            if not math.isfinite(reading):
+                return offset
+            return offset + max(0.0, reading - baseline)
+
+    perception_feed["_shared_womb_clock"] = clock
+    perception_feed["_womb_lived_seconds"] = lived_provider
+    if kaine_config is not None:
+        target = kaine_config.setdefault("perception_feed", {})
+        target["_shared_womb_clock"] = clock
+        target["_womb_lived_seconds"] = lived_provider
+
+
 def _build_perception_feed_video_factory(
     mode: str, feed: dict[str, Any], *, width: int, height: int
 ) -> Any:
@@ -348,17 +430,36 @@ def _build_perception_feed_video_factory(
     The factory matches the LiveCamera ``source_factory(device, *, width, height)``
     signature; the deterministic sources ignore ``device``. Seeded uses the
     config geometry directly + the ``[perception_feed.video]`` knobs; playlist
-    resolves + (later, at open()) verifies the operator manifest.
+    resolves + (later, at open()) verifies the operator manifest; womb uses a
+    shared womb clock so the maternal environment is seen and heard together.
     """
     from kaine.modules.topos.feed import (
         PlaylistSource,
         SeededProceduralSource,
         SeededSchedule,
+        WombProceduralSource,
+        WombSchedule,
         load_playlist_manifest,
     )
 
     if mode == "screen":
         return _build_screen_source_factory(feed)
+
+    if mode == "womb":
+        params = _womb_params(feed)
+        schedule = WombSchedule(
+            seed=int(feed.get("seed", 0)),
+            width=width,
+            height=height,
+        )
+        clock, lived = _shared_womb_objects(feed)
+
+        def _womb_factory(device, *, width, height):  # noqa: ANN001
+            return WombProceduralSource(
+                schedule, params=params, clock=clock, lived_seconds=lived
+            )
+
+        return _womb_factory
 
     video = dict(feed.get("video") or {})
     if mode == "seeded":
@@ -504,7 +605,8 @@ def _build_perception_feed_audio_factory(
     reads the shared ``seed`` + the ``[perception_feed.video].surprise_interval``
     (so the surprise cadence is shared cross-modally) + the
     ``[perception_feed.audio]`` knobs. Playlist walks the SAME manifest as the
-    video surface.
+    video surface. Womb reads a shared seed and the same shared womb clock so
+    the maternal heartbeat stays phase-locked across surfaces.
     """
     if mode == "screen":
         return _build_monitor_audio_factory(feed)
@@ -513,11 +615,45 @@ def _build_perception_feed_audio_factory(
         PlaylistAudioStream,
         SeededAudioSchedule,
         SeededProceduralAudioStream,
+        WombAudioSchedule,
+        WombProceduralAudioStream,
     )
     from kaine.modules.topos.feed import load_playlist_manifest
+    from kaine.modules.womb_signal import _LOWPASS_TAPS
 
     video = dict(feed.get("video") or {})
     audio = dict(feed.get("audio") or {})
+    if mode == "womb":
+        params = _womb_params(feed)
+        sr = int(audio.get("sample_rate", sample_rate))
+        ch = int(audio.get("channels", channels))
+        fpb = int(frames_per_block)
+        min_frames = _LOWPASS_TAPS - 1
+        if fpb < min_frames:
+            raise ValueError(
+                f"[perception_feed.womb] requires frames_per_block >= {min_frames} "
+                f"(the womb low-pass filter needs 128 samples of history); got {fpb}"
+            )
+        if params.lowpass_hz >= sr / 2.0:
+            raise ValueError(
+                f"[perception_feed.womb] requires lowpass_hz < sample_rate/2; "
+                f"got {params.lowpass_hz} Hz with sample_rate {sr} Hz"
+            )
+        schedule = WombAudioSchedule(
+            seed=int(feed.get("seed", 0)),
+            sample_rate=sr,
+            channels=ch,
+            frames_per_block=fpb,
+        )
+        clock, lived = _shared_womb_objects(feed)
+
+        def _womb_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
+            return WombProceduralAudioStream(
+                schedule, params=params, clock=clock, callback=callback
+            )
+
+        return _womb_factory
+
     if mode == "seeded":
         schedule = SeededAudioSchedule(
             seed=int(feed.get("seed", 0)),
@@ -564,9 +700,11 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
     ``seeded`` returns the seed plus BOTH the video and the audio schedule (enough
     to regenerate the entity's full A/V input); for ``playlist`` the single
     manifest sha256 + per-item digests that pin both surfaces (enough to verify);
-    for ``off``/``live`` just the mode. Best-effort — a malformed/absent manifest
-    degrades to ``{"mode": ...}`` and never raises, so it can't crash boot. No
-    rendered frames, no PCM, no operator paths.
+    for ``off``/``live`` just the mode; for ``womb`` the parameters plus the
+    video/audio schedules and the lived-seconds offset. Best-effort — a
+    malformed/absent manifest or womb config degrades to ``{"mode": ...}`` and
+    never raises, so it can't crash boot. No rendered frames, no PCM, no
+    operator paths.
 
     Lives at the boot layer (allowed to import ``kaine.modules``) and is passed
     into ``mint_run_context`` as data, keeping ``kaine.experiment`` off the
@@ -606,6 +744,38 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
             base_strength=float(audio.get("base_strength", 0.3)),
             surprise_strength=float(audio.get("surprise_strength", 1.0)),
         ).as_descriptor()
+    elif mode == "womb":
+        import dataclasses
+
+        from kaine.modules.audition.feed import WombAudioSchedule
+        from kaine.modules.topos.feed import WombSchedule
+
+        seed = int(feed.get("seed", 0))
+        video = dict(feed.get("video") or {})
+        audio = dict(feed.get("audio") or {})
+        descriptor["seed"] = seed
+        try:
+            params = _womb_params(feed)
+            descriptor["womb"] = dataclasses.asdict(params)
+        except Exception:
+            # The womb parameters are validated for real at boot time; the
+            # covariate must not crash the run if they can't be read here.
+            descriptor["womb"] = {"invalid": True}
+        descriptor["video"] = WombSchedule(
+            seed=seed,
+            width=int(topos.get("capture_width", 640)),
+            height=int(topos.get("capture_height", 480)),
+        ).as_descriptor()
+        sample_rate = int(audio.get("sample_rate", audition.get("capture_sample_rate", 16000)))
+        channels = int(audio.get("channels", audition.get("capture_channels", 1)))
+        vad_frame_ms = int(audition.get("vad_frame_ms", 30))
+        descriptor["audio"] = WombAudioSchedule(
+            seed=seed,
+            sample_rate=sample_rate,
+            channels=channels,
+            frames_per_block=max(1, sample_rate * vad_frame_ms // 1000),
+        ).as_descriptor()
+        descriptor["lived_offset_seconds"] = _womb_lived_offset()
     elif mode == "playlist":
         manifest_path = str(feed.get("playlist_manifest", "")).strip()
         try:
@@ -636,6 +806,7 @@ def gather_perception_feed_descriptor(config: dict[str, Any]) -> dict[str, Any]:
         "playlist": "playlist",
         "live": "camera",
         "screen": "screen",
+        "womb": "womb",
     }.get(mode, mode)
     return descriptor
 
@@ -1042,9 +1213,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # stream_factory and force capture on so LiveMicrophone reads from the
     # deterministic source instead of the mic.
     mode = str(feed_section.get("mode", "off")).lower()
-    if mode not in ("off", "seeded", "playlist", "live", "screen"):
+    if mode not in ("off", "seeded", "playlist", "womb", "live", "screen"):
         raise ValueError(
-            f"[perception_feed].mode must be off/seeded/playlist/live/screen, got {mode!r}"
+            f"[perception_feed].mode must be off/seeded/playlist/womb/live/screen, got {mode!r}"
         )
     # 'screen' hears the desktop audio monitor (what is playing on screen), so it
     # takes a stream_factory like seeded/playlist; the deterministic feeds and the
@@ -1054,7 +1225,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     channels = int(audio_cfg.get("channels", section.get("capture_channels", 1)))
     if mode == "live":
         kwargs["capture_enabled"] = True
-    elif mode in ("seeded", "playlist", "screen"):
+    elif mode in ("seeded", "playlist", "womb", "screen"):
         kwargs["capture_enabled"] = True
         vad_frame_ms = int(section.get("vad_frame_ms", 30))
         frames_per_block = max(1, sample_rate * vad_frame_ms // 1000)
@@ -1772,7 +1943,14 @@ def build_registry(
                 "private clocks (video/audio may drift)",
                 exc_info=True,
             )
-    if _feed_mode in ("seeded", "playlist") and (
+    # Womb (local-womb-feed): one shared womb clock for both surfaces, offset by
+    # the lived gestation time, so the heartbeat is seen and heard together and
+    # the maternal trajectory continues across boots instead of replaying.
+    if _feed_mode == "womb" and (
+        bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
+    ):
+        _install_shared_womb_clock(perception_feed, kaine_config, entity_clock)
+    if _feed_mode in ("seeded", "playlist", "womb") and (
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
     ):
         from kaine import perception_state as _ps

@@ -414,7 +414,15 @@ class WombProceduralAudioStream:
             if k > now_k:
                 self._stopped.wait(timeout=(k - now_k) * bs)
                 continue
-            pcm = self.pcm_at(k)
+            try:
+                pcm = self.pcm_at(k)
+            except Exception:
+                log.error(
+                    "womb audio: synthesis failed at block %d; the womb audio stream stops",
+                    k,
+                    exc_info=True,
+                )
+                return
             try:
                 self._callback(pcm)
             except Exception:

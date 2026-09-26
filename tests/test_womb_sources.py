@@ -458,3 +458,83 @@ def test_zero_persistence_no_artifacts(tmp_path, monkeypatch) -> None:
 
     bad = leaked_writes(rec.writes, banned)
     assert bad == []
+
+
+def test_audio_synthesis_failure_stops_the_producer_loudly(caplog) -> None:
+    # A synthesis error must end the producer with an error log (the input-loss
+    # watcher then sees the stall), never spin silently on the failing block.
+    import logging
+
+    stream = WombProceduralAudioStream(
+        WombAudioSchedule(seed=1),
+        params=WombParams(),
+        clock=WombClock(lived_offset_seconds=0.0, clock=_origin_then(5.0)),
+        callback=lambda b: None,
+    )
+
+    def _boom(block_index: int) -> bytes:
+        raise RuntimeError("synthesis broke")
+
+    stream.pcm_at = _boom  # type: ignore[method-assign]
+    with caplog.at_level(logging.ERROR, logger="kaine.modules.audition.feed"):
+        stream.start()
+        thread = stream._thread
+        assert thread is not None
+        thread.join(timeout=2.0)
+        alive = thread.is_alive()
+        stream.stop()
+    assert not alive
+    assert any("synthesis failed" in r.getMessage() for r in caplog.records)
+
+
+def test_womb_is_cpu_only_and_torch_free() -> None:
+    # The local womb must run on a modest single host: rendering a frame and
+    # an audio block needs numpy only, never torch or a GPU stack.
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "from kaine.modules.topos.feed import WombClock, WombProceduralSource, WombSchedule\n"
+        "from kaine.modules.audition.feed import WombAudioSchedule, WombProceduralAudioStream\n"
+        "from kaine.modules.womb_signal import WombParams\n"
+        "c = WombClock(lived_offset_seconds=0.0)\n"
+        "v = WombProceduralSource(WombSchedule(width=32, height=24), params=WombParams(),"
+        " clock=c, lived_seconds=lambda: 0.0)\n"
+        "v.frame_at(0)\n"
+        "a = WombProceduralAudioStream(WombAudioSchedule(), params=WombParams(), clock=c,"
+        " callback=lambda b: None)\n"
+        "a.pcm_at(0)\n"
+        "bad = [m for m in ('torch', 'jax', 'cv2', 'cupy') if m in sys.modules]\n"
+        "print(','.join(bad))\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == ""
+
+
+def test_no_entity_state_feeds_the_womb() -> None:
+    # The womb is external: its only inputs are the seed, the parameters, the
+    # shared womb clock and (for the colour-onset schedule only) lived time.
+    # Nothing from the entity's affect, workspace or modules may reach it.
+    import ast
+    import inspect
+    from pathlib import Path
+
+    import kaine.modules.womb_signal as ws
+
+    assert list(inspect.signature(WombProceduralSource.__init__).parameters) == [
+        "self", "schedule", "params", "clock", "lived_seconds",
+    ]
+    assert list(inspect.signature(WombProceduralAudioStream.__init__).parameters) == [
+        "self", "schedule", "params", "clock", "callback",
+    ]
+    tree = ast.parse(Path(ws.__file__).read_text())
+    kaine_imports = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("kaine")
+    }
+    assert kaine_imports <= {"kaine.config", "kaine.modules.perception_prng"}
