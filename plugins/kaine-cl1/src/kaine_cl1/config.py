@@ -39,6 +39,9 @@ class OverlayConfig:
     hardware_acknowledgement: str = ""
     #: The operator's institutional approval or protocol reference for a hardware target.
     ethics_reference: str = ""
+    #: Nous hybrid mode ([nous] table): "shadow" logs the substrate's proposals only,
+    #: "drive" acts on them.
+    nous_mode: str = "shadow"
 
     def cl1_modules(self) -> list[str]:
         """Modules whose forward model is routed to the substrate, in config order."""
@@ -52,6 +55,12 @@ class OverlayConfig:
                 f"module {module!r} is set to 'cl1' but has no "
                 f"[substrate.territories] channel budget"
             ) from None
+
+    def backend_options(self, module: str) -> dict[str, Any]:
+        """Keyword options the module's wetware backend takes from the overlay."""
+        if module == "nous":
+            return {"mode": self.nous_mode, "seed": self.substrate.random_seed}
+        return {}
 
 
 def _substrate_from_raw(raw: dict[str, Any]) -> SubstrateConfig:
@@ -152,6 +161,11 @@ def overlay_from_mapping(raw: Mapping[str, Any]) -> OverlayConfig:
             raise ValueError("[hardware].ethics_reference must be a string")
         ethics_reference = value.strip()
 
+    nous_raw = raw.get("nous", {}) or {}
+    nous_mode = nous_raw.get("mode", "shadow")
+    if not isinstance(nous_mode, str) or nous_mode not in ("shadow", "drive"):
+        raise ValueError(f"[nous].mode must be 'shadow' or 'drive', got {nous_mode!r}")
+
     return OverlayConfig(
         substrate=substrate,
         backends=backends,
@@ -161,6 +175,7 @@ def overlay_from_mapping(raw: Mapping[str, Any]) -> OverlayConfig:
         oscillator_channels=channels_per_module,
         hardware_acknowledgement=hardware_acknowledgement,
         ethics_reference=ethics_reference,
+        nous_mode=nous_mode,
     )
 
 

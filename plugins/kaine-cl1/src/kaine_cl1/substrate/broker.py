@@ -22,6 +22,7 @@ See `openspec/changes/wetware-substrate-foundation/`.
 """
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
 import threading
@@ -65,6 +66,8 @@ class TerritoryObservation:
     spikes: list[Any]
     from_timestamp: int
     frame_count: int
+    #: The caller's tag of the stimulation this window answers (tagged exchanges only).
+    tag: Any = None
 
 
 class OversubscribedError(RuntimeError):
@@ -95,8 +98,13 @@ class SubstrateBroker:
     _beat_mode: bool = field(default=False, repr=False)
     _accelerated: bool = field(default=True, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    #: Serialises synchronous (pre-beat) windows and the switch to beat mode across threads:
+    #: Nous steps its engine in a worker thread while Chronos and Soma step on the event loop.
+    _sync_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _latest: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _next: dict[str, list[StimRequest]] = field(default_factory=dict, repr=False)
+    _next_tags: dict[str, Any] = field(default_factory=dict, repr=False)
+    _latest_response: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _pending_frames: int | None = field(default=None, repr=False)
     _coalesced: int = field(default=0, repr=False)
     _beat_signal: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -255,18 +263,43 @@ class SubstrateBroker:
         self._check_usable()
         if self._loop_it is None:
             raise RuntimeError("broker is not open; call open(neurons) first")
-        return self._run_window(self._span)
+        with self._sync_lock:
+            return self._run_window(self._span)
 
     # -- beat mode --------------------------------------------------------------
-    def exchange(self, module: str, requests: Sequence[StimRequest]) -> TerritoryObservation:
+    def exchange(
+        self, module: str, requests: Sequence[StimRequest], *, tag: Any = None
+    ) -> TerritoryObservation:
+        """Queue stimulation and return the latest territory observation.
+
+        With ``tag`` set, the call returns the response window to this
+        module's most recent tagged stimulation, carrying that
+        stimulation's tag, rather than the latest window; before any tagged
+        response exists it returns an empty observation with ``tag=None``.
+        Before beat mode the window runs now, so its response carries this
+        call's tag.
+        """
         self._check_usable()
         reqs = self._validate(module, requests)
         if not self._beat_mode:
-            self.queue_stim(module, reqs)
-            return self.run_cognitive_tick()[module]
+            with self._sync_lock:
+                if not self._beat_mode:
+                    self.queue_stim(module, reqs)
+                    obs = self.run_cognitive_tick()[module]
+                    if tag is None:
+                        return obs
+                    obs = dataclasses.replace(obs, tag=tag)
+                    with self._lock:
+                        self._latest_response[module] = obs
+                    return obs
         with self._lock:
             self._next[module] = reqs
-            latest = self._latest.get(module)
+            if tag is None:
+                self._next_tags.pop(module, None)
+                latest = self._latest.get(module)
+            else:
+                self._next_tags[module] = tag
+                latest = self._latest_response.get(module)
         if latest is None:
             return TerritoryObservation(
                 module=module,
@@ -281,35 +314,50 @@ class SubstrateBroker:
             spikes=list(latest.spikes),
             from_timestamp=latest.from_timestamp,
             frame_count=latest.frame_count,
+            tag=latest.tag,
         )
 
-    def start_beat(self, *, accelerated: bool) -> None:
+    def start_beat(self, *, accelerated: bool, blocking: bool = True) -> bool:
+        """Switch to beat mode: one window per cycle tick on a background thread.
+
+        Returns True once beat mode is running. With ``blocking=False`` it returns False instead
+        of waiting when a synchronous window holds the substrate, so a caller on KAINE's event
+        loop never waits for one.
+        """
         if self._loop_it is None:
             raise RuntimeError("broker is not open; call open(neurons) first")
         self._check_usable()
         if self._beat_mode and self._thread is not None and self._thread.is_alive():
-            return
+            return True
         if self._thread is not None and self._thread.is_alive():
             raise RuntimeError("CL1 substrate beat thread is already running")
-        self._stop.clear()
-        self._failed = False
-        self._beat_signal.clear()
-        # Treat a long gap from start (for example a boot-time freeze) like any other gap.
-        self._last_beat_at = time.monotonic()
-        self._beat_mode = True
-        self._accelerated = accelerated
-        with self._lock:
-            for module, reqs in list(self._pending.items()):
-                self._next[module] = list(reqs)
-            self._pending.clear()
-        self._thread = threading.Thread(
-            target=self._beat_loop,
-            name="cl1-substrate-beat",
-            daemon=True,
-        )
-        self._thread.start()
+        if not self._sync_lock.acquire(blocking=blocking):
+            return False
+        try:
+            if self._beat_mode and self._thread is not None and self._thread.is_alive():
+                return True
+            self._stop.clear()
+            self._failed = False
+            self._beat_signal.clear()
+            # Treat a long gap from start (for example a boot-time freeze) like any other gap.
+            self._last_beat_at = time.monotonic()
+            self._beat_mode = True
+            self._accelerated = accelerated
+            with self._lock:
+                for module, reqs in list(self._pending.items()):
+                    self._next[module] = list(reqs)
+                self._pending.clear()
+            self._thread = threading.Thread(
+                target=self._beat_loop,
+                name="cl1-substrate-beat",
+                daemon=True,
+            )
+            self._thread.start()
+        finally:
+            self._sync_lock.release()
         mode = "accelerated" if accelerated else "real time"
         log.info("CL1 substrate switched to beat mode (%s): one window per cycle tick", mode)
+        return True
 
     def beat(self, period_s: float) -> None:
         self._check_usable()
@@ -322,6 +370,7 @@ class SubstrateBroker:
             with self._lock:
                 count = sum(len(v) for v in self._next.values())
                 self._next.clear()
+                self._next_tags.clear()
                 self._pending_frames = None
             if count:
                 self._discarded_stim += count
@@ -370,13 +419,19 @@ class SubstrateBroker:
                         if frames is None:
                             continue
                         self._pending = {m: list(r) for m, r in self._next.items()}
+                        tags = dict(self._next_tags)
                         self._next.clear()
+                        self._next_tags.clear()
                     obs = self._run_window(frames)
                     with self._lock:
                         self._latest.update(obs)
+                        for m, t in tags.items():
+                            if m in obs:
+                                self._latest_response[m] = dataclasses.replace(obs[m], tag=t)
             else:
                 collected: list[Any] = []
                 window_start: int | None = None
+                delivered_tags: dict[str, Any] = {}
                 for tick in self._loop_it:
                     if self._stop.is_set():
                         break
@@ -406,6 +461,13 @@ class SubstrateBroker:
                         }
                         with self._lock:
                             self._latest.update(obs)
+                            for m, t in delivered_tags.items():
+                                if m in obs:
+                                    self._latest_response[m] = dataclasses.replace(
+                                        obs[m], tag=t
+                                    )
+                            delivered_tags = dict(self._next_tags)
+                            self._next_tags.clear()
                             snapshot = {m: list(r) for m, r in self._next.items()}
                             self._next.clear()
                         for requests in snapshot.values():
