@@ -70,11 +70,17 @@
       Done as a kaine plugin (change `kaine-plugin-package`): kaine's own
       `build_registry` constructs Chronos with the plugin's network
       (`tests/test_kaine_boot.py`); further modules add rows to `WETWARE_BACKENDS`.
-- [ ] 5.2 For any module lacking an injection seam, open an upstream PR adding a
+- [x] 5.2 For any module lacking an injection seam, open an upstream PR adding a
       **vendor-neutral** seam (silicon default unchanged); until merged, use a
       pinned subclass override in this repo; never edit the kaine dependency.
-- [ ] 5.3 Preserve KAINE's boot gating (operator-supervised / verified safety
-      net); the overlay must not loosen it.
+      Done upstream by kaine's `module-plugins` change (#172), which added the
+      vendor-neutral seams this package uses, including Soma's `forward_model`;
+      no subclass overrides were needed.
+- [x] 5.3 Preserve KAINE's boot gating (operator-supervised / verified safety
+      net); the overlay must not loosen it. A plugin can only fill KAINE's
+      declared seams; it cannot enable modules, change configuration or bypass
+      any gate (kaine's `module-plugins` requirement, enforced by its loader). The
+      evidence is that core design rather than a test in this package.
 
 ## 6. Validation
 
