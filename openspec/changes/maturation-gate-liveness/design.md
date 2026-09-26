@@ -115,6 +115,24 @@ calls `check_womb_live`.
   pushes its freeze again on its next check and logs that it did. A gestating entity is
   never left running senseless.
 
+### Birth waits while frozen
+
+The gate runner is its own task and keeps evaluating while the cycle is frozen, and a
+readiness readout stays valid for up to `readout_max_age_cadences` cadences. So it
+defers birth while the cycle is paused by any holder (and when the paused state cannot
+be read). Birth is one-way; a frozen, possibly senseless entity is never born.
+
+### Spot during a womb-loss freeze
+
+Spot stays out of freezes it does not own, because heartbeats go stale while the cycle
+is paused. A local womb is most likely lost because a perception module crashed, and a
+gestation freeze that kept Spot out would leave that module dead and the entity frozen
+until an operator intervened. So while the only freeze holder is `gestation`, Spot keeps
+supervising but acts only on crashes (its zero-false-positive signal), never on stale
+heartbeats. It pushes its own freeze on top, restarts the module, and pops only its own
+entry, so the gestation freeze stays until the womb returns. Any other holder on the
+stack (operator, welfare) keeps Spot out as before.
+
 ### Why the freeze stack, not a stopped clock
 
 The spec asks for the entity clock to pause. Setting `EntityClock.scale` to 0 at runtime

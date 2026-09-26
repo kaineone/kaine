@@ -1104,6 +1104,12 @@ min_lived_seconds = 86400         # floor of lived subjective time in gestation 
 gate_cadence_seconds = 60         # how often the maturation gate is evaluated
 readout_max_age_cadences = 3      # a womb readout older than this many cadences is stale (C1)
 require_operator_ack_for_birth = false  # autonomous by default; true for supervised shakedowns
+# Womb before spawn and womb loss (the womb-liveness interface):
+womb_ready_retry_seconds = 5      # boot re-checks a not-ready womb this often; nothing spawns meanwhile
+womb_check_seconds = 1            # how often a running womb's presence is checked
+womb_loss_after_seconds = 5       # sustained absence before a gestating entity is frozen
+womb_arm_timeout_seconds = 120    # a womb never seen live within this is lost
+womb_presence_window_seconds = 3  # presence must advance within this window
 
 [developmental_stage.regulation_thresholds]
 # C1 thresholds the womb change's `gestation.readiness` markers must cross. This

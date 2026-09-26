@@ -8,10 +8,12 @@
 
 Tasks 2.1 and 2.2 check the womb-liveness interface defined by `local-womb-feed`; they are built once that change's phase 1 lands.
 
-- [ ] 2.1 Pre-spawn live-womb check in boot/preboot; the cycle does not start without it; repeated operator-visible report.
-- [ ] 2.2 Womb loss mid-gestation: freeze the cycle under the `gestation` holder, red alert, resume on return; never unlock to `physical`.
-- [ ] 2.5 The cycle records its paused subjective time; lived time subtracts it, so no frozen span counts.
-- [ ] 2.6 The freeze-watch loop leaves perception on for a freeze held only by `gestation`.
+- [x] 2.1 Pre-spawn live-womb check in boot/preboot; the cycle does not start without it; repeated operator-visible report.
+- [x] 2.2 Womb loss mid-gestation: freeze the cycle under the `gestation` holder, red alert, resume on return; never unlock to `physical`.
+- [x] 2.5 The cycle records its paused subjective time; lived time subtracts it, so no frozen span counts.
+- [x] 2.6 The freeze-watch loop leaves perception on for a freeze held only by `gestation`.
+- [x] 2.7 No birth while the cycle is paused by any holder.
+- [x] 2.8 Spot supervises crashes (not stale heartbeats) during a gestation-only freeze and lifts only its own freeze entry.
 - [x] 2.3 `perception_state`: effective locus is the lock holder's locus; unknown locus during gestation resolves to the womb.
 - [x] 2.4 Skip Mundus during gestation; public adapter reachability probe; hot-start Mundus at birth before switching the locus source; `locked_by="gestation"` on unlock.
 
