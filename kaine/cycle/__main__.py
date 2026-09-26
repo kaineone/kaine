@@ -495,6 +495,7 @@ async def _write_runtime_state(
     gate_checks: dict[str, bool] | None = None,
     stage_state: lifecycle_stage.StageState | None = None,
     staging_enabled: bool = False,
+    gate_status: dict | None = None,
 ) -> None:
     RUNTIME_PATH.parent.mkdir(parents=True, exist_ok=True)
     control = read_control()
@@ -550,12 +551,16 @@ async def _write_runtime_state(
         payload["gate_checks"] = dict(gate_checks)
     # Developmental stage surface for Nexus left rail. Non-content operational
     # metadata; omitted when staging is disabled so an ordinary boot is unchanged.
-    if staging_enabled and stage_state is not None:
-        payload["developmental_stage"] = {
-            "stage": stage_state.stage,
-            "gestation_started_at": stage_state.gestation_started_at,
-            "born_at": stage_state.born_at,
-        }
+    if staging_enabled:
+        payload["developmental_stage"] = {}
+        if stage_state is not None:
+            payload["developmental_stage"].update({
+                "stage": stage_state.stage,
+                "gestation_started_at": stage_state.gestation_started_at,
+                "born_at": stage_state.born_at,
+            })
+        if gate_status is not None:
+            payload["developmental_stage"].update(gate_status)
     # Per-run identity (RunContext) — non-content run metadata. Read via the
     # process-global accessor; inert (no fields added) when no run is set.
     try:
@@ -1534,6 +1539,7 @@ async def _boot_and_run(
                 supervision_mode=supervision_mode,
                 gate_checks=gate_checks,
                 stage_state=gate_runner.stage if staging_enabled else None,
+                gate_status=gate_runner.status if staging_enabled else None,
                 staging_enabled=staging_enabled,
             )
             try:

@@ -23,6 +23,7 @@ from kaine.nexus.auth import (
     build_auth_router,
     require_operator_token,
 )
+from kaine.nexus.birth import build_birth_router
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.caretaker import build_caretaker_router
 from kaine.nexus.config import NexusConfig
@@ -195,6 +196,7 @@ def create_app(
         app.include_router(build_perception_router(), dependencies=state_change_dep)
         app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
         app.include_router(build_caretaker_router(), dependencies=state_change_dep)
+        app.include_router(build_birth_router(), dependencies=state_change_dep)
     return app
 
 

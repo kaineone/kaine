@@ -28,6 +28,7 @@ import logging
 import math
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from kaine.bus.schema import Event
@@ -75,6 +76,8 @@ class MaturationGateRunner:
         womb_readout_type: str = DEFAULT_WOMB_READOUT_TYPE,
         hypnos_stream: str = "hypnos.out",
         paused_seconds: Callable[[], float] | None = None,
+        birth_request_path: Path | None = None,
+        birth_ack_path: Path | None = None,
     ) -> None:
         self._bus = bus
         self._config = config
@@ -109,6 +112,13 @@ class MaturationGateRunner:
         # after the stage file is written as embodied so the womb can begin its
         # birth transition.
         self._on_birth: Callable[[], None] | None = None
+        # Operator-supervised birth acknowledgement file paths and state.
+        from kaine.lifecycle.birth_ack import BIRTH_ACK_PATH, BIRTH_REQUEST_PATH
+
+        self._birth_request_path = birth_request_path or BIRTH_REQUEST_PATH
+        self._birth_ack_path = birth_ack_path or BIRTH_ACK_PATH
+        self._birth_request = None
+        self._last_status: dict[str, Any] = {}
 
     def set_pause_sources(
         self,
@@ -132,6 +142,11 @@ class MaturationGateRunner:
     @property
     def stage(self) -> lifecycle_stage.StageState:
         return self._stage
+
+    @property
+    def status(self) -> dict[str, Any]:
+        """Content-free snapshot of the latest maturation-gate status for Nexus."""
+        return dict(self._last_status)
 
     def _lifecycle_event(
         self, type: str, payload: dict[str, Any], *, salience: float = 0.5
@@ -326,13 +341,55 @@ class MaturationGateRunner:
 
     async def _evaluate_once(self) -> None:
         """One gate evaluation: gather signals, decide, act, emit."""
+        from kaine.lifecycle.birth_ack import (
+            clear_request,
+            is_acknowledged,
+            new_request,
+            read_ack,
+            write_request,
+        )
+
+        def _set_status(
+            *,
+            readiness: Any = None,
+            readout: Mapping[str, Any] | None = None,
+            decision: Any = None,
+            consolidation_passes: int | None = None,
+        ) -> None:
+            """Store a content-free status snapshot for Nexus."""
+            self._last_status = {
+                "lived_seconds": float(self._stage.lived_seconds or 0.0),
+                "sleep_count": self._stage.sleep_count or 0,
+                "consolidation_passes": consolidation_passes,
+                "readiness": {
+                    "ready": readiness.ready,
+                    "passed": list(readiness.passed_markers),
+                    "unmet": list(readiness.unmet),
+                } if readiness is not None else None,
+                "readout": dict(readout) if readout is not None else None,
+                "decision": {
+                    "action": decision.action,
+                    "reason": decision.reason,
+                } if decision is not None else None,
+                "awaiting_ack": (
+                    decision.action == ACTION_HOLD_AWAITING_ACK
+                    if decision is not None else False
+                ),
+                "request_id": (
+                    self._birth_request.request_id
+                    if self._birth_request is not None else None
+                ),
+            }
+
         if not self._staging_enabled or not self._stage.is_gestating:
+            _set_status()
             return
 
         before = self._stage
 
         await self._begin_boot()
         if self._boot_ms is None:
+            _set_status()
             return
 
         if not self._womb_feed_configured:
@@ -343,6 +400,7 @@ class MaturationGateRunner:
                 gestation_no_stimulus_payload(),
                 salience=0.7,
             )
+            _set_status()
             return
 
         self._accumulate_lived_time()
@@ -363,6 +421,18 @@ class MaturationGateRunner:
         )
 
         if not readiness.ready:
+            if self._birth_request is not None:
+                try:
+                    clear_request(self._birth_request_path)
+                except OSError as exc:
+                    log.warning("could not clear stale birth request: %s", exc)
+                self._birth_request = None
+                self._awaiting_ack_logged = False
+            _set_status(
+                readiness=readiness,
+                readout=readiness_readout,
+                consolidation_passes=consolidation_passes,
+            )
             for name in readiness.unmet:
                 log.debug("maturation gate: %s not yet met", name)
             return
@@ -382,6 +452,11 @@ class MaturationGateRunner:
                 if not self._birth_deferred_logged:
                     log.info("birth deferred: the entity is frozen")
                     self._birth_deferred_logged = True
+                _set_status(
+                    readiness=readiness,
+                    readout=readiness_readout,
+                    consolidation_passes=consolidation_passes,
+                )
                 return
         self._birth_deferred_logged = False
 
@@ -392,16 +467,32 @@ class MaturationGateRunner:
             reachable=reachable,
         )
 
+        operator_ack = is_acknowledged(
+            self._birth_request, read_ack(self._birth_ack_path)
+        )
         decision = decide_birth(
             readiness=readiness,
             embodiment_ready=embodiment_ready,
             require_operator_ack=self._config.require_operator_ack_for_birth,
-            operator_ack=False,  # TODO: operator-ack surface for supervised shakedown
+            operator_ack=operator_ack,
         )
 
         if decision.action == ACTION_BIRTH:
             await self._do_birth(readiness, self._stage.sleep_count, self._stage.lived_seconds)
+            _set_status(
+                readiness=readiness,
+                readout=readiness_readout,
+                decision=decision,
+                consolidation_passes=consolidation_passes,
+            )
         elif decision.action == ACTION_HOLD_AWAITING_EMBODIMENT:
+            if self._birth_request is not None:
+                try:
+                    clear_request(self._birth_request_path)
+                except OSError as exc:
+                    log.warning("could not clear stale birth request: %s", exc)
+                self._birth_request = None
+                self._awaiting_ack_logged = False
             if not self._awaiting_embodiment_logged:
                 log.warning("stage.birth.ready: awaiting embodiment (Mundus not available)")
                 self._awaiting_embodiment_logged = True
@@ -410,7 +501,24 @@ class MaturationGateRunner:
                 birth_ready_payload(decision),
                 salience=0.7,
             )
+            _set_status(
+                readiness=readiness,
+                readout=readiness_readout,
+                decision=decision,
+                consolidation_passes=consolidation_passes,
+            )
         elif decision.action == ACTION_HOLD_AWAITING_ACK:
+            if self._birth_request is None:
+                try:
+                    req = new_request(self._stage.gestation_started_at)
+                    write_request(req, self._birth_request_path)
+                    self._birth_request = req
+                    log.info("operator birth acknowledgement requested: %s", req.request_id)
+                except (OSError, ValueError) as exc:
+                    log.warning(
+                        "could not write birth request; treating as no operator ack: %s",
+                        exc,
+                    )
             if not self._awaiting_ack_logged:
                 log.warning("stage.birth.ready: awaiting operator ack for supervised birth")
                 self._awaiting_ack_logged = True
@@ -418,6 +526,12 @@ class MaturationGateRunner:
                 STAGE_BIRTH_READY,
                 birth_ready_payload(decision),
                 salience=0.7,
+            )
+            _set_status(
+                readiness=readiness,
+                readout=readiness_readout,
+                decision=decision,
+                consolidation_passes=consolidation_passes,
             )
 
     async def _do_birth(
@@ -460,6 +574,17 @@ class MaturationGateRunner:
         # Persist the monotonic transition.
         lifecycle_stage.write_stage(after)
         self._stage = after
+
+        # Birth is complete: clear the operator acknowledgement files. The
+        # request is tied to this boot and must not be reused later.
+        from kaine.lifecycle.birth_ack import clear_ack, clear_request
+
+        try:
+            clear_request(self._birth_request_path)
+            clear_ack(self._birth_ack_path)
+        except OSError as exc:
+            log.warning("could not clear birth acknowledgement files after birth: %s", exc)
+        self._birth_request = None
 
         # Unlock the gestation locus lock. The unlock is attributed to gestation,
         # not the operator; the locus stays virtual while the handoff continues.
