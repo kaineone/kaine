@@ -103,14 +103,44 @@ bash scripts/install.sh
 The script:
 
 1. Probes `nvidia-smi` — picks CUDA (`cu128`) wheels on NVIDIA hosts, CPU
-   wheels otherwise.
+   wheels otherwise (only when the `core`/`full` extras are selected).
 2. Creates `.venv/` if absent.
-3. Installs PyTorch from the chosen index.
-4. Runs `pip install -e .[test]` for all other dependencies.
+3. Installs PyTorch from the chosen index when needed.
+4. Runs `pip install -e ".[test,<extras>]"` for the chosen extras
+   (default: `full`).
 
 The script is idempotent — safe to re-run when `pyproject.toml` changes. When run
 interactively it then offers to launch the first-run wizard (pass `--no-wizard`
 to skip the prompt).
+
+By default `bash scripts/install.sh` installs the `full` extra, which is the
+same set of dependencies as today.  To stay lean, pick only the extras your
+modules need:
+
+| Extra | Unlocks |
+|---|---|
+| `core` | Soma, Chronos, Topos — `torch` and `ncps` |
+| `memory` | Mnemos, Empatheia, Hypnos embedder — `sentence-transformers`, `qdrant-client` |
+| `memory-edge` | Mnemos `backend = "sqlite_vec"` — `sqlite-vec` |
+| `nexus` | `python -m kaine.nexus` — `fastapi`, `uvicorn`, `jinja2` |
+| `nvidia` | Soma GPU telemetry — `pynvml` (warning only if missing) |
+| `vision` | Topos capture/playlist — `opencv-python-headless`, `transformers`, `Pillow` |
+| `audio` | Audition capture/playlist — `sounddevice`, `webrtcvad`, `funasr`, `librosa`, `av` |
+| `reasoning` | Nous (real engine) — `inferactively-pymdp`, `jax[cpu]` |
+| `worldmodel` | Phantasia DreamerV3 — `jax[cpu]`, `chex`, `einops` |
+| `oscillator` | Syneidesis oscillatory layer — `snntorch`, `scipy` |
+| `full` | All runtime extras above (desktop default) |
+| `training` | Voice-alignment DPO stack — opt-in, never in `full` |
+| `internvideo` | InternVideo-Next vendored code for Topos — opt-in |
+| `internvideo-flash` | Flash-attention fast path — opt-in GPU-only layer |
+
+Examples:
+
+```bash
+bash scripts/install.sh --extras core,memory        # CPU entity, no Nexus/vision
+bash scripts/install.sh --extras nexus              # lean operator console only
+bash scripts/install.sh --extras full               # desktop default
+```
 
 Force a specific flavor if needed:
 
@@ -723,10 +753,10 @@ class today; all of them still require PyTorch. See
   ONNX/static embeddings, NumPy CfC and JAX-free Nous/Phantasia are not yet
   built. Measured on a Raspberry Pi Zero 2 W (512 MB), a full voice turn using
   whisper.cpp tiny.en + SmolLM2-360M + Flite takes 37–46 s when loading one
-  model at a time. The base `pyproject.toml` depends on torch, transformers,
-  sentence-transformers, ncps, qdrant-client and pynvml, so a plain
-  `pip install` fails on 32-bit ARM and on Termux; the original ARMv6 Pi Zero
-  cannot host the torch stack.
+  model at a time. The base install holds no torch or transformers stack; those
+  come with the `core`, `memory` and `vision` extras. Soma and Chronos still need
+  `core` (torch), which has no wheels for 32-bit ARM or Termux yet, and the
+  original ARMv6 Pi Zero cannot host the torch stack.
 
 - **Tier 1 — embodied CPU agent (`tier1.toml`).** Runs on 4–8 GB-class CPU
   hosts such as 64-bit SBCs. It uses llama.cpp Lingua, sqlite-vec Mnemos with

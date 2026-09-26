@@ -7,10 +7,18 @@ the configured Nexus app. NOT invoked by first-boot scripts.
 
 from __future__ import annotations
 
+import sys
+
+from kaine.extras import check, format_missing
+
+_missing = check({}, services={"nexus"})
+if _missing:
+    raise SystemExit(format_missing(_missing))
+del _missing
+
 import asyncio
 import json
 import logging
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any

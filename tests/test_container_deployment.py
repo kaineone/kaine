@@ -89,7 +89,7 @@ def test_print_index_cli_accessor():
     )
 
     with open(_REPO_ROOT / "pyproject.toml", "rb") as f:
-        deps = tomllib.load(f).get("project", {}).get("dependencies", [])
+        deps = tomllib.load(f)["project"]["optional-dependencies"]["core"]
     expected = next(
         dep
         for dep in deps

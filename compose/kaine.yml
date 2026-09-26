@@ -41,11 +41,10 @@ x-kaine-image: &kaine-image
     dockerfile: Dockerfile
     args:
       FLAVOR: ${KAINE_FLAVOR:-cuda}
-      # The running entity needs the perception runtime extras the lean default
-      # (.[test]) omits: [internvideo] (Topos encoder: einops/timm/easydict),
-      # [audio] (Audition + playlist decode: funasr/librosa/av), [vision]
-      # (opencv). Override to a leaner/richer set for other deployments.
-      KAINE_EXTRAS: ${KAINE_EXTRAS:-.[test,vision,audio,internvideo]}
+      # [full] carries every runtime extra (core, memory, nexus, vision, audio,
+      # reasoning, worldmodel, oscillator); [internvideo] adds the Topos encoder's
+      # einops/timm/easydict. Override to a leaner set for other deployments.
+      KAINE_EXTRAS: ${KAINE_EXTRAS:-.[test,full,internvideo]}
       # Bake the source revision into the image (e.g. from
       # `git rev-parse --short HEAD`); compute_git_sha falls back to it.
       GIT_SHA: "${KAINE_GIT_SHA:-}"
