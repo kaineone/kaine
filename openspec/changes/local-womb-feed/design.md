@@ -65,6 +65,14 @@ captures module state (`serialize()`) only, so the oscillator lives inside a mod
 its own state. It is separate from the per-module coalition oscillator that
 `_wire_oscillators` attaches for Syneidesis, which never receives the maternal drive.
 
+**Opt-in, never silent for an existing being.** Filling Soma's feature slots changes the
+input of Soma's interoceptive forward model, and preserved beings were trained with those
+slots at zero. So Soma hosts the self-rhythm oscillator only when
+`[soma].self_rhythm_enabled = true` (shipped false). Local gestation requires it:
+`check_womb_ready` refuses a gestating local womb, with that reason, when the setting is
+off or snnTorch is missing. Once on, the oscillator stays with the entity after birth for
+as long as the setting stays on. The step cadence is `[soma].self_rhythm_step_hz`.
+
 **What it is.**
 - `SelfRhythmOscillator` satisfies `OscillatorProtocol` (`step(drive)`, `phase()`,
   `set_frequency`, `serialize`, `deserialize`). It adds an optional keyword-only

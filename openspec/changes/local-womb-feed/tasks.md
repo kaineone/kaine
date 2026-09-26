@@ -12,7 +12,8 @@
 
 - [ ] 2.1 `SelfRhythmOscillator` (OscillatorProtocol + keyword-only `external_drive` + `amplitude()`) built by `make_self_rhythm_oscillator`; coalition oscillators never receive the drive; no drive is bit-for-bit identical.
 - [ ] 2.2 Soma hosts, steps (own loop at `self_rhythm_step_hz`, default 20 Hz of subjective time; drive averaged over each step) and serializes the self-rhythm oscillator; the maternal-drive provider is injected in `womb` mode from the shared womb clock; feature slots 4-6 carry sin/cos(phase) and amplitude, and the width stays 8.
-- [ ] 2.3 Tests: coherence factor identical with the drive on and off; the drive is bounded; Soma state round-trips the oscillator; the slots stay 0 without a womb; `check_womb_ready` reports a missing oscillator extra.
+- [ ] 2.3 `[soma].self_rhythm_enabled` (shipped false) and `[soma].self_rhythm_step_hz`; `check_womb_ready` refuses a gestating local womb without the self-rhythm.
+- [ ] 2.4 Tests: coherence factor identical with the drive on and off; the drive is bounded; Soma state round-trips the oscillator; the slots stay 0 without a womb; `check_womb_ready` reports a missing oscillator extra.
 
 ## 3. Readiness readout (phase 3)
 
