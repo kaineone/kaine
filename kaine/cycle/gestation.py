@@ -8,7 +8,9 @@ actuate the entity, push it toward any target, or change lifecycle stage.
 The probe protocol is bounded (hard maxima), disclosed via ``gestation.probe``
 events, and never runs while the cycle is frozen (which covers a welfare
 response, since the welfare net freezes) or in the first readout period after
-boot.
+boot. The schedule is intentionally jittered and the perturbation is a bounded
+rise, so an exactly periodic probe cannot be learned by a predictive mind and
+thereby shape what it measures.
 
 Markers and their research sites:
   * ``endogenous_self_sustain`` — self-rhythm amplitude during withdrawal vs.
@@ -40,6 +42,7 @@ from typing import Any, Callable
 import numpy as np
 
 from kaine.bus.schema import Event
+from kaine.modules.perception_prng import keyed_u64, unit_float
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +51,9 @@ PROBE_TYPE = "gestation.probe"
 SOURCE = "gestation"
 WITHDRAWAL_MAX_SECONDS = 30.0
 PERTURBATION_MAX_SECONDS = 10.0
+
+_JITTER_SALT_WITHDRAWAL = 0xB710
+_JITTER_SALT_PERTURBATION = 0xB720
 
 
 @dataclass(frozen=True)
@@ -59,6 +65,8 @@ class GestationReadoutConfig:
     perturbation_period_seconds: float = 3600.0
     perturbation_seconds: float = 5.0
     baseline_drive_fraction: float = 0.5
+    perturbation_drive_fraction: float = 0.75
+    probe_jitter_fraction: float = 0.25
     entrainment_plv_floor: float = 0.5
     hrv_window_seconds: float = 300.0
     recovery_tolerance: float = 0.25
@@ -89,8 +97,22 @@ class GestationReadoutConfig:
             if not isinstance(value, (int, float)):
                 raise ValueError(f"{name} must be a finite number")
             fv = float(value)
-            if not math.isfinite(fv) or fv <= 0.0:
+            if not math.isfinite(fv):
                 raise ValueError(f"{name} must be finite and > 0")
+
+            if name == "probe_jitter_fraction":
+                if fv < 0.0 or fv > 0.5:
+                    raise ValueError(f"{name} must be in [0.0, 0.5]")
+                kwargs[name] = fv
+                continue
+
+            if fv <= 0.0:
+                raise ValueError(f"{name} must be finite and > 0")
+
+            if name == "perturbation_drive_fraction" and fv > 1.0:
+                raise ValueError(f"{name} must be <= 1.0")
+            if name in ("baseline_drive_fraction", "entrainment_plv_floor") and fv > 1.0:
+                raise ValueError(f"{name} must be in (0, 1]")
             if name == "withdrawal_seconds" and fv > WITHDRAWAL_MAX_SECONDS:
                 raise ValueError(
                     f"{name} must be <= {WITHDRAWAL_MAX_SECONDS}"
@@ -99,10 +121,15 @@ class GestationReadoutConfig:
                 raise ValueError(
                     f"{name} must be <= {PERTURBATION_MAX_SECONDS}"
                 )
-            # fv > 0 is already enforced above; these fractions also cap at 1.
-            if name in ("baseline_drive_fraction", "entrainment_plv_floor") and fv > 1.0:
-                raise ValueError(f"{name} must be in (0, 1]")
             kwargs[name] = fv
+
+        baseline = kwargs["baseline_drive_fraction"]
+        perturbation = kwargs["perturbation_drive_fraction"]
+        if not (baseline < perturbation <= 1.0):
+            raise ValueError(
+                "perturbation_drive_fraction must be greater than "
+                "baseline_drive_fraction and at most 1.0"
+            )
 
         return cls(**kwargs)
 
@@ -203,6 +230,7 @@ class GestationOwner:
         is_paused: Callable[[], bool],
         config: GestationReadoutConfig,
         clock: Callable[[], float],
+        seed: int = 0,
         state_path: Path | None = None,
     ) -> None:
         self._bus = bus
@@ -212,9 +240,13 @@ class GestationOwner:
         self._is_paused = is_paused
         self._config = config
         self._clock = clock
+        self._seed = int(seed)
         self._state_path = (
             state_path if state_path is not None else Path("state/lifecycle/gestation_readout.json")
         )
+
+        self._jitter_counter_withdrawal: int = 0
+        self._jitter_counter_perturbation: int = 0
 
         self._drive.scale = self._config.baseline_drive_fraction
         self._started_at = self._clock()
@@ -241,14 +273,21 @@ class GestationOwner:
         self._paused_last_step: bool = False
         self._last_probe_end: float = -float("inf")
 
+        settle_end = self._settle_until
         self._next_withdrawal_at: float = (
-            self._started_at + self._config.readout_period_seconds
+            settle_end
+            + self._jitter_unit("withdrawal")
+            * self._config.probe_jitter_fraction
+            * self._config.withdrawal_period_seconds
         )
         self._next_perturbation_at: float = (
             self._started_at
             + self._config.readout_period_seconds
             + self._config.withdrawal_seconds
             + 60.0
+            + self._jitter_unit("perturbation")
+            * self._config.probe_jitter_fraction
+            * self._config.perturbation_period_seconds
         )
         self._next_readout_at: float = (
             self._started_at + self._config.readout_period_seconds
@@ -273,6 +312,18 @@ class GestationOwner:
 
         self._baseline: float | None = None
         self._load_baseline()
+
+    def _jitter_unit(self, kind: str) -> float:
+        """Return a fresh unit draw for ``kind`` and advance its counter."""
+        if kind == "withdrawal":
+            salt = _JITTER_SALT_WITHDRAWAL
+            counter = self._jitter_counter_withdrawal
+            self._jitter_counter_withdrawal = counter + 1
+        else:
+            salt = _JITTER_SALT_PERTURBATION
+            counter = self._jitter_counter_perturbation
+            self._jitter_counter_perturbation = counter + 1
+        return unit_float(keyed_u64(self._seed, counter, salt))
 
     def _load_baseline(self) -> None:
         if not self._state_path.exists():
@@ -423,11 +474,18 @@ class GestationOwner:
         if kind == "withdrawal":
             seconds = min(self._config.withdrawal_seconds, WITHDRAWAL_MAX_SECONDS)
             self._drive.scale = 0.0
-            self._next_withdrawal_at = now + self._config.withdrawal_period_seconds
+            u = self._jitter_unit("withdrawal")
+            self._next_withdrawal_at = now + self._config.withdrawal_period_seconds * (
+                1.0 + self._config.probe_jitter_fraction * (2.0 * u - 1.0)
+            )
         else:
             seconds = min(self._config.perturbation_seconds, PERTURBATION_MAX_SECONDS)
-            self._drive.scale = 1.0
-            self._next_perturbation_at = now + self._config.perturbation_period_seconds
+            # Perturbation is a bounded rise, not a full-strength drive.
+            self._drive.scale = self._config.perturbation_drive_fraction
+            u = self._jitter_unit("perturbation")
+            self._next_perturbation_at = now + self._config.perturbation_period_seconds * (
+                1.0 + self._config.probe_jitter_fraction * (2.0 * u - 1.0)
+            )
 
         self._probe_state = kind
         self._probe_kind = kind

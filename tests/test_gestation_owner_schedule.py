@@ -108,6 +108,8 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
         "hrv_window_seconds": 10.0,
         "recovery_tolerance": 0.25,
         "recovery_cap_seconds": 30.0,
+        # These tests exercise the fixed schedule; jitter is tested separately.
+        "probe_jitter_fraction": 0.0,
     }
     defaults.update(overrides)
     return GestationReadoutConfig.from_dict(defaults)
@@ -286,7 +288,7 @@ async def test_perturbation_after_withdrawal_waits_for_separation(owner_factory)
     clock.t = earliest
     await owner.step()
     assert owner._probe_state == "perturbation"
-    assert drive.scale == 1.0
+    assert drive.scale == config.perturbation_drive_fraction
 
     starts = [
         e
