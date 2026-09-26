@@ -122,6 +122,18 @@ class FakeOscillator:
         self._ticks = int(state.get("ticks", 0))
 
 
+def _clamp01(value: float) -> float:
+    """Clamp a drive contribution to the unit interval; non-finite values read as 0."""
+    x = float(value)
+    if not math.isfinite(x):
+        return 0.0
+    if x < 0.0:
+        return 0.0
+    if x > 1.0:
+        return 1.0
+    return x
+
+
 class ModuleOscillator:
     """A small snnTorch LIF population whose spiking rhythm yields a phase.
 
@@ -188,9 +200,14 @@ class ModuleOscillator:
         self._spike_rate_history: deque[float] = deque(maxlen=self._history_len)
 
     # -- live dynamics ----------------------------------------------------
-    def step(self, drive: float) -> None:
-        """Advance the LIF population one step under the given drive in [0, 1]."""
-        d = float(drive)
+    def _inject(self, d: float) -> None:
+        """Inject a (lower-clamped) drive into the LIF population and record
+        the resulting population spike rate.
+
+        This is the single code path used by both `ModuleOscillator` and
+        `SelfRhythmOscillator` so the latter's combined drive is injected
+        bit-for-bit like the parent's own drive."""
+        d = float(d)
         if d < 0.0:
             d = 0.0
         injected = d * self._base_drive * self._drive_scale
@@ -198,6 +215,10 @@ class ModuleOscillator:
         spk, self._mem = self._lif(cur, self._mem)
         rate = float(spk.float().mean().item())
         self._spike_rate_history.append(rate)
+
+    def step(self, drive: float) -> None:
+        """Advance the LIF population one step under the given drive in [0, 1]."""
+        self._inject(drive)
 
     def phase(self) -> float:
         """Instantaneous phase of the recent spike-rate signal via Hilbert.
@@ -275,6 +296,60 @@ class ModuleOscillator:
             )
 
 
+class SelfRhythmOscillator(ModuleOscillator):
+    """Endogenous self-rhythm oscillator hosted by Soma.
+
+    This is the entity's own beat: it is stepped by Soma's interoceptive
+    activity and may couple to an optional maternal-drive rhythm, but the drive
+    only *presents* the rhythm. Any phase-locking emerges from the LIF
+    dynamics; nothing here forces phase-lock.
+
+    The capacity to oscillate is treated as an innate substrate property;
+    coupling to an external maternal rhythm is an emergent phenomenon
+    (Feldman 2007; entrainment debate: Notbohm 2016 vs Duecker 2021).
+    """
+
+    def step(self, drive: float, *, external_drive: float | None = None) -> None:
+        """Advance one step.
+
+        When ``external_drive`` is ``None`` this is bit-for-bit identical to
+        `ModuleOscillator.step(drive)`. Otherwise the total drive is the sum of
+        the two clamped drive contributions, injected through the same code
+        path as the parent.
+        """
+        if external_drive is None:
+            super().step(drive)
+            return
+        total = _clamp01(drive) + _clamp01(external_drive)
+        self._inject(total)
+
+    def amplitude(self) -> float:
+        """Population spread (standard deviation) of the recent spike rate.
+
+        Returns 0.0 until enough samples have accumulated, then a finite,
+        non-negative value."""
+        if len(self._spike_rate_history) < MIN_PLV_WINDOW:
+            return 0.0
+        try:
+            import numpy as np
+
+            arr = np.asarray(self._spike_rate_history, dtype=float)
+            amp = float(np.std(arr, ddof=0))
+        except Exception:
+            return 0.0
+        if not math.isfinite(amp) or amp < 0.0:
+            return 0.0
+        return amp
+
+    def serialize(self) -> dict[str, Any]:
+        state = super().serialize()
+        state["kind"] = "self_rhythm"
+        return state
+
+    def deserialize(self, state: dict[str, Any]) -> None:
+        super().deserialize(state)
+
+
 def make_oscillator(
     *,
     population_size: int = MIN_POPULATION_SIZE,
@@ -291,6 +366,33 @@ def make_oscillator(
         return None
     try:
         return ModuleOscillator(
+            population_size=population_size,
+            plv_window=plv_window,
+            beta=beta,
+            threshold=threshold,
+            base_drive=base_drive,
+            seed=seed,
+        )
+    except Exception:  # pragma: no cover - defensive: any lazy-import failure
+        return None
+
+
+def make_self_rhythm_oscillator(
+    *,
+    population_size: int = MIN_POPULATION_SIZE,
+    plv_window: int = MIN_PLV_WINDOW,
+    beta: float = 0.9,
+    threshold: float = 1.0,
+    base_drive: float = 1.5,
+    seed: Optional[int] = None,
+) -> Optional[SelfRhythmOscillator]:
+    """Build a live `SelfRhythmOscillator`, or return ``None`` when snnTorch is
+    not installed. A later wetware self-rhythm plugin would add its own factory
+    here; nothing pluggable is built now."""
+    if not snntorch_available():
+        return None
+    try:
+        return SelfRhythmOscillator(
             population_size=population_size,
             plv_window=plv_window,
             beta=beta,

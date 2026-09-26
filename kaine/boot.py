@@ -86,6 +86,8 @@ def make_soma(
     injections: Optional[Mapping[str, Any]] = None,
 ) -> BaseModule:
     from kaine.modules.soma.module import Soma
+    from kaine.modules.womb_drive import MaternalDriveProvider
+    from kaine.oscillator.module_oscillator import make_self_rhythm_oscillator
 
     allowed = {
         "read_interval_s",
@@ -109,9 +111,35 @@ def make_soma(
         "regulation_warmup_require_error_stabilized",
         "regulation_warmup_stable_window",
         "regulation_warmup_stable_variance",
+        # Self-rhythm oscillator
+        "self_rhythm_enabled",
+        "self_rhythm_step_hz",
     }
+    feed_section = dict(section.pop("perception_feed", {}) or {})
     kw = _pop(section, allowed)
     kw.update(_check_injections("soma", injections, {"forward_model"}))
+
+    if kw.get("self_rhythm_enabled"):
+        kw.pop("self_rhythm_enabled")
+        step_hz = float(kw.pop("self_rhythm_step_hz", 20.0))
+        osc = make_self_rhythm_oscillator(seed=int(feed_section.get("seed", 0)))
+        if osc is None:
+            raise ValueError(
+                "[soma].self_rhythm_enabled requires the oscillator extra (snnTorch)"
+            )
+        kw["self_rhythm"] = osc
+        kw["self_rhythm_step_hz"] = step_hz
+        if feed_section.get("mode") == "womb":
+            params = _womb_params(feed_section)
+            if params.external_drive_to_self_rhythm:
+                clock, _ = _shared_womb_objects(feed_section)
+                kw["maternal_drive"] = MaternalDriveProvider(
+                    clock, params, seed=int(feed_section.get("seed", 0))
+                )
+    else:
+        kw.pop("self_rhythm_enabled", None)
+        kw.pop("self_rhythm_step_hz", None)
+
     return Soma(bus, entity_clock=entity_clock, **kw)
 
 
@@ -2022,9 +2050,9 @@ def construct_module(
     """Construct a single module exactly as `build_registry` would.
 
     Copies the module's section from ``kaine_config``, wires the shared
-    perception feed for Topos/Audition, injects ``entity_clock`` into clocked
-    factories, injects ``intent_secret`` into Praxis, and dispatches plugin
-    injections to Chronos, Soma and Nous.
+    perception feed for Topos/Audition/Soma, injects ``entity_clock`` into
+    clocked factories, injects ``intent_secret`` into Praxis, and dispatches
+    plugin injections to Chronos, Soma and Nous.
     """
     if name not in SIMPLE_FACTORIES and name != "hypnos":
         raise ConfigurationError(f"unknown module {name!r}")
@@ -2035,7 +2063,7 @@ def construct_module(
         )
 
     section = dict(kaine_config.get(name) or {})
-    if name in ("topos", "audition"):
+    if name in ("topos", "audition", "soma"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
 
     if name == "hypnos":
