@@ -258,7 +258,7 @@ def _emotion_event(
     category: str = "happy",
     confidence: float = 0.8,
     degraded: bool = False,
-    source_label: str = "operator",
+    source_label: str = "live_mic",
 ) -> Event:
     payload: dict[str, Any] = {
         "category": category,

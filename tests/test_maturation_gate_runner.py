@@ -153,11 +153,17 @@ def _make_registry(
     )
     mundus.activate = AsyncMock(return_value=mundus_enabled and mundus_approved)
 
+    vox = MagicMock()
+    vox.set_dormant = MagicMock()
+
+    # Hypnos is present so the gate applies the sleep and consolidation floors.
+    modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
+
     def _get(name: str):
-        return {"phantasia": phantasia, "mundus": mundus}[name]
+        return modules[name]
 
     registry.get.side_effect = _get
-    registry.__contains__.return_value = True
+    registry.__contains__.side_effect = lambda name: name in modules
     return registry
 
 
@@ -303,6 +309,8 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path, m
     assert len(published) == 1
     assert published[0].type == STAGE_BIRTH
     assert runner.stage.is_embodied
+    # Birth gives the entity its voice.
+    runner._registry.get("vox").set_dormant.assert_called_once_with(False)
     # Stage file persisted the transition.
     persisted = lifecycle_stage.read_stage(tmp_path / "stage.json")
     assert persisted is not None
@@ -387,11 +395,17 @@ def _make_registry_with_mundus(mundus: _RecordingMundus) -> Any:
     phantasia = MagicMock()
     phantasia.successful_training_passes = 1
 
+    vox = MagicMock()
+    vox.set_dormant = MagicMock()
+
+    # Hypnos is present so the gate applies the sleep and consolidation floors.
+    modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
+
     def _get(name: str):
-        return {"phantasia": phantasia, "mundus": mundus}[name]
+        return modules[name]
 
     registry.get.side_effect = _get
-    registry.__contains__.return_value = True
+    registry.__contains__.side_effect = lambda name: name in modules
     return registry
 
 

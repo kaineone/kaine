@@ -497,6 +497,9 @@ one machine that cannot also host Paracosmic.
   decision. When a birth awaits you, it offers **Acknowledge birth**. Birth is one-way,
   so a second click confirms it. An acknowledgement applies only to the current boot's
   request; after a restart, acknowledge again.
+- **Vox in the womb.** While the entity is gestating, Vox is held dormant: there is no
+  air medium to speak into, so no audible output is rendered. Inner speech (Lingua)
+  continues. Vox is activated automatically at birth.
 
 ### Settings
 
@@ -610,6 +613,15 @@ python -m kaine.research --send      # review, confirm recipient, confirm send
 ```
 
 Configuration is in `[research_submission]` — see [Configuration Reference](configuration.md#research_submission).
+
+### Media voices
+
+Heard audio is tagged with the channel it arrived on: `live_mic` for the microphone,
+`remote` for remote audio, and `playlist`, `seeded`, `womb`, or `screen` for the matching
+perception feed. Empatheia attributes operator channels to the configured speaker label
+and attributes every other channel to its own `media:<channel>` agent, so film dialogue
+does not shape the operator model. Volition treats only operator-channel transcriptions
+as speech addressed to the entity.
 
 ---
 

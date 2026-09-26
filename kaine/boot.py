@@ -1234,6 +1234,17 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     return Lingua(bus, **kw)
 
 
+def _live_mic_source_label(mode: str) -> str:
+    """Return the audition source label for the live-microphone path.
+
+    Perception feeds model the channel they play on; a real microphone stays
+    ``live_mic``.
+    """
+    if mode in ("seeded", "playlist", "womb", "screen"):
+        return mode
+    return "live_mic"
+
+
 def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.audition.live import LiveMicConfig
     from kaine.modules.audition.module import Audition
@@ -1326,6 +1337,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             device=section.get("capture_device") or None,
             sample_rate=sample_rate,
             channels=channels,
+            source_label=_live_mic_source_label(mode),
             vad_backend=section.get("vad_backend", "webrtcvad"),
             vad_aggressiveness=int(section.get("vad_aggressiveness", 2)),
             vad_frame_ms=int(section.get("vad_frame_ms", 30)),
@@ -1826,6 +1838,7 @@ def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "backend",
         "collection",
         "speaker_label",
+        "operator_sources",
         "deviation_threshold",
         "baseline_salience",
         "alert_salience",
@@ -1834,6 +1847,10 @@ def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     kwargs: dict[str, Any] = {k: section[k] for k in allowed - {"qdrant"} if k in section}
+    if "operator_sources" in kwargs:
+        ops = kwargs["operator_sources"]
+        if not isinstance(ops, list) or not all(isinstance(x, str) for x in ops):
+            raise ValueError("empatheia.operator_sources must be a list of strings")
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
     if "port" in qdrant:
