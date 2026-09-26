@@ -690,6 +690,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # When set, preserve_live refuses to write an unencrypted bundle
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
+        # Called with the action taken after every protective response, so an
+        # unattended run can tell its caretaker. Never allowed to break the
+        # response itself.
+        on_response: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(
             bus=bus,
@@ -702,6 +706,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._config = config
         self._on_end = on_end
         self._require_encryption = bool(require_encryption)
+        self._on_response = on_response
         # Cold-start warm-up origin (monotonic run clock), stamped on first poll.
         self._started_at: float | None = None
         self._cursor = "0"
@@ -972,6 +977,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             preservation_id or "PRESERVE-FAILED",
             action_taken,
         )
+        if self._on_response is not None:
+            try:
+                self._on_response(action_taken)
+            except Exception:
+                log.warning("welfare monitor: on_response callback failed", exc_info=True)
 
 
 __all__ = [

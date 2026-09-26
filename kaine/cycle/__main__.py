@@ -1225,6 +1225,31 @@ async def _boot_and_run(
             observations_provider=lambda: cycle.tick_index,
             require_encryption=preservation_cfg.require_encryption,
         )
+    if supervision_mode == "unattended":
+        from kaine.cycle.caretaker import CaretakerConfig
+        from kaine.cycle.caretaker_runtime import CaretakerNotifier
+
+        caretaker = CaretakerNotifier(
+            CaretakerConfig.from_section(kaine_config.get("caretaker") or {})
+        )
+        await caretaker.start()
+    else:
+        caretaker = None
+
+    _caretaker_tasks: set[asyncio.Task] = set()
+
+    def _on_welfare_response(action: str) -> None:
+        if caretaker is None:
+            return
+        try:
+            task = asyncio.get_running_loop().create_task(
+                caretaker.send_event("welfare_response")
+            )
+        except RuntimeError:
+            return
+        _caretaker_tasks.add(task)
+        task.add_done_callback(_caretaker_tasks.discard)
+
     if preservation_cfg.welfare_response.enabled:
         welfare_monitor = WelfareProtectiveMonitor(
             registry=registry,
@@ -1238,6 +1263,7 @@ async def _boot_and_run(
             ),
             on_end=lambda: stop_event.set(),
             require_encryption=preservation_cfg.require_encryption,
+            on_response=_on_welfare_response,
         )
 
     cycle_task = asyncio.create_task(cycle.run_forever(), name="cycle.run_forever")
@@ -1262,6 +1288,37 @@ async def _boot_and_run(
         if staging_enabled and stage_state.is_gestating
         else None
     )
+    caretaker_task = (
+        asyncio.create_task(caretaker.run(stop_event), name="cycle.caretaker")
+        if caretaker is not None
+        else None
+    )
+    input_watch_task = None
+    if caretaker is not None:
+        from kaine.cycle.caretaker import CaretakerConfig as _InputCaretakerConfig
+        from kaine.cycle.input_check import InputLossWatcher
+
+        streams: list[str] = []
+        modules = kaine_config.get("modules") or {}
+        if modules.get("topos"):
+            streams.append("topos.out")
+        if modules.get("audition"):
+            streams.append("audition.out")
+
+        if streams:
+            # Validated by the gate (condition 7) before admission.
+            threshold_s = _InputCaretakerConfig.from_section(
+                kaine_config.get("caretaker") or {}
+            ).input_loss_after_s
+            input_watch_task = asyncio.create_task(
+                InputLossWatcher(
+                    bus,
+                    streams,
+                    threshold_s=threshold_s,
+                    on_loss=lambda: caretaker.send_event("input_lost"),
+                ).run(stop_event),
+                name="cycle.input_watch",
+            )
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
@@ -1298,6 +1355,47 @@ async def _boot_and_run(
             except asyncio.TimeoutError:
                 continue
     finally:
+        if input_watch_task is not None:
+            input_watch_task.cancel()
+            try:
+                await input_watch_task
+            except asyncio.CancelledError:
+                # Expected: we just cancelled it.
+                log.debug("input watch task cancelled at shutdown")
+            except Exception:
+                log.exception("input watch task shutdown failed")
+        if caretaker is not None:
+            try:
+                if spot.escalated:
+                    from kaine.cycle.escalation_state import read_escalation
+
+                    rec = read_escalation()
+                    await caretaker.send_event(
+                        "supervision_lost" if rec.module == "spot" else "spot_escalation"
+                    )
+            except Exception:
+                log.warning("caretaker escalation notice failed", exc_info=True)
+            try:
+                if _caretaker_tasks:
+                    await asyncio.gather(*_caretaker_tasks, return_exceptions=True)
+            except Exception:
+                log.warning("caretaker welfare tasks shutdown failed", exc_info=True)
+            try:
+                if caretaker_task is not None and not caretaker_task.done():
+                    caretaker_task.cancel()
+                    try:
+                        await caretaker_task
+                    except asyncio.CancelledError:
+                        # Expected: we just cancelled it.
+                        log.debug("caretaker task cancelled at shutdown")
+                    except Exception:
+                        log.warning("caretaker task raised during shutdown", exc_info=True)
+            except Exception:
+                log.warning("caretaker task cancellation failed", exc_info=True)
+            try:
+                await caretaker.stop()
+            except Exception:
+                log.warning("caretaker stop failed", exc_info=True)
         if not freeze_task.done():
             freeze_task.cancel()
         try:
@@ -1395,16 +1493,18 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the eight-condition unattended gate over the resolved config.
 
     Reuses the research safety net for conditions 1–5.  Condition 6 comes from
-    Spot's selftest.  Condition 8 is not built in this slice.  Condition 7
-    runs last and needs the outcome of conditions 1–6 and 8 as prerequisites.
+    Spot's selftest.  Condition 8 requires a continuous perception input.
+    Condition 7 runs last and needs the outcome of conditions 1–6 and 8 as
+    prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
+    from kaine.cycle.input_check import check_input_condition
     from kaine.cycle.spot_selftest import check_spot_condition
-    from kaine.cycle.unattended_gate import evaluate_unattended_gate, not_built
+    from kaine.cycle.unattended_gate import evaluate_unattended_gate
 
     spot = check_spot_condition(config.get("spot") or {})
-    eight = not_built(8)
+    eight = check_input_condition(config)
 
     # Condition 7 must report on 1–6 and 8, but must not include itself.
     checks = dict(evaluate_unattended_gate(net, built={6: spot, 8: eight}).checks)
@@ -1417,12 +1517,53 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     return evaluate_unattended_gate(net, built={6: spot, 7: seven, 8: eight})
 
 
+def _record_unattended_gate(result: Any) -> None:
+    """Durably append one JSON record of the unattended gate evaluation.
+
+    Best-effort: a write failure is logged and MUST NOT change the boot outcome.
+    Paths in condition reasons are scrubbed before write.
+    """
+    from kaine.cycle.incident_log import IncidentLog, scrub_paths
+
+    logger = logging.getLogger(__name__)
+    try:
+        conditions = [
+            {
+                "number": c.number,
+                "name": c.name,
+                "ok": bool(c.ok),
+                "reason": scrub_paths(c.reason),
+            }
+            for c in result.conditions
+        ]
+        record: dict[str, Any] = {
+            "transition": "gate",
+            "ok": bool(result.ok),
+            "conditions": conditions,
+        }
+
+        async def _write() -> None:
+            log = IncidentLog(
+                enabled=True, path="state/cycle/incidents", name="unattended_gate"
+            )
+            await log.start()
+            try:
+                await log.write(record)
+            finally:
+                await log.stop()
+
+        asyncio.run(_write())
+    except Exception:
+        logger.warning("failed to record unattended gate evaluation", exc_info=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     from kaine.config import ProfileError
+    from kaine.cycle.caretaker_runtime import send_event_best_effort
     from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE
     from kaine.cycle.unattended_gate import (
         UNATTENDED_GATE_EXIT_CODE,
@@ -1473,6 +1614,8 @@ def main(argv: list[str] | None = None) -> int:
         for c in result.conditions:
             status = "pass" if c.ok else f"FAIL — {c.reason}"
             log.info("unattended gate %d: %s: %s", c.number, c.name, status)
+        # Durably record the gate outcome before the allow/refuse branch.
+        _record_unattended_gate(result)
         if not result.ok:
             sys.stderr.write(result.message() + "\n")
             # Best-effort caretaker notice about the refusal; an error here must
@@ -1518,8 +1661,20 @@ def main(argv: list[str] | None = None) -> int:
     except PluginError as exc:
         # A named plugin that cannot load or supply its seams stops the boot:
         # running on the default models would misrepresent the run.
+        if supervision_mode == "unattended":
+            try:
+                send_event_best_effort(config.get("caretaker"), "boot_failed")
+            except Exception:
+                log.exception("failed to send caretaker boot_failed notice")
         sys.stderr.write(f"kaine.cycle: plugin error: {exc}\n")
         return 1
+    except Exception:
+        if supervision_mode == "unattended":
+            try:
+                send_event_best_effort(config.get("caretaker"), "boot_failed")
+            except Exception:
+                log.exception("failed to send caretaker boot_failed notice")
+        raise
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")
         return 0

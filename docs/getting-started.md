@@ -656,9 +656,10 @@ one.
 - It does not record raw audio or video to disk. Live perception streams pass
   through processing in memory and are released. See
   [Security and Privacy](security-and-privacy.md#zero-raw-sense-data-persistence).
-- It does not start itself. Every launch is gated — operator-present
-  (`KAINE_CYCLE_OPERATOR_PRESENT=1`) or, in the unsupervised research phase, a
-  verified autonomous safety net — and the cycle refuses to boot if neither holds.
+- It does not start itself unless you opt in. Every launch is gated — operator-present
+  (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a verified autonomous safety net in the
+  unsupervised research phase, or an opt-in unattended start that must pass eight
+  conditions at every boot — and the cycle refuses to boot if none holds.
   See [For Researchers](for-researchers.md).
 - It does not act unless Praxis is enabled and the operator has explicitly added
   shell or file-write whitelist entries.

@@ -584,7 +584,8 @@ memory only — never on disk. Capture is disabled by default; requires the
 A design pattern requiring two independent conditions before a sensitive
 operation fires. Examples: a non-research cognitive cycle requires both a running
 Python process and `KAINE_CYCLE_OPERATOR_PRESENT=1` (in research mode that
-requirement is replaced by the verified autonomous safety-net gate); voice-
+requirement is replaced by the verified autonomous safety-net gate, and in an
+unattended start by the eight-condition unattended gate); voice-
 alignment training requires both `[hypnos.voice_alignment].enabled = true` in TOML
 and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` in the environment. The two-gate
 pattern prevents accidental activation from a single misconfiguration. See also:

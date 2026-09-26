@@ -1156,3 +1156,27 @@ async def test_diagnostics_rail_shows_console_link_when_conversation_on():
             assert r.status_code == 200
             assert ">Console</a>" in r.text
             assert 'class="rail__brand" href="/"' in r.text
+
+
+@pytest.mark.asyncio
+async def test_caretaker_ack_requires_auth_in_the_real_app(tmp_path, monkeypatch):
+    """The acknowledge action is mounted on the real app behind the operator
+    session: without a token it is refused and no acknowledgement is written."""
+    from kaine.cycle import caretaker_state
+
+    monkeypatch.setattr(caretaker_state, "START_PATH", tmp_path / "start.json")
+    monkeypatch.setattr(caretaker_state, "ACK_PATH", tmp_path / "ack.json")
+    caretaker_state.write_start(
+        caretaker_state.CaretakerStart(start_id="a" * 32, started_at="2026-01-01T00:00:00+00:00")
+    )
+    client, app = await _make_client()
+    async with client:
+        denied = await client.post("/diagnostics/caretaker/ack", json={"start_id": "a" * 32})
+        allowed = await client.post(
+            "/diagnostics/caretaker/ack",
+            json={"start_id": "a" * 32},
+            headers={"Authorization": "Bearer test-token"},
+        )
+    assert denied.status_code in (401, 403)
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["pending"] is False

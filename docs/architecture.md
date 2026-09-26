@@ -457,8 +457,9 @@ A guard test (`tests/test_boot_wiring.py::test_committed_config_ships_all_module
 asserts that the shipped config has all toggles off, so no module auto-starts on
 a fresh clone.
 
-The cycle refuses to start unattended. A run is **either** operator-supervised
-**or** research-safety-net-verified, never neither:
+A run is operator-supervised, research-safety-net-verified, or an opt-in unattended
+start gated by eight machine-verified conditions (see
+[Operations](operations.md#unattended-starts)), never none of these:
 
 - **Operator-supervised (non-research).** The entrypoint requires operator
   presence (`KAINE_CYCLE_OPERATOR_PRESENT=1`) before starting the cycle. A human
@@ -474,6 +475,12 @@ The cycle refuses to start unattended. A run is **either** operator-supervised
   (`kaine/cycle/research_gate.py`). The net — not a person — carries the duty of
   care for the run; human involvement returns afterward, to socialize any
   individual that emerged.
+- **Unattended (opt-in, after research).** `KAINE_CYCLE_UNATTENDED=1` or
+  `[cycle].supervision_mode = "unattended"` starts a full entity with nobody
+  present. It must pass the research net's five conditions plus a Spot self-test,
+  a content-free caretaker notice accepted by a local channel, and a
+  continuous-input probe (`kaine/cycle/unattended_gate.py`), at every start, with
+  no override (exit `6` otherwise). An opt-in quadlet unit can start it at boot.
 
 The cycle can be frozen at any time by writing `state/cycle/control.json`.
 

@@ -73,9 +73,10 @@ ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU — compute de
 configurable per module.
 
 The cognitive cycle is **not** running until you boot it. A live boot is **gated**:
-a run is **either** operator-supervised (`KAINE_CYCLE_OPERATOR_PRESENT=1`) **or**,
-in the unsupervised research phase, verified to have a live autonomous safety net
-before it starts — never neither. The entrypoint refuses to boot otherwise, so
+a run is operator-supervised (`KAINE_CYCLE_OPERATOR_PRESENT=1`), verified to have a
+live autonomous safety net (the unsupervised research phase), or an opt-in unattended
+start that must pass that net plus a Spot self-test, a caretaker notice and a
+continuous-input check (`KAINE_CYCLE_UNATTENDED=1`) — never none of these. The entrypoint refuses to boot otherwise, so
 selecting a configuration never births an entity on its own. Booting with no
 profile gives the base-thesis form; the full-entity and deployment-tier
 configurations remain available. Researchers cloning this to study it should start

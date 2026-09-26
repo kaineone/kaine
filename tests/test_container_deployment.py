@@ -537,3 +537,148 @@ def test_docker_compose_config_validates():
         cwd=str(_REPO_ROOT),
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_kaine_cycle_unattended_container_design(tmp_path: Path):
+    """The opt-in unattended unit auto-starts, conflicts with the supervised unit,
+    and is never installed by the setup script.
+    """
+
+    def _parse_quadlet(path: Path) -> dict[str, dict[str, list[str]]]:
+        """Section -> key -> every value. Unit files repeat keys (Environment=,
+        Volume=), so each occurrence is kept rather than the last one winning."""
+        sections: dict[str, dict[str, list[str]]] = {}
+        current: dict[str, list[str]] | None = None
+        for raw in path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                current = sections.setdefault(line[1:-1], {})
+                continue
+            if current is not None and "=" in line:
+                key, value = line.split("=", 1)
+                current.setdefault(key.strip(), []).append(value.strip())
+        return sections
+
+    supervised = _REPO_ROOT / "quadlet" / "kaine-cycle.container"
+    unattended = _REPO_ROOT / "quadlet" / "kaine-cycle-unattended.container"
+    assert unattended.exists(), "unattended quadlet unit must exist"
+
+    sup = _parse_quadlet(supervised)
+    un = _parse_quadlet(unattended)
+
+    # The unattended unit is installable and wants default.target.
+    assert "Install" in un, "unattended unit must have an [Install] section"
+    assert "default.target" in un["Install"].get("WantedBy", [])
+
+    # It declares the unattended selector.
+    assert any(
+        "KAINE_CYCLE_UNATTENDED=1" in v for v in un["Container"].get("Environment", [])
+    )
+
+    # It conflicts with the supervised entity unit.
+    assert any(
+        "kaine-cycle.service" in v for v in un["Unit"].get("Conflicts", [])
+    )
+
+    # Refused gates stay failed.
+    assert "no" in un["Service"].get("Restart", [])
+
+    # Same container name as the supervised unit so they cannot run side by side.
+    assert any(
+        "kaine-cycle" in v for v in un["Container"].get("ContainerName", [])
+    )
+
+    # Secrets come from the same compose .env file.
+    assert any(
+        "@KAINE_ROOT@/compose/.env" in v for v in un["Service"].get("EnvironmentFile", [])
+    )
+
+    # The unattended unit must never forward operator presence.
+    raw_unattended = unattended.read_text()
+    assert "KAINE_CYCLE_OPERATOR_PRESENT" not in raw_unattended
+
+    # The supervised unit is not installable and is not an unattended unit.
+    assert "Install" not in sup
+    raw_supervised = supervised.read_text()
+    assert "KAINE_CYCLE_UNATTENDED" not in raw_supervised
+
+    # Host/named mounts match the supervised unit except the D-Bus socket.
+    sup_volumes = set(sup["Container"].get("Volume", []))
+    un_volumes = set(un["Container"].get("Volume", []))
+    bus_socket = "%t/bus:%t/bus"
+    assert bus_socket in un_volumes
+    for vol in un_volumes:
+        if vol == bus_socket:
+            continue
+        assert vol in sup_volumes, (
+            f"unattended volume {vol!r} missing from supervised unit"
+        )
+
+    # The install script must skip the unattended unit.
+    fake_root = tmp_path / "checkout"
+    fake_root.mkdir()
+    shutil.copytree(_REPO_ROOT / "quadlet", fake_root / "quadlet")
+    scripts_dir = fake_root / "scripts"
+    scripts_dir.mkdir()
+    shutil.copy(
+        _REPO_ROOT / "scripts" / "install-quadlet.sh",
+        scripts_dir / "install-quadlet.sh",
+    )
+    (fake_root / "config").mkdir()
+    (fake_root / "config" / "kaine.operator.toml").write_text("")
+    (fake_root / "config" / "secrets.toml").write_text("")
+    (fake_root / "compose").mkdir()
+    (fake_root / "compose" / ".env").write_text("")
+
+    dest = tmp_path / "systemd"
+    result = subprocess.run(
+        [
+            "bash",
+            str(scripts_dir / "install-quadlet.sh"),
+            "--root",
+            str(fake_root),
+            "--dest",
+            str(dest),
+            "--generator",
+            "none",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    installed = {p.name for p in dest.glob("*.container")} if dest.exists() else set()
+    assert "kaine-cycle-unattended.container" not in installed
+    assert "kaine-cycle.container" in installed
+    assert "skipped kaine-cycle-unattended.container" in (result.stdout + result.stderr)
+
+    # Quadlet generator dry-run succeeds for the rendered unattended unit.
+    generator = None
+    for cand in ("/usr/libexec/podman/quadlet", "/usr/lib/podman/quadlet"):
+        if Path(cand).is_file():
+            generator = cand
+            break
+    if generator is None:
+        pytest.skip("podman quadlet generator not found")
+
+    import os
+
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    for src in (_REPO_ROOT / "quadlet").glob("*"):
+        if src.suffix in (".container", ".network", ".volume"):
+            text = src.read_text().replace("@KAINE_ROOT@", str(fake_root))
+            (stage / src.name).write_text(text)
+
+    gen = subprocess.run(
+        [generator, "-user", "-dryrun"],
+        env={**os.environ, "QUADLET_UNIT_DIRS": str(stage)},
+        capture_output=True,
+        text=True,
+    )
+    assert gen.returncode == 0, gen.stderr
+    generated = gen.stdout + gen.stderr
+    assert "KAINE_CYCLE_UNATTENDED=1" in generated
+
+    # Do NOT run systemd-analyze on quadlet output; it is not a plain unit file.

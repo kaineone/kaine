@@ -1229,6 +1229,47 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   overflow-wrap: anywhere;
 }
 
+.caretaker-banner {
+  display: none;
+  padding: 0.65rem 1rem;
+  text-align: center;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  background: var(--degraded-bg);
+  color: var(--degraded);
+  border-bottom: 2px solid var(--degraded);
+}
+.caretaker-banner:not([hidden]) { display: flex; }
+.caretaker-banner__label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+.caretaker-banner__msg { font-weight: normal; }
+#caretaker-ack-msg {
+  font-size: var(--fs-xs);
+  opacity: 0.9;
+}
+#caretaker-ack {
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 0.25rem;
+}
+#caretaker-ack:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ---- Spot console log --------------------------------------------------- */
 
 .spot-console-log {

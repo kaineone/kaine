@@ -469,3 +469,96 @@ def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
     # The result must include the not-built condition 8 and the caretaker condition 7.
     assert checks.get("8_continuous_input") is False
     assert checks.get("7_caretaker_told") is False
+
+
+def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypatch):
+    from kaine.cycle import __main__ as m
+    from kaine.cycle.research_gate import evaluate_research_gate
+    from kaine.cycle.unattended_gate import (
+        CONDITION_NAMES,
+        Condition,
+        evaluate_unattended_gate,
+    )
+    from kaine.plugins import PluginError
+
+    for var in (
+        "KAINE_CYCLE_UNATTENDED",
+        "KAINE_CYCLE_OPERATOR_PRESENT",
+        "KAINE_RESEARCH_MODE",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    net = evaluate_research_gate(
+        preservation_enabled=True,
+        welfare_response_wired=True,
+        logging_active=True,
+        self_check_passed=True,
+        encryption_satisfied=True,
+    )
+    built = {
+        6: Condition(6, CONDITION_NAMES[6], True),
+        7: Condition(7, CONDITION_NAMES[7], True),
+        8: Condition(8, CONDITION_NAMES[8], True),
+    }
+    passing = evaluate_unattended_gate(net, built=built)
+
+    calls = []
+
+    def fake_send_event_best_effort(
+        section, event, *, notify_fn=None, secrets_path=None
+    ):
+        calls.append((section, event))
+
+    async def fake_boot(*, supervision_mode="operator", gate_checks=None):
+        raise PluginError("plugin load failed")
+
+    monkeypatch.setattr(
+        m,
+        "_load_kaine_config",
+        lambda: {
+            "cycle": {"supervision_mode": "unattended"},
+            "caretaker": {"channels": [{"kind": "desktop"}]},
+        },
+    )
+    monkeypatch.setattr(m, "_evaluate_unattended_gate", lambda config: passing)
+    monkeypatch.setattr(m, "_boot_and_run", fake_boot)
+    monkeypatch.setattr(
+        "kaine.cycle.caretaker_runtime.send_event_best_effort", fake_send_event_best_effort
+    )
+
+    rc = m.main([])
+    assert rc == 1
+    assert calls == [({"channels": [{"kind": "desktop"}]}, "boot_failed")]
+
+
+def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
+    from kaine.cycle import __main__ as m
+    from kaine.plugins import PluginError
+
+    monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
+    monkeypatch.delenv("KAINE_CYCLE_UNATTENDED", raising=False)
+    monkeypatch.delenv("KAINE_RESEARCH_MODE", raising=False)
+
+    calls = []
+
+    def fake_send_event_best_effort(
+        section, event, *, notify_fn=None, secrets_path=None
+    ):
+        calls.append((section, event))
+
+    async def fake_boot(*, supervision_mode="operator", gate_checks=None):
+        raise PluginError("plugin load failed")
+
+    monkeypatch.setattr(
+        m,
+        "_load_kaine_config",
+        lambda: {"cycle": {"supervision_mode": "operator"}},
+    )
+    monkeypatch.setattr(m, "_boot_and_run", fake_boot)
+    monkeypatch.setattr(
+        "kaine.cycle.caretaker_runtime.send_event_best_effort", fake_send_event_best_effort
+    )
+
+    rc = m.main([])
+    assert rc == 1
+    assert calls == []

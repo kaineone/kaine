@@ -35,7 +35,7 @@ This document is the authoritative reference for `config/kaine.toml` and the com
 | `minimal_experiment` | The workspace-mediation ablation's minimal run configuration: only Soma, Chronos, Lingua; `[syneidesis].top_k = 2` (forces genuine competitive exclusion on the small candidate set), `[volition].drive_initiative = false`, `[lingua].temperature = 0.0` (greedy decoding). Distinct from `thesis_test` — a narrower, offline-experiment-scoped overlay, not the live default. See `config/profiles/minimal_experiment.toml`. | Yes — three modules. |
 | `tier0` / `tier1` / `tier2` / `tier3` | Deployment-tier hardware profiles (openspec `deployment-tiers`): device/cycle-rate/backend hints for a host class (workstation down to lightweight/SBC-class hardware). **INERT by contract — never enable a module.** A separate axis from `thesis_test`/`minimal_experiment`; combine a tier profile's hardware hints with an operator's own module choices in `config/kaine.operator.toml`. | No — hardware hints only. |
 
-Enabling modules via a profile does not birth an entity: the cognitive cycle still refuses to boot without `KAINE_CYCLE_OPERATOR_PRESENT=1` (or a verified research safety net). A profile only selects which modules construct and how they're configured; no work is lost by not selecting one — every module stays built.
+Enabling modules via a profile does not birth an entity: the cognitive cycle still refuses to boot without `KAINE_CYCLE_OPERATOR_PRESENT=1`, a verified research safety net, or a passing unattended gate. A profile only selects which modules construct and how they're configured; no work is lost by not selecting one — every module stays built.
 
 ---
 
