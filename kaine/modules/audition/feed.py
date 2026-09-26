@@ -563,6 +563,9 @@ class PlaylistAudioStream:
         # surfaces report the same item at the same wall-clock moment. A private
         # clock keeps a standalone audio stream working on its own.
         self._clock = playlist_clock or PlaylistClock(len(manifest.items))
+        self._delivered_lock = threading.Lock()
+        self._delivered: tuple[int, float] | None = None
+        self._produce_item_idx = -1
         self._thread: threading.Thread | None = None
         self._stopped = threading.Event()
 
@@ -589,6 +592,36 @@ class PlaylistAudioStream:
         return PlaylistPosition(
             title=Path(it.path).name, order=it.order, offset=offset, item_idx=idx
         )
+
+    @property
+    def delivered_position(self) -> tuple[int, float] | None:
+        """The seconds of the current item's audio actually handed to the
+        listener so far, measured by the producer thread. ``None`` before the
+        first block is emitted. Content-free provenance."""
+        with self._delivered_lock:
+            return self._delivered
+
+    def _begin_item(self, item_idx: int, offset_s: float) -> None:
+        """Start accounting for ``item_idx``. A producer that resyncs to the
+        shared clock seeks to ``offset_s`` inside the item, so the delivered
+        position starts there rather than at zero."""
+        self._produce_item_idx = item_idx
+        with self._delivered_lock:
+            self._delivered = (item_idx, max(0.0, float(offset_s)))
+
+    def _update_delivered(self, pcm: bytes, item_idx: int) -> float:
+        """Account for ``pcm`` being handed to the listener.
+
+        Returns the block duration in seconds. Resets the cumulative counter
+        when the producer moves to a new item.
+        """
+        with self._delivered_lock:
+            if self._delivered is None or self._delivered[0] != item_idx:
+                self._delivered = (item_idx, 0.0)
+            frames = len(pcm) // (self._channels * 2)
+            seconds = frames / float(self._sample_rate)
+            self._delivered = (item_idx, self._delivered[1] + seconds)
+            return seconds
 
     def _resolve(self, path: str) -> Path:
         p = Path(path)
@@ -651,6 +684,7 @@ class PlaylistAudioStream:
                 next_deadline = time.monotonic()
             if self._stopped.is_set():
                 return
+            self._update_delivered(pcm, self._produce_item_idx)
             try:
                 self._callback(pcm)
             except Exception:
@@ -689,6 +723,7 @@ class PlaylistAudioStream:
                     continue
                 if self._stopped.is_set():
                     return
+                self._begin_item(idx, start_offset if idx == start_idx else 0.0)
                 media = self._resolve(item.path)
                 container = av.open(str(media))
                 try:

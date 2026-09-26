@@ -992,6 +992,9 @@ collection = "empatheia_agents"
 # Operator-set speaker label. Default "operator" for single-partner v1.
 # Speaker diarization (paper §10) will expand this to per-speaker labels.
 speaker_label = "operator"
+# Channels whose voices are attributed to the operator. Audio from any other
+# channel is modelled as media:<channel>; Volition only answers these channels.
+# operator_sources = ["live_mic", "microphone", "remote"]
 # Deviation above this triggers empatheia.social_error.
 deviation_threshold = 0.5
 baseline_salience = 0.15
@@ -1555,6 +1558,21 @@ bystander_consent_attested = false
 # Storage path (MUST remain outside data/evaluation/).
 archive_dir = "state/research/raw_bus_archive"
 retention_days = 30
+
+# In-process ignition log (film-aligned-ignition-log).
+#
+# Records every successful workspace broadcast with programme position, audio
+# delivered position, coalition member ids and timestamps, salience scores and
+# inhibition. No event payloads are recorded, so no conversation content,
+# transcripts, video frames or audio samples are persisted. The log is never on
+# the bus, never reaches any module, and is encrypted at rest when state
+# encryption is on. Its files are never auto-purged.
+#
+# SHIPS DISABLED. Enable it for studies that align workspace broadcasts to a
+# playlist programme (the module-ignition study).
+[ignition_log]
+enabled = false
+directory = "data/ignition"
 
 [logging]
 level = "INFO"

@@ -149,11 +149,17 @@ def _make_registry(
     )
     mundus.activate = AsyncMock(return_value=mundus_enabled and mundus_approved)
 
+    vox = MagicMock()
+    vox.set_dormant = MagicMock()
+
+    # Hypnos is present so the gate applies the sleep and consolidation floors.
+    modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
+
     def _get(name: str):
-        return {"phantasia": phantasia, "mundus": mundus}[name]
+        return modules[name]
 
     registry.get.side_effect = _get
-    registry.__contains__.return_value = True
+    registry.__contains__.side_effect = lambda name: name in modules
     return registry
 
 

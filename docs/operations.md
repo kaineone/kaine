@@ -497,6 +497,9 @@ one machine that cannot also host Paracosmic.
   decision. When a birth awaits you, it offers **Acknowledge birth**. Birth is one-way,
   so a second click confirms it. An acknowledgement applies only to the current boot's
   request; after a restart, acknowledge again.
+- **Vox in the womb.** While the entity is gestating, Vox is held dormant: there is no
+  air medium to speak into, so no audible output is rendered. Inner speech (Lingua)
+  continues. Vox is activated automatically at birth.
 
 ### Settings
 
@@ -554,6 +557,113 @@ The stage file is written only after the revive has landed, so a refused or
 interrupted start leaves it unchanged. If a start is interrupted after the
 revive began, run the same revive again to complete it.
 
+## Running the module-ignition study
+
+The module-ignition study (`module-ignition-study`) is a controlled
+longitudinal run: one gestation, then a main line and a control line each
+viewing the same programme for twelve four-hour sessions.  The runner makes the
+procedure repeatable and records exactly what happened so mistakes such as
+starting from the wrong preservation or sharing memory collections cannot occur.
+
+Before creating a study:
+
+- Build the programme manifest from the films, in viewing order:
+  `python tools/build_playlist_manifest.py --dir <films> --out <programme.toml>`.
+  The study records its sha256, so a changed file voids the study.
+- Configure state encryption (`KAINE_STATE_KEY` or the keyring entry
+  `kaine:state_key`). Research-mode boots require it while
+  `[preservation].require_encryption` is true, which is the default.
+
+Create a study with the runner:
+
+```bash
+python -m kaine.research.ignition_study init \
+    --study-id <id> \
+    --repo-root /path/to/repo \
+    --programme-manifest /path/to/programme.toml \
+    [--base-modules ...] [--order ...] \
+    [--redis-base-url redis://127.0.0.1:6479] \
+    [--db-gestation 10 --db-main 11 --db-control 12] \
+    [--viewings-per-line 12]
+```
+
+This creates `studies/<study-id>/` containing `study.json`, empty
+`steps.jsonl`, and the three line directories `gestation/`, `main/`, and
+`control/`.  Each line directory symlinks `config/kaine.toml` and
+`config/profiles` to the repository configuration.
+
+Run or resume the study:
+
+```bash
+python -m kaine.research.ignition_study run --study-dir studies/<study-id>
+```
+
+The runner executes gestation first, then for each viewing index `k = 0..11`
+runs main line `k` followed by control line `k`.  Each start is a
+research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
+database and collection prefixes, so the two beings never share state.  Every
+completed step is appended to `steps.jsonl`.
+
+If a step ends for any reason other than a successful preservation, the
+runner records it as `failed:<reason>` and stops.  It never retries on its own
+and never deletes a preservation, state directory, or line.  Resume from the
+last successful preservation, or re-run the failed step from the same start
+bundle with:
+
+```bash
+python -m kaine.research.ignition_study run --study-dir studies/<study-id> --retry-failed
+```
+
+Show progress with:
+
+```bash
+python -m kaine.research.ignition_study status --study-dir studies/<study-id>
+```
+
+Because research-mode boots run unattended, the autonomous safety net must be
+active before any run.  The runner will not send `SIGKILL` and will not stop a
+being it cannot preserve.
+
+### Reading the study's report
+
+After the completed viewings have been recorded, analyse them with:
+
+```bash
+python -m kaine.research.ignition_study analyse --study-dir studies/<study-id>
+```
+
+This writes `analysis/report.json` and `analysis/report.md` in the study directory.
+The report is content-free: it contains counts, rates, shares and distributions
+only; no broadcast payload or member type strings are emitted.
+
+Per viewing, the report records:
+
+- **Broadcast rate** over unpaused programme time (Hypnos replays and freezes
+  are excluded from the denominator).
+- **Broadcasts per film-minute bin**, one bin per minute of `offset_s` for each
+  film; bins with no programme coverage are absent rather than zero.
+- **Coalition size** mean, median and p90.
+- **Module share**: the fraction of broadcasts whose coalition contains each
+  module, by member `source`. Workspace-internal sources (`syneidesis`,
+  `volition`) are counted separately, never as faculties.
+- **Member salience** mean, p50 and p90, by module.
+- **Inhibited share**.
+- **Picture-to-sound drift**: median and maximum absolute
+  `programme.offset_s - audio.delivered_s` when recorded.
+- **Data quality**: record count, programme-time gaps longer than 10 s, and
+  dropped records inferred from gaps in the sink sequence.
+
+Per step, the report compares the main line against the control line and each
+step against the previous one on the same line, including film-minute profile
+correlations. Correlations are reported as "not computed" when the two profiles
+share fewer than 30 bins, and as undefined when either profile is constant.
+
+The **limits** section is part of every report: modules are added in one fixed
+order, so each effect is conditional on earlier modules and on the being's
+history; the control line removes familiarity but not order; Praxis, Perception
+and the Mundus stub have no input channel on this host and are expected nulls;
+and there is one being per line, so no significance testing is performed.
+
 ## Entity decommission
 
 The decommission CLI implements the CAL Article 4.2 ("Do Not Shut Them Down Without Care") and 4.3 (privacy) care duties. It never runs automatically and never boots or touches the running cognitive cycle.
@@ -598,6 +708,8 @@ The diagnostics page shows a read-only **entity care & welfare** panel. It displ
 
 ---
 
+- **End of the programme.** When a playlist programme reaches the end of its last item while not paused, the cycle requests a single preservation with stop, and the preserve watcher freezes, preserves, and stops the entity. If the preservation fails or does not report in time, the cycle freezes the entity under the `programme_end` holder, logs the error at CRITICAL, and notifies the caretaker when one is configured.
+
 ## Research participation
 
 Research submission is opt-in and operator-initiated. See [docs/research-participation.md](research-participation.md) for the full privacy inventory, bundle contents, and send procedure.
@@ -611,7 +723,32 @@ python -m kaine.research --send      # review, confirm recipient, confirm send
 
 Configuration is in `[research_submission]` — see [Configuration Reference](configuration.md#research_submission).
 
+### Media voices
+
+Heard audio is tagged with the channel it arrived on: `live_mic` for the microphone,
+`remote` for remote audio, and `playlist`, `seeded`, `womb`, or `screen` for the matching
+perception feed. Empatheia attributes operator channels to the configured speaker label
+and attributes every other channel to its own `media:<channel>` agent, so film dialogue
+does not shape the operator model. Volition treats only operator-channel transcriptions
+as speech addressed to the entity.
+
 ---
+
+### Ignition log
+
+The ignition log is an optional, disabled-by-default per-broadcast research record. When enabled in `[ignition_log]`, the cycle writes one JSONL record for every successful workspace broadcast. Each record contains:
+
+- the run id and a per-sink sequence number;
+- the tick index and the broadcast's bus entry id;
+- wall and monotonic timestamps of the broadcast;
+- the programme position at that instant: item index, order, title, offset in seconds, and whether the programme was paused;
+- the audio feed's own delivered position (item index and seconds handed to the listener) when a playlist stream is running, so drift between picture and sound is measurable;
+- the salience scores and inhibition decision;
+- each coalition member's entry id, source, type, salience, and original timestamp.
+
+The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is never placed on the bus and no module receives it; the entity never learns its place in the programme from the log. Records are written through the encrypting JSONL sink and are never auto-purged, and they are encrypted at rest when state encryption is on.
+
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. Overlapping pauses keep the clock frozen until every holder releases.
 
 ## Enabling a module safely
 

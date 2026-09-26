@@ -399,11 +399,11 @@ class Hypnos(BaseModule):
                 "hypnos: perception suspension (write_desired_locus) failed",
                 exc_info=True,
             )
-        # Pause the shared playlist clock. A missing clock (non-playlist
-        # modes) is an honest no-op, not a crash.
+        # Pause the shared playlist clock under the hypnos holder. A missing
+        # clock (non-playlist modes) is an honest no-op, not a crash.
         if self._playlist_clock is not None:
             try:
-                self._playlist_clock.pause()
+                self._playlist_clock.pause("hypnos")
             except Exception:
                 log.warning("hypnos: playlist clock pause failed", exc_info=True)
 
@@ -425,11 +425,12 @@ class Hypnos(BaseModule):
                 "hypnos: perception restore (write_desired_locus) failed",
                 exc_info=True,
             )
-        # Resume the shared playlist clock so the stimulus resumes with
-        # perception (the invariant: clock paused ⇔ perception suspended).
+        # Resume the shared playlist clock under the hypnos holder so the
+        # stimulus resumes with perception (the invariant: clock paused ⇔
+        # perception suspended).
         if self._playlist_clock is not None:
             try:
-                self._playlist_clock.resume()
+                self._playlist_clock.resume("hypnos")
             except Exception:
                 log.warning("hypnos: playlist clock resume failed", exc_info=True)
 
@@ -903,14 +904,36 @@ class Hypnos(BaseModule):
     def serialize(self) -> dict[str, Any]:
         return {
             "last_sleep_at": self._last_sleep_at,
+            # Kept for backward compatibility with pre-change readers/tests.
             "original_due_at": self._scheduler.original_due_at,
             "effective_due_at": self._scheduler.effective_due_at,
+            # Process-independent schedule: time remaining until sleep.
+            "schedule": self._scheduler.export_remaining(),
         }
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "last_sleep_at" in state:
             value = state["last_sleep_at"]
             self._last_sleep_at = None if value is None else float(value)
+        # The monotonic `original_due_at` / `effective_due_at` values belong to
+        # the old process and must not be used directly. We restore from the
+        # remaining-time snapshot instead.
+        if "schedule" in state:
+            sched = state["schedule"]
+            try:
+                if not isinstance(sched, dict):
+                    raise ValueError("schedule must be a dict")
+                self._scheduler.restore_remaining(
+                    float(sched["original_due_in"]),
+                    float(sched["effective_due_in"]),
+                )
+            except Exception as exc:
+                log.warning(
+                    "hypnos: malformed schedule in snapshot; starting a fresh interval: %s",
+                    exc,
+                )
+        else:
+            log.info("hypnos: snapshot has no schedule; starting a fresh interval")
 
     async def _run_pipeline(self) -> dict[str, Any]:
         """M2 — guarantee ``hypnos.sleep.completed`` is published.

@@ -11,6 +11,7 @@ fires regardless of `try_defer()` calls.
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import Callable, Optional
 
@@ -90,3 +91,23 @@ class RestScheduler:
         now = self._now()
         self._original_due_at = now + self._interval
         self._effective_due_at = self._original_due_at
+
+    def export_remaining(self) -> dict[str, float]:
+        now = self._now()
+        return {
+            "original_due_in": float(self._original_due_at - now),
+            "effective_due_in": float(self._effective_due_at - now),
+        }
+
+    def restore_remaining(self, original_due_in: float, effective_due_in: float) -> None:
+        now = self._now()
+        original = float(original_due_in)
+        effective = float(effective_due_in)
+        if not math.isfinite(original) or not math.isfinite(effective):
+            raise ValueError("schedule remaining times must be finite")
+        if effective < original:
+            raise ValueError(
+                "effective remaining time cannot be less than original (negative deferral)"
+            )
+        self._original_due_at = now + original
+        self._effective_due_at = now + effective

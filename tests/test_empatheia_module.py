@@ -33,26 +33,28 @@ def _emotion_event(
     category: str = "happy",
     confidence: float = 0.8,
     prediction_error: float = 0.0,
-    source_label: str = "operator",
+    source_label: str | None = "live_mic",
 ) -> Event:
+    payload = {
+        "category": category,
+        "confidence": confidence,
+        "scores": {c: (1.0 if c == category else 0.0) for c in EMOTION_CATEGORIES},
+        "model": "emotion2vec/emotion2vec_plus_base",
+        "latency_ms": 50.0,
+        "prediction_error": prediction_error,
+    }
+    if source_label is not None:
+        payload["source_label"] = source_label
     return Event(
         source="audition",
         type="audition.emotion",
-        payload={
-            "category": category,
-            "confidence": confidence,
-            "scores": {c: (1.0 if c == category else 0.0) for c in EMOTION_CATEGORIES},
-            "model": "emotion2vec/emotion2vec_plus_base",
-            "source_label": source_label,
-            "latency_ms": 50.0,
-            "prediction_error": prediction_error,
-        },
+        payload=payload,
         salience=0.4,
         timestamp=datetime.now(timezone.utc),
     )
 
 
-def _transcription_event(source_label: str = "operator") -> Event:
+def _transcription_event(source_label: str = "live_mic") -> Event:
     return Event(
         source="audition",
         type="audition.transcription",
@@ -323,5 +325,46 @@ async def test_serialize_deserialize_preserves_agent_model(bus: AsyncBus):
         model = await emp2.store.get("operator")
         assert model is not None
         assert model.interaction_count == 5
+    finally:
+        await emp.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Channel attribution
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_emotion_event_with_media_channel_updates_media_agent(bus: AsyncBus):
+    """A non-operator channel should update its own media agent, not operator."""
+    emp = await _new_empatheia(bus)
+    await emp.initialize()
+    try:
+        event = _emotion_event("happy", confidence=0.8, source_label="playlist")
+        await emp._handle_audition_event(event)
+        model = await emp.store.get("media:playlist")
+        assert model is not None
+        assert model.interaction_count == 1
+        assert model.emotion_histogram.get("happy", 0.0) > 0.0
+        assert await emp.store.get("operator") is None
+    finally:
+        await emp.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_emotion_event_without_source_label_defaults_to_speaker_label(
+    bus: AsyncBus,
+):
+    """An event with no channel key should fall back to the configured speaker label."""
+    emp = await _new_empatheia(bus)
+    await emp.initialize()
+    try:
+        event = _emotion_event("happy", confidence=0.8, source_label=None)
+        await emp._handle_audition_event(event)
+        model = await emp.store.get("operator")
+        assert model is not None
+        assert model.interaction_count == 1
+        assert model.emotion_histogram.get("happy", 0.0) > 0.0
+        assert await emp.store.get("media:playlist") is None
     finally:
         await emp.shutdown()

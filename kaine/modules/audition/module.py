@@ -307,6 +307,20 @@ class Audition(BaseModule):
             salience=salience,
         )
 
+    def playlist_audio_position(self) -> tuple[int, float] | None:
+        """The audio feed's own delivered position, when a playlist stream is running.
+
+        This is the seconds of the current item's audio actually handed to the
+        listener so far, independent of the shared playlist clock. ``None`` when
+        no playlist stream is active.
+        """
+        if self._live_mic is None:
+            return None
+        stream = getattr(self._live_mic, "_stream", None)
+        if stream is None:
+            return None
+        return getattr(stream, "delivered_position", None)
+
     async def initialize(self) -> None:
         await super().initialize()
         if self._live_mic is not None:

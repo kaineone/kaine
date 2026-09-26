@@ -50,6 +50,11 @@ from kaine.cycle.affect_state import AffectStateProvider
 from kaine.cycle.control_state import read_control, unfreeze
 from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
+from kaine.cycle.ignition_log import (
+    IgnitionLog,
+    IgnitionLogConfig,
+    playlist_position_provider,
+)
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
@@ -77,6 +82,7 @@ from kaine.perception_state import (
     write_desired_audio,
     write_desired_video,
 )
+from kaine.persistence.jsonl_sink import AsyncJsonlSink
 from kaine.security.intent_signing import IntentSigner, generate_intent_secret
 from kaine.state_io import write_json_atomic
 from kaine.workspace import (
@@ -376,7 +382,12 @@ def _merge_qdrant_secret(
         section["qdrant"] = qdrant_cfg
 
 
-async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -> None:
+async def _freeze_watch_loop(
+    cycle: CognitiveCycle,
+    stop_event: asyncio.Event,
+    *,
+    playlist_clock: Any | None = None,
+) -> None:
     """Poll the freeze control and pause/resume the cycle to match.
 
     Runs independently of `run_forever`'s pause gate, so it can resume a frozen
@@ -412,6 +423,13 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
                         f": {control.reason}" if control.reason else "",
                     )
                 await cycle.pause()
+                if playlist_clock is not None:
+                    try:
+                        playlist_clock.pause("freeze")
+                    except Exception:
+                        log.warning(
+                            "freeze: playlist clock pause failed", exc_info=True
+                        )
 
             if control.frozen:
                 if others:
@@ -439,6 +457,13 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
             elif not control.frozen and cycle.is_paused:
                 log.info("resuming cycle (operator)")
                 await cycle.resume()
+                if playlist_clock is not None:
+                    try:
+                        playlist_clock.resume("freeze")
+                    except Exception:
+                        log.warning(
+                            "freeze: playlist clock resume failed", exc_info=True
+                        )
                 # C1 — restore the pre-freeze desired flags so a freeze/resume
                 # cycle (Spot recovery included) never leaves the entity
                 # deaf/blind for the rest of an unattended run.
@@ -694,6 +719,22 @@ def _resolve_start_stage(
     return _resolve_boot_stage(config, stage_override=override)
 
 
+# Effectors that have nothing to act on in the womb: Mundus has no world and
+# Vox has no air to speak into. Both are activated by the gate runner at birth.
+GESTATION_DORMANT_EFFECTORS = ("mundus", "vox")
+
+
+def _hold_effectors_for_gestation(registry) -> list[str]:
+    """Hold the womb-less effectors dormant; return the names held."""
+    held: list[str] = []
+    for name in GESTATION_DORMANT_EFFECTORS:
+        if name in registry and hasattr(registry.get(name), "set_dormant"):
+            registry.get(name).set_dormant(True)
+            held.append(name)
+            log.info("gestation: %s held dormant until birth", name)
+    return held
+
+
 def _lifecycle_event(
     type: str,
     payload: dict[str, Any],
@@ -882,6 +923,43 @@ def _start_preserve_watcher(
         request_stop=request_stop,
     )
     return asyncio.create_task(watcher.run(stop_event), name="cycle.preserve_watch")
+
+
+def _start_programme_end_watcher(
+    kaine_config, *, notify, stop_event
+) -> asyncio.Task | None:
+    """Start the end-of-programme watcher when a shared playlist clock exists."""
+    clock = (kaine_config.get("perception_feed") or {}).get("_shared_playlist_clock")
+    if clock is None:
+        return None
+
+    from kaine.cycle.programme_end import ProgrammeEndWatcher
+    from kaine.modules.topos.feed import load_playlist_manifest
+
+    manifest_path = (kaine_config.get("perception_feed") or {}).get(
+        "playlist_manifest"
+    )
+    if not manifest_path:
+        log.warning(
+            "shared playlist clock exists but no playlist_manifest configured; "
+            "skipping programme-end watcher"
+        )
+        return None
+
+    try:
+        manifest = load_playlist_manifest(manifest_path)
+    except Exception as exc:
+        log.warning(
+            "could not load playlist manifest for programme-end watcher: %s", exc
+        )
+        return None
+
+    watcher = ProgrammeEndWatcher(
+        clock=clock,
+        item_count=len(manifest.items),
+        notify=notify,
+    )
+    return asyncio.create_task(watcher.run(stop_event), name="cycle.programme_end")
 
 
 async def _boot_and_run(
@@ -1131,12 +1209,10 @@ async def _boot_and_run(
     if not len(registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
-    # Gestation: keep Mundus dormant until birth. The gate_runner will
+    # Gestation: keep effectors dormant until birth. The gate_runner will
     # call activate() at birth before unlocking the locus.
     if staging_enabled and stage_state.is_gestating:
-        if "mundus" in registry and hasattr(registry.get("mundus"), "set_dormant"):
-            registry.get("mundus").set_dormant(True)
-            log.info("gestation: mundus held dormant until birth")
+        _hold_effectors_for_gestation(registry)
 
     for module in list(registry.all_modules()):
         await module.initialize()
@@ -1234,6 +1310,18 @@ async def _boot_and_run(
     volition_cfg = kaine_config.get("volition") or {}
     policy_name = str(volition_cfg.get("policy", "")).strip().lower()
     drive_initiative = bool(volition_cfg.get("drive_initiative", True))
+    # Operator-channel set is shared between Empatheia attribution and Volition
+    # user-utterance detection. A single [empatheia].operator_sources key
+    # configures both.
+    empatheia_cfg = kaine_config.get("empatheia") or {}
+    _operator_sources_raw = empatheia_cfg.get("operator_sources")
+    operator_sources = None
+    if _operator_sources_raw is not None:
+        if not isinstance(_operator_sources_raw, list) or not all(
+            isinstance(x, str) for x in _operator_sources_raw
+        ):
+            raise ValueError("[empatheia].operator_sources must be a list of strings")
+        operator_sources = list(_operator_sources_raw)
     # Sign act intents with the per-boot secret so Praxis can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
@@ -1266,11 +1354,19 @@ async def _boot_and_run(
                 clock=_report_clock,
             ),
             signer=intent_signer,
+            operator_sources=operator_sources,
         )
     elif drive_initiative:
-        volition = Volition(policy=DriveBiasedActionSelectionPolicy(), signer=intent_signer)
+        volition = Volition(
+            policy=DriveBiasedActionSelectionPolicy(operator_sources=operator_sources),
+            signer=intent_signer,
+            operator_sources=operator_sources,
+        )
     else:
-        volition = Volition(signer=intent_signer)
+        volition = Volition(
+            signer=intent_signer,
+            operator_sources=operator_sources,
+        )
     cycle = CognitiveCycle(
         bus=bus,
         syneidesis=syneidesis,
@@ -1367,6 +1463,54 @@ async def _boot_and_run(
     if sidecar is not None and sidecar.ablation_recorder is not None:
         cycle.set_ablation_recorder(sidecar.ablation_recorder)
         log.info("live oscillatory ablation attached to cycle")
+
+    ignition_log = None
+    try:
+        il_cfg = IgnitionLogConfig.from_section(kaine_config.get("ignition_log"))
+    except Exception:
+        log.warning("ignition log config invalid; continuing without it", exc_info=True)
+        il_cfg = IgnitionLogConfig(enabled=False)
+
+    if il_cfg.enabled:
+        try:
+            from kaine.modules.topos.feed import load_playlist_manifest
+
+            perception_cfg = kaine_config.get("perception_feed") or {}
+            clock = perception_cfg.get("_shared_playlist_clock")
+            manifest_path = perception_cfg.get("playlist_manifest")
+
+            if clock is not None and manifest_path:
+                manifest = load_playlist_manifest(str(manifest_path))
+                position_provider = playlist_position_provider(clock, manifest)
+            else:
+                def position_provider() -> tuple[int, int, str, float, bool] | None:
+                    return None
+
+            audition_mod = registry.get("audition")
+            if audition_mod is not None and hasattr(
+                audition_mod, "playlist_audio_position"
+            ):
+                audio_position_provider = audition_mod.playlist_audio_position
+            else:
+                def audio_position_provider() -> tuple[int, float] | None:
+                    return None
+
+            sink = AsyncJsonlSink(
+                Path(il_cfg.directory), name="ignition", retention_days=0
+            )
+            await sink.start()
+            ignition_log = IgnitionLog(
+                sink,
+                position_provider,
+                audio_position_provider=audio_position_provider,
+            )
+            cycle.set_broadcast_observer(ignition_log)
+            log.info("ignition log enabled directory=%s", il_cfg.directory)
+        except Exception:
+            log.warning(
+                "ignition log setup failed; continuing without it", exc_info=True
+            )
+            ignition_log = None
 
     # Dev-gated LOOPBACK perception-preview server (paper §4.4 explicit
     # override). Populated by Topos/Audition, this bridges the in-RAM preview
@@ -1520,7 +1664,14 @@ async def _boot_and_run(
 
     cycle_task = asyncio.create_task(cycle.run_forever(), name="cycle.run_forever")
     freeze_task = asyncio.create_task(
-        _freeze_watch_loop(cycle, stop_event), name="cycle.freeze_watch"
+        _freeze_watch_loop(
+            cycle,
+            stop_event,
+            playlist_clock=(kaine_config.get("perception_feed") or {}).get(
+                "_shared_playlist_clock"
+            ),
+        ),
+        name="cycle.freeze_watch",
     )
     spot_task = (
         asyncio.create_task(spot.run(stop_event), name="cycle.spot") if spot_cfg.enabled else None
@@ -1631,6 +1782,11 @@ async def _boot_and_run(
         request_stop=stop_event.set,
         stop_event=stop_event,
     )
+    programme_end_task = _start_programme_end_watcher(
+        kaine_config,
+        notify=caretaker.send_event if caretaker is not None else None,
+        stop_event=stop_event,
+    )
 
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
@@ -1738,7 +1894,7 @@ async def _boot_and_run(
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
         for monitor_task in (
-            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task
+            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task, programme_end_task
         ):
             if monitor_task is None:
                 continue
@@ -1771,6 +1927,15 @@ async def _boot_and_run(
                 await sidecar.stop()
             except Exception:
                 log.warning("evaluation sidecar stop failed", exc_info=True)
+        try:
+            il = ignition_log
+        except NameError:
+            il = None
+        if il is not None:
+            try:
+                await il.close()
+            except Exception:
+                log.warning("ignition log close failed", exc_info=True)
         await cycle.shutdown()
         if not cycle_task.done():
             cycle_task.cancel()

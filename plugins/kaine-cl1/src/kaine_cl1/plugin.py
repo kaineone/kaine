@@ -12,6 +12,7 @@ import atexit
 import importlib.metadata
 import logging
 import math
+import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -26,8 +27,6 @@ log = logging.getLogger(__name__)
 
 #: Modules awaiting a wetware seam conversion.
 PENDING_CONVERSIONS: dict[str, str] = {
-    "oscillator": "oscillator-on-wetware",
-    "nous": "nous-on-wetware",
     "audition_frontend": "hybrid-wetware-conversions",
     "phantasia_surprise": "hybrid-wetware-conversions",
     "volition": "hybrid-wetware-conversions",
@@ -111,6 +110,7 @@ class Cl1Plugin:
         self._close_registered = False
         self._accelerated = True
         self._warned_realtime = False
+        self._beat_switcher: threading.Thread | None = None
 
     def _validated(self, config: Mapping[str, Any]) -> OverlayConfig:
         overlay = overlay_from_mapping(config)
@@ -189,6 +189,17 @@ class Cl1Plugin:
                     ", ".join(converted) if converted else "none",
                     ", ".join(oscillators) if oscillators else "none",
                 )
+            if "nous" in converted:
+                if overlay.nous_mode == "drive":
+                    log.warning(
+                        "CL1 Nous runs in DRIVE mode: the substrate's policy proposal chooses "
+                        "Nous's action; beliefs and expected free energy stay on silicon"
+                    )
+                else:
+                    log.info(
+                        "CL1 Nous runs in shadow mode: the substrate proposes a policy and "
+                        "Nous's action is unchanged"
+                    )
         module_seams = frozenset(
             f"{module}.{WETWARE_BACKENDS[module].inject_kwarg}"
             for module in converted
@@ -211,7 +222,9 @@ class Cl1Plugin:
             territory = broker.allocate(module, overlay.territory_for(module))
 
         spec = WETWARE_BACKENDS[module]
-        return {spec.inject_kwarg: spec.make(broker, territory)}
+        return {
+            spec.inject_kwarg: spec.make(broker, territory, **overlay.backend_options(module))
+        }
 
     def make_oscillator(
         self, module: str, config: Mapping[str, Any], defaults: Mapping[str, Any]
@@ -279,6 +292,9 @@ class Cl1Plugin:
     def close(self) -> None:
         """Close the substrate session and release the broker."""
         if self._broker is not None:
+            if self._beat_switcher is not None:
+                self._beat_switcher.join(timeout=2.0)
+                self._beat_switcher = None
             self._broker.stop_beat()
         if self._session is not None:
             self._session.close()
@@ -289,15 +305,34 @@ class Cl1Plugin:
         """KAINE's cycle hook: close one substrate window per processing tick.
 
         The first call switches the broker to beat mode; every call only signals the
-        background substrate thread, so the cycle never waits on the substrate."""
+        background substrate thread, so the cycle never waits on the substrate. If a synchronous
+        substrate window is in flight at the first tick, the switch finishes on a background thread
+        and ticks are skipped until it has, so KAINE's event loop never waits for the substrate."""
         if self._broker is None:
             return
         if not self._broker.beat_mode:
-            self._broker.start_beat(accelerated=self._accelerated)
+            if self._beat_switcher is not None and self._beat_switcher.is_alive():
+                return
+            if not self._broker.start_beat(accelerated=self._accelerated, blocking=False):
+                self._beat_switcher = threading.Thread(
+                    target=self._switch_to_beat,
+                    args=(self._broker,),
+                    name="cl1-beat-switch",
+                    daemon=True,
+                )
+                self._beat_switcher.start()
+                return
         rate = float(tick.get("processing_rate_hz") or 0.0)
         if not math.isfinite(rate) or rate <= 0.0:
             rate = 10.0
         self._broker.beat(1.0 / rate)
+
+    def _switch_to_beat(self, broker: SubstrateBroker) -> None:
+        """Finish the switch to beat mode off KAINE's event loop, waiting for the window."""
+        try:
+            broker.start_beat(accelerated=self._accelerated)
+        except Exception:
+            log.warning("CL1 substrate could not switch to beat mode", exc_info=True)
 
     def territory_map(self) -> dict[str, tuple[int, ...]]:
         if self._broker is None:

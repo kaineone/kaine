@@ -41,7 +41,7 @@ drive→kind mapping without touching Volition's plumbing.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace.volition import (
@@ -75,10 +75,14 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
     parallel ``think``-in-flight guard for drive-initiated internal speech.
     """
 
-    def __init__(self, clock: Callable[[], float] | None = None) -> None:
+    def __init__(
+        self,
+        clock: Callable[[], float] | None = None,
+        operator_sources: Iterable[str] | None = None,
+    ) -> None:
         # The parent policy owns the injected clock (used by both guard
         # timeouts); pass it through rather than shadowing its _clock.
-        super().__init__(clock=clock)
+        super().__init__(clock=clock, operator_sources=operator_sources)
         self._think_in_flight = False
 
     @property

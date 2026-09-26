@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Iterable, Optional, Protocol, runtime_checkable
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.security.intent_signing import IntentSigner
@@ -64,6 +64,11 @@ USER_COMMUNICATION_TYPE = "audition.transcription"
 OWN_EXTERNAL_SPEECH_SOURCE = "lingua"
 OWN_EXTERNAL_SPEECH_TYPE = "external_speech"
 OWN_INTERNAL_SPEECH_TYPE = "internal_speech"
+
+# Channels whose voices are treated as the operator. Audio from any other
+# channel is modelled as "media:<channel>" and is not answered as a user
+# utterance. The list is shared with Empatheia attribution.
+DEFAULT_OPERATOR_SOURCES = ("live_mic", "microphone", "remote")
 
 
 @dataclass(frozen=True)
@@ -165,12 +170,20 @@ class DefaultActionSelectionPolicy:
     # permanently mute the entity.
     _GUARD_TIMEOUT_S = 48.0
 
-    def __init__(self, *, clock: Optional[Any] = None) -> None:
+    def __init__(
+        self,
+        *,
+        clock: Optional[Any] = None,
+        operator_sources: Iterable[str] | None = None,
+    ) -> None:
         import time
 
         self._speak_in_flight = False
         self._speak_armed_at = float("-inf")
         self._clock = clock or time.monotonic
+        self._operator_sources = set(
+            operator_sources if operator_sources is not None else DEFAULT_OPERATOR_SOURCES
+        )
 
     @property
     def speak_in_flight(self) -> bool:
@@ -185,21 +198,26 @@ class DefaultActionSelectionPolicy:
         """True for the entity's own (external or internal) speech output."""
         return event.source == OWN_EXTERNAL_SPEECH_SOURCE
 
-    @staticmethod
-    def _user_utterance(event: Any) -> Optional[str]:
+    def _user_utterance(self, event: Any) -> Optional[str]:
         """Return the non-empty user-utterance text on this event, else None.
 
         Recognizes a transcribed utterance heard by the ears (source
-        ``audition``, type ``audition.transcription``) with non-empty text.
-        Shared with :class:`DriveBiasedActionSelectionPolicy`.
+        ``audition``, type ``audition.transcription``) with non-empty text, but
+        only when the audio came from an operator channel (or carries no
+        channel for backward compatibility). Shared with
+        :class:`DriveBiasedActionSelectionPolicy`.
         """
         if (
-            event.source == USER_COMMUNICATION_SOURCE
-            and event.type == USER_COMMUNICATION_TYPE
+            event.source != USER_COMMUNICATION_SOURCE
+            or event.type != USER_COMMUNICATION_TYPE
         ):
-            text = str(event.payload.get("text") or "").strip()
-            if text:
-                return text
+            return None
+        source_label = event.payload.get("source_label")
+        if source_label is not None and source_label not in self._operator_sources:
+            return None
+        text = str(event.payload.get("text") or "").strip()
+        if text:
+            return text
         return None
 
     def _user_response_intent(self, snapshot: WorkspaceSnapshot) -> Optional[Intent]:
@@ -271,8 +289,13 @@ class Volition:
         policy: Optional[ActionSelectionPolicy] = None,
         *,
         signer: Optional[IntentSigner] = None,
+        operator_sources: Iterable[str] | None = None,
     ) -> None:
-        self._policy: ActionSelectionPolicy = policy or DefaultActionSelectionPolicy()
+        self._policy: ActionSelectionPolicy = (
+            policy
+            if policy is not None
+            else DefaultActionSelectionPolicy(operator_sources=operator_sources)
+        )
         self._signer = signer
 
     @property

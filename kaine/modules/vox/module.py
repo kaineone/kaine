@@ -139,6 +139,26 @@ class Vox(BaseModule):
         # Latest cached prosody features (numeric) and arrival timestamp.
         self._latest_prosody: Optional[dict[str, Any]] = None
         self._latest_prosody_ts: float = 0.0
+        # Womb/gestation dormancy.
+        self._dormant = False
+        self._suppressed_while_dormant = 0
+
+    def set_dormant(self, dormant: bool) -> None:
+        """Hold or release Vox audible output.
+
+        Dormancy is physical, not cognitive: the womb has no air medium.
+        Inner speech (Lingua) is untouched.
+        """
+        was_dormant = self._dormant
+        self._dormant = bool(dormant)
+        if self._dormant and not was_dormant:
+            log.info("vox held dormant")
+        elif not self._dormant and was_dormant:
+            log.info("vox activated")
+
+    @property
+    def dormant(self) -> bool:
+        return self._dormant
 
     def set_speaking_gate(self, gate: SpeakingGate) -> None:
         """Inject the shared self-hearing gate (wired in build_registry)."""
@@ -207,6 +227,16 @@ class Vox(BaseModule):
         state: Optional[DimensionalState] = None,
     ) -> SynthesisResult:
         """Direct synthesis API for tests and callers without a bus loop."""
+        if self._dormant:
+            log.debug("vox dormant: suppressing utterance")
+            self._suppressed_while_dormant += 1
+            return SynthesisResult(
+                audio=b"",
+                content_type="",
+                latency_ms=0.0,
+                output_format=self._output_format,
+                bytes_produced=0,
+            )
         params = self._params_for(state or self._current_state)
         request = self._build_request(text, params)
         result = await self._tts_client.synthesize(request)

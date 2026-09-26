@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
@@ -45,6 +45,7 @@ class Empatheia(BaseModule):
         backend: str = "inmemory",
         collection: str = "empatheia_agents",
         speaker_label: str = "operator",
+        operator_sources: Sequence[str] = ("live_mic", "microphone", "remote"),
         deviation_threshold: float = 0.5,
         baseline_salience: float = 0.15,
         alert_salience: float = 0.6,
@@ -62,6 +63,7 @@ class Empatheia(BaseModule):
             raise ValueError("deviation_threshold must be in (0, 1]")
 
         self._speaker_label = speaker_label
+        self._operator_sources = frozenset(operator_sources)
         self._deviation_threshold = float(deviation_threshold)
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
@@ -174,6 +176,18 @@ class Empatheia(BaseModule):
         elif event.type == "audition.transcription":
             await self._handle_transcription(event)
 
+    def _agent_for(self, event: Event) -> str:
+        """Map an audition event to the agent id it updates.
+
+        Operator channels (or events with no channel) update the configured
+        speaker label. Every other channel gets its own ``media:<channel>``
+        agent so film voices cannot shape the operator model.
+        """
+        source_label = event.payload.get("source_label")
+        if source_label is None or source_label in self._operator_sources:
+            return self._speaker_label
+        return f"media:{source_label}"
+
     async def _handle_emotion(self, event: Event) -> None:
         """Fold an emotion observation into the current agent model."""
         payload = event.payload
@@ -186,7 +200,7 @@ class Empatheia(BaseModule):
         confidence = float(payload.get("confidence") or 0.0)
         prediction_error = float(payload.get("prediction_error") or 0.0)
 
-        agent_id = self._speaker_label
+        agent_id = self._agent_for(event)
         model = await self._store.get(agent_id)
         if model is None:
             model = AgentModel(id=agent_id, label=agent_id)
@@ -211,7 +225,7 @@ class Empatheia(BaseModule):
         turns register as interactions even when the emotion model has low
         confidence. We do NOT store the transcript text.
         """
-        agent_id = self._speaker_label
+        agent_id = self._agent_for(event)
         model = await self._store.get(agent_id)
         if model is None:
             model = AgentModel(id=agent_id, label=agent_id)
