@@ -31,10 +31,11 @@ ARG FLAVOR=cuda
 # image. Override both for the CPU/ROCm/XPU flavors (see header).
 ARG BUILD_BASE=nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
 ARG RUNTIME_BASE=nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
-# Extras installed into the image. Keep lean by default; perception/vision/audio
-# extras are opt-in at build time (they pull cv2/av/funasr). The abliterated
-# organ, STT/TTS models, and embedders are provisioned to the volume, not here.
-ARG KAINE_EXTRAS=".[test]"
+# Extras installed into the image. [full] carries every runtime extra (the base
+# install no longer includes torch or the memory stack); pass a leaner set to
+# build a smaller image. The abliterated organ, STT/TTS models, and embedders are
+# provisioned to the volume, not here.
+ARG KAINE_EXTRAS=".[test,full]"
 
 # =========================================================================
 # Stage 1 — build: create the venv, install the flavor-correct torch, then

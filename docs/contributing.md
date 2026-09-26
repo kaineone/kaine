@@ -320,9 +320,11 @@ def _load_model(self):
     ...
 ```
 
-This ensures the build and test suite stay green on a minimal install (`.[test]`
-only), and that missing extras produce a clear error message rather than an
-`ImportError` at import time. Modules that need an extra must be designed to
+This keeps importing `kaine` free of heavy dependencies, and makes a missing
+extra produce a clear error message rather than an `ImportError` at import time.
+A module that needs an extra also gets a row in `kaine/extras.py`, so a start
+with the module enabled and the extra missing stops before any module is built
+and names the extra. CI runs the suite on every runtime extra except `audio`, whose audio packages it installs as wheels. Modules that need an extra must be designed to
 degrade gracefully when it is absent — log a clean warning and continue rather
 than crashing the cycle.
 
