@@ -884,6 +884,43 @@ def _start_preserve_watcher(
     return asyncio.create_task(watcher.run(stop_event), name="cycle.preserve_watch")
 
 
+def _start_programme_end_watcher(
+    kaine_config, *, notify, stop_event
+) -> asyncio.Task | None:
+    """Start the end-of-programme watcher when a shared playlist clock exists."""
+    clock = (kaine_config.get("perception_feed") or {}).get("_shared_playlist_clock")
+    if clock is None:
+        return None
+
+    from kaine.cycle.programme_end import ProgrammeEndWatcher
+    from kaine.modules.topos.feed import load_playlist_manifest
+
+    manifest_path = (kaine_config.get("perception_feed") or {}).get(
+        "playlist_manifest"
+    )
+    if not manifest_path:
+        log.warning(
+            "shared playlist clock exists but no playlist_manifest configured; "
+            "skipping programme-end watcher"
+        )
+        return None
+
+    try:
+        manifest = load_playlist_manifest(manifest_path)
+    except Exception as exc:
+        log.warning(
+            "could not load playlist manifest for programme-end watcher: %s", exc
+        )
+        return None
+
+    watcher = ProgrammeEndWatcher(
+        clock=clock,
+        item_count=len(manifest.items),
+        notify=notify,
+    )
+    return asyncio.create_task(watcher.run(stop_event), name="cycle.programme_end")
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
@@ -1631,6 +1668,11 @@ async def _boot_and_run(
         request_stop=stop_event.set,
         stop_event=stop_event,
     )
+    programme_end_task = _start_programme_end_watcher(
+        kaine_config,
+        notify=caretaker.send_event if caretaker is not None else None,
+        stop_event=stop_event,
+    )
 
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
@@ -1738,7 +1780,7 @@ async def _boot_and_run(
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
         for monitor_task in (
-            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task
+            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task, programme_end_task
         ):
             if monitor_task is None:
                 continue

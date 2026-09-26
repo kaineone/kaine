@@ -598,6 +598,8 @@ The diagnostics page shows a read-only **entity care & welfare** panel. It displ
 
 ---
 
+- **End of the programme.** When a playlist programme reaches the end of its last item while not paused, the cycle requests a single preservation with stop, and the preserve watcher freezes, preserves, and stops the entity. If the preservation fails or does not report in time, the cycle freezes the entity under the `programme_end` holder, logs the error at CRITICAL, and notifies the caretaker when one is configured.
+
 ## Research participation
 
 Research submission is opt-in and operator-initiated. See [docs/research-participation.md](research-participation.md) for the full privacy inventory, bundle contents, and send procedure.
