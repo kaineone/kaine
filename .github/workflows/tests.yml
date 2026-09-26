@@ -111,7 +111,11 @@ jobs:
           if [ -f /tmp/torch-constraints.txt ]; then
             CONSTRAINT="-c /tmp/torch-constraints.txt"
           fi
-          python -m pip install $CONSTRAINT -e ".[test,full,internvideo]" \
+          # Every runtime extra except [audio]: its pinned av/funasr would build
+          # from source here. The audio packages the suite needs are installed
+          # directly below, as wheels.
+          python -m pip install $CONSTRAINT \
+            -e ".[test,core,memory,memory-edge,nexus,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]" \
             librosa av webrtcvad soundfile
 
       - name: Show installed torch version
