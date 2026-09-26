@@ -10,7 +10,7 @@ KAINE's temporal-context organ: encodes workspace history with a Closed-form Con
 
 Implemented. Ships **disabled** — `[modules].chronos = false` in `config/kaine.toml`.
 
-- Requires `torch` and `ncps` (Neural Circuit Policy Search, provides the `CfC` cell).
+- The CfC runs on a backend chosen by `cfc_backend` in `[chronos]`: `"numpy"` (the shipped default; needs no `torch` or `ncps`) or `"torch"` (`ncps.torch.CfC`). `torch` and `ncps` (the `core` extra) are needed only for the torch backend.
 - The CfC is **CPU-only by policy** regardless of host hardware; the network is small enough (<100 K parameters at defaults) that GPU adds no benefit and enforcing CPU keeps the cycle tick budget predictable.
 - Optional forward-prediction head (`forward_prediction = false` by default) — purely additive; does not change base behaviour when disabled.
 - Adaptation of the forward-prediction head is suspended during Hypnos offline cycles.
@@ -62,6 +62,7 @@ Section `[chronos]` in `config/kaine.toml`. See also [../configuration.md](../co
 
 | Key | Default | Meaning |
 |---|---|---|
+| `cfc_backend` | `"numpy"` | CfC backend for `CfCNetwork`: `"numpy"` needs no `torch`/`ncps`; `"torch"` uses `ncps` and needs the `core` extra |
 | `cfc_units` | `32` | CfC hidden state size; also sets `ForwardPredictionHead` input size |
 | `baseline_salience` | `0.1` | Salience for routine `chronos.report` events |
 | `alert_salience` | `0.7` | Salience when anomaly / rumination fires |
@@ -81,7 +82,7 @@ Section `[chronos]` in `config/kaine.toml`. See also [../configuration.md](../co
 ```mermaid
 graph TD
     WS["workspace.broadcast\nWorkspaceSnapshot"] -->|featurize| FV["24-dim feature vector\n(SnapshotFeaturizer)"]
-    FV --> CfC["CfCNetwork\n(ncps.torch.CfC, CPU-only)\n→ hidden state (cfc_units-d)"]
+    FV --> CfC["CfCNetwork\n(NumPy or ncps CfC, CPU-only)\n→ hidden state (cfc_units-d)"]
     CfC -->|hidden| Anomaly["RollingZScoreAnomaly\nz-score of hidden L2 norm"]
     CfC -->|hidden| Rum["RecurrenceRuminationDetector\nbucket fingerprint → recurrence count"]
     FV -->|optional| FwdHead["ForwardPredictionHead\nhidden→predicted feature\nonline SGD"]
@@ -111,7 +112,7 @@ The feature vector is assembled from the `WorkspaceSnapshot` without touching to
 
 ### CfCNetwork
 
-Wraps `ncps.torch.CfC(input_size=24, units=32)`. All parameters are frozen (`requires_grad_(False)`); the CfC acts as a **feature extractor**, not a trained model. Hidden state accumulates across workspace broadcasts. Explicitly pinned to `cpu` even if the host has CUDA; a logged warning is emitted if `select_device()` returns something other than `cpu`.
+Runs either the NumPy CfC step in `kaine/cfc_numpy.py` (`cfc_backend = "numpy"`, shipped default, needs no `torch` or `ncps`) or `ncps.torch.CfC` (`cfc_backend = "torch"`, requires the `core` extra). The two backends compute the same step and match to 1e-5 from the same weights. All CfC parameters are frozen; the CfC acts as a **feature extractor**, not a trained model. The reservoir is generated in NumPy from a reservoir seed, identically for both backends (for torch, the generated arrays are copied into the ncps module). The `reservoir_seed` is part of the module's serialized state, and a revived module rebuilds the identical reservoir from it, so a preserved being keeps its reservoir across preservation and revival. Hidden state accumulates across workspace broadcasts during life, but starts at zero on revive and is never persisted. Explicitly pinned to `cpu` even if the host has CUDA; a logged warning is emitted if `select_device()` returns something other than `cpu`.
 
 ### ForwardPredictionHead (optional)
 
@@ -131,7 +132,7 @@ When enabled, `temporal_prediction_error` normalised against the rolling window 
 |---|---|
 | `kaine/modules/chronos/module.py` | `Chronos` class — `on_workspace()`, user-input loop, Hypnos loop |
 | `kaine/modules/chronos/featurizer.py` | `SnapshotFeaturizer` — 24-dim deterministic feature extraction |
-| `kaine/modules/chronos/network.py` | `CfCNetwork` (ncps wrapper) and `ForwardPredictionHead` |
+| `kaine/modules/chronos/network.py` | `CfCNetwork` (numpy/torch backend wrapper) and `ForwardPredictionHead` |
 | `kaine/modules/chronos/anomaly.py` | `RollingZScoreAnomaly` — z-score over hidden-state norms |
 | `kaine/modules/chronos/rumination.py` | `RecurrenceRuminationDetector` — quantized-fingerprint recurrence |
 
@@ -153,7 +154,7 @@ To enable the forward-prediction head:
 forward_prediction = true
 ```
 
-No external services are needed. The CfC weights are random at init and never saved (the CfC is a frozen encoder); only the `ForwardPredictionHead` weights and `last_interaction_at` timestamp are serialised.
+No external services are needed. The CfC reservoir is frozen and is rebuilt from its saved `reservoir_seed`; only the `ForwardPredictionHead` weights (when forward prediction is enabled) and `last_interaction_at` timestamp are serialised.
 
 ---
 
@@ -162,9 +163,10 @@ No external services are needed. The CfC weights are random at init and never sa
 Chronos persists **no raw workspace events**. `serialize()` writes:
 - `last_interaction_at` — a single float timestamp.
 - `user_input_cursors` — Redis stream cursor positions.
-- `pred_head` — `ForwardPredictionHead` weight/bias tensors only (no raw feature vectors).
+- `pred_head` — `ForwardPredictionHead` weight/bias tensors (no raw feature vectors), only when forward prediction is enabled.
+- `reservoir_seed` — the seed used to reproduce the frozen CfC reservoir.
 
-The CfC hidden state is ephemeral and is not serialised; on restart, the CfC begins with a zero hidden state and re-accumulates context from subsequent workspace broadcasts.
+The CfC reservoir is frozen and is rebuilt identically from `reservoir_seed` on revive, so a preserved being keeps its reservoir across preservation and revival. A snapshot without a seed starts a new reservoir and logs that the reservoir is new; a `pred_head` snapshot whose shape does not match the configured network is rejected. The CfC hidden state is ephemeral and is not serialised; on restart, the CfC begins with a zero hidden state and re-accumulates context from subsequent workspace broadcasts.
 
 ---
 

@@ -159,11 +159,21 @@ class NumpyReadout:
     @classmethod
     def from_arrays(cls, W: np.ndarray, b: np.ndarray) -> NumpyReadout:
         """Create a readout from existing weight/bias arrays."""
+        W_arr = np.asarray(W, dtype=np.float32)
+        b_arr = np.asarray(b, dtype=np.float32)
+        if W_arr.ndim != 2:
+            raise ValueError(f"weight must be 2-D, got shape {W_arr.shape}")
+        if b_arr.ndim != 1 or b_arr.shape[0] != W_arr.shape[0]:
+            raise ValueError(
+                f"bias must be 1-D with shape ({W_arr.shape[0]},), got shape {b_arr.shape}"
+            )
+        if not (np.isfinite(W_arr).all() and np.isfinite(b_arr).all()):
+            raise ValueError("weight and bias must contain only finite values")
         self = cls.__new__(cls)
-        self.W = np.asarray(W, dtype=np.float32)
-        self.b = np.asarray(b, dtype=np.float32)
-        self.units = self.W.shape[1]
-        self.out = self.W.shape[0]
+        self.W = W_arr
+        self.b = b_arr
+        self.units = int(W_arr.shape[1])
+        self.out = int(W_arr.shape[0])
         return self
 
     def predict(self, h: list[float]) -> list[float]:
@@ -174,7 +184,8 @@ class NumpyReadout:
     def sgd_step(self, h: list[float], target: list[float], lr: float) -> float:
         """One SGD step toward *target* from *h*; returns MSE loss.
 
-        Skips the update if the loss or any gradient is non-finite.
+        Returns NaN (and skips the update) when the loss or any gradient is
+        non-finite.
         """
         h_arr = np.asarray(h, dtype=np.float32)
         t = np.asarray(target, dtype=np.float32)
@@ -182,12 +193,12 @@ class NumpyReadout:
         err = pred - t
         loss = float(np.mean(err * err))
         if not math.isfinite(loss):
-            return 0.0
+            return float("nan")
         d = self.out
         grad_w = (2.0 / d) * np.outer(err, h_arr)
         grad_b = (2.0 / d) * err
         if not (np.isfinite(grad_w).all() and np.isfinite(grad_b).all()):
-            return 0.0
+            return float("nan")
         self.W = self.W - lr * grad_w
         self.b = self.b - lr * grad_b
         return loss
@@ -196,10 +207,20 @@ class NumpyReadout:
         return {"weight": self.W.tolist(), "bias": self.b.tolist()}
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
-        self.W = np.asarray(state["weight"], dtype=np.float32)
-        self.b = np.asarray(state["bias"], dtype=np.float32)
-        self.out = self.W.shape[0]
-        self.units = self.W.shape[1]
+        W_new = np.asarray(state["weight"], dtype=np.float32)
+        b_new = np.asarray(state["bias"], dtype=np.float32)
+        if W_new.shape != (self.out, self.units):
+            raise ValueError(
+                f"expected weight shape {(self.out, self.units)}, got {W_new.shape}"
+            )
+        if b_new.shape != (self.out,):
+            raise ValueError(
+                f"expected bias shape {(self.out,)}, got {b_new.shape}"
+            )
+        if not (np.isfinite(W_new).all() and np.isfinite(b_new).all()):
+            raise ValueError("weight and bias must contain only finite values")
+        self.W = W_new
+        self.b = b_new
 
 
 def _lecun_tanh(x: np.ndarray) -> np.ndarray:

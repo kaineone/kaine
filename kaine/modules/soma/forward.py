@@ -24,11 +24,11 @@ pattern)
 -----------------------------------------------------------------------
 - CPU-only: all tensors stay on CPU regardless of host hardware.
 - Zero raw-sense-data persistence: ``state_dict()`` / ``load_state_dict()``
-  serialise only the readout's weight and bias tensors. The CfC reservoir's
-  weights are never serialised — like Chronos's ``CfCNetwork``, it is a
-  frozen, reseedable random projection, not learned content, so there is
-  nothing it would mean to "persist". The recurrent hidden state is ephemeral
-  runtime context and is likewise never persisted.
+  serialise only the readout's weight and bias tensors, and loading rejects a
+  readout whose shape does not match this model. The CfC reservoir is frozen
+  and is regenerated from ``reservoir_seed``, which Soma keeps in its
+  snapshot, so a revived being rebuilds the same reservoir. The recurrent
+  hidden state is ephemeral runtime context and is never persisted.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite. Soma's feature vectors come from raw host-sensor reads (unlike
   Chronos's already-curated featurizer output) and can glitch, so a
@@ -38,7 +38,7 @@ pattern)
 - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
   setting ``suspended = True``.
 - Backend selection: ``backend="numpy"`` (default) needs no torch/ncps and is
-  bit-identical to the torch path to 1e-5 when started from the same seed.
+  matches the torch path to 1e-5 when started from the same seed.
   ``backend="torch"`` uses the torch/ncps implementation with the same
   NumPy-generated reservoir.
 """
@@ -78,7 +78,7 @@ class SubstrateForwardModel:
 
     The reservoir is generated in NumPy and, when ``backend="torch"``, copied
     into the ncps module.  Both backends therefore start from exactly the
-    same weights and remain bit-identical through training to 1e-5.
+    same weights and stay within 1e-5 of each other through training.
     """
 
     def __init__(
@@ -355,8 +355,7 @@ class SubstrateForwardModel:
             loss = self._readout.sgd_step(hidden, target_feature, self._lr)
             if not math.isfinite(loss):
                 log.warning(
-                    "SubstrateForwardModel: non-finite loss %.6g; skipping update",
-                    loss,
+                    "SubstrateForwardModel: non-finite loss or gradient; skipping update"
                 )
                 return 0.0
             return loss
@@ -372,8 +371,7 @@ class SubstrateForwardModel:
 
         if not math.isfinite(loss_val):
             log.warning(
-                "SubstrateForwardModel: non-finite loss %.6g; skipping update",
-                loss_val,
+                "SubstrateForwardModel: non-finite loss or gradient; skipping update"
             )
             return 0.0
 
@@ -383,7 +381,7 @@ class SubstrateForwardModel:
         for p in self._readout.parameters():
             if p.grad is not None and not torch.isfinite(p.grad).all():
                 log.warning(
-                    "SubstrateForwardModel: non-finite gradient; skipping update"
+                    "SubstrateForwardModel: non-finite loss or gradient; skipping update"
                 )
                 self._optim.zero_grad()
                 return 0.0
@@ -425,10 +423,9 @@ class SubstrateForwardModel:
         return baseline_salience + ratio * (alert_salience - baseline_salience)
 
     # ------------------------------------------------------------------
-    # Serialisation — readout weights only. The CfC reservoir is frozen and
-    # reseedable, not learned content, so (like Chronos's CfCNetwork) it is
-    # never serialised. The recurrent hidden state is ephemeral runtime
-    # context and is likewise never persisted.
+    # Serialisation — readout weights only. The frozen CfC reservoir is
+    # rebuilt from ``reservoir_seed`` (kept in Soma's snapshot), and the
+    # recurrent hidden state is ephemeral runtime context, never persisted.
     # ------------------------------------------------------------------
 
     def state_dict(self) -> dict[str, Any]:

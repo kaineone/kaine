@@ -276,6 +276,7 @@ Predictive interoception module. Reads GPU/CPU/RAM/cycle-latency metrics and pub
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `cfc_backend` | string | `"numpy"` | `"numpy"` needs no torch; `"torch"` uses ncps and needs the `core` extra; both build the same seeded reservoir, whose seed is kept in the module's snapshot. |
 | `read_interval_s` | float | `1.0` | How often Soma reads substrate metrics (seconds). |
 | `cycle_latency_target_ms` | float | `300.0` | Target cognitive-cycle latency; deviation drives prediction error. |
 | `cycle_latency_window` | integer | `64` | Rolling-window size for cycle-latency averaging. Accepted by the config loader but currently unused by the Soma constructor (silently ignored). |
@@ -318,6 +319,7 @@ Temporal awareness: models event rhythm across the bus with a CfC network (~32 u
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `cfc_backend` | string | `"numpy"` | `"numpy"` needs no torch; `"torch"` uses ncps and needs the `core` extra; both build the same seeded reservoir, whose seed is kept in the module's snapshot. |
 | `cfc_units` | integer | `32` | Hidden units in the CfC temporal network (~3.5 K parameters at 24-dim input). |
 | `baseline_salience` | float | `0.1` | Salience when timing is within expected bounds. |
 | `alert_salience` | float | `0.7` | Salience on anomaly, habituation, or rumination detection. |

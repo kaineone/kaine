@@ -672,9 +672,11 @@ class Soma(BaseModule):
             "cycle_cursor": self._cycle_cursor,
             "read_interval_s": self._read_interval_s,
             "forward_model": self._forward_model.state_dict(),
-            "reservoir_seed": getattr(self._forward_model, "reservoir_seed", None),
             "fatigue": self._fatigue.state_dict(),
         }
+        seed = getattr(self._forward_model, "reservoir_seed", None)
+        if seed is not None:
+            state["reservoir_seed"] = seed
         if self._self_rhythm is not None:
             state["self_rhythm"] = self._self_rhythm.serialize()
         return state
@@ -687,8 +689,9 @@ class Soma(BaseModule):
 
         if "forward_model" in state or "reservoir_seed" in state:
             fm = self._forward_model
-            if "reservoir_seed" in state and hasattr(fm, "reservoir_seed"):
-                seed = int(state["reservoir_seed"])
+            seed = state.get("reservoir_seed")
+            if seed is not None and hasattr(fm, "reservoir_seed"):
+                seed = int(seed)
                 self._forward_model = SubstrateForwardModel(
                     feature_dim=fm.feature_dim,
                     units=fm.units,
@@ -696,7 +699,7 @@ class Soma(BaseModule):
                     backend=getattr(fm, "backend", "numpy"),
                     seed=seed,
                 )
-            elif "reservoir_seed" not in state and hasattr(fm, "reservoir_seed"):
+            elif hasattr(fm, "reservoir_seed"):
                 log.warning(
                     "soma: snapshot has no reservoir seed; the reservoir is new"
                 )

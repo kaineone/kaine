@@ -25,6 +25,7 @@ from kaine.experiment.seeding import set_global_seed
 from kaine.extras import REQUIREMENTS
 from kaine.modules.chronos.network import CfCNetwork, ForwardPredictionHead
 from kaine.modules.soma.forward import SubstrateForwardModel
+from kaine.modules.soma.module import Soma
 
 _TORCH = (
     importlib.util.find_spec("torch") is not None
@@ -453,3 +454,125 @@ def test_unseeded_draws_differ():
     assert a != b
     assert 0 <= a < 2**63 - 1
     assert 0 <= b < 2**63 - 1
+
+
+# ---------------------------------------------------------------------------
+# Hardened NumPy CfC readout and Soma seed restore
+# ---------------------------------------------------------------------------
+
+def test_numpy_readout_load_state_dict_rejects_invalid_and_leaves_state():
+    readout = NumpyReadout(units=8, out=4, rng=np.random.default_rng(1))
+    good_state = readout.state_dict()
+    before_w = readout.W.copy()
+    before_b = readout.b.copy()
+    before_out = readout.out
+    before_units = readout.units
+
+    bad_weight = {"weight": [[0.0] * 8] * 8, "bias": good_state["bias"]}
+    with pytest.raises(ValueError, match="expected weight shape"):
+        readout.load_state_dict(bad_weight)
+    assert np.array_equal(readout.W, before_w)
+    assert np.array_equal(readout.b, before_b)
+    assert readout.out == before_out
+    assert readout.units == before_units
+
+    bad_bias = {"weight": good_state["weight"], "bias": [0.0] * 8}
+    with pytest.raises(ValueError, match="expected bias shape"):
+        readout.load_state_dict(bad_bias)
+    assert np.array_equal(readout.W, before_w)
+    assert np.array_equal(readout.b, before_b)
+    assert readout.out == before_out
+    assert readout.units == before_units
+
+    nan_weight = np.array(good_state["weight"], dtype=np.float32)
+    nan_weight[0, 0] = float("nan")
+    bad_finite = {"weight": nan_weight.tolist(), "bias": good_state["bias"]}
+    with pytest.raises(ValueError, match="finite"):
+        readout.load_state_dict(bad_finite)
+    assert np.array_equal(readout.W, before_w)
+    assert np.array_equal(readout.b, before_b)
+    assert readout.out == before_out
+    assert readout.units == before_units
+
+
+def test_numpy_readout_from_arrays_rejects_invalid():
+    w = np.zeros((4, 8), dtype=np.float32)
+    b = np.zeros(4, dtype=np.float32)
+    with pytest.raises(ValueError, match="2-D"):
+        NumpyReadout.from_arrays(w.flatten(), b)
+    with pytest.raises(ValueError, match="bias"):
+        NumpyReadout.from_arrays(w, np.zeros(8, dtype=np.float32))
+
+
+def test_soma_load_state_dict_wrong_width_raises_and_module_recover():
+    fm64 = SubstrateForwardModel(backend="numpy", feature_dim=8, units=64, seed=1)
+    fm32 = SubstrateForwardModel(backend="numpy", feature_dim=8, units=32, seed=2)
+
+    with pytest.raises(ValueError):
+        fm32.load_state_dict(fm64.state_dict())
+
+    s = object.__new__(Soma)
+    s._forward_model = fm32
+    s._cycle_cursor = "0"
+    s._read_interval_s = 1.0
+    s._fatigue = MagicMock()
+    s._self_rhythm = None
+
+    s.deserialize({"forward_model": fm64.state_dict()})
+    result = s._forward_model.step([0.1] * 8)
+    assert math.isfinite(result)
+
+
+def test_chronos_head_load_state_dict_wrong_width_raises():
+    head64 = ForwardPredictionHead(backend="numpy", input_size=8, units=64, seed=1)
+    head32 = ForwardPredictionHead(backend="numpy", input_size=8, units=32, seed=2)
+    with pytest.raises(ValueError):
+        head32.load_state_dict(head64.state_dict())
+
+
+def test_numpy_readout_sgd_step_nonfinite_returns_nan_and_model_logs(caplog):
+    readout = NumpyReadout(units=8, out=4, rng=np.random.default_rng(3))
+    hidden = [0.1] * 8
+    target = [0.5, -0.2, 0.1, float("inf")]
+    before_w = readout.W.copy()
+    before_b = readout.b.copy()
+    loss = readout.sgd_step(hidden, target, lr=0.1)
+    assert math.isnan(loss)
+    assert np.array_equal(readout.W, before_w)
+    assert np.array_equal(readout.b, before_b)
+
+    model = SubstrateForwardModel(backend="numpy", feature_dim=8, units=8, seed=4)
+    model._last_hidden = [float("inf")] * model.units
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.soma.forward"):
+        result = model.step([0.1] * 8)
+    assert math.isfinite(result)
+    assert "non-finite" in caplog.text
+
+
+def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
+    s = object.__new__(Soma)
+    s._forward_model = MagicMock(spec=["state_dict"])
+    s._forward_model.state_dict.return_value = {"weight": [], "bias": []}
+    s._cycle_cursor = "0"
+    s._read_interval_s = 1.0
+    s._fatigue = MagicMock()
+    s._self_rhythm = None
+
+    state = s.serialize()
+    assert "reservoir_seed" not in state
+    assert state["forward_model"] == {"weight": [], "bias": []}
+
+    s2 = object.__new__(Soma)
+    s2._forward_model = SubstrateForwardModel(
+        backend="numpy", feature_dim=4, units=8, seed=5
+    )
+    s2._cycle_cursor = "0"
+    s2._read_interval_s = 1.0
+    s2._fatigue = MagicMock()
+    s2._self_rhythm = None
+
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.soma.module"):
+        s2.deserialize({"reservoir_seed": None})
+
+    assert "soma: snapshot has no reservoir seed; the reservoir is new" in caplog.text
+    s2._forward_model.step([0.1, 0.2, 0.3, 0.4])

@@ -11,7 +11,7 @@ KAINE's interoceptive organ: predictive substrate monitoring, fatigue accumulati
 Implemented. Ships **disabled** — `[modules].soma = false` in `config/kaine.toml`.
 
 - No optional extras required for the base module. GPU metrics need `pynvml` (nvidia GPU hosts only); gracefully degrades if unavailable.
-- The `SubstrateForwardModel` requires `torch` and `ncps`; these are standard KAINE dependencies.
+- The `SubstrateForwardModel` runs on a CfC backend chosen by `cfc_backend` in `[soma]`: `"numpy"` (the shipped default; needs no `torch` or `ncps`) or `"torch"` (`ncps.torch.CfC`). `torch` and `ncps` (the `core` extra) are needed only for the torch backend.
 - Forward-model adaptation is automatically suspended during Hypnos offline cycles.
 
 ---
@@ -22,7 +22,7 @@ In the PP+GWT framing, Soma is the entity's **interoceptive channel**: it report
 
 Beyond passive reporting, Soma implements two predictive-processing additions:
 
-1. **Predictive interoception** — A CPU-only closed-form continuous-time network (`SubstrateForwardModel`, a CfC via `ncps`) predicts the next substrate feature vector from the current one and its own recurrent hidden state. Prediction error (the magnitude of expected-minus-actual) drives salience: substrate surprises propagate to Syneidesis with appropriately elevated salience, while a steady, predictable substrate stays near-invisible.
+1. **Predictive interoception** — A CPU-only closed-form continuous-time network (`SubstrateForwardModel`, a CfC via the `"numpy"` backend by default, or via `ncps` when `cfc_backend = "torch"`) predicts the next substrate feature vector from the current one and its own recurrent hidden state. Prediction error (the magnitude of expected-minus-actual) drives salience: substrate surprises propagate to Syneidesis with appropriately elevated salience, while a steady, predictable substrate stays near-invisible.
 
 2. **Homeostatic regulation** — Two tightly coupled subsystems ensure maintenance needs are surfaced rather than silently ignored:
    - **FatigueAccumulator** — integrates prediction error over waking time with continuous decay. When the accumulator crosses `fatigue_maintenance_threshold`, Soma publishes `soma.fatigue`, the emergent sleep-pressure signal that Hypnos monitors to schedule maintenance without reference to a wall-clock timer.
@@ -70,6 +70,7 @@ Section `[soma]` in `config/kaine.toml`. See also [../configuration.md](../confi
 | `cycle_latency_window` | `64` | Rolling window size for cycle latency samples; forwarded from `make_soma` into `Soma.__init__` and on into `SystemMetricsReader(cycle_latency_window=...)` |
 | `baseline_salience` | `0.1` | Salience for routine `soma.report` events |
 | `alert_salience` | `0.7` | Salience when threshold alerts, high prediction error, or fatigue fires |
+| `cfc_backend` | `"numpy"` | CfC backend for `SubstrateForwardModel`: `"numpy"` needs no `torch`/`ncps`; `"torch"` uses `ncps` and needs the `core` extra |
 | `forward_model_units` | `32` | Hidden size of the `SubstrateForwardModel` CfC reservoir |
 | `prediction_error_window` | `32` | Rolling window length (ticks) for normalising prediction error into salience |
 | `fatigue_decay_per_s` | `0.01` | Per-second decay rate for the fatigue accumulator; tripled during Hypnos sleep |
@@ -99,7 +100,7 @@ graph TD
 
     SomaTick --> WellnessCalc["compute_wellness()\nweighted avg of\nnormalised metrics"]
     SomaTick --> AnomalyDet["ThresholdAnomalyDetector\n(per-metric > threshold)"]
-    SomaTick --> FwdModel["SubstrateForwardModel\nfeature → CfC reservoir (frozen) → hidden\nhidden → linear readout (online) → next_vec"]
+    SomaTick --> FwdModel["SubstrateForwardModel\nfeature → CfC reservoir (frozen, seeded) → hidden\nhidden → linear readout (online) → next_vec"]
     FwdModel -->|L2 error| FatigueAcc["FatigueAccumulator\nF += e·dt - decay·dt"]
     FwdModel -->|L2 error| RegDet["RegulationDetector\nsustained error > threshold"]
     FatigueAcc -->|threshold crossed| SomaFatigue["soma.fatigue"]
@@ -119,7 +120,7 @@ graph TD
 
 ### SubstrateForwardModel (predictive interoception)
 
-A closed-form continuous-time network (Hasani et al. 2022), via the `ncps` package — the same CfC pattern Chronos uses (`kaine.modules.chronos.network.CfCNetwork` / `ForwardPredictionHead`). Architecture: `feature (8-dim) → ncps.torch.CfC reservoir (frozen, units hidden) → hidden state → Linear(units → 8) readout (online)`, all CPU tensors. The reservoir's weights are randomly initialised and never trained; only the linear readout adapts, with one SGD step per tick. The feature vector is `cpu_percent/100`, `ram_percent/100`, `cycle_latency/2·target`, the hottest GPU's `gpu_*_temp_c/100` (0.0 when no GPU telemetry is available), then zero-padded. A non-finite loss/gradient guard skips weight updates, and a non-finite *input* feature additionally skips committing that tick into the CfC's recurrent state (so one bad sensor read cannot permanently corrupt the hidden state). Adaptation suspended (`suspended = True`) while `_in_hypnos`.
+A closed-form continuous-time network (Hasani et al. 2022) — the same CfC pattern Chronos uses (`kaine.modules.chronos.network.CfCNetwork` / `ForwardPredictionHead`). `SubstrateForwardModel` uses the backend selected by `[soma].cfc_backend`: `"numpy"` (shipped default, implemented in `kaine/cfc_numpy.py`, needs no `torch` or `ncps`) or `"torch"` (`ncps.torch.CfC`, requires the `core` extra). The two backends compute the same step and match to 1e-5 from the same weights. Architecture: `feature (8-dim) → CfC reservoir (frozen, seeded, units hidden) → hidden state → Linear(units → 8) readout (online)`, all CPU tensors. The CfC reservoir is frozen and is generated in NumPy from a reservoir seed, identically for both backends; only the linear readout adapts online by SGD, with one step per tick. The feature vector is `cpu_percent/100`, `ram_percent/100`, `cycle_latency/2·target`, the hottest GPU's `gpu_*_temp_c/100` (0.0 when no GPU telemetry is available), then zero-padded. A non-finite loss/gradient guard skips weight updates, and a non-finite *input* feature additionally skips committing that tick into the CfC's recurrent state (so one bad sensor read cannot permanently corrupt the hidden state). Adaptation suspended (`suspended = True`) while `_in_hypnos`.
 
 ### FatigueAccumulator
 
@@ -165,10 +166,12 @@ Soma requires no external services. GPU metrics appear automatically if `pynvml`
 ## Zero-Persistence Note
 
 Soma holds **no raw metric data beyond the current tick**. Serialisation (`serialize()`) writes:
-- The CfC readout's weight/bias tensors only (`forward_model.weight`, `forward_model.bias`).
-- Scalar `fatigue.value` only; the accumulator time-stamp resets on deserialise.
+- The CfC readout's weight/bias tensors (`forward_model.weight`, `forward_model.bias`).
+- The `reservoir_seed` used to reproduce the frozen CfC reservoir.
+- Scalar `fatigue.value`; the accumulator time-stamp resets on deserialise.
+- `self_rhythm` state when self-rhythm is enabled.
 
-The CfC reservoir itself is never serialised — like Chronos's `CfCNetwork`, it is a frozen, randomly-initialised projection, not learned content, so each boot starts with an independently-seeded reservoir (the readout re-equilibrates to it online within a few ticks). The reservoir's recurrent hidden state is likewise ephemeral runtime context, never persisted. Metric values themselves are never written to disk.
+The CfC reservoir is frozen and is rebuilt identically from `reservoir_seed` on revive, so a preserved being keeps its reservoir across preservation and revival. A snapshot without a seed starts a new reservoir and logs that the reservoir is new; a readout snapshot whose shape does not match the configured network is rejected and Soma keeps a fresh readout. The recurrent hidden state is ephemeral runtime context and starts at zero on revive; it is never persisted. Metric values themselves are never written to disk.
 
 ---
 

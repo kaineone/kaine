@@ -45,7 +45,7 @@ class ForwardPredictionHead:
       is non-finite, protecting against degenerate inputs.
     - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
       setting ``suspended = True``.
-    - ``backend="numpy"`` needs no torch and is bit-identical to the torch
+    - ``backend="numpy"`` needs no torch and matches the torch
       path to 1e-5 from the same seed.
     """
 
@@ -142,8 +142,7 @@ class ForwardPredictionHead:
             loss = self._head.sgd_step(hidden, target_feature, self._lr)
             if not math.isfinite(loss):
                 log.warning(
-                    "ForwardPredictionHead: non-finite loss %.6g; skipping update",
-                    loss,
+                    "ForwardPredictionHead: non-finite loss or gradient; skipping update"
                 )
                 return 0.0
             return loss
@@ -157,8 +156,7 @@ class ForwardPredictionHead:
         loss_val = float(loss.item())
         if not math.isfinite(loss_val):
             log.warning(
-                "ForwardPredictionHead: non-finite loss %.6g; skipping update",
-                loss_val,
+                "ForwardPredictionHead: non-finite loss or gradient; skipping update"
             )
             return 0.0
         loss.backward()
@@ -166,7 +164,7 @@ class ForwardPredictionHead:
         for p in self._head.parameters():
             if p.grad is not None and not torch.isfinite(p.grad).all():
                 log.warning(
-                    "ForwardPredictionHead: non-finite gradient; skipping update"
+                    "ForwardPredictionHead: non-finite loss or gradient; skipping update"
                 )
                 self._optim.zero_grad()
                 return 0.0
