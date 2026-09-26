@@ -406,6 +406,40 @@ replaces it. Verify:
 curl -s http://127.0.0.1:6533/readyz
 ```
 
+### Without Docker
+
+Redis and Qdrant can also run as user-level native services with no
+container runtime and no root. This is the default on hosts without Docker,
+and you can force it with `--native`:
+
+```bash
+bash scripts/redis-bootstrap.sh --native
+bash scripts/qdrant-bootstrap.sh --native
+```
+
+The native Redis server stores its config, AOF and pid file under
+`state/services/redis/` and listens on `127.0.0.1:6479`. The native Qdrant
+server downloads the pinned v1.19.1 release binary, verifies its sha256, and
+runs from `state/services/qdrant/` on `127.0.0.1:6533`. Both are supervised
+by `systemd --user` when available, otherwise by a pid file under
+`state/services/<svc>/`.
+
+Control either kind with:
+
+```bash
+scripts/services.sh status
+scripts/services.sh start redis
+scripts/services.sh stop
+```
+
+`stop` acts on this checkout's native services. The containers are shared by every checkout on the host and may hold a running entity's bus and memory, so stopping one needs `--container` (`scripts/services.sh stop redis --container`). It stops the container and never removes it.
+
+On a host without internet access, download the release archive elsewhere and point the bootstrap at it with `KAINE_QDRANT_ARCHIVE=/path/to/qdrant-<arch>.tar.gz`. It is checked against the same pinned sha256.
+
+On Termux, `bash scripts/redis-bootstrap.sh --native` uses the Redis package
+(`pkg install redis` if it is missing). Qdrant has no Android build; set
+`[mnemos].backend = "sqlite_vec"` in `config/kaine.operator.toml` and skip Qdrant.
+
 ### Model server (language organ)
 
 The published KAINE organ is downloaded and served turnkey. The first-run wizard
