@@ -427,6 +427,8 @@ class WombProceduralAudioStream:
                 self._callback(pcm)
             except Exception:
                 log.debug("womb audio callback raised", exc_info=True)
+            else:
+                self._clock.mark_delivered("audio", k)
             k += 1
 
     def pcm_at(self, block_index: int) -> bytes:

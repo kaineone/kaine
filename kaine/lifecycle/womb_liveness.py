@@ -3,16 +3,22 @@
 
 """Womb liveness probe for the maturation gate.
 
-Two providers: local (the in-process womb perception feed) and external (a
-gestation peripheral publishing presence events). The gate calls this function
-and does not change when a provider is swapped; only the configuration does.
+There are two distinct moments:
 
-Presence contract (external provider): an event with
-``source == "gestation"`` and ``type == "gestation.womb"`` must be published to
-``gestation.out`` at least once per second. The payload must contain
-``provider`` and ``frame_index``. The probe reads the whole configured time
-window, not only the newest entry, because ``gestation.out`` also carries
-``gestation.readiness`` events.
+* ``check_womb_ready`` is called before spawn.  For ``mode == "womb"`` it runs
+  the local, discard-only perception probe; for any other mode it checks
+  the presence contract for an external provider.
+* ``check_womb_live`` is called while the entity is gestating.  It checks the
+  presence contract for both local and external providers.
+
+A running local womb is proven by
+``kaine.cycle.womb_presence.WombPresencePublisher`` from real deliveries.
+Presence contract: an event with ``source == "gestation"`` and
+``type == "gestation.womb"`` must be published to ``gestation.out``.  The
+payload must contain ``provider`` and ``frame_index``.  A live womb must
+publish at least once per second and ``frame_index`` must advance.  The whole
+configured window is read, not only the newest entry, because ``gestation.out``
+also carries ``gestation.readiness`` events.
 """
 from __future__ import annotations
 
@@ -33,22 +39,40 @@ class WombLiveness:
     reason: str  # "" when live; a one-line cause otherwise
 
 
-async def check_womb_liveness(
+def _validate_window_s(window_s: float) -> None:
+    if not math.isfinite(window_s) or window_s <= 0.0:
+        raise ValueError(f"window_s must be finite and > 0; got {window_s!r}")
+
+
+async def check_womb_ready(
     config: dict[str, Any],
     bus: Any | None,
     *,
     perception_check: Callable[[dict[str, Any]], Awaitable[list[Any]]] | None = None,
     window_s: float = DEFAULT_PRESENCE_WINDOW_S,
 ) -> WombLiveness:
-    if not math.isfinite(window_s) or window_s <= 0.0:
-        raise ValueError(f"window_s must be finite and > 0; got {window_s!r}")
+    _validate_window_s(window_s)
 
     feed = dict(config.get("perception_feed") or {})
     mode = str(feed.get("mode", "off")).lower()
 
     if mode == "womb":
         return await _check_local_womb(config, perception_check)
-    return await _check_external_womb(bus, window_s)
+    return await _check_presence(bus, window_s, local=False)
+
+
+async def check_womb_live(
+    config: dict[str, Any],
+    bus: Any | None,
+    *,
+    window_s: float = DEFAULT_PRESENCE_WINDOW_S,
+) -> WombLiveness:
+    _validate_window_s(window_s)
+
+    feed = dict(config.get("perception_feed") or {})
+    mode = str(feed.get("mode", "off")).lower()
+
+    return await _check_presence(bus, window_s, local=(mode == "womb"))
 
 
 async def _check_local_womb(
@@ -108,9 +132,16 @@ async def _check_local_womb(
     return WombLiveness(False, "local", reason)
 
 
-async def _check_external_womb(bus: Any | None, window_s: float) -> WombLiveness:
+async def _check_presence(
+    bus: Any | None,
+    window_s: float,
+    *,
+    local: bool,
+) -> WombLiveness:
+    provider_label = "local" if local else "external"
+
     if bus is None:
-        return WombLiveness(False, "external", "no bus")
+        return WombLiveness(False, provider_label, "no bus")
 
     try:
         now_ms = await bus.server_time_ms()
@@ -121,17 +152,50 @@ async def _check_external_womb(bus: Any | None, window_s: float) -> WombLiveness
             count=None,
         )
     except Exception as exc:
-        return WombLiveness(False, "external", f"{type(exc).__name__}: {exc}")
+        return WombLiveness(False, provider_label, f"{type(exc).__name__}: {exc}")
 
+    qualifying: list[int] = []
     for _id, event in entries:
-        if (
-            getattr(event, "source", None) == WOMB_SOURCE
-            and getattr(event, "type", None) == WOMB_PRESENCE_TYPE
-        ):
-            return WombLiveness(True, "external", "")
+        if getattr(event, "source", None) != WOMB_SOURCE:
+            continue
+        if getattr(event, "type", None) != WOMB_PRESENCE_TYPE:
+            continue
 
-    return WombLiveness(
-        False,
-        "external",
-        f"no {WOMB_PRESENCE_TYPE} presence event on {WOMB_STREAM} in the last {window_s:g} s",
-    )
+        payload = getattr(event, "payload", None)
+        if not isinstance(payload, dict):
+            continue
+
+        frame_index = payload.get("frame_index")
+        if not isinstance(frame_index, int) or isinstance(frame_index, bool):
+            continue
+
+        # The running local womb names itself "local"; an external provider
+        # names itself (e.g. its body adapter) with anything else.
+        provider = payload.get("provider")
+        if local:
+            if provider != "local":
+                continue
+        elif not isinstance(provider, str) or not provider or provider == "local":
+            continue
+
+        qualifying.append(frame_index)
+
+    if len(qualifying) == 0:
+        return WombLiveness(
+            False,
+            provider_label,
+            f"no {WOMB_PRESENCE_TYPE} presence event on {WOMB_STREAM} in the last {window_s:g} s",
+        )
+    if len(qualifying) == 1:
+        return WombLiveness(
+            False,
+            provider_label,
+            "only one presence event in the window; a live womb cannot be told from a stalled one",
+        )
+    if qualifying[-1] <= qualifying[0]:
+        return WombLiveness(
+            False,
+            provider_label,
+            "frame_index did not advance: the provider is stalled or replaying",
+        )
+    return WombLiveness(True, provider_label, "")

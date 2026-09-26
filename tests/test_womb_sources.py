@@ -538,3 +538,56 @@ def test_no_entity_state_feeds_the_womb() -> None:
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("kaine")
     }
     assert kaine_imports <= {"kaine.config", "kaine.modules.perception_prng"}
+
+
+def test_video_read_marks_delivery() -> None:
+    clock = WombClock(lived_offset_seconds=0.0, clock=_origin_then(2.0))
+    src = WombProceduralSource(
+        WombSchedule(seed=1, width=16, height=12),
+        params=WombParams(),
+        clock=clock,
+        lived_seconds=lambda: 0.0,
+    )
+    assert clock.last_delivery("video") is None
+    src.open()
+    ok, _ = src.read()
+    assert ok
+    assert clock.last_delivery("video") == (2.0, int(2.0 * 30.0))
+
+
+def test_audio_marks_delivery_only_when_the_callback_accepts() -> None:
+    # A block counts as delivered only once the consumer took it.
+    def _run(callback) -> tuple[float, int] | None:
+        clock = WombClock(lived_offset_seconds=0.0, clock=_origin_then(1.0))
+        stream = WombProceduralAudioStream(
+            WombAudioSchedule(seed=1),
+            params=WombParams(),
+            clock=clock,
+            callback=callback,
+        )
+        stream.start()
+        try:
+            deadline = 200
+            while clock.last_delivery("audio") is None and deadline:
+                import time
+
+                time.sleep(0.005)
+                deadline -= 1
+        finally:
+            stream.stop()
+        return clock.last_delivery("audio")
+
+    assert _run(lambda b: None) is not None
+
+    def _refuse(b: bytes) -> None:
+        raise RuntimeError("consumer refused the block")
+
+    assert _run(_refuse) is None
+
+
+def test_womb_clock_rejects_unknown_surface() -> None:
+    clock = WombClock(lived_offset_seconds=0.0, clock=lambda: 0.0)
+    with pytest.raises(ValueError):
+        clock.mark_delivered("smell", 1)
+    with pytest.raises(ValueError):
+        clock.last_delivery("smell")

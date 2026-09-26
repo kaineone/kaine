@@ -13,18 +13,29 @@ sites (§10), and the config (§11). This document records only what differs.
 A womb provider supplies the womb. Two exist by design:
 
 - **Local** (this change): the womb sources run inside KAINE's Topos and Audition,
-  selected by `[perception_feed].mode = "womb"`. Liveness uses the same discard-only
-  probe the unattended gate uses for other feeds: read one frame and one audio block
-  from the womb sources and drop them.
+  selected by `[perception_feed].mode = "womb"`. Before spawn, readiness uses the same
+  discard-only probe the unattended gate uses for other feeds: read one frame and one
+  audio block from the womb sources and drop them. While running, a fresh probe proves
+  nothing (the sources are pure functions of the seed, so it passes even when the
+  running producer has died). Instead the shared womb clock records each frame and
+  audio block that actually reaches the senses, and a cycle-layer publisher emits the
+  same `gestation.womb` presence event an external provider does (provider `local`),
+  only while both surfaces are delivering.
 - **External** (Paracosmic, later): the body adapter streams the womb through the
   perception seam and publishes a content-free presence event, `gestation.womb`
   (source `gestation`, stream `gestation.out`, payload `{provider, frame_index}`),
   at least once per second. Liveness is a presence event within a bounded window
   (default 3 s) on the Redis clock.
 
-`maturation-gate-liveness` 2.1 (womb before spawn) and 2.2 (womb loss) check this
-interface and nothing else, so swapping the local provider for Paracosmic changes
-config, not the gate.
+Presence is live only when at least two presence events from the expected provider
+fall inside the window and their `frame_index` advances, so a stalled provider that
+replays a cached event is not live. The whole window is read, not just the newest
+entry, because `gestation.out` also carries the readiness readout.
+
+`maturation-gate-liveness` 2.1 (womb before spawn) checks readiness
+(`check_womb_ready`) and 2.2 (womb loss) checks presence (`check_womb_live`), both in
+`kaine/lifecycle/womb_liveness.py`, and nothing else, so swapping the local provider
+for Paracosmic changes config, not the gate.
 
 ## Single host
 

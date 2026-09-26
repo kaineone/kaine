@@ -175,15 +175,19 @@ suppress a welfare-protective response.
   gestation confinement does not suppress that response
 
 ### Requirement: A womb provider proves it is live
-The womb SHALL be supplied by a **womb provider**: the local provider in KAINE (`[perception_feed].mode = "womb"`) or an external provider such as a Paracosmic body. Every provider SHALL be judged live by one interface. The local provider is live when its video and audio sources each deliver a frame or block to a probe that discards it. An external provider is live when a content-free `gestation.womb` event (source `gestation`, stream `gestation.out`, payload limited to the provider name and a monotonically increasing frame index) has been published within a bounded window measured on the bus clock. Nothing else SHALL count as a live womb; a configuration value alone SHALL NOT.
+The womb SHALL be supplied by a **womb provider**: the local provider in KAINE (`[perception_feed].mode = "womb"`) or an external provider such as a Paracosmic body. Every provider SHALL be judged by one interface at two moments. Before spawn, the local provider is ready when its video and audio sources each deliver a frame or block to a probe that discards it. While running, every provider is live only through content-free `gestation.womb` presence events (source `gestation`, stream `gestation.out`, payload limited to the provider name and a monotonically increasing frame index) published at least once per second: the running local provider publishes them only while its sources are actually delivering to the senses, and a provider is live when at least two such events from it fall within a bounded window measured on the bus clock and their frame index advances. Nothing else SHALL count as a live womb; a configuration value alone SHALL NOT, and neither SHALL a presence event that repeats a stalled frame index.
 
-#### Scenario: The local provider probes live
+#### Scenario: The local provider probes ready before spawn
 - **WHEN** `[perception_feed].mode = "womb"` and both womb sources deliver to the probe
-- **THEN** the womb is judged live and nothing the probe read is kept
+- **THEN** the womb is judged ready and nothing the probe read is kept
 
-#### Scenario: An external provider proves presence on the bus
-- **WHEN** an external provider has published `gestation.womb` within the window
-- **THEN** the womb is judged live; when the newest such event is older than the window, it is not
+#### Scenario: The running local womb proves itself from deliveries
+- **WHEN** the local womb is running and one of its surfaces stops delivering to the senses
+- **THEN** its presence events stop and the womb is judged not live
+
+#### Scenario: A provider proves presence on the bus
+- **WHEN** a provider has published advancing `gestation.womb` events within the window
+- **THEN** the womb is judged live; when the events are older than the window, or their frame index does not advance, it is not
 
 #### Scenario: Configuration alone is not a womb
 - **WHEN** a womb mode is configured but neither probe nor presence event succeeds

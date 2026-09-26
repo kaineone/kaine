@@ -113,6 +113,8 @@ class WombClock:
 
     Womb time is the time axis every womb signal is evaluated on; both
     sources consult one instance so the beat is seen and heard together.
+    Delivery marks record what actually reached the senses, so a running
+    womb can prove itself; they are never rendered content.
     """
 
     def __init__(
@@ -136,6 +138,7 @@ class WombClock:
         self._clock = clock
         self._origin: float | None = None
         self._lock = threading.Lock()
+        self._deliveries: dict[str, tuple[float, int]] = {}
 
     def start(self) -> None:
         """Fix the origin once.  Idempotent and thread-safe."""
@@ -152,6 +155,27 @@ class WombClock:
             if self._origin is None:
                 self._origin = self._clock()
             return self._offset + (self._clock() - self._origin)
+
+    def mark_delivered(self, surface: str, index: int) -> None:
+        """Record that a real delivery reached the named sense surface."""
+        if surface not in ("video", "audio"):
+            raise ValueError("surface must be 'video' or 'audio'")
+        with self._lock:
+            self._deliveries[surface] = (self._clock(), int(index))
+
+    def last_delivery(self, surface: str) -> tuple[float, int] | None:
+        """Return the last (monotonic time, index) delivered to surface."""
+        if surface not in ("video", "audio"):
+            raise ValueError("surface must be 'video' or 'audio'")
+        with self._lock:
+            return self._deliveries.get(surface)
+
+    def monotonic(self) -> float:
+        """Return the injected monotonic clock value.
+
+        Staleness is measured in the same time base as delivery marks.
+        """
+        return self._clock()
 
 
 @dataclass(frozen=True)
@@ -412,7 +436,9 @@ class WombProceduralSource:
         i = int(
             math.floor(self._clock.womb_seconds() * float(s.frame_rate_hz))
         )
-        return True, self.frame_at(i)
+        frame = self.frame_at(i)
+        self._clock.mark_delivered("video", i)
+        return True, frame
 
     def release(self) -> None:
         self._opened = False
