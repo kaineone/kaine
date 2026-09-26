@@ -130,24 +130,27 @@ class Mundus(BaseModule):
         if self._tasks:
             return True
 
-        try:
-            if callable(getattr(self._adapter, "probe", None)):
-                await asyncio.wait_for(self._adapter.probe(), timeout=timeout_s)
-                return True
-
-            async def _open_close_probe() -> bool:
-                await self._adapter.open()
-                return True
-
-            return await asyncio.wait_for(_open_close_probe(), timeout=timeout_s)
-        except Exception:
-            log.debug("mundus probe unavailable", exc_info=True)
-            return False
-        finally:
+        probe = getattr(self._adapter, "probe", None)
+        if callable(probe):
             try:
-                await self._adapter.close()
+                return bool(await asyncio.wait_for(probe(), timeout=timeout_s))
             except Exception:
-                pass
+                log.debug("mundus adapter probe failed", exc_info=True)
+                return False
+
+        # No probe on this adapter: open briefly and close again.
+        try:
+            await asyncio.wait_for(self._adapter.open(), timeout=timeout_s)
+        except Exception:
+            log.debug("mundus open-probe failed", exc_info=True)
+            return False
+        try:
+            await self._adapter.close()
+        except Exception:
+            # The body answered; a failed close after the probe does not make
+            # it unavailable, but it is worth seeing in the log.
+            log.debug("mundus close after open-probe failed", exc_info=True)
+        return True
 
     async def activate(self) -> bool:
         """Start Mundus from a dormant state; returns True if it came up."""

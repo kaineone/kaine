@@ -63,7 +63,8 @@ async def test_probe_available_false_when_probe_raises(fake_async_bus, monkeypat
     mundus = Mundus(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
     assert await mundus.probe_available(timeout_s=1.0) is False
-    assert adapter.closed is True
+    # A probe()-based check never opens the body, so there is nothing to close.
+    assert adapter.opened is False
 
 
 @pytest.mark.asyncio
@@ -73,7 +74,8 @@ async def test_probe_available_false_when_probe_times_out(fake_async_bus, monkey
     mundus = Mundus(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
     assert await mundus.probe_available(timeout_s=0.05) is False
-    assert adapter.closed is True
+    # A probe()-based check never opens the body, so there is nothing to close.
+    assert adapter.opened is False
 
 
 @pytest.mark.asyncio
@@ -113,3 +115,26 @@ async def test_shutdown_cleans_up_after_activate(fake_async_bus, monkeypatch) ->
 
     assert adapter.closed is True
     assert all(t.done() for t in mundus._tasks)
+
+
+async def test_probe_result_false_means_unavailable(fake_async_bus, monkeypatch):
+    """An adapter whose probe answers False is unavailable (the answer is used,
+    not just the absence of an exception), and nothing is opened or closed."""
+    from kaine.modules.mundus.adapters.stub import StubAdapter
+    from kaine.modules.mundus.module import Mundus
+
+    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+
+    class _NoBody(StubAdapter):
+        closed = 0
+
+        async def probe(self) -> bool:
+            return False
+
+        async def close(self) -> None:
+            type(self).closed += 1
+            await super().close()
+
+    mundus = Mundus(fake_async_bus, adapter=_NoBody(), enabled=True, dormant=True)
+    assert await mundus.probe_available() is False
+    assert _NoBody.closed == 0
