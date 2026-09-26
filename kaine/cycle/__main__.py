@@ -1395,15 +1395,26 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the eight-condition unattended gate over the resolved config.
 
     Reuses the research safety net for conditions 1–5.  Condition 6 comes from
-    Spot's selftest.  Conditions 7–8 come from later slices; until then the
-    gate refuses every unattended boot for those two conditions.
+    Spot's selftest.  Condition 8 is not built in this slice.  Condition 7
+    runs last and needs the outcome of conditions 1–6 and 8 as prerequisites.
     """
     net = _evaluate_research_safety_net(config)
+    from kaine.cycle.caretaker import check_caretaker_condition
     from kaine.cycle.spot_selftest import check_spot_condition
-    from kaine.cycle.unattended_gate import evaluate_unattended_gate
+    from kaine.cycle.unattended_gate import evaluate_unattended_gate, not_built
 
-    built = {6: check_spot_condition(config.get("spot") or {})}
-    return evaluate_unattended_gate(net, built=built)
+    spot = check_spot_condition(config.get("spot") or {})
+    eight = not_built(8)
+
+    # Condition 7 must report on 1–6 and 8, but must not include itself.
+    checks = dict(evaluate_unattended_gate(net, built={6: spot, 8: eight}).checks)
+    checks.pop("7_caretaker_told", None)
+    prerequisites_ok = all(checks.values())
+
+    seven = check_caretaker_condition(
+        config.get("caretaker"), prerequisites_ok=prerequisites_ok, conditions=checks
+    )
+    return evaluate_unattended_gate(net, built={6: spot, 7: seven, 8: eight})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1464,6 +1475,13 @@ def main(argv: list[str] | None = None) -> int:
             log.info("unattended gate %d: %s: %s", c.number, c.name, status)
         if not result.ok:
             sys.stderr.write(result.message() + "\n")
+            # Best-effort caretaker notice about the refusal; an error here must
+            # not change the exit code.
+            try:
+                from kaine.cycle.caretaker import send_refusal_notice
+                send_refusal_notice(config.get("caretaker"), result.checks)
+            except Exception:
+                log.exception("failed to send caretaker refusal notice")
             return UNATTENDED_GATE_EXIT_CODE
         log.info(result.message())
         supervision_mode = "unattended"
