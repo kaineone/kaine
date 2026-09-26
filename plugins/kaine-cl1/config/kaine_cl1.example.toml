@@ -12,9 +12,9 @@ enabled = ["cl1"]
 # The plugin runs only against Cortical Labs' simulator (cl-sdk, installed by you).
 # "cloud" and "hardware" are refused: see docs/cl1.md at the repository root.
 target = "simulator"
-# Required while the substrate tick is blocking (foundation task 3.3). It
-# decouples the simulator from wall-clock time so a substrate tick cannot stall
-# the cognitive loop.
+# true: the simulator runs one window per KAINE tick as fast as it can.
+# false: real time (what real tissue needs); a background thread runs the loop
+# and each KAINE tick closes a window. Both follow KAINE's cycle via on_cycle_tick.
 accelerated_time = true
 ticks_per_second = 100        # substrate closed-loop rate
 cognitive_rate = 3.333        # KAINE cognitive-cycle rate (Hz); ticks_per_second must nest in it

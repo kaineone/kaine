@@ -82,9 +82,12 @@ class WetwareInteroceptiveModel:
         return out
 
     def _substrate_tick(self, feature: Sequence[float]) -> np.ndarray:
-        """Run one cognitive tick and return the decoded hidden state."""
-        self._broker.queue_stim(self._module, self._encoder.encode(self._encode(feature)))
-        obs = self._broker.run_cognitive_tick()[self._module]
+        """Run one cognitive tick and return the decoded hidden state.
+
+        In beat mode the returned observation is the territory's latest completed
+        window, so the response to this step's stimulation arrives one tick later.
+        """
+        obs = self._broker.exchange(self._module, self._encoder.encode(self._encode(feature)))
         return self._decoder.decode(obs.spikes) / self._hidden_scale
 
     def _sgd_step(self, hidden: np.ndarray, target: np.ndarray) -> bool:
@@ -167,4 +170,3 @@ class WetwareInteroceptiveModel:
             raise ValueError("state contains non-finite values")
         self._W = new_W.copy()
         self._b = new_b.copy()
-

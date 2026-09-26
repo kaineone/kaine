@@ -43,7 +43,7 @@ def _project(feature_vec: Sequence[float], size: int) -> np.ndarray:
     if vec.size != size:
         idx = np.linspace(0, vec.size, size + 1).astype(int)
         vec = np.array([vec[idx[i]:max(idx[i] + 1, idx[i + 1])].mean() for i in range(size)])
-    return 1.0 / (1.0 + np.exp(-vec))  # fixed squash → [0, 1]
+    return 1.0 / (1.0 + np.exp(-vec))  # fixed squash -> [0, 1]
 
 
 class WetwareTimingModel:
@@ -81,13 +81,16 @@ class WetwareTimingModel:
         return len(self._channels)
 
     def tick(self, feature_vec: Sequence[float]) -> list[float]:
-        """Encode the feature → stim, run one closed-loop tick, decode → hidden."""
+        """Encode the feature -> stim, run one closed-loop tick, decode -> hidden.
+
+        In beat mode, the returned observation is the territory's latest completed window,
+        so the response to this step's stimulation arrives one tick later.
+        """
         amps01 = _project(feature_vec, len(self._channels))
         # PopulationEncoder maps each component in [0,1] to an amplitude in
         # [min_uA, max_uA]; the reference culture's evoked response scales with
         # amplitude, so the hidden state carries the encoded feature.
-        self._broker.queue_stim(self._module, self._encoder.encode(amps01))
-        obs = self._broker.run_cognitive_tick()[self._module]
+        obs = self._broker.exchange(self._module, self._encoder.encode(amps01))
         hidden = self._decoder.decode(obs.spikes) / self._hidden_scale
         return hidden.tolist()
 

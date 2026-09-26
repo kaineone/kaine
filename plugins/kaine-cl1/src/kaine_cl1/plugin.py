@@ -11,6 +11,7 @@ from __future__ import annotations
 import atexit
 import importlib.metadata
 import logging
+import math
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -86,6 +87,8 @@ class Cl1Plugin:
         self._session: Any | None = None
         self._broker: SubstrateBroker | None = None
         self._close_registered = False
+        self._accelerated = True
+        self._warned_realtime = False
 
     def _validated(self, config: Mapping[str, Any]) -> OverlayConfig:
         overlay = overlay_from_mapping(config)
@@ -121,13 +124,17 @@ class Cl1Plugin:
                 f"(64 electrodes, channel 0 reserved); reduce territories or oscillator channels"
             )
 
-        if (converted or overlay.oscillator_modules) and overlay.substrate.accelerated_time is not True:
-            raise ValueError(
-                "the CL1 substrate tick blocks the caller for one cognitive tick; "
-                "a real-time substrate would stall kaine's cognitive loop, so "
-                "accelerated_time = true is required until the non-blocking substrate "
-                "(foundation task 3.3) lands"
-            )
+        if (
+            (converted or overlay.oscillator_modules)
+            and overlay.substrate.accelerated_time is not True
+        ):
+            if not self._warned_realtime:
+                log.warning(
+                    "CL1 substrate runs in real time: it needs KAINE's cycle hook "
+                    "(on_cycle_tick) for non-blocking one-window-per-tick timing; until the "
+                    "first tick each step blocks for one window"
+                )
+                self._warned_realtime = True
 
         if converted or overlay.oscillator_modules:
             nesting_factor_for(overlay.substrate.ticks_per_second, overlay.cognitive_rate)
@@ -217,6 +224,7 @@ class Cl1Plugin:
 
         self._session = session
         self._broker = broker
+        self._accelerated = bool(overlay.substrate.accelerated_time)
 
         if not self._close_registered:
             atexit.register(self.close)
@@ -226,10 +234,26 @@ class Cl1Plugin:
 
     def close(self) -> None:
         """Close the substrate session and release the broker."""
+        if self._broker is not None:
+            self._broker.stop_beat()
         if self._session is not None:
             self._session.close()
         self._session = None
         self._broker = None
+
+    def on_cycle_tick(self, tick: Mapping[str, Any]) -> None:
+        """KAINE's cycle hook: close one substrate window per processing tick.
+
+        The first call switches the broker to beat mode; every call only signals the
+        background substrate thread, so the cycle never waits on the substrate."""
+        if self._broker is None:
+            return
+        if not self._broker.beat_mode:
+            self._broker.start_beat(accelerated=self._accelerated)
+        rate = float(tick.get("processing_rate_hz") or 0.0)
+        if not math.isfinite(rate) or rate <= 0.0:
+            rate = 10.0
+        self._broker.beat(1.0 / rate)
 
     def territory_map(self) -> dict[str, tuple[int, ...]]:
         if self._broker is None:
