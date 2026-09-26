@@ -369,7 +369,7 @@ def perception_feed_block(
         }
         descriptor = gather_perception_feed_descriptor(cfg)
         mode = descriptor.get("mode", "off")
-        reproducible = mode in ("seeded", "playlist")
+        reproducible = mode in ("seeded", "playlist", "womb")
         return {
             "mode": mode,
             "reproducible": reproducible,

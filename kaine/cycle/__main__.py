@@ -697,6 +697,25 @@ def _make_rebuild_module(
     return rebuild_module
 
 
+def _start_womb_presence(
+    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event
+) -> "asyncio.Task[None] | None":
+    """Start the local womb's presence publisher when a womb clock is installed.
+
+    ``build_registry`` installs the shared womb clock only for
+    ``[perception_feed].mode = "womb"``; any other mode starts nothing.
+    """
+    clock = (kaine_config.get("perception_feed") or {}).get("_shared_womb_clock")
+    if clock is None:
+        return None
+    from kaine.cycle.womb_presence import WombPresencePublisher
+
+    return asyncio.create_task(
+        WombPresencePublisher(bus, clock).run(stop_event),
+        name="cycle.womb_presence",
+    )
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
@@ -1329,6 +1348,11 @@ async def _boot_and_run(
                 ).run(stop_event),
                 name="cycle.input_watch",
             )
+    # A running local womb proves itself from real deliveries: presence events
+    # on gestation.out (the same contract an external provider uses), which the
+    # maturation gate reads to detect womb loss. gestation.out is not a module
+    # stream, so presence never enters the workspace.
+    womb_presence_task = _start_womb_presence(kaine_config, bus, stop_event)
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
@@ -1365,6 +1389,15 @@ async def _boot_and_run(
             except asyncio.TimeoutError:
                 continue
     finally:
+        if womb_presence_task is not None:
+            womb_presence_task.cancel()
+            try:
+                await womb_presence_task
+            except asyncio.CancelledError:
+                # Expected: we just cancelled it.
+                log.debug("womb presence task cancelled at shutdown")
+            except Exception:
+                log.exception("womb presence task shutdown failed")
         if input_watch_task is not None:
             input_watch_task.cancel()
             try:

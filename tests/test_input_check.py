@@ -241,6 +241,25 @@ def test_seeded_pass():
     assert cond.ok
 
 
+
+def test_womb_is_continuous_input():
+    # The womb never ends (unlike a playlist), so it satisfies condition 8
+    # when its sources deliver.
+    def _check(config: dict[str, Any]) -> list[CheckResult]:
+        return [
+            CheckResult("perception", "video womb", "PASS", ""),
+            CheckResult("perception", "audio womb", "PASS", ""),
+        ]
+
+    cond = check_input_condition(
+        {
+            "perception_feed": {"mode": "womb"},
+            "modules": {"topos": True, "audition": True},
+        },
+        perception_check=_check,
+    )
+    assert cond.ok
+
 def test_seeded_fail():
     def _check(config: dict[str, Any]) -> list[CheckResult]:
         return [

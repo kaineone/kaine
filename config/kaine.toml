@@ -719,12 +719,18 @@ prosody_enabled = false
 #              from the same media, advancing clip-by-clip. A digest mismatch
 #              fails the run. Audio decode needs PyAV (`av`); absent, it fails
 #              honestly with an install hint (never synthetic silence).
+#   womb     — the gestation stimulus, generated on the CPU in-process: a dim
+#              visual field pulsing with an external maternal heartbeat and tinted
+#              by an external maternal state, over a low-passed soundscape carrying
+#              the same beat. One shared clock keeps the beat seen and heard
+#              together; the maternal trajectory continues across boots. For a
+#              gestating entity on a single host. See [perception_feed.womb].
 #   live     — the real camera + real microphone paths (NON-reproducible;
 #              operator-present demos only, never a research run).
 #   screen   — the entity sees a shared desktop/window and hears its audio monitor
 #              (whatever the operator plays there). Field-tier arbitrary stimulus;
 #              zero-persistence holds. See [perception_feed.screen] below.
-# Selecting seeded/playlist turns capture on automatically for both surfaces.
+# Selecting seeded/playlist/womb turns capture on automatically for both surfaces.
 # SYNCHRONIZATION (honest): coherence is at the media/clip level (playlist) or
 # via the shared seed + cadence (seeded), NOT frame-locked across the two loops.
 [perception_feed]
@@ -741,6 +747,27 @@ sample_rate = 16000             # match [audition].capture_sample_rate
 channels = 1
 base_strength = 0.3             # learnable base soundscape amplitude
 surprise_strength = 1.0         # seed-keyed surprise-burst amplitude (0 = none)
+
+[perception_feed.womb]          # womb: the external maternal channel (mode = "womb")
+heartbeat_bpm = 70              # maternal beat rate (40-120)
+heartbeat_drift = 0.03          # slow fractional drift, so the beat is not a metronome
+maternal_state_rate = 0.02      # how fast the mother's emotional weather drifts
+maternal_state_drives_heartbeat = true  # an aroused maternal state beats faster
+maternal_distress_excursions = false    # not built; must stay false
+maternal_distress_max_magnitude = 0.3
+maternal_distress_max_seconds = 30
+external_drive_to_self_rhythm = true    # read by the self-rhythm oscillator once built
+external_drive_max_amplitude = 0.4
+
+[perception_feed.womb.video]
+luminance_mean = 0.15           # dim field
+luminance_contrast = 0.10       # low contrast
+luminance_pulse_depth = 0.35    # how strongly the field pulses with the beat
+maternal_state_hue_gain = 0.6   # how strongly the maternal state colours the field
+colour_ramp_seconds = 3600      # lived seconds over which colour rises from grey
+
+[perception_feed.womb.audio]
+lowpass_hz = 500                # soundscape low-pass corner (100-2000)
 
 # [perception_feed.screen]      # screen/window capture (mode = "screen"), all off
 # by default. Capture goes through the system ffmpeg binary (gdigrab on Windows,
