@@ -36,7 +36,7 @@
       integer nesting, via `test_nesting_factor`.
 - [x] 3.2 Aggregate the sub-ticks in one cognitive tick into one per-territory
       observation, via `test_cognitive_tick_aggregates_subticks`.
-- [ ] 3.3 Non-blocking guarantee and a shared beat: accelerated-time covers
+- [x] 3.3 Non-blocking guarantee and a shared beat: accelerated-time covers
       offline/sim runs today, where each consumer step runs its own window. The
       real-time path must run the loop in the background on ONE beat driven by
       KAINE's cycle (the effective `experiential_rate_hz` on `cycle.tick`),
