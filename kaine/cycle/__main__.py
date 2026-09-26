@@ -50,6 +50,11 @@ from kaine.cycle.affect_state import AffectStateProvider
 from kaine.cycle.control_state import read_control, unfreeze
 from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
+from kaine.cycle.ignition_log import (
+    IgnitionLog,
+    IgnitionLogConfig,
+    playlist_position_provider,
+)
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
@@ -77,6 +82,7 @@ from kaine.perception_state import (
     write_desired_audio,
     write_desired_video,
 )
+from kaine.persistence.jsonl_sink import AsyncJsonlSink
 from kaine.security.intent_signing import IntentSigner, generate_intent_secret
 from kaine.state_io import write_json_atomic
 from kaine.workspace import (
@@ -376,7 +382,12 @@ def _merge_qdrant_secret(
         section["qdrant"] = qdrant_cfg
 
 
-async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -> None:
+async def _freeze_watch_loop(
+    cycle: CognitiveCycle,
+    stop_event: asyncio.Event,
+    *,
+    playlist_clock: Any | None = None,
+) -> None:
     """Poll the freeze control and pause/resume the cycle to match.
 
     Runs independently of `run_forever`'s pause gate, so it can resume a frozen
@@ -412,6 +423,13 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
                         f": {control.reason}" if control.reason else "",
                     )
                 await cycle.pause()
+                if playlist_clock is not None:
+                    try:
+                        playlist_clock.pause("freeze")
+                    except Exception:
+                        log.warning(
+                            "freeze: playlist clock pause failed", exc_info=True
+                        )
 
             if control.frozen:
                 if others:
@@ -439,6 +457,13 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
             elif not control.frozen and cycle.is_paused:
                 log.info("resuming cycle (operator)")
                 await cycle.resume()
+                if playlist_clock is not None:
+                    try:
+                        playlist_clock.resume("freeze")
+                    except Exception:
+                        log.warning(
+                            "freeze: playlist clock resume failed", exc_info=True
+                        )
                 # C1 — restore the pre-freeze desired flags so a freeze/resume
                 # cycle (Spot recovery included) never leaves the entity
                 # deaf/blind for the rest of an unattended run.
@@ -1368,6 +1393,54 @@ async def _boot_and_run(
         cycle.set_ablation_recorder(sidecar.ablation_recorder)
         log.info("live oscillatory ablation attached to cycle")
 
+    ignition_log = None
+    try:
+        il_cfg = IgnitionLogConfig.from_section(kaine_config.get("ignition_log"))
+    except Exception:
+        log.warning("ignition log config invalid; continuing without it", exc_info=True)
+        il_cfg = IgnitionLogConfig(enabled=False)
+
+    if il_cfg.enabled:
+        try:
+            from kaine.modules.topos.feed import load_playlist_manifest
+
+            perception_cfg = kaine_config.get("perception_feed") or {}
+            clock = perception_cfg.get("_shared_playlist_clock")
+            manifest_path = perception_cfg.get("playlist_manifest")
+
+            if clock is not None and manifest_path:
+                manifest = load_playlist_manifest(str(manifest_path))
+                position_provider = playlist_position_provider(clock, manifest)
+            else:
+                def position_provider() -> tuple[int, int, str, float, bool] | None:
+                    return None
+
+            audition_mod = registry.get("audition")
+            if audition_mod is not None and hasattr(
+                audition_mod, "playlist_audio_position"
+            ):
+                audio_position_provider = audition_mod.playlist_audio_position
+            else:
+                def audio_position_provider() -> tuple[int, float] | None:
+                    return None
+
+            sink = AsyncJsonlSink(
+                Path(il_cfg.directory), name="ignition", retention_days=0
+            )
+            await sink.start()
+            ignition_log = IgnitionLog(
+                sink,
+                position_provider,
+                audio_position_provider=audio_position_provider,
+            )
+            cycle.set_broadcast_observer(ignition_log)
+            log.info("ignition log enabled directory=%s", il_cfg.directory)
+        except Exception:
+            log.warning(
+                "ignition log setup failed; continuing without it", exc_info=True
+            )
+            ignition_log = None
+
     # Dev-gated LOOPBACK perception-preview server (paper §4.4 explicit
     # override). Populated by Topos/Audition, this bridges the in-RAM preview
     # holder to the SEPARATE Nexus process over a 127.0.0.1-only socket so the
@@ -1520,7 +1593,14 @@ async def _boot_and_run(
 
     cycle_task = asyncio.create_task(cycle.run_forever(), name="cycle.run_forever")
     freeze_task = asyncio.create_task(
-        _freeze_watch_loop(cycle, stop_event), name="cycle.freeze_watch"
+        _freeze_watch_loop(
+            cycle,
+            stop_event,
+            playlist_clock=(kaine_config.get("perception_feed") or {}).get(
+                "_shared_playlist_clock"
+            ),
+        ),
+        name="cycle.freeze_watch",
     )
     spot_task = (
         asyncio.create_task(spot.run(stop_event), name="cycle.spot") if spot_cfg.enabled else None
@@ -1771,6 +1851,15 @@ async def _boot_and_run(
                 await sidecar.stop()
             except Exception:
                 log.warning("evaluation sidecar stop failed", exc_info=True)
+        try:
+            il = ignition_log
+        except NameError:
+            il = None
+        if il is not None:
+            try:
+                await il.close()
+            except Exception:
+                log.warning("ignition log close failed", exc_info=True)
         await cycle.shutdown()
         if not cycle_task.done():
             cycle_task.cancel()

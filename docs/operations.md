@@ -613,6 +613,22 @@ Configuration is in `[research_submission]` — see [Configuration Reference](co
 
 ---
 
+### Ignition log
+
+The ignition log is an optional, disabled-by-default per-broadcast research record. When enabled in `[ignition_log]`, the cycle writes one JSONL record for every successful workspace broadcast. Each record contains:
+
+- the run id and a per-sink sequence number;
+- the tick index and the broadcast's bus entry id;
+- wall and monotonic timestamps of the broadcast;
+- the programme position at that instant: item index, order, title, offset in seconds, and whether the programme was paused;
+- the audio feed's own delivered position (item index and seconds handed to the listener) when a playlist stream is running, so drift between picture and sound is measurable;
+- the salience scores and inhibition decision;
+- each coalition member's entry id, source, type, salience, and original timestamp.
+
+The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is never placed on the bus and no module receives it; the entity never learns its place in the programme from the log. Records are written through the encrypting JSONL sink and are never auto-purged, and they are encrypted at rest when state encryption is on.
+
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. Overlapping pauses keep the clock frozen until every holder releases.
+
 ## Enabling a module safely
 
 Every module enable is a deliberate supervised step. The general procedure:
