@@ -1419,3 +1419,85 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
      the header/brand's way. */
   .conn-status { top: 0.4rem; right: 0.4rem; }
 }
+
+/* ---- Development panel -------------------------------------------------- */
+
+#development-panel:not([hidden]) {
+  display: block;
+}
+
+.development__stage {
+  font-weight: bold;
+  font-size: var(--fs-lg);
+  margin-bottom: 0.5rem;
+}
+
+.development__evidence {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.development__readiness,
+.development__decision {
+  white-space: pre-line;
+  margin: 0.5rem 0;
+}
+
+.development__decision {
+  padding: 0.5rem;
+  border-left: 3px solid currentColor;
+  opacity: 0.9;
+}
+
+#dev-decision[hidden] {
+  display: none;
+}
+
+.development__ack {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--degraded-bg);
+  color: var(--degraded);
+  border: 1px solid var(--degraded);
+  border-radius: 0.25rem;
+}
+
+#dev-ack:not([hidden]) {
+  display: block;
+}
+
+#dev-ack-confirm-row:not([hidden]) {
+  display: block;
+}
+
+#dev-ack-msg {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: var(--fs-xs);
+}
+
+#dev-ack-start,
+#dev-ack-confirm,
+#dev-ack-cancel {
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 0.25rem;
+  margin-right: 0.5rem;
+}
+
+#dev-ack-confirm {
+  font-weight: bold;
+}
+
+#dev-ack-start:disabled,
+#dev-ack-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
