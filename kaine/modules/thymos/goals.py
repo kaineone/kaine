@@ -10,14 +10,17 @@ embeddings.
 """
 from __future__ import annotations
 
+import logging
+import math
 import re
 import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+log = logging.getLogger(__name__)
 
 
 class GoalState(str, Enum):
@@ -121,3 +124,128 @@ class GoalLedger:
             if score > best:
                 best = score
         return min(1.0, max(0.0, best))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "goals": [
+                {
+                    "id": g.id,
+                    "description": g.description,
+                    "priority": g.priority,
+                    "state": g.state.value,
+                    "created_at": g.created_at,
+                    "completed_at": g.completed_at,
+                }
+                for g in self._goals.values()
+            ]
+        }
+
+    def load_dict(self, data: Any) -> None:
+        """Replace this ledger's goals from a serialized dictionary.
+
+        The ledger is left unchanged unless ``data`` is a dict with a
+        list-valued ``goals`` key and every entry is parsed successfully.
+        """
+        if not isinstance(data, dict):
+            log.warning("goal ledger: refusing to load from non-dict data: %r", data)
+            return
+        goals = data.get("goals")
+        if not isinstance(goals, list):
+            log.warning(
+                "goal ledger: refusing to load from non-list goals: %r", goals
+            )
+            return
+        parsed: dict[str, Goal] = {}
+        for entry in goals:
+            if not isinstance(entry, dict):
+                log.warning("goal ledger: dropping non-dict goal entry: %r", entry)
+                continue
+            goal = self._parse_goal(entry)
+            if goal is None:
+                continue
+            parsed[goal.id] = goal
+        self._goals = parsed
+
+    @classmethod
+    def from_dict(cls, data: Any) -> GoalLedger:
+        ledger = cls()
+        ledger.load_dict(data)
+        return ledger
+
+    @staticmethod
+    def _parse_goal(entry: dict[str, Any]) -> Optional[Goal]:
+        gid = entry.get("id")
+        description = entry.get("description")
+        if not isinstance(gid, str) or not gid:
+            log.warning("goal ledger: dropping goal entry with missing id: %r", entry)
+            return None
+        if not isinstance(description, str) or not description.strip():
+            log.warning(
+                "goal ledger: dropping goal entry %r with missing description", gid
+            )
+            return None
+        try:
+            priority = float(entry["priority"])
+        except (KeyError, TypeError, ValueError):
+            log.warning("goal ledger: dropping goal entry %r with invalid priority", gid)
+            return None
+        if not math.isfinite(priority) or not 0.0 <= priority <= 1.0:
+            log.warning(
+                "goal ledger: dropping goal entry %r with priority outside [0,1]: %r",
+                gid,
+                priority,
+            )
+            return None
+        try:
+            state = GoalState(entry["state"])
+        except (KeyError, ValueError, TypeError):
+            log.warning(
+                "goal ledger: dropping goal entry %r with invalid state: %r",
+                gid,
+                entry.get("state"),
+            )
+            return None
+        try:
+            created_at = float(entry.get("created_at", 0.0))
+        except (TypeError, ValueError):
+            log.warning(
+                "goal ledger: dropping goal entry %r with invalid created_at: %r",
+                gid,
+                entry.get("created_at"),
+            )
+            return None
+        if not math.isfinite(created_at):
+            log.warning(
+                "goal ledger: dropping goal entry %r with non-finite created_at: %r",
+                gid,
+                created_at,
+            )
+            return None
+        completed_raw = entry.get("completed_at")
+        if completed_raw is None:
+            completed_at: Optional[float] = None
+        else:
+            try:
+                completed_at = float(completed_raw)
+            except (TypeError, ValueError):
+                log.warning(
+                    "goal ledger: dropping goal entry %r with invalid completed_at: %r",
+                    gid,
+                    completed_raw,
+                )
+                return None
+            if not math.isfinite(completed_at):
+                log.warning(
+                    "goal ledger: dropping goal entry %r with non-finite completed_at: %r",
+                    gid,
+                    completed_at,
+                )
+                return None
+        return Goal(
+            id=gid,
+            description=description.strip(),
+            priority=priority,
+            state=state,
+            created_at=created_at,
+            completed_at=completed_at,
+        )

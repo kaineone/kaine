@@ -239,3 +239,18 @@ class Nous(BaseModule):
             self._last_action = state["last_action"]
         if "posterior" in state and isinstance(state["posterior"], list):
             self._last_posterior = [list(p) for p in state["posterior"]]
+            seed = getattr(self._engine, "seed_posterior", None)
+            if self._last_posterior and not callable(seed):
+                # A wrapping or third-party engine that does not take a seed
+                # keeps its own fallback; say so rather than drop it silently.
+                log.info(
+                    "nous: engine %s cannot take the restored posterior; "
+                    "its timeout fallback is not seeded",
+                    type(self._engine).__name__,
+                )
+            elif callable(seed) and self._last_posterior:
+                if not seed(self._last_posterior):
+                    log.warning(
+                        "nous: restored posterior does not match the model; "
+                        "engine fallback unchanged"
+                    )

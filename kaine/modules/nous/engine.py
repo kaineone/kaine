@@ -265,6 +265,35 @@ class PymdpEngine:
         best_idx = int(min(range(n_actions), key=lambda i: efe[i]))
         return posterior, efe, best_idx
 
+    def seed_posterior(self, posterior: list[list[float]]) -> bool:
+        if len(posterior) != len(self._model.num_states):
+            log.warning(
+                "nous: seeded posterior factor count mismatch: %d vs %d",
+                len(posterior),
+                len(self._model.num_states),
+            )
+            return False
+        for i, (dist, size) in enumerate(zip(posterior, self._model.num_states)):
+            if len(dist) != size:
+                log.warning(
+                    "nous: seeded posterior length mismatch at factor %d: %d vs %d",
+                    i,
+                    len(dist),
+                    size,
+                )
+                return False
+            if not all(
+                isinstance(x, (int, float)) and math.isfinite(x) and x >= 0
+                for x in dist
+            ):
+                log.warning(
+                    "nous: seeded posterior has non-finite or negative value at factor %d",
+                    i,
+                )
+                return False
+        self._last_posterior = [list(p) for p in posterior]
+        return True
+
     def infer(self, obs: Sequence[int]) -> EngineResult:
         """Run one belief-update + EFE policy-selection step on raw obs indices.
 
@@ -397,6 +426,28 @@ class FakeEngine:
     @property
     def actions(self) -> tuple[str, ...]:
         return self._actions
+
+    def seed_posterior(self, posterior: list[list[float]]) -> bool:
+        if len(posterior) != len(self._last_posterior):
+            log.warning("nous: fake engine seeded posterior factor count mismatch")
+            return False
+        for i, (dist, expected) in enumerate(zip(posterior, self._last_posterior)):
+            if len(dist) != len(expected):
+                log.warning(
+                    "nous: fake engine seeded posterior length mismatch at factor %d", i
+                )
+                return False
+            if not all(
+                isinstance(x, (int, float)) and math.isfinite(x) and x >= 0
+                for x in dist
+            ):
+                log.warning(
+                    "nous: fake engine seeded posterior has non-finite or negative value at factor %d",
+                    i,
+                )
+                return False
+        self._last_posterior = [list(p) for p in posterior]
+        return True
 
     def step(self, snapshot: Any) -> EngineResult:
         idx = self._step_index
