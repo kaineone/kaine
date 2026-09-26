@@ -21,9 +21,9 @@
 - [x] 3.2 Gate runner default readout stream `womb.out` → `gestation.out`.
 - [x] 3.4 Probe protocol: withdrawal and perturbation windows with enforced hard maxima, `gestation.probe` start and end events, no probe while frozen, during a welfare response or in the first readout period, and abort on any of these.
 - [x] 3.5 The five markers as defined in the design, the persisted prediction-error baseline, and absent markers until data exists.
-- [ ] 3.6 Birth transition: on `stage.birth`, the womb sources render the bounded bloom, stop delivering, and the presence publisher falls silent.
+- [x] 3.6 Birth transition: on `stage.birth`, the womb sources render the bounded bloom, stop delivering, and the presence publisher falls silent.
 - [x] 3.3 The gate runner reads the readout with `bus.latest()`, the newest entry only. Once `gestation.out` also carries `gestation.womb` presence events (at least 1 Hz), the newest entry is usually a presence event, so the readout must be found by scanning a time window for the newest `gestation.readiness`, as `kaine/lifecycle/womb_liveness.py` does for presence.
 
 ## 4. Docs
 
-- [ ] 4.1 Operations docs: running a gestating entity on one host with the local womb; what the womb is and is not.
+- [x] 4.1 Operations docs: running a gestating entity on one host with the local womb; what the womb is and is not.

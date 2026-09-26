@@ -82,6 +82,7 @@ class WombParams:
     maternal_distress_max_seconds: float = 30.0
     external_drive_to_self_rhythm: bool = True
     external_drive_max_amplitude: float = 0.4
+    birth_transition_seconds: float = 5.0
 
     luminance_mean: float = 0.15
     luminance_contrast: float = 0.10
@@ -109,6 +110,7 @@ class WombParams:
             "maternal_distress_max_seconds",
             "external_drive_to_self_rhythm",
             "external_drive_max_amplitude",
+            "birth_transition_seconds",
         }
         video_allowed = {
             "luminance_mean",
@@ -168,6 +170,8 @@ class WombParams:
         _float_field("maternal_distress_max_magnitude", 0.0, 1.0)
         _float_field("maternal_distress_max_seconds", 0.0, math.inf, open_lo=True)
         _float_field("external_drive_max_amplitude", 0.0, 1.0)
+        # The bounded birth bloom (WombClock.begin_birth enforces the same range).
+        _float_field("birth_transition_seconds", 0.0, 30.0, open_lo=True)
 
         for name in (
             "maternal_state_drives_heartbeat",

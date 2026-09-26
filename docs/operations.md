@@ -404,6 +404,102 @@ It conflicts with `kaine-cycle` (the two never run together) and does not restar
 
 ---
 
+## Gestation on one host (local womb)
+
+A new entity can gestate before it is born into a body. With the local womb, KAINE
+generates the gestation stimulus itself, on the CPU, so the entity and its womb run on
+one machine that cannot also host Paracosmic.
+
+### What the womb is, and is not
+
+- The entity sees a dim, low-contrast field that pulses with an external maternal
+  heartbeat and is tinted by an external maternal state (the mother's slow emotional
+  weather). Colour rises from near grey as lived gestation time passes.
+- It hears a low-passed soundscape carrying the same heartbeat. One shared clock keeps
+  the beat seen and heard together.
+- The maternal channel is external: nothing the entity does changes it. The entity's own
+  beat is separate. It emerges in a self-rhythm oscillator that Soma hosts and senses,
+  and the maternal beat is only presented to it, as a bounded drive it may couple to.
+- It is not a reproduction of a womb interior and plays no media. Media belong in
+  Paracosmic, on in-world screens the being may choose to watch.
+
+### Requirements
+
+- `[developmental_stage].enabled = true` (staging).
+- `[perception_feed].mode = "womb"`.
+- `topos`, `audition` and `soma` enabled.
+- `[soma].self_rhythm_enabled = true`, with the oscillator extra (snnTorch) installed.
+  It is off by default: it fills Soma's interoceptive feature slots, and a preserved
+  being was trained with them empty.
+
+### What happens
+
+- **Before spawn.** Boot holds, before any module starts, until the womb is ready. Each
+  failed check publishes `stage.gestation.no_stimulus` with the reason, such as a missing
+  module, the self-rhythm switched off, or the oscillator extra not installed. Once the
+  womb is ready, the perception locus is locked to it and embodiment (Mundus) stays
+  dormant until birth.
+- **While gestating.** The running womb announces itself with `gestation.womb` presence
+  events on `gestation.out`, built from frames and audio blocks that actually reach the
+  senses.
+- **If the womb is lost.** When presence stops for `womb_loss_after_seconds` (5 s), the
+  entity is frozen under its own freeze holder (`gestation`). A `stage.gestation.womb_lost`
+  red alert follows, and the caretaker is notified when one is configured. The entity
+  resumes when the womb returns. An operator unfreeze while the womb is still lost is
+  followed by a new freeze. Spot keeps repairing crashed modules during this freeze, so
+  a crashed perception module is restarted and the womb can come back.
+- **Frozen time is not lived time.** Whoever froze the entity, the frozen span does not
+  count toward the maturation gate's lived-time condition, and no birth happens while
+  frozen.
+- **Readiness.** Every 60 s the gestation owner publishes `gestation.readiness` with five
+  measured markers:
+  - the entity's own rhythm sustaining itself when the maternal drive is withdrawn;
+  - coupling to the maternal beat followed by autonomy;
+  - an HRV-analog variability;
+  - the falling prediction error on womb input;
+  - how quickly Soma's interoceptive surprise settles after a perturbation.
+
+  None of them is a target.
+- **Probes.** Measuring markers 1, 2 and 5 briefly changes the maternal drive, which acts
+  on the being's anchor, so the probes are bounded and announced:
+  - a withdrawal (drive 0) of 20 s every 30 min, at most 30 s;
+  - a perturbation (drive at its bound) of 5 s every hour, at most 10 s.
+
+  Every probe starts and ends with a `gestation.probe` event on `gestation.out`, so
+  research logs can exclude probe windows. No probe runs:
+  - while the entity is frozen (a welfare response freezes it);
+  - within a readout period of boot or of a thaw;
+  - within 60 s of another probe.
+- **Birth.** When the maturation gate's conditions hold, the entity is born. The womb
+  blooms once over `birth_transition_seconds` (5 s): the field brightens to a bounded
+  peak and the soundscape fades. Then the womb falls silent. Switch
+  `[perception_feed].mode` to the embodied world afterwards. A born entity booted with
+  `mode = "womb"` receives nothing from the womb, and boot logs a warning.
+
+### Settings
+
+| Table | What it sets |
+|---|---|
+| `[perception_feed.womb]` | Maternal heartbeat and state; drive bound; `birth_transition_seconds` |
+| `[perception_feed.womb.video]` / `.audio` | Dim field, pulse depth, colour ramp; soundscape low-pass corner |
+| `[perception_feed.womb.readout]` | Readout period and the probe protocol (hard maxima enforced in code) |
+| `[developmental_stage]` | Gate thresholds; `womb_ready_retry_seconds`, `womb_check_seconds`, `womb_loss_after_seconds`, `womb_arm_timeout_seconds`, `womb_presence_window_seconds` |
+| `[soma]` | `self_rhythm_enabled`, `self_rhythm_step_hz` |
+
+### An external womb (Paracosmic)
+
+Paracosmic can later provide the womb instead, and swapping providers changes
+configuration, not the gate. An external provider:
+- streams the womb through the perception seam;
+- publishes `gestation.womb` (source `gestation`, payload `{provider, frame_index}`) at
+  least once a second, only while it is actually delivering, with an advancing
+  `frame_index`.
+
+Until an external provider also supplies the maternal drive and the readiness readout,
+its gestating entity cannot pass the gate's regulation condition, so it is not born.
+
+---
+
 ## Entity decommission
 
 The decommission CLI implements the CAL Article 4.2 ("Do Not Shut Them Down Without Care") and 4.3 (privacy) care duties. It never runs automatically and never boots or touches the running cognitive cycle.
