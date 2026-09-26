@@ -198,12 +198,9 @@ def test_hardware_session_opens_on_a_device(monkeypatch):
     monkeypatch.setattr(cl, "open", lambda: _FakeCtx(fake))
 
     before = os.environ.get("CL_SDK_REPLAY_PATH")
-    session = SubstrateSession(SubstrateConfig(target="hardware"))
-    try:
-        neurons = session.open()
+    with SubstrateSession(SubstrateConfig(target="hardware")) as session:
+        neurons = session.neurons
         assert neurons is fake
-    finally:
-        session.close()
     after = os.environ.get("CL_SDK_REPLAY_PATH")
     assert after == before
 
@@ -317,13 +314,10 @@ def test_hardware_open_forces_real_time_env(monkeypatch):
     monkeypatch.setattr(cl, "is_simulator", lambda: False)
     monkeypatch.setattr(cl, "open", lambda: _FakeCtx(fake))
 
-    session = SubstrateSession(SubstrateConfig(target="hardware"))
-    try:
-        neurons = session.open()
+    with SubstrateSession(SubstrateConfig(target="hardware")) as session:
+        neurons = session.neurons
         assert neurons is fake
         assert os.environ["CL_SDK_ACCELERATED_TIME"] == "0"
-    finally:
-        session.close()
 
     assert recorded == ["0"]
     assert os.environ["CL_SDK_ACCELERATED_TIME"] == "0"
