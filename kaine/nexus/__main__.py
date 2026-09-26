@@ -64,6 +64,10 @@ def make_metrics_snapshot(
             "tick_index": raw.get("tick_index"),
             "processing_rate_hz": raw.get("processing_rate_hz"),
             "experiential_rate_hz": raw.get("experiential_rate_hz"),
+            # Adaptive conscious access: the rate used on the latest tick and
+            # the drive behind it; experiential_rate_hz above is the resting rate.
+            "experiential_rate_effective_hz": raw.get("experiential_rate_effective_hz"),
+            "access_drive": raw.get("access_drive"),
             # Operator-freeze state (experiential loop paused). Metadata-only —
             # the runtime.json writer records `cycle.is_paused`. Feeds the
             # left-rail four-state status chip (OFFLINE/FROZEN/SLEEPING/AWAKE);

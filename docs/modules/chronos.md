@@ -21,7 +21,7 @@ Implemented. Ships **disabled** — `[modules].chronos = false` in `config/kaine
 
 In the PP+GWT framing, Chronos is the entity's **temporal self-model**: it keeps track of *when* things happen, *what patterns repeat*, and *how surprising* recent workspace activity is relative to learned expectations.
 
-On every Syneidesis workspace broadcast (the experiential rate, ~3.33 Hz conscious-access — not the 10 Hz processing tick), Chronos:
+On every Syneidesis workspace broadcast (the experiential rate: ~3.33 Hz conscious access at rest, rising toward the 10 Hz processing rate with arousal and salient reports), Chronos:
 
 1. **Featurizes the snapshot** — deterministically converts the `WorkspaceSnapshot` (selected events, salience statistics, source identity, inhibition flag, elapsed time) into a fixed 24-dimensional float vector.
 2. **Steps the CfC** — feeds the feature vector through a stateful Closed-form Continuous-time recurrent network, producing a hidden-state vector that encodes temporally compressed workspace history.

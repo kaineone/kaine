@@ -61,6 +61,10 @@ SIGNED_UNIT = (-1.0, 1.0)
 # so a value is checked even if the record's event_type isn't in this table.
 # ---------------------------------------------------------------------------
 SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
+    # --- Cycle pacing ---
+    # access_drive is clamped to [0, 1] by kaine.cycle.access_rate; the rates are
+    # positive frequencies.
+    "cycle.tick": {"access_drive": UNIT, "experiential_rate_hz": NONNEG, "processing_rate_hz": NONNEG},
     # --- Prediction / precision ---
     # prediction_error is clamped non-negative at the producer (soma.fatigue:
     # max(0.0, e)); topos likewise reports a non-negative error magnitude.

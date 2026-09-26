@@ -28,9 +28,11 @@ headroom). Hard bounds are `[0.5, 20.0]` Hz.
 The **experiential rate** controls how often a tick's snapshot is broadcast to
 `workspace.broadcast` (and thus becomes "conscious"). It is tracked by a
 fractional accumulator (`_experience_acc`): each tick adds
-`experiential_rate / processing_rate` to the accumulator; when it crosses 1.0
-an experiential broadcast fires and 1.0 is subtracted. This ensures the correct
-long-run ratio even when the two rates differ.
+`experiential_rate / processing_rate` to the accumulator; when it reaches 1.0
+an experiential broadcast fires and 1.0 is subtracted, keeping the fractional
+carry. This keeps the long-run ratio exact even when the two rates do not divide
+evenly (3.333 Hz over 10 Hz broadcasts about 100 times in 300 ticks). At most one
+broadcast happens per tick.
 
 `CognitiveCycle.__init__` itself only falls back to `experiential_rate_hz ==
 processing_rate_hz` when no value is supplied; the entity does not actually
@@ -45,6 +47,34 @@ experiential. Setting `experiential_rate_hz` equal to `processing_rate_hz`
 one-tick-one-broadcast behavior; setting it lower than 3.333 decouples
 "background processing" ticks (no broadcast, no intents) further from
 "conscious" ticks.
+
+### Adaptive conscious access — `[cycle.access_rate]`
+
+`experiential_rate_hz` is the **resting** rate. With `[cycle.access_rate].enabled`
+(the shipped default) the rate used for each tick is recomputed from an **access
+drive** in [0, 1]:
+
+- **tonic**: Thymos arousal above its resting baseline, scaled to [0, 1]. Thymos
+  arousal rises with perceptual prediction error, so predictions that fail raise it.
+- **phasic**: the most salient module report on the tick above `salience_floor`
+  (0.5), scaled to [0, 1] and held as a peak that decays with time constant
+  `phasic_decay_s` (1 subjective second). Events from `cycle` and `syneidesis` are
+  not module reports and do not count.
+
+The drive is the larger of the two, and the tick's rate is
+`resting + (processing − resting) × drive`: 3.333 Hz for a calm entity, one broadcast
+per processing tick (10 Hz) at full drive. The grounding is the reading of the P3 as
+the cortical signature of the locus coeruleus–noradrenaline response to salient or
+unexpected events (Nieuwenhuis, Aston-Jones & Cohen 2005), with its tonic and phasic
+modes (Aston-Jones & Cohen 2005). The linear map is a modelling assumption bounded by
+the resting P3b rate and the processing rate.
+
+The operator's rate control and fork timing profiles set the resting rate; the
+adaptive rate never goes below it or above the processing rate. Every `cycle.tick`
+event carries the tick's `experiential_rate_hz` and `access_drive`, and
+`runtime.json` carries `experiential_rate_effective_hz` and `access_drive` beside the
+resting rate. Only conscious access adapts: the processing rate stays at its
+configured value. `enabled = false` gives the fixed resting rate.
 
 ### Time Dilation — `time_scale` and `EntityClock`
 

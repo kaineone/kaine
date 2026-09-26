@@ -8,7 +8,7 @@ import logging
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
@@ -20,6 +20,9 @@ from kaine.cycle.protocols import (
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.workspace.volition import Volition
+
+if TYPE_CHECKING:
+    from kaine.cycle.access_rate import AccessRateController
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +97,8 @@ class CognitiveCycle:
         affect_observer: Optional[Callable[[list[tuple[str, Event]]], None]] = None,
         ablation_recorder: Optional[Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]] = None,
         seed_cursors_to_tail: bool = False,
+        access_rate: Optional["AccessRateController"] = None,
+        arousal_provider: Optional[Callable[[], Optional[float]]] = None,
     ) -> None:
         if processing_rate_hz <= 0:
             raise ValueError("processing_rate_hz must be positive")
@@ -114,6 +119,15 @@ class CognitiveCycle:
         # logical period can never diverge.
         self._target_tick_period = 1.0 / self._processing_rate
         self._experiential_rate = float(experiential_rate_hz or processing_rate_hz)
+        # Adaptive conscious access (adaptive-access-rate). The configured
+        # experiential rate is the RESTING rate; when a controller is wired the
+        # rate used for promotion is recomputed every tick from arousal and the
+        # salience of module reports, between the resting rate and the
+        # processing rate. None keeps the fixed-rate cycle exactly.
+        self._access_rate = access_rate
+        self._arousal_provider = arousal_provider
+        self._effective_experiential_rate = self._experiential_rate
+        self._access_drive = 0.0
         self._read_count = int(read_count)
         self._clock = clock
         self._sleep = sleep
@@ -376,6 +390,8 @@ class CognitiveCycle:
         if hz <= 0:
             raise ValueError("must be positive")
         self._experiential_rate = float(hz)
+        if self._access_rate is None:
+            self._effective_experiential_rate = float(hz)
 
     @property
     def is_paused(self) -> bool:
@@ -479,6 +495,7 @@ class CognitiveCycle:
                     exc_info=True,
                 )
 
+        self._update_access_rate(events)
         is_experiential = self._advance_experiential()
 
         snapshot: Optional[WorkspaceSnapshot] = None
@@ -630,6 +647,8 @@ class CognitiveCycle:
                     )
                     return False
                 self._experiential_rate = new_exp
+                if self._access_rate is None:
+                    self._effective_experiential_rate = new_exp
                 updated = True
         except (TypeError, ValueError) as exc:
             log.warning("rejecting cycle.set_rates: %s", exc)
@@ -893,16 +912,65 @@ class CognitiveCycle:
             results.append((entries_by_stream.get(stream, []), last_by_stream.get(stream)))
         return results
 
+    def _update_access_rate(self, events: list[tuple[str, Event]]) -> None:
+        if self._access_rate is None:
+            self._effective_experiential_rate = self._experiential_rate
+            self._access_drive = 0.0
+            return
+
+        try:
+            arousal = self._arousal_provider() if self._arousal_provider is not None else None
+        except Exception:
+            log.debug(
+                "arousal provider raised on tick %d; using None",
+                self._tick_index,
+                exc_info=True,
+            )
+            arousal = None
+
+        dt_s = self._target_tick_period
+        try:
+            drive, effective = self._access_rate.step(
+                events=events,
+                arousal=arousal,
+                dt_s=dt_s,
+                resting_hz=self._experiential_rate,
+                ceiling_hz=self._processing_rate,
+            )
+            self._access_drive = drive
+            self._effective_experiential_rate = effective
+        except Exception:
+            log.warning(
+                "access rate step failed on tick %d; falling back to resting rate",
+                self._tick_index,
+                exc_info=True,
+            )
+            self._access_drive = 0.0
+            self._effective_experiential_rate = self._experiential_rate
+
+    @property
+    def effective_experiential_rate_hz(self) -> float:
+        return self._effective_experiential_rate
+
+    @property
+    def access_drive(self) -> float:
+        return self._access_drive
+
     def _advance_experiential(self) -> bool:
-        ratio = self._experiential_rate / self._processing_rate
+        ratio = self._effective_experiential_rate / self._processing_rate
         self._experience_acc += ratio
-        # L2 — clamp the accumulator when throttled below the experiential
-        # rate (ratio > 1): it must never grow without bound across starved
-        # ticks.
-        if self._experience_acc > 1.0:
-            self._experience_acc = 1.0
         if self._experience_acc >= 1.0:
+            # Subtract first, so the fractional carry survives: at 3.333 Hz over
+            # 10 Hz (ratio 0.3333) the accumulator reaches 1.3332 on the fourth
+            # tick, and keeping the 0.3332 carry yields one broadcast every ~3
+            # ticks. Clamping before subtracting threw the carry away and gave
+            # one broadcast every 4 ticks (2.5 Hz instead of 3.333 Hz).
             self._experience_acc -= 1.0
+            # L2 — when the experiential rate exceeds the processing rate
+            # (ratio > 1) at most one broadcast happens per tick; clamp the
+            # remainder so it never grows without bound across starved ticks.
+            if self._experience_acc > 1.0:
+                self._experience_acc = 1.0
             return True
         return False
 
@@ -948,6 +1016,9 @@ class CognitiveCycle:
                     "slip_ms": slip_ms,
                     "is_experiential": is_experiential,
                     "error": error,
+                    "processing_rate_hz": self._processing_rate,
+                    "experiential_rate_hz": self._effective_experiential_rate,
+                    "access_drive": self._access_drive,
                 },
                 salience=0.5 if error else 0.05,
                 timestamp=self._now(),
