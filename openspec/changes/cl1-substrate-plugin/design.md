@@ -31,7 +31,7 @@ Research on Cortical Labs' published material (2026-09-23) found:
 
 **9. Sequencing.** The wizard and `docs/getting-started.md` edits are based on main after `first-run-service-fixes` (merged as kaine #180). The package move under `plugins/` does not touch those files and can go first.
 
-**10. Config writes and the browser setup.** The wizard step writes the `[plugins]` block through `kaine.secrets_file` (`upsert_toml_field` / `read_toml_field`), which refuses layouts it cannot edit safely, rather than editing TOML by hand. If the browser-based setup (kaine #179) lands later, this step is re-expressed in its step model.
+**10. Config writes and the browser setup.** The wizard step records the `[plugins]` block in the operator config the wizard assembles, which `main()` writes with `tomlwriter` like every other step; `tomlwriter` gains support for flat lists of scalars for `[plugins].enabled`. No secret is written. The step is a helper in the same pattern as `_trainer_provisioning_step`, so the browser-based setup (kaine #179) can reuse it.
 
 ## Risks
 

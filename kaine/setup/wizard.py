@@ -283,6 +283,58 @@ def _trainer_provisioning_step(
         line(f"  trainer provisioning skipped (probe/guide error: {exc}).")
 
 
+def _cl1_substrate_step(
+    cfg: dict[str, Any],
+    *,
+    input_fn: Callable[[str], str],
+    line: Callable[..., None],
+) -> None:
+    """Optional step, off by default, that offers the CL1 substrate plugin
+    in plugins/kaine-cl1. It only records configuration and prints install
+    commands; it never installs or runs anything.
+    """
+    line()
+    line("-" * 70)
+    line("Biological substrate plugin (optional, off by default)")
+    line("-" * 70)
+    line("KAINE can run the forward models of Chronos and Soma on Cortical Labs'")
+    line("CL1, cultured neurons on a 64-electrode array, through the optional")
+    line("plugin in plugins/kaine-cl1. It needs Cortical Labs' cl-sdk, which KAINE")
+    line("does not ship or install: you install it yourself, it is licensed")
+    line("CC BY-NC 4.0 (non-commercial use only), and its simulator is non-learning")
+    line("(Cortical Labs describes its data as control data that does not respond to")
+    line("stimulation). The plugin runs only on that simulator for now; real neurons")
+    line("need a paid Cortical Cloud account or a CL1 device, which it does not")
+    line("support yet. See docs/cl1.md.")
+    if not _ask_yes_no(input_fn, "Set up the CL1 substrate plugin?", default=False):
+        line("CL1 substrate plugin left off (the default).")
+        return
+    modules = [m for m in ("chronos", "soma") if (cfg.get("modules") or {}).get(m)]
+    if not modules:
+        line(
+            "Neither Chronos nor Soma is enabled, so there is nothing for the "
+            "plugin to convert; it was left off."
+        )
+        return
+    cfg["plugins"] = {
+        "enabled": ["cl1"],
+        "cl1": {
+            "substrate": {
+                "target": "simulator",
+                "accelerated_time": True,
+                "data_source": "reference_culture",
+                "territories": {m: 12 for m in modules},
+            },
+            "backends": {m: "cl1" for m in modules},
+        },
+    }
+    line("  Recorded [plugins] converting: " + ", ".join(modules) + ".")
+    line("  Install these yourself before booting (this wizard does not run them):")
+    line("    pip install ./plugins/kaine-cl1")
+    line("    pip install cl-sdk")
+    line("  Every boot will warn that the substrate is simulated.")
+
+
 def _ask_yes_no(input_fn: Callable[[str], str], prompt: str, default: bool) -> bool:
     suffix = " [Y/n]: " if default else " [y/N]: "
     raw = input_fn(prompt + suffix).strip().lower()
@@ -699,6 +751,10 @@ def run_wizard(
         )
     else:
         line("State encryption left disabled (the default).")
+
+    # --- Step 8b: optional CL1 substrate plugin (off by default) ------------
+    if not defaults:
+        _cl1_substrate_step(cfg, input_fn=input_fn, line=line)
 
     return WizardResult(
         acknowledged=True,

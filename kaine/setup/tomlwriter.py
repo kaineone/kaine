@@ -12,10 +12,11 @@ Round-trip contract: anything :func:`dumps` writes MUST parse back with
 :mod:`tomllib` to the same Python values. The test suite enforces this for
 strings, bools, ints, floats, and nested tables.
 
-Supported value types: ``str``, ``bool``, ``int``, ``float``. Nested ``dict``
-values become sub-tables (``[parent.child]``). Lists/None/other types are
-rejected so a caller never silently emits something this writer cannot
-round-trip.
+Supported value types: ``str``, ``bool``, ``int``, ``float``, and flat ``list`` values
+containing only those scalar types (rendered as inline TOML arrays). Nested ``dict``
+values become sub-tables (``[parent.child]``). ``None``/other types, and lists
+containing non-scalars, are rejected so a caller never silently emits something this
+writer cannot round-trip.
 """
 from __future__ import annotations
 
@@ -62,6 +63,16 @@ def _format_scalar(value: Any) -> str:
         return repr(value)
     if isinstance(value, str):
         return _format_str(value)
+    # Only flat lists of scalars are supported (e.g. [plugins].enabled = ["cl1"]).
+    if isinstance(value, list):
+        items: list[str] = []
+        for item in value:
+            if not isinstance(item, (bool, int, float, str)):
+                raise TypeError(
+                    f"tomlwriter cannot serialize value of type {type(item).__name__!r}: {item!r}"
+                )
+            items.append(_format_scalar(item))
+        return "[" + ", ".join(items) + "]"
     raise TypeError(
         f"tomlwriter cannot serialize value of type {type(value).__name__!r}: {value!r}"
     )
