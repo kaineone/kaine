@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
@@ -104,6 +105,10 @@ class SubstrateBroker:
     _failed: bool = field(default=False, repr=False)
     _broken: bool = field(default=False, repr=False)
     _thread: Any = None
+    _last_beat_at: float | None = field(default=None, repr=False)
+    _period_s: float = field(default=0.1, repr=False)
+    _discarded_stim: int = field(default=0, repr=False)
+    _rt_overruns: int = field(default=0, repr=False)
     _fps: int = field(default=25000, repr=False)
 
     def __post_init__(self) -> None:
@@ -114,21 +119,26 @@ class SubstrateBroker:
 
     # -- allocation (pure) ------------------------------------------------------
     def allocate(self, module: str, count: int) -> ChannelTerritory:
-        if module in self._territories:
-            raise ValueError(f"module {module!r} already has a territory")
-        if count <= 0:
-            raise ValueError("territory size must be positive")
-        if count > len(self._free):
-            raise OversubscribedError(
-                f"cannot lease {count} channels to {module!r}: only "
-                f"{len(self._free)} of {self.channel_count} remain "
-                f"(64-electrode array is the hard ceiling)"
-            )
-        leased = tuple(self._free[:count])
-        self._free = self._free[count:]
-        territory = ChannelTerritory(module=module, channels=leased)
-        self._territories[module] = territory
-        return territory
+        with self._lock:
+            if module in self._territories:
+                raise ValueError(f"module {module!r} already has a territory")
+            if count <= 0:
+                raise ValueError("territory size must be positive")
+            if count > len(self._free):
+                raise OversubscribedError(
+                    f"cannot lease {count} channels to {module!r}: only "
+                    f"{len(self._free)} of {self.channel_count} remain "
+                    f"(64-electrode array is the hard ceiling)"
+                )
+            leased = tuple(self._free[:count])
+            self._free = self._free[count:]
+            territory = ChannelTerritory(module=module, channels=leased)
+            self._territories[module] = territory
+            return territory
+
+    def _territories_snapshot(self) -> dict[str, ChannelTerritory]:
+        with self._lock:
+            return dict(self._territories)
 
     def territory(self, module: str) -> ChannelTerritory:
         return self._territories[module]
@@ -146,9 +156,12 @@ class SubstrateBroker:
         return {m: t.channels for m, t in self._territories.items()}
 
     # -- spike routing (pure) ---------------------------------------------------
-    def route(self, spikes: Iterable) -> dict[str, list]:
-        owner = {ch: m for m, t in self._territories.items() for ch in t.channels}
-        out: dict[str, list] = {m: [] for m in self._territories}
+    def route(
+        self, spikes: Iterable, territories: dict[str, ChannelTerritory] | None = None
+    ) -> dict[str, list]:
+        territories = self._territories if territories is None else territories
+        owner = {ch: m for m, t in territories.items() for ch in t.channels}
+        out: dict[str, list] = {m: [] for m in territories}
         for s in spikes:
             m = owner.get(int(s.channel))
             if m is not None:
@@ -221,7 +234,8 @@ class SubstrateBroker:
         self._spillover = [s for s in collected if int(s.timestamp) >= window_end]
         from_ts = self._cursor
         self._cursor = window_end
-        routed = self.route(in_window)
+        territories = self._territories_snapshot()
+        routed = self.route(in_window, territories)
         return {
             module: TerritoryObservation(
                 module=module,
@@ -230,7 +244,7 @@ class SubstrateBroker:
                 from_timestamp=from_ts,
                 frame_count=frames,
             )
-            for module, t in self._territories.items()
+            for module, t in territories.items()
         }
 
     def run_cognitive_tick(self) -> dict[str, TerritoryObservation]:
@@ -280,6 +294,8 @@ class SubstrateBroker:
         self._stop.clear()
         self._failed = False
         self._beat_signal.clear()
+        # Treat a long gap from start (for example a boot-time freeze) like any other gap.
+        self._last_beat_at = time.monotonic()
         self._beat_mode = True
         self._accelerated = accelerated
         with self._lock:
@@ -299,6 +315,24 @@ class SubstrateBroker:
         self._check_usable()
         if not self._beat_mode:
             raise RuntimeError("broker is not in beat mode")
+        now = time.monotonic()
+        last = self._last_beat_at
+        if last is not None and now - last > 2 * period_s:
+            gap = now - last
+            with self._lock:
+                count = sum(len(v) for v in self._next.values())
+                self._next.clear()
+                self._pending_frames = None
+            if count:
+                self._discarded_stim += count
+                log.warning(
+                    "CL1 substrate discarded %d queued stimulation request(s) after a %.2f s gap "
+                    "between cycle ticks (cycle frozen or stalled)",
+                    count,
+                    gap,
+                )
+        self._last_beat_at = now
+        self._period_s = period_s
         if self._accelerated:
             frames = max(1, int(round(period_s * self._fps)))
             with self._lock:
@@ -313,6 +347,14 @@ class SubstrateBroker:
                 self._pending_frames = frames
                 self._beat_signal.set()
         else:
+            if self._boundary.is_set():
+                self._rt_overruns += 1
+                if self._rt_overruns == 1 or self._rt_overruns % 100 == 0:
+                    log.warning(
+                        "CL1 substrate (real time) is behind the cycle: %d beat(s) arrived before "
+                        "the previous window closed",
+                        self._rt_overruns,
+                    )
             self._boundary.set()
 
     def _beat_loop(self) -> None:
@@ -341,11 +383,17 @@ class SubstrateBroker:
                     collected.extend(tick.analysis.spikes)
                     if window_start is None:
                         window_start = int(tick.analysis.start_timestamp)
+                    cap = max(1, int(round(self._period_s * self._fps)))
+                    stop_ts = int(tick.analysis.stop_timestamp)
+                    if stop_ts - window_start > 2 * cap:
+                        collected = [s for s in collected if int(s.timestamp) >= stop_ts - cap]
+                        window_start = stop_ts - cap
                     if self._boundary.is_set():
                         self._boundary.clear()
                         stop_ts = int(tick.analysis.stop_timestamp)
                         assert window_start is not None
-                        routed = self.route(collected)
+                        territories = self._territories_snapshot()
+                        routed = self.route(collected, territories)
                         obs = {
                             module: TerritoryObservation(
                                 module=module,
@@ -354,7 +402,7 @@ class SubstrateBroker:
                                 from_timestamp=window_start,
                                 frame_count=stop_ts - window_start,
                             )
-                            for module, t in self._territories.items()
+                            for module, t in territories.items()
                         }
                         with self._lock:
                             self._latest.update(obs)
@@ -401,6 +449,16 @@ class SubstrateBroker:
     def coalesced_beats(self) -> int:
         """Number of accelerated beats coalesced because a window was pending."""
         return self._coalesced
+
+    @property
+    def discarded_stim(self) -> int:
+        """Number of queued stimulation requests discarded after a frozen cycle tick."""
+        return self._discarded_stim
+
+    @property
+    def realtime_overruns(self) -> int:
+        """Number of real-time beats that arrived before the previous window closed."""
+        return self._rt_overruns
 
     @property
     def failed(self) -> bool:

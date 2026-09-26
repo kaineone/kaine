@@ -43,6 +43,18 @@ entity-welfare gates:
    are an explicit, reviewed step, never an accidental default, so the transition
    from sim to tissue is deliberate.
 
+## How the plugin enforces this
+
+The plugin reaches real tissue only through `target = "hardware"`, and only when
+the operator's configuration carries an exact acknowledgement of this document
+and an institutional approval reference, with accelerated time off and no
+simulated data source (see `docs/cl1.md`, "Running on a CL1"). On hardware,
+stimulation happens only on KAINE's cycle ticks, so any freeze stops it, and
+stimulation queued before a freeze is discarded. Code enforces the configuration
+and the stimulation limits; it cannot verify the approval, the culture's care or
+that a pattern was characterised in the simulator first. Those remain the
+operator's responsibility.
+
 ## Two welfare stacks
 
 A project that puts a *synthetic mind's* forward models into *biological neurons*

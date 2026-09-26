@@ -303,9 +303,9 @@ def _cl1_substrate_step(
     line("does not ship or install: you install it yourself, it is licensed")
     line("CC BY-NC 4.0 (non-commercial use only), and its simulator is non-learning")
     line("(Cortical Labs describes its data as control data that does not respond to")
-    line("stimulation). The plugin runs only on that simulator for now; real neurons")
-    line("need a paid Cortical Cloud account or a CL1 device, which it does not")
-    line("support yet. See docs/cl1.md.")
+    line("stimulation). This step sets it up for that simulator; real neurons")
+    line("need a paid Cortical Cloud account (not supported yet) or a CL1 device")
+    line("(supported only through a welfare gate). See docs/cl1.md.")
     if not _ask_yes_no(input_fn, "Set up the CL1 substrate plugin?", default=False):
         line("CL1 substrate plugin left off (the default).")
         return

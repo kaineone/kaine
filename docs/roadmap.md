@@ -25,6 +25,7 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-26 | cl1 hardware-target (plugins/kaine-cl1) |
 | 2026-09-26 | local-womb-feed |
 | 2026-09-25 | cl1-substrate-plugin |
 | 2026-09-25 | adaptive-access-rate |
