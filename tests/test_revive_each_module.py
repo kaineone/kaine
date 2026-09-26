@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -332,10 +333,7 @@ async def test_roundtrip_thymos(bus: AsyncBus, tmp_path: Path) -> None:
     m1._state = DimensionalState(valence=0.5, arousal=0.6, dominance=0.1)
     m1._baseline = DimensionalState(valence=0.1, arousal=0.3, dominance=0.0)
     m1._familiarity_cache = {"operator": 0.8}
-    try:
-        m1._goals.add("test goal", priority=0.5)  # type: ignore[union-attr]
-    except AttributeError:
-        pass
+    m1._goals.add("test goal", priority=0.5)
     state = _json_roundtrip(m1.serialize())
     m2 = Thymos(bus, publish_interval_s=0.5, clock=lambda: 0.0)
     m2.deserialize(state)
@@ -781,10 +779,7 @@ def _mutate_thymos(m: Thymos, i: int) -> None:
     )
     m._baseline = DimensionalState(valence=0.0, arousal=0.3, dominance=0.0)
     m._familiarity_cache = {f"agent-{i}": 0.1 * i}
-    try:
-        m._goals.add(f"goal {i}", priority=0.5)  # type: ignore[union-attr]
-    except AttributeError:
-        pass
+    m._goals.add(f"goal {i}", priority=0.5)
 
 
 async def _mutate_mnemos(m: Mnemos, i: int) -> None:
@@ -910,7 +905,11 @@ async def test_study_order_revive_chain(
             try:
                 await m.shutdown()
             except Exception:
-                pass
+                # Teardown is best effort: stand-in collaborators may fail to
+                # shut down cleanly, and one failure must not skip the rest.
+                logging.getLogger(__name__).warning(
+                    "teardown: %s shutdown failed", type(m).__name__, exc_info=True
+                )
 
     try:
         for i, (name, factory) in enumerate(ORDER):

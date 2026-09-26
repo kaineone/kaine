@@ -540,8 +540,6 @@ def test_pymdp_engine_seed_posterior_valid_and_invalid():
 
 @pytest.mark.asyncio
 async def test_nous_logs_when_engine_cannot_take_the_posterior(bus: AsyncBus, caplog):
-    import logging
-
     from kaine.modules.nous.module import Nous
 
     class _NoSeedEngine:
