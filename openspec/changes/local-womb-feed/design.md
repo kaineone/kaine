@@ -82,13 +82,19 @@ its own state. It is separate from the per-module coalition oscillator that
   its absence.
 
 **How it is driven.**
-- Soma steps the oscillator on every read tick with its own interoceptive drive (the
-  same activity measure it gives its coalition oscillator).
+- **Cadence.** Soma's read tick (1 Hz by default) is far too slow to represent a
+  maternal beat of about 1.2 Hz, whose pulse is only tens of milliseconds wide. Soma
+  therefore steps the self-rhythm oscillator in its own small loop at
+  `self_rhythm_step_hz` (default 20 Hz) of subjective time (the entity clock). The
+  interoceptive feature slots are read from it at Soma's read tick.
+- **Own drive.** Each step's own drive is Soma's latest interoceptive activity measure,
+  held between reads: the same measure it gives its coalition oscillator.
 - In `womb` mode with `external_drive_to_self_rhythm = true`, boot injects a
-  maternal-drive provider into Soma, and each tick adds
-  `external_drive_max_amplitude × beat_pulse(heartbeat_phase(seed, womb_seconds))`.
-  The drive is read from the shared womb clock, so the oscillator is driven by the same
-  beat the entity sees and hears.
+  maternal-drive provider into Soma. Each step adds `external_drive_max_amplitude` times
+  the beat pulse **averaged over that step's interval** of womb time. A point sample at
+  20 Hz would hit or miss a pulse tens of milliseconds wide and alias into noise;
+  averaging is the honest low-pass. The drive is read from the shared womb clock, so
+  the oscillator is driven by the same beat the entity sees and hears.
 - The probe protocol (phase 3) may withdraw the drive (0.0) or raise it for a bounded
   moment.
 - Without a provider the drive is `None` and the oscillator behaves exactly as without
