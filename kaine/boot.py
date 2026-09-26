@@ -380,6 +380,11 @@ def _womb_params(feed: dict[str, Any]) -> WombParams:
     audio = womb.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
         raise ValueError("[perception_feed.womb.audio] must be a table")
+    # [perception_feed.womb.readout] belongs to the gestation owner, which
+    # validates it itself (GestationReadoutConfig).
+    readout = womb.pop("readout", None)
+    if readout is not None and not isinstance(readout, dict):
+        raise ValueError("[perception_feed.womb.readout] must be a table")
     return WombParams.from_sections(womb, video or {}, audio or {})
 
 
