@@ -44,6 +44,10 @@ A silicon result that timed out or errored SHALL be returned unchanged with no s
 - **WHEN** Nous calls `seed_posterior` on the wrapped engine after a revive
 - **THEN** the call reaches the inner engine and returns its result
 
+#### Scenario: Revive through KAINE's loader
+- **WHEN** a Nous whose engine the CL1 plugin wraps restores a posterior that fits the model
+- **THEN** KAINE's own engine holds that posterior, and KAINE logs neither that the engine cannot take the restored posterior nor that it does not match the model
+
 ### Requirement: Synchronous substrate windows run one at a time
 Before the substrate follows KAINE's cycle, each step runs its own substrate window. The broker SHALL serialise those windows, and the switch to following the cycle, across threads, because Nous steps its engine in a worker thread while other converted modules step on the event loop.
 
