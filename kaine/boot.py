@@ -890,7 +890,12 @@ def make_nous(
 ) -> BaseModule:
     from kaine.modules.nous.module import Nous
 
-    injected = _check_injections("nous", injections, {"engine"})
+    injected = _check_injections("nous", injections, {"engine", "engine_wrapper"})
+
+    if "engine" in injected and "engine_wrapper" in injected:
+        raise ConfigurationError(
+            "nous cannot take both an injected engine and an engine wrapper"
+        )
 
     allowed = {
         # Complexity envelope (validated below).
@@ -930,13 +935,27 @@ def make_nous(
     if "engine" in injected:
         return Nous(bus, engine=injected["engine"], **cfg)
 
-    from kaine.modules.nous.engine import PymdpEngine
+    from kaine.modules.nous.engine import ActiveInferenceEngine, PymdpEngine
     from kaine.modules.nous.generative_model import build_generative_model
 
     # Build the engine eagerly so a misconfigured envelope / missing reasoning
     # extra fails loudly at boot rather than mid-cycle.
     model = build_generative_model(max_states_per_factor=max_states)
     engine = PymdpEngine(model, efe_timeout_ms=efe_timeout_ms, policy_len=horizon)
+
+    # The wrapper receives the engine KAINE built from [nous], so a plugin can
+    # add to it without seeing the settings.
+    if "engine_wrapper" in injected:
+        wrapped = injected["engine_wrapper"](engine)
+        if not isinstance(wrapped, ActiveInferenceEngine):
+            who = getattr(injected["engine_wrapper"], "plugin_name", "a plugin")
+            raise ConfigurationError(
+                f"nous engine_wrapper from plugin {who} returned {type(wrapped).__name__}, "
+                "which is not an ActiveInferenceEngine "
+                "(needs an actions property and a step method)"
+            )
+        engine = wrapped
+
     return Nous(bus, engine=engine, **cfg)
 
 

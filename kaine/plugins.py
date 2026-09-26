@@ -7,6 +7,10 @@ Plugins are discovered via the ``kaine.plugins`` importlib metadata entry-point
 group, but only entry points whose names appear in ``[plugins].enabled`` are
 loaded. The loader validates declared seams, detects conflicts, and supplies
 constructor injections to module factories.
+
+Recognized injectable seams are ``chronos.network``, ``soma.forward_model``,
+``nous.engine`` (a replacement engine), and ``nous.engine_wrapper`` (a callable
+that receives KAINE's default Nous engine and returns the engine to use).
 """
 from __future__ import annotations
 
@@ -33,8 +37,30 @@ class PluginError(ValueError):
 INJECTABLE_SEAMS: dict[str, frozenset[str]] = {
     "chronos": frozenset({"network"}),
     "soma": frozenset({"forward_model"}),
-    "nous": frozenset({"engine"}),
+    "nous": frozenset({"engine", "engine_wrapper"}),
 }
+
+# A replacement and a wrapper for the same model cannot both apply.
+_EXCLUSIVE_SEAMS: tuple[tuple[str, str], ...] = (("nous.engine", "nous.engine_wrapper"),)
+
+
+class _NamedWrapper:
+    """A plugin's engine wrapper, tagged with the plugin's name so KAINE can name it
+    in errors; exceptions it raises become PluginError naming the plugin."""
+
+    def __init__(self, plugin_name: str, fn: Callable[[Any], Any]) -> None:
+        self.plugin_name = plugin_name
+        self._fn = fn
+
+    def __call__(self, engine: Any) -> Any:
+        try:
+            return self._fn(engine)
+        except Exception as exc:
+            raise PluginError(
+                f"plugin {self.plugin_name} engine_wrapper raised "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+
 
 # Log a warning on the 1st and every Nth cycle-tick failure or slow call.
 _CYCLE_WARN_EVERY = 100
@@ -176,6 +202,13 @@ class LoadedPlugins:
                         f"{module}.{key}"
                     )
             for key, value in provided.items():
+                if key == "engine_wrapper":
+                    if not callable(value):
+                        raise PluginError(
+                            f"plugin {name} returned a non-callable for "
+                            f"{module}.engine_wrapper"
+                        )
+                    value = _NamedWrapper(name, value)
                 result[key] = value
                 logger.warning("plugin %s fills %s.%s", name, module, key)
         return result
@@ -357,6 +390,14 @@ def load_plugins(
                     )
 
             seam_owners[seam] = name
+
+        for a, b in _EXCLUSIVE_SEAMS:
+            if a in seam_owners and b in seam_owners:
+                raise PluginError(
+                    f"seams {a} (plugin {seam_owners[a]}) and {b} "
+                    f"(plugin {seam_owners[b]}) cannot both be filled: "
+                    "a replacement and a wrapper for the same model cannot both apply"
+                )
 
         dist_name = None
         version = None
