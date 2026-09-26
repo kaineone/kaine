@@ -19,12 +19,15 @@ sensory content (no transcribed text, no audio bytes, no frame data).
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from kaine.state_io import write_json_atomic
+
+log = logging.getLogger(__name__)
 
 RUNTIME_PATH = Path("state/perception/runtime.json")
 DESIRED_PATH = Path("state/perception/desired.json")
@@ -166,9 +169,17 @@ def read_desired(path: Path | None = None) -> DesiredState:
     if not target.exists():
         return DesiredState()
     try:
-        return DesiredState.from_dict(json.loads(target.read_text()))
+        raw_text = target.read_text()
+        raw_data = json.loads(raw_text)
     except (json.JSONDecodeError, OSError):
         return DesiredState()
+
+    parsed = DesiredState.from_dict(raw_data)
+    if parsed.locus_locked and parsed.locked_by == "gestation":
+        raw_locus = raw_data.get("locus") if isinstance(raw_data, dict) else None
+        if raw_locus not in LOCI:
+            return replace(parsed, locus="virtual")
+    return parsed
 
 
 def write_desired_audio(active: bool, path: Path | None = None) -> DesiredState:
@@ -198,8 +209,17 @@ def write_desired_locus(
     ``locked_by`` records WHO holds the lock (``operator`` | ``gestation``); the
     developmental gate passes ``gestation`` so a womb confinement is logged as a
     developmental-gate action, not an operator lock. When omitted the existing
-    attribution is preserved."""
+    attribution is preserved.
+
+    A lock held by ``gestation`` cannot be moved or re-attributed by any caller
+    other than the gestation holder: if the current desired state is locked by
+    ``gestation`` and ``locked_by != "gestation"``, the locus stays ``virtual``
+    and the lock and attribution remain unchanged. The gestation holder itself
+    (``locked_by="gestation"``) may set anything, including unlocking."""
     cur = read_desired(path)
+    if cur.locus_locked and cur.locked_by == "gestation" and locked_by != "gestation":
+        log.debug("locus held by gestation; ignoring non-gestation write")
+        return cur
     updated = replace(
         cur,
         locus=_coerce_locus(locus),

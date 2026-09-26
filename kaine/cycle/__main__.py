@@ -899,6 +899,13 @@ async def _boot_and_run(
     if not len(registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
+    # Gestation: keep Mundus dormant until birth. The gate_runner will
+    # call activate() at birth before unlocking the locus.
+    if staging_enabled and stage_state.is_gestating:
+        if "mundus" in registry and hasattr(registry.get("mundus"), "set_dormant"):
+            registry.get("mundus").set_dormant(True)
+            log.info("gestation: mundus held dormant until birth")
+
     for module in list(registry.all_modules()):
         await module.initialize()
 

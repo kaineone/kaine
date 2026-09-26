@@ -6,10 +6,12 @@
 
 ## 2. Womb, locus and embodiment
 
+Tasks 2.1 and 2.2 check the womb-liveness interface defined by `local-womb-feed`; they are built once that change's phase 1 lands.
+
 - [ ] 2.1 Pre-spawn live-womb check in boot/preboot; the cycle does not start without it; repeated operator-visible report.
 - [ ] 2.2 Womb loss mid-gestation: pause the entity clock, red alert, resume on return; never unlock to `physical`.
-- [ ] 2.3 `perception_state`: effective locus is the lock holder's locus; unknown locus during gestation resolves to the womb.
-- [ ] 2.4 Skip Mundus during gestation; public adapter reachability probe; hot-start Mundus at birth before switching the locus source; `locked_by="gestation"` on unlock.
+- [x] 2.3 `perception_state`: effective locus is the lock holder's locus; unknown locus during gestation resolves to the womb.
+- [x] 2.4 Skip Mundus during gestation; public adapter reachability probe; hot-start Mundus at birth before switching the locus source; `locked_by="gestation"` on unlock.
 
 ## 3. Readouts, acknowledgement, visibility
 
