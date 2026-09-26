@@ -536,3 +536,21 @@ def test_pymdp_engine_seed_posterior_valid_and_invalid():
     assert engine._last_posterior == valid
 
     engine.close()
+
+
+@pytest.mark.asyncio
+async def test_nous_logs_when_engine_cannot_take_the_posterior(bus: AsyncBus, caplog):
+    import logging
+
+    from kaine.modules.nous.module import Nous
+
+    class _NoSeedEngine:
+        actions = ("noop",)
+
+        def step(self, snapshot):  # pragma: no cover - never stepped here
+            raise AssertionError
+
+    nous = Nous(bus, engine=_NoSeedEngine())
+    with caplog.at_level(logging.INFO, logger="kaine.modules.nous.module"):
+        nous.deserialize({"posterior": [[0.5, 0.5]], "last_action": None})
+    assert any("cannot take the restored posterior" in r.message for r in caplog.records)

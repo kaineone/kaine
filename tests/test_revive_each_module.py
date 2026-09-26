@@ -890,7 +890,7 @@ async def test_study_order_revive_chain(
     bus: AsyncBus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_stage, "STAGE_PATH", str(tmp_path / "stage"))
+    monkeypatch.setattr(_stage, "STAGE_PATH", tmp_path / "stage.json")
 
     out_root = tmp_path / "backups"
     forks = tmp_path / "forks"
