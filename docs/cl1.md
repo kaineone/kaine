@@ -21,8 +21,9 @@ forward model:
 |---|---|---|
 | Chronos | `chronos.network` | The recurrent network whose hidden state feeds Chronos' prediction head |
 | Soma | `soma.forward_model` | The reservoir under Soma's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units |
+| Any module's oscillator | `oscillator.<module>` | The oscillatory-binding oscillator: each time the module publishes, its own small territory is stimulated in proportion to the event's salience, and the binding phase is read from that territory's firing, exactly as the silicon oscillator reads its simulated population |
 
-Oscillator, Nous and several partial conversions are planned; their designs are
+Nous and several partial conversions are planned; their designs are
 in [`plugins/kaine-cl1/openspec/`](../plugins/kaine-cl1/openspec/).
 
 ## What it needs
@@ -84,6 +85,23 @@ chronos = 12
 soma = 12
 ```
 
+To source the oscillatory-binding phase of some modules from the substrate as
+well, list them; each gets its own territory, and KAINE's `[oscillator].enabled`
+must be true (KAINE refuses oscillator seams otherwise):
+
+```toml
+[oscillator]
+enabled = true
+
+[plugins.cl1.oscillators]
+modules = ["chronos", "soma"]
+channels_per_module = 4
+```
+
+All territories together must fit in the 63 usable channels (64 electrodes, with
+channel 0 reserved); the plugin refuses to load otherwise. Each publish of an
+oscillated module costs one substrate tick.
+
 With `cl1` absent from `[plugins].enabled`, or every module set to `"silicon"`,
 KAINE runs exactly as it does without the plugin. The full set of keys is in
 [`plugins/kaine-cl1/config/kaine_cl1.example.toml`](../plugins/kaine-cl1/config/kaine_cl1.example.toml).
@@ -115,9 +133,14 @@ the plugin filled. A simulated run is never evidence about living neurons.
 - **Hardware.** `target = "hardware"` is refused. Running on living tissue is a
   deliberate step with its own welfare review, described in
   [`plugins/kaine-cl1/docs/biological-welfare.md`](../plugins/kaine-cl1/docs/biological-welfare.md).
-- **Real time.** A substrate tick currently blocks the caller for one cognitive
-  tick, so the plugin requires the simulator's accelerated time. A non-blocking
-  substrate is planned.
+- **Real time and a shared clock.** Each converted module step, and each publish
+  of an oscillated module, runs its own substrate window and blocks the caller
+  while it does, so the plugin requires the simulator's accelerated time. It also
+  means substrate time runs faster than KAINE's cognitive time, and a territory
+  records only the windows its own module runs (each module reads the response to
+  its own stimulus). A non-blocking substrate with one shared window per cognitive
+  tick, paced by KAINE's live broadcast rate, is planned and is required before any
+  run on real hardware.
 
 ## Testing
 

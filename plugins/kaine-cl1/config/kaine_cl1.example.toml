@@ -39,6 +39,12 @@ soma = "cl1"
 
 # Channel-territory sizes (electrodes leased per converted module). Channel 0 is
 # reserved, so the sum must stay <= 63.
+# Optional: source these modules' oscillatory-binding phase from the substrate.
+# Needs KAINE's [oscillator].enabled = true. Each gets its own territory.
+# [plugins.cl1.oscillators]
+# modules = ["chronos", "soma"]
+# channels_per_module = 4
+
 [plugins.cl1.substrate.territories]
 chronos = 12
 soma = 12

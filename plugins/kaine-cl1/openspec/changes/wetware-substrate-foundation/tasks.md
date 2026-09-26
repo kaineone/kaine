@@ -36,9 +36,15 @@
       integer nesting, via `test_nesting_factor`.
 - [x] 3.2 Aggregate the sub-ticks in one cognitive tick into one per-territory
       observation, via `test_cognitive_tick_aggregates_subticks`.
-- [ ] 3.3 Non-blocking guarantee: accelerated-time covers offline/sim runs today;
-      the background-thread path for real-time hardware lands with hardware work.
-      (Starvation probe deferred to the hardware phase.)
+- [ ] 3.3 Non-blocking guarantee and a shared beat: accelerated-time covers
+      offline/sim runs today, where each consumer step runs its own window. The
+      real-time path must run the loop in the background on ONE beat driven by
+      KAINE's cycle (the effective `experiential_rate_hz` on `cycle.tick`),
+      queue every consumer's stim for the next window, and hand each consumer
+      its territory's latest window, so the timeline advances once per cycle
+      regardless of how many consumers there are (second-review finding on kaine
+      #197). Needs a test with several consumers in one cycle asserting exactly
+      one window advanced. (Starvation probe deferred to the hardware phase.)
 
 ## 4. Codecs
 
