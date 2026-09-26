@@ -89,9 +89,13 @@ A `WombLossWatcher` (a cycle-layer task, `kaine/cycle/womb_watch.py`) runs while
 stage is `gestation` and stops at birth. Every `womb_check_seconds` (default 1 s) it
 calls `check_womb_live`.
 
-- **Grace.** Presence needs two advancing events inside the window, so the watcher does
-  not judge the womb until `window_s + 2 × womb_check_seconds` after it starts and after
-  each return.
+- **Arming.** A local womb publishes presence only once the senses are actually
+  receiving it, which can take a while after boot (the vision encoder loads first). The
+  watcher therefore arms on its first live observation. A womb that never becomes live
+  within `arm_timeout_seconds` (default 120 s) is lost.
+- **Grace.** Presence needs two advancing events inside the window, so after arming, and
+  after each return, the watcher does not judge the womb for
+  `window_s + 2 × womb_check_seconds`.
 - **Hysteresis.** Loss is declared after `womb_loss_after_seconds` (default 5 s) of
   continuous not-live checks. Return is declared after two consecutive live checks.
   One missed event never freezes the entity.
