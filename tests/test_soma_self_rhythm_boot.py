@@ -84,3 +84,45 @@ def test_construct_module_injects_perception_feed_for_soma(monkeypatch):
     assert result is captured["section"] is not None or result is not None
     assert "perception_feed" in captured["section"]
     assert captured["section"]["perception_feed"] == config["perception_feed"]
+
+
+@pytest.mark.asyncio
+async def test_maternal_drive_starts_at_the_usual_drive_never_the_bound():
+    # Soma steps its self-rhythm from initialize(), long before the gestation
+    # owner exists, so the provider must start at the configured usual drive
+    # (the readout's baseline_drive_fraction), not at the bound (scale 1.0)
+    # that a perturbation probe uses briefly and announces.
+    pytest.importorskip("snntorch")
+    bus = types.SimpleNamespace()
+    default = make_soma(
+        bus,
+        {
+            "self_rhythm_enabled": True,
+            "perception_feed": {"mode": "womb", "seed": 3},
+        },
+    )
+    assert default._maternal_drive.scale == 0.5
+    configured = make_soma(
+        bus,
+        {
+            "self_rhythm_enabled": True,
+            "perception_feed": {
+                "mode": "womb",
+                "seed": 3,
+                "womb": {"readout": {"baseline_drive_fraction": 0.3}},
+            },
+        },
+    )
+    assert configured._maternal_drive.scale == pytest.approx(0.3)
+    with pytest.raises(ValueError):
+        make_soma(
+            bus,
+            {
+                "self_rhythm_enabled": True,
+                "perception_feed": {
+                    "mode": "womb",
+                    "seed": 3,
+                    "womb": {"readout": {"withdrawal_seconds": 99}},
+                },
+            },
+        )

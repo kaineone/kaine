@@ -103,6 +103,10 @@ as long as the setting stays on. The step cadence is `[soma].self_rhythm_step_hz
   20 Hz would hit or miss a pulse tens of milliseconds wide and alias into noise;
   averaging is the honest low-pass. The drive is read from the shared womb clock, so
   the oscillator is driven by the same beat the entity sees and hears.
+- The provider starts at the usual drive, the readout's `baseline_drive_fraction` of
+  the bound, from the moment Soma starts stepping. It never starts at the bound: Soma
+  steps long before the gestation owner exists, and a drive at the bound is what a
+  perturbation probe does briefly and announces.
 - The probe protocol (phase 3) may withdraw the drive (0.0) or raise it for a bounded
   moment.
 - Without a provider the drive is `None` and the oscillator behaves exactly as without

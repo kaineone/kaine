@@ -66,6 +66,9 @@ class GestationReadoutConfig:
 
     @classmethod
     def from_dict(cls, data) -> "GestationReadoutConfig":
+        # An absent [perception_feed.womb.readout] table means the defaults.
+        if data is None:
+            data = {}
         if not isinstance(data, dict):
             raise ValueError("GestationReadoutConfig expects a dict")
         allowed = {f.name for f in cls.__dataclass_fields__.values()}

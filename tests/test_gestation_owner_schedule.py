@@ -485,3 +485,7 @@ async def test_an_unreadable_pause_state_counts_as_frozen(owner_factory):
     await owner.step()
     assert owner._probe_state == "idle"
     assert drive.scale == config.baseline_drive_fraction
+
+
+def test_an_absent_readout_table_means_the_defaults() -> None:
+    assert GestationReadoutConfig.from_dict(None) == GestationReadoutConfig()
