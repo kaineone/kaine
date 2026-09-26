@@ -3,6 +3,7 @@
 
 """tests for the wetware oscillatory-binding oscillator and its plugin wiring."""
 
+import logging
 import os
 
 os.environ.setdefault("CL_SDK_ACCELERATED_TIME", "1")
@@ -14,6 +15,7 @@ import types  # noqa: E402
 import cl.sim as clsim  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+from kaine_cl1.backends.chronos import WetwareTimingModel  # noqa: E402
 from kaine_cl1.backends.oscillator import (  # noqa: E402
     MIN_PLV_WINDOW,
     WetwareOscillator,
@@ -322,3 +324,50 @@ async def test_oscillator_attaches_through_kaines_loader():
             info["plugin"].close()
         clsim.clear_simulator_data_source()
 
+
+def test_failure_is_logged_loudly_and_re_raised(caplog, monkeypatch):
+    b = SubstrateBroker(channel_count=64)
+    t = b.allocate("x", 4)
+
+    def bad_tick():
+        raise RuntimeError("substrate gone")
+
+    monkeypatch.setattr(b, "run_cognitive_tick", bad_tick)
+
+    osc = WetwareOscillator(b, t)
+
+    with caplog.at_level(logging.WARNING, logger="kaine_cl1.backends.oscillator"):
+        for _ in range(3):
+            with pytest.raises(RuntimeError):
+                osc.step(0.5)
+
+    assert osc.failures == 3
+
+    warnings = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and r.name == "kaine_cl1.backends.oscillator"
+    ]
+    assert len(warnings) == 1
+    msg = warnings[0].message
+    assert "x" in msg
+    assert "substrate gone" in msg
+
+
+def test_two_consumers_each_see_their_own_stimulus(substrate):
+    """Each consumer queues its stim and runs its own window, so it reads the response to its
+    own stimulus even while another consumer shares the broker (second-review finding on
+    kaine #197).
+    """
+    broker, terrs = substrate
+    strong = WetwareTimingModel(broker, terrs["osc.a"])
+    weak = WetwareTimingModel(broker, terrs["osc.b"])
+
+    strong_vals = []
+    weak_vals = []
+    for _ in range(8):
+        s = sum(strong.tick([10.0] * 4))
+        w = sum(weak.tick([-10.0] * 4))
+        strong_vals.append(s)
+        weak_vals.append(w)
+
+    assert np.mean(strong_vals) > np.mean(weak_vals)

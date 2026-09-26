@@ -8,12 +8,22 @@ multiplexer:
 
 - **Channel allocation.** Each module leases a disjoint block of the 64 channels,
   fixed for the run. The sum cannot exceed 64 (enforced at allocation).
-- **One closed loop.** The broker runs the single `neurons.loop(...)`; per
-  cognitive tick it delivers each module's queued stim, reads the resulting
-  spikes, and routes each module only the spikes on its own channels.
-- **Cadence bridging.** The substrate loop runs faster (~100 Hz) than KAINE's
-  cognitive cycle (~3.3 Hz). The broker aggregates the `nesting_factor` substrate
-  sub-ticks within one cognitive tick into a single per-territory observation.
+- **One closed loop.** The broker runs the single `neurons.loop(...)`. Each call
+  to `run_cognitive_tick()` delivers all queued stim at the start of one window
+  of `nesting_factor` substrate sub-ticks, reads the resulting spikes, and routes
+  each territory only the spikes on its own channels.
+- **One window per consumer step, not per cognitive tick.** Every converted
+  model (and every wetware oscillator, once per publish) queues its stim and
+  calls `run_cognitive_tick()` with no await in between, so each consumer reads
+  the window that contains the response to its own stimulus. The substrate
+  timeline therefore advances by one window per consumer step, and a
+  territory's activity in windows run by other consumers is not attributed to
+  it. The window length is sized from the resting cognitive rate
+  (`nesting_factor_for`), which is a window size, not a promise that one window
+  runs per KAINE cycle. On the accelerated simulator this is harmless; on real
+  time it serialises consumers on one loop, which the non-blocking substrate
+  (foundation task 3.3) must replace with a single cycle-driven beat before any
+  hardware run.
 
 See `openspec/changes/wetware-substrate-foundation/`.
 """

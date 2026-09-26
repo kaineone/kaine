@@ -10,6 +10,7 @@ PLV coherence means the same thing on both. See
 """
 from __future__ import annotations
 
+import logging
 import math
 from collections import deque
 from typing import Any
@@ -18,6 +19,10 @@ import numpy as np
 
 from kaine_cl1.substrate.broker import ChannelTerritory, SubstrateBroker
 from kaine_cl1.substrate.codec import StimRequest
+
+log = logging.getLogger(__name__)
+
+_WARN_EVERY = 100  # Warn on first failure and every N failures to avoid log spam.
 
 NEUTRAL_PHASE: float = 0.0
 MIN_PLV_WINDOW: int = 10
@@ -69,6 +74,7 @@ class WetwareOscillator:
         self._plv_window = int(plv_window)
         self._drive_scale = 1.0
         self._history: deque[float] = deque(maxlen=2 * plv_window)
+        self._failures = 0
 
     @property
     def drive_scale(self) -> float:
@@ -77,6 +83,10 @@ class WetwareOscillator:
     @property
     def samples(self) -> int:
         return len(self._history)
+
+    @property
+    def failures(self) -> int:
+        return self._failures
 
     def step(self, drive: float) -> None:
         """Convert salience drive into a stimulation level and record firing."""
@@ -90,15 +100,26 @@ class WetwareOscillator:
         if level > 1.0:
             level = 1.0
 
-        if level > 0.0:
-            amp = self._min_uA + level * (self._max_uA - self._min_uA)
-            requests = [StimRequest(int(ch), amp) for ch in self._channels]
-            self._broker.queue_stim(self._module, requests)
+        try:
+            if level > 0.0:
+                amp = self._min_uA + level * (self._max_uA - self._min_uA)
+                requests = [StimRequest(int(ch), amp) for ch in self._channels]
+                self._broker.queue_stim(self._module, requests)
 
-        obs = self._broker.run_cognitive_tick()[self._module]
-        fired = {spike.channel for spike in obs.spikes if spike.channel in self._channel_set}
-        fraction = len(fired) / len(self._channels) if self._channels else 0.0
-        self._history.append(fraction)
+            obs = self._broker.run_cognitive_tick()[self._module]
+            fired = {spike.channel for spike in obs.spikes if spike.channel in self._channel_set}
+            fraction = len(fired) / len(self._channels) if self._channels else 0.0
+            self._history.append(fraction)
+        except Exception as exc:
+            self._failures += 1
+            if self._failures == 1 or self._failures % _WARN_EVERY == 0:
+                log.warning(
+                    "CL1 oscillator on territory %s failed to step (%d failure(s) so far): %s",
+                    self._module,
+                    self._failures,
+                    exc,
+                )
+            raise
 
     def phase(self) -> float:
         """Return the current binding phase, or the neutral phase if undefined."""
