@@ -992,6 +992,9 @@ collection = "empatheia_agents"
 # Operator-set speaker label. Default "operator" for single-partner v1.
 # Speaker diarization (paper §10) will expand this to per-speaker labels.
 speaker_label = "operator"
+# Channels whose voices are attributed to the operator. Audio from any other
+# channel is modelled as media:<channel>; Volition only answers these channels.
+# operator_sources = ["live_mic", "microphone", "remote"]
 # Deviation above this triggers empatheia.social_error.
 deviation_threshold = 0.5
 baseline_salience = 0.15

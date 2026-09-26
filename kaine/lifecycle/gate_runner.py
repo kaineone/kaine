@@ -578,6 +578,12 @@ class MaturationGateRunner:
 
         # Start embodiment before the stage file is written, so the locus source
         # is actually available when the entity becomes embodied.
+        # Vox is activated before Mundus so the voice is available at birth.
+        if "vox" in self._registry:
+            vox = self._registry.get("vox")
+            if hasattr(vox, "set_dormant"):
+                vox.set_dormant(False)
+                log.info("birth: vox activated")
         if "mundus" in self._registry:
             mundus = self._registry.get("mundus")
             try:

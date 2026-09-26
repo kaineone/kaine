@@ -719,6 +719,22 @@ def _resolve_start_stage(
     return _resolve_boot_stage(config, stage_override=override)
 
 
+# Effectors that have nothing to act on in the womb: Mundus has no world and
+# Vox has no air to speak into. Both are activated by the gate runner at birth.
+GESTATION_DORMANT_EFFECTORS = ("mundus", "vox")
+
+
+def _hold_effectors_for_gestation(registry) -> list[str]:
+    """Hold the womb-less effectors dormant; return the names held."""
+    held: list[str] = []
+    for name in GESTATION_DORMANT_EFFECTORS:
+        if name in registry and hasattr(registry.get(name), "set_dormant"):
+            registry.get(name).set_dormant(True)
+            held.append(name)
+            log.info("gestation: %s held dormant until birth", name)
+    return held
+
+
 def _lifecycle_event(
     type: str,
     payload: dict[str, Any],
@@ -1156,12 +1172,10 @@ async def _boot_and_run(
     if not len(registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
-    # Gestation: keep Mundus dormant until birth. The gate_runner will
+    # Gestation: keep effectors dormant until birth. The gate_runner will
     # call activate() at birth before unlocking the locus.
     if staging_enabled and stage_state.is_gestating:
-        if "mundus" in registry and hasattr(registry.get("mundus"), "set_dormant"):
-            registry.get("mundus").set_dormant(True)
-            log.info("gestation: mundus held dormant until birth")
+        _hold_effectors_for_gestation(registry)
 
     for module in list(registry.all_modules()):
         await module.initialize()
@@ -1259,6 +1273,18 @@ async def _boot_and_run(
     volition_cfg = kaine_config.get("volition") or {}
     policy_name = str(volition_cfg.get("policy", "")).strip().lower()
     drive_initiative = bool(volition_cfg.get("drive_initiative", True))
+    # Operator-channel set is shared between Empatheia attribution and Volition
+    # user-utterance detection. A single [empatheia].operator_sources key
+    # configures both.
+    empatheia_cfg = kaine_config.get("empatheia") or {}
+    _operator_sources_raw = empatheia_cfg.get("operator_sources")
+    operator_sources = None
+    if _operator_sources_raw is not None:
+        if not isinstance(_operator_sources_raw, list) or not all(
+            isinstance(x, str) for x in _operator_sources_raw
+        ):
+            raise ValueError("[empatheia].operator_sources must be a list of strings")
+        operator_sources = list(_operator_sources_raw)
     # Sign act intents with the per-boot secret so Praxis can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
@@ -1291,11 +1317,19 @@ async def _boot_and_run(
                 clock=_report_clock,
             ),
             signer=intent_signer,
+            operator_sources=operator_sources,
         )
     elif drive_initiative:
-        volition = Volition(policy=DriveBiasedActionSelectionPolicy(), signer=intent_signer)
+        volition = Volition(
+            policy=DriveBiasedActionSelectionPolicy(operator_sources=operator_sources),
+            signer=intent_signer,
+            operator_sources=operator_sources,
+        )
     else:
-        volition = Volition(signer=intent_signer)
+        volition = Volition(
+            signer=intent_signer,
+            operator_sources=operator_sources,
+        )
     cycle = CognitiveCycle(
         bus=bus,
         syneidesis=syneidesis,
