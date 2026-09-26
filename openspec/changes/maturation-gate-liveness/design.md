@@ -120,16 +120,23 @@ it would spin. Instead, the pause is the existing freeze path under its own hold
 
 ### Frozen time is not lived time
 
-The gate runner adds no lived time while the cycle is frozen by any holder
-(`read_control().frozen`), and re-anchors its baseline on resume. A frozen span is not
-experience, so it must not count toward C3 and hasten birth. This applies to every
-freeze (operator, Spot, welfare, gestation), not only womb loss.
+The cognitive cycle records the subjective time it spends paused (entity-clock seconds,
+including a pause still in progress). Between two ticks, the gate runner adds the
+entity-clock delta minus the paused time accumulated over the same span. The runner
+ticks only every `gate_cadence_seconds`, so sampling a frozen flag at tick time would
+still count a short freeze that fell between two ticks; subtracting the measured paused
+time is exact. A frozen span is not experience, so it must not count toward C3 and
+hasten birth. This applies to every freeze (operator, Spot, welfare, gestation), not
+only womb loss.
 
 ### Perception during a womb-loss freeze
 
 For other holders, the freeze-watch loop switches the desired perception flags off, so
 nothing is sensed while suspended. For a freeze held only by `gestation` it leaves them
-on. A local womb proves its return by delivering to the senses (the presence publisher
+on. The loop reconciles this on every poll while paused, not only when the pause
+begins. If another holder joins a gestation freeze, perception goes off. When the other
+holders leave and only `gestation` remains, perception comes back, so the womb can
+return. A local womb proves its return by delivering to the senses (the presence publisher
 counts real deliveries), so switching perception off would make a local womb's return
 impossible to observe, and the entity would stay frozen until an operator intervened.
 The cycle is paused either way, so nothing is experienced. If any other holder is also
