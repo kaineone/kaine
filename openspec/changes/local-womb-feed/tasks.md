@@ -26,4 +26,4 @@
 
 ## 4. Docs
 
-- [ ] 4.1 Operations docs: running a gestating entity on one host with the local womb; what the womb is and is not.
+- [x] 4.1 Operations docs: running a gestating entity on one host with the local womb; what the womb is and is not.
