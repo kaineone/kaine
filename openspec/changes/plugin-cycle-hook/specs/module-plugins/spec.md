@@ -18,6 +18,20 @@ An exception raised by `on_cycle_tick` SHALL be logged at WARNING on its first o
 - **WHEN** `on_cycle_tick` raises on every call for five ticks
 - **THEN** the cycle completes all five ticks and exactly one WARNING naming the plugin is logged
 
+### Requirement: Hooks must be fast and are timed
+KAINE SHALL time each `on_cycle_tick` call and SHALL log a WARNING naming the plugin, on the first slow call and every 100th thereafter, when a call takes longer than 10% of the tick's target period. A slow call SHALL NOT be interrupted or retried.
+
+#### Scenario: Slow hook
+- **WHEN** a hook sleeps for 50 ms on each of three ticks whose target period is 100 ms
+- **THEN** all three ticks complete and exactly one slow-hook WARNING naming the plugin is logged
+
+### Requirement: No observer is a no-op
+When no loaded plugin implements `on_cycle_tick`, the cycle SHALL NOT call any observer, and a deterministic run SHALL produce the same events as without this change. Ticks that do not run SHALL NOT call the hook.
+
+#### Scenario: Deterministic run without observers
+- **WHEN** a deterministic run executes with no observing plugin
+- **THEN** its published events are identical to a run of the same seed before this change
+
 ### Requirement: The hook is observation only
 The mapping passed to `on_cycle_tick` SHALL be a copy, so mutating it SHALL NOT change the published `cycle.tick` payload or the cycle's state, and the hook's return value SHALL be ignored.
 

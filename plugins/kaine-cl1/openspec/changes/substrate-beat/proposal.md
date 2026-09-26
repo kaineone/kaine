@@ -8,9 +8,10 @@ KAINE's `plugin-cycle-hook` change gives plugins the cycle's beat through `on_cy
 
 - **One window per cycle tick.** KAINE calls `on_cycle_tick` on every processing tick (10 Hz by default), not only on experiential broadcasts. Each call closes the current substrate window: stimulation queued since the previous tick is delivered at the start of the next window, and each territory's spikes for the window just closed become that territory's latest observation.
 - **Consumers stop driving the clock.** In beat mode, a consumer's step queues its stimulation for the next window and reads its territory's latest completed window. The response to a stimulus therefore arrives one processing tick later (about 100 ms at the default rate), which is how a real culture on a shared loop behaves. Stimulation queued twice for the same territory before a window starts keeps the latest request.
-- **Two runners, one semantics.**
-  - Accelerated simulator: `on_cycle_tick` runs one window synchronously. Its length is one processing period (`1 / processing_rate_hz` from the tick), so substrate time matches cognitive time.
-  - Real time (the simulator's real-time mode, or hardware): a background thread runs the substrate loop continuously; `on_cycle_tick` only marks the window boundary and swaps observations under a lock, so the cycle never waits for the substrate.
+- **The beat never runs the substrate on the cycle's loop.** KAINE times `on_cycle_tick` and warns when it exceeds 10% of the tick period, so the hook only signals a background thread and returns. The thread does the work:
+  - Accelerated simulator: on each signal it runs one window one processing period long (`1 / processing_rate_hz` from the tick), so substrate time matches cognitive time, and publishes each territory's observation for consumers to read on the next tick.
+  - Real time (the simulator's real-time mode, or hardware): the thread runs the substrate loop continuously, and each signal marks a window boundary; observations are swapped under a lock.
+  In both, the cycle never waits for the substrate.
 - **Standalone behaviour kept.** Until the first `on_cycle_tick` arrives (for example when the plugin is used outside KAINE, or with a KAINE that predates the hook), consumers run their own windows as they do today. The first beat switches the broker to beat mode for the rest of the process, and this is logged.
 - **The accelerated-time requirement is relaxed** once beat mode is available: real-time simulator runs become supported and non-blocking. `target = "hardware"` stays refused in this change; enabling it is a separate, reviewed change.
 

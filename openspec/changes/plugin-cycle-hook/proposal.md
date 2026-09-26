@@ -6,8 +6,8 @@ A plugin that replaces a model with an external, stateful substrate needs to kno
 
 - **An optional plugin hook.** A plugin object may implement `on_cycle_tick(tick: Mapping[str, Any]) -> None`. After each cycle tick, KAINE calls it once per loaded plugin that implements it, with the same fields the cycle publishes on `cycle.tick`: `tick_index`, `wall_duration_ms`, `target_duration_ms`, `slip_ms`, `is_experiential`, `processing_rate_hz`, `experiential_rate_hz` (effective for that tick) and `access_drive`.
 - **Observation only.** The hook receives a read-only copy of those fields and returns nothing that KAINE uses. It cannot change the cycle, the workspace or any module.
-- **It never stops the cycle.** An exception from the hook is logged at WARNING (the first failure, then every 100th, naming the plugin) and the cycle continues. The hook runs inside the tick, so plugins must keep it short and do heavy work elsewhere (a background thread, for example).
-- **No hook, no change.** Plugins without `on_cycle_tick`, and runs with no plugins, behave exactly as today; the call is skipped.
+- **It never stops the cycle.** An exception from the hook is logged at WARNING (the first failure, then every 100th, naming the plugin) and the cycle continues. The hook runs synchronously inside the tick on the cycle's event loop, so it must return quickly and do heavy work elsewhere (a background thread, for example). KAINE times every call and logs a rate-limited WARNING naming the plugin when a call exceeds 10% of the target tick period (10 ms at 10 Hz).
+- **No hook, no change.** Plugins without `on_cycle_tick`, and runs with no plugins, behave exactly as today: with no observer the call site is a no-op, so deterministic runs stay byte-identical. Ticks that do not run (a frozen entity) do not call the hook.
 - **Recorded.** The manifest's plugin entry gains `observes_cycle: true|false` so a run's record shows which plugins followed the cycle.
 
 ## Impact
