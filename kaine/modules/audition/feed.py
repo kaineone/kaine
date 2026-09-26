@@ -56,6 +56,7 @@ from kaine.modules.topos.feed import (
 )
 
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
+    from kaine.modules.topos.feed import WombClock
     from kaine.modules.womb_signal import WombParams
 
 log = logging.getLogger(__name__)
@@ -348,20 +349,23 @@ class WombProceduralAudioStream:
     (Van Leeuwen 2009; Webb 2015).  The heartbeat is external; the entity's
     own rhythm is emergent, not synthesised here.
 
-    Persists only ``(seed, schedule, params)``; no PCM is written.
+    Persists only ``(seed, schedule, params, clock)``; no PCM is written.
     """
+
+    _MAX_LAG_BLOCKS = 5
 
     def __init__(
         self,
         schedule: WombAudioSchedule,
         *,
         params: "WombParams",
+        clock: "WombClock",
         callback: Callable[[bytes], None],
     ) -> None:
         self._schedule = schedule
         self._params = params
+        self._clock = clock
         self._callback = callback
-        self._index = 0
         self._thread: threading.Thread | None = None
         self._stopped = threading.Event()
 
@@ -388,23 +392,34 @@ class WombProceduralAudioStream:
     def close(self) -> None:
         self.stop()
 
+    @staticmethod
+    def _advance(k: int | None, now_k: int) -> int:
+        """Return the next block index to emit.
+
+        ``None`` means the stream has not emitted anything yet.  Small lags
+        are replayed; a lag larger than ``_MAX_LAG_BLOCKS`` jumps forward to
+        the clock so the producer never falls arbitrarily far behind.
+        """
+        if k is None or now_k - k > WombProceduralAudioStream._MAX_LAG_BLOCKS:
+            return now_k
+        return k
+
     def _produce(self) -> None:
         s = self._schedule
-        block_seconds = max(1, s.frames_per_block) / float(max(1, s.sample_rate))
-        next_deadline = time.monotonic()
+        bs = max(1, s.frames_per_block) / float(max(1, s.sample_rate))
+        k = None
         while not self._stopped.is_set():
-            pcm = self.pcm_at(self._index)
-            self._index += 1
+            now_k = int(self._clock.womb_seconds() / bs)
+            k = self._advance(k, now_k)
+            if k > now_k:
+                self._stopped.wait(timeout=(k - now_k) * bs)
+                continue
+            pcm = self.pcm_at(k)
             try:
                 self._callback(pcm)
             except Exception:
                 log.debug("womb audio callback raised", exc_info=True)
-            next_deadline += block_seconds
-            sleep_for = next_deadline - time.monotonic()
-            if sleep_for > 0:
-                self._stopped.wait(timeout=sleep_for)
-            else:
-                next_deadline = time.monotonic()
+            k += 1
 
     def pcm_at(self, block_index: int) -> bytes:
         """Synthesize the int16 LE PCM block at ``block_index``.
@@ -419,7 +434,9 @@ class WombProceduralAudioStream:
         from kaine.modules.perception_prng import unit_float as _unit_float
         from kaine.modules.womb_signal import (
             SEED_SALT_AUDIO,
+            beat_pulse,
             heartbeat_phase,
+            lowpassed_noise,
         )
 
         s = self._schedule
@@ -434,11 +451,15 @@ class WombProceduralAudioStream:
         samples = np.zeros(n, dtype=np.float64)
         two_pi = 2.0 * math.pi
 
-        # Low-frequency soundscape: a few seed-derived sinusoids 30-250 Hz.
+        # Low-frequency soundscape: a few seed-derived sinusoids below the
+        # low-pass corner.
         n_base = 4
         base_amp_total = 0.35
+        lp = float(p.lowpass_hz)
+        max_base_f = min(250.0, 0.8 * lp)
+        base_freq_range = max_base_f - 30.0
         for k in range(n_base):
-            f = 30.0 + 220.0 * _unit_float(
+            f = 30.0 + base_freq_range * _unit_float(
                 _keyed_u64(seed, k, SEED_SALT_AUDIO | 0x10 | k)
             )
             ph = two_pi * _unit_float(
@@ -446,22 +467,16 @@ class WombProceduralAudioStream:
             )
             samples += (base_amp_total / n_base) * np.sin(two_pi * f * t + ph)
 
-        # Filtered-noise surrogate: many deterministic sinusoids below lowpass.
-        n_noise = 32
-        noise_amp_total = 0.25
-        lp = float(p.lowpass_hz)
-        for k in range(n_noise):
-            f = lp * (k + 0.5) / n_noise
-            ph = two_pi * _unit_float(
-                _keyed_u64(seed, k, SEED_SALT_AUDIO | 0x30 | k)
-            )
-            samples += (noise_amp_total / n_noise) * np.sin(two_pi * f * t + ph)
+        # Real low-passed noise: white noise through a Hamming-windowed sinc
+        # FIR.  The output is continuous across block boundaries and still a
+        # pure function of ``(seed, block_index)``.  Low-pass, low-frequency
+        # intrauterine soundscape (Benzaquen 1990; Parga 2018; Webb 2015).
+        noise_rms = 0.08
+        samples += noise_rms * lowpassed_noise(seed, block_index, n, sr, lp)
 
         # Maternal heartbeat thud, phase-shared with the video pulse.
         phase = heartbeat_phase(seed, t, p)
-        sigma = 0.04
-        d = np.minimum(phase, 1.0 - phase)
-        env = np.exp(-0.5 * (d / sigma) ** 2)
+        env = beat_pulse(phase)
         thud_f = 45.0 + 10.0 * _unit_float(
             _keyed_u64(seed, 0, SEED_SALT_AUDIO | 0x40)
         )
@@ -471,8 +486,9 @@ class WombProceduralAudioStream:
         thud_amp = 0.35
         samples += thud_amp * env * np.sin(two_pi * thud_f * t + thud_ph)
 
-        # Fixed headroom so the stream never clips, independent of block.
-        max_possible = base_amp_total + noise_amp_total + thud_amp
+        # Fixed headroom so the stream almost never clips; rare noise peaks
+        # beyond 4 RMS are clipped.
+        max_possible = base_amp_total + 4 * noise_rms + thud_amp
         gain = (_INT16_MAX * 0.9) / max_possible
         samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
 

@@ -108,6 +108,52 @@ class WombSchedule:
         }
 
 
+class WombClock:
+    """Shared womb-time clock.
+
+    Womb time is the time axis every womb signal is evaluated on; both
+    sources consult one instance so the beat is seen and heard together.
+    """
+
+    def __init__(
+        self,
+        *,
+        lived_offset_seconds: float,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        import math
+
+        if isinstance(lived_offset_seconds, bool):
+            raise ValueError(
+                "lived_offset_seconds must be a number, not a bool"
+            )
+        value = float(lived_offset_seconds)
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(
+                "lived_offset_seconds must be a finite non-negative number"
+            )
+        self._offset = value
+        self._clock = clock
+        self._origin: float | None = None
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        """Fix the origin once.  Idempotent and thread-safe."""
+        with self._lock:
+            if self._origin is None:
+                self._origin = self._clock()
+
+    def womb_seconds(self) -> float:
+        """Return ``lived_offset_seconds + (clock() - origin)``.
+
+        Starts the clock first if the origin has not been fixed yet.
+        """
+        with self._lock:
+            if self._origin is None:
+                self._origin = self._clock()
+            return self._offset + (self._clock() - self._origin)
+
+
 @dataclass(frozen=True)
 class _BaseParams:
     """Per-seed parameters of the learnable base visual world.
@@ -331,7 +377,7 @@ class WombProceduralSource:
     saturation follows the biological sense-onset schedule (Hepper &
     Shahidullah 1994; Teller / Bornstein).
 
-    Persists only ``(seed, schedule, params, lived_seconds provider)``;
+    Persists only ``(seed, schedule, params, clock, lived_seconds provider)``;
     never a rendered frame.
     """
 
@@ -340,12 +386,13 @@ class WombProceduralSource:
         schedule: WombSchedule,
         *,
         params: "WombParams",
-        lived_seconds: Callable[[], float] | None = None,
+        clock: WombClock,
+        lived_seconds: Callable[[], float],
     ) -> None:
         self._schedule = schedule
         self._params = params
-        self._lived = lived_seconds if lived_seconds is not None else lambda: 0.0
-        self._index = 0
+        self._clock = clock
+        self._lived = lived_seconds
         self._opened = False
 
     @property
@@ -353,16 +400,19 @@ class WombProceduralSource:
         return self._schedule
 
     def open(self) -> bool:
-        self._index = 0
         self._opened = True
         return True
 
     def read(self) -> tuple[bool, Any]:
         if not self._opened:
             return False, None
-        frame = self.frame_at(self._index)
-        self._index += 1
-        return True, frame
+        import math
+
+        s = self._schedule
+        i = int(
+            math.floor(self._clock.womb_seconds() * float(s.frame_rate_hz))
+        )
+        return True, self.frame_at(i)
 
     def release(self) -> None:
         self._opened = False
@@ -383,7 +433,9 @@ class WombProceduralSource:
             SEED_SALT_VIDEO,
             beat_pulse,
             colour_saturation,
+            flow_phase,
             heartbeat_phase,
+            maternal_hue,
             maternal_state,
         )
 
@@ -405,18 +457,15 @@ class WombProceduralSource:
         fy = 1.0 + 2.0 * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x11))
         px = two_pi * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x12))
         py = two_pi * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x13))
-        flow_base = 0.01 + 0.03 * _unit_float(
-            _keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x14)
-        )
 
-        # The external maternal state drives hue and flow speed (Feldman 2007).
+        # The external maternal state drives hue and flow (Feldman 2007).
+        # Flow speed is integrated so hours of womb time do not alias the field.
         valence, arousal = maternal_state(seed, t, p)
-        flow_speed = flow_base * (1.0 + 2.0 * float(arousal))
-        time_drift = flow_speed * t
+        drift = float(flow_phase(seed, t, p))
 
         field = (
-            np.sin(two_pi * (fx * xs + time_drift) + px)
-            + np.sin(two_pi * (fy * ys + time_drift * 0.7) + py)
+            np.sin(two_pi * (fx * xs + drift) + px)
+            + np.sin(two_pi * (fy * ys + drift * 0.7) + py)
         ) * 0.5
 
         mean = float(p.luminance_mean)
@@ -432,8 +481,8 @@ class WombProceduralSource:
         saturation = float(colour_saturation(self._lived(), p)) * float(
             p.maternal_state_hue_gain
         )
-        hue_angle = math.pi * (float(valence) + 1.0)  # 0..2π
-        r, g, b = colorsys.hsv_to_rgb(hue_angle / (2.0 * math.pi), 1.0, 1.0)
+        hue = maternal_hue(float(valence))
+        r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
         hue_rgb = np.array([r, g, b], dtype=np.float32)
 
         # Multiplicative chroma so saturation 0 gives exactly grey and the

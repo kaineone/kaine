@@ -9,13 +9,20 @@ import random
 import numpy as np
 import pytest
 
+from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
+from kaine.modules.perception_prng import unit_float as _unit_float
 from kaine.modules.womb_signal import (
     MATERNAL_HEARTBEAT_GAIN,
+    SEED_SALT_AUDIO,
+    SEED_SALT_VIDEO,
     WombParams,
     _heartbeat_integral,
     beat_pulse,
     colour_saturation,
+    flow_phase,
     heartbeat_phase,
+    lowpassed_noise,
+    maternal_hue,
     maternal_state,
 )
 
@@ -163,6 +170,16 @@ def test_beat_pulse_shape() -> None:
     assert beat_pulse(1.0) == pytest.approx(beat_pulse(0.0), abs=1e-12)
 
 
+def test_beat_pulse_vectorised() -> None:
+    arr = np.array([0.0, 0.5, 0.12, 1.0])
+    out = beat_pulse(arr)
+    assert isinstance(out, np.ndarray)
+    assert out[0] == 1.0
+    assert np.allclose(
+        out, np.array([beat_pulse(float(x)) for x in arr]), atol=0.0
+    )
+
+
 def test_colour_saturation() -> None:
     params = WombParams()
     assert colour_saturation(0.0, params) == 0.0
@@ -179,3 +196,131 @@ def test_colour_saturation() -> None:
 
     tau = params.colour_ramp_seconds
     assert colour_saturation(3.0 * tau, params) > 0.9
+
+
+def test_flow_phase_properties() -> None:
+    params = WombParams()
+    t = np.array([0.0, 1.0, 1e3, 1e6, 1e7], dtype=np.float64)
+    phases = flow_phase(0, t, params)
+    assert isinstance(phases, np.ndarray)
+    assert np.all((phases >= 0.0) & (phases < 1.0))
+    assert np.allclose(phases, flow_phase(0, t, params), atol=0.0)
+
+    # Central difference with a step wide enough that float64 rounding of the
+    # ~1e5-cycle integral (before the mod) stays far below the tolerance.
+    t0 = 1e6
+    dt = 1e-2
+    p0 = float(flow_phase(0, t0 - dt, params))
+    p1 = float(flow_phase(0, t0 + dt, params))
+    diff = (p1 - p0) % 1.0
+    derivative = diff / (2.0 * dt)
+
+    flow_base = 0.01 + 0.03 * _unit_float(
+        _keyed_u64(0, 0, SEED_SALT_VIDEO | 0x14)
+    )
+    _, arousal = maternal_state(0, t0, params)
+    target = flow_base * (1.0 + 2.0 * arousal)
+    assert derivative == pytest.approx(target, rel=1e-6)
+
+
+def test_maternal_hue() -> None:
+    assert maternal_hue(1.0) == pytest.approx(0.12, abs=1e-12)
+    assert maternal_hue(0.0) == pytest.approx(0.48, abs=1e-12)
+    assert maternal_hue(-1.0) == pytest.approx(0.94, abs=1e-12)
+    assert maternal_hue(float("nan")) == pytest.approx(0.48, abs=1e-12)
+    assert maternal_hue(-1.0) > maternal_hue(0.0) > maternal_hue(1.0)
+    assert len({maternal_hue(-1.0), maternal_hue(0.0), maternal_hue(1.0)}) == 3
+
+
+def _white_block(seed: int, block_index: int, n: int) -> np.ndarray:
+    from kaine.modules.perception_prng import keyed_u64
+
+    rng = np.random.Philox(
+        key=keyed_u64(seed, block_index, SEED_SALT_AUDIO | 0x30)
+    )
+    raw = rng.random_raw(n)
+    return (raw >> np.uint64(11)).astype(np.float64) / float(1 << 53) - 0.5
+
+
+def test_lowpassed_noise_deterministic_and_validation() -> None:
+    from kaine.modules.womb_signal import _LOWPASS_TAPS
+
+    params = WombParams()
+    n = 480
+    a = lowpassed_noise(7, 3, n, 16000.0, params.lowpass_hz)
+    b = lowpassed_noise(7, 3, n, 16000.0, params.lowpass_hz)
+    assert a.shape == (n,)
+    assert np.allclose(a, b, atol=0.0)
+
+    with pytest.raises(ValueError):
+        lowpassed_noise(7, 3, _LOWPASS_TAPS - 2, 16000.0, params.lowpass_hz)
+    with pytest.raises(ValueError):
+        lowpassed_noise(7, 3, n, 16000.0, 9000.0)
+    with pytest.raises(ValueError):
+        lowpassed_noise(7, 3, n, 16000.0, 0.0)
+
+
+def test_lowpassed_noise_continuous_across_blocks() -> None:
+    from kaine.modules.womb_signal import _LOWPASS_TAPS
+
+    seed = 11
+    sr = 16000.0
+    lp = 500.0
+    n = 480
+    L = _LOWPASS_TAPS - 1
+    k = 5
+
+    b_k = lowpassed_noise(seed, k, n, sr, lp)
+    b_k1 = lowpassed_noise(seed, k + 1, n, sr, lp)
+    concat_out = np.concatenate([b_k, b_k1])
+
+    prefix = _white_block(seed, k - 1, n)[-L:]
+    wk = _white_block(seed, k, n)
+    wk1 = _white_block(seed, k + 1, n)
+    big = np.concatenate([prefix, wk, wk1])
+
+    nn = np.arange(_LOWPASS_TAPS, dtype=np.float64)
+    h = np.sinc(2.0 * (lp / sr) * (nn - (_LOWPASS_TAPS - 1) / 2.0))
+    h *= np.hamming(_LOWPASS_TAPS)
+    h /= h.sum()
+    ref = np.convolve(big, h, mode="valid") / np.sqrt(np.sum(h * h) / 12.0)
+
+    assert np.allclose(concat_out, ref, atol=1e-12)
+
+
+def test_lowpassed_noise_spectral_shape() -> None:
+
+    params = WombParams()
+    sr = 16000.0
+    lp = params.lowpass_hz
+    n = 480
+    total_seconds = 4.0
+    n_blocks = int(total_seconds * sr / n)
+    chunks = [lowpassed_noise(3, k, n, sr, lp) for k in range(n_blocks)]
+    signal = np.concatenate(chunks)
+    assert len(signal) == n_blocks * n
+
+    # Welch-ish averaged periodogram with Hann windows.
+    window_size = 4096
+    step = window_size
+    hann = np.hanning(window_size)
+    psd_sum = np.zeros(window_size // 2 + 1, dtype=np.float64)
+    count = 0
+    for start in range(0, len(signal) - window_size + 1, step):
+        seg = signal[start : start + window_size] * hann
+        fft = np.fft.rfft(seg)
+        psd_sum += np.abs(fft) ** 2
+        count += 1
+    psd = psd_sum / count
+    freqs = np.fft.rfftfreq(window_size, d=1.0 / sr)
+
+    below_mask = freqs < 500.0
+    above_mask = freqs > 1500.0
+    assert np.mean(psd[below_mask]) > 0.0
+    ratio = np.mean(psd[below_mask]) / np.mean(psd[above_mask])
+    assert ratio >= 10 ** (30.0 / 10.0)
+
+    band = (freqs >= 30.0) & (freqs <= 500.0)
+    band_psd = psd[band]
+    peak_to_median = band_psd.max() / np.median(band_psd)
+    assert peak_to_median < 25.0
