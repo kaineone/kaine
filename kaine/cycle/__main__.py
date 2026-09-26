@@ -1293,6 +1293,32 @@ async def _boot_and_run(
         if caretaker is not None
         else None
     )
+    input_watch_task = None
+    if caretaker is not None:
+        from kaine.cycle.caretaker import CaretakerConfig as _InputCaretakerConfig
+        from kaine.cycle.input_check import InputLossWatcher
+
+        streams: list[str] = []
+        modules = kaine_config.get("modules") or {}
+        if modules.get("topos"):
+            streams.append("topos.out")
+        if modules.get("audition"):
+            streams.append("audition.out")
+
+        if streams:
+            # Validated by the gate (condition 7) before admission.
+            threshold_s = _InputCaretakerConfig.from_section(
+                kaine_config.get("caretaker") or {}
+            ).input_loss_after_s
+            input_watch_task = asyncio.create_task(
+                InputLossWatcher(
+                    bus,
+                    streams,
+                    threshold_s=threshold_s,
+                    on_loss=lambda: caretaker.send_event("input_lost"),
+                ).run(stop_event),
+                name="cycle.input_watch",
+            )
     try:
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
@@ -1329,6 +1355,14 @@ async def _boot_and_run(
             except asyncio.TimeoutError:
                 continue
     finally:
+        if input_watch_task is not None:
+            input_watch_task.cancel()
+            try:
+                await input_watch_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                log.exception("input watch task shutdown failed")
         if caretaker is not None:
             try:
                 if spot.escalated:
@@ -1457,16 +1491,18 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the eight-condition unattended gate over the resolved config.
 
     Reuses the research safety net for conditions 1–5.  Condition 6 comes from
-    Spot's selftest.  Condition 8 is not built in this slice.  Condition 7
-    runs last and needs the outcome of conditions 1–6 and 8 as prerequisites.
+    Spot's selftest.  Condition 8 requires a continuous perception input.
+    Condition 7 runs last and needs the outcome of conditions 1–6 and 8 as
+    prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
+    from kaine.cycle.input_check import check_input_condition
     from kaine.cycle.spot_selftest import check_spot_condition
-    from kaine.cycle.unattended_gate import evaluate_unattended_gate, not_built
+    from kaine.cycle.unattended_gate import evaluate_unattended_gate
 
     spot = check_spot_condition(config.get("spot") or {})
-    eight = not_built(8)
+    eight = check_input_condition(config)
 
     # Condition 7 must report on 1–6 and 8, but must not include itself.
     checks = dict(evaluate_unattended_gate(net, built={6: spot, 8: eight}).checks)

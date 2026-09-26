@@ -38,16 +38,16 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 - [x] 4.6 Best-effort refusal notice on exit 6 that never changes the exit code.
 - [x] 4.7 Reminders until acknowledged; unacknowledged starts never alter the entity.
 - [x] 4.8 Nexus: standing banner while unacknowledged; acknowledge POST behind the operator session; acknowledgement written to the event log; tests for auth, banner and reminder stop.
-- [ ] 4.9 Running notices: Spot escalation, supervision lost, welfare-protective response, input loss, and a boot that fails after admission; failed sends are logged and never stop the entity.
+- [x] 4.9 Running notices: Spot escalation, supervision lost, welfare-protective response, input loss, and a boot that fails after admission; failed sends are logged and never stop the entity.
 - [x] 4.10 Tests: no channel configured; all channels fail; one of two accepts; public address refused at config time; hostname resolving to a public address refused at send time; token never logged.
 
 ## 5. Input check (condition 8)
 
-- [ ] 5.1 Config check: mode in `live`/`seeded`/`screen`, and `topos` or `audition` enabled; reasons "no input" (off), "playlist ends" (playlist), "no perceiving module".
-- [ ] 5.2 Reuse `kaine.preboot.check_perception` for `seeded` and `screen`.
-- [ ] 5.3 Add a live-device probe: open the configured camera and microphone, read one frame and one block, release, drop the data; nothing written.
-- [ ] 5.4 Input-loss watcher during unattended runs, notifying after `input_loss_after_s` without stopping the entity.
-- [ ] 5.5 Tests: each refusal reason; live device absent; the probe writes nothing (filesystem write recorder from `tests/zero_persistence.py`); input-loss notice sent and entity still running.
+- [x] 5.1 Config check: mode in `live`/`seeded`/`screen`, and `topos` or `audition` enabled; reasons "no input" (off), "playlist ends" (playlist), "no perceiving module".
+- [x] 5.2 Reuse `kaine.preboot.check_perception` for `seeded` and `screen`.
+- [x] 5.3 Add a live-device probe: open the configured camera and microphone, read one frame and one block, release, drop the data; nothing written.
+- [x] 5.4 Input-loss watcher during unattended runs, notifying after `input_loss_after_s` without stopping the entity.
+- [x] 5.5 Tests: each refusal reason; live device absent; the probe writes nothing (filesystem write recorder from `tests/zero_persistence.py`); input-loss notice sent and entity still running.
 
 ## 6. Exit code and refusal output
 

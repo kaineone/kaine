@@ -4,6 +4,8 @@
 """Tests for the unattended boot gate and supervision-mode resolution."""
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from kaine.cycle.research_gate import evaluate_research_gate
@@ -219,3 +221,71 @@ def test_evaluate_unattended_gate_includes_spot_condition(monkeypatch):
     result = cycle_main._evaluate_unattended_gate({})
     assert not result.ok
     assert tuple(c.number for c in result.failed) == (6, 7, 8)
+
+
+def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
+    from kaine.cycle import __main__ as main_module
+    from kaine.cycle.unattended_gate import Condition
+
+    net = type(
+        "GateResult",
+        (),
+        {
+            "checks": {
+                "preservation_enabled": True,
+                "welfare_response_wired": True,
+                "logging_active": True,
+                "dry_self_check_passed": True,
+                "encryption_satisfied": True,
+            }
+        },
+    )()
+
+    spot = Condition(
+        number=6, name="Spot armed and self-tested", ok=True, reason=""
+    )
+    eight_ok = Condition(number=8, name="continuous input", ok=True, reason="")
+    seven = Condition(number=7, name="caretaker told", ok=True, reason="")
+
+    monkeypatch.setattr(main_module, "_evaluate_research_safety_net", lambda cfg: net)
+    monkeypatch.setattr(
+        "kaine.cycle.spot_selftest.check_spot_condition", lambda cfg: spot
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.input_check.check_input_condition", lambda cfg: eight_ok
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.caretaker.check_caretaker_condition",
+        lambda cfg, prerequisites_ok, conditions: seven,
+    )
+
+    result = main_module._evaluate_unattended_gate({})
+    assert result.ok
+
+    # Now fail condition 8 and verify condition 7 reports prerequisites failed.
+    caretaker_calls: list[bool] = []
+    eight_fail = Condition(
+        number=8, name="continuous input", ok=False, reason="no camera"
+    )
+
+    def fake_caretaker(cfg: Any, prerequisites_ok: bool, conditions: dict[str, bool]) -> Condition:
+        caretaker_calls.append(prerequisites_ok)
+        return Condition(
+            number=7,
+            name="caretaker told",
+            ok=False,
+            reason="prerequisites not attempted",
+        )
+
+    monkeypatch.setattr(
+        "kaine.cycle.caretaker.check_caretaker_condition", fake_caretaker
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.input_check.check_input_condition", lambda cfg: eight_fail
+    )
+
+    result2 = main_module._evaluate_unattended_gate({})
+    assert not result2.ok
+    c7 = next(c for c in result2.conditions if c.number == 7)
+    assert "not attempted" in c7.reason
+    assert False in caretaker_calls

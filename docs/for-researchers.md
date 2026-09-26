@@ -62,21 +62,28 @@ a duty of care. Booting is therefore **gated**. A run is **either**:
 - **research-safety-net-verified** — an unsupervised research run whose
   autonomous safety net is live and verified (see below), **or**
 - **unattended** — a full entity started with no person present
-  (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`), gated
-  by the research safety net plus three more conditions: Spot armed and self-tested,
-  a caretaker told over a local channel, and a continuous input source. The Spot
-  check is built: Spot must be enabled and pass a self-test that drives a
-  synthetic module through freeze, snapshot, restart and release in a scratch
-  directory. The caretaker check is built: a content-free "starting unattended"
-  notice must be accepted by at least one `[caretaker]` channel (a desktop
-  notification, or an HTTP POST to a server on your own network; public addresses
-  are refused). It is sent only when every other condition has passed, and a refused
-  boot sends a best-effort refusal notice. While a start is unacknowledged, every Nexus
-  page shows a banner with an Acknowledge button (operator session required) and the
-  caretaker gets a reminder every `reminder_interval_s`; an unacknowledged start never
-  changes the entity. The input check is not built yet, so an
-  unattended boot currently always refuses (exit `6`) and names it. Selecting unattended together with another mode is a configuration
-  error (exit `1`),
+  (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must
+  pass the research safety net's five conditions plus three more, checked at every
+  boot with no override:
+  - **Spot armed and self-tested**: Spot is enabled and a self-test drives a
+    synthetic module through freeze, snapshot, restart and release in a scratch
+    directory.
+  - **Continuous input**: the perception feed is `live`, `seeded` or `screen` (`off`
+    has no input and a playlist runs out), `topos` or `audition` is enabled to
+    perceive it, and a probe reads one frame or audio block and discards it.
+  - **Caretaker told**: once every other condition has passed, a content-free
+    "starting unattended" notice must be accepted by at least one `[caretaker]`
+    channel (a desktop notification, or an HTTP POST to a server on your own
+    network; public addresses are refused).
+
+  A refused start sends a best-effort refusal notice. While a start is
+  unacknowledged, every Nexus page shows a banner with an Acknowledge button
+  (operator session required) and the caretaker gets a reminder every
+  `reminder_interval_s`. While running, the caretaker is notified on Spot
+  escalation, lost supervision, a welfare-protective response, a boot that fails
+  after admission, and input going quiet for `input_loss_after_s`. None of these
+  notices changes the entity. Selecting unattended together with another mode is a
+  configuration error (exit `1`),
 
 and **never none of these**. If no condition holds, the cycle refuses to boot.
 
