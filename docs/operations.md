@@ -554,6 +554,113 @@ The stage file is written only after the revive has landed, so a refused or
 interrupted start leaves it unchanged. If a start is interrupted after the
 revive began, run the same revive again to complete it.
 
+## Running the module-ignition study
+
+The module-ignition study (`module-ignition-study`) is a controlled
+longitudinal run: one gestation, then a main line and a control line each
+viewing the same programme for twelve four-hour sessions.  The runner makes the
+procedure repeatable and records exactly what happened so mistakes such as
+starting from the wrong preservation or sharing memory collections cannot occur.
+
+Before creating a study:
+
+- Build the programme manifest from the films, in viewing order:
+  `python tools/build_playlist_manifest.py --dir <films> --out <programme.toml>`.
+  The study records its sha256, so a changed file voids the study.
+- Configure state encryption (`KAINE_STATE_KEY` or the keyring entry
+  `kaine:state_key`). Research-mode boots require it while
+  `[preservation].require_encryption` is true, which is the default.
+
+Create a study with the runner:
+
+```bash
+python -m kaine.research.ignition_study init \
+    --study-id <id> \
+    --repo-root /path/to/repo \
+    --programme-manifest /path/to/programme.toml \
+    [--base-modules ...] [--order ...] \
+    [--redis-base-url redis://127.0.0.1:6479] \
+    [--db-gestation 10 --db-main 11 --db-control 12] \
+    [--viewings-per-line 12]
+```
+
+This creates `studies/<study-id>/` containing `study.json`, empty
+`steps.jsonl`, and the three line directories `gestation/`, `main/`, and
+`control/`.  Each line directory symlinks `config/kaine.toml` and
+`config/profiles` to the repository configuration.
+
+Run or resume the study:
+
+```bash
+python -m kaine.research.ignition_study run --study-dir studies/<study-id>
+```
+
+The runner executes gestation first, then for each viewing index `k = 0..11`
+runs main line `k` followed by control line `k`.  Each start is a
+research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
+database and collection prefixes, so the two beings never share state.  Every
+completed step is appended to `steps.jsonl`.
+
+If a step ends for any reason other than a successful preservation, the
+runner records it as `failed:<reason>` and stops.  It never retries on its own
+and never deletes a preservation, state directory, or line.  Resume from the
+last successful preservation, or re-run the failed step from the same start
+bundle with:
+
+```bash
+python -m kaine.research.ignition_study run --study-dir studies/<study-id> --retry-failed
+```
+
+Show progress with:
+
+```bash
+python -m kaine.research.ignition_study status --study-dir studies/<study-id>
+```
+
+Because research-mode boots run unattended, the autonomous safety net must be
+active before any run.  The runner will not send `SIGKILL` and will not stop a
+being it cannot preserve.
+
+### Reading the study's report
+
+After the completed viewings have been recorded, analyse them with:
+
+```bash
+python -m kaine.research.ignition_study analyse --study-dir studies/<study-id>
+```
+
+This writes `analysis/report.json` and `analysis/report.md` in the study directory.
+The report is content-free: it contains counts, rates, shares and distributions
+only; no broadcast payload or member type strings are emitted.
+
+Per viewing, the report records:
+
+- **Broadcast rate** over unpaused programme time (Hypnos replays and freezes
+  are excluded from the denominator).
+- **Broadcasts per film-minute bin**, one bin per minute of `offset_s` for each
+  film; bins with no programme coverage are absent rather than zero.
+- **Coalition size** mean, median and p90.
+- **Module share**: the fraction of broadcasts whose coalition contains each
+  module, by member `source`. Workspace-internal sources (`syneidesis`,
+  `volition`) are counted separately, never as faculties.
+- **Member salience** mean, p50 and p90, by module.
+- **Inhibited share**.
+- **Picture-to-sound drift**: median and maximum absolute
+  `programme.offset_s - audio.delivered_s` when recorded.
+- **Data quality**: record count, programme-time gaps longer than 10 s, and
+  dropped records inferred from gaps in the sink sequence.
+
+Per step, the report compares the main line against the control line and each
+step against the previous one on the same line, including film-minute profile
+correlations. Correlations are reported as "not computed" when the two profiles
+share fewer than 30 bins, and as undefined when either profile is constant.
+
+The **limits** section is part of every report: modules are added in one fixed
+order, so each effect is conditional on earlier modules and on the being's
+history; the control line removes familiarity but not order; Praxis, Perception
+and the Mundus stub have no input channel on this host and are expected nulls;
+and there is one being per line, so no significance testing is performed.
+
 ## Entity decommission
 
 The decommission CLI implements the CAL Article 4.2 ("Do Not Shut Them Down Without Care") and 4.3 (privacy) care duties. It never runs automatically and never boots or touches the running cognitive cycle.
