@@ -270,6 +270,9 @@ perception = false
 mundus = false
 
 [soma]
+# CfC backend: "numpy" (default; needs no torch) or "torch" (ncps). Both build
+# the same reservoir from the seed kept in Soma's snapshot.
+cfc_backend = "numpy"
 read_interval_s = 1.0
 cycle_latency_target_ms = 300.0
 cycle_latency_window = 64
@@ -333,6 +336,9 @@ self_rhythm_step_hz = 20.0      # subjective-time cadence; fast enough for a ~1.
 "cycle_latency_avg_ms" = 1.0
 
 [chronos]
+# CfC backend: "numpy" (default; needs no torch) or "torch" (ncps). Both build
+# the same reservoir from the seed kept in Chronos's snapshot.
+cfc_backend = "numpy"
 cfc_units = 32
 baseline_salience = 0.1
 alert_salience = 0.7

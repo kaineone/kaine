@@ -99,6 +99,7 @@ def make_soma(
         "weights",
         # Predictive interoception (soma-forward-model-fatigue)
         "forward_model_units",
+        "cfc_backend",
         "prediction_error_window",
         "fatigue_decay_per_s",
         "fatigue_maintenance_threshold",
@@ -164,6 +165,7 @@ def make_chronos(
 
     allowed = {
         "cfc_units",
+        "cfc_backend",
         "baseline_salience",
         "alert_salience",
         "anomaly_window",  # consumed by the anomaly detector default
@@ -180,6 +182,7 @@ def make_chronos(
         k: section[k]
         for k in (
             "cfc_units",
+            "cfc_backend",
             "baseline_salience",
             "alert_salience",
             "anomaly_alert_threshold",

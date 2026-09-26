@@ -27,8 +27,8 @@ pattern)
   serialise only the readout's weight and bias tensors. The CfC reservoir's
   weights are never serialised — like Chronos's ``CfCNetwork``, it is a
   frozen, reseedable random projection, not learned content, so there is
-  nothing it would mean to "persist". The recurrent hidden state is
-  ephemeral runtime context and is likewise never persisted.
+  nothing it would mean to "persist". The recurrent hidden state is ephemeral
+  runtime context and is likewise never persisted.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite. Soma's feature vectors come from raw host-sensor reads (unlike
   Chronos's already-curated featurizer output) and can glitch, so a
@@ -37,12 +37,18 @@ pattern)
   permanently corrupted by a single bad sensor read.
 - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
   setting ``suspended = True``.
+- Backend selection: ``backend="numpy"`` (default) needs no torch/ncps and is
+  bit-identical to the torch path to 1e-5 when started from the same seed.
+  ``backend="torch"`` uses the torch/ncps implementation with the same
+  NumPy-generated reservoir.
 """
 from __future__ import annotations
 
 import logging
 import math
 from typing import Any, Optional
+
+from kaine.cfc_numpy import draw_reservoir_seed, load_reservoir_into_ncps
 
 log = logging.getLogger(__name__)
 
@@ -55,18 +61,24 @@ _DEFAULT_LR: float = 1e-3
 DEFAULT_FEATURE_DIM: int = 8
 
 
+
+
 class SubstrateForwardModel:
     """CfC-backed model that predicts the next substrate feature vector.
 
     Architecture
     ------------
-    A `ncps.torch.CfC` reservoir (``feature_dim`` inputs -> ``units`` hidden
+    A frozen CfC reservoir (``feature_dim`` inputs -> ``units`` hidden
     units) turns the current feature vector into a recurrent hidden state.
     The reservoir's weights are randomly initialised and FROZEN (never
     trained) — it is a fixed temporal feature extractor, exactly like
     Chronos's `CfCNetwork`. A linear readout (``units`` -> ``feature_dim``)
     maps that hidden state to a feature prediction and adapts online via
     SGD, exactly like Chronos's `ForwardPredictionHead`.
+
+    The reservoir is generated in NumPy and, when ``backend="torch"``, copied
+    into the ncps module.  Both backends therefore start from exactly the
+    same weights and remain bit-identical through training to 1e-5.
     """
 
     def __init__(
@@ -76,6 +88,7 @@ class SubstrateForwardModel:
         *,
         lr: float = _DEFAULT_LR,
         seed: Optional[int] = None,
+        backend: str = "numpy",
     ) -> None:
         if feature_dim <= 0:
             raise ValueError("feature_dim must be positive")
@@ -83,46 +96,64 @@ class SubstrateForwardModel:
             raise ValueError("units must be positive")
         if lr <= 0:
             raise ValueError("lr must be positive")
+        if backend not in ("numpy", "torch"):
+            raise ValueError("backend must be 'numpy' or 'torch'")
 
-        from kaine.hardware import select_device
+        if seed is None:
+            seed = draw_reservoir_seed()
 
-        device = select_device("cpu")
-        if device != "cpu":
-            log.warning(
-                "Soma forward model requested cpu but select_device returned "
-                "%s; pinning to cpu regardless to keep the network small and "
-                "the cycle predictable",
-                device,
-            )
-            device = "cpu"
-
-        # Lazy import so the rest of the soma package can be tested without
-        # torch / ncps installed.
-        import torch
-        import torch.nn as nn
-        from ncps.torch import CfC  # type: ignore[import-untyped]
-
-        if seed is not None:
-            torch.manual_seed(seed)
-
-        self._torch = torch
-        self._device = device
+        self._backend = backend
         self._feature_dim = int(feature_dim)
         self._units = int(units)
         self._lr = float(lr)
+        self.reservoir_seed = int(seed)
 
-        # Frozen CfC reservoir — a fixed, randomly-initialised temporal
-        # feature extractor (mirrors Chronos's CfCNetwork).
-        self._cfc = CfC(self._feature_dim, self._units, batch_first=True).to(device)
-        self._cfc.eval()
-        for p in self._cfc.parameters():
-            p.requires_grad_(False)
+        from kaine.cfc_numpy import NumpyReadout, generate_cfc_weights
 
-        # Online-adapting linear readout (mirrors Chronos's
-        # ForwardPredictionHead).
-        self._readout = nn.Linear(self._units, self._feature_dim)
-        self._readout.train()
-        self._optim = torch.optim.SGD(self._readout.parameters(), lr=self._lr)
+        reservoir, readout_init = generate_cfc_weights(
+            seed, self._feature_dim, self._units, self._feature_dim
+        )
+        self._reservoir = reservoir
+
+        if backend == "torch":
+            # Lazy import so the numpy backend never touches torch/ncps.
+            import torch
+            import torch.nn as nn
+            from ncps.torch import CfC  # type: ignore[import-untyped]
+
+            from kaine.hardware import select_device
+
+            device = select_device("cpu")
+            if device != "cpu":
+                log.warning(
+                    "Soma forward model requested cpu but select_device returned "
+                    "%s; pinning to cpu regardless to keep the network small and "
+                    "the cycle predictable",
+                    device,
+                )
+                device = "cpu"
+
+            self._torch = torch
+            self._device = device
+
+            self._cfc = CfC(self._feature_dim, self._units, batch_first=True)
+            load_reservoir_into_ncps(self._cfc, reservoir, torch)
+            self._cfc.to(device)
+            self._cfc.eval()
+            for p in self._cfc.parameters():
+                p.requires_grad_(False)
+
+            self._readout = nn.Linear(self._units, self._feature_dim)
+            with torch.no_grad():
+                self._readout.weight.copy_(torch.from_numpy(readout_init.W))
+                self._readout.bias.copy_(torch.from_numpy(readout_init.b))
+            self._readout.train()
+            self._optim = torch.optim.SGD(self._readout.parameters(), lr=self._lr)
+        else:
+            self._torch = None
+            self._device = "cpu"
+            self._readout = NumpyReadout.from_arrays(readout_init.W, readout_init.b)
+            self._cfc = None  # not used in numpy mode
 
         # Count of real online-adaptation steps taken (one SGD step per tick
         # where a finite feature vector was learned from, not suspended). This
@@ -153,6 +184,14 @@ class SubstrateForwardModel:
         return self._units
 
     @property
+    def lr(self) -> float:
+        return self._lr
+
+    @property
+    def backend(self) -> str:
+        return self._backend
+
+    @property
     def adaptation_steps(self) -> int:
         """Number of real online-adaptation (SGD) steps performed so far.
 
@@ -170,6 +209,23 @@ class SubstrateForwardModel:
 
     def parameter_count(self) -> int:
         """Total parameter count across the frozen reservoir and the readout."""
+        if self._backend == "numpy":
+            reservoir_params = sum(
+                arr.size
+                for arr in (
+                    self._reservoir.backbone_w,
+                    self._reservoir.backbone_b,
+                    self._reservoir.ff1_w,
+                    self._reservoir.ff1_b,
+                    self._reservoir.ff2_w,
+                    self._reservoir.ff2_b,
+                    self._reservoir.time_a_w,
+                    self._reservoir.time_a_b,
+                    self._reservoir.time_b_w,
+                    self._reservoir.time_b_b,
+                )
+            )
+            return int(reservoir_params + self._readout.W.size + self._readout.b.size)
         return int(
             sum(p.numel() for p in self._cfc.parameters())
             + sum(p.numel() for p in self._readout.parameters())
@@ -199,6 +255,15 @@ class SubstrateForwardModel:
         tick is a side-effect-free "peek" against the CURRENT persisted
         state, leaving it untouched (used by ``predict()``).
         """
+        if self._backend == "numpy":
+            from kaine.cfc_numpy import numpy_cfc_step
+
+            h = self._hx if self._hx is not None else [0.0] * self._units
+            hidden = numpy_cfc_step(self._reservoir, feature, h)
+            if commit:
+                self._hx = hidden
+            return hidden
+
         torch = self._torch
         with torch.no_grad():
             x = torch.tensor(feature, dtype=torch.float32, device=self._device)
@@ -210,6 +275,9 @@ class SubstrateForwardModel:
         return hidden
 
     def _readout_predict(self, hidden: list[float]) -> list[float]:
+        if self._backend == "numpy":
+            return self._readout.predict(hidden)
+
         torch = self._torch
         with torch.no_grad():
             h = torch.tensor(hidden, dtype=torch.float32)
@@ -283,6 +351,16 @@ class SubstrateForwardModel:
 
         Skips the update if the loss or any gradient is non-finite.
         """
+        if self._backend == "numpy":
+            loss = self._readout.sgd_step(hidden, target_feature, self._lr)
+            if not math.isfinite(loss):
+                log.warning(
+                    "SubstrateForwardModel: non-finite loss %.6g; skipping update",
+                    loss,
+                )
+                return 0.0
+            return loss
+
         torch = self._torch
         h = torch.tensor(hidden, dtype=torch.float32)
         t = torch.tensor(target_feature, dtype=torch.float32)
@@ -355,6 +433,8 @@ class SubstrateForwardModel:
 
     def state_dict(self) -> dict[str, Any]:
         """Return serialisable readout weight tensors (no raw feature data)."""
+        if self._backend == "numpy":
+            return self._readout.state_dict()
         return {
             "weight": self._readout.weight.detach().cpu().tolist(),
             "bias": self._readout.bias.detach().cpu().tolist(),
@@ -362,6 +442,9 @@ class SubstrateForwardModel:
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         """Restore readout weights from a ``state_dict()`` snapshot."""
+        if self._backend == "numpy":
+            self._readout.load_state_dict(state)
+            return
         torch = self._torch
         weight = torch.tensor(state["weight"], dtype=torch.float32)
         bias = torch.tensor(state["bias"], dtype=torch.float32)

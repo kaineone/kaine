@@ -104,13 +104,14 @@ async def test_soma_fatigue_through_module_scales(monkeypatch):
         def update_cycle_latency_sample(self, wall_duration_ms: float) -> None: ...
 
     async def _run(scale: float, clk: ManualClock) -> float:
-        # Seed torch identically before each run so the two Somas' forward
-        # models init to the SAME weights → identical prediction-error
-        # sequences. Only the fatigue dt-integral then differs, and it differs
-        # purely by time_scale — exactly the property under test.
-        import torch
+        # Seed the ambient RNGs (NumPy, which draws the reservoir seed, and
+        # torch) identically before each run so both Somas build the same
+        # reservoir and readout, keeping prediction-error sequences identical.
+        # Only the fatigue dt-integral then differs, and it differs purely by
+        # time_scale — exactly the property under test.
+        from kaine.experiment.seeding import set_global_seed
 
-        torch.manual_seed(1234)
+        set_global_seed(1234)
         bus = AsyncBus(
             BusConfig(password="x", audit_required=False),
             client=FakeRedis(decode_responses=True),

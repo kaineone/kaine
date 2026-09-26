@@ -29,7 +29,12 @@ def test_check_reports_missing_core_for_enabled_soma_chronos(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
-    config = {"modules": {"soma": True, "chronos": True}}
+    # The torch CfC backend needs core; the default numpy backend does not.
+    config = {
+        "modules": {"soma": True, "chronos": True},
+        "soma": {"cfc_backend": "torch"},
+        "chronos": {"cfc_backend": "torch"},
+    }
     missing = check(config)
 
     errors = [m for m in missing if m.severity == "error"]
@@ -251,7 +256,7 @@ def test_format_missing_omits_warnings_and_groups_extras(monkeypatch):
         "find_spec",
         _make_find_spec({"torch"}),
     )
-    config = {"modules": {"soma": True, "nous": True}}
+    config = {"modules": {"soma": True, "nous": True}, "soma": {"cfc_backend": "torch"}}
     missing = check(config)
     message = format_missing(missing)
     assert "core" in message

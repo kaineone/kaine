@@ -67,6 +67,8 @@ class Soma(BaseModule):
         # does not apply.
         forward_model: Optional[Any] = None,
         forward_model_units: int = 32,
+        cfc_backend: str = "numpy",
+        reservoir_seed: Optional[int] = None,
         prediction_error_window: int = 32,
         fatigue_decay_per_s: float = 0.01,
         fatigue_maintenance_threshold: float = 100.0,
@@ -130,6 +132,8 @@ class Soma(BaseModule):
             self._forward_model = SubstrateForwardModel(
                 feature_dim=DEFAULT_FEATURE_DIM,
                 units=int(forward_model_units),
+                backend=cfc_backend,
+                seed=reservoir_seed,
             )
         else:
             self._forward_model = forward_model
@@ -668,6 +672,7 @@ class Soma(BaseModule):
             "cycle_cursor": self._cycle_cursor,
             "read_interval_s": self._read_interval_s,
             "forward_model": self._forward_model.state_dict(),
+            "reservoir_seed": getattr(self._forward_model, "reservoir_seed", None),
             "fatigue": self._fatigue.state_dict(),
         }
         if self._self_rhythm is not None:
@@ -679,11 +684,28 @@ class Soma(BaseModule):
             self._cycle_cursor = str(state["cycle_cursor"])
         if "read_interval_s" in state:
             self._read_interval_s = float(state["read_interval_s"])
-        if "forward_model" in state:
-            try:
-                self._forward_model.load_state_dict(state["forward_model"])
-            except Exception:
-                log.warning("failed to restore forward model weights", exc_info=True)
+
+        if "forward_model" in state or "reservoir_seed" in state:
+            fm = self._forward_model
+            if "reservoir_seed" in state and hasattr(fm, "reservoir_seed"):
+                seed = int(state["reservoir_seed"])
+                self._forward_model = SubstrateForwardModel(
+                    feature_dim=fm.feature_dim,
+                    units=fm.units,
+                    lr=getattr(fm, "lr", 1e-3),
+                    backend=getattr(fm, "backend", "numpy"),
+                    seed=seed,
+                )
+            elif "reservoir_seed" not in state and hasattr(fm, "reservoir_seed"):
+                log.warning(
+                    "soma: snapshot has no reservoir seed; the reservoir is new"
+                )
+            if "forward_model" in state:
+                try:
+                    self._forward_model.load_state_dict(state["forward_model"])
+                except Exception:
+                    log.warning("failed to restore forward model weights", exc_info=True)
+
         if "fatigue" in state:
             try:
                 self._fatigue.load_state_dict(state["fatigue"])
