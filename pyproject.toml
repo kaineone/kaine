@@ -263,25 +263,15 @@ unmatched_ignore_imports_alerting = "none"
 # kaine.cycle.types (WorkspaceSnapshot) — directly or transitively through
 # neutral collaborators like kaine.faithful / kaine.workspace.volition — but
 # NOT on the cycle RUNTIME (the engine/loop, registry, preflight, boot,
-# __main__, spot, monitors, etc.). kaine.cycle.types is deliberately omitted
-# from forbidden_modules: it is the declared, contract-only exception. Adding a
-# new runtime submodule to kaine/cycle/ means adding it here too.
+# __main__, spot, monitors, etc.). The whole kaine.cycle package is forbidden,
+# so every runtime submodule, present and future, is covered; the one declared
+# exception is kaine.cycle.types, whose incoming imports are ignored.
 [[tool.importlinter.contracts]]
 name = "Modules must not import the cycle runtime (only kaine.cycle.types)"
 type = "forbidden"
 source_modules = ["kaine.modules"]
-forbidden_modules = [
-    "kaine.cycle.control_state",
-    "kaine.cycle.engine",
-    "kaine.cycle.escalation_state",
-    "kaine.cycle.incident_log",
-    "kaine.cycle.__main__",
-    "kaine.cycle.preflight",
-    "kaine.cycle.preservation_monitor",
-    "kaine.cycle.protocols",
-    "kaine.cycle.research_gate",
-    "kaine.cycle.spot",
-]
+forbidden_modules = ["kaine.cycle"]
+ignore_imports = ["kaine.** -> kaine.cycle.types"]
 
 # Module plugins (module-plugins): cognitive modules receive plugin objects only
 # through their constructors, so they never import the loader; the loader is a
