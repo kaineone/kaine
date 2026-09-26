@@ -184,7 +184,9 @@ class StudyRunner:
             try:
                 fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
             except OSError:
-                pass
+                # Closing the file below releases the lock whether or not the
+                # explicit unlock succeeded.
+                log.debug("explicit study-lock unlock failed", exc_info=True)
             self._lock_fd.close()
             self._lock_fd = None
 

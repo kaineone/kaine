@@ -60,6 +60,8 @@ _SCALAR_DIFF_KEYS = (
     "data_quality",
 )
 
+log = logging.getLogger(__name__)
+
 
 @dataclass
 class PerFilmBins:
@@ -301,7 +303,12 @@ def _analyse_viewing(
                 )
                 drift_values.append(drift)
             except (TypeError, ValueError):
-                pass
+                # A malformed position leaves this record out of the drift
+                # measure; say so rather than drop it silently.
+                log.warning(
+                    "ignition record %s has a non-numeric position; left out of drift",
+                    rec.get("seq"),
+                )
 
         seen_sources: set[str] = set()
         for member in members:
