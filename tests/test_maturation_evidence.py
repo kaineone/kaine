@@ -246,10 +246,10 @@ async def test_womb_readiness_readout_trustworthiness(
 
     # Wrong event type is ignored.
     await bus.client.xadd(
-        "womb.out",
+        "gestation.out",
         _encode_event(
             Event(
-                source="womb",
+                source="gestation",
                 type="womb.heartbeat",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
@@ -259,15 +259,15 @@ async def test_womb_readiness_readout_trustworthiness(
         id="1000001-0",
     )
     assert await runner._womb_readiness_readout() is None
-    await bus.client.delete("womb.out")
+    await bus.client.delete("gestation.out")
 
     # A readout from just before this boot is ignored even though it is young
     # enough to pass the age window (500 ms old against a 3 s window).
     await bus.client.xadd(
-        "womb.out",
+        "gestation.out",
         _encode_event(
             Event(
-                source="womb",
+                source="gestation",
                 type="gestation.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
@@ -277,14 +277,31 @@ async def test_womb_readiness_readout_trustworthiness(
         id="999500-0",
     )
     assert await runner._womb_readiness_readout() is None
-    await bus.client.delete("womb.out")
+    await bus.client.delete("gestation.out")
+
+    # A readout from a source other than the gestation owner is ignored.
+    await bus.client.xadd(
+        "gestation.out",
+        _encode_event(
+            Event(
+                source="impostor",
+                type="gestation.readiness",
+                payload={"readout": {"x": 2}},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            )
+        ),
+        id="1000500-0",
+    )
+    assert await runner._womb_readiness_readout() is None
+    await bus.client.delete("gestation.out")
 
     # Fresh valid readout -> the embedded readout dict.
     await bus.client.xadd(
-        "womb.out",
+        "gestation.out",
         _encode_event(
             Event(
-                source="womb",
+                source="gestation",
                 type="gestation.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
@@ -298,12 +315,12 @@ async def test_womb_readiness_readout_trustworthiness(
 
     # Stale by age (default 3 cadences * 1.0 s).
     monkeypatch.setattr(bus, "server_time_ms", AsyncMock(return_value=1_010_000))
-    await bus.client.delete("womb.out")
+    await bus.client.delete("gestation.out")
     await bus.client.xadd(
-        "womb.out",
+        "gestation.out",
         _encode_event(
             Event(
-                source="womb",
+                source="gestation",
                 type="gestation.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,

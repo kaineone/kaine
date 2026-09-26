@@ -153,11 +153,20 @@ the entity, or gates anything.
    `state/lifecycle/gestation_readout.json` so it survives restarts. It is a falling
    ratio, not a normalised salience signal: Topos's normalised error is relative to its
    own rolling mean and cannot fall over time by construction.
-5. `return_to_baseline_seconds` (float): after the latest perturbation, the time until
-   Soma's reported arousal is back within `baseline_epsilon` (default 0.05) of its
-   median over the 60 s before the perturbation, capped at 300 s (Feldman 2012).
+5. `return_to_baseline_seconds` (float): after the latest completed perturbation, the
+   time until Soma's own interoceptive surprise settles. Soma reports its forward-model
+   `prediction_error` about once a second. The baseline is its median over the 60 s
+   before the perturbation. Recovery is the first moment after the perturbation ends at
+   which the median of the last 5 s of reports is at most `baseline × (1 +
+   recovery_tolerance)` (default 0.25). The time is capped at `recovery_cap_seconds`
+   (default 300 s) (Feldman 2012). What is measured is the entity's own state settling,
+   never a target it is pushed toward.
 
 Until a marker has data, it is absent from the readout, and the gate fails closed on it.
+
+**Settings.** The readout and probe settings live in `[perception_feed.womb.readout]`
+(read by the owner, not by `WombParams`). Every duration and period is in subjective
+seconds of the entity clock, so a dilated mind is probed on its own time.
 
 **Probe protocol (bounded, disclosed, welfare-first).**
 - **Withdrawal.** Every `withdrawal_period_seconds` (default 1800 s), the drive is set

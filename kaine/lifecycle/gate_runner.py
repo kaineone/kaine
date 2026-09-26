@@ -54,7 +54,7 @@ log = logging.getLogger(__name__)
 
 # Default stream the womb module publishes ``gestation.readiness`` readouts to.
 # The womb change owns the measurement; the maturation gate only reads it.
-DEFAULT_WOMB_READOUT_STREAM = "womb.out"
+DEFAULT_WOMB_READOUT_STREAM = "gestation.out"
 DEFAULT_WOMB_READOUT_TYPE = "gestation.readiness"
 
 
@@ -268,40 +268,42 @@ class MaturationGateRunner:
     async def _womb_readiness_readout(self) -> Mapping[str, Any] | None:
         """Read the latest womb ``gestation.readiness`` event from the bus.
 
+        The stream also carries presence and probe events, so the newest entry is
+        rarely the readout. We therefore search the stream window newest-first
+        and return the first matching event.
+
         Returns ``None`` when the readout is absent, of the wrong type, older
         than this boot, or stale, so C1 fails closed. Stream ids and Redis
         ``TIME`` share the same clock, so host clock skew does not matter.
         """
         try:
-            entry = await self._bus.latest(self._womb_stream)
-            if entry is None:
-                return None
-            entry_id, event = entry
-            if event.type != self._womb_type:
-                return None
             if self._boot_ms is None:
                 return None
-            id_ms = int(entry_id.split("-")[0])
-            if id_ms < self._boot_ms:
-                return None
-
             now_ms = await self._bus.server_time_ms()
             max_age_ms = (
                 self._config.readout_max_age_cadences
                 * self._config.gate_cadence_seconds
                 * 1000
             )
-            if now_ms - id_ms > max_age_ms:
+            start_ms = max(self._boot_ms, now_ms - int(max_age_ms))
+            entries = await self._bus.range(
+                self._womb_stream, start=str(start_ms), end="+"
+            )
+            for entry_id, event in reversed(entries):
+                if event.type != self._womb_type or event.source != "gestation":
+                    continue
+                if isinstance(event.payload, dict):
+                    readout = event.payload.get("readout")
+                    if isinstance(readout, dict):
+                        return readout
+                    return event.payload
                 return None
-
-            readout = event.payload.get("readout")
-            if isinstance(readout, dict):
-                return readout
-            if isinstance(event.payload, dict):
-                return event.payload
             return None
         except Exception:
-            log.debug("maturation gate: womb readiness readout failed closed", exc_info=True)
+            log.debug(
+                "maturation gate: womb readiness readout failed closed",
+                exc_info=True,
+            )
             return None
 
     def _persist_if_changed(self, before: lifecycle_stage.StageState) -> None:
