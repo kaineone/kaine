@@ -1515,6 +1515,46 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     return evaluate_unattended_gate(net, built={6: spot, 7: seven, 8: eight})
 
 
+def _record_unattended_gate(result: Any) -> None:
+    """Durably append one JSON record of the unattended gate evaluation.
+
+    Best-effort: a write failure is logged and MUST NOT change the boot outcome.
+    Paths in condition reasons are scrubbed before write.
+    """
+    from kaine.cycle.incident_log import IncidentLog, scrub_paths
+
+    logger = logging.getLogger(__name__)
+    try:
+        conditions = [
+            {
+                "number": c.number,
+                "name": c.name,
+                "ok": bool(c.ok),
+                "reason": scrub_paths(c.reason),
+            }
+            for c in result.conditions
+        ]
+        record: dict[str, Any] = {
+            "transition": "gate",
+            "ok": bool(result.ok),
+            "conditions": conditions,
+        }
+
+        async def _write() -> None:
+            log = IncidentLog(
+                enabled=True, path="state/cycle/incidents", name="unattended_gate"
+            )
+            await log.start()
+            try:
+                await log.write(record)
+            finally:
+                await log.stop()
+
+        asyncio.run(_write())
+    except Exception:
+        logger.warning("failed to record unattended gate evaluation", exc_info=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -1572,6 +1612,8 @@ def main(argv: list[str] | None = None) -> int:
         for c in result.conditions:
             status = "pass" if c.ok else f"FAIL — {c.reason}"
             log.info("unattended gate %d: %s: %s", c.number, c.name, status)
+        # Durably record the gate outcome before the allow/refuse branch.
+        _record_unattended_gate(result)
         if not result.ok:
             sys.stderr.write(result.message() + "\n")
             # Best-effort caretaker notice about the refusal; an error here must

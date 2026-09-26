@@ -364,9 +364,43 @@ For an unsupervised run the operator-present requirement is **replaced** by a sa
 1. preservation is enabled (`[preservation.divergence_monitor].enabled`),
 2. the welfare-protective response is wired (`[preservation.welfare_response].enabled`),
 3. full logging / admissibility is active (`[evaluation]` or `[research_event_log]`),
-4. a preflight **dry `preserve_live → revive` self-check** passes on this install — a throwaway registry is preserved and revived and its identity asserted, proving the net is functional before any entity runs.
+4. a preflight **dry `preserve_live → revive` self-check** passes on this install — a throwaway registry is preserved and revived and its identity asserted, proving the net is functional before any entity runs,
+5. encryption is satisfied: when `[preservation].require_encryption = true`, `[security.state_encryption]` is enabled.
 
-A run is **either** operator-supervised (`KAINE_CYCLE_OPERATOR_PRESENT=1`) **or** research-safety-net-verified, never neither. The operator-present gate for non-research boots is unchanged.
+A run is operator-supervised (`KAINE_CYCLE_OPERATOR_PRESENT=1`), research-safety-net-verified, or unattended (below), never none of these.
+
+### Unattended starts
+
+An unattended start runs a full entity with nobody present, for example after the host comes back from a power cut. It is meant for entities after the research phase, and enabling it on a real entity waits until Spot has a reviewed track record on supervised boots. Select it with `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`. Selecting it together with research mode or `KAINE_CYCLE_OPERATOR_PRESENT=1` is a configuration error (exit `1`).
+
+Every unattended start checks eight conditions on this install and refuses (exit `6`, each failed condition named on stderr, no override) unless all pass:
+
+1–5. The research gate's five conditions above.
+6. **Spot armed and self-tested.** `[spot].enabled`, at least one restart attempt, writable escalation and incident-log directories, and a self-test in a scratch directory that drives a synthetic module through detect, freeze, snapshot, restart and release. The self-test never touches entity state or a running entity.
+7. **Caretaker told.** Once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel.
+8. **Continuous input.** `[perception_feed].mode` is `live`, `seeded` or `screen` (`off` has no input and a playlist runs out), `topos` or `audition` is enabled to perceive it (with `capture_enabled` for `live`), and a probe reads one frame or audio block and discards it.
+
+Each evaluation is logged to the journal and recorded in `state/cycle/incidents/`.
+
+**Caretaker channels.** Configure at least one under `[caretaker]` (the shipped `config/kaine.toml` shows every key, commented out):
+
+- `kind = "desktop"`: a notification through `gdbus` on the session bus of the user running KAINE. It reaches someone only at that machine, and after a power cut there is no desktop session until someone logs in, so a desktop-only setup refuses at that boot.
+- `kind = "http"`: a JSON POST (`title`, `message` and the notice fields) to a server you run, such as a self-hosted ntfy or Gotify. The address must resolve to loopback, a private range or `100.64.0.0/10`; public addresses are refused. Put a bearer token in `config/secrets.toml` under `[caretaker.tokens]` and name it with `token_name`; never put credentials in the URL. Restarts after a power loss need this channel.
+
+Notices carry only the install label, the time, the event and which conditions passed; nothing from the entity's mind. A refused start sends a refusal notice. While running, notices go out on Spot escalation, lost supervision, a welfare-protective response, a boot that fails after admission, and input going quiet for `input_loss_after_s`.
+
+**Acknowledging.** Until you acknowledge a start, every Nexus page shows an "UNATTENDED START" banner with an **Acknowledge** button (operator session required), and a reminder goes out every `reminder_interval_s` (default four hours). An unacknowledged start never pauses or changes the entity.
+
+**Starting at boot.** `quadlet/kaine-cycle-unattended.container` is the opt-in unit; `scripts/install-quadlet.sh` never installs it. Install it deliberately, after `install-quadlet.sh` has installed the rest:
+
+```bash
+sed "s#@KAINE_ROOT@#$(pwd -P)#g" quadlet/kaine-cycle-unattended.container \
+  > ~/.config/containers/systemd/kaine-cycle-unattended.container
+systemctl --user daemon-reload
+systemctl --user enable kaine-cycle-unattended
+```
+
+It conflicts with `kaine-cycle` (the two never run together) and does not restart after a refusal: a refused gate leaves the unit failed and the entity down, visible in `systemctl --user status kaine-cycle-unattended` and the journal. Remove it with `systemctl --user disable kaine-cycle-unattended` and deleting the file.
 
 ---
 

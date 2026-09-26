@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# OPT-IN UNATTENDED ENTITY START. Enabling this unit starts the entity at boot
+# (with linger) with no person present. Every start is gated by the eight
+# conditions of the unattended gate, checked on this host, with no override:
+#
+#   1. preservation enabled ([preservation.divergence_monitor])
+#   2. welfare-protective response wired ([preservation.welfare_response])
+#   3. logging active ([evaluation] or [research_event_log])
+#   4. dry preserve -> revive round-trip passing
+#   5. encryption satisfied where [preservation].require_encryption is set
+#   6. Spot enabled and its scratch freeze/restart self-test passing
+#   7. a content-free start notice accepted by a [caretaker] channel
+#   8. a continuous perception input delivering a frame or audio block
+#
+# A refusal exits 6 and leaves the unit failed; the entity stays down.
+# scripts/install-quadlet.sh NEVER installs this file. Install it deliberately
+# with the command in docs/operations.md ("Unattended starts"), which writes the
+# checkout path in place of @KAINE_ROOT@. After a power loss no desktop session
+# exists, so a desktop caretaker channel cannot be reached at that boot:
+# configure an `http` channel. Never enable this unit together with kaine-cycle.
+[Unit]
+Description=KAINE cognitive cycle, unattended (opt-in; gated by the unattended safety net)
+Requires=kaine-redis.service kaine-qdrant.service
+After=kaine-redis.service kaine-qdrant.service kaine-nexus.service
+Conflicts=kaine-cycle.service
+
+[Container]
+ContainerName=kaine-cycle
+Image=kaine:cuda
+Network=kaine.network
+Exec=python -m kaine.cycle
+AddDevice=nvidia.com/gpu=1
+SecurityLabelDisable=true
+Volume=@KAINE_ROOT@/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
+Volume=@KAINE_ROOT@/config/secrets.toml:/app/config/secrets.toml:ro,Z
+Volume=kaine-state.volume:/app/state
+Volume=kaine-models.volume:/models:ro
+Volume=kaine-eval-data.volume:/app/data/evaluation
+Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
+Tmpfs=/app/state/perception
+# Share the user's D-Bus session bus so a desktop caretaker channel can send
+# notifications. The image must contain `gdbus`. This channel does NOT work
+# after a power loss because no desktop session exists at boot.
+Volume=%t/bus:%t/bus
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
+Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
+Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
+Environment=KAINE_STATE_KEY=${KAINE_STATE_KEY}
+Environment=KAINE_MODELS_DIR=/models
+Environment=KAINE_CYCLE_UNATTENDED=1
+
+[Service]
+# Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).
+EnvironmentFile=@KAINE_ROOT@/compose/.env
+# A refused gate stays refused and visible in `systemctl --user status`. Do not
+# loop; once the entity runs, restarts belong to Spot.
+Restart=no
+
+[Install]
+WantedBy=default.target

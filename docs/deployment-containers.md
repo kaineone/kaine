@@ -154,6 +154,7 @@ off — in-container exactly as host-native.
 | `KAINE_STATE_KEY` | encryption-at-rest key | empty (set to enable) |
 | `KAINE_CYCLE_OPERATOR_PRESENT` | first-boot gate | **never defaulted** |
 | `KAINE_RESEARCH_MODE` | unsupervised-research gate | **never defaulted** |
+| `KAINE_CYCLE_UNATTENDED` | unattended-start gate (set only in the opt-in unattended quadlet unit) | **never defaulted** |
 
 No boot-gate variable is defaulted to a permissive value on the `kaine-cycle`
 service. The operator sets them explicitly, preserving supervised first boot.

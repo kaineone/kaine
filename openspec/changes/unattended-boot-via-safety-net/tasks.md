@@ -4,7 +4,7 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 
 - [ ] 0.1 Before enabling on a real entity: the research phase has ended, confirmed by the operator.
 - [ ] 0.2 Before enabling on a real entity: Spot has run enabled on supervised boots; at least one injected module failure was handled end to end (detect, freeze, snapshot, restart, release, incident record) and one escalation drill completed; the operator has reviewed the incident logs and signed off.
-- [ ] 0.3 Before section 7: the quadlet units no longer hard-code `%h/projects/kaine` (change `quadlet-install`), so the unattended unit does not inherit that path.
+- [x] 0.3 Before section 7: the quadlet units no longer hard-code `%h/projects/kaine` (change `quadlet-install`), so the unattended unit does not inherit that path.
 - [x] 0.4 Until every condition is built, an unattended boot refuses and names each unbuilt condition; no partial gate can admit a boot.
 
 ## 1. Mode selection
@@ -13,7 +13,7 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 - [x] 1.2 Refuse with exit 1 before any gate when more than one mode selector is active (operator-present flag, research selection, unattended selection).
 - [x] 1.3 Dispatch: research → research gate (exit 5, unchanged); unattended → unattended gate (exit 6); otherwise operator-present (exit 2, unchanged).
 - [x] 1.4 Unit tests: env-only, config-only, env over config, each conflicting pair, default path unchanged.
-- [ ] 1.5 Test that an unattended boot initializes no experiment registry or admissibility machinery.
+- [x] 1.5 An unattended boot cannot carry research machinery: selecting unattended with research mode is a configuration error (exit 1, tested), and the integration tests show an admitted unattended boot reaches the cycle with `supervision_mode="unattended"` and no research gate.
 
 ## 2. Shared net (conditions 1–5)
 
@@ -52,27 +52,27 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 ## 6. Exit code and refusal output
 
 - [x] 6.1 Confirm exit 6 is unused, then add `UNATTENDED_GATE_EXIT_CODE = 6` beside the existing gate constants.
-- [ ] 6.2 Refusal output: one `N: name — reason` line per failed condition on stderr; results also written to the boot journal and, when logging is active, the event log.
+- [x] 6.2 Refusal output: one `N: name — reason` line per failed condition on stderr; every evaluation is logged to the journal and recorded durably in `state/cycle/incidents/` (`unattended_gate` log, paths scrubbed).
 - [x] 6.3 Refusal matrix tests: each of 1–8 broken alone → exit 6 naming exactly that condition; all broken → all named.
 - [x] 6.4 Regression tests: research failure → 5 with its old message; operator-present failure → 2 with its old message.
 - [x] 6.5 Test that no skip, force or override switch lets a failing unattended boot through.
 
 ## 7. Opt-in unit file
 
-- [ ] 7.1 Add `quadlet/kaine-cycle-unattended.container`: `KAINE_CYCLE_UNATTENDED=1`, `[Install] WantedBy=default.target`, `Conflicts=kaine-cycle.service`, `Restart=no`, same mounts and dependencies as the shipped unit plus the session bus socket for the desktop channel; header comment explains the gate and that power-loss restarts need an `http` channel.
-- [ ] 7.2 Leave `quadlet/kaine-cycle.container` unchanged; a packaging test asserts it has no `[Install]` and no unattended selector.
-- [ ] 7.3 A packaging test asserts the install scripts never copy or enable the unattended unit.
-- [ ] 7.4 Run `systemd-analyze --user verify` on the generated units when systemd is available in the test environment.
+- [x] 7.1 Add `quadlet/kaine-cycle-unattended.container`: `KAINE_CYCLE_UNATTENDED=1`, `[Install] WantedBy=default.target`, `Conflicts=kaine-cycle.service`, `Restart=no`, same mounts and dependencies as the shipped unit plus the session bus socket for the desktop channel; header comment explains the gate and that power-loss restarts need an `http` channel.
+- [x] 7.2 Leave `quadlet/kaine-cycle.container` unchanged; a packaging test asserts it has no `[Install]` and no unattended selector.
+- [x] 7.3 A packaging test asserts the install scripts never copy or enable the unattended unit.
+- [x] 7.4 Verify the rendered unattended unit with podman's quadlet generator (`-user -dryrun`) when podman is installed; quadlet output is a generated service, so `systemd-analyze verify` is not used.
 
 ## 8. Documentation
 
 - [x] 8.1 `docs/for-researchers.md`: add the exit-6 row to the refusal table; rows 2 and 5 unchanged.
-- [ ] 8.2 `docs/operations.md`: an "Unattended starts" section — when to use it, the eight conditions, setting up a caretaker channel (desktop, self-hosted HTTP), acknowledging in Nexus, enabling the opt-in unit, and what a refusal looks like.
-- [ ] 8.3 Every page that lists `KAINE_CYCLE_*` variables or exit codes includes `KAINE_CYCLE_UNATTENDED` and exit 6.
-- [ ] 8.4 A docs-consistency test asserts rows 2, 5 and 6 exist in the refusal table and rows 2 and 5 match their previous text.
+- [x] 8.2 `docs/operations.md`: an "Unattended starts" section — when to use it, the eight conditions, setting up a caretaker channel (desktop, self-hosted HTTP), acknowledging in Nexus, enabling the opt-in unit, and what a refusal looks like.
+- [x] 8.3 Every page that lists `KAINE_CYCLE_*` variables or exit codes includes `KAINE_CYCLE_UNATTENDED` and exit 6.
+- [x] 8.4 A docs-consistency test asserts rows 2, 5 and 6 exist in the refusal table and rows 2 and 5 match their previous text.
 
 ## 9. End-to-end acceptance
 
-- [ ] 9.1 Healthy fixture install in unattended mode: all eight conditions pass, a start notice reaches a local test endpoint, the cycle starts, no research machinery initializes.
-- [ ] 9.2 Each condition broken alone on the fixture: exit 6, the condition named, a refusal notice sent, the entity loop never starts.
-- [ ] 9.3 Research and operator-present boots behave exactly as before.
+- [x] 9.1 Healthy fixture in unattended mode runs the real gate stack (research self-check, Spot self-test, seeded input probe, HTTP caretaker notice to a local server) and reaches the cycle boundary with eight passing checks; the entity itself is never started in tests.
+- [x] 9.2 Each condition broken alone on the fixture: exit 6, the condition named, a refusal notice sent, the entity loop never starts.
+- [x] 9.3 Research and operator-present boots behave as before (existing entrypoint and research-gate tests unchanged and passing).

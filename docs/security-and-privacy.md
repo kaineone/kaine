@@ -227,6 +227,7 @@ they fire. This design prevents accidental activation from a single misconfigura
 |---|---|---|
 | Cognitive cycle start (non-research) | (any config) | `KAINE_CYCLE_OPERATOR_PRESENT=1` |
 | Cognitive cycle start (research) | `[research].enabled` *(or `KAINE_RESEARCH_MODE=1`)* + the safety-net config (see below) | — *(operator-present requirement replaced by the verified safety net)* |
+| Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` *(or `KAINE_CYCLE_UNATTENDED=1`)* + the safety-net, `[spot]`, `[caretaker]` and perception config | — *(replaced by eight conditions verified at every start; see [Operations](operations.md#unattended-starts))* |
 | First-boot script | (any config) | `KAINE_FIRST_BOOT_OPERATOR_PRESENT=1` |
 | Voice-alignment training | `[hypnos.voice_alignment].enabled = true` | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` |
 | Mundus embodiment | `[mundus].enabled = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
@@ -238,9 +239,10 @@ environment variable alone can start a sensitive operation.
 
 ## Boot gate — supervised or safety-net-verified
 
-The cognitive cycle never starts unattended, but it carries the welfare
-obligation in one of two ways. A run is **either** operator-supervised **or**
-research-safety-net-verified — never neither:
+The cognitive cycle carries the welfare obligation in one of three ways. A run is
+operator-supervised, research-safety-net-verified, or an opt-in unattended start
+(the research net plus a Spot self-test, a caretaker notice and a continuous-input
+check; see [Operations](operations.md#unattended-starts)) — never none of these:
 
 - **Operator-supervised (non-research).** The cycle refuses to start unless
   `KAINE_CYCLE_OPERATOR_PRESENT=1` is exported. A human is the safety net.
@@ -255,9 +257,17 @@ research-safety-net-verified — never neither:
   run; human involvement returns afterward, to socialize any individual that
   emerged. See [processes/research-operation.md](processes/research-operation.md)
   and [processes/entity-preservation.md](processes/entity-preservation.md).
+- **Unattended (opt-in, after research).** `KAINE_CYCLE_UNATTENDED=1` or
+  `[cycle].supervision_mode = "unattended"` replaces the operator-present
+  requirement with eight conditions verified at every start (exit `6` otherwise):
+  the research net's five, Spot armed and self-tested, a content-free caretaker
+  notice accepted by a local channel, and a continuous-input probe. See
+  [Operations](operations.md#unattended-starts).
 
-Neither mode auto-starts the entity from a CI hook, shell completion, autoreload
-daemon, or any other mechanism.
+No mode auto-starts the entity from a CI hook, shell completion, autoreload
+daemon, or any other mechanism. The only start at boot is the opt-in
+`kaine-cycle-unattended` quadlet unit, which an operator installs and enables
+deliberately and which runs the unattended gate every time.
 
 The entity ships with every module disabled, and the safety-net components ship
 disabled too. Enabling a module requires a deliberate edit of `config/kaine.toml`.
