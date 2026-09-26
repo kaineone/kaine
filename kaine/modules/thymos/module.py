@@ -543,6 +543,9 @@ class Thymos(BaseModule):
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from Empatheia.
             "familiarity_cache": dict(self._familiarity_cache),
+            # Goals: the entity's own intentions, not sense data, so they also
+            # satisfy the zero raw-sense-data persistence rule.
+            "goals": self._goals.to_dict(),
         }
 
     def deserialize(self, state: dict[str, Any]) -> None:
@@ -578,3 +581,6 @@ class Thymos(BaseModule):
                     for k, v in raw.items()
                     if isinstance(v, (int, float))
                 }
+        if "goals" in state:
+            # A restore is not a lifecycle change: no thymos.goal events.
+            self._goals.load_dict(state["goals"])

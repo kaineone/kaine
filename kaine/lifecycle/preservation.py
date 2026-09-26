@@ -177,6 +177,7 @@ async def preserve_live(
         from kaine.lifecycle import stage as _stage_module
 
         stage_path = _stage_module.STAGE_PATH
+    stage_path = Path(stage_path)
 
     modules = list(registry.all_modules())
 

@@ -157,6 +157,73 @@ def test_real_pymdp_engine_timeout_guard_returns_last_posterior():
         engine.close()
 
 
+@pytestmark_real
+def test_real_pymdp_engine_seeded_posterior_is_the_timeout_fallback():
+    from kaine.modules.nous.engine import PymdpEngine
+
+    engine = PymdpEngine(efe_timeout_ms=0.001)
+    try:
+        seeded = []
+        for size in engine.model.num_states:
+            dist = [0.0] * size
+            dist[-1] = 1.0
+            seeded.append(dist)
+
+        assert engine.seed_posterior(seeded) is True
+
+        result = engine.step(_snap())
+        assert result.timed_out is True
+        assert result.posterior == seeded
+        assert result.action == engine.actions[0]
+    finally:
+        engine.close()
+
+
+@pytestmark_real
+def test_real_pymdp_engine_rejects_mismatched_posterior():
+    from kaine.modules.nous.engine import PymdpEngine
+
+    engine = PymdpEngine(efe_timeout_ms=0.001)
+    try:
+        sizes = list(engine.model.num_states)
+        uniform = [[1.0 / n] * n for n in sizes]
+
+        # Wrong factor count.
+        assert engine.seed_posterior(uniform[:-1]) is False
+        result = engine.step(_snap())
+        assert result.timed_out is True
+        assert result.posterior == uniform
+
+        # Right count but one factor one element short.
+        short = [list(d) for d in uniform]
+        if short:
+            short[-1] = short[-1][:-1]
+        assert engine.seed_posterior(short) is False
+        result = engine.step(_snap())
+        assert result.timed_out is True
+        assert result.posterior == uniform
+
+        # A NaN value.
+        nan_post = [list(d) for d in uniform]
+        if nan_post and nan_post[-1]:
+            nan_post[-1][0] = float("nan")
+        assert engine.seed_posterior(nan_post) is False
+        result = engine.step(_snap())
+        assert result.timed_out is True
+        assert result.posterior == uniform
+
+        # A negative value.
+        neg_post = [list(d) for d in uniform]
+        if neg_post and neg_post[-1]:
+            neg_post[-1][0] = -0.1
+        assert engine.seed_posterior(neg_post) is False
+        result = engine.step(_snap())
+        assert result.timed_out is True
+        assert result.posterior == uniform
+    finally:
+        engine.close()
+
+
 # --------------------------------------------------------------------------
 # H1: EngineResult error field — distinguishes crashes from genuine no_ops
 # --------------------------------------------------------------------------
