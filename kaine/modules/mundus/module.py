@@ -80,6 +80,7 @@ class Mundus(BaseModule):
         *,
         adapter: EmbodimentAdapter,
         enabled: bool = False,
+        dormant: bool = False,
         expose: Optional[dict[str, bool]] = None,
         continuous_expose: Optional[dict[str, bool]] = None,
         mirror_speech: bool = True,
@@ -116,6 +117,65 @@ class Mundus(BaseModule):
         self._intent_cursor = "0-0"
         self._speech_cursor = "0-0"
         self._tasks: list[asyncio.Task] = []
+        self._dormant = bool(dormant)
+
+    async def probe_available(self, timeout_s: float = 5.0) -> bool:
+        """Public reachability probe that works while dormant.
+
+        Uses the adapter's ``probe()`` method if present; otherwise briefly opens
+        and closes the adapter inside the timeout.
+        """
+        if not self._enabled():
+            return False
+        if self._tasks:
+            return True
+
+        try:
+            if callable(getattr(self._adapter, "probe", None)):
+                await asyncio.wait_for(self._adapter.probe(), timeout=timeout_s)
+                return True
+
+            async def _open_close_probe() -> bool:
+                await self._adapter.open()
+                return True
+
+            return await asyncio.wait_for(_open_close_probe(), timeout=timeout_s)
+        except Exception:
+            log.debug("mundus probe unavailable", exc_info=True)
+            return False
+        finally:
+            try:
+                await self._adapter.close()
+            except Exception:
+                pass
+
+    async def activate(self) -> bool:
+        """Start Mundus from a dormant state; returns True if it came up."""
+        if not self._enabled():
+            return False
+        if self._tasks:
+            return True
+        self._dormant = False
+        try:
+            await self.initialize()
+            return True
+        except Exception:
+            log.warning("mundus activate failed", exc_info=True)
+            return False
+
+    @property
+    def enabled_by_config(self) -> bool:
+        """Whether Mundus is enabled by configuration (operator approval separate)."""
+        return self._config_enabled
+
+    @property
+    def dormant(self) -> bool:
+        """Whether Mundus is currently held dormant (gestation)."""
+        return self._dormant
+
+    def set_dormant(self, dormant: bool) -> None:
+        """Set whether Mundus should remain dormant across the next initialize()."""
+        self._dormant = bool(dormant)
 
     @property
     def control_surface(self) -> Optional["ContinuousMotorSurface"]:
@@ -126,6 +186,9 @@ class Mundus(BaseModule):
         return self._config_enabled and operator_approved()
 
     async def initialize(self) -> None:
+        if self._dormant:
+            log.info("mundus dormant (gestation): not opening the body")
+            return
         if not self._enabled():
             log.info("mundus disabled (config=%s, operator_approved=%s)",
                      self._config_enabled, operator_approved())

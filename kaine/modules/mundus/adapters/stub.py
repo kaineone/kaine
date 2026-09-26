@@ -56,6 +56,10 @@ class StubAdapter:
         self.actions: list[tuple[str, dict[str, Any]]] = []
         self.setpoints: list[dict[str, float]] = []
 
+    async def probe(self) -> bool:
+        """Reachability probe: stub is always available."""
+        return True
+
     def capabilities(self) -> EmbodimentCapabilities:
         return EmbodimentCapabilities(
             name="stub",

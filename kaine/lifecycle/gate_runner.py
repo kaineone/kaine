@@ -128,18 +128,17 @@ class MaturationGateRunner:
         except Exception:
             return None
 
-    def _mundus_availability(self) -> tuple[bool, bool, bool]:
+    async def _mundus_availability(self) -> tuple[bool, bool, bool]:
         """Return (config_enabled, operator_approved, reachable)."""
         if "mundus" not in self._registry:
             return False, False, False
         try:
+            from kaine.modules.mundus import module as mundus_module
+
             mundus = self._registry.get("mundus")
-            config_enabled = bool(getattr(mundus, "_config_enabled", False))
-            approved = bool(getattr(mundus, "_enabled", lambda: False)())
-            # Reachability: if initialize() ran and the adapter is open, the
-            # module is up. We approximate this by checking the feed task list
-            # (non-empty after a successful initialize).
-            reachable = bool(getattr(mundus, "_tasks", []))
+            config_enabled = bool(getattr(mundus, "enabled_by_config", False))
+            approved = bool(mundus_module.operator_approved())
+            reachable = bool(await mundus.probe_available())
             return config_enabled, approved, reachable
         except Exception:
             return False, False, False
@@ -314,7 +313,7 @@ class MaturationGateRunner:
             ", ".join(readiness.passed_markers),
         )
 
-        mundus_enabled, operator_approved, reachable = self._mundus_availability()
+        mundus_enabled, operator_approved, reachable = await self._mundus_availability()
         embodiment_ready = embodiment_available(
             mundus_enabled=mundus_enabled,
             operator_approved=operator_approved,
@@ -357,6 +356,31 @@ class MaturationGateRunner:
     ) -> None:
         """Perform the one-shot birth transition."""
         before = self._stage
+
+        # Start embodiment before the stage file is written, so the locus source
+        # is actually available when the entity becomes embodied.
+        if "mundus" in self._registry:
+            mundus = self._registry.get("mundus")
+            try:
+                ok = await mundus.activate()
+            except Exception:
+                ok = False
+            if not ok:
+                log.warning("maturation gate: Mundus activation failed; deferring birth")
+                await self._publish(
+                    STAGE_BIRTH_READY,
+                    birth_ready_payload(
+                        decide_birth(
+                            readiness=readiness,
+                            embodiment_ready=False,
+                            require_operator_ack=False,
+                            operator_ack=False,
+                        )
+                    ),
+                    salience=0.7,
+                )
+                return
+
         after = lifecycle_stage.advance_to_embodied(before)
         if not lifecycle_stage.birth_is_new(before, after):
             return
@@ -365,11 +389,10 @@ class MaturationGateRunner:
         lifecycle_stage.write_stage(after)
         self._stage = after
 
-        # Unlock the gestation locus lock. The locus stays virtual; the actual
-        # sense source handoff from womb feed to Mundus is rendered by the feed
-        # and Mundus modules (this change only triggers the transition).
+        # Unlock the gestation locus lock. The unlock is attributed to gestation,
+        # not the operator; the locus stays virtual while the handoff continues.
         try:
-            write_desired_locus("virtual", locked=False, locked_by="operator")
+            write_desired_locus("virtual", locked=False, locked_by="gestation")
         except Exception:
             log.warning("could not unlock gestation locus after birth", exc_info=True)
 
