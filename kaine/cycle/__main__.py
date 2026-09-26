@@ -52,6 +52,7 @@ from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
+from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
 from kaine.experiment import (
@@ -373,11 +374,14 @@ def _merge_qdrant_secret(
 
 
 async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -> None:
-    """Poll the operator freeze control and pause/resume the cycle to match.
+    """Poll the freeze control and pause/resume the cycle to match.
 
     Runs independently of `run_forever`'s pause gate, so it can resume a frozen
-    cycle (a paused tick loop never reads its own resume). Freezing also pauses
-    live perception so no sensory data accumulates while the entity is suspended.
+    cycle (a paused tick loop never reads its own resume). A gestation-only
+    freeze pauses the cycle but keeps perception on so a local womb can prove
+    its return through real deliveries. Perception flags are reconciled on
+    every poll so adding or removing a non-gestation holder while already
+    paused is reflected immediately.
     """
     # C1: snapshot of the desired perception flags at freeze time, restored
     # on resume so a freeze/resume cycle does not leave the entity deaf/blind.
@@ -385,22 +389,50 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
     while not stop_event.is_set():
         try:
             control = read_control()
-            if control.frozen and not cycle.is_paused:
-                log.info(
-                    "freezing cycle (operator)%s",
-                    f": {control.reason}" if control.reason else "",
+            if control.stack:
+                others = any(
+                    entry.get("source") != GESTATION_FREEZE_SOURCE
+                    for entry in control.stack
                 )
-                await cycle.pause()
-                try:
-                    desired = read_desired()
-                    desired_snapshot = (
-                        bool(desired.audio_live_desired),
-                        bool(desired.video_live_desired),
+            else:
+                others = control.frozen and control.source != GESTATION_FREEZE_SOURCE
+
+            if control.frozen and not cycle.is_paused:
+                if others:
+                    log.info(
+                        "freezing cycle (operator)%s",
+                        f": {control.reason}" if control.reason else "",
                     )
-                    write_desired_audio(False)
-                    write_desired_video(False)
-                except Exception:
-                    log.debug("perception pause on freeze failed", exc_info=True)
+                else:
+                    log.info(
+                        "freezing cycle (gestation)%s",
+                        f": {control.reason}" if control.reason else "",
+                    )
+                await cycle.pause()
+
+            if control.frozen:
+                if others:
+                    if desired_snapshot is None:
+                        try:
+                            desired = read_desired()
+                            desired_snapshot = (
+                                bool(desired.audio_live_desired),
+                                bool(desired.video_live_desired),
+                            )
+                            write_desired_audio(False)
+                            write_desired_video(False)
+                        except Exception:
+                            log.debug("perception pause on freeze failed", exc_info=True)
+                else:
+                    if desired_snapshot is not None:
+                        try:
+                            write_desired_audio(desired_snapshot[0])
+                            write_desired_video(desired_snapshot[1])
+                        except Exception:
+                            log.warning("perception restore on resume failed", exc_info=True)
+                        desired_snapshot = None
+                        log.info("perception is back on so the womb can return")
+
             elif not control.frozen and cycle.is_paused:
                 log.info("resuming cycle (operator)")
                 await cycle.resume()
@@ -418,6 +450,7 @@ async def _freeze_watch_loop(cycle: CognitiveCycle, stop_event: asyncio.Event) -
             raise
         except Exception:
             log.warning("freeze-watch loop error", exc_info=True)
+
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=0.25)
         except asyncio.TimeoutError:
@@ -635,17 +668,6 @@ def _resolve_boot_stage(
     return resolved, True, fresh
 
 
-def _is_womb_feed_configured(config: dict[str, Any]) -> bool:
-    """True when the operator has configured a womb perception feed.
-
-    The womb feed mode is owned by ``gestational-womb-stimulus``; the
-    maturation gate only checks the configured mode and refuses to pin a
-    senseless locked locus when it is absent.
-    """
-    feed = config.get("perception_feed") or {}
-    return str(feed.get("mode", "off")).lower() == "womb"
-
-
 def _lifecycle_event(
     type: str,
     payload: dict[str, Any],
@@ -735,23 +757,9 @@ async def _boot_and_run(
     else:
         log.debug("developmental staging disabled; running un-staged")
 
-    # Gestation locus pinning / no-stimulus safety. If a womb feed is configured,
-    # the entity is confined to the virtual womb with an honest gestation lock. If
-    # no womb feed is configured, we do NOT silently pin a senseless locked locus;
-    # instead we warn loudly and repeatedly (the gate loop will re-emit).
-    if staging_enabled and stage_state.is_gestating:
-        if _is_womb_feed_configured(kaine_config):
-            from kaine import perception_state as _ps
-
-            _ps.write_desired_locus("virtual", locked=True, locked_by="gestation")
-            _ps.write_desired_audio(True)
-            _ps.write_desired_video(True)
-            log.info("gestation: pinned locus to virtual womb (locked by gestation)")
-        else:
-            log.warning(
-                "stage.gestation.no_stimulus: staging enabled but no womb feed "
-                "configured; the entity will not be confined to a senseless locus"
-            )
+    # Gestation locus pinning happens once the bus exists and a womb is proven
+    # ready (below): a configuration value alone never pins the entity to a
+    # senseless locked locus.
 
     # supervision_mode + (research-mode) gate_checks are evaluated ONCE in
     # main() — the authoritative, pre-event-loop gate — and threaded in here for
@@ -906,6 +914,44 @@ async def _boot_and_run(
         except Exception:
             log.warning("could not publish stage.gestation.started", exc_info=True)
 
+    async def _publish_lifecycle(type_: str, payload: dict[str, Any], salience: float) -> None:
+        await bus.publish(_lifecycle_event(type_, payload, salience=salience))
+
+    # Womb before spawn (maturation-gate-liveness 2.1): a gestating entity is
+    # never spawned without a womb that is ready. Hold here, before any module
+    # initializes, reporting stage.gestation.no_stimulus on every failed check.
+    womb_ready = False
+    if staging_enabled and stage_state.is_gestating:
+        from kaine.cycle.womb_watch import hold_until_womb_ready
+
+        hold_stop = asyncio.Event()
+        hold_loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                hold_loop.add_signal_handler(sig, hold_stop.set)
+            except NotImplementedError:
+                pass
+        try:
+            womb_ready = await hold_until_womb_ready(
+                kaine_config, bus, hold_stop, publish=_publish_lifecycle
+            )
+        finally:
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                try:
+                    hold_loop.remove_signal_handler(sig)
+                except NotImplementedError:
+                    pass
+        if not womb_ready:
+            log.info("shutdown requested while waiting for the womb; nothing was spawned")
+            await bus.close()
+            return 0
+        from kaine import perception_state as _ps
+
+        _ps.write_desired_locus("virtual", locked=True, locked_by="gestation")
+        _ps.write_desired_audio(True)
+        _ps.write_desired_video(True)
+        log.info("gestation: womb ready; pinned locus to the virtual womb (locked by gestation)")
+
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
     # in this function's scope: it is never published to the bus, written to
@@ -939,7 +985,7 @@ async def _boot_and_run(
         entity_clock=getattr(registry, "entity_clock", None),
         stage_state=stage_state,
         staging_enabled=staging_enabled,
-        womb_feed_configured=_is_womb_feed_configured(kaine_config),
+        womb_feed_configured=womb_ready,
     )
 
     cycle_cfg = kaine_config.get("cycle") or {}
@@ -1312,11 +1358,30 @@ async def _boot_and_run(
         if welfare_monitor is not None
         else None
     )
+    # Frozen time is not lived time: the runner subtracts the subjective time
+    # the cycle spends paused (maturation-gate-liveness 2.5).
+    gate_runner.set_paused_seconds_source(cycle.paused_subjective_seconds)
     gate_task = (
         asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
         if staging_enabled and stage_state.is_gestating
         else None
     )
+    # Womb loss (maturation-gate-liveness 2.2): freeze a gestating entity under
+    # its own holder when the womb stops, and release it when the womb returns.
+    womb_watch_task = None
+    if staging_enabled and stage_state.is_gestating:
+        from kaine.cycle.womb_watch import WombLossWatcher
+
+        womb_watch_task = asyncio.create_task(
+            WombLossWatcher(
+                kaine_config,
+                bus,
+                publish=_publish_lifecycle,
+                is_gestating=lambda: gate_runner.stage.is_gestating,
+                notify=caretaker.send_event if caretaker is not None else None,
+            ).run(stop_event),
+            name="cycle.womb_watch",
+        )
     caretaker_task = (
         asyncio.create_task(caretaker.run(stop_event), name="cycle.caretaker")
         if caretaker is not None
@@ -1456,7 +1521,7 @@ async def _boot_and_run(
                 pass  # expected: we just cancelled it
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
-        for monitor_task in (divergence_task, welfare_task, gate_task):
+        for monitor_task in (divergence_task, welfare_task, gate_task, womb_watch_task):
             if monitor_task is None:
                 continue
             if not monitor_task.done():
