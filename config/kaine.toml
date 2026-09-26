@@ -1556,6 +1556,21 @@ bystander_consent_attested = false
 archive_dir = "state/research/raw_bus_archive"
 retention_days = 30
 
+# In-process ignition log (film-aligned-ignition-log).
+#
+# Records every successful workspace broadcast with programme position, audio
+# delivered position, coalition member ids and timestamps, salience scores and
+# inhibition. No event payloads are recorded, so no conversation content,
+# transcripts, video frames or audio samples are persisted. The log is never on
+# the bus, never reaches any module, and is encrypted at rest when state
+# encryption is on. Its files are never auto-purged.
+#
+# SHIPS DISABLED. Enable it for studies that align workspace broadcasts to a
+# playlist programme (the module-ignition study).
+[ignition_log]
+enabled = false
+directory = "data/ignition"
+
 [logging]
 level = "INFO"
 

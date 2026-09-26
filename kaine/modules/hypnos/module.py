@@ -399,11 +399,11 @@ class Hypnos(BaseModule):
                 "hypnos: perception suspension (write_desired_locus) failed",
                 exc_info=True,
             )
-        # Pause the shared playlist clock. A missing clock (non-playlist
-        # modes) is an honest no-op, not a crash.
+        # Pause the shared playlist clock under the hypnos holder. A missing
+        # clock (non-playlist modes) is an honest no-op, not a crash.
         if self._playlist_clock is not None:
             try:
-                self._playlist_clock.pause()
+                self._playlist_clock.pause("hypnos")
             except Exception:
                 log.warning("hypnos: playlist clock pause failed", exc_info=True)
 
@@ -425,11 +425,12 @@ class Hypnos(BaseModule):
                 "hypnos: perception restore (write_desired_locus) failed",
                 exc_info=True,
             )
-        # Resume the shared playlist clock so the stimulus resumes with
-        # perception (the invariant: clock paused ⇔ perception suspended).
+        # Resume the shared playlist clock under the hypnos holder so the
+        # stimulus resumes with perception (the invariant: clock paused ⇔
+        # perception suspended).
         if self._playlist_clock is not None:
             try:
-                self._playlist_clock.resume()
+                self._playlist_clock.resume("hypnos")
             except Exception:
                 log.warning("hypnos: playlist clock resume failed", exc_info=True)
 
