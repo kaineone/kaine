@@ -68,12 +68,18 @@ FORCE=""
 NO_WIZARD=0
 RESEARCH=0
 RETRY_GPU=0
+EXTRAS="full"
 # Pins filled by host-aware wheel-index resolution for CUDA and ROCm.
 TORCH_PIN=""
 TV_PIN=""
 TA_PIN=""
 SELFTEST=""
 TA_UNAVAILABLE="false"
+# Audio-stack coherence / research checks read these after the torch branch,
+# so they must be initialised for the torch-free path under set -u.
+NEED_TORCHAUDIO=0
+INDEX_URL=""
+TORCH_CONSTRAINTS=""
 # Legacy fallback: used only when the host-resolved wheel-index probe
 # (kaine.wheel_index) fails; the cuda flavor branch below normally overrides it.
 # cu126 is the CUDA index with the widest driver compatibility that carries
@@ -109,6 +115,20 @@ while [[ $# -gt 0 ]]; do
     --no-wizard) NO_WIZARD=1; shift ;;
     --research) RESEARCH=1; shift ;;
     --retry-gpu) RETRY_GPU=1; shift ;;
+    --extras)
+      if [ "$#" -lt 2 ]; then
+        echo "install.sh: --extras requires a comma-separated list" >&2
+        exit 2
+      fi
+      EXTRAS="$2"
+      shift 2
+      continue
+      ;;
+    --extras=*)
+      EXTRAS="${1#--extras=}"
+      shift
+      continue
+      ;;
     --print-torch-spec)
       printf '%s\n' "$TORCH_SPEC"
       exit 0
@@ -126,6 +146,7 @@ bash scripts/install.sh --research # ALSO install the perception extras (.[perce
 bash scripts/install.sh --no-wizard # skip the interactive wizard
 bash scripts/install.sh --print-torch-spec # print the resolved torch spec and exit
 bash scripts/install.sh --retry-gpu # delete the GPU self-test fallback marker and retry the resolved CUDA index
+bash scripts/install.sh --extras core,memory # install a chosen extra set instead of full
 EOF
       exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -305,9 +326,15 @@ else
   echo "==> no accelerator detected: picking CPU wheels"
 fi
 
-# Audio-stack coherence: if torchaudio is already installed and this is not a
-# --research run, keep the audio stack coherent on every flavor. The resolver
-# is asked for a torchaudio pin whenever one is needed.
+NEED_TORCH=0
+if [[ ",${EXTRAS}," == *",core,"* ]] || [[ ",${EXTRAS}," == *",full,"* ]]; then
+  NEED_TORCH=1
+fi
+
+if [[ "$NEED_TORCH" -eq 1 ]]; then
+  # Audio-stack coherence: if torchaudio is already installed and this is not a
+  # --research run, keep the audio stack coherent on every flavor. The resolver
+  # is asked for a torchaudio pin whenever one is needed.
 NEED_TORCHAUDIO=0
 if [[ "$RESEARCH" -eq 0 ]] && _package_installed torchaudio; then
   NEED_TORCHAUDIO=1
@@ -785,12 +812,16 @@ if _package_installed torchaudio; then
   fi
 fi
 
-TORCH_CONSTRAINTS="$VENV_DIR/kaine-torch-constraints.txt"
-pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
-echo "==> pinned torch stack: $pinned"
+  TORCH_CONSTRAINTS="$VENV_DIR/kaine-torch-constraints.txt"
+  pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
+  echo "==> pinned torch stack: $pinned"
 
-echo "==> installing the rest of KAINE (editable, with test deps)"
-"$PIP" install --quiet -c "$TORCH_CONSTRAINTS" -e ".[test]"
+  echo "==> installing the rest of KAINE (editable, with test deps and extras: $EXTRAS)"
+  "$PIP" install --quiet -c "$TORCH_CONSTRAINTS" -e ".[test,$EXTRAS]"
+else
+  echo "==> installing the rest of KAINE (editable, with test deps and extras: $EXTRAS) (no torch)"
+  "$PIP" install --quiet -e ".[test,$EXTRAS]"
+fi
 
 # Audio-stack coherence: a pre-existing torchaudio on any flavor must follow
 # the selected torch stack when --research is not set.
@@ -803,18 +834,21 @@ fi
 # --research: ALSO provision the perception extras (audio+vision incl. PyAV) so
 # the reproducible perception feed can decode playlist media (cv2 video + av
 # audio) on a fresh research machine. The default install stays lean.
-if [[ "$RESEARCH" -eq 1 ]]; then
-  _install_torchaudio research "$INDEX_URL" "$TA_PIN" "$TORCH_CONSTRAINTS" "$FORCE_REINSTALL_FLAG"
-  pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
-  echo "==> pinned torch stack: $pinned"
-  echo "==> [--research] installing perception extras: pip install -c $TORCH_CONSTRAINTS -e .[perception]"
-  echo "    (audio: sounddevice, webrtcvad, funasr, librosa, av;  vision: opencv-python-headless)"
-  "$PIP" install -c "$TORCH_CONSTRAINTS" -e ".[perception]"
-  echo "==> [--research] perception extras installed (playlist audio/video decode ready)"
+if [[ "$NEED_TORCH" -eq 1 ]]; then
+  if [[ "$RESEARCH" -eq 1 ]]; then
+    _install_torchaudio research "$INDEX_URL" "$TA_PIN" "$TORCH_CONSTRAINTS" "$FORCE_REINSTALL_FLAG"
+    pinned=$(write_torch_constraints "$TORCH_CONSTRAINTS")
+    echo "==> pinned torch stack: $pinned"
+    echo "==> [--research] installing perception extras: pip install -c $TORCH_CONSTRAINTS -e .[perception]"
+    echo "    (audio: sounddevice, webrtcvad, funasr, librosa, av;  vision: opencv-python-headless)"
+    "$PIP" install -c "$TORCH_CONSTRAINTS" -e ".[perception]"
+    echo "==> [--research] perception extras installed (playlist audio/video decode ready)"
+  fi
 fi
 
-echo "==> verifying"
-"$PY" - <<'PY'
+if [[ "$NEED_TORCH" -eq 1 ]]; then
+  echo "==> verifying"
+  "$PY" - <<'PY'
 import torch
 from kaine.hardware import describe_host
 import json
@@ -823,7 +857,7 @@ print("cuda.is_available", torch.cuda.is_available())
 print(json.dumps(describe_host(), indent=2, default=str))
 PY
 
-"$PY" - <<'PY'
+  "$PY" - <<'PY'
 import sys
 from kaine.torch_stack import check_torch_stack
 problems = check_torch_stack()
@@ -831,6 +865,27 @@ for p in problems:
     print("TORCH STACK MISMATCH:", p, file=sys.stderr)
 sys.exit(1 if problems else 0)
 PY
+else
+  echo "==> verifying extras support (no torch requested)"
+  "$PY" - "$PWD" <<'PY'
+import os, sys
+from kaine.config import load_runtime_config
+from kaine.extras import check, format_missing
+# The repository root: config/kaine.toml, profiles and the operator overlay
+# resolve from here exactly as they do at boot. A config that cannot load fails
+# the verification; it is never replaced by an empty one.
+os.chdir(sys.argv[1])
+config = load_runtime_config()
+missing = check(config)
+errors = [m for m in missing if m.severity == "error"]
+if errors:
+    print(format_missing(missing), file=sys.stderr)
+    sys.exit(1)
+for m in missing:
+    print(f"note: {m.module} can use {m.import_name!r} (extra {m.extra!r}); not installed")
+print("extras support OK")
+PY
+fi
 
 echo "==> install complete"
 

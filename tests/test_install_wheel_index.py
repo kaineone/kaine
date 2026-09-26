@@ -39,8 +39,8 @@ shim (which must exist, to shadow a real binary on GPU-equipped test hosts),
 while absence of a presence-detected tool is simulated by omitting the shim
 entirely; the module skips itself on hosts that carry the real ROCm/XPU
 tooling, because no shim can hide a real binary.  The real interpreter runs the
-wheel-index resolver: the ``python3``/``python`` shims delegate everything to the
-real interpreter except ``-m venv`` (a skeleton virtualenv is fabricated —
+wheel-index resolver: the ``python3``/``python`` shims delegate everything to
+the real interpreter except ``-m venv`` (a skeleton virtualenv is fabricated —
 no ensurepip, no network, no real venv anywhere), ``-m pip`` (routed to the pip
 shim, so it absorbs every install attempt), and ``-m kaine.wheel_index``
 (which can be forced to mark the resolved stack as requiring a GPU self-test
@@ -922,12 +922,56 @@ def test_install_proceeds_past_constraints_to_editable_install(tmp_path: Path) -
     proc, pip_log = _run_install(tmp_path, ["--cpu", "--no-wizard"])
     for line in pip_log.splitlines():
         tokens = line.split()
-        if "-e" in tokens and ".[test]" in tokens:
+        if "-e" in tokens and any(t.startswith(".[test") for t in tokens):
             return
     pytest.fail(
-        "no recorded pip invocation contained both -e and '.[test]'"
+        "no recorded pip invocation contained both -e and an editable test install"
         + _context(proc, pip_log)
     )
+
+
+def _assert_no_torch_and_nexus_editable(
+    proc: subprocess.CompletedProcess, pip_log: str
+) -> None:
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        for token in tokens:
+            if token == "torch" or (
+                token.startswith("torch")
+                and not token.startswith("torchaudio")
+                and any(c in token for c in "=<>!~")
+            ):
+                pytest.fail(
+                    f"recorded pip line installs torch: {line!r}"
+                    + _context(proc, pip_log)
+                )
+
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        if "-e" in tokens and any(t == ".[test,nexus]" for t in tokens):
+            break
+    else:
+        pytest.fail(
+            "no recorded editable install contained '.[test,nexus]'"
+            + _context(proc, pip_log)
+        )
+
+    assert "UnboundLocalError" not in proc.stderr, _context(proc, pip_log)
+    assert "unbound variable" not in proc.stderr, _context(proc, pip_log)
+
+
+def test_install_sh_torch_free_extras_nexus_does_not_install_torch(tmp_path: Path) -> None:
+    proc, pip_log = _run_install(
+        tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.sh"
+    )
+    _assert_no_torch_and_nexus_editable(proc, pip_log)
+
+
+def test_install_py_torch_free_extras_nexus_does_not_install_torch(tmp_path: Path) -> None:
+    proc, pip_log = _run_install(
+        tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.py"
+    )
+    _assert_no_torch_and_nexus_editable(proc, pip_log)
 
 
 def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path) -> None:
@@ -1283,7 +1327,8 @@ def test_print_torch_spec_matches_pyproject() -> None:
     import tomllib
 
     with open(REPO_ROOT / "pyproject.toml", "rb") as f:
-        deps = tomllib.load(f)["project"]["dependencies"]
+        data = tomllib.load(f)
+    deps = data["project"]["optional-dependencies"]["core"]
     operators = ("~=", "==", "!=", "<=", ">=", ">", "<")
     expected = next(
         dep

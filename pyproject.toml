@@ -14,18 +14,8 @@ dependencies = [
     "redis>=5,<6",
     "pydantic>=2.6,<3",
     "psutil>=5.9,<7",
-    "pynvml>=13.0.1,<14",
     "numpy>=2.4.6,<3",
-    "torch>=2.9.1,<2.15",
-    "ncps>=1.0.1,<2",
-    "transformers>=5.13.1,<6",
-    "Pillow>=10,<12",
-    "qdrant-client>=1.19.1,<2",
-    "sentence-transformers>=2.7,<6",
     "httpx>=0.28.1,<1",
-    "fastapi>=0.139.0,<1",
-    "uvicorn[standard]>=0.51.0,<1",
-    "jinja2>=3.1.6,<4",
     # AES-256-GCM encryption-at-rest for persisted cognitive state
     # (kaine/security/crypto.py). Imported lazily, only when
     # [security.state_encryption].enabled = true.
@@ -33,6 +23,35 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+core = [
+    "torch>=2.9.1,<2.15",
+    "ncps>=1.0.1,<2",
+]
+memory = [
+    "sentence-transformers>=2.7,<6",
+    "qdrant-client>=1.19.1,<2",
+]
+memory-edge = [
+    "sqlite-vec>=0.1,<1",
+]
+nexus = [
+    "fastapi>=0.139.0,<1",
+    "uvicorn[standard]>=0.51.0,<1",
+    "jinja2>=3.1.6,<4",
+]
+nvidia = [
+    "pynvml>=13.0.1,<14",
+]
+# Topos: the vision encoder (transformers, Pillow) and the live camera / playlist
+# video reader (OpenCV). Lazy-imported.
+vision = [
+    "opencv-python-headless>=5.0.0.93,<6",
+    "transformers>=5.13.1,<6",
+    "Pillow>=10,<12",
+]
+full = [
+    "kaine[core,memory,memory-edge,nexus,nvidia,vision,audio,reasoning,worldmodel,oscillator]",
+]
 test = [
     "pytest>=8",
     "pytest-asyncio>=1.4.0",
@@ -58,11 +77,6 @@ audio = [
     # Required only if [audition].prosody_enabled = true. Lazy-imported.
     "librosa>=0.10,<1",
     "av>=12,<15",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
-]
-# Live camera (LiveCamera in kaine/modules/topos/live.py).
-# Required only if [topos].capture_enabled = true. Lazy-imported.
-vision = [
-    "opencv-python-headless>=5.0.0.93,<6",
 ]
 # Temporally-native InternVideo-Next clip encoder for Topos
 # (topos-temporal-video-encoder). Required only when
@@ -168,6 +182,11 @@ select = [
 ignore = [
     "E501",  # line too long — project already allows long lines in places
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# The Nexus __main__ dependency check deliberately runs before the heavy
+# FastAPI/uvicorn imports so the module can fail fast on a slim host.
+"kaine/nexus/__main__.py" = ["E402"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

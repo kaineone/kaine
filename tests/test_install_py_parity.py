@@ -30,8 +30,12 @@ def _load_install_module() -> ...:
 
 def _torch_spec_from_pyproject(repo_root: Path) -> str:
     with open(repo_root / "pyproject.toml", "rb") as f:
-        deps = tomllib.load(f).get("project", {}).get("dependencies", [])
-    for dep in deps:
+        project = tomllib.load(f).get("project", {})
+    core = (project.get("optional-dependencies") or {}).get("core") or []
+    for dep in core:
+        if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep):
+            return dep
+    for dep in project.get("dependencies", []):
         if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep):
             return dep
     raise RuntimeError("no torch dependency found in pyproject.toml")

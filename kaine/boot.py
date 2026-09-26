@@ -1982,6 +1982,22 @@ def build_registry(
     """
     install_state_encryption(kaine_config)
     toggles = kaine_config.get("modules") or {}
+
+    from kaine.extras import check, format_missing
+
+    missing = check(kaine_config)
+    errors = [m for m in missing if m.severity == "error"]
+    if errors:
+        raise ConfigurationError(format_missing(missing))
+    for m in missing:
+        log.warning(
+            "Module %s needs %r (extra %r) but it is not installed; "
+            "degrading gracefully.",
+            m.module,
+            m.import_name,
+            m.extra,
+        )
+
     registry = ModuleRegistry()
     # One shared subjective clock for the whole mind. Built here from
     # [cycle].time_scale (default 1.0 = real-time) unless the caller already
