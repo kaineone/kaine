@@ -352,8 +352,14 @@ class _VerifiedHostHTTPSConnection(HTTPSConnection):
 
     def connect(self) -> None:
         sock = socket.create_connection((self.host, self.port), self.timeout)
-        context = ssl.create_default_context()
-        self.sock = context.wrap_socket(sock, server_hostname=self._server_hostname)
+        self.sock = _tls_context().wrap_socket(sock, server_hostname=self._server_hostname)
+
+
+def _tls_context() -> ssl.SSLContext:
+    """Certificate- and hostname-verifying context that refuses TLS below 1.2."""
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
 
 
 def send_http(

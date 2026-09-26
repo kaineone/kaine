@@ -191,9 +191,24 @@ def test_build_notice_rejects_unknown_event():
 
 
 def test_build_notice_rejects_free_text_argument():
+    """build_notice has no free-text parameter, so nothing from the entity's
+    mind can be smuggled into a notice. The keyword is passed dynamically on
+    purpose: the call is expected to fail."""
     cfg = CaretakerConfig()
+    extra = {"free_text": "hello"}
     with pytest.raises(TypeError):
-        build_notice("starting_unattended", cfg, free_text="hello")
+        build_notice("starting_unattended", cfg, **extra)
+
+
+def test_tls_context_refuses_old_protocols():
+    import ssl
+
+    from kaine.cycle.caretaker import _tls_context
+
+    context = _tls_context()
+    assert context.minimum_version >= ssl.TLSVersion.TLSv1_2
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
 
 
 def test_render_text_names_failed_conditions():
