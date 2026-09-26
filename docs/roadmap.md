@@ -25,6 +25,7 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-25 | adaptive-access-rate |
 | 2026-09-25 | fix-lingua-realization-audit |
 | 2026-09-25 | torch-stack-coherence |
 | 2026-09-25 | paracosmic-connector (retired unbuilt; superseded by body-agnostic-embodiment-adapters) |
