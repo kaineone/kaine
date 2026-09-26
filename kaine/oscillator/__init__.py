@@ -23,7 +23,9 @@ from kaine.oscillator.module_oscillator import (
     FakeOscillator,
     ModuleOscillator,
     OscillatorProtocol,
+    SelfRhythmOscillator,
     make_oscillator,
+    make_self_rhythm_oscillator,
     neutral_phase,
     snntorch_available,
 )
@@ -33,7 +35,9 @@ __all__ = [
     "FakeOscillator",
     "ModuleOscillator",
     "OscillatorProtocol",
+    "SelfRhythmOscillator",
     "make_oscillator",
+    "make_self_rhythm_oscillator",
     "neutral_phase",
     "snntorch_available",
 ]

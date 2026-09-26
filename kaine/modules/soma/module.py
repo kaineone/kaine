@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections import deque
-from typing import Any, ClassVar, Optional
+from typing import Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -74,8 +75,8 @@ class Soma(BaseModule):
         # --- Developmental warm-up (soma-coldstart-regulation-warmup) ---
         # While the interoceptive forward model is still learning this host's
         # substrate baseline, WITHHOLD the punitive allostatic actions its
-        # (untrained) prediction error would trigger and DAMPEN its inflation of
-        # the fatigue accumulator. The prediction-error signal itself is never
+        # (untrained) prediction error would trigger and DAMPEN its inflation
+        # of the fatigue accumulator. The prediction-error signal itself is never
         # altered, and the absolute [soma.thresholds] limits are never gated
         # (see tick_once). Grounded in the paper's warmed-up-signal logic.
         regulation_warmup_enabled: bool = True,
@@ -91,6 +92,12 @@ class Soma(BaseModule):
         # rest of the mind. Defaults to a real-time clock so standalone use and
         # the existing tests are behavior-identical.
         entity_clock: Optional[EntityClock] = None,
+        # --- Self-rhythm oscillator (endogenous beat) -----------------------
+        # The entity's own rhythm, preserved with the mind. It is separate from
+        # the per-module coalition oscillator used by Syneidesis.
+        self_rhythm: Any | None = None,
+        self_rhythm_step_hz: float = 20.0,
+        maternal_drive: Callable[[], float] | None = None,
     ) -> None:
         super().__init__(bus)
         if read_interval_s <= 0:
@@ -99,6 +106,8 @@ class Soma(BaseModule):
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
             raise ValueError("alert_salience must be in [0, 1]")
+        if not math.isfinite(self_rhythm_step_hz) or self_rhythm_step_hz <= 0:
+            raise ValueError("self_rhythm_step_hz must be finite and positive")
         # When no reader is injected, size the latency-averaging window from
         # config. An injected reader (e.g. in tests) brings its own window.
         self._reader: MetricsReader = reader or SystemMetricsReader(
@@ -176,6 +185,12 @@ class Soma(BaseModule):
 
         # --- Hypnos event consumer ---
         self._hypnos_cursor: str = "0"
+
+        # --- Self-rhythm state ---
+        self._self_rhythm = self_rhythm
+        self._self_rhythm_step_hz = float(self_rhythm_step_hz)
+        self._maternal_drive = maternal_drive
+        self._self_rhythm_own_drive = 0.0
 
     # ------------------------------------------------------------------
     # Developmental warm-up (soma-coldstart-regulation-warmup)
@@ -262,6 +277,12 @@ class Soma(BaseModule):
                 self._hypnos_event_loop(), name=f"{self.name}-hypnos-consumer"
             )
         )
+        if self._self_rhythm is not None:
+            self._tasks.append(
+                asyncio.create_task(
+                    self._self_rhythm_loop(), name=f"{self.name}-self-rhythm"
+                )
+            )
 
     async def shutdown(self) -> None:
         await super().shutdown()
@@ -269,6 +290,15 @@ class Soma(BaseModule):
             await self._reader.shutdown()
         except Exception:
             log.warning("metrics reader shutdown failed", exc_info=True)
+
+    def self_rhythm_state(self) -> tuple[float, float] | None:
+        """Return (phase, amplitude) of the self-rhythm oscillator, or None."""
+        if self._self_rhythm is None:
+            return None
+        try:
+            return (self._self_rhythm.phase(), self._self_rhythm.amplitude())
+        except Exception:
+            return None
 
     async def tick_once(self) -> dict[str, Any]:
         """Read metrics, evaluate, update forward model / fatigue / regulation, publish."""
@@ -286,6 +316,19 @@ class Soma(BaseModule):
             feature_dim=DEFAULT_FEATURE_DIM,
             cycle_latency_target_ms=self._cycle_latency_target_ms,
         )
+
+        # --- Self-rhythm interoception (fills zero-padded feature slots) ---
+        # slots 4..6 keep the width at 8 for the wetware interoceptive model;
+        # sin/cos avoid a jump where the phase wraps. slot 7 stays 0.0.
+        if self._self_rhythm is not None:
+            rhythm_state = self.self_rhythm_state()
+            if rhythm_state is not None:
+                phase, amplitude = rhythm_state
+                feature_vec[4] = 0.5 + 0.5 * math.sin(phase)
+                feature_vec[5] = 0.5 + 0.5 * math.cos(phase)
+                feature_vec[6] = min(1.0, 2.0 * amplitude)
+                # slot 7 intentionally stays 0.0
+
         if self._in_hypnos:
             self._forward_model.suspended = True
         else:
@@ -398,6 +441,7 @@ class Soma(BaseModule):
         )
         salience = self._alert_salience if alert.is_alert else error_salience
         await self.publish("soma.report", payload, salience=salience)
+        self._self_rhythm_own_drive = float(salience)
 
         # --- Publish soma.fatigue if threshold newly crossed ---
         if fatigue_crossed and not self._fatigue_threshold_emitted:
@@ -511,6 +555,36 @@ class Soma(BaseModule):
             return subjective_s
         return subjective_s / scale
 
+    async def _self_rhythm_loop(self) -> None:
+        """Step the self-rhythm oscillator at its own subjective cadence."""
+        try:
+            while not self._stopped.is_set():
+                external: float | None = None
+                if self._maternal_drive is not None:
+                    try:
+                        external = float(self._maternal_drive())
+                    except Exception:
+                        log.debug("maternal drive provider failed; using None", exc_info=True)
+                        external = None
+                try:
+                    self._self_rhythm.step(
+                        self._self_rhythm_own_drive, external_drive=external
+                    )
+                except Exception:
+                    log.debug("self-rhythm step failed", exc_info=True)
+                try:
+                    await asyncio.wait_for(
+                        self._stopped.wait(),
+                        timeout=self._subjective_poll_timeout(
+                            1.0 / self._self_rhythm_step_hz
+                        ),
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                break
+        except asyncio.CancelledError:
+            raise
+
     async def _cycle_consumer_loop(self) -> None:
         try:
             while not self._stopped.is_set():
@@ -591,6 +665,8 @@ class Soma(BaseModule):
             "forward_model": self._forward_model.state_dict(),
             "fatigue": self._fatigue.state_dict(),
         }
+        if self._self_rhythm is not None:
+            state["self_rhythm"] = self._self_rhythm.serialize()
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
@@ -608,3 +684,8 @@ class Soma(BaseModule):
                 self._fatigue.load_state_dict(state["fatigue"])
             except Exception:
                 log.warning("failed to restore fatigue state", exc_info=True)
+        if self._self_rhythm is not None and "self_rhythm" in state:
+            try:
+                self._self_rhythm.deserialize(state["self_rhythm"])
+            except Exception:
+                log.warning("failed to restore self-rhythm state", exc_info=True)

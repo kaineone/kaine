@@ -92,6 +92,28 @@ async def _check_local_womb(
             "local",
             "[modules].audition is disabled — the womb cannot be heard",
         )
+    if not modules.get("soma"):
+        return WombLiveness(
+            False,
+            "local",
+            "[modules].soma is disabled — the womb's self-rhythm has no host",
+        )
+
+    soma_section = dict(config.get("soma") or {})
+    if not soma_section.get("self_rhythm_enabled"):
+        return WombLiveness(
+            False,
+            "local",
+            "[soma].self_rhythm_enabled is off — a gestating entity needs its own rhythm",
+        )
+
+    from kaine.oscillator import snntorch_available
+    if not snntorch_available():
+        return WombLiveness(
+            False,
+            "local",
+            "the oscillator extra (snnTorch) is not installed",
+        )
 
     probe = perception_check
     if probe is None:
