@@ -206,3 +206,48 @@ async def test_a_failed_result_write_still_releases_the_freeze(tmp_path, monkeyp
     await watcher.step()  # the same request must not be handled again
 
     assert tuple(read_control(watcher._control_path).stack) == ()
+
+
+@pytest.mark.asyncio
+async def test_watcher_retries_failed_freeze_release(tmp_path, monkeypatch):
+    import kaine.cycle.preserve_watch as pw
+
+    real_pop_freeze = pw.pop_freeze
+    call_count = 0
+
+    def flaky_pop_freeze(path=None, source=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise OSError("cannot release freeze")
+        return real_pop_freeze(path, source=source)
+
+    monkeypatch.setattr(pw, "pop_freeze", flaky_pop_freeze)
+
+    watcher = _make_watcher(
+        tmp_path,
+        preserve=lambda reason: _FakeResult(ok=True, preservation_id="pid1"),
+    )
+
+    req1 = write_request_for_test(tmp_path, "first", stop=False)
+    await watcher.step()
+
+    assert watcher._last_handled_id == req1.request_id
+    assert tuple(read_control(watcher._control_path).stack) != ()
+    assert watcher._release_pending is True
+
+    req2 = write_request_for_test(tmp_path, "second", stop=False)
+    await watcher.step()
+
+    assert watcher._release_pending is False
+    assert tuple(read_control(watcher._control_path).stack) == ()
+    assert watcher._last_handled_id == req1.request_id
+
+    await watcher.step()
+
+    assert watcher._last_handled_id == req2.request_id
+    result = read_result(watcher._result_path)
+    assert result is not None
+    assert result["request_id"] == req2.request_id
+    assert result["ok"] is True
+    assert tuple(read_control(watcher._control_path).stack) == ()

@@ -13,11 +13,9 @@ import pytest_asyncio
 from kaine.cycle.research_gate import _NullBus
 from kaine.cycle.revive_boot import (
     ReviveRefused,
-    apply_stage,
     prepare_revive,
     revive_into,
 )
-from kaine.lifecycle import stage
 from kaine.lifecycle.manager import ForkManager
 from kaine.modules.eidolon import Eidolon, SelfModel
 from kaine.modules.registry import ModuleRegistry
@@ -77,26 +75,8 @@ async def test_prepare_revive_reads_preservation_id(tmp_path, eidolon):
     assert plan.bundle == bundle
 
 
-@pytest.mark.asyncio
-async def test_apply_stage_writes_stage_and_returns_true(tmp_path, eidolon, monkeypatch):
-    bundle = await _make_bundle(tmp_path, eidolon)
-    plan = prepare_revive(bundle)
-    stage_path = tmp_path / "boot-stage.json"
-    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
-    # The bundle was preserved without a stage file; give the plan one.
-    plan = _replace_stage(plan, {"stage": "embodied", "lived_seconds": 12.0})
-    assert apply_stage(plan) is True
-    written = json.loads(stage_path.read_text())
-    assert written["stage"] == "embodied"
 
 
-@pytest.mark.asyncio
-async def test_apply_stage_returns_false_without_stage(tmp_path, eidolon):
-    bundle = await _make_bundle(tmp_path, eidolon)
-    plan = prepare_revive(bundle)
-    # Force a None stage even if a stage file existed during preservation.
-    plan = _replace_stage(plan, None)
-    assert apply_stage(plan) is False
 
 
 @pytest.mark.asyncio

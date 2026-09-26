@@ -151,8 +151,25 @@ class PreserveRequestWatcher:
         if isinstance(prior, dict):
             self._last_handled_id = prior.get("request_id")
 
+        # A failed freeze release is retried at the start of the next step.
+        self._release_pending = False
+
     async def step(self) -> None:
-        """Handle one poll of the request file."""
+        """Handle one poll of the request file.
+
+        If a prior freeze release failed, retry it first. If it fails again,
+        defer request handling to the next poll; once it succeeds, continue the
+        poll loop and let the next step handle any new request.
+        """
+        if self._release_pending:
+            try:
+                pop_freeze(self._control_path, source=PRESERVE_FREEZE_SOURCE)
+            except Exception:
+                log.error("could not release pending preserve freeze", exc_info=True)
+                return
+            self._release_pending = False
+            return
+
         req = read_request(self._request_path)
         if req is None:
             return
@@ -203,9 +220,19 @@ class PreserveRequestWatcher:
             log.error("could not write the preserve result", exc_info=True)
         finally:
             if ok and req.stop:
-                self._request_stop()
+                try:
+                    self._request_stop()
+                except Exception:
+                    log.error(
+                        "could not request stop after preserve",
+                        exc_info=True,
+                    )
             else:
-                pop_freeze(self._control_path, source=PRESERVE_FREEZE_SOURCE)
+                try:
+                    pop_freeze(self._control_path, source=PRESERVE_FREEZE_SOURCE)
+                except Exception:
+                    log.error("could not release preserve freeze", exc_info=True)
+                    self._release_pending = True
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """Poll until ``stop_event`` is set."""

@@ -3,9 +3,9 @@
 ## Revive order
 
 1. Parse `--revive <bundle>`. Read the bundle's members (`_read_bundle_members`, which decrypts when state encryption is on). A missing or unreadable bundle exits 7.
-2. If the bundle carries `stage.json`, write it to the stage path BEFORE `_resolve_boot_stage` runs, so gestation, the womb hold and the gate all see the preserved stage. A bundle without a stage member (an older bundle) leaves the stage file untouched and logs that.
+2. If the bundle carries `stage.json`, its stage is handed to `_resolve_boot_stage` in memory, so gestation, the womb hold, the womb clock (through `build_registry(boot_stage=...)`) and the gate all see the preserved stage. The stage file is NOT written yet. A bundle without a stage member (an older bundle) resolves the stage from the stage file as today and logs that.
 3. Build the registry and initialise the modules, as the research gate's self-check does. Initialise first, because Eidolon's `initialize()` reloads its disk file; a revive before it would be overwritten.
-4. `await revive(bundle, registry)`. A `ReviveError` shuts the modules down and exits 7. A start that ends before the revive lands (a refused revive, a plugin error, any boot failure) restores the stage file to what it was before step 2, so the next start never pairs the bundle's stage with the previous individual's state.
+4. `await revive(bundle, registry)`, then write the bundle's stage to the stage file; only then has the revive landed. A `ReviveError`, or a failure to write the stage file, shuts the modules down and exits 7. Because the stage file is written only after the revive lands, a start that ends earlier, for any reason including SIGTERM, SIGKILL or power loss, leaves it exactly as it was. A crash between the revive and the stage write can leave module stores (for example memories upserted into Qdrant) partly holding the bundle's individual; running the same revive again completes it, since imports upsert.
 5. Log the modules enabled now but not captured by the bundle as "new faculty, starting fresh". That is the study's add-a-module step.
 6. Start the cycle, and record `revived_from` in `runtime.json` and the run context.
 
@@ -18,7 +18,7 @@ Modules start their background loops in `initialize()`, so a loop can run briefl
   1. `push_freeze(source="preserve")`, then wait for the freeze-watch loop to pause the cycle, up to 5 s;
   2. `preserve_live(registry, reason=..., label="operator", require_encryption=[preservation].require_encryption, ...)`;
   3. write `state/cycle/preserve_result.json`: `{request_id, ok, preservation_id, bundle, error}`;
-  4. without `stop`, `pop_freeze(source="preserve")`; with `stop`, set the stop event and leave the freeze in place until exit.
+  4. without `stop`, `pop_freeze(source="preserve")`; with `stop`, set the stop event and leave the freeze in place until exit. If releasing the freeze fails, the watcher retries the release on every poll until it succeeds, and handles no new request meanwhile.
 
   A request id is handled once; the result file records it.
 - **Failure.** A failed preservation writes `ok: false` with the error and never stops the entity. The freeze is released, and the operator decides.

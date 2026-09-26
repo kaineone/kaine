@@ -6,11 +6,14 @@
 The operator revive order is:
 
   1. Parse ``--revive <bundle>``. Read the bundle's members.
-  2. If the bundle carries ``stage.json``, write it to the stage path *before*
-     ``_resolve_boot_stage`` runs, so gestation, the womb hold and the gate
-     all see the preserved stage.
+  2. If the bundle carries ``stage.json``, its stage is handed to
+     ``_resolve_boot_stage`` in memory, so gestation, the womb hold, the womb
+     clock and the gate all see the preserved stage. The stage file is NOT
+     written yet. A bundle without a stage member resolves the stage from the
+     stage file as today and logs that.
   3. Build the registry and initialise the modules.
-  4. ``await revive(bundle, registry)``.
+  4. ``await revive(bundle, registry)``, then write the bundle's stage to the
+     stage file; only then has the revive landed.
   5. Log any modules enabled now but not captured by the bundle as "new
      faculty, starting fresh".
   6. Start the cycle, recording ``revived_from`` in ``runtime.json`` and the
@@ -21,14 +24,13 @@ reloads its disk file; a revive before it would be overwritten. Background
 loops started during ``initialize()`` run briefly on fresh state before the
 revive lands, but the cognitive cycle (and so the workspace) has not started,
 so this is safe. This is the same order the research gate's self-check already
-relies on.
+relies on. A crash or interruption before the stage file is written leaves the
+stage file exactly as it was; running the same revive again completes it.
 """
 from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -110,27 +112,6 @@ def prepare_revive(bundle: str | Path) -> RevivePlan:
     )
 
 
-def apply_stage(plan: RevivePlan, stage_path: Path | None = None) -> bool:
-    """Write the bundle's preserved stage to the stage file.
-
-    Returns True when a stage was written, False when the bundle carries no
-    stage (the existing stage file is left untouched in that case).
-    """
-    if plan.stage is None:
-        log.info("bundle carries no stage; stage file left as is")
-        return False
-
-    target = stage_path
-    if target is None:
-        from kaine.lifecycle import stage as _stage_module
-
-        target = _stage_module.STAGE_PATH
-
-    state = StageState.from_dict(plan.stage)
-    write_stage(state, target)
-    return True
-
-
 async def revive_into(plan: RevivePlan, registry: Any) -> list[str]:
     """Restore ``plan.bundle`` into ``registry`` and report new faculty.
 
@@ -156,19 +137,23 @@ async def revive_into(plan: RevivePlan, registry: Any) -> list[str]:
 
 
 class ReviveSession:
-    """A single operator revive session: stage write, rollback, and registry revive."""
+    """A single operator revive session: in-memory stage and registry revive."""
 
     def __init__(self, plan: RevivePlan, stage_path: Path | None = None) -> None:
         self._plan = plan
         self._stage_path = stage_path
-        self._target: Path | None = None
-        self._prior_bytes: bytes | None = None
-        self._wrote = False
         self._landed = False
 
     @property
     def plan(self) -> RevivePlan:
         return self._plan
+
+    @property
+    def stage_state(self) -> StageState | None:
+        """The bundle's preserved stage, if any, validated but not yet written."""
+        if self._plan.stage is None:
+            return None
+        return StageState.from_dict(self._plan.stage)
 
     @property
     def landed(self) -> bool:
@@ -178,67 +163,28 @@ class ReviveSession:
     def revived_from(self) -> str:
         return self._plan.preservation_id or self._plan.bundle.name
 
-    def apply(self) -> None:
-        """Write the bundle's stage to the stage file, remembering prior bytes."""
-        target = self._stage_path
-        if target is None:
-            from kaine.lifecycle import stage as _stage_module
-
-            target = _stage_module.STAGE_PATH
-
-        self._target = target
-        self._prior_bytes = target.read_bytes() if target.exists() else None
-        self._wrote = apply_stage(self._plan, target)
-
     async def revive(self, registry: Any) -> list[str]:
-        """Revive the bundle into the registry and mark the session as landed."""
+        """Revive the bundle into ``registry`` and write the stage on success.
+
+        Raises :class:`ReviveRefused` if the revive itself fails or if the
+        stage file cannot be written. Only once both the registry revive and
+        the stage write succeed is the session considered landed.
+        """
         new = await revive_into(self._plan, registry)
+
+        if self._plan.stage is not None:
+            target = self._stage_path
+            if target is None:
+                from kaine.lifecycle import stage as _stage_module
+
+                target = _stage_module.STAGE_PATH
+
+            try:
+                write_stage(StageState.from_dict(self._plan.stage), target)
+            except Exception as exc:
+                raise ReviveRefused(
+                    f"could not write the stage file: {type(exc).__name__}: {exc}"
+                ) from exc
+
         self._landed = True
         return new
-
-    def rollback(self) -> None:
-        """Restore the stage file to its pre-apply bytes, or remove it.
-
-        No-op once the revive has landed or when apply wrote nothing.
-        Idempotent.
-        """
-        if self._landed or not self._wrote or self._target is None:
-            return
-
-        target = self._target
-        try:
-            if self._prior_bytes is None:
-                if target.exists():
-                    target.unlink()
-                    log.warning(
-                        "revive session: removed stage file %s (no prior stage existed)",
-                        target,
-                    )
-            else:
-                fd, tmp_path = tempfile.mkstemp(
-                    dir=target.parent,
-                    prefix=f"{target.stem}.",
-                    suffix=target.suffix,
-                )
-                closed = False
-                try:
-                    os.write(fd, self._prior_bytes)
-                    os.close(fd)
-                    closed = True
-                    os.replace(tmp_path, target)
-                    log.warning(
-                        "revive session: restored prior stage bytes to %s", target
-                    )
-                finally:
-                    if not closed:
-                        try:
-                            os.close(fd)
-                        except OSError:
-                            pass
-                    try:
-                        os.unlink(tmp_path)
-                    except OSError:
-                        pass
-        finally:
-            # Make rollback idempotent: the stage is no longer our responsibility.
-            self._wrote = False

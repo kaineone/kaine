@@ -7,20 +7,22 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
 
+from kaine.boot import _install_shared_womb_clock
 from kaine.cycle.__main__ import (
+    _resolve_boot_stage,
     _revive_or_refuse,
     _start_preserve_watcher,
     _write_runtime_state,
 )
 from kaine.cycle.preserve_watch import new_request, write_request
 from kaine.cycle.research_gate import _NullBus
-from kaine.cycle.revive_boot import ReviveSession, prepare_revive
+from kaine.cycle.revive_boot import ReviveRefused, ReviveSession, prepare_revive
 from kaine.lifecycle import stage
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import bundle_dir_for
@@ -94,99 +96,6 @@ async def _make_bundle(
     return out_root / f"preservation_{result.preservation_id}_entrypoint-entity"
 
 
-def _replace_stage(plan, stage_value):
-    return replace(plan, stage=stage_value)
-
-
-@pytest.mark.asyncio
-async def test_revive_session_apply_writes_stage_and_rollback_restores_bytes(
-    tmp_path, eidolon, monkeypatch
-):
-    monkeypatch.chdir(tmp_path)
-    stage_path = tmp_path / "lifecycle-stage.json"
-    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
-
-    bundle = await _make_bundle(
-        tmp_path, eidolon, stage_state=stage.StageState(stage="gestation", lived_seconds=0.0)
-    )
-    plan = prepare_revive(bundle)
-
-    prior = stage.StageState(stage="embodied", lived_seconds=42.0)
-    stage.write_stage(prior, stage_path)
-    prior_bytes = stage_path.read_bytes()
-
-    revive = ReviveSession(plan)
-    revive.apply()
-    assert stage_path.read_bytes() != prior_bytes
-    written = json.loads(stage_path.read_text())
-    assert written["stage"] == "gestation"
-
-    revive.rollback()
-    assert stage_path.read_bytes() == prior_bytes
-
-    # Rollback is idempotent.
-    revive.rollback()
-    assert stage_path.read_bytes() == prior_bytes
-
-
-@pytest.mark.asyncio
-async def test_revive_session_rollback_removes_file_when_no_prior_stage(
-    tmp_path, eidolon, monkeypatch
-):
-    monkeypatch.chdir(tmp_path)
-    stage_path = tmp_path / "stage.json"
-    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
-
-    bundle = await _make_bundle(
-        tmp_path, eidolon, stage_state=stage.StageState(stage="gestation", lived_seconds=0.0)
-    )
-    plan = prepare_revive(bundle)
-    # Simulate the no-prior-stage case.
-    if stage_path.exists():
-        stage_path.unlink()
-
-    revive = ReviveSession(plan)
-    revive.apply()
-    assert stage_path.exists()
-
-    revive.rollback()
-    assert not stage_path.exists()
-
-    # Idempotent: still absent.
-    revive.rollback()
-    assert not stage_path.exists()
-
-
-@pytest.mark.asyncio
-async def test_revive_session_rollback_noop_after_landed(tmp_path, eidolon, bus, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    stage_path = tmp_path / "stage.json"
-    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
-
-    bundle = await _make_bundle(
-        tmp_path, eidolon, stage_state=stage.StageState(stage="gestation", lived_seconds=1.0)
-    )
-    plan = prepare_revive(bundle)
-
-    prior = stage.StageState(stage="embodied", lived_seconds=99.0)
-    stage.write_stage(prior, stage_path)
-    prior_bytes = stage_path.read_bytes()
-
-    reg = ModuleRegistry()
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
-    await eid2.initialize()
-    reg.register(eid2)
-
-    revive = ReviveSession(plan)
-    revive.apply()
-    await revive.revive(reg)
-    assert revive.landed
-
-    revive.rollback()
-    assert stage_path.read_bytes() != prior_bytes
-    await eid2.shutdown()
-
-
 def test_main_missing_revive_bundle_returns_seven_no_boot(tmp_path, monkeypatch):
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
@@ -207,7 +116,7 @@ def test_main_missing_revive_bundle_returns_seven_no_boot(tmp_path, monkeypatch)
     assert not (tmp_path / "state" / "lifecycle" / "stage.json").exists()
 
 
-def test_main_revive_restores_stage_on_boot_failure(tmp_path, eidolon, monkeypatch):
+def test_main_revive_stage_untouched_on_boot_failure(tmp_path, eidolon, monkeypatch):
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
 
@@ -241,8 +150,45 @@ def test_main_revive_restores_stage_on_boot_failure(tmp_path, eidolon, monkeypat
     with pytest.raises(RuntimeError, match="boom"):
         cycle_main.main(["--revive", str(bundle)])
 
-    assert isinstance(captured["kwargs"].get("revive"), ReviveSession)
-    assert json.loads(captured["stage_bytes"])["stage"] == "gestation"
+    session = captured["kwargs"].get("revive")
+    assert isinstance(session, ReviveSession)
+    assert session.stage_state == stage.StageState(stage="gestation", lived_seconds=0.0)
+    assert captured["stage_bytes"] == prior_bytes
+    assert stage_path.read_bytes() == prior_bytes
+
+
+def test_main_revive_stage_untouched_when_boot_returns_zero(
+    tmp_path, eidolon, monkeypatch
+):
+    _hermetic_cwd(tmp_path, monkeypatch)
+    monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
+
+    stage_path = tmp_path / "lifecycle" / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+
+    bundle = asyncio.run(
+        _make_bundle(
+            tmp_path,
+            eidolon,
+            stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+        )
+    )
+
+    prior = stage.StageState(stage="embodied", lived_seconds=88.0)
+    stage.write_stage(prior, stage_path)
+    prior_bytes = stage_path.read_bytes()
+
+    import kaine.cycle.__main__ as cycle_main
+
+    async def _fake_boot(**kwargs):
+        assert isinstance(kwargs.get("revive"), ReviveSession)
+        return 0
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _fake_boot)
+
+    rc = cycle_main.main(["--revive", str(bundle)])
+    assert rc == 0
     assert stage_path.read_bytes() == prior_bytes
 
 
@@ -289,7 +235,182 @@ def test_main_revive_invalid_stage_returns_seven_and_leaves_stage(
 
 
 @pytest.mark.asyncio
-async def test_revive_or_refuse_exits_7_on_missing_captured_module(tmp_path, bus, monkeypatch):
+async def test_revive_session_revive_writes_stage_and_lands(
+    tmp_path, eidolon, bus, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    stage_path = tmp_path / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+
+    bundle = await _make_bundle(
+        tmp_path,
+        eidolon,
+        stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+    )
+    plan = prepare_revive(bundle)
+
+    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    await eid2.initialize()
+    reg = ModuleRegistry()
+    reg.register(eid2)
+
+    revive = ReviveSession(plan)
+    assert not revive.landed
+    new = await revive.revive(reg)
+    assert revive.landed
+    assert new == []
+
+    written = stage.read_stage(stage_path)
+    assert written is not None
+    assert written.stage == "gestation"
+    assert written.lived_seconds == 0.0
+
+    await eid2.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_revive_session_revive_refuses_missing_module_and_leaves_stage(
+    tmp_path, eidolon, bus, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    stage_path = tmp_path / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+
+    reg1 = ModuleRegistry()
+    reg1.register(eidolon)
+    reg1.register(_ExtraModule())
+
+    bundle = await _make_bundle(
+        tmp_path,
+        eidolon,
+        registry=reg1,
+        stage_state=stage.StageState(stage="embodied"),
+    )
+
+    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    await eid2.initialize()
+    reg2 = ModuleRegistry()
+    reg2.register(eid2)
+
+    plan = prepare_revive(bundle)
+    revive = ReviveSession(plan)
+
+    prior_exists = stage_path.exists()
+    prior_bytes = stage_path.read_bytes() if prior_exists else None
+
+    with pytest.raises(ReviveRefused):
+        await revive.revive(reg2)
+
+    assert not revive.landed
+    if prior_bytes is None:
+        assert not stage_path.exists()
+    else:
+        assert stage_path.read_bytes() == prior_bytes
+
+    await eid2.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_revive_session_revive_refuses_when_stage_write_fails(
+    tmp_path, eidolon, bus, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    stage_path = tmp_path / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+
+    bundle = await _make_bundle(
+        tmp_path,
+        eidolon,
+        stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+    )
+    plan = prepare_revive(bundle)
+
+    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    await eid2.initialize()
+    reg = ModuleRegistry()
+    reg.register(eid2)
+
+    revive = ReviveSession(plan)
+
+    import kaine.cycle.revive_boot as revive_boot
+
+    def broken_write(state, path=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(revive_boot, "write_stage", broken_write)
+
+    with pytest.raises(ReviveRefused, match="could not write the stage file"):
+        await revive.revive(reg)
+
+    assert not revive.landed
+    await eid2.shutdown()
+
+
+@pytest.mark.parametrize(
+    "config, expected_enabled",
+    [
+        ({"developmental_stage": {"enabled": True}}, True),
+        ({}, False),
+    ],
+)
+def test_resolve_boot_stage_override_uses_stage_and_skips_file(
+    tmp_path, monkeypatch, config, expected_enabled
+):
+    monkeypatch.chdir(tmp_path)
+    stage_path = tmp_path / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+    stage.write_stage(stage.StageState(stage="embodied", lived_seconds=999.0), stage_path)
+
+    override = stage.StageState(stage="gestation", lived_seconds=0.0)
+
+    def fail_read(_path=None):
+        raise AssertionError("stage file should not be read when override is given")
+
+    monkeypatch.setattr(stage, "read_stage", fail_read)
+
+    result, enabled, fresh = _resolve_boot_stage(config, stage_override=override)
+    assert result == override
+    assert enabled is expected_enabled
+    assert fresh is False
+
+
+def test_install_shared_womb_clock_uses_stage_state_and_ignores_file(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    stage_path = tmp_path / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+    stage.write_stage(stage.StageState(stage="gestation", lived_seconds=1.0), stage_path)
+
+    override = stage.StageState(stage="embodied", lived_seconds=123.0)
+
+    built: list[Any] = []
+
+    class FakeWombClock:
+        def __init__(self, *, lived_offset_seconds: float):
+            self.lived_offset_seconds = lived_offset_seconds
+            self.born = False
+            built.append(self)
+
+        def mark_born(self) -> None:
+            self.born = True
+
+    monkeypatch.setattr("kaine.modules.topos.feed.WombClock", FakeWombClock)
+
+    feed: dict[str, Any] = {}
+    _install_shared_womb_clock(feed, None, None, stage_state=override)
+
+    assert len(built) == 1
+    clock = built[0]
+    assert clock.lived_offset_seconds == 123.0
+    assert clock.born is True
+    assert feed["_shared_womb_clock"] is clock
+
+
+@pytest.mark.asyncio
+async def test_revive_or_refuse_exits_7_on_missing_captured_module(
+    tmp_path, bus, monkeypatch
+):
     monkeypatch.chdir(tmp_path)
     stage_path = tmp_path / "stage.json"
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
@@ -475,3 +596,23 @@ async def test_write_runtime_state_records_revived_from(tmp_path, monkeypatch):
     await _write_runtime_state(FakeCycle(), FakeRegistry(), revived_from="pid-xyz")
     data = json.loads(RUNTIME_PATH.read_text())
     assert data["revived_from"] == "pid-xyz"
+
+
+def test_start_stage_uses_the_revive_session_stage(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from kaine.cycle.__main__ import _resolve_start_stage
+
+    stage_path = tmp_path / "stage.json"
+    monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
+    stage.write_stage(stage.StageState(stage="embodied", lived_seconds=9.0), stage_path)
+    preserved = stage.StageState(stage="gestation", lived_seconds=3.0)
+    config = {"developmental_stage": {"enabled": True}}
+
+    resolved, enabled, fresh = _resolve_start_stage(
+        config, SimpleNamespace(stage_state=preserved)
+    )
+    assert resolved == preserved and enabled is True and fresh is False
+
+    from_file, _, _ = _resolve_start_stage(config, None)
+    assert from_file.stage == "embodied"

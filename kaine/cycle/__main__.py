@@ -647,6 +647,7 @@ def _resolve_seed(config: dict[str, Any]) -> int:
 
 def _resolve_boot_stage(
     config: dict[str, Any],
+    stage_override: lifecycle_stage.StageState | None = None,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the developmental stage at boot.
 
@@ -658,8 +659,13 @@ def _resolve_boot_stage(
     ``is_fresh_gestation`` is true only when staging is enabled, no stage file
     existed, and the resolved stage is ``gestation`` — the moment the womb first
     begins.
+
+    If ``stage_override`` is provided it is returned directly and the stage file
+    is not read.
     """
     ds_config = MaturationConfig.from_dict(config.get("developmental_stage"))
+    if stage_override is not None:
+        return stage_override, ds_config.enabled, False
     if not ds_config.enabled:
         # Ship-inert: read any existing stage file so forks inherit, but do not
         # create one and do not gate behaviour.
@@ -677,6 +683,15 @@ def _resolve_boot_stage(
     # gestation clock is anchored and evidence is owned by one writer.
     fresh = resolved.is_gestating
     return resolved, True, fresh
+
+
+def _resolve_start_stage(
+    config: dict[str, Any], revive: "ReviveSession | None"
+) -> tuple[lifecycle_stage.StageState, bool, bool]:
+    """Resolve the stage for this start: the bundle's preserved stage when
+    reviving one that carries a stage, otherwise the stage file as usual."""
+    override = revive.stage_state if revive is not None else None
+    return _resolve_boot_stage(config, stage_override=override)
 
 
 def _lifecycle_event(
@@ -880,7 +895,12 @@ async def _boot_and_run(
     # Developmental stage resolution. Done early so gestation can gate locus and
     # embodiment before any module opens. Ship-inert by default: a normal boot
     # is completely unaffected.
-    stage_state, staging_enabled, fresh_gestation = _resolve_boot_stage(kaine_config)
+    stage_state, staging_enabled, fresh_gestation = _resolve_start_stage(kaine_config, revive)
+    if revive is not None and revive.stage_state is not None:
+        log.info(
+            "revive: using bundle's preserved developmental stage: %s",
+            stage_state.stage,
+        )
     if staging_enabled:
         log.info(
             "developmental stage: %s (staging enabled)",
@@ -1101,7 +1121,13 @@ async def _boot_and_run(
     # any other bus writer fails verification and never reaches an effector.
     intent_secret = generate_intent_secret()
 
-    registry = build_registry(bus, kaine_config, intent_secret=intent_secret, plugins=plugins)
+    registry = build_registry(
+        bus,
+        kaine_config,
+        intent_secret=intent_secret,
+        plugins=plugins,
+        boot_stage=stage_state,
+    )
     if not len(registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
@@ -1969,14 +1995,6 @@ def main(argv: list[str] | None = None) -> int:
             return REVIVE_REFUSED_EXIT
 
         revive = ReviveSession(plan)
-        try:
-            revive.apply()
-        except OSError as exc:
-            revive.rollback()
-            sys.stderr.write(
-                f"kaine.cycle: revive refused: could not write the stage file: {exc}\n"
-            )
-            return REVIVE_REFUSED_EXIT
 
     from kaine.plugins import PluginError
 
@@ -2009,9 +2027,6 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         log.info("interrupted; shutdown complete")
         return 0
-    finally:
-        if revive is not None:
-            revive.rollback()
 
 
 if __name__ == "__main__":

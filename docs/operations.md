@@ -549,8 +549,10 @@ captured modules are revived after they initialise and before the cognitive
 cycle starts, and modules enabled now but absent from the bundle start fresh
 and are logged as new faculties. `revived_from` is recorded in
 `state/cycle/runtime.json` and in the run manifest. If the bundle cannot be
-read or captured a module that is not enabled, the start exits with code `7`
-and leaves the stage file as it was.
+read or captured a module that is not enabled, the start exits with code `7`.
+The stage file is written only after the revive has landed, so a refused or
+interrupted start leaves it unchanged. If a start is interrupted after the
+revive began, run the same revive again to complete it.
 
 ## Entity decommission
 
