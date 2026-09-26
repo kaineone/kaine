@@ -28,7 +28,9 @@ LOG_EVERY = 100
 
 class WetwarePolicyEngine:
     """KAINE's Nous engine wrapped with a substrate policy proposal; forwards unknown
-    attributes to the inner engine.
+    attributes to the inner engine. The tissue's answer is scored against the silicon choice
+    its stimulation encoded: immediately before the substrate follows KAINE's cycle, one
+    Nous step later once it does.
     """
 
     def __init__(
@@ -71,8 +73,8 @@ class WetwarePolicyEngine:
         self._groups = groups
         self._feedback_channels = feedback_channels
         self._n = n
-        self._prev_proposal: int | None = None
-        self._prev_silicon: int | None = None
+        self._last_proposal: int | None = None
+        self._last_outcome: bool | None = None
         self._proposals = 0
         self._agreements = 0
 
@@ -96,10 +98,10 @@ class WetwarePolicyEngine:
         return amplitudes.tolist()
 
     def _feedback(self) -> list[StimRequest]:
-        if self._prev_proposal is None:
+        if self._last_outcome is None:
             return []
 
-        if self._prev_proposal == self._prev_silicon:
+        if self._last_outcome:
             return [StimRequest(ch, FEEDBACK_PULSE_UA) for ch in self._feedback_channels]
 
         requests: list[StimRequest] = []
@@ -121,7 +123,8 @@ class WetwarePolicyEngine:
             for ch in group
         ] + self._feedback()
 
-        obs = self._broker.exchange(self._module, requests)
+        obs = self._broker.exchange(self._module, requests, tag=res.action_index)
+        answered = obs.tag
 
         counts = np.zeros(self._n, dtype=np.float64)
         for spike in obs.spikes:
@@ -133,31 +136,31 @@ class WetwarePolicyEngine:
         sizes = np.array([len(g) for g in self._groups], dtype=np.float64)
         rates = counts / sizes
         max_rate = float(rates.max())
-        if max_rate <= 0.0:
-            proposal = res.action_index
+        decided = max_rate > 0.0 and int(np.sum(rates == max_rate)) == 1
+        top = int(np.argmax(rates)) if decided else -1
+
+        proposal = top if decided else res.action_index
+        self._last_proposal = proposal
+
+        if answered is None:
+            self._last_outcome = None
         else:
-            top = np.flatnonzero(rates == max_rate)
-            if top.size > 1:
-                proposal = res.action_index
-            else:
-                proposal = int(top[0])
+            agreed = decided and top == answered
+            self._last_outcome = agreed
+            self._proposals += 1
+            if agreed:
+                self._agreements += 1
 
-        self._prev_proposal = proposal
-        self._prev_silicon = res.action_index
-        self._proposals += 1
-        if proposal == res.action_index:
-            self._agreements += 1
-
-        if self._proposals % LOG_EVERY == 0:
-            pct = 100.0 * self._agreements / self._proposals
-            log.info(
-                "CL1 Nous (%s mode): tissue agreed with the silicon policy on "
-                "%d of %d proposals (%.0f%%)",
-                self._mode,
-                self._agreements,
-                self._proposals,
-                pct,
-            )
+            if self._proposals % LOG_EVERY == 0:
+                pct = 100.0 * self._agreements / self._proposals
+                log.info(
+                    "CL1 Nous (%s mode): tissue agreed with the silicon policy on "
+                    "%d of %d proposals (%.0f%%)",
+                    self._mode,
+                    self._agreements,
+                    self._proposals,
+                    pct,
+                )
 
         if self._mode == "shadow":
             return res
@@ -168,20 +171,23 @@ class WetwarePolicyEngine:
 
     @property
     def proposal_count(self) -> int:
+        """Tissue answers scored so far; a step before any response window arrives is not
+        counted."""
         return self._proposals
 
     @property
     def agreement_rate(self) -> float:
+        """Share of tissue answers that picked the silicon choice they encoded; a silent or tied
+        window counts as a disagreement."""
         if self._proposals == 0:
             return 0.0
         return self._agreements / self._proposals
 
     @property
     def last_proposal(self) -> int | None:
-        return self._prev_proposal
+        return self._last_proposal
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
         return getattr(self._inner, name)
-

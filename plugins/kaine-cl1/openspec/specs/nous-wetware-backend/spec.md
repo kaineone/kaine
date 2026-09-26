@@ -6,7 +6,11 @@ Nous on the CL1 substrate as a hybrid: KAINE's own active-inference engine keeps
 ## Requirements
 
 ### Requirement: The tissue proposes Nous' policy beside the silicon engine
-When `nous = "cl1"`, the plugin SHALL wrap KAINE's own Nous engine. Each step SHALL run the silicon engine first, stimulate one channel group per action with an amplitude that rises as that action's expected free energy falls, and decode the tissue's proposed action as the group with the highest per-channel firing in the returned window, ties going to the silicon choice.
+When `nous = "cl1"`, the plugin SHALL wrap KAINE's own Nous engine. Each step SHALL run the silicon engine first, stimulate one channel group per action with an amplitude that rises as that action's expected free energy falls, and decode the tissue's proposed action as the group with the highest per-channel firing in the returned window, ties and silent windows going to the silicon choice. The returned window SHALL be the response to Nous' own most recent stimulation, never a later window that carried none of it, and the tissue's answer SHALL be scored against the silicon choice that stimulation encoded.
+
+#### Scenario: Response one step later once the substrate follows the cycle
+- **WHEN** the substrate follows KAINE's cycle and Nous steps less often than the cycle ticks
+- **THEN** each step reads the response window to Nous' previous stimulation, labelled with the silicon choice that stimulation encoded, and scores the answer against that choice
 
 #### Scenario: Proposal follows the encoded preference on the reference culture
 - **WHEN** the silicon engine's EFE strongly favours one action for many steps on the simulator's reference culture
@@ -27,7 +31,7 @@ In `mode = "drive"` the returned `action_index` and `action` SHALL be the tissue
 - **THEN** the returned `action_index` is 2 and `posterior` and `policy_efe` equal the silicon engine's
 
 ### Requirement: Feedback follows agreement
-Each step SHALL stimulate the feedback channels predictably (a fixed pulse on both) when the previous proposal agreed with the silicon engine's lowest-EFE action, and unpredictably (a seeded random amplitude per channel) when it did not.
+Each step SHALL stimulate the feedback channels predictably (a fixed pulse on both) when the previous tissue answer agreed with the silicon choice it encoded, and unpredictably (a seeded random amplitude per channel) when it did not, a silent or tied window counting as a disagreement.
 
 #### Scenario: Agreement then disagreement
 - **WHEN** one step's proposal agrees and the next disagrees

@@ -22,6 +22,7 @@ See `openspec/changes/wetware-substrate-foundation/`.
 """
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
 import threading
@@ -65,6 +66,8 @@ class TerritoryObservation:
     spikes: list[Any]
     from_timestamp: int
     frame_count: int
+    #: The caller's tag of the stimulation this window answers (tagged exchanges only).
+    tag: Any = None
 
 
 class OversubscribedError(RuntimeError):
@@ -100,6 +103,8 @@ class SubstrateBroker:
     _sync_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _latest: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _next: dict[str, list[StimRequest]] = field(default_factory=dict, repr=False)
+    _next_tags: dict[str, Any] = field(default_factory=dict, repr=False)
+    _latest_response: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _pending_frames: int | None = field(default=None, repr=False)
     _coalesced: int = field(default=0, repr=False)
     _beat_signal: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -262,17 +267,39 @@ class SubstrateBroker:
             return self._run_window(self._span)
 
     # -- beat mode --------------------------------------------------------------
-    def exchange(self, module: str, requests: Sequence[StimRequest]) -> TerritoryObservation:
+    def exchange(
+        self, module: str, requests: Sequence[StimRequest], *, tag: Any = None
+    ) -> TerritoryObservation:
+        """Queue stimulation and return the latest territory observation.
+
+        With ``tag`` set, the call returns the response window to this
+        module's most recent tagged stimulation, carrying that
+        stimulation's tag, rather than the latest window; before any tagged
+        response exists it returns an empty observation with ``tag=None``.
+        Before beat mode the window runs now, so its response carries this
+        call's tag.
+        """
         self._check_usable()
         reqs = self._validate(module, requests)
         if not self._beat_mode:
             with self._sync_lock:
                 if not self._beat_mode:
                     self.queue_stim(module, reqs)
-                    return self.run_cognitive_tick()[module]
+                    obs = self.run_cognitive_tick()[module]
+                    if tag is None:
+                        return obs
+                    obs = dataclasses.replace(obs, tag=tag)
+                    with self._lock:
+                        self._latest_response[module] = obs
+                    return obs
         with self._lock:
             self._next[module] = reqs
-            latest = self._latest.get(module)
+            if tag is None:
+                self._next_tags.pop(module, None)
+                latest = self._latest.get(module)
+            else:
+                self._next_tags[module] = tag
+                latest = self._latest_response.get(module)
         if latest is None:
             return TerritoryObservation(
                 module=module,
@@ -287,6 +314,7 @@ class SubstrateBroker:
             spikes=list(latest.spikes),
             from_timestamp=latest.from_timestamp,
             frame_count=latest.frame_count,
+            tag=latest.tag,
         )
 
     def start_beat(self, *, accelerated: bool) -> None:
@@ -329,6 +357,7 @@ class SubstrateBroker:
             with self._lock:
                 count = sum(len(v) for v in self._next.values())
                 self._next.clear()
+                self._next_tags.clear()
                 self._pending_frames = None
             if count:
                 self._discarded_stim += count
@@ -377,13 +406,19 @@ class SubstrateBroker:
                         if frames is None:
                             continue
                         self._pending = {m: list(r) for m, r in self._next.items()}
+                        tags = dict(self._next_tags)
                         self._next.clear()
+                        self._next_tags.clear()
                     obs = self._run_window(frames)
                     with self._lock:
                         self._latest.update(obs)
+                        for m, t in tags.items():
+                            if m in obs:
+                                self._latest_response[m] = dataclasses.replace(obs[m], tag=t)
             else:
                 collected: list[Any] = []
                 window_start: int | None = None
+                delivered_tags: dict[str, Any] = {}
                 for tick in self._loop_it:
                     if self._stop.is_set():
                         break
@@ -413,6 +448,13 @@ class SubstrateBroker:
                         }
                         with self._lock:
                             self._latest.update(obs)
+                            for m, t in delivered_tags.items():
+                                if m in obs:
+                                    self._latest_response[m] = dataclasses.replace(
+                                        obs[m], tag=t
+                                    )
+                            delivered_tags = dict(self._next_tags)
+                            self._next_tags.clear()
                             snapshot = {m: list(r) for m, r in self._next.items()}
                             self._next.clear()
                         for requests in snapshot.values():
