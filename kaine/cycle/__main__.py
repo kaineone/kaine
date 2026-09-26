@@ -930,7 +930,9 @@ async def _boot_and_run(
             try:
                 hold_loop.add_signal_handler(sig, hold_stop.set)
             except NotImplementedError:
-                pass
+                # Windows / restricted loops have no signal handlers; the default
+                # signal behaviour then ends the process, and nothing is spawned yet.
+                continue
         try:
             _womb_cfg = MaturationConfig.from_dict(kaine_config.get("developmental_stage"))
             womb_ready = await hold_until_womb_ready(
@@ -945,7 +947,8 @@ async def _boot_and_run(
                 try:
                     hold_loop.remove_signal_handler(sig)
                 except NotImplementedError:
-                    pass
+                    # Nothing was installed on this loop, so there is nothing to remove.
+                    continue
         if not womb_ready:
             log.info("shutdown requested while waiting for the womb; nothing was spawned")
             await bus.close()
