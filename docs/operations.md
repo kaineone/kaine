@@ -475,9 +475,20 @@ one machine that cannot also host Paracosmic.
   - while the entity is frozen (a welfare response freezes it);
   - within a readout period of boot or of a thaw;
   - within 60 s of another probe.
+- **Which conditions apply.** The gate judges only the faculties the entity has:
+  - the regulation markers (C1) and the lived-time floor (C3) always apply;
+  - the sleep-cycle floor applies when Hypnos is enabled;
+  - the consolidation floor applies when Hypnos and Phantasia are both enabled.
+
+  When neither applies, C2 is recorded as not applicable: it is listed under
+  `not_applicable` in the gate status and the birth record, never as passed.
 - **Birth.** When the maturation gate's conditions hold, the entity is born. The womb
   blooms once over `birth_transition_seconds` (5 s): the field brightens to a bounded
-  peak and the soundscape fades. Then the womb falls silent. Switch
+  peak and the soundscape fades. Then the womb falls silent. With Mundus enabled, birth
+  also needs an approved, reachable body; a ready entity without one holds in the womb and
+  says so (`awaiting_embodiment`). Without Mundus, the entity is born into its perceptual
+  world, the audio and video it perceives. The `stage.birth` event records `world`
+  (`perceptual` or `embodied`) and which conditions applied. Switch
   `[perception_feed].mode` to the embodied world afterwards. A born entity booted with
   `mode = "womb"` receives nothing from the womb, and boot logs a warning.
 - **Supervised birth.** With `[developmental_stage].require_operator_ack_for_birth = true`,

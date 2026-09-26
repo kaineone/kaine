@@ -348,6 +348,21 @@ class MaturationGateRunner:
             read_ack,
             write_request,
         )
+        from kaine.lifecycle.maturation_gate import Faculties
+
+        if self._registry is None:
+            faculties = Faculties()
+        else:
+            faculties = Faculties(
+                hypnos="hypnos" in self._registry,
+                phantasia="phantasia" in self._registry,
+                mundus="mundus" in self._registry,
+            )
+        world = "embodied" if faculties.mundus else "perceptual"
+        conditions = {
+            "c2_sleep_required": bool(faculties.hypnos),
+            "c2_consolidation_required": bool(faculties.hypnos and faculties.phantasia),
+        }
 
         def _set_status(
             *,
@@ -361,9 +376,12 @@ class MaturationGateRunner:
                 "lived_seconds": float(self._stage.lived_seconds or 0.0),
                 "sleep_count": self._stage.sleep_count or 0,
                 "consolidation_passes": consolidation_passes,
+                "world": world,
+                "conditions": conditions,
                 "readiness": {
                     "ready": readiness.ready,
                     "passed": list(readiness.passed_markers),
+                    "not_applicable": list(readiness.not_applicable),
                     "unmet": list(readiness.unmet),
                 } if readiness is not None else None,
                 "readout": dict(readout) if readout is not None else None,
@@ -418,6 +436,7 @@ class MaturationGateRunner:
             consolidation_passes=consolidation_passes,
             lived_seconds=lived_seconds,
             config=self._config,
+            faculties=faculties,
         )
 
         if not readiness.ready:
@@ -460,12 +479,15 @@ class MaturationGateRunner:
                 return
         self._birth_deferred_logged = False
 
-        mundus_enabled, operator_approved, reachable = await self._mundus_availability()
-        embodiment_ready = embodiment_available(
-            mundus_enabled=mundus_enabled,
-            operator_approved=operator_approved,
-            reachable=reachable,
-        )
+        if faculties.mundus:
+            mundus_enabled, operator_approved, reachable = await self._mundus_availability()
+            embodiment_ready = embodiment_available(
+                mundus_enabled=mundus_enabled,
+                operator_approved=operator_approved,
+                reachable=reachable,
+            )
+        else:
+            embodiment_ready = True
 
         operator_ack = is_acknowledged(
             self._birth_request, read_ack(self._birth_ack_path)
@@ -475,10 +497,16 @@ class MaturationGateRunner:
             embodiment_ready=embodiment_ready,
             require_operator_ack=self._config.require_operator_ack_for_birth,
             operator_ack=operator_ack,
+            faculties=faculties,
         )
 
         if decision.action == ACTION_BIRTH:
-            await self._do_birth(readiness, self._stage.sleep_count, self._stage.lived_seconds)
+            await self._do_birth(
+                readiness,
+                self._stage.sleep_count,
+                self._stage.lived_seconds,
+                faculties,
+            )
             _set_status(
                 readiness=readiness,
                 readout=readiness_readout,
@@ -539,8 +567,13 @@ class MaturationGateRunner:
         readiness: Any,
         sleep_count: int | None,
         lived_seconds: float | None,
+        faculties: Any = None,
     ) -> None:
         """Perform the one-shot birth transition."""
+        if faculties is None:
+            from kaine.lifecycle.maturation_gate import Faculties
+            faculties = Faculties()
+
         before = self._stage
 
         # Start embodiment before the stage file is written, so the locus source
@@ -605,6 +638,7 @@ class MaturationGateRunner:
                 readiness=readiness,
                 sleep_count=sleep_count,
                 lived_seconds=lived_seconds,
+                faculties=faculties,
             ),
             salience=0.9,
         )
