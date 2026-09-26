@@ -277,3 +277,21 @@ def test_realtime_window_is_capped_without_beats():
     finally:
         b.stop_beat(timeout=2.0)
 
+
+def test_stimulation_queued_before_the_first_tick_after_a_long_boot_gap_is_discarded(caplog):
+    """On hardware the beat starts at open; stimulation queued during a boot-time freeze
+    must not be delivered on the first tick."""
+    p = Cl1Plugin(session_factory=_FakeHardwareSession)
+    try:
+        net = p.injections("chronos", _hw_cfg())["network"]
+        net.tick([10.0] * 8)
+        time.sleep(0.3)
+        fake = p._session.neurons
+        with caplog.at_level(logging.WARNING, logger="kaine_cl1.substrate.broker"):
+            p.on_cycle_tick({"processing_rate_hz": 10.0})
+        time.sleep(0.2)
+        assert fake.stims == []
+        assert p._broker.discarded_stim > 0
+        assert any("discarded" in rec.message for rec in caplog.records)
+    finally:
+        p.close()

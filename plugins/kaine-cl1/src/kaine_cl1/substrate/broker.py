@@ -294,6 +294,8 @@ class SubstrateBroker:
         self._stop.clear()
         self._failed = False
         self._beat_signal.clear()
+        # Treat a long gap from start (for example a boot-time freeze) like any other gap.
+        self._last_beat_at = time.monotonic()
         self._beat_mode = True
         self._accelerated = accelerated
         with self._lock:
