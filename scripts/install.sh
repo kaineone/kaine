@@ -75,6 +75,11 @@ TV_PIN=""
 TA_PIN=""
 SELFTEST=""
 TA_UNAVAILABLE="false"
+# Audio-stack coherence / research checks read these after the torch branch,
+# so they must be initialised for the torch-free path under set -u.
+NEED_TORCHAUDIO=0
+INDEX_URL=""
+TORCH_CONSTRAINTS=""
 # Legacy fallback: used only when the host-resolved wheel-index probe
 # (kaine.wheel_index) fails; the cuda flavor branch below normally overrides it.
 # cu126 is the CUDA index with the widest driver compatibility that carries

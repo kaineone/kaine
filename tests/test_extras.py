@@ -155,7 +155,7 @@ def test_audition_needs_audio_when_capture_enabled(monkeypatch):
     assert any(m.import_name == "webrtcvad" for m in missing)
 
 
-def test_audition_needs_audio_in_playlist_mode(monkeypatch):
+def test_audition_playlist_requires_av_and_webrtcvad_not_sounddevice(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
         "modules": {"audition": True},
@@ -163,12 +163,12 @@ def test_audition_needs_audio_in_playlist_mode(monkeypatch):
         "perception_feed": {"mode": "playlist"},
     }
     missing = check(config)
-    assert any(m.import_name == "sounddevice" for m in missing)
-    assert any(m.import_name == "webrtcvad" for m in missing)
-    assert any(m.import_name == "av" for m in missing)
+    assert any(m.import_name == "av" and m.extra == "audio" for m in missing)
+    assert any(m.import_name == "webrtcvad" and m.extra == "audio" for m in missing)
+    assert not any(m.import_name == "sounddevice" for m in missing)
 
 
-def test_audition_needs_audio_in_seeded_womb_or_screen(monkeypatch):
+def test_audition_webrtcvad_needed_in_seeded_womb_or_screen_not_sounddevice(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     for mode in ("seeded", "womb", "screen"):
         config = {
@@ -178,8 +178,34 @@ def test_audition_needs_audio_in_seeded_womb_or_screen(monkeypatch):
         }
         missing = check(config)
         assert any(
-            m.import_name == "sounddevice" and m.extra == "audio" for m in missing
+            m.import_name == "webrtcvad" and m.extra == "audio" for m in missing
         )
+        assert not any(
+            m.import_name == "sounddevice" for m in missing
+        )
+
+
+def test_audition_seeded_rms_backend_needs_no_audio_extra(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"audition": True},
+        "audition": {"capture_enabled": False, "vad_backend": "rms"},
+        "perception_feed": {"mode": "seeded"},
+    }
+    missing = check(config)
+    assert not any(m.module == "audition" for m in missing)
+
+
+def test_audition_live_capture_requires_sounddevice_and_webrtcvad(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"audition": True},
+        "audition": {"capture_enabled": True},
+        "perception_feed": {"mode": "live"},
+    }
+    missing = check(config)
+    assert any(m.import_name == "sounddevice" for m in missing)
+    assert any(m.import_name == "webrtcvad" for m in missing)
 
 
 def test_nous_needs_reasoning(monkeypatch):
@@ -316,8 +342,10 @@ def test_nexus_main_refuses_without_nexus(monkeypatch):
     try:
         with pytest.raises(SystemExit) as excinfo:
             importlib.import_module("kaine.nexus.__main__")
-        assert excinfo.value.code == 1
-        assert "fastapi" in stderr.getvalue()
+        # SystemExit carrying the message: the interpreter prints it to stderr
+        # and exits with status 1.
+        assert "fastapi" in str(excinfo.value.code)
+        assert "kaine[nexus]" in str(excinfo.value.code)
     finally:
         sys.modules.pop("kaine.nexus.__main__", None)
 

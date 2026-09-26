@@ -13,8 +13,7 @@ from kaine.extras import check, format_missing
 
 _missing = check({}, services={"nexus"})
 if _missing:
-    print(format_missing(_missing), file=sys.stderr)
-    sys.exit(1)
+    raise SystemExit(format_missing(_missing))
 del _missing
 
 import asyncio

@@ -57,10 +57,29 @@ def _topos_cv2_needed(config: dict) -> bool:
     return _perception_mode(config) == "playlist"
 
 
-def _audition_capture_like(config: dict) -> bool:
-    if (config.get("audition") or {}).get("capture_enabled"):
-        return True
-    return _perception_mode(config) in {"playlist", "seeded", "womb", "screen"}
+def _audition_sounddevice_needed(config: dict) -> bool:
+    """sounddevice is only used when audition itself opens a real mic device."""
+    if not (config.get("audition") or {}).get("capture_enabled"):
+        return False
+    mode = _perception_mode(config)
+    # Feed modes provide an explicit stream factory, so a real device is only
+    # needed for the unset/default path, an explicit "live" device, or "off"
+    # (i.e. no feed, direct capture).
+    return mode in (None, "live", "off")
+
+
+def _audition_webrtcvad_needed(config: dict) -> bool:
+    """webrtcvad runs on the live-microphone path unless the RMS fallback is
+    selected."""
+    mode = _perception_mode(config)
+    live_path = (
+        (config.get("audition") or {}).get("capture_enabled")
+        or mode in {"playlist", "seeded", "womb", "screen"}
+    )
+    if not live_path:
+        return False
+    backend = (config.get("audition") or {}).get("vad_backend", "webrtcvad")
+    return backend != "rms"
 
 
 def _audition_av_needed(config: dict) -> bool:
@@ -128,8 +147,8 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("cv2", "vision", predicate=_topos_cv2_needed),
     ),
     "audition": (
-        Requirement("sounddevice", "audio", predicate=_audition_capture_like),
-        Requirement("webrtcvad", "audio", predicate=_audition_capture_like),
+        Requirement("sounddevice", "audio", predicate=_audition_sounddevice_needed),
+        Requirement("webrtcvad", "audio", predicate=_audition_webrtcvad_needed),
         Requirement("av", "audio", predicate=_audition_av_needed),
     ),
     "nous": (

@@ -930,6 +930,50 @@ def test_install_proceeds_past_constraints_to_editable_install(tmp_path: Path) -
     )
 
 
+def _assert_no_torch_and_nexus_editable(
+    proc: subprocess.CompletedProcess, pip_log: str
+) -> None:
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        for token in tokens:
+            if token == "torch" or (
+                token.startswith("torch")
+                and not token.startswith("torchaudio")
+                and any(c in token for c in "=<>!~")
+            ):
+                pytest.fail(
+                    f"recorded pip line installs torch: {line!r}"
+                    + _context(proc, pip_log)
+                )
+
+    for line in pip_log.splitlines():
+        tokens = line.split()
+        if "-e" in tokens and any(t == ".[test,nexus]" for t in tokens):
+            break
+    else:
+        pytest.fail(
+            "no recorded editable install contained '.[test,nexus]'"
+            + _context(proc, pip_log)
+        )
+
+    assert "UnboundLocalError" not in proc.stderr, _context(proc, pip_log)
+    assert "unbound variable" not in proc.stderr, _context(proc, pip_log)
+
+
+def test_install_sh_torch_free_extras_nexus_does_not_install_torch(tmp_path: Path) -> None:
+    proc, pip_log = _run_install(
+        tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.sh"
+    )
+    _assert_no_torch_and_nexus_editable(proc, pip_log)
+
+
+def test_install_py_torch_free_extras_nexus_does_not_install_torch(tmp_path: Path) -> None:
+    proc, pip_log = _run_install(
+        tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.py"
+    )
+    _assert_no_torch_and_nexus_editable(proc, pip_log)
+
+
 def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path) -> None:
     """A failing GPU self-test falls back to CPU wheels and records the marker.
 

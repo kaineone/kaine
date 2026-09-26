@@ -1019,6 +1019,8 @@ def main() -> None:
     flavor = detect_flavor(args.force)
     need_torch = _extras_need_torch(args.extras)
 
+    # This name is only assigned inside the torch branch but is read below.
+    installed_ta = None
     if need_torch:
         # Audio-stack coherence: if torchaudio is already installed and this is
         # not a --research run, keep the audio stack coherent on every flavor.
@@ -1178,6 +1180,14 @@ def main() -> None:
             )
             force_reinstall = True
             need_install = True
+
+    if not need_torch:
+        # The selected extras do not include core: no torch stack is installed
+        # and there is nothing to self-test.
+        if need_install or selftest:
+            print("==> skipping the torch stack (the selected extras do not include core)")
+        need_install = False
+        selftest = False
 
     if need_install:
         install_cmd = [str(pip), "install"]
