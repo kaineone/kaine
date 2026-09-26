@@ -10,6 +10,7 @@ os.environ.setdefault("CL_SDK_VISUALISATION", "0")
 
 import logging  # noqa: E402
 import time  # noqa: E402
+import types  # noqa: E402
 
 import cl.sim as clsim  # noqa: E402
 import pytest  # noqa: E402
@@ -215,13 +216,85 @@ def test_plugin_follows_kaines_cycle_through_the_loader(monkeypatch):
         plugin_obj.injections("chronos", cfg["plugins"]["cl1"])
         counter = _count_windows(monkeypatch, plugin_obj._broker)
         try:
+            # Real ticks are a processing period apart, so wait for each window before
+            # the next tick; back-to-back beats are coalesced by design.
             for i in range(3):
                 observer({"tick_index": i, "processing_rate_hz": 10.0}, 100.0)
-            assert _wait_for(lambda: counter[0] == 3)
+                assert _wait_for(lambda n=i + 1: counter[0] == n)
             time.sleep(0.2)
             assert counter[0] == 3
         finally:
             plugin_obj.close()
     finally:
         clsim.clear_simulator_data_source()
+
+
+def test_slow_substrate_coalesces_beats(accel, monkeypatch, caplog):
+    original = accel._run_window
+
+    def slow_run_window(frames):
+        time.sleep(0.3)
+        return original(frames)
+
+    monkeypatch.setattr(accel, "_run_window", slow_run_window)
+    accel.start_beat(accelerated=True)
+    with caplog.at_level(logging.WARNING, logger="kaine_cl1.substrate.broker"):
+        for _ in range(10):
+            accel.beat(0.1)
+    assert _wait_for(lambda: accel.coalesced_beats >= 1)
+    assert accel.coalesced_beats <= 9
+    assert any("coalesced" in record.message for record in caplog.records)
+    assert accel._pending_frames is None or isinstance(accel._pending_frames, int)
+
+
+def test_stop_that_times_out_marks_broken(accel, monkeypatch, caplog):
+    accel.start_beat(accelerated=True)
+    real_thread = accel._thread
+    accel._thread = types.SimpleNamespace(
+        join=lambda timeout=None: None, is_alive=lambda: True
+    )
+    try:
+        with caplog.at_level(logging.WARNING, logger="kaine_cl1.substrate.broker"):
+            accel.stop_beat(timeout=0.01)
+        assert accel.broken is True
+        assert any("did not stop" in record.message for record in caplog.records)
+        with pytest.raises(RuntimeError):
+            accel.exchange("a", [])
+        with pytest.raises(RuntimeError):
+            accel.run_cognitive_tick()
+    finally:
+        accel._thread = None
+        accel._broken = False
+        accel._beat_mode = False
+        accel._stop.set()
+        real_thread.join(timeout=2)
+
+
+def test_stop_then_start_runs_a_new_thread(accel, monkeypatch):
+    counter = _count_windows(monkeypatch, accel)
+    accel.start_beat(accelerated=True)
+    accel.beat(0.1)
+    assert _wait_for(lambda: counter[0] == 1)
+    accel.stop_beat()
+    assert accel.beat_mode is False
+    accel.start_beat(accelerated=True)
+    assert accel.beat_mode is True
+    accel.beat(0.1)
+    assert _wait_for(lambda: counter[0] == 2)
+
+
+def test_crashed_loop_makes_calls_raise(accel, monkeypatch):
+    def die(frames):
+        raise RuntimeError("substrate died")
+
+    monkeypatch.setattr(accel, "_run_window", die)
+    accel.start_beat(accelerated=True)
+    accel.beat(0.1)
+    assert _wait_for(lambda: accel.failed)
+    with pytest.raises(RuntimeError):
+        accel.beat(0.1)
+    with pytest.raises(RuntimeError):
+        accel.exchange("a", [])
+    with pytest.raises(RuntimeError):
+        accel.start_beat(accelerated=True)
 

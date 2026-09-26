@@ -15,6 +15,8 @@ multiplexer:
   on a background thread. Consumers queue stim for the next window through
   `exchange()` and read their territory's latest window; the cycle hook never waits
   on the substrate.
+- **Health.** `coalesced_beats`, `failed`, and `broken` expose the beat thread state
+  for diagnostics.
 
 See `openspec/changes/wetware-substrate-foundation/`.
 """
@@ -22,7 +24,6 @@ from __future__ import annotations
 
 import logging
 import math
-import queue
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
@@ -95,9 +96,13 @@ class SubstrateBroker:
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _latest: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _next: dict[str, list[StimRequest]] = field(default_factory=dict, repr=False)
-    _beats: queue.Queue[int] = field(default_factory=queue.Queue, repr=False)
+    _pending_frames: int | None = field(default=None, repr=False)
+    _coalesced: int = field(default=0, repr=False)
+    _beat_signal: threading.Event = field(default_factory=threading.Event, repr=False)
     _boundary: threading.Event = field(default_factory=threading.Event, repr=False)
     _stop: threading.Event = field(default_factory=threading.Event, repr=False)
+    _failed: bool = field(default=False, repr=False)
+    _broken: bool = field(default=False, repr=False)
     _thread: Any = None
     _fps: int = field(default=25000, repr=False)
 
@@ -233,19 +238,21 @@ class SubstrateBroker:
         queued stim at the window start, and return one aggregated observation per
         territory. Spikes past the window boundary are buffered for the next tick,
         so the per-tick spike set is a deterministic function of the timeline."""
+        self._check_usable()
         if self._loop_it is None:
             raise RuntimeError("broker is not open; call open(neurons) first")
         return self._run_window(self._span)
 
     # -- beat mode --------------------------------------------------------------
     def exchange(self, module: str, requests: Sequence[StimRequest]) -> TerritoryObservation:
+        self._check_usable()
         reqs = self._validate(module, requests)
         if not self._beat_mode:
             self.queue_stim(module, reqs)
             return self.run_cognitive_tick()[module]
         with self._lock:
             self._next[module] = reqs
-        latest = self._latest.get(module)
+            latest = self._latest.get(module)
         if latest is None:
             return TerritoryObservation(
                 module=module,
@@ -265,8 +272,14 @@ class SubstrateBroker:
     def start_beat(self, *, accelerated: bool) -> None:
         if self._loop_it is None:
             raise RuntimeError("broker is not open; call open(neurons) first")
-        if self._beat_mode:
+        self._check_usable()
+        if self._beat_mode and self._thread is not None and self._thread.is_alive():
             return
+        if self._thread is not None and self._thread.is_alive():
+            raise RuntimeError("CL1 substrate beat thread is already running")
+        self._stop.clear()
+        self._failed = False
+        self._beat_signal.clear()
         self._beat_mode = True
         self._accelerated = accelerated
         with self._lock:
@@ -283,10 +296,22 @@ class SubstrateBroker:
         log.info("CL1 substrate switched to beat mode (%s): one window per cycle tick", mode)
 
     def beat(self, period_s: float) -> None:
+        self._check_usable()
         if not self._beat_mode:
             raise RuntimeError("broker is not in beat mode")
         if self._accelerated:
-            self._beats.put(max(1, int(round(period_s * self._fps))))
+            frames = max(1, int(round(period_s * self._fps)))
+            with self._lock:
+                if self._pending_frames is not None:
+                    self._coalesced += 1
+                    if self._coalesced == 1 or self._coalesced % 100 == 0:
+                        log.warning(
+                            "CL1 substrate is behind the cycle: coalesced %d beat(s) so far; "
+                            "substrate time is running slower than cognitive time",
+                            self._coalesced,
+                        )
+                self._pending_frames = frames
+                self._beat_signal.set()
         else:
             self._boundary.set()
 
@@ -294,11 +319,14 @@ class SubstrateBroker:
         try:
             if self._accelerated:
                 while not self._stop.is_set():
-                    try:
-                        frames = self._beats.get(timeout=0.1)
-                    except queue.Empty:
+                    if not self._beat_signal.wait(timeout=0.1):
                         continue
+                    self._beat_signal.clear()
                     with self._lock:
+                        frames = self._pending_frames
+                        self._pending_frames = None
+                        if frames is None:
+                            continue
                         self._pending = {m: list(r) for m, r in self._next.items()}
                         self._next.clear()
                     obs = self._run_window(frames)
@@ -339,14 +367,47 @@ class SubstrateBroker:
                         window_start = stop_ts
         except Exception:
             log.exception("CL1 substrate beat loop stopped")
+            self._failed = True
 
     def stop_beat(self, timeout: float = 2.0) -> None:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout)
+            if self._thread.is_alive():
+                log.warning(
+                    "CL1 substrate beat thread did not stop within %.1f s; "
+                    "the broker is now unusable",
+                    timeout,
+                )
+                self._broken = True
+                return
         self._thread = None
         self._beat_mode = False
 
+    def _check_usable(self) -> None:
+        if self._failed:
+            raise RuntimeError(
+                "CL1 substrate beat loop has stopped after an error; see the earlier log"
+            )
+        if self._broken:
+            raise RuntimeError("CL1 substrate broker is broken; open a new session")
+
     @property
     def beat_mode(self) -> bool:
+        """Whether the broker is currently running in beat mode."""
         return self._beat_mode
+
+    @property
+    def coalesced_beats(self) -> int:
+        """Number of accelerated beats coalesced because a window was pending."""
+        return self._coalesced
+
+    @property
+    def failed(self) -> bool:
+        """Whether the beat loop stopped after an unhandled exception."""
+        return self._failed
+
+    @property
+    def broken(self) -> bool:
+        """Whether stop_beat timed out and the broker is no longer usable."""
+        return self._broken
