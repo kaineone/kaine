@@ -8,6 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from kaine.research.ignition_study import analysis
 from kaine.research.ignition_study.plan import (
     DEFAULT_GESTATION_BUDGET_SECONDS,
     DEFAULT_VIEWING_BUDGET_SECONDS,
@@ -110,6 +111,12 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_analyse(args: argparse.Namespace) -> int:
+    json_path, md_path = analysis.run_analysis(args.study_dir)
+    print(f"Wrote analysis report to {json_path} and {md_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m kaine.research.ignition_study"
@@ -154,6 +161,12 @@ def main(argv: list[str] | None = None) -> int:
     status_p = sub.add_parser("status", help="show progress")
     status_p.add_argument("--study-dir", required=True)
 
+    analyse_p = sub.add_parser(
+        "analyse",
+        help="analyse completed ignition viewings and write the report",
+    )
+    analyse_p.add_argument("--study-dir", required=True)
+
     args = parser.parse_args(argv)
     if args.command == "init":
         return _cmd_init(args)
@@ -161,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_run(args)
     if args.command == "status":
         return _cmd_status(args)
+    if args.command == "analyse":
+        return _cmd_analyse(args)
     return 2
 
 
