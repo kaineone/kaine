@@ -133,9 +133,14 @@ the plugin filled. A simulated run is never evidence about living neurons.
 - **Hardware.** `target = "hardware"` is refused. Running on living tissue is a
   deliberate step with its own welfare review, described in
   [`plugins/kaine-cl1/docs/biological-welfare.md`](../plugins/kaine-cl1/docs/biological-welfare.md).
-- **Real time.** A substrate tick currently blocks the caller for one cognitive
-  tick, so the plugin requires the simulator's accelerated time. A non-blocking
-  substrate is planned.
+- **Real time and a shared clock.** Each converted module step, and each publish
+  of an oscillated module, runs its own substrate window and blocks the caller
+  while it does, so the plugin requires the simulator's accelerated time. It also
+  means substrate time runs faster than KAINE's cognitive time, and a territory
+  records only the windows its own module runs (each module reads the response to
+  its own stimulus). A non-blocking substrate with one shared window per cognitive
+  tick, paced by KAINE's live broadcast rate, is planned and is required before any
+  run on real hardware.
 
 ## Testing
 
