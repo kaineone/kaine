@@ -180,6 +180,9 @@ class CognitiveCycle:
         # dual-path pass and select() is called exactly as before, so the entity's
         # behaviour is unchanged whether or not the ablation is being recorded.
         self._ablation_recorder = ablation_recorder
+        # In-process ignition-log observer: called after every successful workspace
+        # broadcast, never on the bus, never reaches modules or the entity.
+        self._broadcast_observer = None
 
         self._tick_index = 0
         # L1 — incremental deterministic logical time. The logical clock is
@@ -233,6 +236,16 @@ class CognitiveCycle:
         observer exists (the registry is built after the cycle). ``None`` clears
         it, restoring plain single-path selection."""
         self._ablation_recorder = recorder
+
+    def set_broadcast_observer(self, observer: Any) -> None:
+        """Attach an in-process broadcast observer for the ignition log.
+
+        The observer is called after every successful workspace broadcast with
+        the published payload, bus entry id, and wall/monotonic timestamps. It
+        runs inside the cycle, is not a module, and receives no returned value.
+        A failure is logged and never affects the tick.
+        """
+        self._broadcast_observer = observer
 
     @property
     def tick_index(self) -> int:
@@ -555,8 +568,21 @@ class CognitiveCycle:
             broadcast_ok = False
             try:
                 payload = self._snapshot_to_payload(snapshot, is_experiential)
-                await self._bus.publish_workspace(payload)
+                entry_id = await self._bus.publish_workspace(payload)
                 broadcast_ok = True
+                if self._broadcast_observer is not None:
+                    wall_ts = datetime.now(timezone.utc)
+                    mono_ts = time.monotonic()
+                    try:
+                        await self._broadcast_observer.on_broadcast(
+                            payload, entry_id, wall_ts, mono_ts
+                        )
+                    except Exception:
+                        log.warning(
+                            "broadcast observer failed on tick %d",
+                            self._tick_index,
+                            exc_info=True,
+                        )
             except Exception:
                 log.exception("workspace broadcast failed on tick %d", self._tick_index)
             # Executive action selection runs immediately after a successful
