@@ -22,8 +22,9 @@ forward model:
 | Chronos | `chronos.network` | The recurrent network whose hidden state feeds Chronos' prediction head |
 | Soma | `soma.forward_model` | The reservoir under Soma's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units |
 | Any module's oscillator | `oscillator.<module>` | The oscillatory-binding oscillator: each time the module publishes, its own small territory is stimulated in proportion to the event's salience, and the binding phase is read from that territory's firing, exactly as the silicon oscillator reads its simulated population |
+| Nous | `nous.engine_wrapper` | A policy proposal beside KAINE's own active-inference engine, which keeps its beliefs and expected free energy (see "Nous: the tissue as a policy proposer") |
 
-Nous and several partial conversions are planned; their designs are
+Several partial conversions are planned; their designs are
 in [`plugins/kaine-cl1/openspec/`](../plugins/kaine-cl1/openspec/).
 
 ## What it needs
@@ -122,6 +123,49 @@ Every boot with a converted module logs a warning that the substrate is
 simulated and names the data source, and the run manifest records which seams
 the plugin filled. A simulated run is never evidence about living neurons.
 
+## Nous: the tissue as a policy proposer
+
+Nous is off the substrate unless you set `nous = "cl1"`. When it is on, KAINE
+builds its usual active-inference engine and the plugin wraps it. Each step runs
+the silicon engine first, then stimulates one group of electrodes per action,
+harder for actions with lower expected free energy, and reads the tissue's
+proposed action from whichever group fires most in the window that answers its
+stimulation. When no group fires, or the top groups tie, the proposal is the
+silicon engine's choice and the answer counts as a disagreement. Once the
+substrate follows KAINE's cycle, that answer arrives one Nous step later, so it is
+scored against the silicon choice it was stimulated with, not the current one.
+The last two electrodes of the territory carry feedback in the manner of Cortical
+Labs' DishBrain experiment: a fixed pulse after a proposal that agreed with the
+silicon engine, and a random amplitude after one that did not.
+
+```toml
+[plugins.cl1.backends]
+nous = "cl1"
+
+[plugins.cl1.substrate.territories]
+nous = 10        # two electrodes per action plus two feedback electrodes
+
+[plugins.cl1.nous]
+mode = "shadow"  # or "drive"
+```
+
+The territory needs two electrodes for each of Nous' actions plus the two
+feedback electrodes, so 10 for the default four actions; a smaller one fails the
+boot with a message naming the plugin.
+
+- **`shadow`** (the default) changes nothing about what Nous does. The tissue's
+  proposal is computed and the agreement rate with the silicon engine is logged
+  every 100 proposals.
+- **`drive`** makes Nous act on the tissue's proposal. Beliefs and expected free
+  energy still come from the silicon engine. Every boot in drive mode logs a
+  warning.
+
+A step whose silicon inference timed out or failed is passed through untouched,
+with no stimulation. On the simulator this proves the wiring only: the reference
+culture responds to stimulation but does not learn, so its proposals follow the
+encoded preference and nothing more. On a CL1, the feedback pattern is
+stimulation like any other and belongs in your welfare review.
+
 ## What it does not do yet
 
 - **Cortical Cloud.** Cortical Cloud deploys your code to run on the CL1 itself,
@@ -149,7 +193,10 @@ A module's step queues its stimulation for the next window and reads its
 territory's latest completed window, so the response to a stimulus arrives one
 tick later (about 100 ms). If two steps of the same module queue stimulation
 before a window starts, the later one wins. Outside KAINE, or before the first
-tick, each step runs its own window instead.
+tick, each step runs its own window instead, one at a time (Nous steps from a
+worker thread, the other modules from the event loop). If such a window is still
+running at the first tick, the switch to one window per tick finishes in the
+background, so the cycle never waits for it.
 
 ## Running on a CL1
 
@@ -208,5 +255,6 @@ cd plugins/kaine-cl1
 pytest
 ```
 
-Some tests boot stock KAINE through its plugin loader, and two also need torch
-(to compare against the silicon models); those skip where torch is absent.
+Some tests boot stock KAINE through its plugin loader. Two also need torch (to
+compare against the silicon models) and the Nous boot tests need KAINE's
+`reasoning` extra (pymdp); those skip where their dependency is absent.
