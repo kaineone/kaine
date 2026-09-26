@@ -233,6 +233,12 @@ class GestationOwner:
         soma_maxlen = int((self._config.recovery_cap_seconds + 120.0) * 2.0)
         self._soma_series: deque[tuple[float, float]] = deque(maxlen=max(soma_maxlen, 16))
 
+        self._settle_until: float = (
+            self._started_at + self._config.readout_period_seconds
+        )
+        self._paused_last_step: bool = False
+        self._last_probe_end: float = -float("inf")
+
         self._next_withdrawal_at: float = (
             self._started_at + self._config.readout_period_seconds
         )
@@ -328,14 +334,18 @@ class GestationOwner:
         if paused and self._probe_state != "idle":
             await self._abort_probe(now)
         elif not paused:
+            if self._paused_last_step:
+                self._settle_until = now + self._config.readout_period_seconds
             await self._handle_probes(now)
+
+        self._paused_last_step = paused
 
         self._sample(now)
         await self._read_soma_reports(now)
 
         if now >= self._next_readout_at:
             await self._do_readout(now)
-            self._next_readout_at += self._config.readout_period_seconds
+            self._next_readout_at = now + self._config.readout_period_seconds
 
     async def run(self, stop_event: asyncio.Event) -> None:
         try:
@@ -350,7 +360,8 @@ class GestationOwner:
                         timeout=1.0 / self._config.sample_hz,
                     )
                 except TimeoutError:
-                    pass
+                    # Expected periodic wake-up; continue the loop.
+                    continue
         finally:
             if self._probe_state != "idle":
                 try:
@@ -383,23 +394,34 @@ class GestationOwner:
                 await self._end_probe(now)
             return
 
-        if now < self._started_at + self._config.readout_period_seconds:
+        if now < self._settle_until:
             return
 
-        if now >= self._next_withdrawal_at:
-            await self._start_probe(now, "withdrawal")
-        elif now >= self._next_perturbation_at:
-            await self._start_probe(now, "perturbation")
+        min_probe_at = self._last_probe_end + max(
+            60.0, self._config.withdrawal_seconds
+        )
+        if now < min_probe_at:
+            return
+
+        # When both are due, the more overdue one goes first, so neither kind can
+        # starve the other.
+        due = [
+            (self._next_withdrawal_at, "withdrawal"),
+            (self._next_perturbation_at, "perturbation"),
+        ]
+        due = [d for d in due if now >= d[0]]
+        if due:
+            await self._start_probe(now, min(due)[1])
 
     async def _start_probe(self, now: float, kind: str) -> None:
         if kind == "withdrawal":
             seconds = min(self._config.withdrawal_seconds, WITHDRAWAL_MAX_SECONDS)
             self._drive.scale = 0.0
-            self._next_withdrawal_at += self._config.withdrawal_period_seconds
+            self._next_withdrawal_at = now + self._config.withdrawal_period_seconds
         else:
             seconds = min(self._config.perturbation_seconds, PERTURBATION_MAX_SECONDS)
             self._drive.scale = 1.0
-            self._next_perturbation_at += self._config.perturbation_period_seconds
+            self._next_perturbation_at = now + self._config.perturbation_period_seconds
 
         self._probe_state = kind
         self._probe_kind = kind
@@ -415,6 +437,10 @@ class GestationOwner:
 
         self._drive.scale = self._config.baseline_drive_fraction
         await self._publish_probe_event(kind, "end", seconds, aborted=False)
+
+        # The drive is restored now, which may be a tick after the planned end;
+        # the spacing to the next probe counts from this real end.
+        self._last_probe_end = float(now)
 
         self._probe_state = "idle"
         self._probe_kind = None
@@ -435,6 +461,8 @@ class GestationOwner:
 
         self._drive.scale = self._config.baseline_drive_fraction
         await self._publish_probe_event(kind, "end", seconds, aborted=True)
+
+        self._last_probe_end = float(now)
 
         self._probe_state = "idle"
         self._probe_kind = None
@@ -470,16 +498,27 @@ class GestationOwner:
     async def _compute_withdrawal_markers(self, start: float, end: float) -> None:
         duration = end - start
         driven = [
-            s for s in self._samples if start - duration <= s[0] < start
+            s
+            for s in self._samples
+            if start - duration <= s[0] < start and s[4] == "idle"
         ]
-        withdrawn = [s for s in self._samples if start <= s[0] <= end]
+        withdrawn = [
+            s
+            for s in self._samples
+            if start <= s[0] <= end and s[4] == "withdrawal"
+        ]
 
         driven_amps = [s[2] for s in driven if s[2] is not None]
         withdrawn_amps = [s[2] for s in withdrawn if s[2] is not None]
         self._endogenous_self_sustain = self_sustains(driven_amps, withdrawn_amps)
 
-        driven_phases = [s[1] for s in driven if s[1] is not None]
-        driven_beats = [s[3] for s in driven if s[3] is not None]
+        pairs = [
+            (s[1], s[3])
+            for s in driven
+            if s[1] is not None and s[3] is not None
+        ]
+        driven_phases = [p[0] for p in pairs]
+        driven_beats = [p[1] for p in pairs]
         plv = phase_locking_value(driven_phases, driven_beats)
         if (
             plv is not None

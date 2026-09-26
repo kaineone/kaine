@@ -484,8 +484,10 @@ async def test_perturbation_sets_full_drive(owner_factory):
     config = _config(
         readout_period_seconds=1.0,
         withdrawal_seconds=0.5,
-        withdrawal_period_seconds=1.0,
-        perturbation_period_seconds=1.0,
+        # A long withdrawal period isolates the perturbation under test (the
+        # first withdrawal still runs, and the perturbation keeps 60 s from it).
+        withdrawal_period_seconds=1000.0,
+        perturbation_period_seconds=1000.0,
         perturbation_seconds=2.0,
         sample_hz=10.0,
     )
@@ -505,7 +507,7 @@ async def test_perturbation_sets_full_drive(owner_factory):
     )
 
     in_perturbation = False
-    max_steps = int((first_perturbation + config.perturbation_seconds + 2.0) / dt)
+    max_steps = int((first_perturbation + config.perturbation_seconds + 3.0) / dt)
     for i in range(max_steps):
         clock.t = i * dt
         await owner.step()
