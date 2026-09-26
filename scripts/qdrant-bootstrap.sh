@@ -72,6 +72,12 @@ ENV_FILE="compose/.env"
 SECRETS_FILE="config/secrets.toml"
 SECRETS_EXAMPLE="config/secrets.example.toml"
 
+# Rotating a running shared container requires an explicit --container.
+if [[ "$RUNTIME_MODE" == "container" && "$ROTATE" -eq 1 && "$CONTAINER_FLAG" -eq 0 ]] && container_is_running qdrant; then
+  echo "==> kaine-qdrant container is already running; --rotate requires --container to recreate the shared container" >&2
+  exit 2
+fi
+
 # 1. Resolve the API key (shared code path for both runtimes).
 KEY=""
 resolve_credential KAINE_QDRANT_API_KEY qdrant api_key "$ROTATE" "$KEEP" KEY
@@ -84,6 +90,17 @@ mirror_toml_credential "$SECRETS_FILE" "$SECRETS_EXAMPLE" qdrant api_key "$KEY" 
 
 # 4. Bring up the chosen runtime.
 if [[ "$RUNTIME_MODE" == "container" ]]; then
+  if [[ "$CONTAINER_FLAG" -eq 0 ]] && container_is_running qdrant; then
+    echo "==> kaine-qdrant container is already running; verifying health"
+    PORT="${KAINE_QDRANT_HOST_PORT:-6533}"
+    if wait_qdrant_readyz "$KEY" 127.0.0.1 "$PORT" 60; then
+      echo "==> kaine-qdrant container is healthy and was left untouched"
+      exit 0
+    fi
+    echo "==> kaine-qdrant container is running but not answering; refusing to recreate it without --container" >&2
+    exit 3
+  fi
+
   echo "==> docker compose -f compose/qdrant.yml down"
   docker compose -f compose/qdrant.yml down --remove-orphans 2>&1 | sed 's/^/    /' || true
   echo "==> docker compose -f compose/qdrant.yml up -d"

@@ -66,6 +66,12 @@ ENV_FILE="compose/.env"
 SECRETS_FILE="config/secrets.toml"
 SECRETS_EXAMPLE="config/secrets.example.toml"
 
+# Rotating a running shared container requires an explicit --container.
+if [[ "$RUNTIME_MODE" == "container" && "$ROTATE" -eq 1 && "$CONTAINER_FLAG" -eq 0 ]] && container_is_running redis; then
+  echo "==> kaine-redis container is already running; --rotate requires --container to recreate the shared container" >&2
+  exit 2
+fi
+
 # 1. Resolve the password (shared code path for both runtimes).
 PW=""
 resolve_credential KAINE_REDIS_PASSWORD redis password "$ROTATE" "$KEEP" PW
@@ -78,6 +84,16 @@ mirror_toml_credential "$SECRETS_FILE" "$SECRETS_EXAMPLE" redis password "$PW" "
 
 # 4. Bring up the chosen runtime.
 if [[ "$RUNTIME_MODE" == "container" ]]; then
+  if [[ "$CONTAINER_FLAG" -eq 0 ]] && container_is_running redis; then
+    echo "==> kaine-redis container is already running; verifying health"
+    if wait_redis_ping "$PW" 127.0.0.1 6479 30; then
+      echo "==> kaine-redis container is healthy and was left untouched"
+      exit 0
+    fi
+    echo "==> kaine-redis container is running but not answering; refusing to recreate it without --container" >&2
+    exit 3
+  fi
+
   echo "==> docker compose -f compose/redis.yml down"
   docker compose -f compose/redis.yml down --remove-orphans 2>&1 | sed 's/^/    /' || true
   echo "==> docker compose -f compose/redis.yml up -d"

@@ -336,6 +336,29 @@ def _qdrant_sha_env(root, fixture):
     pytest.skip(f"unsupported test architecture: {machine}")
 
 
+def _logging_docker_stub(log_path):
+    # Reports kaine-redis/kaine-qdrant as running until `compose -f
+    # compose/<svc>.yml stop` stops one (state kept beside the log), and
+    # records argv.
+    stopped = str(log_path) + ".stopped"
+    return (
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$*\" >> {str(log_path)!r}\n"
+        "if [ \"$1\" = \"ps\" ]; then\n"
+        "  for s in redis qdrant; do\n"
+        f"    grep -qx \"$s\" {stopped!r} 2>/dev/null || printf 'kaine-%s\\n' \"$s\"\n"
+        "  done\n"
+        "  exit 0\n"
+        "fi\n"
+        "case \"$*\" in\n"
+        f"  *compose/redis.yml\\ stop) echo redis >> {stopped!r} ;;\n"
+        f"  *compose/qdrant.yml\\ stop) echo qdrant >> {stopped!r} ;;\n"
+        "esac\n"
+        "[ \"$1\" = \"compose\" ] && exit 0\n"
+        "exit 1\n"
+    )
+
+
 def test_redis_fresh(fake_repo):
     r = _run(fake_repo, "redis-bootstrap.sh")
     assert r.returncode == 0
@@ -788,17 +811,6 @@ def test_qdrant_local_archive_is_still_checked_against_the_pin(fake_repo):
     assert not (fake_repo / "state" / "services" / "qdrant" / "bin" / "qdrant").exists()
 
 
-def _logging_docker_stub(log_path):
-    # Reports kaine-redis/kaine-qdrant as running containers and records argv.
-    return (
-        "#!/bin/sh\n"
-        f"printf '%s\\n' \"$*\" >> {str(log_path)!r}\n"
-        "if [ \"$1\" = \"ps\" ]; then printf 'kaine-redis\\nkaine-qdrant\\n'; exit 0; fi\n"
-        "[ \"$1\" = \"compose\" ] && exit 0\n"
-        "exit 1\n"
-    )
-
-
 def test_services_stop_refuses_a_shared_container_without_the_flag(fake_repo):
     log = fake_repo / "docker-argv.log"
     r = _run(
@@ -816,15 +828,151 @@ def test_services_stop_refuses_a_shared_container_without_the_flag(fake_repo):
 
 def test_services_stop_with_the_flag_stops_and_never_removes(fake_repo):
     log = fake_repo / "docker-argv.log"
+    state = fake_repo / "docker-state"
+    stub = (
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$*\" >> {str(log)!r}\n"
+        'if [ "$1" = \"ps\" ]; then\n'
+        f'  if [ -f {str(state)!r} ]; then exit 0; fi\n'
+        '  printf \"kaine-redis\\n\"\n'
+        "  exit 0\n"
+        "fi\n"
+        # argv is `compose -f compose/redis.yml stop`: match the last word.
+        'case \"$*\" in compose*" stop") ;; *) exit 0;; esac\n'
+        f"touch {str(state)!r}\n"
+        "exit 0\n"
+    )
     r = _run(
         fake_repo,
         "services.sh",
         "stop",
         "redis",
         "--container",
-        extra_stubs={"docker": _logging_docker_stub(log)},
+        extra_stubs={"docker": stub},
     )
     assert r.returncode == 0, r.stdout + r.stderr
     calls = log.read_text()
     assert "compose -f compose/redis.yml stop" in calls
     assert " down" not in calls
+    assert state.exists()
+
+
+# ------------------------------------------------------------------------------
+# Review-finding regression tests
+# ------------------------------------------------------------------------------
+
+
+def test_container_no_flag_leaves_running_container_untouched(fake_repo):
+    env_path = fake_repo / "compose" / ".env"
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text("KAINE_REDIS_PASSWORD=" + "a" * 64 + "\n")
+
+    log = fake_repo / "docker-argv.log"
+    docker_stub = _logging_docker_stub(log)
+
+    # No flags, container already running and healthy: must skip down/up.
+    r = _run(fake_repo, "redis-bootstrap.sh", extra_stubs={"docker": docker_stub})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "left untouched" in (r.stdout + r.stderr).lower()
+    assert _parse_env(env_path)["KAINE_REDIS_PASSWORD"] == "a" * 64
+    calls = log.read_text()
+    assert " down" not in calls
+    assert " up" not in calls
+
+    # --rotate without --container on a running container must refuse.
+    r = _run(fake_repo, "redis-bootstrap.sh", "--rotate", extra_stubs={"docker": docker_stub})
+    assert r.returncode != 0
+    assert "--container" in (r.stdout + r.stderr).lower()
+    assert _parse_env(env_path)["KAINE_REDIS_PASSWORD"] == "a" * 64
+
+    # --container while running recreates as before.
+    r = _run(fake_repo, "redis-bootstrap.sh", "--container", extra_stubs={"docker": docker_stub})
+    assert r.returncode == 0, r.stdout + r.stderr
+    calls = log.read_text()
+    assert "compose -f compose/redis.yml down --remove-orphans" in calls
+    assert "compose -f compose/redis.yml up -d" in calls
+
+
+def test_pid_reuse_does_not_signal_or_kill_unrelated_process(fake_repo):
+    sleep_bin = _find_system_tool("sleep")
+    proc = subprocess.Popen([str(sleep_bin), "30"])
+    try:
+        pidfile = fake_repo / "state" / "services" / "redis" / "redis.pid"
+        pidfile.parent.mkdir(parents=True, exist_ok=True)
+        pidfile.write_text(str(proc.pid))
+
+        r = _run(fake_repo, "services.sh", "status", "redis", omit_stubs=["docker"])
+        assert r.returncode == 0
+        assert "not running" in r.stdout
+        assert not pidfile.exists()
+        assert proc.poll() is None
+
+        r = _run(fake_repo, "services.sh", "stop", "redis", omit_stubs=["docker"])
+        assert r.returncode == 0
+        assert proc.poll() is None
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            proc.kill()
+
+
+def test_qdrant_pidfile_secret_not_on_argv(fake_repo):
+    argv_log = fake_repo / "qdrant-argv.log"
+    env_log = fake_repo / "qdrant-env.log"
+    qdrant_script = (
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$@\" >> {str(argv_log)!r}\n"
+        f"env >> {str(env_log)!r}\n"
+        "while true; do sleep 1; done\n"
+    ).encode()
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        info = tarfile.TarInfo(name="qdrant")
+        info.size = len(qdrant_script)
+        info.mode = 0o755
+        tf.addfile(info, io.BytesIO(qdrant_script))
+    fixture = fake_repo / "qdrant-fixture.tar.gz"
+    fixture.write_bytes(buf.getvalue())
+    _qdrant_curl_stub(fake_repo, fixture)
+
+    r = _run(
+        fake_repo,
+        "qdrant-bootstrap.sh",
+        "--native",
+        env=_qdrant_sha_env(fake_repo, fixture),
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    key = _parse_env(fake_repo / "compose" / ".env")["KAINE_QDRANT_API_KEY"]
+    assert argv_log.exists()
+    assert key not in argv_log.read_text()
+    assert env_log.exists()
+    assert key in env_log.read_text()
+
+    source = (fake_repo / "scripts" / "lib" / "native-services.sh").read_text()
+    assert 'env "${' not in source
+
+
+def test_services_stop_container_reports_compose_failure(fake_repo):
+    log = fake_repo / "docker-argv.log"
+    stub = (
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$*\" >> {str(log)!r}\n"
+        'if [ \"$1\" = \"ps\" ]; then printf \"kaine-redis\\n\"; exit 0; fi\n'
+        'case \"$*\" in compose*" stop") exit 1;; esac\n'
+        "exit 0\n"
+    )
+    r = _run(
+        fake_repo,
+        "services.sh",
+        "stop",
+        "redis",
+        "--container",
+        extra_stubs={"docker": stub},
+    )
+    assert r.returncode != 0
+    assert "failed" in (r.stdout + r.stderr).lower()
+    calls = log.read_text()
+    assert "compose -f compose/redis.yml stop" in calls
