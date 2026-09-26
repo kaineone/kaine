@@ -2,15 +2,15 @@
 
 - [ ] 1.1 `operator-revive-and-preserve`: revive into a running cycle; operator preserve on request; the stage in the bundle.
 - [ ] 1.2 `faculty-relative-birth`: the birth gate judges only enabled faculties (sleep and consolidation only with Hypnos and Phantasia; a body only with Mundus); birth into the audio/video world.
-- [ ] 1.3 `snapshot-completeness`: Thymos goals saved; Hypnos schedule restored; Nous belief handed to its engine; Phantasia training and weight persistence in the study profile; revive-with-extra-module tests for every module.
+- [ ] 1.3 `snapshot-completeness`: Thymos goals saved; Hypnos schedule restored; the Nous posterior handed to its engine's fallback (Nous has no other belief carry-over); revive-with-extra-module tests for every module. Phantasia training and weight persistence move to the study profile (2.1).
 - [ ] 1.4 `film-aligned-ignition-log`: a content-free film-position event (item, offset, paused); the broadcast record keeps entry ids, the run id and the broadcast time.
 - [ ] 1.5 `film-end-preserve`: the programme's end publishes an event and, in study mode, freezes, preserves and stops.
 - [ ] 1.6 `study-confounds`: Empatheia labels media speech as media, not the operator; a gestating being's speech intents form but its outputs are held.
 
 ## 2. The study
 
-- [ ] 2.1 The four-film manifest (checksummed) and the study profile.
-- [ ] 2.2 The study runner: line roots and isolation, the step loop, the step manifests, resumable after an interruption.
+- [ ] 2.1 The four-film manifest (checksummed) and the study profile, which turns on Phantasia training and weight persistence.
+- [ ] 2.2 The study runner: line roots and isolation, the step loop, the step manifests, resumable after an interruption; it refuses a step whose preservation did not capture the world model while Phantasia is enabled.
 - [ ] 2.3 The ignition analysis and its report.
 - [ ] 2.4 A dry run of the runner end to end with a tiny stand-in programme and no entity (fakes), before the real run.
 

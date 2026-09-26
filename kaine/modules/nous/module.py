@@ -239,3 +239,10 @@ class Nous(BaseModule):
             self._last_action = state["last_action"]
         if "posterior" in state and isinstance(state["posterior"], list):
             self._last_posterior = [list(p) for p in state["posterior"]]
+            seed = getattr(self._engine, "seed_posterior", None)
+            if callable(seed) and self._last_posterior:
+                if not seed(self._last_posterior):
+                    log.warning(
+                        "nous: restored posterior does not match the model; "
+                        "engine fallback unchanged"
+                    )
