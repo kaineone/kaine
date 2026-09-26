@@ -69,6 +69,7 @@ NO_WIZARD=0
 RESEARCH=0
 RETRY_GPU=0
 EXTRAS="full"
+EXTRAS_PROVIDED=0
 # Pins filled by host-aware wheel-index resolution for CUDA and ROCm.
 TORCH_PIN=""
 TV_PIN=""
@@ -121,11 +122,13 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       EXTRAS="$2"
+      EXTRAS_PROVIDED=1
       shift 2
       continue
       ;;
     --extras=*)
       EXTRAS="${1#--extras=}"
+      EXTRAS_PROVIDED=1
       shift
       continue
       ;;
@@ -304,9 +307,63 @@ _install_torchaudio() {
 echo "==> upgrading pip"
 "$PIP" install --quiet --upgrade pip
 
+# Determine wheel flavor and extras via the target probe unless forced.
+PROBE_FAILED=0
+if [[ -z "$FORCE" ]]; then
+  if probe_flavor=$(PYTHONPATH="$ROOT" "$PYTHON_BIN" -m kaine.install_target --flavor-only); then
+    probe_rc=0
+  else
+    probe_rc=$?
+  fi
+  if [[ "$probe_rc" -eq 0 ]]; then
+    flavor="$probe_flavor"
+    echo "==> target probe selected flavor: $flavor"
+  elif [[ "$probe_rc" -eq 3 ]]; then
+    echo "install.sh: unsupported target (probe returned $probe_rc):" >&2
+    printf '%s\n' "$probe_flavor" >&2
+    exit 1
+  else
+    echo "install.sh: target probe failed (rc=$probe_rc); falling back to legacy detection" >&2
+    PROBE_FAILED=1
+  fi
+fi
+
+if [[ "$EXTRAS_PROVIDED" -eq 0 ]]; then
+  if probe_json=$(PYTHONPATH="$ROOT" "$PYTHON_BIN" -m kaine.install_target --json); then
+    probe_rc=0
+  else
+    probe_rc=$?
+  fi
+  if [[ "$probe_rc" -eq 0 ]]; then
+    EXTRAS=$(printf '%s\n' "$probe_json" | "$PYTHON_BIN" -c 'import sys,json; print(json.load(sys.stdin)["plan"]["extras"])')
+    printf '%s\n' "$probe_json" | "$PYTHON_BIN" -c 'import sys,json
+d=json.load(sys.stdin)
+p=d["plan"]
+print("==> KAINE install plan")
+print("    target: {} (flavor: {})".format(d["target"]["name"], d["target"]["flavor"]))
+print("    extras: {}".format(p["extras"]))
+if p["runs"]:
+    print("    will run:")
+    for r in p["runs"]: print("      - {}".format(r))
+if p["will_not_run"]:
+    print("    will NOT run:")
+    for m,r in p["will_not_run"]: print("      - {}: {}".format(m,r))
+for note in p.get("notes", []):
+    print("    note: {}".format(note))'
+  elif [[ "$probe_rc" -eq 3 ]]; then
+    echo "install.sh: unsupported target (probe returned $probe_rc):" >&2
+    printf '%s\n' "$probe_json" >&2
+    exit 1
+  else
+    echo "install.sh: target probe failed (rc=$probe_rc); using default extras" >&2
+  fi
+fi
+
 # Determine wheel flavor.
-flavor=""
-if [[ -n "$FORCE" ]]; then
+flavor="${flavor:-}"
+if [[ -n "$flavor" ]]; then
+  : # already selected by the target probe
+elif [[ -n "$FORCE" ]]; then
   flavor="$FORCE"
   echo "==> wheel flavor forced via flag: $flavor"
 elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then

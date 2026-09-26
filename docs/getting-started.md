@@ -33,6 +33,34 @@ boot.** Read every section before running anything. First boot is a one-way door
 
 ---
 
+## One command on any host
+
+Clone and bootstrap KAINE with a single shell command:
+
+```bash
+bash <(curl -fsSL https://your-repo.example/kaine/scripts/bootstrap.sh) --repo https://your-repo.example/kaine.git --yes
+```
+
+> Replace the URL with your own fork of the repository. The bootstrap script
+> never starts the entity; it only prepares the host, installs KAINE, and
+> offers the first-run setup wizard.
+
+| Target | Detected by | Flavor | Extras | What runs |
+|---|---|---|---|---|
+| Desktop NVIDIA | working `nvidia-smi -L` | `cuda` | `full` | all modules |
+| Desktop AMD | `rocm-smi` on PATH or `/opt/rocm` | `rocm` | `full` | all modules |
+| Desktop Intel | `xpu-smi` or `sycl-ls` | `xpu` | `full` | all modules |
+| Desktop CPU | x86_64 Linux, no accelerator | `cpu` | `full` | all modules |
+| Jetson / Tegra | `/etc/nv_tegra_release` or device-tree Tegra markers (works without `nvidia-smi`) | `cuda` | `full` | all modules; aarch64 cu13x wheel |
+| Generic aarch64 CPU | aarch64 Linux, not Tegra | `cpu` | `full` | all modules |
+| macOS | Darwin | `mps` on Apple Silicon, `cpu` otherwise | `full` | all modules |
+| Termux / Android | `TERMUX_VERSION` or a `com.termux` prefix | `cpu` | `memory-edge` | memory + edge only; Soma, Chronos, Topos need torch (phase 2); Nous, Phantasia need JAX (phase 3); use `sqlite_vec` for Mnemos |
+
+The bootstrap script prints the system-package command for your package manager
+(`apt`, `dnf`, `pacman`, `pkg`, or `brew`) and only runs it when you pass
+`--yes`. It never starts the entity and it never assumes root: `sudo` commands
+prompt the operator.
+
 ## Prerequisites
 
 ### Host software
