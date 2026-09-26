@@ -295,3 +295,35 @@ def test_stimulation_queued_before_the_first_tick_after_a_long_boot_gap_is_disca
         assert any("discarded" in rec.message for rec in caplog.records)
     finally:
         p.close()
+
+
+def test_hardware_open_forces_real_time_env(monkeypatch):
+    """A stale accelerated-time setting in the environment never reaches a device."""
+    monkeypatch.setenv("CL_SDK_ACCELERATED_TIME", "1")
+    recorded = []
+
+    class _FakeCtx:
+        def __init__(self, neurons):
+            self._neurons = neurons
+
+        def __enter__(self):
+            recorded.append(os.environ.get("CL_SDK_ACCELERATED_TIME"))
+            return self._neurons
+
+        def __exit__(self, *args):
+            return None
+
+    fake = _FakeNeurons()
+    monkeypatch.setattr(cl, "is_simulator", lambda: False)
+    monkeypatch.setattr(cl, "open", lambda: _FakeCtx(fake))
+
+    session = SubstrateSession(SubstrateConfig(target="hardware"))
+    try:
+        neurons = session.open()
+        assert neurons is fake
+        assert os.environ["CL_SDK_ACCELERATED_TIME"] == "0"
+    finally:
+        session.close()
+
+    assert recorded == ["0"]
+    assert os.environ["CL_SDK_ACCELERATED_TIME"] == "0"

@@ -109,6 +109,9 @@ class SubstrateSession:
         import cl  # lazy: importing the SDK is a side-effecting act
 
         if self._config.target == "hardware":
+            # Never inherit an ambient accelerated-time setting on living tissue. Set it the
+            # same way the simulator path does (after importing cl, before cl.open()).
+            os.environ["CL_SDK_ACCELERATED_TIME"] = "0"
             if cl.is_simulator():
                 raise RuntimeError(
                     "refusing to run: target is 'hardware' but cl.is_simulator() is True "
