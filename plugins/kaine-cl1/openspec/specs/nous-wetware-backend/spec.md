@@ -50,3 +50,10 @@ Before the substrate follows KAINE's cycle, each step runs its own substrate win
 #### Scenario: Nous and Chronos step at once before the first tick
 - **WHEN** Nous' worker thread and Chronos on the event loop each exchange with the broker before the first cycle tick
 - **THEN** their windows run one after the other on the substrate, never interleaved
+
+### Requirement: Following the cycle never blocks KAINE's event loop
+When KAINE's first cycle tick finds a synchronous substrate window in flight, the plugin SHALL NOT wait for it on the calling thread: it SHALL finish the switch to following the cycle on a background thread and skip ticks until the switch completes. Closing the plugin SHALL wait for a pending switch before stopping the substrate.
+
+#### Scenario: First tick during a Nous window
+- **WHEN** the first cycle tick arrives while Nous' worker thread is running a synchronous window
+- **THEN** the tick returns without waiting, and the substrate follows the cycle once that window ends

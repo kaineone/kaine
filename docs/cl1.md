@@ -194,7 +194,9 @@ territory's latest completed window, so the response to a stimulus arrives one
 tick later (about 100 ms). If two steps of the same module queue stimulation
 before a window starts, the later one wins. Outside KAINE, or before the first
 tick, each step runs its own window instead, one at a time (Nous steps from a
-worker thread, the other modules from the event loop).
+worker thread, the other modules from the event loop). If such a window is still
+running at the first tick, the switch to one window per tick finishes in the
+background, so the cycle never waits for it.
 
 ## Running on a CL1
 
