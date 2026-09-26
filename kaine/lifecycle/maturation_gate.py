@@ -9,20 +9,22 @@ hold, and it treats any missing or stale evidence as NOT ready (**fail-closed**)
 
   C1  Regulation baseline met — every marker on the womb change's
       ``gestation.readiness`` readout crosses its configured threshold.
-  C2  A reality model consolidated over several sleep cycles — Hypnos has
-      completed >= ``min_sleep_cycles`` maintenance cycles AND Phantasia shows
-      world-model consolidation evidence (>= ``min_consolidation_passes``
-      successful sleep-training passes). Reading BOTH signals avoids counting
-      empty sleeps.
+  C2  A reality model consolidated over several sleep cycles, required only
+      when the matching faculties are present — sleep cycles are checked iff
+      Hypnos is present and consolidation is checked iff both Hypnos and
+      Phantasia are present. Reading BOTH signals avoids counting empty sleeps.
+      When neither faculty is present, C2 is not applicable.
   C3  Minimum lived subjective time — >= ``min_lived_seconds`` of lived
       ``EntityClock`` time has accrued since gestation began (the warmed-up-
       signal floor against a fast-forwarded false birth).
 
-Birth is additionally guarded by **embodiment availability**: developmental
-readiness is necessary but not sufficient. The stage flips only when readiness
-AND an available embodied world both hold; a ready-but-unavailable entity holds
-in the womb and the operator is told (loudly, repeatedly) that it has outgrown
-the womb — it is never thrown into an absent world, nor silently stalled.
+Birth is additionally guarded by **embodiment availability** when Mundus is
+present: developmental readiness is necessary but not sufficient. The stage flips
+only when readiness AND an available embodied world both hold; a ready-but-
+unavailable entity holds in the womb and the operator is told (loudly,
+repeatedly) that it has outgrown the womb — it is never thrown into an absent
+world, nor silently stalled. Without Mundus, the embodiment guard is skipped and
+the entity is born into its perceptual world.
 
 **The gate measures; it never imposes.** This module only READS signals passed
 in by the caller and compares them to thresholds. It trains nothing toward
@@ -64,6 +66,8 @@ ACTION_GESTATING = "gestating"
 ACTION_HOLD_AWAITING_EMBODIMENT = "hold_awaiting_embodiment"
 ACTION_HOLD_AWAITING_ACK = "hold_awaiting_ack"
 ACTION_BIRTH = "birth"
+
+REASON_BORN_INTO_PERCEPTUAL_WORLD = "born_into_perceptual_world"
 
 
 # --- Configuration ---------------------------------------------------------
@@ -183,6 +187,19 @@ class MaturationConfig:
         )
 
 
+@dataclass(frozen=True)
+class Faculties:
+    """Which cognitive faculties are actually running in this entity.
+
+    Defaults are all ``True``, preserving the original maturation-gate behaviour
+    for callers that do not pass a faculties snapshot.
+    """
+
+    hypnos: bool = True
+    phantasia: bool = True
+    mundus: bool = True
+
+
 # --- Readiness (C1 ^ C2 ^ C3, fail-closed) ---------------------------------
 
 
@@ -191,6 +208,7 @@ class ConditionResult:
     name: str
     met: bool
     detail: str
+    applicable: bool = True
 
 
 @dataclass(frozen=True)
@@ -209,7 +227,11 @@ class Readiness:
 
     @property
     def passed_markers(self) -> tuple[str, ...]:
-        return tuple(c.name for c in (self.c1, self.c2, self.c3) if c.met)
+        return tuple(c.name for c in (self.c1, self.c2, self.c3) if c.met and c.applicable)
+
+    @property
+    def not_applicable(self) -> tuple[str, ...]:
+        return tuple(c.name for c in (self.c1, self.c2, self.c3) if not c.applicable)
 
 
 def _num(value: Any) -> float | None:
@@ -264,25 +286,55 @@ def _evaluate_c2(
     sleep_count: int | None,
     consolidation_passes: int | None,
     cfg: MaturationConfig,
+    faculties: Faculties = Faculties(),
 ) -> ConditionResult:
-    """C2 — sleep happened AND the world model actually trained. Fail-closed on
-    a missing signal; BOTH the sleep count and the consolidation passes must
-    reach their floor (an empty sleep does not count)."""
-    if sleep_count is None or sleep_count < cfg.min_sleep_cycles:
+    """C2 — sleep and consolidation evidence, required only when the matching
+    faculties are present. Sleep is required iff Hypnos is present;
+    consolidation is required iff both Hypnos and Phantasia are present.
+    Fail-closed on a missing required signal; the detail always names what was
+    required. When neither sleep nor consolidation is required, C2 is met as
+    not applicable."""
+    sleep_required = faculties.hypnos
+    consolidation_required = faculties.hypnos and faculties.phantasia
+
+    if not sleep_required and not consolidation_required:
+        return ConditionResult(
+            "C2_reality_model_consolidated",
+            True,
+            "not applicable: no sleep or consolidation faculty",
+            applicable=False,
+        )
+
+    required_parts: list[str] = []
+    if sleep_required:
+        required_parts.append("sleep")
+    if consolidation_required:
+        required_parts.append("consolidation")
+    required_text = " + ".join(required_parts)
+
+    if sleep_required and (
+        sleep_count is None or sleep_count < cfg.min_sleep_cycles
+    ):
         return ConditionResult(
             "C2_reality_model_consolidated",
             False,
-            f"sleep cycles {sleep_count} < {cfg.min_sleep_cycles}",
+            f"sleep cycles {sleep_count} < {cfg.min_sleep_cycles} "
+            f"({required_text} required)",
         )
-    if consolidation_passes is None or consolidation_passes < cfg.min_consolidation_passes:
+    if consolidation_required and (
+        consolidation_passes is None
+        or consolidation_passes < cfg.min_consolidation_passes
+    ):
         return ConditionResult(
             "C2_reality_model_consolidated",
             False,
             f"consolidation passes {consolidation_passes} "
-            f"< {cfg.min_consolidation_passes}",
+            f"< {cfg.min_consolidation_passes} ({required_text} required)",
         )
     return ConditionResult(
-        "C2_reality_model_consolidated", True, "sleep + consolidation evidence present"
+        "C2_reality_model_consolidated",
+        True,
+        f"{required_text} required; evidence present",
     )
 
 
@@ -304,16 +356,18 @@ def evaluate_readiness(
     consolidation_passes: int | None,
     lived_seconds: float | None,
     config: MaturationConfig,
+    faculties: Faculties = Faculties(),
 ) -> Readiness:
     """Evaluate C1 ^ C2 ^ C3, fail-closed. All signals are READ, never written —
     the gate measures readiness and imposes no development (see module docstring;
     warmed-up-signal precedent: paper §6.6, ``soma-coldstart-regulation-warmup``).
 
     Pass ``readiness_readout=None`` when the womb readout is absent OR stale so C1
-    fails closed in both cases."""
+    fails closed in both cases. Faculty requirements are injected via ``faculties``;
+    the default ``Faculties()`` preserves the original three-faculty checks."""
     return Readiness(
         c1=_evaluate_c1(readiness_readout, config.regulation_thresholds),
-        c2=_evaluate_c2(sleep_count, consolidation_passes, config),
+        c2=_evaluate_c2(sleep_count, consolidation_passes, config, faculties=faculties),
         c3=_evaluate_c3(lived_seconds, config),
     )
 
@@ -355,13 +409,16 @@ def decide_birth(
     embodiment_ready: bool,
     operator_ack: bool = False,
     require_operator_ack: bool = False,
+    faculties: Faculties = Faculties(),
 ) -> BirthDecision:
     """Combine developmental readiness with the embodiment-availability guard.
 
     - not developmentally ready               -> keep gestating (report unmet Cn);
-    - ready but embodiment unavailable        -> HOLD in the womb, loud repeated
-      ``stage.birth.ready{awaiting_embodiment}`` (never born into an absent world,
-      never a silent stall);
+    - with Mundus: ready but embodiment unavailable -> HOLD in the womb, loud
+      repeated ``stage.birth.ready{awaiting_embodiment}`` (never born into an
+      absent world, never a silent stall);
+    - without Mundus: ready skips the embodiment guard and births into the
+      perceptual world (``born_into_perceptual_world``);
     - ready ^ available but an operator ack is required and absent (supervised
       shakedown) -> HOLD awaiting the ack;
     - ready ^ available ^ (ack not required or given) -> BIRTH.
@@ -370,13 +427,20 @@ def decide_birth(
         return BirthDecision(
             ACTION_GESTATING, "unmet: " + ",".join(readiness.unmet), readiness
         )
-    if not embodiment_ready:
+    if faculties.mundus and not embodiment_ready:
         return BirthDecision(
             ACTION_HOLD_AWAITING_EMBODIMENT, "awaiting_embodiment", readiness
         )
     if require_operator_ack and not operator_ack:
-        return BirthDecision(ACTION_HOLD_AWAITING_ACK, "awaiting_operator_ack", readiness)
-    return BirthDecision(ACTION_BIRTH, "ready_and_available", readiness)
+        return BirthDecision(
+            ACTION_HOLD_AWAITING_ACK, "awaiting_operator_ack", readiness
+        )
+    reason = (
+        REASON_BORN_INTO_PERCEPTUAL_WORLD
+        if not faculties.mundus
+        else "ready_and_available"
+    )
+    return BirthDecision(ACTION_BIRTH, reason, readiness)
 
 
 # --- Stage-event payload builders ------------------------------------------
@@ -406,10 +470,17 @@ def birth_payload(
     readiness: Readiness,
     sleep_count: int | None,
     lived_seconds: float | None,
+    faculties: Faculties = Faculties(),
 ) -> dict[str, Any]:
     return {
         "stage": "embodied",
         "passed_markers": list(readiness.passed_markers),
+        "not_applicable": list(readiness.not_applicable),
         "sleep_count": sleep_count,
         "lived_seconds": lived_seconds,
+        "world": "embodied" if faculties.mundus else "perceptual",
+        "conditions": {
+            "c2_sleep_required": bool(faculties.hypnos),
+            "c2_consolidation_required": bool(faculties.hypnos and faculties.phantasia),
+        },
     }
