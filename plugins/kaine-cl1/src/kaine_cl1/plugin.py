@@ -52,12 +52,33 @@ CLOUD_MESSAGE = (
     "remote CL1. See docs/cl1.md."
 )
 
-HARDWARE_MESSAGE = (
-    "the plugin runs only against the CL1 simulator; "
-    "hardware runs are a deliberate, reviewed step outside the plugin "
-    "(see plugins/kaine-cl1/docs/biological-welfare.md), and the accelerated time the "
-    "plugin requires is simulator-only"
+REQUIRED_ACKNOWLEDGEMENT = (
+    "I have read plugins/kaine-cl1/docs/biological-welfare.md and hold institutional "
+    "approval for work with this culture"
 )
+
+
+def _hardware_gate_problems(overlay: OverlayConfig) -> list[str]:
+    problems: list[str] = []
+    if overlay.hardware_acknowledgement != REQUIRED_ACKNOWLEDGEMENT:
+        problems.append(
+            "[hardware].welfare_acknowledgement must be exactly: " + REQUIRED_ACKNOWLEDGEMENT
+        )
+    if not overlay.ethics_reference:
+        problems.append(
+            "[hardware].ethics_reference must name your institutional approval or protocol"
+        )
+    if overlay.substrate.accelerated_time:
+        problems.append(
+            "[substrate].accelerated_time must be false on hardware "
+            "(accelerated time is simulator-only)"
+        )
+    if overlay.substrate.data_source is not None:
+        problems.append(
+            "[substrate].data_source must not be set on hardware (simulated data sources do not "
+            "apply)"
+        )
+    return problems
 
 
 def _cl_sdk_installed() -> bool:
@@ -97,8 +118,13 @@ class Cl1Plugin:
             raise ValueError(REQUIREMENTS_MESSAGE)
         if overlay.substrate.target == "cloud":
             raise ValueError(CLOUD_MESSAGE)
-        if overlay.substrate.target != "simulator":
-            raise ValueError(HARDWARE_MESSAGE)
+        if overlay.substrate.target == "hardware":
+            problems = _hardware_gate_problems(overlay)
+            if problems:
+                raise ValueError(
+                    "the CL1 plugin refuses the hardware target until these are met "
+                    "(see docs/cl1.md, Running on a CL1): " + "; ".join(problems)
+                )
 
         converted = overlay.cl1_modules()
 
@@ -146,14 +172,22 @@ class Cl1Plugin:
         converted = overlay.cl1_modules()
         oscillators = overlay.oscillator_modules
         if converted or oscillators:
-            log.warning(
-                "CL1 substrate is SIMULATED (Cortical Labs cl-sdk simulator, "
-                "data_source=%s); results are not biological. Converted modules: %s; "
-                "oscillators: %s",
-                overlay.substrate.data_source,
-                ", ".join(converted) if converted else "none",
-                ", ".join(oscillators) if oscillators else "none",
-            )
+            if overlay.substrate.target == "hardware":
+                log.warning(
+                    "A LIVING NEURAL CULTURE is in the loop (CL1 hardware target; ethics "
+                    "reference: %s). Stimulation reaches real cells; KAINE freezes stop all "
+                    "stimulation.",
+                    overlay.ethics_reference,
+                )
+            elif overlay.substrate.target == "simulator":
+                log.warning(
+                    "CL1 substrate is SIMULATED (Cortical Labs cl-sdk simulator, "
+                    "data_source=%s); results are not biological. Converted modules: %s; "
+                    "oscillators: %s",
+                    overlay.substrate.data_source,
+                    ", ".join(converted) if converted else "none",
+                    ", ".join(oscillators) if oscillators else "none",
+                )
         module_seams = frozenset(
             f"{module}.{WETWARE_BACKENDS[module].inject_kwarg}"
             for module in converted
@@ -221,6 +255,15 @@ class Cl1Plugin:
         except Exception:
             session.close()
             raise
+
+        if overlay.substrate.target == "hardware":
+            # On living tissue, stimulation happens only on KAINE's cycle ticks, so a
+            # frozen cycle delivers none; never fall back to per-step windows.
+            try:
+                broker.start_beat(accelerated=False)
+            except Exception:
+                session.close()
+                raise
 
         self._session = session
         self._broker = broker

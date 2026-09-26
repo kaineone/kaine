@@ -35,6 +35,10 @@ class OverlayConfig:
     oscillator_modules: list[str] = field(default_factory=list)
     #: Channels leased to each oscillator's own territory.
     oscillator_channels: int = 4
+    #: The operator's welfare acknowledgement for a hardware target ([hardware] table).
+    hardware_acknowledgement: str = ""
+    #: The operator's institutional approval or protocol reference for a hardware target.
+    ethics_reference: str = ""
 
     def cl1_modules(self) -> list[str]:
         """Modules whose forward model is routed to the substrate, in config order."""
@@ -57,12 +61,23 @@ def _substrate_from_raw(raw: dict[str, Any]) -> SubstrateConfig:
         raise ValueError(
             f"[substrate].target must be 'simulator', 'cloud' or 'hardware', got {target!r}"
         )
-    data_source = str(sub.get("data_source", "reference_culture"))
-    if data_source not in ("reference_culture", "sdk", "replay"):
-        raise ValueError(
-            "[substrate].data_source must be 'reference_culture', 'sdk' or 'replay', "
-            f"got {data_source!r}"
-        )
+    if target == "hardware":
+        if "data_source" in sub:
+            data_source = str(sub["data_source"])
+            if data_source not in ("reference_culture", "sdk", "replay"):
+                raise ValueError(
+                    "[substrate].data_source must be 'reference_culture', 'sdk' or 'replay', "
+                    f"got {data_source!r}"
+                )
+        else:
+            data_source = None
+    else:
+        data_source = str(sub.get("data_source", "reference_culture"))
+        if data_source not in ("reference_culture", "sdk", "replay"):
+            raise ValueError(
+                "[substrate].data_source must be 'reference_culture', 'sdk' or 'replay', "
+                f"got {data_source!r}"
+            )
     if data_source == "replay" and not sub.get("replay_path"):
         raise ValueError("[substrate].data_source = 'replay' needs [substrate].replay_path")
     return SubstrateConfig(
@@ -122,6 +137,21 @@ def overlay_from_mapping(raw: Mapping[str, Any]) -> OverlayConfig:
     if channels_per_module < 1:
         raise ValueError("[oscillators].channels_per_module must be an integer >= 1")
 
+    hardware_raw = raw.get("hardware", {}) or {}
+    hardware_acknowledgement = ""
+    if "welfare_acknowledgement" in hardware_raw:
+        value = hardware_raw["welfare_acknowledgement"]
+        if not isinstance(value, str):
+            raise ValueError("[hardware].welfare_acknowledgement must be a string")
+        hardware_acknowledgement = value.strip()
+
+    ethics_reference = ""
+    if "ethics_reference" in hardware_raw:
+        value = hardware_raw["ethics_reference"]
+        if not isinstance(value, str):
+            raise ValueError("[hardware].ethics_reference must be a string")
+        ethics_reference = value.strip()
+
     return OverlayConfig(
         substrate=substrate,
         backends=backends,
@@ -129,6 +159,8 @@ def overlay_from_mapping(raw: Mapping[str, Any]) -> OverlayConfig:
         cognitive_rate=cognitive_rate,
         oscillator_modules=oscillator_modules,
         oscillator_channels=channels_per_module,
+        hardware_acknowledgement=hardware_acknowledgement,
+        ethics_reference=ethics_reference,
     )
 
 

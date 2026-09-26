@@ -27,7 +27,8 @@ class SubstrateConfig:
     """Resolved configuration for a substrate session (mirrors the SDK env knobs)."""
 
     #: "simulator" (default; what we build/validate on) or "hardware" (deliberate,
-    #: reviewed opt-in: a real culture is reached only by explicit choice).
+    #: reviewed opt-in through the plugin's welfare gate; see docs/cl1.md). The
+    #: session refuses "hardware" when the SDK reports the simulator.
     target: str = "simulator"
     #: Simulator only. Decouples the loop from wall-clock for fast offline
     #: evaluation (CL_SDK_ACCELERATED_TIME=1). Must be False on real hardware,
@@ -107,14 +108,21 @@ class SubstrateSession:
         """Open (and take control of) the one connection. Returns the `Neurons`."""
         import cl  # lazy: importing the SDK is a side-effecting act
 
-        self._apply_env()
-        self._apply_data_source()
-        if self._config.target != "hardware" and not cl.is_simulator():
-            raise RuntimeError(
-                "refusing to run: target is 'simulator' but cl.is_simulator() is "
-                "False (a real device is present). Set [substrate].target = "
-                "'hardware' to opt in deliberately."
-            )
+        if self._config.target == "hardware":
+            if cl.is_simulator():
+                raise RuntimeError(
+                    "refusing to run: target is 'hardware' but cl.is_simulator() is True "
+                    "(no real device is present); use target = 'simulator' for the simulator"
+                )
+        else:
+            self._apply_env()
+            self._apply_data_source()
+            if self._config.target != "hardware" and not cl.is_simulator():
+                raise RuntimeError(
+                    "refusing to run: target is 'simulator' but cl.is_simulator() is "
+                    "False (a real device is present). Set [substrate].target = "
+                    "'hardware' to opt in deliberately."
+                )
         # cl.open() is a context manager; own it beyond a `with` block.
         self._cm = cl.open()
         self._neurons = self._cm.__enter__()
