@@ -327,6 +327,9 @@ def test_manifest_is_content_free(tmp_path):
         # Operator revive (operator-revive-and-preserve): the preservation id
         # this run was revived from, or None for a fresh start. An id only.
         "revived_from",
+        # Timing settings (slip-driven-time-dilation): the configured
+        # time_scale and the automatic-dilation parameters. Numbers only.
+        "timing",
     }
     assert loaded["perception_feed"] == {"mode": "off"}
     assert loaded["plugins"] == {}

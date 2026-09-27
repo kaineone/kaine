@@ -127,6 +127,7 @@ class IgnitionLog:
             "inhibited": payload.get("inhibited"),
             "salience_scores": payload.get("salience_scores"),
             "members": members,
+            "time_scale": payload.get("time_scale"),
         }
 
         await self._sink.write(record)

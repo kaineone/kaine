@@ -50,6 +50,17 @@ experiential_rate_hz = 3.333
 # whole mind coherently because every cognitive timer reads the shared
 # EntityClock (clock injection into the other modules is Phase 2).
 time_scale = 1.0
+# Automatic time dilation. When enabled, the cycle lowers time_scale when ticks
+# do not fit their wall-clock period, and raises it back when they fit with room.
+# It never raises time_scale above the configured value, and it is disabled in
+# deterministic mode.
+auto_time_scale = false
+auto_time_scale_floor = 0.1
+auto_time_scale_target = 0.85
+auto_time_scale_high = 0.95
+auto_time_scale_low = 0.6
+auto_time_scale_dwell_s = 10.0
+auto_time_scale_window_s = 30.0
 
 [cycle.access_rate]
 # Adaptive conscious access. The P3 is read as the cortical signature of the locus

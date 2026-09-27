@@ -40,6 +40,25 @@ from tests._fakes import FakeClock
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
+async def test_ignition_record_includes_time_scale():
+    sink = AsyncMock()
+    sink.dropped_count = 0
+    log = IgnitionLog(sink, position_provider=lambda: None)
+    payload = {
+        "tick_index": 7,
+        "inhibited": False,
+        "salience_scores": {},
+        "selected": [],
+        "time_scale": 0.5,
+    }
+    await log.on_broadcast(
+        payload, "entry-1", datetime.now(timezone.utc), 123.0
+    )
+    record = sink.write.await_args.args[0]
+    assert record["time_scale"] == 0.5
+
+
 def _make_event(source: str, etype: str, salience: float, text: str) -> Event:
     return Event(
         source=source,
@@ -268,6 +287,7 @@ async def test_record_shape_has_exact_keys_and_no_payloads(tmp_path: Path) -> No
         "inhibited",
         "salience_scores",
         "members",
+        "time_scale",
     }
     assert record["tick_index"] == 7
     assert record["entry_id"] == "bus-entry-42"

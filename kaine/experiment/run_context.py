@@ -56,6 +56,8 @@ class RunContext:
     perception_feed: dict[str, Any] = field(default_factory=dict)
     # Enabled plugin manifest (non-content: names, distribution, version, seams).
     plugins: dict[str, Any] = field(default_factory=dict)
+    # Timing / time-dilation configuration snapshot for this run.
+    timing: dict[str, Any] = field(default_factory=dict)
     # Non-content preservation id that this run was revived from, if any.
     revived_from: Optional[str] = None
 
@@ -116,6 +118,7 @@ def mint_run_context(
     version: str,
     perception_feed: Mapping[str, Any] | None = None,
     plugins: Mapping[str, Any] | None = None,
+    timing: Mapping[str, Any] | None = None,
     revived_from: str | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
@@ -147,6 +150,7 @@ def mint_run_context(
         kaine_version=str(version),
         perception_feed=dict(perception_feed or {"mode": "off"}),
         plugins=dict(plugins or {}),
+        timing=dict(timing or {}),
         revived_from=revived_from,
     )
 

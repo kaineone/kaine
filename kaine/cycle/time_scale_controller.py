@@ -68,6 +68,10 @@ class TimeScaleController:
         self._last_change_time: float = -math.inf
 
     @property
+    def settings(self) -> TimeScaleSettings:
+        return self._settings
+
+    @property
     def utilization(self) -> float | None:
         return self._ema
 

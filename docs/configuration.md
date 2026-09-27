@@ -158,7 +158,14 @@ Cognitive cycle timing, read at startup.
 |---|---|---|---|
 | `processing_rate_hz` | float | `10.0` | Processing loop rate (100 ms/tick; alpha-band sampling / workspace tick). Benchmarked-cleared on this host (RTX 4070 SUPER, ~17 Hz tick headroom). Independent of the experiential rate. |
 | `experiential_rate_hz` | float | `3.333` | Rate at which a tick is promoted to a CONSCIOUS broadcast. This is the **resting** rate, the P3b conscious-access band (~3.33 Hz), so the senses (e.g. 10 Hz vision) outrun awareness and several samples inform one conscious update. With `[cycle.access_rate]` enabled the rate rises from here toward the processing rate with arousal and salient reports. |
-| `time_scale` | float | `1.0` | Global time dilation of the entity's subjective clock. `1.0` = real-time (the shipped default — behavior is byte-identical to no clock at all). `0` freezes the entity (the subjective clock stops; reuses the existing freeze/suspend path). Values `> 1` run the mind faster than wall-clock as an aspirational target: the cycle attempts the faster tick rate and, when the hardware cannot hold it, the existing slip measurement records the overrun honestly. One knob dilates the whole mind coherently because every cognitive timer reads the shared EntityClock. |
+| `time_scale` | float | `1.0` | Global time dilation of the entity's subjective clock. `1.0` = real-time (the shipped default — behavior is byte-identical to no clock at all). `0` freezes the entity (the subjective clock stops; reuses the existing freeze/suspend path). Setting `time_scale = 0` while `auto_time_scale = true` refuses boot. Values `> 1` run the mind faster than wall-clock as an aspirational target: the cycle attempts the faster tick rate and, when the hardware cannot hold it, the existing slip measurement records the overrun honestly. When automatic dilation is enabled the configured `time_scale` is its ceiling. One knob dilates the whole mind coherently because every cognitive timer reads the shared EntityClock. |
+| `auto_time_scale` | bool | `false` | Enable automatic adjustment of `time_scale` to keep tick utilization near target. Disabled in deterministic mode. An invalid threshold combination, or `time_scale = 0` with auto enabled, refuses boot. |
+| `auto_time_scale_window_s` | float | `30.0` | Wall seconds over which tick busy-time is averaged as an exponential moving average. |
+| `auto_time_scale_target` | float | `0.85` | Target tick utilization (busy time / tick period) the controller aims for, `[0, 1]`. |
+| `auto_time_scale_high` | float | `0.95` | Utilization threshold above which the controller lowers `time_scale` after one dwell, `[0, 1]`. |
+| `auto_time_scale_low` | float | `0.6` | Utilization threshold below which the controller raises `time_scale` after three dwells, `[0, 1]`. Must be below `auto_time_scale_target`. |
+| `auto_time_scale_dwell_s` | float | `10.0` | Minimum wall seconds a utilization condition must persist before `time_scale` changes; also the minimum time between changes. |
+| `auto_time_scale_floor` | float | `0.1` | Minimum value `time_scale` is allowed to reach, `[0, 1]`. |
 
 ### `[cycle.access_rate]`
 
