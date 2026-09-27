@@ -35,6 +35,7 @@ from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
+from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.thymos.state import DimensionalState
 from kaine.modules.vox.client import (
@@ -71,6 +72,7 @@ class Vox(BaseModule):
         *,
         tts_client: Optional[TTSClient] = None,
         player: Optional[Player] = None,
+        entity_clock: Optional[EntityClock] = None,
         chatterbox_url: str = "http://127.0.0.1:8883",
         voice_mode: str = "predefined",
         predefined_voice_id: Optional[str] = None,
@@ -129,6 +131,7 @@ class Vox(BaseModule):
         self._thymos_stream = thymos_state_stream
         self._cursors: dict[str, str] = {}
         self._current_state: DimensionalState = DimensionalState()
+        self._clock = entity_clock or EntityClock()
         # Prosodic mirroring state.
         self._mirroring_enabled = bool(mirroring_enabled)
         # Clamp mirror_strength to [0, mirror_ceiling] at init time.
@@ -138,7 +141,7 @@ class Vox(BaseModule):
         self._audition_prosody_stream = audition_prosody_stream
         # Latest cached prosody features (numeric) and arrival timestamp.
         self._latest_prosody: Optional[dict[str, Any]] = None
-        self._latest_prosody_ts: float = 0.0
+        self._latest_prosody_ts: float | None = None
         # Womb/gestation dormancy.
         self._dormant = False
         self._suppressed_while_dormant = 0
@@ -279,7 +282,7 @@ class Vox(BaseModule):
             effective_strength = decayed_strength(
                 self._mirror_strength,
                 self._latest_prosody_ts,
-                time.monotonic(),
+                self._clock.now(),
                 self._mirror_decay_s,
             )
             if effective_strength > 0.0:
@@ -305,6 +308,7 @@ class Vox(BaseModule):
     async def _sink_audio(self, text: str, result: SynthesisResult) -> None:
         # Filename: timestamp + uuid + format. Keeps writes serializable
         # across concurrent syntheses.
+        # wall clock: the output file name records real time.
         name = f"{int(time.time()*1000)}-{uuid.uuid4().hex[:8]}.{result.output_format}"
         path = self._sink_path / name
         try:
@@ -411,7 +415,8 @@ class Vox(BaseModule):
                     "rms_std": float(payload.get("rms_std", 0.0)),
                     "tempo_bpm": float(payload.get("tempo_bpm", 0.0)),
                 }
-                self._latest_prosody_ts = time.monotonic()
+                # Cognitive timer: prosody-mirroring decay.
+                self._latest_prosody_ts = self._clock.now()
             except Exception:
                 log.warning("failed to parse audition.prosody payload", exc_info=True)
         elif stream == self._lingua_stream:

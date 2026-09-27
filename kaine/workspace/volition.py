@@ -180,6 +180,8 @@ class DefaultActionSelectionPolicy:
 
         self._speak_in_flight = False
         self._speak_armed_at = float("-inf")
+        # wall clock: the speak guard times real audio playback; a lost
+        # "done speaking" must unstick after real seconds.
         self._clock = clock or time.monotonic
         self._operator_sources = set(
             operator_sources if operator_sources is not None else DEFAULT_OPERATOR_SOURCES

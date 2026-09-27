@@ -241,7 +241,9 @@ def test_empty_prosody_returns_affect_params():
 
 def test_decayed_no_prosody_seen_returns_zero():
     """When last_prosody_ts == 0.0 (never seen), strength is always 0."""
-    assert decayed_strength(0.5, 0.0, now=100.0, decay_s=10.0) == 0.0
+    assert decayed_strength(0.5, None, now=100.0, decay_s=10.0) == 0.0
+    # A prosody seen at subjective time 0.0 (the clock origin) still counts.
+    assert decayed_strength(0.5, 0.0, now=1.0, decay_s=10.0) == pytest.approx(0.45)
 
 
 def test_decayed_within_window_returns_full_strength():

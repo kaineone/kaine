@@ -12,6 +12,7 @@ from typing import Any, ClassVar, Iterable, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.chronos.anomaly import AnomalyDetector, RollingZScoreAnomaly
 from kaine.modules.chronos.featurizer import SnapshotFeaturizer
@@ -49,6 +50,7 @@ class Chronos(BaseModule):
         rumination_threshold: int = 4,
         rumination_bucket_resolution: float = 0.25,
         user_input_streams: Iterable[str] = DEFAULT_USER_INPUT_STREAMS,
+        entity_clock: Optional[EntityClock] = None,
         clock: Optional[callable] = None,
         # Forward prediction config
         forward_prediction: bool = False,
@@ -63,7 +65,8 @@ class Chronos(BaseModule):
             raise ValueError("anomaly_alert_threshold must be >= 0")
         if prediction_error_window < 2:
             raise ValueError("prediction_error_window must be >= 2")
-        self._featurizer = featurizer or SnapshotFeaturizer()
+        self._clock = clock or (entity_clock.now if entity_clock is not None else time.time)
+        self._featurizer = featurizer or SnapshotFeaturizer(clock=self._clock)
         self._network = network  # lazy import to avoid torch unless used
         # An injected network (a plugin substrate, or a test double) brings its
         # own hidden width; the prediction head must be sized from it.
@@ -92,7 +95,6 @@ class Chronos(BaseModule):
         self._user_input_cursors: dict[str, str] = {
             stream: "$" for stream in self._user_input_streams
         }
-        self._clock = clock or time.time
 
         # Forward-prediction head (lazy — created alongside the network)
         self._forward_prediction: bool = bool(forward_prediction)
@@ -252,8 +254,9 @@ class Chronos(BaseModule):
                     if entries:
                         drained_any = True
                         self._user_input_cursors[stream] = entries[-1][0]
-                        latest_ts = entries[-1][1].timestamp.timestamp()
-                        self._last_interaction_at = float(latest_ts)
+                        # Bus event stamps are wall epoch seconds; cognitive
+                        # time-since-interaction must run on the subjective clock.
+                        self._last_interaction_at = float(self._clock())
                 if not drained_any:
                     await asyncio.sleep(0.05)
         except asyncio.CancelledError:

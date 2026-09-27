@@ -127,6 +127,8 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
             return clock()
         import time
 
+        # wall clock: the speak guard times real audio playback so a lost
+        # "done speaking" report unsticks after real seconds.
         return time.monotonic()
 
     def _apply_guard_timeouts(self) -> None:

@@ -614,8 +614,10 @@ class Soma(BaseModule):
                             if event.type == "cycle.tick":
                                 latency = event.payload.get("wall_duration_ms")
                                 if latency is not None:
+                                    # The setpoint is a subjective duration, so a
+                                    # dilated mind does not feel its slow hardware.
                                     self._reader.update_cycle_latency_sample(
-                                        float(latency)
+                                        float(latency) * self._clock.scale
                                     )
                     else:
                         await asyncio.sleep(0.05)

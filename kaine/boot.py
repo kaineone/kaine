@@ -182,6 +182,7 @@ def make_chronos(
     bus: AsyncBus,
     section: dict[str, Any],
     *,
+    entity_clock: Optional[EntityClock] = None,
     injections: Optional[Mapping[str, Any]] = None,
 ) -> BaseModule:
     from kaine.modules.chronos.module import Chronos
@@ -220,7 +221,7 @@ def make_chronos(
         if k in section
     }
     kwargs.update(_check_injections("chronos", injections, {"network"}))
-    return Chronos(bus, **kwargs)
+    return Chronos(bus, entity_clock=entity_clock, **kwargs)
 
 
 def make_topos(
@@ -1415,7 +1416,12 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     return Audition(bus, **kwargs)
 
 
-def make_vox(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
+def make_vox(
+    bus: AsyncBus,
+    section: dict[str, Any],
+    *,
+    entity_clock: Optional[EntityClock] = None,
+) -> BaseModule:
     from kaine.modules.vox.module import Vox
 
     allowed = {
@@ -1455,7 +1461,7 @@ def make_vox(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         kw["mirror_ceiling"] = float(mirroring_section["mirror_ceiling"])
     if "decay_s" in mirroring_section:
         kw["mirror_decay_s"] = float(mirroring_section["decay_s"])
-    return Vox(bus, **kw)
+    return Vox(bus, entity_clock=entity_clock, **kw)
 
 
 def make_hypnos(
@@ -1973,7 +1979,7 @@ def install_state_encryption(kaine_config: dict[str, Any]) -> None:
 # clock dilates their integrals/cadences coherently with the cycle's tick
 # pacing. Every other module is purely event-driven (paces off the subjective
 # cycle already) or times only infrastructure, so it gets no clock.
-_CLOCKED_FACTORIES: frozenset[str] = frozenset({"soma", "topos", "mnemos", "thymos", "perception"})
+_CLOCKED_FACTORIES: frozenset[str] = frozenset({"soma", "topos", "mnemos", "thymos", "perception", "chronos", "vox"})
 
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
