@@ -170,7 +170,7 @@ def blend_prosody(
 
 def decayed_strength(
     strength: float,
-    last_prosody_ts: float,
+    last_prosody_ts: float | None,
     now: float,
     decay_s: float,
 ) -> float:
@@ -186,15 +186,17 @@ def decayed_strength(
     strength:
         Configured mirror strength (e.g. from ``[vox.mirroring].mirror_strength``).
     last_prosody_ts:
-        Monotonic timestamp (seconds) of the most recent prosody event.
+        Timestamp (seconds, on the same clock as ``now``) of the most recent
+        prosody event, or ``None`` when none has been seen.
     now:
         Current monotonic time.
     decay_s:
         Decay window in seconds.  Values <= 0 disable decay (always returns
         full strength while a prosody has been seen).
     """
-    if last_prosody_ts <= 0.0:
-        # No prosody has ever been seen.
+    if last_prosody_ts is None:
+        # No prosody has ever been seen. (None, not a sentinel time: the
+        # entity clock's subjective time starts at its origin, 0.0.)
         return 0.0
     elapsed = now - last_prosody_ts
     if elapsed < 0.0:
