@@ -236,9 +236,22 @@ class _FakeAsyncQdrant:
         pts = self.store.get(collection_name, [])
         return pts, None
 
+    @staticmethod
+    def _validate_point_id(pid):
+        if isinstance(pid, int) and pid >= 0:
+            return
+        import uuid
+        if isinstance(pid, uuid.UUID):
+            return
+        try:
+            uuid.UUID(pid)
+        except Exception as exc:
+            raise ValueError(f"Unable to parse UUID: {pid}") from exc
+
     async def upsert(self, collection_name, points):
         self.store.setdefault(collection_name, [])
         for p in points:
+            self._validate_point_id(p.id)
             self.store[collection_name].append(
                 _FakeQdrantPoint(p.id, list(p.vector), dict(p.payload))
             )
@@ -255,7 +268,7 @@ async def test_qdrant_export_import_roundtrip_codec():
         text="planted memory",
         payload={"timestamp": 1.0},
         affect={"intensity": 0.9},
-        point_id="p1",
+        point_id="11111111-1111-1111-1111-111111111111",
     )
     dump = await src.export(["mnemos_episodic"])
     assert dump["mnemos_episodic"][0]["text"] == "planted memory"
@@ -593,10 +606,23 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
         async def delete_collection(self, collection_name, **kwargs):
             self.store.pop(collection_name, None)
 
+        @staticmethod
+        def _validate_point_id(pid):
+            if isinstance(pid, int) and pid >= 0:
+                return
+            import uuid
+            if isinstance(pid, uuid.UUID):
+                return
+            try:
+                uuid.UUID(pid)
+            except Exception as exc:
+                raise ValueError(f"Unable to parse UUID: {pid}") from exc
+
         async def upsert(self, collection_name, points, **kwargs):
             coll = self.store.setdefault(collection_name, [])
             by_id = {p.id: i for i, p in enumerate(coll)}
             for p in points:
+                self._validate_point_id(p.id)
                 vec = list(p.vector) if p.vector is not None else []
                 payload = dict(p.payload) if p.payload is not None else {}
                 point = _FakeQdrantPoint(p.id, vec, payload)

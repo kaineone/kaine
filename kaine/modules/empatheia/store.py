@@ -24,12 +24,22 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.text_embedding import DEFAULT_LATENT_DIM
 
 log = logging.getLogger(__name__)
+
+
+# Namespace used to derive deterministic Qdrant point IDs from agent IDs.
+_AGENT_ID_NAMESPACE = uuid.UUID("5b0c7d2e-8f41-4a3c-9d6e-1f2a3b4c5d6e")
+
+
+def _point_id(agent_id: str) -> str:
+    """Return a deterministic Qdrant point id (UUIDv5) for ``agent_id``."""
+    return str(uuid.uuid5(_AGENT_ID_NAMESPACE, agent_id))
 
 
 # ---------------------------------------------------------------------------
@@ -281,8 +291,8 @@ class QdrantAgentStore:
         vector = await self._build_embedding(model)
         profile_json = json.dumps(model.to_dict())
         payload = {"agent_id": model.id, "profile_json": profile_json}
-        # Use agent_id as a stable point ID (hex-encoded for Qdrant).
-        point_id = model.id.encode("utf-8").hex()
+        # Qdrant point ids must be an unsigned integer or a UUID.
+        point_id = _point_id(model.id)
         await self._client.upsert(
             collection_name=self._collection,
             points=[

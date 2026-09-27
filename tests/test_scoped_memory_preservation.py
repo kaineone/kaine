@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.store import QdrantAgentStore
+from kaine.modules.empatheia.store import _AGENT_ID_NAMESPACE, QdrantAgentStore, _point_id
 from kaine.modules.mnemos import MnemosCore
 from kaine.modules.mnemos.storage import InMemoryStorage, QdrantStorage, StorageError
 from kaine.text_embedding import FakeEmbedder
@@ -148,10 +149,22 @@ class _FakeAsyncQdrant:
     async def count(self, collection_name, **kwargs):
         return self._Count(len(self.store.get(collection_name, [])))
 
+    @staticmethod
+    def _validate_point_id(pid):
+        if isinstance(pid, int) and pid >= 0:
+            return
+        if isinstance(pid, uuid.UUID):
+            return
+        try:
+            uuid.UUID(pid)
+        except Exception as exc:
+            raise ValueError(f"Unable to parse UUID: {pid}") from exc
+
     async def upsert(self, collection_name, points, **kwargs):
         coll = self.store.setdefault(collection_name, [])
         by_id = {p.id: i for i, p in enumerate(coll)}
         for p in points:
+            self._validate_point_id(p.id)
             vec = list(p.vector) if p.vector is not None else []
             payload = dict(p.payload) if p.payload is not None else {}
             point = _FakeQdrantPoint(p.id, vec, payload)
@@ -264,7 +277,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
 
     good_vec = list(await embedder.encode("good"))
     point = {
-        "id": "p1",
+        "id": "11111111-1111-1111-1111-111111111111",
         "vector": good_vec,
         "text": "alpha",
         "payload": {"timestamp": 1.0},
@@ -279,7 +292,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
             "a_procedural": [],
             "b_episodic": [point],
             "empatheia_agents": [
-                {"id": "x", "vector": good_vec, "text": "agent", "payload": {}, "affect": None}
+                {"id": "22222222-2222-2222-2222-222222222222", "vector": good_vec, "text": "agent", "payload": {}, "affect": None}
             ],
         },
     }
@@ -348,7 +361,7 @@ async def test_empatheia_qdrant_all_profiles_includes_collection():
     model = AgentModel(id="remote", label="remote")
     profile_json = json.dumps(model.to_dict())
     point = _FakeQdrantPoint(
-        pid="remote".encode("utf-8").hex(),
+        pid=_point_id("remote"),
         vector=[0.1] * 4,
         payload={"agent_id": "remote", "profile_json": profile_json},
     )
@@ -505,21 +518,21 @@ async def test_qdrant_replace_collection_drops_stale_points():
     store._client = _FakeAsyncQdrant()
 
     p1 = {
-        "id": "a",
+        "id": "00000000-0000-0000-0000-00000000000a",
         "vector": [0.1, 0.2, 0.3, 0.4],
         "text": "a",
         "payload": {},
         "affect": None,
     }
     p2 = {
-        "id": "b",
+        "id": "00000000-0000-0000-0000-00000000000b",
         "vector": [0.4, 0.3, 0.2, 0.1],
         "text": "b",
         "payload": {},
         "affect": None,
     }
     p3 = {
-        "id": "c",
+        "id": "00000000-0000-0000-0000-00000000000c",
         "vector": [0.5, 0.6, 0.7, 0.8],
         "text": "c",
         "payload": {},
@@ -532,10 +545,10 @@ async def test_qdrant_replace_collection_drops_stale_points():
     result = await store.export(["c_episodic"])
     assert list(result) == ["c_episodic"]
     assert len(result["c_episodic"]) == 1
-    assert result["c_episodic"][0]["id"] == "c"
+    assert result["c_episodic"][0]["id"] == "00000000-0000-0000-0000-00000000000c"
 
     bad = {
-        "id": "d",
+        "id": "00000000-0000-0000-0000-00000000000d",
         "vector": [0.1, 0.2, 0.3],
         "text": "bad",
         "payload": {},
@@ -545,7 +558,7 @@ async def test_qdrant_replace_collection_drops_stale_points():
         await store.replace_collection("c_episodic", [bad])
 
     result_after = await store.export(["c_episodic"])
-    assert [p["id"] for p in result_after["c_episodic"]] == ["c"]
+    assert [p["id"] for p in result_after["c_episodic"]] == ["00000000-0000-0000-0000-00000000000c"]
 
 
 @pytest.mark.asyncio
@@ -558,9 +571,10 @@ async def test_qdrant_export_paginates_large_collection():
     await storage.initialize()
 
     vec = list(await embedder.encode("x"))
+    point_ids = {f"{i:032x}" for i in range(300)}
     points = [
         {
-            "id": f"p{i}",
+            "id": f"{i:032x}",
             "vector": vec,
             "text": f"text {i}",
             "payload": {"i": i},
@@ -572,7 +586,7 @@ async def test_qdrant_export_paginates_large_collection():
     exported = await storage.export(["big_episodic"])
     assert "big_episodic" in exported
     assert len(exported["big_episodic"]) == 300
-    assert {p["id"] for p in exported["big_episodic"]} == {f"p{i}" for i in range(300)}
+    assert {p["id"] for p in exported["big_episodic"]} == point_ids
 
 
 @pytest.mark.asyncio
@@ -727,5 +741,50 @@ async def test_sqlite_vec_replace_collection_only_named_rows(tmp_path: Path):
 
     assert await storage.count("x_episodic") == 0
     assert await storage.count("x_semantic") == 1
+
+
+@pytest.mark.asyncio
+async def test_empatheia_put_generates_stable_valid_point_id():
+    pytest.importorskip("qdrant_client")
+    client = _FakeAsyncQdrant()
+    store = QdrantAgentStore(
+        api_key="k",
+        collection="empatheia_agents",
+        latent_dim=4,
+        embedder=FakeEmbedder(latent_dim=4),
+    )
+    store._client = client
+    await store.initialize()
+
+    model = AgentModel(
+        id="operator", label="operator", interaction_count=1, reliability=0.5
+    )
+    expected_pid = str(uuid.uuid5(_AGENT_ID_NAMESPACE, "operator"))
+
+    await store.put(model)
+    pts, _ = await client.scroll(
+        collection_name="empatheia_agents",
+        limit=10,
+        offset=None,
+        with_payload=True,
+        with_vectors=True,
+    )
+    assert len(pts) == 1
+    assert pts[0].id == expected_pid
+
+    model2 = AgentModel(
+        id="operator", label="operator", interaction_count=2, reliability=0.6
+    )
+    await store.put(model2)
+    pts2, _ = await client.scroll(
+        collection_name="empatheia_agents",
+        limit=10,
+        offset=None,
+        with_payload=True,
+        with_vectors=True,
+    )
+    assert len(pts2) == 1
+    assert pts2[0].id == expected_pid
+    assert json.loads(pts2[0].payload["profile_json"]) == model2.to_dict()
 
 
