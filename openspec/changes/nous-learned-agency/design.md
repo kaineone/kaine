@@ -4,9 +4,11 @@
 - **Control and actions.**
   - There is one control factor, the action factor, with four actions and horizon 1 by default.
   - `B_action_dependencies = [[0], [0], [0], [0]]`: every state factor's transition depends on the action.
-  - The action factor keeps "the next action state is the action taken", so the being observes its own last action.
+  - The action factor keeps "the next action state is the action taken". The engine supplies the action actually taken as that factor's observation, so the being observes its own last action. Its transitions are held exactly fixed: they are restored after every learning update.
 - **Perceptual factors** `f` in {salience, affect, event cluster}: `B_f` has shape `(n_f, n_f, 4)`. Its initial expected value is the same for every action: `persistence·I + (1 − persistence)·uniform`, with `persistence = 0.8`.
 - **Prior over transitions.** `pB_f = concentration · B_f`, with `concentration = 1.0` per column. The prior is weak, so a few dozen experiences of an action dominate it.
+- **Bounded evidence.** After each update, any perceptual column whose total exceeds `transition_max_concentration` (default 1000) is rescaled to that total, keeping its proportions. This bounds how much evidence the being holds, so it can still learn when the world changes, and it keeps the counts well inside float32 precision.
+- **B follows pB.** Whenever an agent is built from a learned `pB` (revive), `B` is the column-normalised `pB`, so a revived being plans with the transitions it learned.
 - **Settings.** `persistence` and `concentration` are `[nous]` settings with these defaults. They express how much the being assumes the world persists and how sure it starts out, not what any action does.
 - **A, C and D are unchanged.** The preference over the highest salience band predates this change and stays as it is. This change adds no preference.
 
@@ -23,7 +25,10 @@
 
 ### Limits and honesty
 - **Budget.** The complexity envelope and the ≤200 ms median decision budget still apply. The learning update runs after the action is published, so it is not on the decision's critical path. It runs within the same timeout guard.
-- **Records.** `nous.policy` carries `param_info_gain_used: true`. `nous.belief` is unchanged.
+- **Records.** `nous.policy` carries `param_info_gain: true`. `nous.belief` is unchanged.
+- **The learning step is warmed up at construction**, so its first live call does not compile inside the timeout guard.
+- **An action other than the one chosen.** When a wrapper publishes a different action (the CL1 plugin's drive mode), it tells the engine through `record_taken_action`, so learning and the carried prior follow the action taken.
+- **A restore during a step.** A generation counter, advanced by every restore, makes a step's result commit only if no restore happened while it ran.
 
 ## Verification
 - **Golden run.** Over the 192 encodable observations, with a fresh learned model driven through a sequence of steps, Nous chooses more than one action. Before this change it chose only `no_op`.

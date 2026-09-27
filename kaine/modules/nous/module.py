@@ -166,6 +166,7 @@ class Nous(BaseModule):
                 "policy": result.action,
                 "expected_free_energy": efe,
                 "horizon": getattr(self._engine, "policy_len", 1),
+                "param_info_gain": getattr(self._engine, "uses_param_info_gain", False),
             },
             salience=self._baseline_salience,
         )
@@ -229,10 +230,14 @@ class Nous(BaseModule):
         # Zero raw-sense-data persistence: only numeric posteriors + the action
         # label. `posterior` lets NousMergeStrategy pick the lower-entropy
         # (more certain) fork on merge.
-        return {
+        out: dict[str, Any] = {
             "last_action": self._last_action,
             "posterior": [list(p) for p in self._last_posterior],
         }
+        learned = getattr(self._engine, "learned_state", None)
+        if callable(learned):
+            out["learned"] = learned()
+        return out
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "last_action" in state:
@@ -254,3 +259,17 @@ class Nous(BaseModule):
                         "nous: restored posterior does not match the model; "
                         "engine fallback unchanged"
                     )
+        if "learned" in state:
+            load = getattr(self._engine, "load_learned_state", None)
+            if callable(load):
+                if not load(state["learned"]):
+                    log.warning("nous: could not restore learned model of actions")
+            else:
+                log.info(
+                    "nous: engine %s cannot restore a learned model of actions",
+                    type(self._engine).__name__,
+                )
+        else:
+            log.info(
+                "nous: snapshot has no learned model of its actions; starting from the prior"
+            )

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pytest
 
 from kaine.modules.nous.generative_model import (
@@ -49,9 +50,9 @@ def test_b_matrix_has_four_action_dimensions():
     # Factor 0 is the controllable action latent; its B last dim == action count.
     b0 = gm.B[0]
     assert b0.shape[-1] == len(ACTION_SPACE) == 4
-    # Uncontrollable factors have a single action slice.
+    # Perceptual factors are now action-dependent: every action has its own slice.
     for f in range(1, gm.num_factors):
-        assert gm.B[f].shape[-1] == 1
+        assert gm.B[f].shape[-1] == gm.num_actions
 
 
 def _build_agent(gm):
@@ -64,13 +65,19 @@ def _build_agent(gm):
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        n_actions = gm.num_actions
         return Agent(
-            A=[jnp.array(a) for a in gm.A],
-            B=[jnp.array(b) for b in gm.B],
-            C=[jnp.array(c) for c in gm.C],
-            D=[jnp.array(d) for d in gm.D],
+            A=[jnp.array(a)[None] for a in gm.A],
+            B=[jnp.array(b)[None] for b in gm.B],
+            C=[jnp.array(c)[None] for c in gm.C],
+            D=[jnp.array(d)[None] for d in gm.D],
+            pB=[jnp.array(pb)[None] for pb in gm.pB],
             A_dependencies=gm.A_dependencies,
+            B_action_dependencies=gm.B_action_dependencies,
+            num_controls=[n_actions],
             policy_len=1,
+            use_param_info_gain=True,
+            learn_B=True,
         )
 
 
@@ -139,6 +146,19 @@ def test_encode_snapshot_handles_missing_factors_gracefully():
 def test_max_states_per_factor_cap_is_enforced():
     with pytest.raises(ValueError):
         build_generative_model(max_states_per_factor=2)  # affect has 4 states
+
+
+def test_pB_prior_has_expected_shapes_and_action_factor_is_fixed():
+    gm = build_generative_model()
+    for f, (b, pb) in enumerate(zip(gm.B, gm.pB)):
+        assert pb.shape == b.shape
+        if f == 0:
+            np.testing.assert_allclose(pb, b)  # fixed: restored after every update
+        else:
+            assert np.all(pb > 0)
+            # All action slices start identical.
+            for a in range(1, gm.num_actions):
+                np.testing.assert_allclose(pb[:, :, a], pb[:, :, 0])
 
 
 def test_factor_growth_seam_documented():

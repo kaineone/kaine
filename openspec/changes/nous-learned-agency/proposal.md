@@ -9,6 +9,8 @@ Nous also starts every step from its initial prior `D`, with no carried belief, 
 
 The module-ignition study adds Nous at the fifth viewing. As shipped, that adds beliefs to the workspace but never a choice.
 
+**What Nous's actions reach.** Nous publishes its choices as `intent.act` events on `nous.out`. No module realizes them: Volition, Praxis and Lingua read other streams, and Hypnos only counts Nous intents as unrealizable. So a choice changes the world only through its own intent event, which re-enters the workspace like any other event. This change makes Nous choose and learn honestly within that reach. Whether Nous's intents should drive real actions (a think request, a speech candidate, a maintenance request, each through the existing gates) is a separate architectural decision, recorded as an open question.
+
 ## What Changes
 
 - **Actions have consequences Nous learns.**
@@ -30,4 +32,4 @@ The module-ignition study adds Nous at the fifth viewing. As shipped, that adds 
 
 - `kaine/modules/nous/generative_model.py` (action-dependent B, `pB` prior), `kaine/modules/nous/engine.py` (learning, carried prior, parameter info gain, serialization of the learned state), `kaine/modules/nous/module.py` (serialize/deserialize), `kaine/boot.py` (settings), config, docs, tests.
 - The phase 3 NumPy engine must reproduce learning and parameter information gain.
-- **Research:** Nous's behaviour in live beings changes from always `no_op` to exploring and then choosing. The study should run with this change, so that adding Nous adds a chooser. The operator decides that.
+- **Research:** in live beings, Nous goes from always `no_op` to exploring and then choosing, and what it learns is how its own intents register in the workspace. Adding Nous in the study adds a chooser whose choices are recorded, not one whose choices act. The operator decides whether the study runs with this change, and whether Nous's intents should be wired to action first.

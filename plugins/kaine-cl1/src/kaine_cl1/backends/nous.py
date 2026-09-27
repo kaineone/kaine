@@ -165,6 +165,7 @@ class WetwarePolicyEngine:
         if self._mode == "shadow":
             return res
 
+        getattr(self._inner, "record_taken_action", lambda _: None)(proposal)
         return dataclasses.replace(
             res, action_index=proposal, action=self.actions[proposal]
         )

@@ -136,6 +136,14 @@ class GenerativeModel:
     salience_bands: tuple[str, ...] = SALIENCE_BANDS
     affect_quadrants: tuple[str, ...] = AFFECT_QUADRANTS
     event_clusters: tuple[str, ...] = DEFAULT_EVENT_CLUSTERS
+    # Learned agency: a Dirichlet prior over action-dependent transitions and
+    # the state factors each transition depends on. Absent for models that do
+    # not learn their transitions (e.g. the offline benchmark's task models).
+    pB: Optional[list[np.ndarray]] = None
+    B_action_dependencies: Optional[list[list[int]]] = None
+    # Upper bound on the total Dirichlet concentration any perceptual transition
+    # column can hold. Keeps the learned posterior responsive to change.
+    transition_max_concentration: float = 1000.0
 
     @property
     def num_factors(self) -> int:
@@ -184,6 +192,9 @@ def build_generative_model(
     event_clusters: Sequence[str] = DEFAULT_EVENT_CLUSTERS,
     max_states_per_factor: Optional[int] = None,
     likelihood_confidence: float = 0.9,
+    persistence: float = 0.8,
+    concentration: float = 1.0,
+    transition_max_concentration: float = 1000.0,
 ) -> GenerativeModel:
     """Construct the compact A/B/C/D generative model.
 
@@ -202,9 +213,22 @@ def build_generative_model(
         factors (the rest is spread uniformly over the off-diagonal), so a
         clear observation strongly — but not infinitely — identifies its
         latent band. Must be in (0, 1].
+    persistence:
+        Diagonal mass of each perceptual transition slice; the rest is spread
+        uniformly. Must be in [0, 1]. Higher values make the world appear more
+        persistent across actions.
+    concentration:
+        Confidence (Dirichlet pseudo-counts) of the prior over perceptual
+        transitions. Must be > 0. Low values let a few experiences dominate.
     """
     if not 0.0 < likelihood_confidence <= 1.0:
         raise ValueError("likelihood_confidence must be in (0, 1]")
+    if not 0.0 <= persistence <= 1.0:
+        raise ValueError("persistence must be in [0, 1]")
+    if concentration <= 0.0:
+        raise ValueError("concentration must be > 0")
+    if transition_max_concentration <= concentration:
+        raise ValueError("transition_max_concentration must be greater than concentration")
 
     actions = tuple(actions)
     salience_bands = tuple(salience_bands)
@@ -254,27 +278,41 @@ def build_generative_model(
 
     # Transition B. Factor 0 (action_latent) is controllable: action a moves
     # the latent deterministically to state a (the entity "becomes" the action
-    # it takes). Every other factor is uncontrollable: a single identity slice.
+    # it takes). Perceptual factors are now action-dependent too, but their
+    # initial expected transitions are identical for every action (broad and
+    # uncertain). Nous learns what each action actually does from experience.
+    n_actions = len(actions)
     B: list[np.ndarray] = []
+    pB: list[np.ndarray] = []
     for f in range(n_factors):
         n = num_states[f]
         if f == ACTION_FACTOR:
-            n_actions = len(actions)
             mat = np.zeros((n, n, n_actions))
             for a in range(n_actions):
                 # next-state == a regardless of previous state.
                 slice_ = np.zeros((n, n))
                 slice_[a, :] = 1.0
                 mat[:, :, a] = slice_
+            # The action factor's pB is the plain transition matrix. The engine
+            # restores it after every learning update, so it is never learned.
+            prior = mat
         else:
-            mat = np.zeros((n, n, 1))
-            mat[:, :, 0] = np.eye(n)
+            base = persistence * np.eye(n) + (1.0 - persistence) * np.full(
+                (n, n), 1.0 / n
+            )
+            mat = np.stack([base] * n_actions, axis=-1)
+            prior = concentration * mat
         B.append(mat)
+        pB.append(prior)
 
-    # Preferences C over observations. v1: mildly prefer the "no_op" /
-    # low-arousal-ish baseline is NOT encoded; instead we prefer observing a
-    # HIGH-salience signal (information-rich) and stay neutral elsewhere. This
-    # gives EFE something to discriminate over while remaining conservative.
+    B_action_dependencies = [[0]] * n_factors
+
+    # Preferences C over observations. v1: the existing preference for the
+    # highest salience band acts through the learned consequences of actions:
+    # once Nous learns which actions tend to produce high-salience observations,
+    # EFE can favour those actions. C by itself cannot discriminate actions,
+    # because no action's effect is written into the model; the discrimination
+    # emerges from learning B.
     C: list[np.ndarray] = []
     for f in range(n_factors):
         pref = np.zeros(num_obs[f])
@@ -301,7 +339,9 @@ def build_generative_model(
         B=B,
         C=C,
         D=D,
+        pB=pB,
         A_dependencies=A_dependencies,
+        B_action_dependencies=B_action_dependencies,
         num_states=num_states,
         num_obs=num_obs,
         state_labels=state_labels,
@@ -309,6 +349,7 @@ def build_generative_model(
         salience_bands=salience_bands,
         affect_quadrants=affect_quadrants,
         event_clusters=event_clusters,
+        transition_max_concentration=transition_max_concentration,
     )
 
 
