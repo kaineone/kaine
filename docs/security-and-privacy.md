@@ -39,10 +39,8 @@ setup and it loads fully offline from **vendored, revision-pinned** modeling cod
 with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1` —
 no code is fetched or executed from the hub at runtime, closing the
 `trust_remote_code` supply-chain path the model card would otherwise use. The only
-post-setup download risk is the first run of Mnemos (all-MiniLM-L6-v2), or the
-DINOv2 fallback (`facebook/dinov2-small`) if selected, when their HuggingFace
-caches are empty. These are open (not gated) downloads, and telemetry is
-suppressed even on that first download.
+post-setup download risk is the DINOv2 fallback (`facebook/dinov2-small`) if selected when its HuggingFace cache is empty. Mnemos's all-MiniLM-L6-v2 files are fetched at setup time by `python -m kaine.setup.provision`; nothing is downloaded at runtime. These are open (not gated) downloads, and telemetry is
+suppressed.
 
 ---
 

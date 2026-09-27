@@ -181,16 +181,13 @@ copy GGUFs from Ollama's blob store for use outside Ollama.
 
 ## Lighter and larger hardware
 
-Today every tier with memory still depends on torch: Mnemos, Empatheia and
-Hypnos each build a sentence-transformers MiniLM embedder (Soma and Chronos run
-their CfC networks on NumPy by default), and the edge profiles only reduce the module set rather than remove
+Today memory embeddings run on the shared NumPy MiniLM embedder by default: Mnemos, Empatheia and Hypnos use the same `[embedding]` instance and only load torch when `[embedding].backend = "sentence_transformers"` (Soma and Chronos run their CfC networks on NumPy by default). The edge profiles only reduce the module set rather than remove
 the torch requirement — `tier0.toml` disables Topos, Audition, Vox, Empatheia
 and Phantasia, while `tier1.toml` disables Vox and vocal emotion. Tier 2 and
 Tier 3 remain the workstation defaults that pin Ollama and Qdrant. Smaller
 and upcycled hardware therefore reaches the full module set through the
 portability program in `openspec/changes/portability-program`: Phase 1 installs
-anywhere Linux runs, Phase 2 delivers a torch-free NumPy CfC core with a shared
-ONNX/model2vec embedder and sherpa-onnx speech plus slip-driven `time_scale`,
+anywhere Linux runs, Phase 2 delivers a torch-free NumPy CfC core with the shared NumPy MiniLM embedder and sherpa-onnx speech plus slip-driven `time_scale`,
 Phase 3 adds JAX-free Nous/Phantasia plus Termux and thin-client offload for
 the Pi Zero 2 W, and Phase 4 covers residency, arm64 images and multi-node. See
 [docs/deployment-tiers.md](deployment-tiers.md) for the tier definitions and

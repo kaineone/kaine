@@ -142,7 +142,7 @@ organ-level divergence input: when the latest `divergence_rate` or
 `divergence_magnitude` crosses its configured threshold the entity is treated as
 organ-level diverged. This is the cheap, continuous companion to the rigorous
 individuation permutation test — computed every sleep, where the permutation
-test is operator-run at merge points. The embedder lives in the boundary-neutral
+test is operator-run at merge points. The shared embedder lives in the boundary-neutral
 `kaine.text_embedding`, so Hypnos computes the magnitude without importing the
 evaluation sidecar.
 

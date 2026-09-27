@@ -398,9 +398,22 @@ The complexity envelope `factors * max_states_per_factor * actions * planning_ho
 
 ---
 
+## `[embedding]`
+
+Shared text embedder configuration. Mnemos, Empatheia, Hypnos and the evaluation sidecar all use the same embedder instance, loaded once and configured here.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `backend` | string | `"numpy"` | Embedder backend. `"numpy"` uses the built-in NumPy implementation; `"sentence_transformers"` uses the `sentence-transformers` torch backend. |
+| `model_id` | string | `"sentence-transformers/all-MiniLM-L6-v2"` | HuggingFace model ID. The NumPy backend reads the model's own `model.safetensors`, `config.json`, and `vocab.txt` files. |
+| `device` | string | `"cpu"` | Compute device, read only by the `sentence_transformers` backend. Pinned to CPU per paper §6.1 so `cuda:1` stays available for Topos. |
+| `model_path` | string | — | If set, read the model files from this local directory instead of the HuggingFace cache. |
+
+---
+
 ## `[mnemos]`
 
-Vector-store memory. Backs episodic, semantic, and procedural collections in Qdrant. Embeds with `all-MiniLM-L6-v2` (384-dim, ~80 MB). See [modules/mnemos.md](modules/mnemos.md).
+Vector-store memory. Backs episodic, semantic, and procedural collections in Qdrant. Embeds with the shared embedder configured in `[embedding]`. See [modules/mnemos.md](modules/mnemos.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -408,8 +421,6 @@ Vector-store memory. Backs episodic, semantic, and procedural collections in Qdr
 | `collection_prefix` | string | `"mnemos_"` | Prefix applied to all Qdrant collection names (e.g. `mnemos_episodic`). |
 | `short_term_capacity` | integer | `128` | Maximum traces held in the in-process short-term buffer before flushing to the vector store. |
 | `recall_top_k` | integer | `5` | Number of nearest-neighbor results returned per recall query. |
-| `embedder_model_id` | string | `"sentence-transformers/all-MiniLM-L6-v2"` | HuggingFace model ID for the sentence embedder. |
-| `device` | string | `"cpu"` | Compute device for the embedder. Pinned to CPU per paper §6.1 so `cuda:1` stays available for Topos. |
 | `baseline_salience` | float | `0.15` | Salience of routine recall events. |
 | `alert_salience` | float | `0.6` | Salience when a high-affect memory surfaces. |
 

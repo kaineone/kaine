@@ -143,7 +143,7 @@ embodiment**, off regardless of base-thesis status).
 | 3 | **Topos** | Prediction | Active | `kaine/modules/topos/` | InternVideo-Next (frozen, temporally-native clip; DINOv2 fallback); online forward model |
 | 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | Speaches distil-Whisper (gated off by default); emotion2vec+; auditory forward model |
 | 5 | **Nous** | Cognition | Gated | `kaine/modules/nous/` | pymdp (JAX); active inference — belief updating + EFE policy selection |
-| 6 | **Mnemos** | Cognition | Gated | `kaine/modules/mnemos/` | Qdrant; all-MiniLM-L6-v2 (384-dim, CPU); episodic / semantic / procedural |
+| 6 | **Mnemos** | Cognition | Gated | `kaine/modules/mnemos/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic / semantic / procedural |
 | 7 | **Eidolon** | Cognition | Gated | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
 | 8 | **Phantasia** | Cognition | Gated | `kaine/modules/phantasia/` | DreamerV3 RSSM (JAX, CPU; ships disabled); fake backend default |
 | 9 | **Empatheia** | Cognition | Gated | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
@@ -442,7 +442,7 @@ at setup time. At runtime:
 - The LIF oscillator layer runs on CPU (snnTorch).
 - Nous (pymdp/JAX) defaults to CPU-only JAX; GPU is operator-configured.
 - Phantasia (DreamerV3/JAX) defaults to CPU-only JAX.
-- The embedding model (all-MiniLM-L6-v2) runs on CPU.
+- The shared embedding model (all-MiniLM-L6-v2) runs on CPU by default.
 - Voice alignment training (`[training_device]`) targets `cuda:0` by
   default but degrades gracefully to CPU.
 - Torch wheels are selected per host at install time (CUDA vs CPU).

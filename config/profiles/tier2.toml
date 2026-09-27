@@ -7,7 +7,7 @@
 #
 # Full real-time multimodal: Gemma/Qwen organ on GPU via an OpenAI-compatible
 # server, DINOv2/InternVideo vision, emotion2vec+, faster-whisper, Chatterbox,
-# Qdrant + sentence-transformers.
+# Qdrant + shared NumPy MiniLM embedder (sentence_transformers backend optional).
 #
 # INERT + VOICE-FREE by contract (see tier0.toml header): it only names the
 # Tier-2 default backends, which equal today's behaviour. It enables no module
