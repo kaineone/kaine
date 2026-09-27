@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Iterable, Optional
 
 from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
-from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS
+from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS, stamp_key
 from kaine.modules.mnemos.embeddings import Embedder
 from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory, StorageError
 from kaine.text_embedding import same_space
@@ -101,7 +101,7 @@ class MnemosCore:
 
     @property
     def stamp_key(self) -> str:
-        return f"{self._prefix}embedding_space"
+        return stamp_key(self._prefix)
 
     async def initialize(self) -> None:
         await self._embedder.load()
@@ -114,23 +114,53 @@ class MnemosCore:
     async def _check_embedding_space_stamp(self) -> None:
         space = self._embedder.space
         stamp = await self._storage.read_stamp(self.stamp_key)
-        if stamp is not None:
-            if not same_space(stamp, space):
-                raise StorageError(
-                    f"mnemos: the memory store is stamped with embedding space {stamp} "
-                    f"but the embedder is {space}; its memories must be re-embedded "
-                    f"before this embedder can use them"
-                )
-            return
+        own_collections = self.persisted_collection_names()
 
-        point_count = 0
-        for name in self.persisted_collection_names():
-            point_count += await self._storage.count(name)
-        if point_count == 0:
+        if stamp is not None:
+            if same_space(stamp, space):
+                return
+            # The stamp is stale. If the being's own persisted collections are
+            # empty there is nothing to mix, so replace the stamp.
+            total = 0
+            for name in own_collections:
+                total += await self._storage.count(name, strict=True)
+            if total == 0:
+                await self._storage.write_stamp(self.stamp_key, space)
+                log.warning(
+                    "mnemos: memory store is empty; its stale embedding-space stamp %s is replaced with %s",
+                    stamp,
+                    space,
+                )
+                return
+            raise StorageError(
+                f"mnemos: the memory store is stamped with embedding space {stamp} "
+                f"but the embedder is {space}; its memories must be re-embedded "
+                f"before this embedder can use them"
+            )
+
+        # No stamp yet. Count strictly; a storage failure must not read as empty.
+        total = 0
+        for name in own_collections:
+            total += await self._storage.count(name, strict=True)
+        if total == 0:
             await self._storage.write_stamp(self.stamp_key, space)
             return
 
         # Store predates embedding-space stamps; assume it holds the legacy space.
+        # Verify the *actual* stored dimension first; a collection whose vectors
+        # are not the legacy dimension must not be stamped as legacy.
+        for name in own_collections:
+            if await self._storage.count(name, strict=True) == 0:
+                continue
+            dim = await self._storage.vector_dim(name)
+            if dim != LEGACY_EMBEDDING_SPACE["dim"]:
+                raise StorageError(
+                    f"mnemos: memory store collection {name!r} has vector "
+                    f"dimension {dim} but the legacy KAINE space requires "
+                    f"{LEGACY_EMBEDDING_SPACE['dim']}; its memories must be "
+                    f"re-embedded before this embedder can use them"
+                )
+
         if same_space(space, LEGACY_EMBEDDING_SPACE):
             await self._storage.write_stamp(self.stamp_key, LEGACY_EMBEDDING_SPACE)
             log.warning(

@@ -11,6 +11,7 @@ import json
 import logging
 import math
 import random
+import types
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -21,6 +22,8 @@ from kaine.embedding_defaults import (
     DEFAULT_MODEL_ID,
     LEGACY_EMBEDDING_SPACE,
 )
+from kaine.lifecycle.strategies import MnemosMergeStrategy
+from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION
 from kaine.modules.mnemos import MnemosCore
 from kaine.modules.mnemos.storage import (
     InMemoryStorage,
@@ -123,6 +126,73 @@ class _StampFakeQdrant(_FakeAsyncQdrant):
                 )()
             )
         return out
+
+    async def count(self, collection_name, **kwargs):
+        # The real AsyncQdrantClient returns a CountResult with ``.count``.
+        return types.SimpleNamespace(count=len(self.store.get(collection_name, [])))
+
+    async def create_collection(self, collection_name, **kwargs):
+        self.store.setdefault(collection_name, [])
+
+    async def get_collection(self, collection_name, **kwargs):
+        pts = self.store.get(collection_name, [])
+        if pts:
+            size = len(pts[0].vector)
+        else:
+            size = int(getattr(self, "_default_dim", 1))
+        return type(
+            "CollectionInfo",
+            (),
+            {
+                "config": type(
+                    "Config",
+                    (),
+                    {
+                        "params": type(
+                            "Params",
+                            (),
+                            {
+                                "vectors": type(
+                                    "VectorParams", (), {"size": size}
+                                )()
+                            },
+                        )()
+                    },
+                )()
+            },
+        )()
+
+
+class _CountFailFakeQdrant(_StampFakeQdrant):
+    async def count(self, collection_name, **kwargs):
+        raise RuntimeError("count boom")
+
+
+class _WrongDimFakeQdrant(_StampFakeQdrant):
+    def __init__(self):
+        super().__init__()
+        self._default_dim = 768
+
+    async def count(self, collection_name, **kwargs):
+        if collection_name.startswith("mnemos_"):
+            return types.SimpleNamespace(count=1)
+        return await super().count(collection_name, **kwargs)
+
+
+class _RaceCreateFakeQdrant(_StampFakeQdrant):
+    def __init__(self):
+        super().__init__()
+        self._create_attempts = 0
+
+    async def create_collection(self, collection_name, **kwargs):
+        self._create_attempts += 1
+        if (
+            collection_name == MNEMOS_STAMP_COLLECTION
+            and self._create_attempts == 1
+        ):
+            self.store.setdefault(collection_name, [])
+            raise RuntimeError("concurrent kaine_meta creation")
+        await super().create_collection(collection_name, **kwargs)
 
 
 @pytest.mark.asyncio
@@ -418,3 +488,170 @@ def test_space_uses_the_canonical_model_id(tmp_path: Path) -> None:
     assert same_space(short.space, LEGACY_EMBEDDING_SPACE)
     st_short = SentenceTransformerTextEmbedder("all-MiniLM-L6-v2")
     assert same_space(st_short.space, LEGACY_EMBEDDING_SPACE)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_QDRANT, reason="qdrant_client not installed")
+async def test_strict_count_failure_raises_storage_error():
+    fake = _CountFailFakeQdrant()
+    storage = QdrantStorage(latent_dim=32, api_key="test")
+    storage._client = fake
+    embedder = FakeEmbedder(latent_dim=32)
+    core = MnemosCore(embedder, storage)
+    with pytest.raises(StorageError, match="count boom"):
+        await core.initialize()
+    assert await storage.read_stamp(core.stamp_key) is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_store_with_wrong_dimension_refuses_in_memory():
+    embedder = _LegacySpaceEmbedder()
+    storage = InMemoryStorage(latent_dim=768)
+    await storage.upsert(
+        "mnemos_episodic",
+        vector=[0.0] * 768,
+        text="legacy-wrong-dim",
+        payload={},
+        affect=None,
+    )
+    core = MnemosCore(embedder, storage)
+    with pytest.raises(StorageError, match="re-embedded"):
+        await core.initialize()
+    assert await storage.read_stamp(core.stamp_key) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_QDRANT, reason="qdrant_client not installed")
+async def test_legacy_store_with_wrong_dimension_refuses_qdrant():
+    fake = _WrongDimFakeQdrant()
+    storage = QdrantStorage(latent_dim=DEFAULT_LATENT_DIM, api_key="test")
+    storage._client = fake
+    embedder = _LegacySpaceEmbedder()
+    core = MnemosCore(embedder, storage)
+    with pytest.raises(StorageError, match="re-embedded"):
+        await core.initialize()
+    assert await storage.read_stamp(core.stamp_key) is None
+
+
+@pytest.mark.asyncio
+async def test_stale_stamp_on_empty_store_is_replaced(caplog):
+    caplog.set_level(logging.WARNING)
+    embedder = FakeEmbedder(latent_dim=32)
+    storage = InMemoryStorage(latent_dim=32)
+    stale_stamp = {
+        "model_id": "other-model",
+        "dim": 32,
+        "pooling": "mean",
+        "normalized": True,
+    }
+    await storage.write_stamp("mnemos_embedding_space", stale_stamp)
+    core = MnemosCore(embedder, storage)
+    await core.initialize()
+    stamp = await storage.read_stamp(core.stamp_key)
+    assert same_space(stamp, embedder.space)
+    assert any(
+        "stale embedding-space stamp" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_stale_stamp_on_non_empty_store_refuses():
+    embedder = FakeEmbedder(latent_dim=32)
+    storage = InMemoryStorage(latent_dim=32)
+    stale_stamp = {
+        "model_id": "other-model",
+        "dim": 32,
+        "pooling": "mean",
+        "normalized": True,
+    }
+    await storage.write_stamp("mnemos_embedding_space", stale_stamp)
+    await storage.upsert(
+        "mnemos_episodic",
+        vector=[0.0] * 32,
+        text="x",
+        payload={},
+        affect=None,
+    )
+    core = MnemosCore(embedder, storage)
+    with pytest.raises(StorageError, match="re-embedded"):
+        await core.initialize()
+
+
+def test_merge_defaults_missing_space_to_legacy():
+    strategy = MnemosMergeStrategy()
+    a = {
+        "short_term_size": 1,
+        "collection_prefix": "mnemos_",
+        "embedding_space": LEGACY_EMBEDDING_SPACE,
+    }
+    b = {"short_term_size": 2, "collection_prefix": "mnemos_"}
+    out = strategy.merge(a, b)
+    assert "embedding_space_mismatch" not in out.get("metadata", {})
+    assert same_space(out["embedding_space"], LEGACY_EMBEDDING_SPACE)
+
+
+def test_merge_flags_different_space_when_one_missing():
+    strategy = MnemosMergeStrategy()
+    a = {"short_term_size": 1, "collection_prefix": "mnemos_"}
+    b = {
+        "short_term_size": 2,
+        "collection_prefix": "mnemos_",
+        "embedding_space": {
+            "model_id": "other-384",
+            "dim": DEFAULT_LATENT_DIM,
+            "pooling": "mean",
+            "normalized": True,
+        },
+    }
+    out = strategy.merge(a, b)
+    assert out["metadata"]["embedding_space_mismatch"] is True
+    assert same_space(out["embedding_space"], LEGACY_EMBEDDING_SPACE)
+
+
+@pytest.mark.asyncio
+async def test_stamp_tolerates_extra_keys_and_rejects_malformed():
+    storage = InMemoryStorage(latent_dim=32)
+    extra = {
+        "model_id": "x",
+        "dim": 32,
+        "pooling": "mean",
+        "normalized": True,
+        "extra": 1,
+    }
+    await storage.write_stamp("mnemos_embedding_space", extra)
+    read = await storage.read_stamp("mnemos_embedding_space")
+    assert read == extra
+    assert "extra" in read
+
+    missing = {"model_id": "x", "dim": 32, "normalized": True}
+    await storage.write_stamp("missing_key", missing)
+    with pytest.raises(StorageError, match="malformed"):
+        await storage.read_stamp("missing_key")
+
+    bool_dim = {
+        "model_id": "x",
+        "dim": True,
+        "pooling": "mean",
+        "normalized": True,
+    }
+    await storage.write_stamp("bool_key", bool_dim)
+    with pytest.raises(StorageError, match="malformed"):
+        await storage.read_stamp("bool_key")
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_QDRANT, reason="qdrant_client not installed")
+async def test_qdrant_write_stamp_race_creating_meta_collection():
+    fake = _RaceCreateFakeQdrant()
+    storage = QdrantStorage(latent_dim=DEFAULT_LATENT_DIM, api_key="test")
+    storage._client = fake
+    stamp = {
+        "model_id": "legacy",
+        "dim": DEFAULT_LATENT_DIM,
+        "pooling": "mean",
+        "normalized": True,
+    }
+    await storage.write_stamp("mnemos_embedding_space", stamp)
+    read = await storage.read_stamp("mnemos_embedding_space")
+    assert same_space(read, stamp)

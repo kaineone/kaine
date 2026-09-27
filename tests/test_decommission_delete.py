@@ -3,9 +3,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
+import pytest
+
 from kaine.lifecycle.decommission import delete_entity_state
+from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION, stamp_key, stamp_point_id
+
+HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
 def _seed(state_root: Path) -> None:
@@ -70,3 +76,69 @@ def test_delete_handles_missing_state(tmp_path):
     )
     # No on-disk removals, no crash.
     assert result.removed_paths == []
+
+
+class _DecommissionFakeQdrantClient:
+    def __init__(self):
+        self.collections = {
+            "mnemos_episodic": None,
+            "mnemos_semantic": None,
+            "mnemos_short_term": None,
+            "mnemos_procedural": None,
+            "empatheia_agents": None,
+            MNEMOS_STAMP_COLLECTION: None,
+        }
+        self.deleted_collections: list[str] = []
+        self.deleted_points: list[tuple[str, list[str]]] = []
+
+    def get_collections(self):
+        coll_type = type("Coll", (), {})
+        out = []
+        for name in self.collections:
+            c = coll_type()
+            c.name = name
+            out.append(c)
+        return type("Collections", (), {"collections": out})()
+
+    def delete_collection(self, collection_name: str) -> None:
+        self.deleted_collections.append(collection_name)
+        self.collections.pop(collection_name, None)
+
+    def delete(self, *, collection_name: str, points_selector) -> None:
+        self.deleted_points.append((collection_name, list(points_selector.points)))
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.mark.skipif(not HAS_QDRANT, reason="qdrant_client not installed")
+def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
+    state_root = tmp_path / "state"
+    _seed(state_root)
+    fake = _DecommissionFakeQdrantClient()
+    monkeypatch.setattr(
+        "kaine.lifecycle.decommission._qdrant_client",
+        lambda _cfg: fake,
+    )
+    result = delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg={
+            "mnemos": {
+                "qdrant": {
+                    "host": "127.0.0.1",
+                    "port": 6533,
+                    "api_key": "test",
+                }
+            }
+        },
+        redis_cfg=None,
+        dry_run=False,
+    )
+    expected_key = stamp_key("mnemos_")
+    expected_pid = stamp_point_id(expected_key)
+    assert f"{MNEMOS_STAMP_COLLECTION}:{expected_key}" in result.dropped_collections
+    assert any(
+        coll == MNEMOS_STAMP_COLLECTION and expected_pid in pids
+        for coll, pids in fake.deleted_points
+    )
+    assert "mnemos_episodic" in fake.deleted_collections

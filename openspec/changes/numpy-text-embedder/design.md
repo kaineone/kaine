@@ -62,7 +62,11 @@ Moving to ONNX or model2vec would add a dependency, and model2vec is also a diff
   - A stamp equal to the embedder's space: proceed.
   - A stamp for a different space: raise `StorageError` naming both spaces. Mnemos does not start (fail closed), and the message says a re-embed is needed.
   - No stamp and no points in the being's own collections: write the stamp.
-  - No stamp but existing points: the store predates stamping and holds `LEGACY_EMBEDDING_SPACE`. If that equals the embedder's space, write it and log that the store was stamped as legacy MiniLM. Otherwise refuse, as for a mismatch.
+  - No stamp but existing points: the store predates stamping and holds `LEGACY_EMBEDDING_SPACE`. The store's actual vector dimension is read first: the Qdrant collection's vector size, the sqlite `vec_memories` definition, or the in-memory vectors. If it is not the legacy dimension, or the legacy space differs from the embedder's, Mnemos refuses without writing any stamp. Otherwise it writes the legacy stamp and logs that the store was stamped as legacy MiniLM.
+  - A stamp on a store whose own collections are all empty holds no vectors to mix, so it is replaced with the embedder's space and logged.
+  - The point counts behind these decisions are strict. A storage error while counting raises; it never reads as "empty".
+  - A stored stamp must contain the four keys; extra keys (from a later version) are tolerated, so a rollback does not refuse memory.
+  - Decommission deletes the being's stamp along with its collections.
 - **Export, bundles and merge.**
   - `MnemosCore.export_state` includes `embedding_space` (the embedder's space).
   - `import_state` compares the bundle's `embedding_space` with the running embedder's before validating or writing anything. A missing one means `LEGACY_EMBEDDING_SPACE`. A mismatch raises `StorageError`, so preservation refuses the revive. After a successful import it writes the running space as the stamp.

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Preservation carries the embedding space and revive refuses to mix spaces
-A preserved being's memory state SHALL include the embedding-space stamp of the vectors it holds. Revive and fork merge SHALL refuse a memory state whose embedding space differs from the running embedder's, rather than importing its vectors. A memory state without a stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2`.
+A preserved being's memory state SHALL include the embedding-space stamp of the vectors it holds. Revive SHALL refuse a memory state whose embedding space differs from the running embedder's, rather than importing its vectors. Fork merge, which carries no vectors, SHALL flag a mismatch between the merged parents' spaces. A memory state without a stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2`.
 
 #### Scenario: Revive onto a different embedder
 - **WHEN** a being preserved with one embedding space is revived where the embedder has another

@@ -40,7 +40,12 @@ from pathlib import Path
 from typing import Any
 
 from kaine.lifecycle.divergence import DivergenceAssessment
-from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS
+from kaine.memory_kinds import (
+    MNEMOS_COLLECTION_KINDS,
+    MNEMOS_STAMP_COLLECTION,
+    stamp_key,
+    stamp_point_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -187,9 +192,14 @@ def _purge_plaintext_bundle(bundle_dir: Path, *, error: str) -> None:
         log.warning("could not write encryption-failure marker", exc_info=True)
 
 
+def _mnemos_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
+    cfg = qdrant_cfg or {}
+    return str((cfg.get("mnemos") or {}).get("collection_prefix", "mnemos_"))
+
+
 def _mnemos_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
     cfg = qdrant_cfg or {}
-    prefix = str((cfg.get("mnemos") or {}).get("collection_prefix", "mnemos_"))
+    prefix = _mnemos_prefix(cfg)
     names = [f"{prefix}{kind}" for kind in MNEMOS_COLLECTION_KINDS]
     empatheia = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
     if empatheia:
@@ -670,8 +680,13 @@ def delete_entity_state(
 
     # --- Qdrant collections (best-effort) ------------------------------
     collections = _mnemos_collection_names(qdrant_cfg)
+    prefix = _mnemos_prefix(qdrant_cfg)
+    stamp_coll = MNEMOS_STAMP_COLLECTION
+    stamp_key_str = stamp_key(prefix)
+    stamp_pid = stamp_point_id(stamp_key_str)
     if dry_run:
         result.dropped_collections = list(collections)  # would-drop
+        result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
     else:
         client = _qdrant_client(qdrant_cfg)
         if client is not None:
@@ -708,6 +723,21 @@ def delete_entity_state(
                             result.dropped_collections.append(coll)
                         except Exception as exc:
                             result.errors.append(f"drop collection {coll}: {exc}")
+                    if stamp_coll in existing:
+                        try:
+                            from qdrant_client import models
+
+                            client.delete(
+                                collection_name=stamp_coll,
+                                points_selector=models.PointIdsList(
+                                    points=[stamp_pid]
+                                ),
+                            )
+                            result.dropped_collections.append(
+                                f"{stamp_coll}:{stamp_key_str}"
+                            )
+                        except Exception as exc:
+                            result.errors.append(f"delete stamp {stamp_key_str}: {exc}")
             finally:
                 try:
                     client.close()
