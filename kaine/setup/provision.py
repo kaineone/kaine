@@ -48,6 +48,7 @@ from kaine.setup.organ import (
     plan_organ_download,
     run_organ_download,
 )
+from kaine.text_embedding import resolve_embedding_config
 
 # Shipped-default HF repo ids for the non-organ models. Kept in sync with
 # config/kaine.toml (grep: dinov2-small, all-MiniLM-L6-v2, faster-distil-whisper,
@@ -133,9 +134,15 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
             AuxModel(_cfg_repo(cfg, "topos", "encoder_model_id", DEFAULT_VISION_REPO),
                      "vision encoder (DINOv2-small)")
         )
+    emb_cfg = resolve_embedding_config(cfg)
+    emb_repo = emb_cfg["model_id"]
+    emb_label = (
+        "memory embedder (all-MiniLM-L6-v2)"
+        if emb_repo == DEFAULT_EMBEDDER_REPO
+        else f"memory embedder ({emb_repo})"
+    )
     models.extend([
-        AuxModel(_cfg_repo(cfg, "mnemos", "embedder_model_id", DEFAULT_EMBEDDER_REPO),
-                 "memory embedder (all-MiniLM-L6-v2)"),
+        AuxModel(emb_repo, emb_label),
         AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"),
     ])
     return tuple(models)

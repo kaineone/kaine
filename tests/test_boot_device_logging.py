@@ -31,6 +31,9 @@ async def test_build_registry_logs_topos_device(caplog):
                         "collection_prefix": "mnemos_",
                         "short_term_capacity": 8,
                         "recall_top_k": 3,
+                    },
+                    "embedding": {
+                        "backend": "sentence_transformers",
                         "device": "cpu",
                     },
                     "audition": {
@@ -44,6 +47,6 @@ async def test_build_registry_logs_topos_device(caplog):
             )
         text = "\n".join(rec.message for rec in caplog.records)
         assert "device assignment: topos.encoder → cuda:1" in text
-        assert "device assignment: mnemos.embedder → cpu" in text
+        assert "device assignment: embedding → sentence_transformers:cpu" in text
         assert "device assignment: audition.emotion → cpu" in text
         assert "topos" in registry

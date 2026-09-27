@@ -491,17 +491,22 @@ alert_salience = 0.8
 # cycle). Kept modest so a timeout nudges attention without dominating it.
 timeout_salience = 0.3
 
+[embedding]
+# One shared text embedder for Mnemos, Empatheia, Hypnos and the
+# evaluation sidecar. backend = "numpy" runs the model in NumPy
+# with no torch (same vectors as "sentence_transformers" to 1e-5);
+# "device" applies only to the sentence_transformers backend. Set
+# model_path to read the model files from a directory instead of
+# the HuggingFace cache.
+backend = "numpy"
+model_id = "sentence-transformers/all-MiniLM-L6-v2"
+device = "cpu"
+
 [mnemos]
 backend = "qdrant"            # or "inmemory" for tests / minimal deployments
 collection_prefix = "mnemos_"
 short_term_capacity = 128
 recall_top_k = 5
-embedder_model_id = "sentence-transformers/all-MiniLM-L6-v2"
-# all-MiniLM-L6-v2 is ~80 MB and runs comfortably on CPU. Pinning to
-# CPU leaves cuda:1 fully available for Topos (per paper §6.1) and
-# cuda:0 fully available for Lingua/Hypnos. Override to a cuda:N if
-# you have headroom and want faster recall under heavy bursts.
-device = "cpu"
 baseline_salience = 0.15
 alert_salience = 0.6
 

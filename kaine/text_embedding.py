@@ -25,6 +25,7 @@ re-exports these names for back-compat without a second implementation.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -42,6 +43,9 @@ DEFAULT_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 #: embedder's ``latent_dim`` must equal this for the default model; the
 #: storage layers assert vector dims against the collection size at write time.
 DEFAULT_LATENT_DIM = 384
+
+EMBEDDING_BACKENDS = ("numpy", "sentence_transformers")
+EMBEDDING_ALLOWED_KEYS = {"backend", "model_id", "device", "model_path"}
 
 
 @runtime_checkable
@@ -257,6 +261,114 @@ class FakeEmbedder:
 
     async def shutdown(self) -> None:
         self.shutdown_called = True
+
+
+class SharedEmbedder:
+    """Wraps an embedder so many consumers can share one model instance.
+
+    ``load()`` is serialised with an ``asyncio.Lock`` so the inner embedder
+    loads exactly once, even across concurrent callers or a Spot rebuild.
+    ``shutdown()`` is intentionally a no-op: MnemosCore shuts its embedder
+    down when it stops, and a Spot restart of one module must not unload
+    the model underneath the other modules that still hold a reference to it.
+    """
+
+    def __init__(self, inner: Embedder) -> None:
+        self._inner = inner
+        self._loaded = False
+        self._load_lock: asyncio.Lock | None = None
+
+    @property
+    def inner(self) -> Embedder:
+        return self._inner
+
+    @property
+    def latent_dim(self) -> int:
+        return self._inner.latent_dim
+
+    @property
+    def model_id(self) -> str:
+        return self._inner.model_id
+
+    @property
+    def kind(self) -> Any:
+        return getattr(self._inner, "kind", None)
+
+    async def load(self) -> None:
+        if self._loaded:
+            return
+        # Created on first load() so construction outside a running loop is safe.
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
+        async with self._load_lock:
+            if self._loaded:
+                return
+            await self._inner.load()
+            self._loaded = True
+
+    async def shutdown(self) -> None:
+        """No-op: the shared instance outlives individual module lifecycles."""
+        return
+
+    async def encode(self, text: str) -> list[float]:
+        return await self._inner.encode(text)
+
+    async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
+        return await self._inner.encode_batch(texts)
+
+    async def embed(self, text: str) -> list[float]:
+        inner_embed = getattr(self._inner, "embed", None)
+        if inner_embed is None:
+            return await self._inner.encode(text)
+        return await inner_embed(text)
+
+
+def resolve_embedding_config(kaine_config: dict) -> dict:
+    """Return the ``[embedding]`` table with defaults applied and validated.
+
+    ``kaine_config`` is the full KAINE config dict. Raises ``ValueError``
+    for unknown keys or an unsupported backend.
+    """
+    section = dict(kaine_config.get("embedding") or {})
+
+    unknown = sorted(set(section.keys()) - EMBEDDING_ALLOWED_KEYS)
+    if unknown:
+        allowed = sorted(EMBEDDING_ALLOWED_KEYS)
+        raise ValueError(
+            f"unknown [embedding] config keys: {unknown} (allowed: {allowed})"
+        )
+
+    backend = section.get("backend", "numpy")
+    if backend not in EMBEDDING_BACKENDS:
+        raise ValueError(
+            f"unknown embedding backend {backend!r} (allowed: {EMBEDDING_BACKENDS})"
+        )
+
+    return {
+        "backend": backend,
+        "model_id": section.get("model_id", DEFAULT_MODEL_ID),
+        "device": section.get("device", "cpu"),
+        "model_path": section.get("model_path", None),
+    }
+
+
+def make_text_embedder(kaine_config: dict) -> Embedder:
+    """Build the configured text embedder (numpy or sentence_transformers)."""
+    resolved = resolve_embedding_config(kaine_config)
+
+    if resolved["backend"] == "numpy":
+        from kaine.text_embedding_numpy import NumpyMiniLMEmbedder
+
+        return NumpyMiniLMEmbedder(
+            resolved["model_id"],
+            model_path=resolved["model_path"],
+        )
+
+    # sentence_transformers
+    return SentenceTransformerTextEmbedder(
+        model_id=resolved["model_id"],
+        device_preference=resolved["device"],
+    )
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

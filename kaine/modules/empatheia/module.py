@@ -27,6 +27,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.store import AgentStore, InMemoryAgentStore
+from kaine.text_embedding import Embedder
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class Empatheia(BaseModule):
         bus: AsyncBus,
         *,
         store: Optional[AgentStore] = None,
+        embedder: Optional[Embedder] = None,
         backend: str = "inmemory",
         collection: str = "empatheia_agents",
         speaker_label: str = "operator",
@@ -80,9 +82,10 @@ class Empatheia(BaseModule):
                     "set [qdrant].api_key in config/secrets.toml"
                 )
             from kaine.modules.empatheia.store import QdrantAgentStore
-            from kaine.text_embedding import SentenceTransformerTextEmbedder
+            from kaine.text_embedding import make_text_embedder
 
-            embedder = SentenceTransformerTextEmbedder()
+            if embedder is None:
+                embedder = make_text_embedder({})
             self._store = QdrantAgentStore(
                 host=qdrant_host,
                 port=qdrant_port,

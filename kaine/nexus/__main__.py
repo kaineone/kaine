@@ -251,9 +251,20 @@ async def _build():
             # Attribution is threaded through the same call. Both are optional;
             # when None the surface degrades gracefully.
             try:
+                from kaine.config import load_kaine_config
                 from kaine.evaluation.registry import SidecarRegistry
+                from kaine.text_embedding import make_text_embedder
 
-                eval_registry = SidecarRegistry(bus=bus, config=eval_cfg)
+                kaine_config = (
+                    load_kaine_config()
+                    if Path("config/kaine.toml").exists()
+                    else {}
+                )
+                eval_registry = SidecarRegistry(
+                    bus=bus,
+                    config=eval_cfg,
+                    embedder=make_text_embedder(kaine_config),
+                )
             except Exception:
                 logging.debug("sidecar registry unavailable at nexus boot", exc_info=True)
 

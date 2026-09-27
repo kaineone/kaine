@@ -20,6 +20,7 @@ import pytest
 
 from kaine.boot import (
     SIMPLE_FACTORIES,
+    ConfigurationError,
     MetricsCollector,
     build_registry,
     make_audition,
@@ -312,21 +313,36 @@ def test_make_mnemos_from_config_does_not_connect_qdrant():
     assert mnemos.name == "mnemos"
 
 
-def test_make_mnemos_forwards_embedder_model_id():
+def test_make_mnemos_rejects_embedder_model_id():
     bus = _bus()
-    mnemos = make_mnemos(
-        bus,
-        {
-            "backend": "inmemory",
-            "collection_prefix": "mnemos_",
-            "short_term_capacity": 128,
-            "recall_top_k": 5,
-            "embedder_model_id": "sentence-transformers/all-mpnet-base-v2",
-        },
-    )
-    # Embedder should be configured with the requested model id (model
-    # weights are not loaded until initialize()).
-    assert mnemos._core._embedder.model_id == "sentence-transformers/all-mpnet-base-v2"
+    with pytest.raises(ConfigurationError) as exc:
+        make_mnemos(
+            bus,
+            {
+                "backend": "inmemory",
+                "collection_prefix": "mnemos_",
+                "short_term_capacity": 128,
+                "recall_top_k": 5,
+                "embedder_model_id": "sentence-transformers/all-mpnet-base-v2",
+            },
+        )
+    assert "[embedding].model_id" in str(exc.value)
+
+
+def test_make_mnemos_rejects_device():
+    bus = _bus()
+    with pytest.raises(ConfigurationError) as exc:
+        make_mnemos(
+            bus,
+            {
+                "backend": "inmemory",
+                "collection_prefix": "mnemos_",
+                "short_term_capacity": 128,
+                "recall_top_k": 5,
+                "device": "cpu",
+            },
+        )
+    assert "[embedding].device" in str(exc.value)
 
 
 def test_make_eidolon_from_config(tmp_path):

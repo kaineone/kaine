@@ -67,9 +67,7 @@ def test_check_respects_module_toggles(monkeypatch):
 
 def test_mnemos_qdrant_backend_needs_memory(monkeypatch):
     monkeypatch.setattr(
-        importlib.util,
-        "find_spec",
-        _make_find_spec({"sentence_transformers"}),
+        importlib.util, "find_spec", _make_find_spec(set())
     )
     config = {"modules": {"mnemos": True}, "mnemos": {"backend": "qdrant"}}
     missing = check(config)
@@ -80,13 +78,12 @@ def test_mnemos_qdrant_backend_needs_memory(monkeypatch):
         for m in missing
     )
     assert not any(m.import_name == "sqlite_vec" for m in missing)
+    assert not any(m.import_name == "sentence_transformers" for m in missing)
 
 
 def test_mnemos_sqlite_vec_backend_needs_memory_edge(monkeypatch):
     monkeypatch.setattr(
-        importlib.util,
-        "find_spec",
-        _make_find_spec({"sentence_transformers"}),
+        importlib.util, "find_spec", _make_find_spec(set())
     )
     config = {"modules": {"mnemos": True}, "mnemos": {"backend": "sqlite_vec"}}
     missing = check(config)
@@ -97,15 +94,70 @@ def test_mnemos_sqlite_vec_backend_needs_memory_edge(monkeypatch):
         for m in missing
     )
     assert not any(m.import_name == "qdrant_client" for m in missing)
+    assert not any(m.import_name == "sentence_transformers" for m in missing)
 
 
-def test_mnemos_inmemory_backend_needs_only_sentence_transformers(monkeypatch):
+def test_mnemos_inmemory_backend_needs_nothing_by_default(monkeypatch):
     monkeypatch.setattr(
-        importlib.util, "find_spec", _make_find_spec({"sentence_transformers"})
+        importlib.util, "find_spec", _make_find_spec(set())
     )
     config = {"modules": {"mnemos": True}, "mnemos": {"backend": "inmemory"}}
     missing = check(config)
     assert not missing
+
+
+def test_mnemos_sentence_transformers_backend_needs_memory(monkeypatch):
+    monkeypatch.setattr(
+        importlib.util, "find_spec", _make_find_spec(set())
+    )
+    config = {
+        "modules": {"mnemos": True},
+        "mnemos": {"backend": "qdrant"},
+        "embedding": {"backend": "sentence_transformers"},
+    }
+    missing = check(config)
+    assert any(
+        m.module == "mnemos"
+        and m.import_name == "sentence_transformers"
+        and m.extra == "memory"
+        for m in missing
+    )
+
+
+def test_empatheia_qdrant_sentence_transformers_backend_needs_memory(monkeypatch):
+    monkeypatch.setattr(
+        importlib.util, "find_spec", _make_find_spec(set())
+    )
+    config = {
+        "modules": {"empatheia": True},
+        "empatheia": {"backend": "qdrant"},
+        "embedding": {"backend": "sentence_transformers"},
+    }
+    missing = check(config)
+    assert any(
+        m.module == "empatheia"
+        and m.import_name == "sentence_transformers"
+        and m.extra == "memory"
+        for m in missing
+    )
+
+
+def test_hypnos_warns_sentence_transformers_when_embedding_backend_torch(monkeypatch):
+    monkeypatch.setattr(
+        importlib.util, "find_spec", _make_find_spec(set())
+    )
+    config = {
+        "modules": {"hypnos": True},
+        "embedding": {"backend": "sentence_transformers"},
+    }
+    missing = check(config)
+    assert any(
+        m.module == "hypnos"
+        and m.import_name == "sentence_transformers"
+        and m.extra == "memory"
+        and m.severity == "warning"
+        for m in missing
+    )
 
 
 def test_topos_cv2_needed_when_capture_enabled(monkeypatch):

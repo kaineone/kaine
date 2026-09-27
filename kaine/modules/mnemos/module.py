@@ -28,7 +28,6 @@ from kaine.modules.mnemos.storage import (
 from kaine.text_embedding import (
     DEFAULT_LATENT_DIM,
     Embedder,
-    SentenceTransformerTextEmbedder,
 )
 
 log = logging.getLogger(__name__)
@@ -58,8 +57,6 @@ class Mnemos(BaseModule):
         baseline_salience: float = 0.15,
         alert_salience: float = 0.6,
         retrigger_hook: EmotionalRetriggerHook | None = None,
-        embedder_model_id: Optional[str] = None,
-        embedder_device_preference: Optional[str] = None,
         recall_on_workspace: bool = True,
         recall_cooldown_s: float = 5.0,
         # Replay config
@@ -116,12 +113,9 @@ class Mnemos(BaseModule):
             self._core = core
         else:
             if embedder is None:
-                kw = {}
-                if embedder_model_id:
-                    kw["model_id"] = embedder_model_id
-                if embedder_device_preference is not None:
-                    kw["device_preference"] = embedder_device_preference
-                embedder = SentenceTransformerTextEmbedder(**kw)
+                from kaine.text_embedding import make_text_embedder
+
+                embedder = make_text_embedder({})
             # Embedder's latent_dim may not be known until `await embedder.load()`
             # has happened. We pick a default for construction-time storage
             # sizing; the actual dimension is reconciled at initialize() time.

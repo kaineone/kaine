@@ -24,7 +24,6 @@ from kaine.evaluation.config import EvaluationConfig, ResearchEventLogConfig
 from kaine.evaluation.eidolon_accuracy import EidolonAccuracyRunner
 from kaine.evaluation.embeddings import (
     HashEmbedder,
-    SentenceTransformerTextEmbedder,
     TextEmbedder,
 )
 from kaine.evaluation.memory_probes import (
@@ -50,6 +49,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.sleep_snapshots import SleepSnapshotRecorder
 from kaine.evaluation.trajectory import TrajectoryRecorder
 from kaine.evaluation.voice_tracking import VoiceTrackingObserver
+from kaine.text_embedding import make_text_embedder
 
 log = logging.getLogger(__name__)
 
@@ -140,16 +140,16 @@ class SidecarRegistry:
         if self._embedder is not None:
             return self._embedder
         try:
-            return SentenceTransformerTextEmbedder()
+            return make_text_embedder({})
         except Exception:
             if self._config.require_semantic_embedder:
                 raise RuntimeError(
-                    "require_semantic_embedder=true but SentenceTransformerTextEmbedder "
+                    "require_semantic_embedder=true but the text embedder "
                     "failed to load; refusing to fall back to HashEmbedder (fail-closed). "
-                    "Install sentence-transformers or set require_semantic_embedder=false."
+                    "Provision the embedding model (python -m kaine.setup.provision) or set require_semantic_embedder=false."
                 ) from None
             log.error(
-                "SentenceTransformerTextEmbedder failed to load — falling back to "
+                "the text embedder failed to load — falling back to "
                 "HashEmbedder. WARNING: A/B-divergence and memory-probe cosine metrics "
                 "will be LEXICAL token-hash similarity, NOT semantic similarity. "
                 "All records will carry embedder='hash' for filtering.",

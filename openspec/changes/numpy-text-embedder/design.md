@@ -35,9 +35,15 @@ Moving to ONNX or model2vec would add a dependency, and model2vec is also a diff
   - `device` = `"cpu"` by default; only the torch backend reads it;
   - `model_path` is optional.
 - `make_text_embedder(config) -> Embedder` in `kaine/text_embedding.py` builds either backend. Boot builds one instance per registry and passes it to Mnemos (`embedder=`), Empatheia (a new `embedder=` argument, used by its Qdrant store), Hypnos (`consolidation_embedder`) and the evaluation sidecar. Nothing else constructs an embedder.
-- `mnemos.embedder_model_id` is removed; configuration validation rejects it and names `[embedding].model_id`.
+- **Sharing without shutting each other down.**
+  - The instance handed to the modules is wrapped in `SharedEmbedder`: `load()` runs the inner load once, under an `asyncio.Lock`, and later calls return at once. `shutdown()` is a no-op, because `MnemosCore` shuts its embedder down when it stops, and a Spot restart of one module must not unload the model under the others.
+  - Every other attribute and method forwards to the inner embedder.
+  - The registry keeps the instance as `registry.shared_embedder`. `construct_module` hands it to Mnemos, Empatheia and Hypnos through a reserved `_embedder` key in their sections, as it already does for the perception feed, so a Spot restart gets the same instance.
+  - It is created on first need, so a registry with none of the three modules enabled never builds an embedder.
+  - The evaluation sidecar in the cycle process takes `registry.shared_embedder`. Nexus, a separate process, builds its own through `make_text_embedder`.
+- `mnemos.embedder_model_id` and `mnemos.device` are removed. `make_mnemos` rejects either with a `ConfigurationError` naming `[embedding].model_id` / `[embedding].device`.
 - Mnemos sizes storage from the embedder's declared dimension. It reads `hidden_size` from the model's `config.json` before load, and `load()` checks it against the loaded model.
-- Both backends set `kind` for disclosure (`"numpy_minilm"` / `"sentence_transformers"`). Run identity records the backend and `model_id` from the instance, not from a config string.
+- Both backends set `kind` for disclosure (`"numpy_minilm"` / `"sentence_transformers"`). Run identity records `embedding_backend` and `embedding_model_id` from the resolved `[embedding]` table, defaults included.
 
 ### The embedding-space stamp
 - The stamp is `{"model_id": str, "dim": int, "pooling": "mean", "normalized": true}`. `Embedder` gains a `space` property that returns it. The backend is not part of the space: the parity tests are what make the two backends interchangeable.

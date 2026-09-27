@@ -2,8 +2,8 @@
 #
 # Host class: 4–8 GB-class single-board computer, or a retired 8 GB flagship
 # smartphone under a userland like Termux. torch is required today because Soma
-# and Chronos use torch+ncps CfC networks and Mnemos/Empatheia/Hypnos build
-# sentence-transformers MiniLM embedders; there is no accelerator, so heavy
+# and Chronos use torch+ncps CfC networks, while Mnemos/Empatheia/Hypnos run
+# their shared memory embedder in NumPy with no torch; there is no accelerator, so heavy
 # models run on the edge runtimes at CPU pace: a 1–2B GGUF LLM at chat pace,
 # periodic (not streaming) vision, ONNX embeddings.
 #
@@ -28,7 +28,6 @@ backend = "llama_cpp"   # 1–2B GGUF at chat pace
 
 [mnemos]
 backend = "sqlite_vec"  # in-process vector store
-device = "cpu"          # ONNX MiniLM embeddings on the CPU
 
 [topos]
 # Vision is periodic, not streaming, at this tier. Pin the encoder to the CPU;

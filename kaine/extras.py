@@ -105,6 +105,11 @@ def _hypnos_embedder_enabled(config: dict) -> bool:
     return (config.get("hypnos") or {}).get("consolidation_embedder_enabled", True)
 
 
+def _embedding_torch_backend(config: dict) -> bool:
+    from kaine.text_embedding import resolve_embedding_config
+    return resolve_embedding_config(config)["backend"] == "sentence_transformers"
+
+
 def _phantasia_dreamerv3(config: dict) -> bool:
     return (config.get("phantasia") or {}).get("backend", "dreamerv3") == "dreamerv3"
 
@@ -132,20 +137,24 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("ncps", "core", predicate=_chronos_torch_needed),
     ),
     "mnemos": (
-        Requirement("sentence_transformers", "memory"),
+        Requirement("sentence_transformers", "memory", predicate=_embedding_torch_backend),
         Requirement("qdrant_client", "memory", predicate=_mnemos_qdrant),
         Requirement("sqlite_vec", "memory-edge", predicate=_mnemos_sqlite_vec),
     ),
     "empatheia": (
         Requirement("qdrant_client", "memory", predicate=_empatheia_qdrant),
-        Requirement("sentence_transformers", "memory", predicate=_empatheia_qdrant),
+        Requirement(
+            "sentence_transformers",
+            "memory",
+            predicate=lambda c: _empatheia_qdrant(c) and _embedding_torch_backend(c),
+        ),
     ),
     "hypnos": (
         Requirement(
             "sentence_transformers",
             "memory",
             severity="warning",
-            predicate=_hypnos_embedder_enabled,
+            predicate=lambda c: _hypnos_embedder_enabled(c) and _embedding_torch_backend(c),
         ),
     ),
     "topos": (
