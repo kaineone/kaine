@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 import pytest
 
-import kaine.text_embedding_numpy
 from kaine.text_embedding_numpy import (
     NumpyMiniLMEmbedder,
     WordPieceTokenizer,
@@ -609,29 +608,37 @@ def test_resolve_model_dir(tmp_path: Path) -> None:
     assert str(hf_hub_cache / "hub") in msg
 
 
+@pytest.fixture
+def minilm_dir() -> Path:
+    model_dir: Path | None = None
+    try:
+        model_dir = resolve_model_dir("sentence-transformers/all-MiniLM-L6-v2")
+    except FileNotFoundError:
+        pass
+    if model_dir is None:
+        pytest.skip("MiniLM model not cached")
+    if not (model_dir / "modules.json").exists():
+        pytest.skip("MiniLM modules.json not found")
+    if not (model_dir / "vocab.txt").exists() and not (
+        model_dir / "0_Transformer" / "vocab.txt"
+    ).exists():
+        pytest.skip("vocab.txt not found in cached model")
+    return model_dir
+
+
 @pytest.mark.skipif(
     sys.version_info < (3, 9),
     reason="optional parity tests need a recent environment",
 )
-def test_tokenizer_parity_with_hf() -> None:
-    try:
-        from transformers import BertTokenizer, BertTokenizerFast
-    except Exception:
-        pytest.skip("transformers not installed")
+def test_tokenizer_parity_with_hf(minilm_dir: Path) -> None:
+    transformers = pytest.importorskip("transformers")
 
-    try:
-        model_dir = resolve_model_dir("sentence-transformers/all-MiniLM-L6-v2")
-    except FileNotFoundError:
-        pytest.skip("MiniLM model not cached")
-
-    vocab_path = model_dir / "vocab.txt"
+    vocab_path = minilm_dir / "vocab.txt"
     if not vocab_path.exists():
-        vocab_path = model_dir / "0_Transformer" / "vocab.txt"
-    if not vocab_path.exists():
-        pytest.skip("vocab.txt not found in cached model")
+        vocab_path = minilm_dir / "0_Transformer" / "vocab.txt"
 
-    tok_hf_slow = BertTokenizer.from_pretrained(str(model_dir))
-    tok_hf_fast = BertTokenizerFast.from_pretrained(str(model_dir))
+    tok_hf_slow = transformers.BertTokenizer.from_pretrained(str(minilm_dir))
+    tok_hf_fast = transformers.BertTokenizerFast.from_pretrained(str(minilm_dir))
     tok_np = WordPieceTokenizer.from_vocab_file(str(vocab_path), max_length=256)
 
     long_text = " ".join(f"w{i}" for i in range(300))
@@ -666,22 +673,11 @@ def test_tokenizer_parity_with_hf() -> None:
         assert ids_np == ids_fast, f"fast mismatch for {text!r}: {ids_np} != {ids_fast}"
 
 
-def test_embedding_parity_with_sentence_transformers() -> None:
-    try:
-        import sentence_transformers
-    except Exception:
-        pytest.skip("sentence_transformers not installed")
+def test_embedding_parity_with_sentence_transformers(minilm_dir: Path) -> None:
+    sentence_transformers = pytest.importorskip("sentence_transformers")
 
-    try:
-        model_dir = resolve_model_dir("sentence-transformers/all-MiniLM-L6-v2")
-    except FileNotFoundError:
-        pytest.skip("MiniLM model not cached")
-
-    if not (model_dir / "modules.json").exists():
-        pytest.skip("MiniLM modules.json not found")
-
-    model = sentence_transformers.SentenceTransformer(str(model_dir), device="cpu")
-    embedder = NumpyMiniLMEmbedder(model_path=str(model_dir))
+    model = sentence_transformers.SentenceTransformer(str(minilm_dir), device="cpu")
+    embedder = NumpyMiniLMEmbedder(model_path=str(minilm_dir))
     asyncio.run(embedder.load())
 
     long_text = " ".join(f"w{i}" for i in range(300))
@@ -724,25 +720,14 @@ def test_embedding_parity_with_sentence_transformers() -> None:
     assert len(empty_batch[0]) == 384
 
 
-def test_embedding_parity_numpy_erf_fallback(monkeypatch: Any) -> None:
-    try:
-        import sentence_transformers
-    except Exception:
-        pytest.skip("sentence_transformers not installed")
+def test_embedding_parity_numpy_erf_fallback(monkeypatch: Any, minilm_dir: Path) -> None:
+    sentence_transformers = pytest.importorskip("sentence_transformers")
 
-    try:
-        model_dir = resolve_model_dir("sentence-transformers/all-MiniLM-L6-v2")
-    except FileNotFoundError:
-        pytest.skip("MiniLM model not cached")
-
-    if not (model_dir / "modules.json").exists():
-        pytest.skip("MiniLM modules.json not found")
-
-    model = sentence_transformers.SentenceTransformer(str(model_dir), device="cpu")
-    embedder = NumpyMiniLMEmbedder(model_path=str(model_dir))
+    model = sentence_transformers.SentenceTransformer(str(minilm_dir), device="cpu")
+    embedder = NumpyMiniLMEmbedder(model_path=str(minilm_dir))
     asyncio.run(embedder.load())
 
-    monkeypatch.setattr(kaine.text_embedding_numpy, "_SCIPY_ERF", None)
+    monkeypatch.setattr("kaine.text_embedding_numpy._SCIPY_ERF", None)
 
     long_text = " ".join(f"w{i}" for i in range(300))
 

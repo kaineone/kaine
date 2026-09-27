@@ -32,17 +32,11 @@ import math
 import os
 from typing import Any, Iterable, Protocol, runtime_checkable
 
+# Re-exported: modules import these defaults from here.
+from kaine.embedding_defaults import DEFAULT_LATENT_DIM as DEFAULT_LATENT_DIM
+from kaine.embedding_defaults import DEFAULT_MODEL_ID as DEFAULT_MODEL_ID
+
 log = logging.getLogger(__name__)
-
-DEFAULT_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-
-#: Output dimension of :data:`DEFAULT_MODEL_ID`. The Qdrant collection schemas
-#: (Mnemos storage, Empatheia agent store) must be created with this size
-#: BEFORE the embedder has loaded — its ``latent_dim`` is unknown until then —
-#: so this is the single pinned value those schemas derive from. A loaded
-#: embedder's ``latent_dim`` must equal this for the default model; the
-#: storage layers assert vector dims against the collection size at write time.
-DEFAULT_LATENT_DIM = 384
 
 EMBEDDING_BACKENDS = ("numpy", "sentence_transformers")
 EMBEDDING_ALLOWED_KEYS = {"backend", "model_id", "device", "model_path"}

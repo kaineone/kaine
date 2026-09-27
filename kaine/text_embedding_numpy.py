@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from kaine.text_embedding import DEFAULT_LATENT_DIM, DEFAULT_MODEL_ID
+from kaine.embedding_defaults import DEFAULT_LATENT_DIM, DEFAULT_MODEL_ID
 
 log = logging.getLogger(__name__)
 
@@ -724,7 +724,12 @@ class NumpyMiniLMEmbedder:
             if cfg is not None:
                 self._latent_dim = int(cfg["hidden_size"])
         except (FileNotFoundError, KeyError, json.JSONDecodeError):
-            pass
+            log.debug(
+                "text embedding model %s is not resolvable yet; latent_dim stays %d until load()",
+                model_id,
+                self._latent_dim,
+                exc_info=True,
+            )
 
     @property
     def latent_dim(self) -> int:
