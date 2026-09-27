@@ -18,7 +18,7 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, Sequence, runtime_checkable
 
 log = logging.getLogger(__name__)
 
@@ -75,9 +75,9 @@ class MemoryStorage(Protocol):
 
     async def count(self, collection: str) -> int: ...
 
-    async def export(self) -> dict[str, list[dict[str, Any]]]: ...
+    async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]: ...
 
-    async def import_(self, collections: dict[str, list[dict[str, Any]]]) -> int: ...
+    async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int: ...
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -179,15 +179,19 @@ class InMemoryStorage:
     async def count(self, collection: str) -> int:
         return len(self._collections.get(collection, []))
 
-    async def export(self) -> dict[str, list[dict[str, Any]]]:
-        """Full-fidelity dump of every collection's points.
+    async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
+        """Full-fidelity dump of the requested collections' points.
 
         Each point is ``{id, vector, text, payload, affect}`` — the same shape
         :meth:`upsert` stores. Used by Mnemos preservation so the persisted
         vector memory travels with the bundle, not just its sizes.
+        Collections that do not exist are simply absent from the result.
         """
         out: dict[str, list[dict[str, Any]]] = {}
-        for name, points in self._collections.items():
+        for name in collections:
+            if name not in self._collections:
+                continue
+            points = self._collections[name]
             out[name] = [
                 {
                     "id": p["id"],
@@ -200,35 +204,30 @@ class InMemoryStorage:
             ]
         return out
 
-    async def import_(self, collections: dict[str, list[dict[str, Any]]]) -> int:
-        """Rebuild collections from an :meth:`export` dump. Returns point count.
+    async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
+        """Replace one collection with the given points. Returns point count.
 
-        Replaces the in-memory store wholesale (revive runs against a fresh,
-        empty backend), preserving point ids/vectors/text/payload/affect so a
-        revived entity recalls exactly what was preserved.
+        FAILS LOUDLY if any point has the wrong dimension or a non-finite
+        vector — the target collection is left untouched on validation failure.
         """
-        total = 0
-        for name, points in (collections or {}).items():
-            self._collections.setdefault(name, [])
-            for p in points:
-                vec = list(p.get("vector") or [])
-                if len(vec) != self._latent_dim:
-                    raise StorageError(
-                        f"imported point in {name!r} has vector dim {len(vec)} "
-                        f"!= storage latent_dim {self._latent_dim}"
-                    )
-                affect = p.get("affect")
-                self._collections[name].append(
-                    {
-                        "id": str(p.get("id") or uuid.uuid4().hex),
-                        "vector": vec,
-                        "text": str(p.get("text", "")),
-                        "payload": dict(p.get("payload") or {}),
-                        "affect": dict(affect) if affect else None,
-                    }
+        for p in points:
+            vec = list(p.get("vector") or [])
+            if len(vec) != self._latent_dim or not all(math.isfinite(v) for v in vec):
+                raise StorageError(
+                    f"point in {name!r} has invalid vector "
+                    f"(dim {len(vec)} != {self._latent_dim} or non-finite)"
                 )
-                total += 1
-        return total
+        self._collections[name] = [
+            {
+                "id": str(p.get("id") or uuid.uuid4().hex),
+                "vector": list(p.get("vector") or []),
+                "text": str(p.get("text", "")),
+                "payload": dict(p.get("payload") or {}),
+                "affect": dict(p["affect"]) if p.get("affect") else None,
+            }
+            for p in points
+        ]
+        return len(points)
 
 
 class SqliteVecStorage:
@@ -359,20 +358,39 @@ class SqliteVecStorage:
                     (blob, rowid),
                 )
             else:
-                cur = db.execute(
-                    "INSERT INTO memories (collection, point_id, text, payload, "
-                    "affect) VALUES (?, ?, ?, ?, ?)",
-                    (collection, pid, text, payload_json, affect_json),
-                )
-                rowid = int(cur.lastrowid)
-                db.execute(
-                    "INSERT INTO vec_memories (rowid, embedding) VALUES (?, ?)",
-                    (rowid, blob),
+                self._insert_point_sync(
+                    db, collection, pid, vector, text, payload_json, affect_json
                 )
             db.commit()
 
         await asyncio.to_thread(_write)
         return pid
+
+    def _insert_point_sync(
+        self,
+        db: Any,
+        collection: str,
+        point_id: str,
+        vector: list[float],
+        text: str,
+        payload_json: str,
+        affect_json: str | None,
+    ) -> None:
+        import struct
+
+        blob = struct.pack(
+            f"{self._latent_dim}f", *[float(x) for x in vector]
+        )
+        cur = db.execute(
+            "INSERT INTO memories (collection, point_id, text, payload, affect) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (collection, point_id, text, payload_json, affect_json),
+        )
+        rowid = int(cur.lastrowid)
+        db.execute(
+            "INSERT INTO vec_memories (rowid, embedding) VALUES (?, ?)",
+            (rowid, blob),
+        )
 
     async def search(
         self,
@@ -462,9 +480,12 @@ class SqliteVecStorage:
 
         return await asyncio.to_thread(_count)
 
-    async def export(self) -> dict[str, list[dict[str, Any]]]:
+    async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
         import asyncio
         import struct
+
+        if not collections:
+            return {}
 
         def _export() -> dict[str, list[dict[str, Any]]]:
             db = self._db
@@ -472,10 +493,12 @@ class SqliteVecStorage:
                 raise StorageError("sqlite-vec export before initialize()")
             out: dict[str, list[dict[str, Any]]] = {}
             try:
+                placeholders = ",".join("?" for _ in collections)
                 cur = db.execute(
                     "SELECT m.collection, m.point_id, m.text, m.payload, m.affect, "
                     "v.embedding FROM memories m JOIN vec_memories v "
-                    "ON v.rowid = m.rowid"
+                    f"ON v.rowid = m.rowid WHERE m.collection IN ({placeholders})",
+                    tuple(collections),
                 )
                 for coll, pid, text, payload_json, affect_json, emb in cur.fetchall():
                     vec = list(struct.unpack(f"{self._latent_dim}f", emb))
@@ -495,26 +518,47 @@ class SqliteVecStorage:
 
         return await asyncio.to_thread(_export)
 
-    async def import_(self, collections: dict[str, list[dict[str, Any]]]) -> int:
-        total = 0
-        for name, points in (collections or {}).items():
-            for p in points:
-                vec = list(p.get("vector") or [])
-                if len(vec) != self._latent_dim:
-                    raise StorageError(
-                        f"imported point in {name!r} has vector dim {len(vec)} "
-                        f"!= storage latent_dim {self._latent_dim}"
-                    )
-                await self.upsert(
-                    name,
-                    vector=vec,
-                    text=str(p.get("text", "")),
-                    payload=dict(p.get("payload") or {}),
-                    affect=(dict(p["affect"]) if p.get("affect") else None),
-                    point_id=str(p.get("id") or uuid.uuid4().hex),
+    async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
+        import asyncio
+
+        for p in points:
+            vec = list(p.get("vector") or [])
+            if len(vec) != self._latent_dim or not all(math.isfinite(v) for v in vec):
+                raise StorageError(
+                    f"point in {name!r} has invalid vector "
+                    f"(dim {len(vec)} != {self._latent_dim} or non-finite)"
                 )
-                total += 1
-        return total
+
+        def _replace() -> int:
+            db = self._db
+            if db is None:
+                raise StorageError("sqlite-vec replace_collection before initialize()")
+            try:
+                db.execute("BEGIN")
+                db.execute(
+                    "DELETE FROM vec_memories WHERE rowid IN "
+                    "(SELECT rowid FROM memories WHERE collection = ?)",
+                    (name,),
+                )
+                db.execute("DELETE FROM memories WHERE collection = ?", (name,))
+                for p in points:
+                    pid = str(p.get("id") or uuid.uuid4().hex)
+                    vec = list(p.get("vector") or [])
+                    text = str(p.get("text", ""))
+                    payload_json = json.dumps(p.get("payload") or {})
+                    affect_json = json.dumps(p["affect"]) if p.get("affect") else None
+                    self._insert_point_sync(
+                        db, name, pid, vec, text, payload_json, affect_json
+                    )
+                db.commit()
+                return len(points)
+            except Exception as exc:
+                db.rollback()
+                raise StorageError(
+                    f"sqlite-vec replace_collection failed for {name!r}: {exc}"
+                ) from exc
+
+        return await asyncio.to_thread(_replace)
 
 
 class QdrantStorage:
@@ -676,24 +720,27 @@ class QdrantStorage:
             return 0
         return int(info.count)
 
-    async def export(self) -> dict[str, list[dict[str, Any]]]:
-        """Scroll every Mnemos collection into a full-fidelity point dump.
+    async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
+        """Scroll the requested collections into a full-fidelity point dump.
 
         FAILS LOUDLY (raises :class:`StorageError`) if the server is
         unreachable or a scroll fails — a preservation that cannot read the
         vector store MUST NOT silently emit an empty memory set that looks
-        complete. Returns ``{collection: [{id, vector, text, payload, affect}]}``.
+        complete. Only requested collections that exist are returned.
+        Returns ``{collection: [{id, vector, text, payload, affect}]}``.
         """
         assert self._client is not None
         try:
             existing = await self._client.get_collections()
-            names = [c.name for c in existing.collections]
+            existing_names = {c.name for c in existing.collections}
         except Exception as exc:
             raise StorageError(
                 f"qdrant export failed: could not list collections ({exc})"
             ) from exc
         out: dict[str, list[dict[str, Any]]] = {}
-        for name in names:
+        for name in collections:
+            if name not in existing_names:
+                continue
             points: list[dict[str, Any]] = []
             offset = None
             try:
@@ -727,31 +774,48 @@ class QdrantStorage:
             out[name] = points
         return out
 
-    async def import_(self, collections: dict[str, list[dict[str, Any]]]) -> int:
-        """Recreate collections and re-upsert every exported point.
+    async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
+        """Replace one collection with the given validated points.
 
-        FAILS LOUDLY on any error — a revive that cannot restore the vector
-        store must raise, not produce a memory-poor lesser individual.
+        FAILS LOUDLY on any server or validation error — a revive that
+        cannot restore the vector store must raise.
         """
         from qdrant_client import models  # type: ignore[import-untyped]
 
         assert self._client is not None
-        total = 0
-        for name, points in (collections or {}).items():
+        for p in points:
+            vec = list(p.get("vector") or [])
+            if len(vec) != self._latent_dim or not all(math.isfinite(v) for v in vec):
+                raise StorageError(
+                    f"qdrant replace_collection validation failed for {name!r}: "
+                    f"point has dim {len(vec)} != {self._latent_dim} or non-finite vector"
+                )
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant replace_collection failed listing collections for {name!r}: {exc}"
+            ) from exc
+        if name in existing_names:
             try:
-                await self.ensure_collection(name)
+                await self._client.delete_collection(collection_name=name)
             except Exception as exc:
                 raise StorageError(
-                    f"qdrant import failed creating collection {name!r}: {exc}"
+                    f"qdrant replace_collection failed deleting {name!r}: {exc}"
                 ) from exc
+        try:
+            await self.ensure_collection(name)
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant replace_collection failed recreating {name!r}: {exc}"
+            ) from exc
+        total = 0
+        batch_size = 256
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
             structs = []
-            for p in points:
-                vec = list(p.get("vector") or [])
-                if len(vec) != self._latent_dim:
-                    raise StorageError(
-                        f"imported point in {name!r} has vector dim {len(vec)} "
-                        f"!= storage latent_dim {self._latent_dim}"
-                    )
+            for p in batch:
                 merged_payload: dict[str, Any] = {
                     "text": str(p.get("text", "")),
                     **dict(p.get("payload") or {}),
@@ -762,16 +826,15 @@ class QdrantStorage:
                 structs.append(
                     models.PointStruct(
                         id=p.get("id") or uuid.uuid4().hex,
-                        vector=vec,
+                        vector=list(p.get("vector") or []),
                         payload=merged_payload,
                     )
                 )
-            if structs:
-                try:
-                    await self._client.upsert(collection_name=name, points=structs)
-                except Exception as exc:
-                    raise StorageError(
-                        f"qdrant import failed upserting into {name!r}: {exc}"
-                    ) from exc
-                total += len(structs)
+            try:
+                await self._client.upsert(collection_name=name, points=structs)
+            except Exception as exc:
+                raise StorageError(
+                    f"qdrant replace_collection failed upserting into {name!r}: {exc}"
+                ) from exc
+            total += len(structs)
         return total

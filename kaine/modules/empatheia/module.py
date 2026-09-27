@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 
 class Empatheia(BaseModule):
     name: ClassVar[str] = "empatheia"
+    preservation_state_key: ClassVar[str | None] = "profiles"
 
     def holds_external_resources(self) -> bool:
         return True
@@ -305,3 +306,21 @@ class Empatheia(BaseModule):
         import json
         profiles = state.get("profiles") or {}
         self._store.deserialize(json.dumps(profiles).encode("utf-8"))
+
+    async def export_preservation_state(self) -> dict[str, Any]:
+        """Capture every agent profile for preservation."""
+        profiles = await self._store.all_profiles()
+        return {"profiles": {agent_id: model.to_dict() for agent_id, model in profiles.items()}}
+
+    async def import_preservation_state(self, state: dict[str, Any]) -> int:
+        """Restore agent profiles from a preservation bundle.
+
+        Re-embeds every profile with the running embedder and replaces
+        the store's contents. Returns the number of profiles restored.
+        """
+        if not getattr(self._store, "_initialized", False):
+            raise RuntimeError("Empatheia store has not been initialized")
+        profiles = state.get("profiles") or {}
+        models = [AgentModel.from_dict(d) for d in profiles.values()]
+        await self._store.replace_all(models)
+        return len(models)
