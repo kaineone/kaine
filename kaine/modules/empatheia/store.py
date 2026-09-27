@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.text_embedding import DEFAULT_LATENT_DIM
@@ -48,6 +48,10 @@ class AgentStore(Protocol):
 
     async def all_ids(self) -> list[str]: ...
 
+    async def all_profiles(self) -> dict[str, AgentModel]: ...
+
+    async def replace_all(self, models: Sequence[AgentModel]) -> None: ...
+
     def serialize(self) -> bytes: ...
 
     def deserialize(self, data: bytes) -> None: ...
@@ -67,8 +71,10 @@ class InMemoryAgentStore:
 
     def __init__(self) -> None:
         self._profiles: dict[str, AgentModel] = {}
+        self._initialized = False
 
     async def initialize(self) -> None:
+        self._initialized = True
         return
 
     async def shutdown(self) -> None:
@@ -82,6 +88,14 @@ class InMemoryAgentStore:
 
     async def all_ids(self) -> list[str]:
         return list(self._profiles)
+
+    async def all_profiles(self) -> dict[str, AgentModel]:
+        return dict(self._profiles)
+
+    async def replace_all(self, models: Sequence[AgentModel]) -> None:
+        self._profiles.clear()
+        for model in models:
+            self._profiles[model.id] = model
 
     def serialize(self) -> bytes:
         payload = {
@@ -140,6 +154,7 @@ class QdrantAgentStore:
         self._latent_dim = int(latent_dim)
         self._embedder = embedder
         self._client: Any = None
+        self._initialized = False
         # Local cache so serialize() works without an async context.
         self._cache: dict[str, AgentModel] = {}
 
@@ -160,6 +175,7 @@ class QdrantAgentStore:
 
         self._client = await asyncio.to_thread(_open)
         await self._ensure_collection()
+        self._initialized = True
 
     async def _ensure_collection(self) -> None:
         from qdrant_client import models  # type: ignore[import-untyped]
@@ -184,12 +200,14 @@ class QdrantAgentStore:
                 log.warning("QdrantAgentStore close failed", exc_info=True)
             self._client = None
 
-    async def _embed(self, model: AgentModel) -> list[float]:
+    async def _build_embedding(self, model: AgentModel) -> list[float]:
         """Return an embedding for the agent's behavioral summary.
 
         The embedding is derived from a textual rendering of the
         behavioral summary (numeric features only — no raw sense data).
-        Falls back to a zero vector if no embedder is available.
+        Falls back to a zero vector when no embedder is configured or
+        the embedder fails, because only the profile payload is ever
+        read back.
         """
         summary_text = (
             f"agent:{model.label} "
@@ -205,7 +223,7 @@ class QdrantAgentStore:
             try:
                 return await self._embedder.encode(summary_text)
             except Exception:
-                log.warning("QdrantAgentStore embed failed", exc_info=True)
+                log.warning("QdrantAgentStore embed failed; storing the profile with a zero vector", exc_info=True)
         return [0.0] * self._latent_dim
 
     async def get(self, agent_id: str) -> Optional[AgentModel]:
@@ -245,33 +263,89 @@ class QdrantAgentStore:
             log.warning("QdrantAgentStore.get failed for %s", agent_id, exc_info=True)
             return None
 
+    async def _put_strict(self, model: AgentModel) -> None:
+        from qdrant_client import models  # type: ignore[import-untyped]
+
+        assert self._client is not None
+        vector = await self._build_embedding(model)
+        profile_json = json.dumps(model.to_dict())
+        payload = {"agent_id": model.id, "profile_json": profile_json}
+        # Use agent_id as a stable point ID (hex-encoded for Qdrant).
+        point_id = model.id.encode("utf-8").hex()
+        await self._client.upsert(
+            collection_name=self._collection,
+            points=[
+                models.PointStruct(
+                    id=point_id,
+                    vector=list(vector),
+                    payload=payload,
+                )
+            ],
+        )
+
     async def put(self, model: AgentModel) -> None:
         self._cache[model.id] = model
         if self._client is None:
             return
         try:
-            from qdrant_client import models  # type: ignore[import-untyped]
-
-            vector = await self._embed(model)
-            profile_json = json.dumps(model.to_dict())
-            payload = {"agent_id": model.id, "profile_json": profile_json}
-            # Use agent_id as a stable point ID (hex-encoded for Qdrant).
-            point_id = model.id.encode("utf-8").hex()
-            await self._client.upsert(
-                collection_name=self._collection,
-                points=[
-                    models.PointStruct(
-                        id=point_id,
-                        vector=list(vector),
-                        payload=payload,
-                    )
-                ],
-            )
+            await self._put_strict(model)
         except Exception:
             log.warning("QdrantAgentStore.put failed for %s", model.id, exc_info=True)
 
     async def all_ids(self) -> list[str]:
         return list(self._cache)
+
+    async def all_profiles(self) -> dict[str, AgentModel]:
+        if self._client is None:
+            raise RuntimeError(
+                "QdrantAgentStore is not initialized: no Qdrant client"
+            )
+        profiles: dict[str, AgentModel] = {}
+        offset = None
+        try:
+            while True:
+                points, offset = await self._client.scroll(
+                    collection_name=self._collection,
+                    limit=256,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for p in points:
+                    payload = dict(getattr(p, "payload", None) or {})
+                    profile_json = payload.get("profile_json")
+                    if not profile_json:
+                        continue
+                    d = json.loads(profile_json)
+                    model = AgentModel.from_dict(d)
+                    profiles[model.id] = model
+                if offset is None:
+                    break
+        except Exception as exc:
+            raise RuntimeError(
+                f"QdrantAgentStore.all_profiles failed for collection {self._collection!r}: {exc}"
+            ) from exc
+        profiles.update(self._cache)
+        return profiles
+
+    async def replace_all(self, models: Sequence[AgentModel]) -> None:
+        if self._client is None:
+            raise RuntimeError(
+                "QdrantAgentStore is not initialized: no Qdrant client"
+            )
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+            if self._collection in existing_names:
+                await self._client.delete_collection(collection_name=self._collection)
+        except Exception as exc:
+            raise RuntimeError(
+                f"QdrantAgentStore.replace_all failed deleting {self._collection!r}: {exc}"
+            ) from exc
+        await self._ensure_collection()
+        self._cache.clear()
+        for model in models:
+            await self._put_strict(model)
 
     def serialize(self) -> bytes:
         """Lossless snapshot of all known profiles (from cache)."""

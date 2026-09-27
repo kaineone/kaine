@@ -34,6 +34,8 @@ from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import PreservationError, ReviveError
 from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.empatheia.agent import AgentModel
+from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
 from kaine.modules.mnemos.storage import QdrantStorage, StorageError
 from kaine.modules.phantasia.encoder import observation_dim
@@ -224,6 +226,9 @@ class _FakeAsyncQdrant:
     async def create_collection(self, collection_name, vectors_config):
         self.store.setdefault(collection_name, [])
 
+    async def delete_collection(self, collection_name):
+        self.store.pop(collection_name, None)
+
     async def scroll(self, collection_name, limit, offset, with_payload, with_vectors):
         pts = self.store.get(collection_name, [])
         return pts, None
@@ -249,15 +254,15 @@ async def test_qdrant_export_import_roundtrip_codec():
         affect={"intensity": 0.9},
         point_id="p1",
     )
-    dump = await src.export()
+    dump = await src.export(["mnemos_episodic"])
     assert dump["mnemos_episodic"][0]["text"] == "planted memory"
     assert dump["mnemos_episodic"][0]["affect"] == {"intensity": 0.9}
 
     dst = QdrantStorage(latent_dim=4, api_key="k")
     dst._client = _FakeAsyncQdrant()
-    n = await dst.import_(dump)
+    n = await dst.replace_collection("mnemos_episodic", dump["mnemos_episodic"])
     assert n == 1
-    redump = await dst.export()
+    redump = await dst.export(["mnemos_episodic"])
     assert redump["mnemos_episodic"][0]["vector"] == [0.1, 0.2, 0.3, 0.4]
     assert redump["mnemos_episodic"][0]["text"] == "planted memory"
 
@@ -273,7 +278,7 @@ async def test_qdrant_export_fails_loud_when_unreachable():
     s = QdrantStorage(latent_dim=4, api_key="k")
     s._client = _Broken()
     with pytest.raises(StorageError, match="could not list collections"):
-        await s.export()
+        await s.export([])
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +362,91 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
         await eid2.shutdown()
         await mnemos2.shutdown()
         await ph2.shutdown()
+    finally:
+        for m in reg.all_modules():
+            await m.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
+    bus: AsyncBus, tmp_path: Path
+):
+    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+
+    empatheia = Empatheia(bus, backend="inmemory")
+    await empatheia.initialize()
+    await empatheia.store.put(
+        AgentModel(id="operator", label="operator", interaction_count=3)
+    )
+    reg.register(empatheia)
+
+    fm = ForkManager(tmp_path / "forks")
+    result = await fm.preserve_live(
+        reg,
+        reason="scoped-memory-preservation",
+        label="test-scoped-revive",
+        out_root=tmp_path / "backups",
+        entity_name="aria",
+    )
+    assert result.ok
+    assert result.preservation_id
+    bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
+
+    # Revive into a fresh registry with a differently-prefixed Mnemos.
+    reg2 = ModuleRegistry()
+    eid2 = Eidolon(
+        bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
+    )
+    await eid2.initialize()
+    reg2.register(eid2)
+
+    emb = FakeEmbedder(latent_dim=8)
+    await emb.load()
+    storage2 = InMemoryStorage(latent_dim=emb.latent_dim)
+    core2 = MnemosCore(
+        embedder=emb, storage=storage2, short_term_capacity=8, collection_prefix="other_"
+    )
+    mnemos2 = Mnemos(bus, core=core2)
+    await mnemos2.initialize()
+    reg2.register(mnemos2)
+
+    wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
+    ph2 = Phantasia(
+        bus,
+        world_model=wm2,
+        backend="fake",
+        persist_weights=False,
+        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+    )
+    await ph2.initialize()
+    reg2.register(ph2)
+
+    empatheia2 = Empatheia(bus, backend="inmemory")
+    await empatheia2.initialize()
+    reg2.register(empatheia2)
+
+    await fm.revive(bundle, reg2)
+
+    # The planted episodic memory survives under the new collection prefix.
+    ep_results, _ = await mnemos2.core.recall("lighthouse", collection="episodic")
+    assert any("lighthouse keeper" in r.text for r in ep_results)
+
+    # The memory lives under the reviving being's prefix, and nothing was
+    # written under the preserved being's original prefix.
+    assert await storage2.count("other_episodic") == 1
+    assert await storage2.export(["mnemos_episodic", "mnemos_semantic"]) == {}
+
+    # Empatheia profile is restored.
+    restored = await empatheia2.store.get("operator")
+    assert restored is not None
+    assert restored.label == "operator"
+    assert restored.interaction_count == 3
+
+    try:
+        await eid2.shutdown()
+        await mnemos2.shutdown()
+        await ph2.shutdown()
+        await empatheia2.shutdown()
     finally:
         for m in reg.all_modules():
             await m.shutdown()
@@ -712,7 +802,7 @@ async def test_revive_fails_loud_on_corrupt_bundle(bus: AsyncBus, tmp_path: Path
 
 @pytest.mark.asyncio
 async def test_qdrant_import_fails_loud_on_upsert_error():
-    """QdrantStorage.import_ must raise StorageError when the backend upsert
+    """QdrantStorage.replace_collection must raise StorageError when the backend upsert
     fails — a revive that cannot restore the vector store must not silently
     produce a memory-poor lesser individual."""
     pytest.importorskip("qdrant_client")
@@ -723,19 +813,17 @@ async def test_qdrant_import_fails_loud_on_upsert_error():
 
     dst = QdrantStorage(latent_dim=4, api_key="k")
     dst._client = _UpsertBroken()
-    dump = {
-        "mnemos_episodic": [
-            {
-                "id": "p1",
-                "vector": [0.1, 0.2, 0.3, 0.4],
-                "text": "planted memory",
-                "payload": {"timestamp": 1.0},
-                "affect": {"intensity": 0.9},
-            }
-        ]
-    }
+    points = [
+        {
+            "id": "p1",
+            "vector": [0.1, 0.2, 0.3, 0.4],
+            "text": "planted memory",
+            "payload": {"timestamp": 1.0},
+            "affect": {"intensity": 0.9},
+        }
+    ]
     with pytest.raises(StorageError, match="upserting into"):
-        await dst.import_(dump)
+        await dst.replace_collection("mnemos_episodic", points)
 
 
 @pytest.mark.asyncio

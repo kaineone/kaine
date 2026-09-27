@@ -10,6 +10,7 @@ can drive memory operations without spinning up a bus.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ from typing import Any, Awaitable, Callable, Iterable, Optional
 
 from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS
 from kaine.modules.mnemos.embeddings import Embedder
-from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory
+from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory, StorageError
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,9 @@ class MnemosCore:
         if kind not in DEFAULT_COLLECTIONS:
             raise ValueError(f"unknown collection kind {kind!r}")
         return f"{self._prefix}{kind}"
+
+    def persisted_collection_names(self) -> list[str]:
+        return [self.collection_name(k) for k in DEFAULT_COLLECTIONS if k != "short_term"]
 
     @property
     def short_term_size(self) -> int:
@@ -218,7 +222,7 @@ class MnemosCore:
             }
             for m in self._short_term
         ]
-        persisted = await self._storage.export()
+        persisted = await self._storage.export(self.persisted_collection_names())
         return {
             "collection_prefix": self._prefix,
             "short_term": short_term,
@@ -228,9 +232,10 @@ class MnemosCore:
     async def import_state(self, state: dict[str, Any]) -> int:
         """Restore a store captured by :meth:`export_state`. Returns total points.
 
-        Rebuilds the short-term deque and re-imports persisted collections.
-        FAILS LOUDLY (propagates StorageError) when the backend cannot
-        re-import — revive must not yield a memory-poor lesser individual.
+        Rebuilds the short-term deque and re-imports persisted collections
+        under this core's own prefix. FAILS LOUDLY (propagates StorageError)
+        when the backend cannot re-import — revive must not yield a
+        memory-poor lesser individual.
         """
         self._short_term.clear()
         for entry in state.get("short_term") or []:
@@ -243,7 +248,41 @@ class MnemosCore:
                     timestamp=float(entry.get("timestamp", 0.0)),
                 )
             )
-        return await self._storage.import_(state.get("persisted") or {})
+        src_prefix = state.get("collection_prefix") or "mnemos_"
+        persisted = state.get("persisted") or {}
+        persisted_kinds = [k for k in DEFAULT_COLLECTIONS if k != "short_term"]
+        mapping: dict[str, str] = {}
+        for kind in persisted_kinds:
+            src_name = f"{src_prefix}{kind}"
+            if src_name in persisted:
+                mapping[src_name] = self.collection_name(kind)
+
+        for src_name, target_name in mapping.items():
+            for p in persisted[src_name]:
+                vec = list(p.get("vector") or [])
+                if len(vec) != self._storage.latent_dim:
+                    raise StorageError(
+                        f"imported point in {src_name!r} -> {target_name!r} "
+                        f"has vector dim {len(vec)} != storage latent_dim {self._storage.latent_dim}"
+                    )
+                if not all(math.isfinite(v) for v in vec):
+                    raise StorageError(
+                        f"imported point in {src_name!r} -> {target_name!r} has non-finite vector"
+                    )
+
+        total = 0
+        for src_name, target_name in mapping.items():
+            n = await self._storage.replace_collection(target_name, persisted[src_name])
+            total += n
+
+        for name, points in persisted.items():
+            if name not in mapping:
+                log.info(
+                    "mnemos: revive skips collection %s (%d points): not this bundle's own memory",
+                    name,
+                    len(points),
+                )
+        return total
 
     async def _invoke_hook(self, summary: RecallSummary) -> None:
         try:
