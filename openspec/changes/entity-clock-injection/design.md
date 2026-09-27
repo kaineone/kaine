@@ -2,7 +2,6 @@
 
 - **Injection pattern.** Each timer takes an optional `entity_clock` (or a `clock: Callable[[], float]` where it already takes one) and defaults to a real-time `EntityClock(scale=1.0)`, as Soma, Thymos and Mnemos already do. Boot passes the registry's shared clock.
   - Chronos joins `_CLOCKED_FACTORIES`.
-  - The Volition and drive-policy guards receive the clock where the cycle builds them (`cycle/__main__.py`).
   - Vox receives it from its factory.
 - **Chronos.**
   - `SnapshotFeaturizer`'s Δt feature and the time-since-interaction measure read `entity_clock.now()`.

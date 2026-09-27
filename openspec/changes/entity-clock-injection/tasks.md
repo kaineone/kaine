@@ -1,7 +1,7 @@
 ## 1. Timers
 
 - [ ] 1.1 Chronos on the entity clock (featurizer Δt, time-since-interaction); Chronos in `_CLOCKED_FACTORIES`.
-- [ ] 1.2 Volition speak guard and drive policy on the entity clock, wired from the cycle.
+- [ ] 1.2 The Volition and drive-policy speak guard classified as wall clock (it times real playback), with a comment.
 - [ ] 1.3 Vox prosody-mirroring decay on the entity clock.
 - [ ] 1.4 Soma's cycle-latency sense in subjective time.
 - [ ] 1.5 `# wall clock:` classification comments on the wall-clock sites left in the touched modules.

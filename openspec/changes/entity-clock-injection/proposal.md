@@ -3,7 +3,6 @@
 The entity-time spec requires every timer that models cognition to run on the shared `EntityClock`, so that one `time_scale` dilates the whole mind coherently. A timing audit on 2026-09-26 found cognitive timers that still read the wall clock:
 
 - Chronos's interval feature and time-since-interaction (`chronos/module.py`, `featurizer.py`), both defaulting to `time.time`;
-- the Volition speak guard (`workspace/volition.py`) and the drive-policy fallback (`workspace/drive_policy.py`), on `time.monotonic`;
 - Vox's prosody-mirroring decay (`vox/module.py`);
 - Soma's cycle-latency sense, which compares the tick's **wall** duration with a fixed wall setpoint.
 
@@ -11,9 +10,9 @@ At `time_scale = 1.0`, the shipped default, this is invisible. At any other scal
 
 ## What Changes
 
-- Chronos, the Volition speak guard, the drive policy and Vox's mirroring decay take the `EntityClock` and derive their durations and "now" from it. Chronos becomes a clocked factory.
+- Chronos and Vox's mirroring decay take the `EntityClock` and derive their durations and "now" from it. Chronos becomes a clocked factory.
 - Soma's cycle-latency feature compares the tick's **subjective** duration (wall duration × `time_scale`) with its setpoint.
-- Wall-clock sites that protect infrastructure, or that track real media and real audio, stay on wall time and are classified in code comments. These include Vox's speaking gate, Audition's feed and STT timing, request timeouts, bus polls, heartbeats and record timestamps.
+- Wall-clock sites that protect infrastructure, or that track real media and real audio, stay on wall time and are classified in code comments. These include Vox's speaking gate, the Volition and drive-policy speak guard (a timeout that unsticks speech when real playback never reports its end; the report policy's refractory periods already run on the entity clock), Audition's feed and STT timing, request timeouts, bus polls, heartbeats and record timestamps.
 - Nous's EFE timeout stays a wall-clock compute budget. It bounds how long one decision may take on real hardware; it does not model cognition.
 - At `time_scale = 1.0` every changed timer computes exactly what it does today.
 
@@ -27,6 +26,6 @@ At `time_scale = 1.0`, the shipped default, this is invisible. At any other scal
 
 ## Impact
 
-- `kaine/modules/chronos/{module,featurizer}.py`, `kaine/workspace/{volition,drive_policy}.py`, `kaine/modules/vox/module.py`, `kaine/modules/soma/module.py`, `kaine/boot.py` (factory wiring).
+- `kaine/modules/chronos/{module,featurizer}.py`, `kaine/modules/vox/module.py`, `kaine/workspace/{volition,drive_policy}.py` (classification comments only), `kaine/modules/soma/module.py`, `kaine/boot.py` (factory wiring).
 - Tests that pin each timer's behaviour at scale 1.0 and at another scale.
 - No change at the shipped `time_scale = 1.0`.
