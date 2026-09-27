@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change biological-timing-and-dilation. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A shared entity clock is the single source of subjective time
 
 The system SHALL provide one injected `EntityClock` that exposes the entity's
@@ -103,3 +105,32 @@ the scale. The all-off first-boot guard SHALL remain satisfied.
 - **THEN** tick pacing, fatigue, perception cadence, and event timestamps match the
   pre-change behavior
 
+### Requirement: The remaining cognitive timers run on the entity clock
+Chronos's interval and time-since-interaction measures and Vox's prosody-mirroring decay SHALL derive their durations and "now" from the shared `EntityClock`. Soma's cycle-latency sense SHALL compare the tick's subjective duration (its wall duration multiplied by the clock's `time_scale`) with its setpoint. Sites that track real audio or media, bound a real compute or network budget, or stamp records SHALL stay on wall time and SHALL be marked as such in the code.
+
+#### Scenario: Dilation moves every cognitive timer together
+- **WHEN** `time_scale = 0.5` and one wall second passes
+- **THEN** Chronos's interval feature and Vox's mirroring decay each advance by half a subjective second
+
+#### Scenario: A dilated mind does not feel its slow hardware
+- **WHEN** a tick takes 300 ms of wall time at `time_scale = 0.5`
+- **THEN** Soma's cycle-latency sense receives 150 ms
+
+#### Scenario: The default is unchanged
+- **WHEN** `time_scale = 1.0`
+- **THEN** every timer named here computes the same values as before this change
+
+### Requirement: Dilation can follow measured load, within the operator's ceiling
+When `[cycle].auto_time_scale` is true, the cycle SHALL measure the fraction of each tick's period the tick uses and SHALL lower `time_scale` when ticks do not fit, and raise it when they fit with room to spare, never above the configured `time_scale` and never below the configured floor. Changes SHALL go through the clock's continuous re-anchoring, SHALL be separated by a minimum dwell, and SHALL use a dead band so the scale does not oscillate. The controller SHALL be off by default and disabled in deterministic cycle mode. Every change SHALL be published with its old and new scale, the measured utilization and the reason, and every tick record SHALL carry the scale in force.
+
+#### Scenario: Slow hardware slows subjective time instead of distorting it
+- **WHEN** automatic dilation is on and ticks take longer than their period for longer than the dwell
+- **THEN** `time_scale` is lowered so that ticks fit, a `cycle.time_scale` event records the change, and subjective time stays continuous
+
+#### Scenario: The operator's scale is a ceiling
+- **WHEN** load falls and ticks fit with room to spare
+- **THEN** the scale rises gradually and never above the configured `time_scale`
+
+#### Scenario: Off by default
+- **WHEN** `auto_time_scale` is not set
+- **THEN** `time_scale` never changes on its own

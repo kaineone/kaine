@@ -324,3 +324,14 @@ Preservation SHALL capture only the preserved being's own memory collections (it
 #### Scenario: An older bundle that swept other collections
 - **WHEN** a bundle containing another being's collections is revived
 - **THEN** only the bundle's own memory kinds are restored, and the other collections are skipped and named in the log
+
+### Requirement: Preservation carries the embedding space and revive refuses to mix spaces
+A preserved being's memory state SHALL include the embedding-space stamp of the vectors it holds. Revive SHALL refuse a memory state whose embedding space differs from the running embedder's, rather than importing its vectors. Fork merge, which carries no vectors, SHALL flag a mismatch between the merged parents' spaces. A memory state without a stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2`.
+
+#### Scenario: Revive onto a different embedder
+- **WHEN** a being preserved with one embedding space is revived where the embedder has another
+- **THEN** the revive is refused with an error naming both spaces and no memory is imported
+
+#### Scenario: Revive of an older bundle
+- **WHEN** a bundle from before stamping is revived with the MiniLM-L6-v2 embedder on either backend
+- **THEN** its memories are imported unchanged

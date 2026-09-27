@@ -8,7 +8,9 @@
 - [x] 1.6 `study-confounds`: Empatheia labels media speech as media, not the operator; a gestating being's speech intents form but its outputs are held.
 - [x] 1.7 `ignition-world-model-check`: the runner refuses a step with Phantasia whose bundle did not capture the world model.
 - [x] 1.8 `scoped-memory-preservation`: a bundle holds only the preserved being's memories; revive restores them into the reviving line's own collections and replaces their contents; Empatheia preserves its own profiles.
-- [ ] 1.9 `numpy-text-embedder` task 3: every memory store, snapshot and bundle is stamped with its embedding space, and revive refuses to mix spaces.
+- [x] 1.9 `numpy-text-embedder` task 3: every memory store, snapshot and bundle is stamped with its embedding space, and revive refuses to mix spaces.
+- [x] 1.10 `honest-planning-and-training` and `nous-learned-agency`: Nous's per-action EFE is correct at any horizon; only a learning pass counts as consolidation; Nous learns what follows its actions and preserves that model.
+- [ ] 1.11 Operator decision: whether Nous's intents drive real actions through the existing gates. No module realizes them today, so Nous's choices are recorded, not acted on.
 
 ## 2. The study
 
@@ -23,9 +25,9 @@
 - [x] 3.1 Phase 1: slim base dependencies into extras; native Redis and Qdrant install paths; one installer for x86-64 and aarch64 that detects the target.
 - [ ] 3.2 Phase 2: torch-free core backends and slip-driven automatic time dilation.
   - [x] 3.2.1 A NumPy CfC for Soma and Chronos with a persisted reservoir seed (`numpy-cfc`).
-  - [ ] 3.2.2 One shared NumPy text embedder for Mnemos, Empatheia and Hypnos (`numpy-text-embedder`).
+  - [x] 3.2.2 One shared NumPy text embedder for Mnemos, Empatheia and Hypnos (`numpy-text-embedder`).
   - [ ] 3.2.3 sherpa-onnx speech backends.
-  - [ ] 3.2.4 Slip-driven automatic time dilation.
+  - [x] 3.2.4 Slip-driven automatic time dilation (`entity-clock-injection`, `slip-driven-time-dilation`).
 - [ ] 3.3 Phase 3: JAX-free Nous and Phantasia; the Termux (Android arm64) install path; a Pixel 6a profile.
 - [ ] 3.4 Phase 4: memory residency and swap for the Orin Nano Super; arm64 images.
 - [ ] 3.5 A full entity verified on the desktop, the Orin Nano Super and the Pixel 6a.

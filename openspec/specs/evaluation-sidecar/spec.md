@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change memory-probes-stub-cleanup. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Memory probe scoring uses async-only path
 `kaine/evaluation/memory_probes.py` SHALL expose exactly one
 reconstruction scorer, `score_async(response, memory, embedder)`,
@@ -96,9 +98,9 @@ conditioning.
 
 Every A/B-divergence and memory-probe JSONL record SHALL include an
 `"embedder"` field whose value is the embedder's `kind` attribute
-(`"sentence_transformers"` or `"hash"`).  This allows operators and
-researchers to filter out records where cosine similarity is lexical
-(hash-based) rather than semantic.
+(`"numpy_minilm"`, `"sentence_transformers"` or `"hash"`). This allows
+operators and researchers to filter out records where cosine similarity is
+lexical (hash-based) rather than semantic.
 
 #### Scenario: Hash embedder is disclosed in A/B-divergence records
 
@@ -112,43 +114,39 @@ researchers to filter out records where cosine similarity is lexical
 
 #### Scenario: Semantic embedder is disclosed when available
 
-- **WHEN** `SentenceTransformerTextEmbedder` is in use
-- **THEN** records SHALL contain `"embedder": "sentence_transformers"`
-
----
+- **WHEN** the configured semantic embedder is in use
+- **THEN** records SHALL contain its kind, `"numpy_minilm"` or `"sentence_transformers"`
 
 ### Requirement: Fallback to HashEmbedder is logged at ERROR level
 
-The sidecar SHALL log at `ERROR` level when `SentenceTransformerTextEmbedder`
-fails to load and falls back to `HashEmbedder`.  The log message SHALL
-explicitly state that cosine metrics will be lexical token-hash similarity,
-not semantic similarity.
+The sidecar SHALL use the text embedder configured by `[embedding]` and SHALL
+load it when it starts. When that load fails and `require_semantic_embedder`
+is false, it SHALL log at `ERROR` level and fall back to `HashEmbedder`. The
+log message SHALL explicitly state that cosine metrics will be lexical
+token-hash similarity, not semantic similarity. A semantic embedder that failed
+to load SHALL never be used to produce a record.
 
 #### Scenario: Fallback logs at ERROR with lexical disclosure
 
-- **WHEN** `SentenceTransformerTextEmbedder` raises on construction
+- **WHEN** the configured embedder fails to load at sidecar start
 - **AND** `require_semantic_embedder` is `False`
 - **THEN** the log entry SHALL be at `ERROR` level
 - **AND** the log message SHALL state that cosine metrics will be lexical
-
----
+- **AND** records SHALL carry `"embedder": "hash"`
 
 ### Requirement: require_semantic_embedder fails closed when set
 
 `EvaluationConfig` SHALL include a `require_semantic_embedder: bool`
-field (default `False`).  When `True`, `_embedder_default()` SHALL raise
-rather than falling back to `HashEmbedder` if
-`SentenceTransformerTextEmbedder` fails to load.  Default `False` so
-minimal/CPU installs without `sentence-transformers` still run.
+field (default `False`). When `True`, the sidecar SHALL refuse to start
+rather than falling back to `HashEmbedder` if the configured text embedder
+fails to load.
 
 #### Scenario: Fail closed when required
 
 - **WHEN** `require_semantic_embedder` is `True`
-- **AND** `SentenceTransformerTextEmbedder` raises on construction
-- **THEN** `_embedder_default()` SHALL raise `RuntimeError`
-- **AND** SHALL NOT return `HashEmbedder`
-
----
+- **AND** the configured embedder fails to load at sidecar start
+- **THEN** the sidecar's start SHALL raise `RuntimeError`
+- **AND** SHALL NOT fall back to `HashEmbedder`
 
 ### Requirement: Eidolon accuracy only advertises supported claim signals
 
@@ -297,4 +295,3 @@ The system SHALL provide a controlled, seeded, offline runner for each of the A/
   no network
 - **AND** it does NOT boot an entity, attach to live modules, or open a network
   connection
-
