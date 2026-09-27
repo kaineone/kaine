@@ -26,6 +26,7 @@ Nothing records which model wrote a memory store. Qdrant collections, the sqlite
 ### Modified Capabilities
 - `mnemos`: a shared, backend-selectable text embedder with a torch-free default, and a stamped embedding space that Mnemos refuses to mix.
 - `entity-preservation`: snapshots and bundles carry the embedding-space stamp, and revive refuses a mismatched space.
+- `evaluation-sidecar`: the sidecar uses the configured embedder, loads it when it starts, and applies the HashEmbedder fallback or fails closed when the load fails; records disclose `numpy_minilm` as a kind.
 
 ## Impact
 

@@ -12,6 +12,7 @@ import pytest
 from kaine.boot import build_registry, construct_module
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.config import ConfigShapeError, validate_config_shape
 from kaine.text_embedding import (
     EMBEDDING_ALLOWED_KEYS,
     EMBEDDING_BACKENDS,
@@ -191,3 +192,63 @@ def test_boot_wires_same_shared_embedder_for_modules_and_spot_rebuild():
     # Spot rebuild of the same module must receive the existing instance.
     mnemos2 = construct_module("mnemos", bus, config, registry=registry)
     assert mnemos2._core._embedder is shared
+
+
+@pytest.mark.asyncio
+async def test_shared_methods_load_inner_once():
+    inner = _FakeInner()
+    shared = SharedEmbedder(inner)
+
+    await asyncio.gather(
+        shared.encode("a"),
+        shared.encode_batch(["b", "c"]),
+        shared.embed("d"),
+    )
+
+    assert inner.load_count == 1
+    assert inner.encode_count == 4
+
+
+@pytest.mark.asyncio
+async def test_shared_encode_batch_empty_skips_load():
+    inner = _FakeInner()
+    shared = SharedEmbedder(inner)
+
+    result = await shared.encode_batch([])
+    assert result == []
+    assert inner.load_count == 0
+    assert inner.encode_count == 0
+
+
+@pytest.mark.asyncio
+async def test_shared_encode_raises_when_inner_load_fails():
+    class _FailingInner(_FakeInner):
+        async def load(self) -> None:
+            raise RuntimeError("load failed")
+
+    inner = _FailingInner()
+    shared = SharedEmbedder(inner)
+
+    with pytest.raises(RuntimeError, match="load failed"):
+        await shared.encode("hi")
+
+    assert inner.encode_count == 0
+
+
+def test_shared_getattr_forwards_inner_attribute():
+    class _DeviceInner(_FakeInner):
+        device = "cpu"
+
+    inner = _DeviceInner()
+    shared = SharedEmbedder(inner)
+    assert shared.device == "cpu"
+    assert shared._inner is inner
+    with pytest.raises(AttributeError):
+        shared.no_such_attribute
+
+
+def test_validate_config_shape_rejects_bad_embedding_model_id_type():
+    with pytest.raises(ConfigShapeError) as exc:
+        validate_config_shape({"embedding": {"model_id": 3}})
+    assert "embedding.model_id" in str(exc.value)
+    assert "expected string" in str(exc.value)

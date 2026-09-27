@@ -311,16 +311,27 @@ class SharedEmbedder:
         return
 
     async def encode(self, text: str) -> list[float]:
+        await self.load()
         return await self._inner.encode(text)
 
     async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
+        texts = list(texts)
+        if not texts:
+            return []
+        await self.load()
         return await self._inner.encode_batch(texts)
 
     async def embed(self, text: str) -> list[float]:
+        await self.load()
         inner_embed = getattr(self._inner, "embed", None)
         if inner_embed is None:
             return await self._inner.encode(text)
         return await inner_embed(text)
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "_inner":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
 
 
 def resolve_embedding_config(kaine_config: dict) -> dict:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import shutil
 import struct
 import subprocess
 import sys
@@ -120,6 +121,7 @@ def _build_tiny_bert_vocab() -> list[str]:
     )
     words = [
         "hello",
+        "London",
         "world",
         "the",
         "a",
@@ -196,6 +198,8 @@ def _make_tiny_bert_dir(tmp_path: Path) -> Path:
     _write_safetensors(model_dir / "model.safetensors", weights)
 
     config = {
+        "model_type": "bert",
+        "hidden_act": "gelu",
         "hidden_size": hidden,
         "num_hidden_layers": layers,
         "num_attention_heads": heads,
@@ -208,6 +212,18 @@ def _make_tiny_bert_dir(tmp_path: Path) -> Path:
     (model_dir / "config.json").write_text(json.dumps(config))
 
     (model_dir / "vocab.txt").write_text("\n".join(vocab))
+
+    tok_cfg = {
+        "do_lower_case": True,
+        "tokenize_chinese_chars": True,
+        "special_tokens_map": {
+            "unk_token": "[PAD]",
+            "cls_token": "[CLS]",
+            "sep_token": "[SEP]",
+            "mask_token": "[MASK]",
+        },
+    }
+    (model_dir / "tokenizer_config.json").write_text(json.dumps(tok_cfg))
 
     modules = [
         {
@@ -277,6 +293,33 @@ def test_tiny_bert_load_and_encode(tiny_bert_dir: Path) -> None:
         asyncio.run(fresh.encode("hello world"))
 
 
+def test_tokenizer_config_do_lower_case_false_preserves_cased(tiny_bert_dir: Path) -> None:
+    cased_dir = tiny_bert_dir.parent / "tiny_bert_cased"
+    shutil.copytree(tiny_bert_dir, cased_dir)
+    tok_cfg = {
+        "do_lower_case": False,
+        "tokenize_chinese_chars": True,
+        "special_tokens_map": {
+            "unk_token": "[PAD]",
+            "cls_token": "[CLS]",
+            "sep_token": "[SEP]",
+            "mask_token": "[MASK]",
+        },
+    }
+    (cased_dir / "tokenizer_config.json").write_text(json.dumps(tok_cfg))
+    embedder = NumpyMiniLMEmbedder(model_path=str(cased_dir))
+    asyncio.run(embedder.load())
+    ids = embedder._tokenizer.encode("London")
+    vocab = [line.strip() for line in (cased_dir / "vocab.txt").read_text().splitlines()]
+    assert ids == [vocab.index("[CLS]"), vocab.index("London"), vocab.index("[SEP]")]
+
+
+def test_encode_batch_empty_returns_empty(tiny_bert_dir: Path) -> None:
+    embedder = NumpyMiniLMEmbedder(model_path=str(tiny_bert_dir))
+    asyncio.run(embedder.load())
+    assert asyncio.run(embedder.encode_batch([])) == []
+
+
 def test_tiny_bert_invalid_pooling(tiny_bert_dir: Path) -> None:
     cls_dir = tiny_bert_dir.parent / "tiny_bert_cls"
     cls_dir.mkdir()
@@ -333,6 +376,62 @@ def test_tiny_bert_invalid_pooling(tiny_bert_dir: Path) -> None:
     embedder2 = NumpyMiniLMEmbedder(model_path=str(no_norm_dir))
     with pytest.raises(ValueError):
         asyncio.run(embedder2.load())
+
+
+def test_load_refuses_unsupported_model_type(tiny_bert_dir: Path) -> None:
+    bad_dir = tiny_bert_dir.parent / "tiny_bert_roberta"
+    shutil.copytree(tiny_bert_dir, bad_dir)
+    cfg = json.loads((bad_dir / "config.json").read_text())
+    cfg["model_type"] = "roberta"
+    (bad_dir / "config.json").write_text(json.dumps(cfg))
+    embedder = NumpyMiniLMEmbedder(model_path=str(bad_dir))
+    with pytest.raises(ValueError, match="model_type"):
+        asyncio.run(embedder.load())
+
+
+def test_load_refuses_unsupported_hidden_act(tiny_bert_dir: Path) -> None:
+    bad_dir = tiny_bert_dir.parent / "tiny_bert_relu"
+    shutil.copytree(tiny_bert_dir, bad_dir)
+    cfg = json.loads((bad_dir / "config.json").read_text())
+    cfg["hidden_act"] = "relu"
+    (bad_dir / "config.json").write_text(json.dumps(cfg))
+    embedder = NumpyMiniLMEmbedder(model_path=str(bad_dir))
+    with pytest.raises(ValueError, match="hidden_act"):
+        asyncio.run(embedder.load())
+
+
+def test_load_refuses_relative_position_embedding(tiny_bert_dir: Path) -> None:
+    bad_dir = tiny_bert_dir.parent / "tiny_bert_relative"
+    shutil.copytree(tiny_bert_dir, bad_dir)
+    cfg = json.loads((bad_dir / "config.json").read_text())
+    cfg["position_embedding_type"] = "relative_key"
+    (bad_dir / "config.json").write_text(json.dumps(cfg))
+    embedder = NumpyMiniLMEmbedder(model_path=str(bad_dir))
+    with pytest.raises(ValueError, match="position_embedding_type"):
+        asyncio.run(embedder.load())
+
+
+def test_load_refuses_missing_layer_weight(tiny_bert_dir: Path) -> None:
+    bad_dir = tiny_bert_dir.parent / "tiny_bert_missing"
+    shutil.copytree(tiny_bert_dir, bad_dir)
+    weights = read_safetensors(bad_dir / "model.safetensors")
+    del weights["encoder.layer.0.attention.self.query.weight"]
+    _write_safetensors(bad_dir / "model.safetensors", weights)
+    embedder = NumpyMiniLMEmbedder(model_path=str(bad_dir))
+    with pytest.raises(ValueError, match="encoder.layer.0.attention.self.query.weight"):
+        asyncio.run(embedder.load())
+
+
+def test_load_refuses_misshaped_weight(tiny_bert_dir: Path) -> None:
+    bad_dir = tiny_bert_dir.parent / "tiny_bert_shape"
+    shutil.copytree(tiny_bert_dir, bad_dir)
+    weights = read_safetensors(bad_dir / "model.safetensors")
+    w = weights["encoder.layer.0.attention.self.query.weight"]
+    weights["encoder.layer.0.attention.self.query.weight"] = w[: w.shape[0] // 2]
+    _write_safetensors(bad_dir / "model.safetensors", weights)
+    embedder = NumpyMiniLMEmbedder(model_path=str(bad_dir))
+    with pytest.raises(ValueError, match="shape"):
+        asyncio.run(embedder.load())
 
 
 def test_bert_forward_reference(tiny_bert_dir: Path) -> None:
@@ -464,25 +563,50 @@ asyncio.run(main())
 
 
 def test_resolve_model_dir(tmp_path: Path) -> None:
-    hub = tmp_path / "hub"
-    repo = hub / "models--org--name"
-    refs = repo / "refs"
-    refs.mkdir(parents=True)
-    (refs / "main").write_text("abc123\n")
-    snap = repo / "snapshots" / "abc123"
-    snap.mkdir(parents=True)
+    # HF_HUB_CACHE beats HF_HOME
+    hf_hub_cache = tmp_path / "hf_hub_cache"
+    hf_home = tmp_path / "hf_home"
+    for root in (hf_hub_cache, hf_home):
+        repo = root / "hub" / "models--org--name"
+        (repo / "refs").mkdir(parents=True)
+        (repo / "refs" / "main").write_text("abc123\n")
+        snap = repo / "snapshots" / "abc123"
+        snap.mkdir(parents=True)
 
-    env = {"HF_HOME": str(tmp_path)}
+    env = {
+        "HF_HUB_CACHE": str(hf_hub_cache / "hub"),
+        "HF_HOME": str(hf_home),
+    }
     resolved = resolve_model_dir("org/name", env=env)
-    assert resolved == snap
+    assert resolved == hf_hub_cache / "hub" / "models--org--name" / "snapshots" / "abc123"
 
-    (refs / "main").unlink()
-    resolved2 = resolve_model_dir("org/name", env=env)
+    # XDG_CACHE_HOME fallback
+    xdg = tmp_path / "xdg"
+    repo = xdg / "huggingface" / "hub" / "models--org--name"
+    (repo / "refs").mkdir(parents=True)
+    (repo / "refs" / "main").write_text("def456\n")
+    snap = repo / "snapshots" / "def456"
+    snap.mkdir(parents=True)
+    env_xdg = {"XDG_CACHE_HOME": str(xdg)}
+    resolved2 = resolve_model_dir("org/name", env=env_xdg)
     assert resolved2 == snap
 
+    # org-less id resolves under sentence-transformers
+    st_repo = hf_hub_cache / "hub" / "models--sentence-transformers--minilm"
+    (st_repo / "refs").mkdir(parents=True)
+    (st_repo / "refs" / "main").write_text("xyz789\n")
+    st_snap = st_repo / "snapshots" / "xyz789"
+    st_snap.mkdir(parents=True)
+    env_st = {"HF_HUB_CACHE": str(hf_hub_cache / "hub")}
+    resolved3 = resolve_model_dir("minilm", env=env_st)
+    assert resolved3 == st_snap
+
+    # error lists searched paths
     with pytest.raises(FileNotFoundError) as exc:
-        resolve_model_dir("other/name", env=env)
-    assert "other/name" in str(exc.value)
+        resolve_model_dir("other/name", env=env_st)
+    msg = str(exc.value)
+    assert "other/name" in msg
+    assert str(hf_hub_cache / "hub") in msg
 
 
 @pytest.mark.skipif(
@@ -491,7 +615,7 @@ def test_resolve_model_dir(tmp_path: Path) -> None:
 )
 def test_tokenizer_parity_with_hf() -> None:
     try:
-        import transformers
+        from transformers import BertTokenizer, BertTokenizerFast
     except Exception:
         pytest.skip("transformers not installed")
 
@@ -506,12 +630,15 @@ def test_tokenizer_parity_with_hf() -> None:
     if not vocab_path.exists():
         pytest.skip("vocab.txt not found in cached model")
 
-    tok_hf = transformers.BertTokenizer.from_pretrained(str(model_dir))
-    tok_np = WordPieceTokenizer.from_vocab_file(
-        str(vocab_path), do_lower_case=True, max_length=256
-    )
+    tok_hf_slow = BertTokenizer.from_pretrained(str(model_dir))
+    tok_hf_fast = BertTokenizerFast.from_pretrained(str(model_dir))
+    tok_np = WordPieceTokenizer.from_vocab_file(str(vocab_path), max_length=256)
+
+    long_text = " ".join(f"w{i}" for i in range(300))
 
     corpus = [
+        "",
+        "   \t\n  ",
         "hello world",
         "The quick brown fox jumps over the lazy dog.",
         "Café, naïve, résumé: accents matter!",
@@ -525,12 +652,18 @@ def test_tokenizer_parity_with_hf() -> None:
         "a" * 150,
         "word" * 80,
         "\x00control\x01chars\x02",
+        "ΟΔΟΣ ΚΑΙ ΣΟΦΙΑ",
+        "This text contains [CLS] and [SEP] and [MASK] and [PAD] literals.",
+        "Reserved vocab entries like [unused1] and [unused993] are not special.",
+        long_text,
     ]
 
     for text in corpus:
-        ids_hf = tok_hf(text, truncation=True, max_length=256)["input_ids"]
         ids_np = tok_np.encode(text)
-        assert ids_np == ids_hf, f"mismatch for {text!r}: {ids_np} != {ids_hf}"
+        ids_slow = tok_hf_slow(text, truncation=True, max_length=256)["input_ids"]
+        ids_fast = tok_hf_fast(text, truncation=True, max_length=256)["input_ids"]
+        assert ids_np == ids_slow, f"slow mismatch for {text!r}: {ids_np} != {ids_slow}"
+        assert ids_np == ids_fast, f"fast mismatch for {text!r}: {ids_np} != {ids_fast}"
 
 
 def test_embedding_parity_with_sentence_transformers() -> None:
@@ -551,13 +684,18 @@ def test_embedding_parity_with_sentence_transformers() -> None:
     embedder = NumpyMiniLMEmbedder(model_path=str(model_dir))
     asyncio.run(embedder.load())
 
+    long_text = " ".join(f"w{i}" for i in range(300))
+
     corpus = [
+        "",
         "hello world",
         "The quick brown fox jumps over the lazy dog.",
         "Café, naïve, résumé: accents matter!",
         "我爱北京天安门",
         "Tabs\tand\nnewlines\n\rare whitespace.",
         "apostrophes aren't punctuation",
+        "This text contains [CLS] and [SEP] and [MASK] and [PAD] literals.",
+        long_text,
     ]
 
     hf = model.encode(corpus, normalize_embeddings=False, convert_to_numpy=True)
@@ -580,6 +718,10 @@ def test_embedding_parity_with_sentence_transformers() -> None:
         assert np.max(np.abs(v_np - v_hf)) < 1e-5
         cos = float(np.dot(v_np, v_hf) / (np.linalg.norm(v_np) * np.linalg.norm(v_hf)))
         assert cos >= 0.99999
+
+    empty_batch = asyncio.run(embedder.encode_batch([""]))
+    assert len(empty_batch) == 1
+    assert len(empty_batch[0]) == 384
 
 
 def test_embedding_parity_numpy_erf_fallback(monkeypatch: Any) -> None:
@@ -602,13 +744,18 @@ def test_embedding_parity_numpy_erf_fallback(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(kaine.text_embedding_numpy, "_SCIPY_ERF", None)
 
+    long_text = " ".join(f"w{i}" for i in range(300))
+
     corpus = [
+        "",
         "hello world",
         "The quick brown fox jumps over the lazy dog.",
         "Café, naïve, résumé: accents matter!",
         "我爱北京天安门",
         "Tabs\tand\nnewlines\n\rare whitespace.",
         "apostrophes aren't punctuation",
+        "This text contains [CLS] and [SEP] and [MASK] and [PAD] literals.",
+        long_text,
     ]
 
     hf = model.encode(corpus, normalize_embeddings=False, convert_to_numpy=True)
@@ -631,6 +778,10 @@ def test_embedding_parity_numpy_erf_fallback(monkeypatch: Any) -> None:
         assert np.max(np.abs(v_np - v_hf)) < 1e-5
         cos = float(np.dot(v_np, v_hf) / (np.linalg.norm(v_np) * np.linalg.norm(v_hf)))
         assert cos >= 0.99999
+
+    empty_batch = asyncio.run(embedder.encode_batch([""]))
+    assert len(empty_batch) == 1
+    assert len(empty_batch[0]) == 384
 
 
 def test_erf_numpy_matches_math_erf() -> None:

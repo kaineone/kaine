@@ -21,3 +21,23 @@ Every Mnemos store SHALL carry a stamp naming the embedding space its vectors be
 #### Scenario: A store from before stamping
 - **WHEN** Mnemos starts on a 384-dimension store with points and no stamp, using MiniLM-L6-v2
 - **THEN** it stamps the store as MiniLM-L6-v2, logs that it did, and starts
+
+## MODIFIED Requirements
+
+### Requirement: Default Mnemos config and disabled-by-default
+The repository SHALL ship a `[mnemos]` block in `config/kaine.toml`
+with default values for `backend` (`qdrant`), `collection_prefix`,
+`short_term_capacity`, `recall_top_k`, `baseline_salience` and
+`alert_salience`, and an `[embedding]` block with `backend` (`numpy`),
+`model_id` and `device`. `[mnemos]` SHALL NOT accept `embedder_model_id`
+or `device`: boot SHALL reject either with an error naming the
+`[embedding]` key that replaces it. The `[modules].mnemos = false` flag
+SHALL keep first boot from auto-registering Mnemos.
+
+#### Scenario: kaine.toml carries defaults
+- **WHEN** an operator inspects `config/kaine.toml`
+- **THEN** they find a `[mnemos]` section with the documented keys, an `[embedding]` section, and `[modules].mnemos == false`
+
+#### Scenario: The old embedder keys are refused
+- **WHEN** an operator config sets `[mnemos].embedder_model_id` or `[mnemos].device`
+- **THEN** boot fails with an error naming `[embedding].model_id` or `[embedding].device`

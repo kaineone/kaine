@@ -1444,6 +1444,8 @@ async def _boot_and_run(
     sidecar: SidecarRegistry | None = None
     research_active = research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
     if eval_cfg.enabled or research_active:
+        from kaine.boot import shared_embedder
+
         sidecar = SidecarRegistry(
             bus=bus,
             config=eval_cfg,
@@ -1452,7 +1454,7 @@ async def _boot_and_run(
             sleep_state_provider=_sleep_state_factory(registry),
             memory_source=_memory_source_factory(registry),
             cognitive_query_client=_cognitive_query_client_factory(registry, eval_cfg),
-            embedder=getattr(registry, "shared_embedder", None),
+            embedder=shared_embedder(registry, kaine_config),
         )
         try:
             await sidecar.start()

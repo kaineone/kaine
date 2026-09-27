@@ -70,10 +70,15 @@ def _pop(section: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
     return {k: section[k] for k in section if k in allowed}
 
 
-def _shared_embedder(
+def shared_embedder(
     registry: ModuleRegistry, kaine_config: dict[str, Any]
 ) -> SharedEmbedder:
-    """Return the registry-wide shared embedder, creating it on first need."""
+    """Return the registry-wide shared embedder, creating it on first need.
+
+    Public so the evaluation sidecar and any cycle entrypoint can build the
+    shared instance from ``[embedding]`` even when memory/social modules are
+    disabled.
+    """
     existing: SharedEmbedder | None = getattr(registry, "shared_embedder", None)
     if existing is not None:
         return existing
@@ -2188,7 +2193,7 @@ def construct_module(
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
 
     if name in ("mnemos", "empatheia"):
-        section["_embedder"] = _shared_embedder(registry, kaine_config)
+        section["_embedder"] = shared_embedder(registry, kaine_config)
 
     if name == "hypnos":
         mnemos = registry.get("mnemos") if "mnemos" in registry else None
@@ -2203,7 +2208,7 @@ def construct_module(
             phantasia=phantasia,
             kaine_config=kaine_config,
             entity_clock=entity_clock,
-            embedder=_shared_embedder(registry, kaine_config),
+            embedder=shared_embedder(registry, kaine_config),
         )
 
     factory = SIMPLE_FACTORIES[name]

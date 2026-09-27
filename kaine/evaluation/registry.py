@@ -81,6 +81,7 @@ class SidecarRegistry:
         self._cognitive_client = cognitive_query_client
         self._bare_client = bare_inference_client
         self._embedder = embedder
+        self._resolved_embedder: Optional[TextEmbedder] = None
         self._sinks: list[AsyncJsonlSink] = []
         self._observers: list[Any] = []
         self._started = False
@@ -136,7 +137,34 @@ class SidecarRegistry:
         self._sinks.append(sink)
         return sink
 
+    async def _resolve_embedder(self) -> TextEmbedder:
+        if self._resolved_embedder is not None:
+            return self._resolved_embedder
+        embedder = self._embedder if self._embedder is not None else make_text_embedder({})
+        try:
+            await embedder.load()
+        except Exception:
+            if self._config.require_semantic_embedder:
+                raise RuntimeError(
+                    "require_semantic_embedder=true but the text embedder "
+                    "failed to load; refusing to fall back to HashEmbedder (fail-closed). "
+                    "Provision the embedding model (python -m kaine.setup.provision) or set require_semantic_embedder=false."
+                ) from None
+            log.error(
+                "the text embedder failed to load — falling back to "
+                "HashEmbedder. WARNING: A/B-divergence and memory-probe cosine metrics "
+                "will be LEXICAL token-hash similarity, NOT semantic similarity. "
+                "All records will carry embedder='hash' for filtering.",
+                exc_info=True,
+            )
+            self._resolved_embedder = HashEmbedder()
+        else:
+            self._resolved_embedder = embedder
+        return self._resolved_embedder
+
     def _embedder_default(self) -> TextEmbedder:
+        if self._resolved_embedder is not None:
+            return self._resolved_embedder
         if self._embedder is not None:
             return self._embedder
         try:
@@ -337,6 +365,7 @@ class SidecarRegistry:
         # is enabled — the research log is independent of [evaluation].enabled.
         if self._started or not (self._config.enabled or self._research_active):
             return
+        await self._resolve_embedder()
         if not self._observers:
             self.build()
         for sink in self._sinks:

@@ -37,6 +37,15 @@ from kaine.nexus.health import DEGRADED, DOWN, UP, nous_health_probe
 # ---------------------------------------------------------------------------
 
 
+class _FailingEmbedder:
+    def __init__(self) -> None:
+        self.load_called = False
+
+    async def load(self) -> None:
+        self.load_called = True
+        raise RuntimeError("forced load failure")
+
+
 def _event(source: str, type_: str, payload: dict) -> Event:
     return Event(
         source=source,
@@ -288,6 +297,54 @@ def test_no_require_semantic_embedder_falls_back_silently(tmp_path, caplog, monk
     assert any("LEXICAL" in r.message for r in caplog.records), (
         "expected ERROR log mentioning LEXICAL"
     )
+
+
+@pytest.mark.asyncio
+async def test_sidecar_resolve_embedder_fail_closed(tmp_path):
+    """An injected embedder whose load() raises must fail registry.start()
+    when require_semantic_embedder=True."""
+    embedder = _FailingEmbedder()
+    cfg = EvaluationConfig.from_mapping(
+        {
+            "enabled": True,
+            "require_semantic_embedder": True,
+            "paths": {
+                "trajectory_dir": str(tmp_path / "traj"),
+                "evaluation_logs": str(tmp_path / "eval"),
+            },
+        }
+    )
+    registry = SidecarRegistry(bus=FakeBus(), config=cfg, embedder=embedder)
+    registry.build = lambda: None  # isolate embedder resolution from observers
+
+    with pytest.raises(RuntimeError, match="require_semantic_embedder"):
+        await registry.start()
+
+    assert embedder.load_called is True
+
+
+@pytest.mark.asyncio
+async def test_sidecar_resolve_embedder_fallback(tmp_path):
+    """An injected embedder whose load() raises is replaced by HashEmbedder
+    when require_semantic_embedder=False."""
+    embedder = _FailingEmbedder()
+    cfg = EvaluationConfig.from_mapping(
+        {
+            "enabled": True,
+            "require_semantic_embedder": False,
+            "paths": {
+                "trajectory_dir": str(tmp_path / "traj"),
+                "evaluation_logs": str(tmp_path / "eval"),
+            },
+        }
+    )
+    registry = SidecarRegistry(bus=FakeBus(), config=cfg, embedder=embedder)
+    registry.build = lambda: None  # isolate embedder resolution from observers
+
+    await registry.start()
+
+    assert embedder.load_called is True
+    assert isinstance(registry._embedder_default(), HashEmbedder)
 
 
 # ---------------------------------------------------------------------------

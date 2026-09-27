@@ -1,11 +1,10 @@
 # Tier 1 — embodied CPU agent (openspec deployment-tiers)
 #
 # Host class: 4–8 GB-class single-board computer, or a retired 8 GB flagship
-# smartphone under a userland like Termux. torch is required today because Soma
-# and Chronos use torch+ncps CfC networks, while Mnemos/Empatheia/Hypnos run
-# their shared memory embedder in NumPy with no torch; there is no accelerator, so heavy
-# models run on the edge runtimes at CPU pace: a 1–2B GGUF LLM at chat pace,
-# periodic (not streaming) vision, ONNX embeddings.
+# smartphone under a userland like Termux. Soma and Chronos run a NumPy CfC
+# network, and Mnemos/Empatheia/Hypnos run their shared memory embedder in NumPy;
+# there is no accelerator, so heavy models run on the edge runtimes at CPU pace:
+# a 1–2B GGUF LLM at chat pace, periodic (not streaming) vision, NumPy embeddings.
 #
 # INERT + VOICE-FREE by contract (see tier0.toml header): backends + device/
 # cycle-rate hints only; no module is enabled and no private voice is embedded.

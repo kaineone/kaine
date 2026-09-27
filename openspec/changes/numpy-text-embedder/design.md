@@ -37,10 +37,13 @@ Moving to ONNX or model2vec would add a dependency, and model2vec is also a diff
 - `make_text_embedder(config) -> Embedder` in `kaine/text_embedding.py` builds either backend. Boot builds one instance per registry and passes it to Mnemos (`embedder=`), Empatheia (a new `embedder=` argument, used by its Qdrant store), Hypnos (`consolidation_embedder`) and the evaluation sidecar. Nothing else constructs an embedder.
 - **Sharing without shutting each other down.**
   - The instance handed to the modules is wrapped in `SharedEmbedder`: `load()` runs the inner load once, under an `asyncio.Lock`, and later calls return at once. `shutdown()` is a no-op, because `MnemosCore` shuts its embedder down when it stops, and a Spot restart of one module must not unload the model under the others.
-  - Every other attribute and method forwards to the inner embedder.
+  - `encode`, `encode_batch` and `embed` await `load()` first, so a consumer never has to load it. A failed load raises to that consumer, never a fake vector.
+  - Every other attribute forwards to the inner embedder.
+  - Empatheia loads it before it initializes its Qdrant store and sizes the store's collection from its dimension. A missing model therefore fails the module's start rather than writing zero vectors.
+  - The evaluation sidecar loads its embedder when it starts. On a load failure it fails closed when `require_semantic_embedder` is set; otherwise it falls back to `HashEmbedder` with the ERROR disclosure, and records carry `hash`.
   - The registry keeps the instance as `registry.shared_embedder`. `construct_module` hands it to Mnemos, Empatheia and Hypnos through a reserved `_embedder` key in their sections, as it already does for the perception feed, so a Spot restart gets the same instance.
   - It is created on first need, so a registry with none of the three modules enabled never builds an embedder.
-  - The evaluation sidecar in the cycle process takes `registry.shared_embedder`. Nexus, a separate process, builds its own through `make_text_embedder`.
+  - The evaluation sidecar in the cycle process takes `shared_embedder(registry, kaine_config)`, which builds the instance from `[embedding]` even when no memory module is enabled. Nexus, a separate process, builds its own through `make_text_embedder`.
 - `mnemos.embedder_model_id` and `mnemos.device` are removed. `make_mnemos` rejects either with a `ConfigurationError` naming `[embedding].model_id` / `[embedding].device`.
 - Mnemos sizes storage from the embedder's declared dimension. It reads `hidden_size` from the model's `config.json` before load, and `load()` checks it against the loaded model.
 - Both backends set `kind` for disclosure (`"numpy_minilm"` / `"sentence_transformers"`). Run identity records `embedding_backend` and `embedding_model_id` from the resolved `[embedding]` table, defaults included.

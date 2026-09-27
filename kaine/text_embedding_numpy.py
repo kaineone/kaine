@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import os
+import re
 import struct
 import unicodedata
 from pathlib import Path
@@ -122,20 +123,46 @@ class WordPieceTokenizer:
         vocab: dict[str, int],
         *,
         do_lower_case: bool = True,
+        strip_accents: bool | None = None,
+        tokenize_chinese_chars: bool = True,
         max_length: int = 256,
         unk_token: str = "[UNK]",
         cls_token: str = "[CLS]",
         sep_token: str = "[SEP]",
+        mask_token: str = "[MASK]",
+        never_split: set[str] | None = None,
     ) -> None:
         self.vocab = vocab
         self.do_lower_case = do_lower_case
+        if strip_accents is None:
+            strip_accents = do_lower_case
+        self.strip_accents = strip_accents
+        self.tokenize_chinese_chars = tokenize_chinese_chars
         self.max_length = int(max_length)
         self.unk_token = unk_token
         self.cls_token = cls_token
         self.sep_token = sep_token
+        self.mask_token = mask_token
         self.unk_id = vocab[unk_token]
         self.cls_id = vocab[cls_token]
         self.sep_id = vocab[sep_token]
+        self.mask_id = vocab[mask_token]
+
+        never_split = set(never_split) if never_split else set()
+        for tok in (unk_token, cls_token, sep_token, mask_token):
+            never_split.add(tok)
+        # Only the declared special tokens are matched whole, as HuggingFace
+        # does; other bracketed vocab entries such as ``[unused1]`` are split.
+        special_tokens = [t for t in vocab if t in never_split]
+        # Longest first so a shorter token doesn't steal a prefix of a longer one.
+        special_tokens.sort(key=len, reverse=True)
+        self.special_tokens = set(special_tokens)
+        if special_tokens:
+            self._special_re = re.compile(
+                "(" + "|".join(re.escape(t) for t in special_tokens) + ")"
+            )
+        else:
+            self._special_re = None
 
     @classmethod
     def from_vocab_file(
@@ -143,21 +170,64 @@ class WordPieceTokenizer:
         path: str | Path,
         *,
         do_lower_case: bool = True,
+        strip_accents: bool | None = None,
+        tokenize_chinese_chars: bool = True,
         max_length: int = 256,
+        never_split: set[str] | None = None,
     ) -> "WordPieceTokenizer":
+        vocab_path = Path(path)
         vocab: dict[str, int] = {}
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(vocab_path, "r", encoding="utf-8") as fh:
             for i, line in enumerate(fh):
                 token = line.rstrip("\n")
                 if token:
                     vocab[token] = i
-        return cls(vocab, do_lower_case=do_lower_case, max_length=max_length)
+
+        special_tokens: set[str] = set(never_split) if never_split else set()
+        tc_path = vocab_path.with_name("tokenizer_config.json")
+        if tc_path.exists():
+            tc = json.loads(tc_path.read_text())
+            if "do_lower_case" in tc:
+                do_lower_case = tc["do_lower_case"]
+            if "strip_accents" in tc:
+                strip_accents = tc["strip_accents"]
+            if "tokenize_chinese_chars" in tc:
+                tokenize_chinese_chars = tc["tokenize_chinese_chars"]
+            ns = tc.get("never_split")
+            if ns:
+                special_tokens.update(
+                    t.get("content") if isinstance(t, dict) else t for t in ns
+                )
+            stm = tc.get("special_tokens_map") or {}
+            for key in ("unk_token", "cls_token", "sep_token", "mask_token", "pad_token"):
+                tok = stm.get(key) or tc.get(key)
+                if isinstance(tok, dict):
+                    tok = tok.get("content")
+                if isinstance(tok, str):
+                    special_tokens.add(tok)
+
+        return cls(
+            vocab,
+            do_lower_case=do_lower_case,
+            strip_accents=strip_accents,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            max_length=max_length,
+            never_split=special_tokens,
+        )
 
     def tokenize(self, text: str) -> list[str]:
-        """Return wordpiece tokens (no special tokens)."""
+        """Return wordpiece tokens, preserving literal special tokens."""
         pieces: list[str] = []
-        for token in self._basic_tokenize(text):
-            pieces.extend(self._wordpiece_tokenize(token))
+        if self._special_re is None:
+            segments = [text]
+        else:
+            segments = self._special_re.split(text)
+        for segment in segments:
+            if segment in self.special_tokens:
+                pieces.append(segment)
+            else:
+                for token in self._basic_tokenize(segment):
+                    pieces.extend(self._wordpiece_tokenize(token))
         return pieces
 
     def encode(self, text: str) -> list[int]:
@@ -242,12 +312,14 @@ class WordPieceTokenizer:
 
     def _basic_tokenize(self, text: str) -> list[str]:
         text = self._clean_text(text)
-        text = self._tokenize_chinese_chars(text)
+        if self.tokenize_chinese_chars:
+            text = self._tokenize_chinese_chars(text)
         orig_tokens = text.split()
         split_tokens: list[str] = []
         for token in orig_tokens:
             if self.do_lower_case:
-                token = token.lower()
+                token = "".join(ch.lower() for ch in token)
+            if self.strip_accents:
                 token = self._run_strip_accents(token)
             split_tokens.extend(self._run_split_on_punc(token))
         return split_tokens
@@ -285,9 +357,17 @@ def resolve_model_dir(
     """Resolve a sentence-transformers model directory.
 
     If ``model_path`` is given it is returned directly.  Otherwise the HF
-    cache layout is inspected: ``$HF_HOME/hub`` (or the default cache), then
-    ``models--<org>--<name>/refs/main`` → ``snapshots/<rev>``.  If the ref is
-    missing, the single snapshot directory is used as a fallback.
+    hub cache is inspected in this order:
+
+    * ``HF_HUB_CACHE``
+    * ``HUGGINGFACE_HUB_CACHE``
+    * ``HF_HOME/hub``
+    * ``XDG_CACHE_HOME/huggingface/hub``
+    * ``~/.cache/huggingface/hub``
+
+    Within a hub directory ``models--<org>--<name>/refs/main`` points to
+    ``snapshots/<rev>``.  If the ref is missing, the single snapshot
+    directory is used as a fallback.
     """
     if model_path is not None:
         return Path(model_path)
@@ -295,34 +375,49 @@ def resolve_model_dir(
     if env is None:
         env = os.environ
 
-    hf_home = env.get("HF_HOME")
-    if hf_home:
-        hub_dir = Path(hf_home) / "hub"
-    else:
-        hub_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    if "/" not in model_id:
+        model_id = f"sentence-transformers/{model_id}"
 
-    if "/" in model_id:
-        org, name = model_id.split("/", 1)
-    else:
-        org, name = "", model_id
+    org, name = model_id.split("/", 1)
 
-    repo_dir = hub_dir / f"models--{org}--{name}"
-    refs_main = repo_dir / "refs" / "main"
-    snapshot_dir = repo_dir / "snapshots"
-    searched = [str(repo_dir)]
+    candidates: list[Path] = []
+    if env.get("HF_HUB_CACHE"):
+        candidates.append(Path(env["HF_HUB_CACHE"]))
+    if env.get("HUGGINGFACE_HUB_CACHE"):
+        candidates.append(Path(env["HUGGINGFACE_HUB_CACHE"]))
+    if env.get("HF_HOME"):
+        candidates.append(Path(env["HF_HOME"]) / "hub")
+    if env.get("XDG_CACHE_HOME"):
+        candidates.append(Path(env["XDG_CACHE_HOME"]) / "huggingface" / "hub")
+    candidates.append(Path.home() / ".cache" / "huggingface" / "hub")
 
-    if refs_main.exists():
-        rev = refs_main.read_text().strip()
-        resolved = snapshot_dir / rev
-        if resolved.is_dir():
-            return resolved
-        searched.append(str(refs_main))
-        searched.append(str(resolved))
-    elif snapshot_dir.is_dir():
-        snaps = [d for d in snapshot_dir.iterdir() if d.is_dir()]
-        if len(snaps) == 1:
-            return snaps[0]
-        searched.append(str(snapshot_dir))
+    searched: list[str] = []
+
+    for hub_dir in candidates:
+        if not hub_dir.is_dir():
+            searched.append(str(hub_dir))
+            continue
+
+        repo_dir = hub_dir / f"models--{org}--{name}"
+        searched.append(str(repo_dir))
+        if not repo_dir.is_dir():
+            continue
+
+        refs_main = repo_dir / "refs" / "main"
+        snapshot_dir = repo_dir / "snapshots"
+
+        if refs_main.exists():
+            rev = refs_main.read_text().strip()
+            resolved = snapshot_dir / rev
+            if resolved.is_dir():
+                return resolved
+            searched.append(str(refs_main))
+            searched.append(str(resolved))
+        elif snapshot_dir.is_dir():
+            snaps = [d for d in snapshot_dir.iterdir() if d.is_dir()]
+            if len(snaps) == 1:
+                return snaps[0]
+            searched.append(str(snapshot_dir))
 
     raise FileNotFoundError(
         f"model directory not found for {model_id}; searched: {', '.join(searched)}"
@@ -520,6 +615,86 @@ def _load_json_config(model_dir: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text())
 
 
+def _load_tokenizer_settings(model_dir: Path) -> dict[str, Any]:
+    path = _locate_file(model_dir, "tokenizer_config.json", "0_Transformer/tokenizer_config.json")
+    if path is None:
+        return {}
+    tc = json.loads(path.read_text())
+    settings: dict[str, Any] = {}
+    if "do_lower_case" in tc:
+        settings["do_lower_case"] = tc["do_lower_case"]
+    if "strip_accents" in tc:
+        settings["strip_accents"] = tc["strip_accents"]
+    if "tokenize_chinese_chars" in tc:
+        settings["tokenize_chinese_chars"] = tc["tokenize_chinese_chars"]
+
+    special_tokens: set[str] = set()
+    ns = tc.get("never_split")
+    if ns:
+        special_tokens.update(
+            t.get("content") if isinstance(t, dict) else t for t in ns
+        )
+    stm = tc.get("special_tokens_map") or {}
+    for key in ("unk_token", "cls_token", "sep_token", "mask_token", "pad_token"):
+        tok = stm.get(key) or tc.get(key)
+        if isinstance(tok, dict):
+            tok = tok.get("content")
+        if isinstance(tok, str):
+            special_tokens.add(tok)
+    if special_tokens:
+        settings["never_split"] = special_tokens
+    return settings
+
+
+def _validate_weights(weights: dict[str, np.ndarray], config: dict[str, Any]) -> None:
+    """Check that every tensor the BERT forward pass reads is present and shaped."""
+    hidden = int(config["hidden_size"])
+    vocab = int(config["vocab_size"])
+    positions = int(config["max_position_embeddings"])
+    type_vocab = int(config.get("type_vocab_size", 2))
+    layers = int(config["num_hidden_layers"])
+    intermediate = int(config["intermediate_size"])
+
+    def check(name: str, expected: tuple[int, ...]) -> None:
+        key = name
+        if key not in weights:
+            alt = "bert." + name
+            if alt in weights:
+                key = alt
+            else:
+                raise ValueError(f"weight {name!r} is missing")
+        shape = tuple(weights[key].shape)
+        if shape != expected:
+            raise ValueError(
+                f"weight {key!r} has shape {shape}, expected {expected}"
+            )
+
+    check("embeddings.word_embeddings.weight", (vocab, hidden))
+    check("embeddings.position_embeddings.weight", (positions, hidden))
+    check("embeddings.token_type_embeddings.weight", (type_vocab, hidden))
+    check("embeddings.LayerNorm.weight", (hidden,))
+    check("embeddings.LayerNorm.bias", (hidden,))
+
+    for layer in range(layers):
+        pfx = f"encoder.layer.{layer}"
+        check(f"{pfx}.attention.self.query.weight", (hidden, hidden))
+        check(f"{pfx}.attention.self.query.bias", (hidden,))
+        check(f"{pfx}.attention.self.key.weight", (hidden, hidden))
+        check(f"{pfx}.attention.self.key.bias", (hidden,))
+        check(f"{pfx}.attention.self.value.weight", (hidden, hidden))
+        check(f"{pfx}.attention.self.value.bias", (hidden,))
+        check(f"{pfx}.attention.output.dense.weight", (hidden, hidden))
+        check(f"{pfx}.attention.output.dense.bias", (hidden,))
+        check(f"{pfx}.attention.output.LayerNorm.weight", (hidden,))
+        check(f"{pfx}.attention.output.LayerNorm.bias", (hidden,))
+        check(f"{pfx}.intermediate.dense.weight", (intermediate, hidden))
+        check(f"{pfx}.intermediate.dense.bias", (intermediate,))
+        check(f"{pfx}.output.dense.weight", (hidden, intermediate))
+        check(f"{pfx}.output.dense.bias", (hidden,))
+        check(f"{pfx}.output.LayerNorm.weight", (hidden,))
+        check(f"{pfx}.output.LayerNorm.bias", (hidden,))
+
+
 class NumpyMiniLMEmbedder:
     """NumPy-only sentence-transformer-style embedder.
 
@@ -610,6 +785,18 @@ class NumpyMiniLMEmbedder:
             if cfg is None:
                 raise FileNotFoundError(f"config.json not found in {model_dir}")
 
+            model_type = cfg.get("model_type")
+            if model_type != "bert":
+                raise ValueError(f"model_type {model_type!r} is not 'bert'")
+            hidden_act = cfg.get("hidden_act", "gelu")
+            if hidden_act != "gelu":
+                raise ValueError(f"hidden_act {hidden_act!r} is not 'gelu'")
+            position_embedding_type = cfg.get("position_embedding_type", "absolute")
+            if position_embedding_type != "absolute":
+                raise ValueError(
+                    f"position_embedding_type {position_embedding_type!r} is not supported"
+                )
+
             vocab_path = _locate_file(model_dir, "vocab.txt", "0_Transformer/vocab.txt")
             if vocab_path is None:
                 raise FileNotFoundError(f"vocab.txt not found in {model_dir}")
@@ -623,15 +810,18 @@ class NumpyMiniLMEmbedder:
                 raise FileNotFoundError(f"model.safetensors not found in {model_dir}")
 
             weights = read_safetensors(weights_path)
+            _validate_weights(weights, cfg)
+
             hidden_size = int(cfg["hidden_size"])
             if hidden_size != self._latent_dim:
                 raise ValueError(
                     f"latent_dim mismatch: config {hidden_size} vs expected {self._latent_dim}"
                 )
 
+            tokenizer_settings = _load_tokenizer_settings(model_dir)
             self._config = cfg
             self._tokenizer = WordPieceTokenizer.from_vocab_file(
-                vocab_path, do_lower_case=True, max_length=max_length
+                vocab_path, max_length=max_length, **tokenizer_settings
             )
             self._weights = weights
             self._loaded = True
@@ -658,6 +848,9 @@ class NumpyMiniLMEmbedder:
             assert self._tokenizer is not None
             assert self._config is not None
             assert self._weights is not None
+
+            if len(texts) == 0:
+                return []
 
             ids_batch = [self._tokenizer.encode(str(t)) for t in texts]
             max_len = max((len(ids) for ids in ids_batch), default=0)

@@ -7,10 +7,58 @@ from __future__ import annotations
 import pytest
 
 from kaine.modules.empatheia.agent import EMOTION_CATEGORIES, AgentModel
+from kaine.modules.empatheia.module import Empatheia
+from kaine.modules.empatheia.store import QdrantAgentStore
 
 # ---------------------------------------------------------------------------
 # Familiarity
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_empatheia_initialize_loads_embedder_before_qdrant_store():
+    """A failing embedder.load() must fail Empatheia.initialize() before the
+    Qdrant store opens, so missing models are never masked as zero vectors.
+    """
+
+    class _FailingEmbedder:
+        def __init__(self) -> None:
+            self.latent_dim = 8
+            self.model_id = "fake/failing"
+            self.load_called = False
+
+        async def load(self) -> None:
+            self.load_called = True
+            raise RuntimeError("model missing")
+
+        async def encode(self, text: str) -> list[float]:
+            return [0.0] * self.latent_dim
+
+        async def encode_batch(self, texts: list[str]) -> list[list[float]]:
+            return [[0.0] * self.latent_dim for _ in texts]
+
+    embedder = _FailingEmbedder()
+    module = Empatheia(
+        bus=None,
+        backend="qdrant",
+        qdrant_api_key="k",
+        embedder=embedder,
+    )
+    assert isinstance(module._store, QdrantAgentStore)
+
+    store_initialized = False
+
+    async def _fake_initialize() -> None:
+        nonlocal store_initialized
+        store_initialized = True
+
+    module._store.initialize = _fake_initialize
+
+    with pytest.raises(RuntimeError, match="model missing"):
+        await module.initialize()
+
+    assert embedder.load_called is True
+    assert store_initialized is False
 
 
 def test_familiarity_zero_on_fresh_model():
