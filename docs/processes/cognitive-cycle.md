@@ -85,7 +85,7 @@ subjective clock runs relative to real wall-clock time:
 
 | `time_scale` | Meaning |
 |---|---|
-| `0` | Frozen — the subjective clock stops. Reuses the existing pause/freeze path (see "Operator Freeze" below); the cycle does not invent a second freeze mechanism. |
+| `0` | Frozen — the subjective clock stops. Reuses the existing pause/freeze path (see "Operator Freeze" below); the cycle does not invent a second freeze mechanism. `time_scale = 0` with `auto_time_scale = true` is a configuration error and refuses boot. |
 | `1.0` | Real-time (the shipped default) — behavior is byte-identical to no clock injection at all. |
 | `< 1.0` | Deliberately slowed subjective time. |
 | `> 1.0` | Dilated-fast — an aspirational target: the cycle attempts the faster real tick rate and, when the hardware cannot hold it, the shortfall is recorded honestly as slip (never silently capped or faked). |
@@ -113,6 +113,31 @@ that is true when the achieved rate falls materially (>1%) below target. This
 makes a `time_scale > 1` dilation — or any sustained overrun — visible rather
 than silently throttled: the cycle always attempts the requested rate and
 reports honestly when the hardware cannot sustain it.
+
+### Automatic time dilation
+
+`[cycle].auto_time_scale` (default `false`) turns on automatic time-scale
+adjustment. The cycle measures the busy fraction of each tick (control and
+regulation handling included) as an exponential moving average over
+`auto_time_scale_window_s` of wall time. If utilization stays above
+`auto_time_scale_high` for `auto_time_scale_dwell_s`, `time_scale` drops in one
+step to bring utilization toward `auto_time_scale_target`. If it stays below
+`auto_time_scale_low` for three consecutive dwells, `time_scale` rises by at most
+×1.25 per step. The controller never exceeds the configured `time_scale`
+(ceiling), never falls below `auto_time_scale_floor`, waits at least one dwell
+between changes, and is disabled in deterministic mode. An invalid combination
+of thresholds or setting `time_scale = 0` with auto enabled refuses boot with a
+configuration error.
+
+Every change publishes a `cycle.time_scale` event with `from`, `to`,
+`reason` (`overload` or `headroom`), `utilization` and `window_s`. Each
+`cycle.tick` payload and each ignition-log record carries `time_scale`; the run
+manifest records the timing settings under `timing`; the `pacing` block of
+`runtime.json` shows `time_scale`, `auto_time_scale` and `time_scale_changes`.
+
+Soma's `reduce_rate` regulation still lowers the processing rate when it senses
+overload; that lowers utilization, and automatic dilation may then raise the
+scale back toward the ceiling.
 
 ---
 
@@ -343,6 +368,13 @@ All knobs live in `config/kaine.toml` (see [configuration.md](../configuration.m
 processing_rate_hz = 10.0
 experiential_rate_hz = 3.333
 time_scale = 1.0
+auto_time_scale = false
+auto_time_scale_window_s = 30.0
+auto_time_scale_target = 0.85
+auto_time_scale_high = 0.95
+auto_time_scale_low = 0.6
+auto_time_scale_dwell_s = 10.0
+auto_time_scale_floor = 0.1
 
 [oscillator]
 enabled = false

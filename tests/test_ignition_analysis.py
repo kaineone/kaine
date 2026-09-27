@@ -42,6 +42,32 @@ def _reset_encryptor():
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
 
+def test_viewing_with_time_scale_change_is_flagged(tmp_path: Path):
+    from kaine.research.ignition_study.analysis import _analyse_viewing
+
+    run_id = "r-scale"
+    log_dir = tmp_path / "ignition"
+    records = [
+        _record(run_id, 1, offset=0.0, time_scale=1.0),
+        _record(run_id, 2, offset=60.0, time_scale=1.0),
+        _record(run_id, 3, offset=120.0, time_scale=0.5),
+    ]
+    _write_log(log_dir, records)
+    step = {
+        "line": "main",
+        "step": 1,
+        "run_id": run_id,
+        "ignition_log_dir": ".",
+        "_study_dir": tmp_path,
+        "modules": ["topos"],
+    }
+    result = _analyse_viewing(step, ["topos"])
+    assert result.measures["time_scale_min"] == 0.5
+    assert result.measures["time_scale_max"] == 1.0
+    assert result.measures["time_scale_changed"] is True
+    assert result.measures["broadcasts_per_tick"] == 3 / 3
+
+
 def _make_study_dir(tmp_path: Path, viewings_per_line: int = 2) -> Path:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
@@ -82,8 +108,9 @@ def _record(
     delivered: float | None = None,
     inhibited: bool = False,
     members: list[dict[str, Any]] | None = None,
+    time_scale: float | None = None,
 ) -> dict[str, Any]:
-    return {
+    rec: dict[str, Any] = {
         "tick_index": seq,
         "entry_id": f"e{seq}",
         "wall_ts": "2026-01-01T00:00:00Z",
@@ -104,6 +131,9 @@ def _record(
         "run_id": run_id,
         "seq": seq,
     }
+    if time_scale is not None:
+        rec["time_scale"] = time_scale
+    return rec
 
 
 def _member(source: str, salience: float = 0.5) -> dict[str, Any]:

@@ -189,7 +189,7 @@ and upcycled hardware therefore reaches the full module set through the
 portability program in `openspec/changes/portability-program`: Phase 1 installs
 anywhere Linux runs, Phase 2 delivers a torch-free NumPy CfC core with the shared NumPy MiniLM embedder and sherpa-onnx speech plus slip-driven `time_scale`,
 Phase 3 adds JAX-free Nous/Phantasia plus Termux and thin-client offload for
-the Pi Zero 2 W, and Phase 4 covers residency, arm64 images and multi-node. See
+the Pi Zero 2 W, and Phase 4 covers residency, arm64 images and multi-node. On hosts that cannot hold the processing rate, `auto_time_scale = true` slows subjective time instead of distorting the dynamics. See
 [docs/deployment-tiers.md](deployment-tiers.md) for the tier definitions and
 [Getting Started — Smaller and upcycled hardware](getting-started.md#smaller-and-upcycled-hardware)
 for the current capability list.

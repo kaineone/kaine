@@ -58,6 +58,9 @@ _SCALAR_DIFF_KEYS = (
     "drift_median",
     "drift_max",
     "data_quality",
+    "time_scale_min",
+    "time_scale_max",
+    "broadcasts_per_tick",
 )
 
 log = logging.getLogger(__name__)
@@ -273,6 +276,27 @@ def _analyse_viewing(
     records, unreadable_lines, dropped_records = _load_ignition_records(run_id, log_dir)
 
     total_records = len(records)
+    scales = [
+        float(r["time_scale"])
+        for r in records
+        if isinstance(r.get("time_scale"), (int, float))
+    ]
+    time_scale_min = min(scales) if scales else None
+    time_scale_max = max(scales) if scales else None
+    time_scale_changed = (
+        time_scale_min is not None
+        and time_scale_max is not None
+        and time_scale_min != time_scale_max
+    )
+    tick_indices = [
+        int(r["tick_index"]) for r in records if isinstance(r.get("tick_index"), int)
+    ]
+    broadcasts_per_tick = (
+        total_records / (max(tick_indices) - min(tick_indices) + 1)
+        if tick_indices
+        else None
+    )
+
     programme_seconds, film_bins, gaps_over_10s = _programme_time_and_bins(records)
     programme_minutes = programme_seconds / 60.0
 
@@ -375,6 +399,10 @@ def _analyse_viewing(
             "unreadable_lines": unreadable_lines,
         },
         "expected_null_modules_flagged": expected_nulls_flagged,
+        "time_scale_min": time_scale_min,
+        "time_scale_max": time_scale_max,
+        "time_scale_changed": time_scale_changed,
+        "broadcasts_per_tick": broadcasts_per_tick,
     }
 
     return ViewingResult(
@@ -565,15 +593,17 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
     header = (
         "| Step | Line | Modules | Rate/min | Prog min | Paused | "
         "Coal mean | Coal median | Coal p90 | Inhibited | Drift median | "
-        "Drift max | Records | Gaps >10s | Drops | Unreadable |"
+        "Drift max | Records | Gaps >10s | Drops | Unreadable | "
+        "Scale min | Scale max | Changed | B/T |"
     )
     lines.append(header)
     lines.append(
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
     )
     for pv in report["per_viewing"]:
         m = pv["measures"]
         dq = m["data_quality"]
+        changed = "yes" if m["time_scale_changed"] else "no"
         row = (
             f"| {pv['step']} | {pv['line']} | {', '.join(pv['modules'])} | "
             f"{_fmt(m['broadcast_rate_per_minute'])} | {_fmt(m['programme_time_minutes'])} | "
@@ -582,9 +612,20 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
             f"{_fmt(m['inhibited_share'])} | {_fmt(m['drift_median'])} | "
             f"{_fmt(m['drift_max'])} | {dq['record_count']} | "
             f"{dq['gaps_longer_than_10s']} | {dq['dropped_records']} | "
-            f"{dq['unreadable_lines']} |"
+            f"{dq['unreadable_lines']} | "
+            f"{_fmt(m['time_scale_min'])} | {_fmt(m['time_scale_max'])} | "
+            f"{changed} | {_fmt(m['broadcasts_per_tick'])} |"
         )
         lines.append(row)
+    lines.append("")
+
+    lines.append("## Time-dilation interpretation")
+    lines.append("")
+    lines.append(
+        "Time dilation lowers the number of ignitions per film minute "
+        "without changing the being; any viewing whose time_scale changed "
+        "must therefore be compared per tick, not per minute."
+    )
     lines.append("")
 
     lines.append("## Module shares")

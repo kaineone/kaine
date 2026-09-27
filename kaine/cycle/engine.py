@@ -17,6 +17,7 @@ from kaine.cycle.protocols import (
     ModuleRegistryProtocol,
     SyneidesisProtocol,
 )
+from kaine.cycle.time_scale_controller import TimeScaleController
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.workspace.volition import Volition
@@ -94,6 +95,7 @@ class CognitiveCycle:
         deterministic: bool = False,
         time_scale: float = 1.0,
         entity_clock: Optional[EntityClock] = None,
+        time_scale_controller: Optional[TimeScaleController] = None,
         affect_observer: Optional[Callable[[list[tuple[str, Event]]], None]] = None,
         ablation_recorder: Optional[Callable[[WorkspaceSnapshot, WorkspaceSnapshot], None]] = None,
         seed_cursors_to_tail: bool = False,
@@ -154,6 +156,11 @@ class CognitiveCycle:
             monotonic=clock,
             real_sleep=sleep,
         )
+        if deterministic and time_scale_controller is not None:
+            log.info("cycle: automatic time dilation is disabled in deterministic mode")
+            time_scale_controller = None
+        self._time_scale_controller = time_scale_controller
+        self._time_scale_changes = 0
         # Event-timestamp seam. `_clock` (monotonic float) measures elapsed time
         # for slip/latency; `_wall_clock` (datetime) stamps published events.
         # The two are deliberately distinct and never conflated. In deterministic
@@ -357,6 +364,8 @@ class CognitiveCycle:
                 "overrun_ticks": self._overrun_ticks,
                 "window_ticks": 0,
                 "time_scale": scale,
+                "time_scale_changes": self._time_scale_changes,
+                "auto_time_scale": self._time_scale_controller is not None,
             }
         mean_wall = sum(self._recent_wall_ms) / n
         mean_target = sum(self._recent_target_ms) / n
@@ -385,6 +394,8 @@ class CognitiveCycle:
             "overrun_ticks": self._overrun_ticks,
             "window_ticks": n,
             "time_scale": scale,
+            "time_scale_changes": self._time_scale_changes,
+            "auto_time_scale": self._time_scale_controller is not None,
         }
 
     def _apply_processing_rate(self, hz: float) -> None:
@@ -869,9 +880,55 @@ class CognitiveCycle:
             await self._paused.wait()
             if self._stopped:
                 break
+            tick_start_wall = self._entity_clock.wall()
             await self.consume_control_events()
             await self.consume_soma_regulation()
             result = await self.tick()
+            busy_end_wall = self._entity_clock.wall()
+            busy_ms = max(0.0, (busy_end_wall - tick_start_wall) * 1000.0)
+
+            controller = self._time_scale_controller
+            if (
+                controller is not None
+                and self._entity_clock.scale > 0
+                and not self.is_paused
+            ):
+                period_ms = self._entity_clock.period(self._processing_rate) * 1000.0
+                change = controller.observe(
+                    busy_ms,
+                    period_ms,
+                    self._entity_clock.wall(),
+                    current_scale=self._entity_clock.scale,
+                )
+                if change is not None:
+                    self._entity_clock.scale = change.new
+                    self._time_scale_changes += 1
+                    log.info(
+                        "cycle: time_scale changed from %.3f to %.3f (%s) utilization=%.3f",
+                        change.old,
+                        change.new,
+                        change.reason,
+                        change.utilization,
+                    )
+                    try:
+                        event = Event(
+                            source="cycle",
+                            type="cycle.time_scale",
+                            payload={
+                                "from": change.old,
+                                "to": change.new,
+                                "reason": change.reason,
+                                "utilization": change.utilization,
+                                "window_s": controller.settings.window_s,
+                            },
+                            # Like cycle.rates: a pacing record, not a percept.
+                            salience=0.1,
+                            timestamp=self._now(),
+                        )
+                        await self._bus.publish(event)
+                    except Exception:
+                        log.exception("failed to publish cycle.time_scale event")
+
             if max_ticks is not None and self._tick_index >= max_ticks:
                 break
             # `target_duration_ms` is the REAL per-tick budget (the EntityClock
@@ -1032,6 +1089,7 @@ class CognitiveCycle:
             "tick_index": snapshot.tick_index,
             "inhibited": snapshot.inhibited,
             "is_experiential": is_experiential,
+            "time_scale": self._entity_clock.scale,
             "salience_scores": dict(snapshot.salience_scores),
             "metadata": dict(snapshot.metadata),
             "selected": [
@@ -1066,6 +1124,7 @@ class CognitiveCycle:
             "processing_rate_hz": self._processing_rate,
             "experiential_rate_hz": self._effective_experiential_rate,
             "access_drive": self._access_drive,
+            "time_scale": self._entity_clock.scale,
         }
         try:
             event = Event(

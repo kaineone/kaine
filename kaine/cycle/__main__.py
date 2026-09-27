@@ -965,6 +965,30 @@ def _start_programme_end_watcher(
     return asyncio.create_task(watcher.run(stop_event), name="cycle.programme_end")
 
 
+def _make_time_scale_controller(cycle_cfg: dict[str, Any]):
+    """Build the automatic time-dilation controller from ``[cycle]``, or None
+    when ``auto_time_scale`` is off. Raises ``ValueError`` on invalid settings."""
+    if not bool(cycle_cfg.get("auto_time_scale", False)):
+        return None
+    from kaine.cycle.time_scale_controller import TimeScaleController, TimeScaleSettings
+
+    ceiling = float(cycle_cfg.get("time_scale", 1.0))
+    if ceiling <= 0.0:
+        raise ValueError(
+            "auto_time_scale requires a positive time_scale (frozen is not compatible)"
+        )
+    settings = TimeScaleSettings(
+        ceiling=ceiling,
+        floor=float(cycle_cfg.get("auto_time_scale_floor", 0.1)),
+        target=float(cycle_cfg.get("auto_time_scale_target", 0.85)),
+        high=float(cycle_cfg.get("auto_time_scale_high", 0.95)),
+        low=float(cycle_cfg.get("auto_time_scale_low", 0.6)),
+        dwell_s=float(cycle_cfg.get("auto_time_scale_dwell_s", 10.0)),
+        window_s=float(cycle_cfg.get("auto_time_scale_window_s", 30.0)),
+    )
+    return TimeScaleController(settings, initial_scale=ceiling)
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
@@ -1046,6 +1070,19 @@ async def _boot_and_run(
     # cannot load stops the boot (PluginError) rather than run on defaults.
     plugins = load_plugins(kaine_config, known_modules=known_module_names())
 
+    _timing_cfg = kaine_config.get("cycle") or {}
+    timing: dict[str, Any] = {
+        "time_scale": float(_timing_cfg.get("time_scale", 1.0)),
+        "auto_time_scale": bool(_timing_cfg.get("auto_time_scale", False)),
+    }
+    if timing["auto_time_scale"]:
+        timing["floor"] = float(_timing_cfg.get("auto_time_scale_floor", 0.1))
+        timing["target"] = float(_timing_cfg.get("auto_time_scale_target", 0.85))
+        timing["high"] = float(_timing_cfg.get("auto_time_scale_high", 0.95))
+        timing["low"] = float(_timing_cfg.get("auto_time_scale_low", 0.6))
+        timing["dwell_s"] = float(_timing_cfg.get("auto_time_scale_dwell_s", 10.0))
+        timing["window_s"] = float(_timing_cfg.get("auto_time_scale_window_s", 30.0))
+
     run_ctx = mint_run_context(
         seed=seed,
         started_at=datetime.now(timezone.utc).isoformat(),
@@ -1057,6 +1094,7 @@ async def _boot_and_run(
         perception_feed=gather_perception_feed_descriptor(kaine_config),
         plugins=plugins.manifest_entry(),
         revived_from=revive.revived_from if revive is not None else None,
+        timing=timing,
     )
     set_run_context(run_ctx)
     if bool(experiment_cfg.get("write_manifest", True)):
@@ -1408,6 +1446,7 @@ async def _boot_and_run(
         # A1 already pinned makes the run bit-for-bit reproducible. Production
         # leaves it false → real wall-clock time. Used by ablation experiments.
         deterministic=bool(experiment_cfg.get("deterministic", False)),
+        time_scale_controller=_make_time_scale_controller(cycle_cfg),
         # DI seam for the live salience factors: the engine refreshes the affect/
         # drive snapshot from each tick's thymos.state. None when both factors are
         # the static negative control (then the tick is byte-identical).
@@ -2092,6 +2131,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except Exception as exc:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
+        return 1
+
+    # Validate the automatic time-dilation settings before any resource opens;
+    # _boot_and_run builds the controller itself from the same [cycle] table.
+    try:
+        _make_time_scale_controller(config.get("cycle") or {})
+    except ValueError as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         return 1
 
     # Exactly one mode per boot. Conflicting selectors refuse before any gate.

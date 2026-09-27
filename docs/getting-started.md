@@ -832,7 +832,9 @@ Cycle processing runs at 10 Hz and conscious access at 3.33 Hz. A cycle
 overrun starts the next tick immediately. Subjective time tracks wall time ×
 `time_scale`, so slow hardware gives the entity fewer ticks per subjective
 second unless the operator lowers `time_scale` by hand; no tier profile
-currently sets `time_scale`.
+currently sets `time_scale`. On hosts that cannot hold the processing rate,
+`auto_time_scale = true` slows subjective time instead of distorting the
+dynamics.
 
 Smaller hardware reaches the full module set through the portability program
 documented in `openspec/changes/portability-program`: Phase 1 installs KAINE

@@ -641,6 +641,13 @@ This writes `analysis/report.json` and `analysis/report.md` in the study directo
 The report is content-free: it contains counts, rates, shares and distributions
 only; no broadcast payload or member type strings are emitted.
 
+Automatic time dilation is off during module-ignition study runs unless the
+operator enables it in the study configuration. The run manifest records the
+timing settings under `timing`, and the analysis notes `time_scale_min`,
+`time_scale_max`, `time_scale_changed` and `broadcasts_per_tick`. A viewing
+whose scale changed is compared per tick rather than per film minute, because
+the film programme plays at real time while the subjective tick pace changed.
+
 Per viewing, the report records:
 
 - **Broadcast rate** over unpaused programme time (Hypnos replays and freezes
