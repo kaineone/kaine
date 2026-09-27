@@ -9,4 +9,4 @@
 
 - [x] 2.1 Tests with faked probe inputs (files, env, commands) for every target, including a Jetson without `nvidia-smi` and Termux; the plan per target; bootstrap dry runs per package manager.
 - [ ] 2.2 Real runs recorded: this desktop; the Orin Nano Super (the operator runs it on the device); the Pixel 6a under Termux (the operator runs it on the device, to the documented limit).
-- [ ] 2.3 Offline suite green; `openspec validate any-target-bootstrap --strict`.
+- [x] 2.3 Offline suite green; `openspec validate any-target-bootstrap --strict`.
