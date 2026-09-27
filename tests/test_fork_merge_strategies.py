@@ -47,15 +47,17 @@ def test_union_concatenates_lists_dedup_preserving_order():
 
 def test_mnemos_sums_short_term_and_preserves_matching_prefix():
     s = MnemosMergeStrategy()
+    space = {"model_id": "minilm", "dim": 384, "pooling": "mean", "normalized": True}
     out = s.merge(
         {"short_term_size": 4, "collection_prefix": "mnemos_",
-         "embedder_model_id": "minilm"},
+         "embedding_space": space},
         {"short_term_size": 7, "collection_prefix": "mnemos_",
-         "embedder_model_id": "minilm"},
+         "embedding_space": space},
     )
     assert out["short_term_size"] == 11
     assert out["collection_prefix"] == "mnemos_"
     assert "metadata" not in out
+    assert out["embedding_space"] == space
     assert out["pending_source_tag"] == ["fork-a", "fork-b"]
 
 
@@ -67,6 +69,18 @@ def test_mnemos_flags_prefix_mismatch():
     )
     assert out["metadata"]["prefix_mismatch"] is True
     assert set(out["metadata"]["parent_prefixes"]) == {"a_", "b_"}
+
+
+def test_mnemos_flags_embedding_space_mismatch():
+    s = MnemosMergeStrategy()
+    out = s.merge(
+        {"short_term_size": 1, "collection_prefix": "mnemos_",
+         "embedding_space": {"model_id": "a", "dim": 384, "pooling": "mean", "normalized": True}},
+        {"short_term_size": 2, "collection_prefix": "mnemos_",
+         "embedding_space": {"model_id": "b", "dim": 384, "pooling": "mean", "normalized": True}},
+    )
+    assert out["metadata"]["embedding_space_mismatch"] is True
+    assert out["embedding_space"]["model_id"] == "a"
 
 
 def test_mnemos_one_parent_missing():

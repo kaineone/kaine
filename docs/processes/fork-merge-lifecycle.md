@@ -111,7 +111,7 @@ Last-write-wins for scalar keys; recursive union for dicts; deduplication by
 |-------|-----------|
 | `short_term_size` | Sum of both parents |
 | `collection_prefix` | A's prefix if equal; A's with `prefix_mismatch` flag if different |
-| `embedder_model_id` | A's if equal; A's with `embedder_mismatch` flag if different |
+| `embedding_space` | A's (an unstamped side counts as legacy MiniLM); `embedding_space_mismatch` flag if the defaulted spaces differ |
 | `pending_source_tag` | `["fork-a", "fork-b"]` — tells Mnemos to tag recalled memories by origin on next retrieval |
 
 ### `NousMergeStrategy`

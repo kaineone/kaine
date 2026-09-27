@@ -13,7 +13,14 @@ stdlib-only; imports nothing else from ``kaine``.
 """
 from __future__ import annotations
 
-__all__ = ["MNEMOS_COLLECTION_KINDS"]
+import uuid
+
+__all__ = [
+    "MNEMOS_COLLECTION_KINDS",
+    "MNEMOS_STAMP_COLLECTION",
+    "stamp_key",
+    "stamp_point_id",
+]
 
 # Canonical Mnemos memory-collection kinds.
 MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
@@ -22,3 +29,22 @@ MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
     "semantic",
     "procedural",
 )
+
+#: Shared Qdrant collection used for embedding-space stamps.
+MNEMOS_STAMP_COLLECTION: str = "kaine_meta"
+
+#: Fixed namespace for deriving deterministic Qdrant point ids for
+#: ``kaine_meta`` embedding-space stamps.
+_STAMP_NAMESPACE: uuid.UUID = uuid.UUID(
+    "a7c1f3e2-4b2c-4f6d-9e8a-1c2d3e4f5a6b"
+)
+
+
+def stamp_key(prefix: str) -> str:
+    """Canonical embedding-space stamp key for a collection prefix."""
+    return f"{prefix}embedding_space"
+
+
+def stamp_point_id(key: str) -> str:
+    """Deterministic Qdrant point id for an embedding-space stamp key."""
+    return str(uuid.uuid5(_STAMP_NAMESPACE, key))

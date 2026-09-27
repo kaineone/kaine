@@ -11,8 +11,8 @@
 
 ## 3. Embedding-space stamp
 
-- [ ] 3.1 `Embedder.space`; sqlite-vec `kaine_meta` and Qdrant `<prefix>kaine_meta` stamps; start-up check (match, refuse, legacy, empty); Empatheia's collection likewise.
-- [ ] 3.2 Stamp in `serialize()`, export and bundles; revive and merge refuse a mismatch; unstamped bundles treated as legacy MiniLM.
+- [x] 3.1 `Embedder.space`; stamps in sqlite-vec `kaine_meta`, a Qdrant `kaine_meta` collection and in memory, keyed by collection prefix; start-up check (match, refuse, legacy, empty).
+- [x] 3.2 Stamp in `serialize()`, export and bundles; revive refuses a mismatch and merge flags it; unstamped bundles treated as legacy MiniLM.
 
 ## 4. Docs and verification
 

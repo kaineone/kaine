@@ -24,7 +24,11 @@ from typing import Any
 
 import numpy as np
 
-from kaine.embedding_defaults import DEFAULT_LATENT_DIM, DEFAULT_MODEL_ID
+from kaine.embedding_defaults import (
+    DEFAULT_LATENT_DIM,
+    DEFAULT_MODEL_ID,
+    canonical_model_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -375,8 +379,7 @@ def resolve_model_dir(
     if env is None:
         env = os.environ
 
-    if "/" not in model_id:
-        model_id = f"sentence-transformers/{model_id}"
+    model_id = canonical_model_id(model_id)
 
     org, name = model_id.split("/", 1)
 
@@ -734,6 +737,15 @@ class NumpyMiniLMEmbedder:
     @property
     def latent_dim(self) -> int:
         return self._latent_dim
+
+    @property
+    def space(self) -> dict[str, Any]:
+        return {
+            "model_id": canonical_model_id(self.model_id),
+            "dim": self.latent_dim,
+            "pooling": "mean",
+            "normalized": True,
+        }
 
     async def load(self) -> None:
         """Load model weights, config and tokenizer (idempotent)."""

@@ -7,6 +7,9 @@ import copy
 import math
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
+from kaine.text_embedding import same_space
+
 
 def _normalised_entropy(dist: Any) -> float:
     """Shannon entropy of a discrete distribution normalised to [0, 1].
@@ -132,13 +135,13 @@ class MnemosMergeStrategy:
             out["collection_prefix"] = prefix_a or prefix_b
             metadata["prefix_mismatch"] = True
             metadata["parent_prefixes"] = [prefix_a, prefix_b]
-        embed_a = state_a.get("embedder_model_id")
-        embed_b = state_b.get("embedder_model_id")
-        if embed_a == embed_b:
-            out["embedder_model_id"] = embed_a
-        else:
-            out["embedder_model_id"] = embed_a or embed_b
-            metadata["embedder_mismatch"] = True
+        embed_a = state_a.get("embedding_space")
+        embed_b = state_b.get("embedding_space")
+        defaulted_a = embed_a if embed_a is not None else LEGACY_EMBEDDING_SPACE
+        defaulted_b = embed_b if embed_b is not None else LEGACY_EMBEDDING_SPACE
+        out["embedding_space"] = defaulted_a
+        if not same_space(defaulted_a, defaulted_b):
+            metadata["embedding_space_mismatch"] = True
         out["pending_source_tag"] = ["fork-a", "fork-b"]
         if metadata:
             out["metadata"] = metadata

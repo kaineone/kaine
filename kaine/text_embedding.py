@@ -35,6 +35,7 @@ from typing import Any, Iterable, Protocol, runtime_checkable
 # Re-exported: modules import these defaults from here.
 from kaine.embedding_defaults import DEFAULT_LATENT_DIM as DEFAULT_LATENT_DIM
 from kaine.embedding_defaults import DEFAULT_MODEL_ID as DEFAULT_MODEL_ID
+from kaine.embedding_defaults import canonical_model_id
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +66,10 @@ class Embedder(Protocol):
     @property
     def model_id(self) -> str:
         """The embedding model id."""
+
+    @property
+    def space(self) -> dict[str, Any]:
+        """Embedding-space stamp (model, dimension, pooling, normalized)."""
 
     async def load(self) -> None:
         """Load the underlying model (idempotent)."""
@@ -121,6 +126,22 @@ class SentenceTransformerTextEmbedder:
     @property
     def device(self) -> str:
         return self._device
+
+    @property
+    def space(self) -> dict[str, Any]:
+        dim: int
+        if self._latent_dim is not None:
+            dim = self._latent_dim
+        elif canonical_model_id(self._model_id) == DEFAULT_MODEL_ID:
+            dim = DEFAULT_LATENT_DIM
+        else:
+            raise RuntimeError("embedding space unknown before load")
+        return {
+            "model_id": canonical_model_id(self._model_id),
+            "dim": dim,
+            "pooling": "mean",
+            "normalized": True,
+        }
 
     async def load(self) -> None:
         if self._model is not None:
@@ -239,6 +260,15 @@ class FakeEmbedder:
     def model_id(self) -> str:
         return self._model_id
 
+    @property
+    def space(self) -> dict[str, Any]:
+        return {
+            "model_id": "fake",
+            "dim": self._latent_dim,
+            "pooling": "mean",
+            "normalized": True,
+        }
+
     async def load(self) -> None:
         self.loaded = True
 
@@ -285,6 +315,10 @@ class SharedEmbedder:
         return self._inner.model_id
 
     @property
+    def space(self) -> dict[str, Any]:
+        return self._inner.space
+
+    @property
     def kind(self) -> Any:
         return getattr(self._inner, "kind", None)
 
@@ -326,6 +360,16 @@ class SharedEmbedder:
         if name == "_inner":
             raise AttributeError(name)
         return getattr(self._inner, name)
+
+
+def same_space(a: dict, b: dict) -> bool:
+    """Return True when two embedding-space stamps describe the same space.
+
+    Compares exactly the four canonical keys: ``model_id``, ``dim``,
+    ``pooling``, and ``normalized``.
+    """
+    keys = ("model_id", "dim", "pooling", "normalized")
+    return all(a.get(k) == b.get(k) for k in keys)
 
 
 def resolve_embedding_config(kaine_config: dict) -> dict:
