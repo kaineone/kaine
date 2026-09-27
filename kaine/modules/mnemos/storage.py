@@ -22,6 +22,23 @@ from typing import Any, Protocol, Sequence, runtime_checkable
 
 log = logging.getLogger(__name__)
 
+#: Fixed namespace for deriving deterministic Qdrant point ids for
+#: ``kaine_meta`` embedding-space stamps.
+_STAMP_NAMESPACE = uuid.UUID("a7c1f3e2-4b2c-4f6d-9e8a-1c2d3e4f5a6b")
+
+_REQUIRED_STAMP_KEYS = frozenset({"model_id", "dim", "pooling", "normalized"})
+
+
+def _validate_stamp(value: Any, backend: str, key: str) -> None:
+    """Fail loudly on malformed embedding-space stamps.
+
+    A stamp that is present but malformed must never be read as "no
+    stamp"; otherwise Mnemos would silently re-stamp a store and
+    pretend the existing vectors belong to the current embedder.
+    """
+    if not isinstance(value, dict) or set(value.keys()) != _REQUIRED_STAMP_KEYS:
+        raise StorageError(f"{backend} stamp for {key!r} is malformed: {value!r}")
+
 
 class StorageError(Exception):
     """Raised when a storage backend operation fails.
@@ -79,6 +96,10 @@ class MemoryStorage(Protocol):
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int: ...
 
+    async def read_stamp(self, key: str) -> dict | None: ...
+
+    async def write_stamp(self, key: str, stamp: dict) -> None: ...
+
 
 def _cosine(a: list[float], b: list[float]) -> float:
     na = math.sqrt(sum(x * x for x in a))
@@ -102,6 +123,7 @@ class InMemoryStorage:
             raise ValueError("latent_dim must be positive")
         self._latent_dim = int(latent_dim)
         self._collections: dict[str, list[dict[str, Any]]] = {}
+        self._stamps: dict[str, dict] = {}
 
     @property
     def latent_dim(self) -> int:
@@ -229,6 +251,16 @@ class InMemoryStorage:
         ]
         return len(points)
 
+    async def read_stamp(self, key: str) -> dict | None:
+        if key not in self._stamps:
+            return None
+        value = self._stamps[key]
+        _validate_stamp(value, "in-memory", key)
+        return dict(value)
+
+    async def write_stamp(self, key: str, stamp: dict) -> None:
+        self._stamps[key] = dict(stamp)
+
 
 class SqliteVecStorage:
     """In-process vector store on ``sqlite-vec`` (edge backend, Tier 0/1).
@@ -297,6 +329,10 @@ class SqliteVecStorage:
             db.execute(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0("
                 f"embedding float[{self._latent_dim}] distance_metric=cosine)"
+            )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS kaine_meta ("
+                "key TEXT PRIMARY KEY, value TEXT)"
             )
             db.commit()
             return db
@@ -559,6 +595,58 @@ class SqliteVecStorage:
                 ) from exc
 
         return await asyncio.to_thread(_replace)
+
+    async def read_stamp(self, key: str) -> dict | None:
+        import asyncio
+
+        def _read() -> dict | None:
+            db = self._db
+            if db is None:
+                raise StorageError("sqlite-vec read_stamp before initialize()")
+            try:
+                cur = db.execute(
+                    "SELECT value FROM kaine_meta WHERE key = ?", (key,)
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                try:
+                    value = json.loads(row[0])
+                except json.JSONDecodeError as exc:
+                    raise StorageError(
+                        f"sqlite-vec stamp for {key!r} is malformed: {exc}"
+                    ) from exc
+                _validate_stamp(value, "sqlite-vec", key)
+                return value
+            except StorageError:
+                raise
+            except Exception as exc:
+                raise StorageError(
+                    f"sqlite-vec read_stamp failed for {key!r}: {exc}"
+                ) from exc
+
+        return await asyncio.to_thread(_read)
+
+    async def write_stamp(self, key: str, stamp: dict) -> None:
+        import asyncio
+
+        def _write() -> None:
+            db = self._db
+            if db is None:
+                raise StorageError("sqlite-vec write_stamp before initialize()")
+            try:
+                db.execute(
+                    "INSERT INTO kaine_meta (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (key, json.dumps(stamp)),
+                )
+                db.commit()
+            except Exception as exc:
+                raise StorageError(
+                    f"sqlite-vec write_stamp failed for {key!r}: {exc}"
+                ) from exc
+
+        await asyncio.to_thread(_write)
 
 
 class QdrantStorage:
@@ -838,3 +926,77 @@ class QdrantStorage:
                 ) from exc
             total += len(structs)
         return total
+
+    async def write_stamp(self, key: str, stamp: dict) -> None:
+        if self._client is None:
+            raise StorageError("qdrant write_stamp before initialize()")
+        from qdrant_client import models  # type: ignore[import-untyped]
+
+        meta_name = "kaine_meta"
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant write_stamp failed listing collections: {exc}"
+            ) from exc
+        if meta_name not in existing_names:
+            try:
+                await self._client.create_collection(
+                    collection_name=meta_name,
+                    vectors_config=models.VectorParams(
+                        size=1,
+                        distance=models.Distance.COSINE,
+                    ),
+                )
+            except Exception as exc:
+                raise StorageError(
+                    f"qdrant write_stamp failed creating {meta_name!r}: {exc}"
+                ) from exc
+        pid = str(uuid.uuid5(_STAMP_NAMESPACE, key))
+        try:
+            await self._client.upsert(
+                collection_name=meta_name,
+                points=[
+                    models.PointStruct(
+                        id=pid,
+                        vector=[1.0],
+                        payload={"key": key, "stamp": stamp},
+                    )
+                ],
+            )
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant write_stamp failed upserting {key!r}: {exc}"
+            ) from exc
+
+    async def read_stamp(self, key: str) -> dict | None:
+        if self._client is None:
+            raise StorageError("qdrant read_stamp before initialize()")
+        meta_name = "kaine_meta"
+        pid = str(uuid.uuid5(_STAMP_NAMESPACE, key))
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant read_stamp failed listing collections: {exc}"
+            ) from exc
+        if meta_name not in existing_names:
+            return None
+        try:
+            records = await self._client.retrieve(
+                collection_name=meta_name,
+                ids=[pid],
+                with_payload=True,
+            )
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant read_stamp failed for {key!r}: {exc}"
+            ) from exc
+        if not records:
+            return None
+        payload = getattr(records[0], "payload", None) or {}
+        stamp = payload.get("stamp") if isinstance(payload, dict) else None
+        _validate_stamp(stamp, "qdrant", key)
+        return stamp

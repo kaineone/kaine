@@ -523,10 +523,17 @@ class Mnemos(BaseModule):
         without risking a deadlock inside a running event loop, so it stays
         metadata-only here and the preservation path carries the real memories.
         """
-        return {
+        result: dict[str, Any] = {
             "short_term_size": self._core.short_term_size,
             "collection_prefix": self._core._prefix,
         }
+        try:
+            result["embedding_space"] = self._core.embedder.space
+        except RuntimeError:
+            # The sentence-transformers backend cannot report its dimension
+            # before it has loaded; omit the key rather than crash serialize().
+            pass
+        return result
 
     def deserialize(self, state: dict[str, Any]) -> None:
         """Restore from a preservation capture when one is present.

@@ -49,19 +49,25 @@ Moving to ONNX or model2vec would add a dependency, and model2vec is also a diff
 - Both backends set `kind` for disclosure (`"numpy_minilm"` / `"sentence_transformers"`). Run identity records `embedding_backend` and `embedding_model_id` from the resolved `[embedding]` table, defaults included.
 
 ### The embedding-space stamp
-- The stamp is `{"model_id": str, "dim": int, "pooling": "mean", "normalized": true}`. `Embedder` gains a `space` property that returns it. The backend is not part of the space: the parity tests are what make the two backends interchangeable.
-- **sqlite-vec:** a `kaine_meta` table (`key TEXT PRIMARY KEY, value TEXT`) holds the stamp as JSON under `embedding_space`.
-- **Qdrant:** a collection `<prefix>kaine_meta` with a single point, id 1, vector size 1, and the stamp in its payload. `<prefix>` is the collection prefix Mnemos already uses, so the two study lines stay separate. Storage `export` skips the meta collection, and the stamp travels in the exported state instead.
-- **At `initialize`:**
-  - a stamp equal to the embedder's space → proceed;
-  - a stamp for a different space → `StorageError` naming both spaces. Mnemos does not start (fail closed), and the log says a re-embed is needed.
-  - no stamp and no points → write the stamp;
-  - no stamp but existing points → the store predates stamping. Only MiniLM-L6-v2 has ever shipped, so if its dimension matches, write that model's stamp and log that the store was stamped as legacy MiniLM. Otherwise refuse.
-- **Serialize, export and bundles:**
-  - `Mnemos.serialize()` and `export_preservation_state` include `embedding_space`.
-  - `import_` and revive compare it with the running embedder's space and raise on a mismatch, so preservation refuses the revive. A missing stamp in a bundle is treated as legacy MiniLM, as above.
-  - `MnemosMergeStrategy` compares `embedding_space` instead of the never-written `embedder_model_id`.
-- **Empatheia's collection** is written only through the same shared embedder, and is stamped and checked the same way under its own meta key.
+- **The stamp.**
+  - It is `{"model_id": str, "dim": int, "pooling": "mean", "normalized": true}`.
+  - `Embedder` gains a `space` property that returns it. `SharedEmbedder` forwards it, and `FakeEmbedder` reports its own model id and dimension.
+  - The backend is not part of the space: the parity tests are what make the two backends interchangeable.
+  - `LEGACY_EMBEDDING_SPACE` names `sentence-transformers/all-MiniLM-L6-v2` at 384 dimensions. It is the only model KAINE has ever shipped.
+- **Storage** gains `read_stamp(key) -> dict | None` and `write_stamp(key, stamp)`, where the key is `<collection prefix>embedding_space`. The two study lines therefore keep separate stamps even where they share a store.
+  - **sqlite-vec:** a `kaine_meta` table (`key TEXT PRIMARY KEY, value TEXT`) holds the stamp as JSON.
+  - **Qdrant:** a collection `kaine_meta` with vector size 1. It holds one point per key, with id `uuid5(<namespace>, key)` and the stamp in its payload. It is never one of a being's memory collections, so the scoped export never touches it.
+  - **In-memory:** a dictionary.
+- **At `MnemosCore.initialize`**, after the collections are ensured:
+  - A stamp equal to the embedder's space: proceed.
+  - A stamp for a different space: raise `StorageError` naming both spaces. Mnemos does not start (fail closed), and the message says a re-embed is needed.
+  - No stamp and no points in the being's own collections: write the stamp.
+  - No stamp but existing points: the store predates stamping and holds `LEGACY_EMBEDDING_SPACE`. If that equals the embedder's space, write it and log that the store was stamped as legacy MiniLM. Otherwise refuse, as for a mismatch.
+- **Export, bundles and merge.**
+  - `MnemosCore.export_state` includes `embedding_space` (the embedder's space).
+  - `import_state` compares the bundle's `embedding_space` with the running embedder's before validating or writing anything. A missing one means `LEGACY_EMBEDDING_SPACE`. A mismatch raises `StorageError`, so preservation refuses the revive. After a successful import it writes the running space as the stamp.
+  - `Mnemos.serialize()` includes `embedding_space`. `MnemosMergeStrategy` compares it instead of the never-written `embedder_model_id`, and a mismatch sets its existing mismatch flag, now `embedding_space_mismatch`.
+- **Empatheia's collection is not stamped.** Its vectors are never searched: only the profile payload is read back. Since `scoped-memory-preservation`, revive re-embeds every profile with the running embedder, so no vector crosses between spaces.
 
 ### Extras and provisioning
 - The NumPy backend needs only NumPy (base). In `kaine/extras.py`, the `mnemos`, `empatheia` (Qdrant) and `hypnos` rows require `sentence_transformers` only when `[embedding].backend = "sentence_transformers"`.

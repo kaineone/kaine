@@ -185,6 +185,23 @@ class _FakeAsyncQdrant:
         pts = self.store.get(collection_name, [])
         self.store[collection_name] = [p for p in pts if p.id not in ids]
 
+    async def retrieve(self, collection_name, ids, with_payload=True, with_vectors=False, **kwargs):
+        if collection_name not in self.store:
+            raise ValueError(f"Collection {collection_name} not found")
+        wanted = {str(i) for i in ids}
+        out = []
+        for p in self.store.get(collection_name, []):
+            if str(p.id) not in wanted:
+                continue
+            out.append(
+                _FakeQdrantPoint(
+                    p.id,
+                    p.vector if with_vectors else None,
+                    p.payload if with_payload else {},
+                )
+            )
+        return out
+
     async def close(self, **kwargs):
         pass
 
@@ -285,6 +302,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
     }
     state = {
         "collection_prefix": "a_",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {
             "a_episodic": [point],
@@ -328,6 +346,7 @@ async def test_replace_semantics_and_validation_failure():
     }
     state = {
         "collection_prefix": "x_",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {"x_episodic": [point]},
     }
@@ -342,6 +361,7 @@ async def test_replace_semantics_and_validation_failure():
 
     bad_state = {
         "collection_prefix": "x_",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {
             "x_episodic": [{"id": "bad", "vector": good_vec[:2], "text": "bad", "payload": {}, "affect": None}]
@@ -600,6 +620,7 @@ async def test_import_absent_kind_empties_target():
     await core.store("old semantic point", collection="semantic")
     state = {
         "collection_prefix": "x_",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {"x_episodic": []},
     }
@@ -621,6 +642,7 @@ async def test_import_only_foreign_collections_raises():
     good_vec = list(await embedder.encode("good"))
     state = {
         "collection_prefix": "z_",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {
             "a_episodic": [
@@ -643,6 +665,7 @@ async def test_import_empty_collection_prefix_maps_kind_directly():
     vec = list(await embedder.encode("good"))
     state = {
         "collection_prefix": "",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {
             "episodic": [
@@ -672,6 +695,7 @@ async def test_import_validation_failure_leaves_short_term_and_persisted_unchang
     good_vec = list(await embedder.encode("good"))
     bad_state = {
         "collection_prefix": "x_",
+        "embedding_space": embedder.space,
         "short_term": [
             {"text": "new stm", "payload": {}, "affect": None, "timestamp": 1.0}
         ],
@@ -712,6 +736,7 @@ async def test_sqlite_vec_import_absent_kind_empties_target(tmp_path: Path):
 
     state = {
         "collection_prefix": "x_",
+        "embedding_space": embedder.space,
         "short_term": [],
         "persisted": {"x_episodic": []},
     }

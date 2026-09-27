@@ -16,9 +16,11 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Iterable, Optional
 
+from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
 from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS
 from kaine.modules.mnemos.embeddings import Embedder
 from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory, StorageError
+from kaine.text_embedding import same_space
 
 log = logging.getLogger(__name__)
 
@@ -97,12 +99,50 @@ class MnemosCore:
     def storage(self) -> MemoryStorage:
         return self._storage
 
+    @property
+    def stamp_key(self) -> str:
+        return f"{self._prefix}embedding_space"
+
     async def initialize(self) -> None:
         await self._embedder.load()
         await self._storage.initialize()
         # Persisted collections only. Short-term lives in process.
         for kind in ("episodic", "semantic", "procedural"):
             await self._storage.ensure_collection(self.collection_name(kind))
+        await self._check_embedding_space_stamp()
+
+    async def _check_embedding_space_stamp(self) -> None:
+        space = self._embedder.space
+        stamp = await self._storage.read_stamp(self.stamp_key)
+        if stamp is not None:
+            if not same_space(stamp, space):
+                raise StorageError(
+                    f"mnemos: the memory store is stamped with embedding space {stamp} "
+                    f"but the embedder is {space}; its memories must be re-embedded "
+                    f"before this embedder can use them"
+                )
+            return
+
+        point_count = 0
+        for name in self.persisted_collection_names():
+            point_count += await self._storage.count(name)
+        if point_count == 0:
+            await self._storage.write_stamp(self.stamp_key, space)
+            return
+
+        # Store predates embedding-space stamps; assume it holds the legacy space.
+        if same_space(space, LEGACY_EMBEDDING_SPACE):
+            await self._storage.write_stamp(self.stamp_key, LEGACY_EMBEDDING_SPACE)
+            log.warning(
+                "mnemos: memory store predates embedding-space stamps; stamped as %s",
+                LEGACY_EMBEDDING_SPACE,
+            )
+        else:
+            raise StorageError(
+                f"mnemos: the memory store is stamped with embedding space {LEGACY_EMBEDDING_SPACE} "
+                f"but the embedder is {space}; its memories must be re-embedded "
+                f"before this embedder can use them"
+            )
 
     async def shutdown(self) -> None:
         try:
@@ -227,6 +267,7 @@ class MnemosCore:
             "collection_prefix": self._prefix,
             "short_term": short_term,
             "persisted": persisted,
+            "embedding_space": self._embedder.space,
         }
 
     async def import_state(self, state: dict[str, Any]) -> int:
@@ -237,6 +278,13 @@ class MnemosCore:
         when the backend cannot re-import — revive must not yield a
         memory-poor lesser individual.
         """
+        bundle_space = state.get("embedding_space") or LEGACY_EMBEDDING_SPACE
+        if not same_space(bundle_space, self._embedder.space):
+            raise StorageError(
+                f"mnemos: bundle embedding space {bundle_space} does not match "
+                f"running embedder space {self._embedder.space}; cannot revive"
+            )
+
         src_prefix = (
             state["collection_prefix"] if "collection_prefix" in state else "mnemos_"
         )
@@ -307,6 +355,8 @@ class MnemosCore:
                     name,
                     len(points),
                 )
+
+        await self._storage.write_stamp(self.stamp_key, self._embedder.space)
         return total
 
     async def _invoke_hook(self, summary: RecallSummary) -> None:

@@ -132,13 +132,17 @@ class MnemosMergeStrategy:
             out["collection_prefix"] = prefix_a or prefix_b
             metadata["prefix_mismatch"] = True
             metadata["parent_prefixes"] = [prefix_a, prefix_b]
-        embed_a = state_a.get("embedder_model_id")
-        embed_b = state_b.get("embedder_model_id")
-        if embed_a == embed_b:
-            out["embedder_model_id"] = embed_a
+        from kaine.text_embedding import same_space
+
+        embed_a = state_a.get("embedding_space")
+        embed_b = state_b.get("embedding_space")
+        if embed_a is None and embed_b is None:
+            out["embedding_space"] = None
+        elif same_space(embed_a, embed_b):
+            out["embedding_space"] = embed_a
         else:
-            out["embedder_model_id"] = embed_a or embed_b
-            metadata["embedder_mismatch"] = True
+            out["embedding_space"] = embed_a or embed_b
+            metadata["embedding_space_mismatch"] = True
         out["pending_source_tag"] = ["fork-a", "fork-b"]
         if metadata:
             out["metadata"] = metadata
