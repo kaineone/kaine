@@ -18,6 +18,7 @@ Covers the `phantasia-weight-persistence` change:
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 import os
 import tomllib
@@ -86,6 +87,13 @@ class _PersistableFake(FakeWorldModel):
     def export_params(self, *, extra=None) -> bytes:
         self.export_count += 1
         return json.dumps({"decay": self._decay, "extra": dict(extra or {})}).encode()
+
+    def train(self, trajectory):
+        # Stands in for a learning world model: a successful pass counts.
+        outcome = super().train(trajectory)
+        if outcome.steps > 0 and not outcome.aborted:
+            return dataclasses.replace(outcome, learned=True)
+        return outcome
 
     def import_params(self, blob: bytes, *, extra=None) -> None:
         data = json.loads(blob)

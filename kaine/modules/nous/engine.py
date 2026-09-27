@@ -36,6 +36,8 @@ from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
+import numpy as np
+
 from kaine.modules.nous.generative_model import (
     ACTION_FACTOR,
     GenerativeModel,
@@ -164,6 +166,7 @@ class PymdpEngine:
         self._num_iter = int(num_iter)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nous-efe")
         self._agent = self._build_agent()
+        self._policies = self._read_policies()
         self._jit_cycle = self._build_jit_cycle()
         # Last good posterior, used when a step times out.
         self._last_posterior: list[list[float]] = [
@@ -183,6 +186,10 @@ class PymdpEngine:
     @property
     def actions(self) -> tuple[str, ...]:
         return self._model.actions
+
+    @property
+    def policy_len(self) -> int:
+        return self._policy_len
 
     def _build_agent(self) -> Any:
         import jax.numpy as jnp
@@ -205,6 +212,22 @@ class PymdpEngine:
                 policy_len=self._policy_len,
                 num_iter=self._num_iter,
             )
+
+    def _read_policies(self) -> Any:
+        """Cache the agent's policy matrix once at construction.
+
+        Returns the numpy array (or None if unavailable) so per-action EFE
+        grouping does not re-read it every cycle.
+        """
+        try:
+            # pymdp's Policies object indexes but has no length, so read its
+            # array attribute; np.asarray on the object itself never ends.
+            policies = self._agent.policies
+            arr = getattr(policies, "policy_arr", None)
+            return np.asarray(arr) if arr is not None else None
+        except Exception:
+            log.debug("pymdp policy array unavailable at construction", exc_info=True)
+            return None
 
     def _build_jit_cycle(self) -> Any:
         """JIT-compile infer_states + infer_policies into one traced function.
@@ -240,7 +263,6 @@ class PymdpEngine:
         """
         import jax
         import jax.numpy as jnp
-        import numpy as np
 
         obs_batched = [jnp.array([int(o)]) for o in obs]
         qs, neg_efe = self._jit_cycle(obs_batched)
@@ -253,17 +275,38 @@ class PymdpEngine:
                 arr = arr / s
             posterior.append([float(x) for x in arr])
         neg = np.asarray(neg_efe).reshape(-1)
-        # EFE = -neg_efe (lower EFE is better); align to action order. The
-        # control factor's policies are one-per-action in action order.
+        # EFE = -neg_efe (lower EFE is better).
         efe = [float(-x) for x in neg]
-        # Pad/trim to action count defensively.
         n_actions = self._model.num_actions
-        if len(efe) < n_actions:
-            efe = efe + [float("inf")] * (n_actions - len(efe))
-        elif len(efe) > n_actions:
-            efe = efe[:n_actions]
-        best_idx = int(min(range(n_actions), key=lambda i: efe[i]))
-        return posterior, efe, best_idx
+
+        if self._policies is None or self._policies.ndim != 3:
+            if self._policy_len == 1:
+                # Fallback: with horizon 1 the policy vector is one-per-action.
+                if len(efe) < n_actions:
+                    efe = efe + [float("inf")] * (n_actions - len(efe))
+                elif len(efe) > n_actions:
+                    efe = efe[:n_actions]
+                best_idx = int(min(range(n_actions), key=lambda i: efe[i]))
+                return posterior, efe, best_idx
+            shape_info = "unavailable" if self._policies is None else f"ndim={self._policies.ndim}"
+            raise RuntimeError(
+                f"Policy array {shape_info} but policy_len={self._policy_len}; "
+                f"cannot compute per-action EFE at horizon > 1"
+            )
+
+        first = self._policies[:, 0, ACTION_FACTOR]
+        if len(efe) != len(first):
+            raise RuntimeError(
+                f"EFE vector length ({len(efe)}) does not match policy count ({len(first)})"
+            )
+
+        per_action_efe = [float("inf")] * n_actions
+        for p_idx, action_first in enumerate(first):
+            a = int(action_first)
+            if 0 <= a < n_actions and efe[p_idx] < per_action_efe[a]:
+                per_action_efe[a] = efe[p_idx]
+        best_idx = int(min(range(n_actions), key=lambda i: per_action_efe[i]))
+        return posterior, per_action_efe, best_idx
 
     def seed_posterior(self, posterior: list[list[float]]) -> bool:
         if len(posterior) != len(self._model.num_states):
@@ -426,6 +469,10 @@ class FakeEngine:
     @property
     def actions(self) -> tuple[str, ...]:
         return self._actions
+
+    @property
+    def policy_len(self) -> int:
+        return 1
 
     def seed_posterior(self, posterior: list[list[float]]) -> bool:
         if len(posterior) != len(self._last_posterior):

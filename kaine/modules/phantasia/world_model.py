@@ -42,6 +42,7 @@ class TrainOutcome:
     steps: int
     aborted: bool = False
     reason: str = ""
+    learned: bool = False
 
 
 class CheckpointMismatchError(RuntimeError):
@@ -166,7 +167,8 @@ class FakeWorldModel:
             return TrainOutcome(loss=float("nan"), steps=n, aborted=True, reason="non-finite loss")
         # "Learning": nudge decay toward 0.5 (a no-op-ish stable point).
         self._decay = snapshot_decay + 0.01 * (0.5 - snapshot_decay)
-        return TrainOutcome(loss=float(loss), steps=n, aborted=False)
+        # FakeWorldModel has no learned parameters; this is a deterministic stub.
+        return TrainOutcome(loss=float(loss), steps=n, aborted=False, learned=False)
 
     def reset_state(self) -> None:
         self._state = [0.0] * self.obs_dim
@@ -284,7 +286,7 @@ class DreamerV3WorldModel:
                 loss=result.loss, steps=0, aborted=True, reason=result.reason
             )
         self._params = result.params
-        return TrainOutcome(loss=float(result.loss), steps=1, aborted=False)
+        return TrainOutcome(loss=float(result.loss), steps=1, aborted=False, learned=True)
 
     def reset_state(self) -> None:
         self._state = self._rssm.initial_state(self._cfg)

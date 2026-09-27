@@ -165,7 +165,7 @@ class Nous(BaseModule):
             {
                 "policy": result.action,
                 "expected_free_energy": efe,
-                "horizon": 1,
+                "horizon": getattr(self._engine, "policy_len", 1),
             },
             salience=self._baseline_salience,
         )

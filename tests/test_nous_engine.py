@@ -61,6 +61,11 @@ def test_belief_update_changes_posterior():
     assert r2.posterior[1][2] == pytest.approx(0.8)
 
 
+def test_fake_engine_exposes_policy_len():
+    fake = FakeEngine()
+    assert fake.policy_len == 1
+
+
 def test_policy_selection_returns_lowest_efe():
     # Action index 2 has the lowest EFE -> request_speak.
     fake = FakeEngine(policy_efe=[0.9, 0.5, 0.05, 0.7])
@@ -153,6 +158,63 @@ def test_real_pymdp_engine_timeout_guard_returns_last_posterior():
         # Last posterior fallback is the uniform/initial one (well-formed).
         assert len(result.posterior) == 4
         assert result.action == engine.actions[0]
+    finally:
+        engine.close()
+
+
+@pytestmark_real
+def test_real_pymdp_engine_exposes_policy_len():
+    from kaine.modules.nous.engine import PymdpEngine
+
+    engine = PymdpEngine(policy_len=2)
+    try:
+        assert engine.policy_len == 2
+    finally:
+        engine.close()
+
+
+@pytestmark_real
+def test_real_pymdp_engine_per_action_efe_at_horizon_two():
+    import numpy as np
+
+    from kaine.modules.nous.engine import PymdpEngine, encode_snapshot_default
+    from kaine.modules.nous.generative_model import ACTION_FACTOR
+
+    engine = PymdpEngine(policy_len=2, efe_timeout_ms=10_000.0)
+    try:
+        # Warm-up inference to populate a posterior and cache the policy matrix.
+        engine.infer(encode_snapshot_default(engine.model))
+
+        policies = engine._policies
+        assert policies.ndim == 3
+        first = policies[:, 0, ACTION_FACTOR]
+        n_policies = len(first)
+
+        # Craft a neg-EFE vector where the best policy starts with action 2.
+        candidates = np.where(first == 2)[0]
+        assert len(candidates) > 0, "no policies start with action 2"
+        target = int(candidates[0])
+        # EFE = -neg_efe, so the best (lowest-EFE) policy has the HIGHEST neg-EFE.
+        neg_efe = np.full(n_policies, -5.0, dtype=np.float32)
+        neg_efe[target] = 10.0
+
+        def _fake_cycle(obs_batched):
+            import jax.numpy as jnp
+            qs = [jnp.array(p) for p in engine._last_posterior]
+            return qs, jnp.array(neg_efe)
+
+        engine._jit_cycle = _fake_cycle
+        result = engine.infer(encode_snapshot_default(engine.model))
+
+        assert result.action_index == 2
+        assert result.action == engine.actions[2]
+
+        raw_efe = [-float(x) for x in neg_efe]
+        expected = [float("inf")] * engine.model.num_actions
+        for p_idx, a in enumerate(first):
+            if 0 <= a < engine.model.num_actions and raw_efe[p_idx] < expected[a]:
+                expected[a] = raw_efe[p_idx]
+        assert result.policy_efe == pytest.approx(expected, nan_ok=True)
     finally:
         engine.close()
 

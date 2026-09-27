@@ -18,6 +18,7 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.phantasia.module import Phantasia
+from kaine.modules.phantasia.world_model import FakeWorldModel, TrainOutcome
 
 
 @pytest.fixture
@@ -290,6 +291,54 @@ async def test_training_enabled_runs_in_memory(bus: AsyncBus):
         assert outcome is not None
         assert outcome.steps == 5
         assert not outcome.aborted
+    finally:
+        await ph.shutdown()
+
+
+class _LearningFakeWorldModel(FakeWorldModel):
+    """Fake backend that claims to have updated learned parameters."""
+
+    def train(self, trajectory):
+        outcome = super().train(trajectory)
+        return TrainOutcome(
+            loss=outcome.loss,
+            steps=outcome.steps,
+            aborted=outcome.aborted,
+            reason=outcome.reason,
+            learned=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_fake_backend_does_not_count_as_consolidation(bus: AsyncBus):
+    ph = Phantasia(bus, backend="fake", training_enabled=True)
+    await ph.initialize()
+    try:
+        for i in range(5):
+            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+        outcome = ph.train_now()
+        assert outcome is not None
+        assert not outcome.learned
+
+        before = ph._successful_training_passes
+        await ph._maybe_train()
+        assert ph._successful_training_passes == before
+    finally:
+        await ph.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_learned_pass_counts_as_consolidation(bus: AsyncBus):
+    ph = Phantasia(bus, backend="fake", training_enabled=True)
+    await ph.initialize()
+    try:
+        ph._wm = _LearningFakeWorldModel(obs_dim=ph._wm.obs_dim)
+        for i in range(5):
+            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+        before = ph._successful_training_passes
+        ph._save_weights = lambda reason: None
+        await ph._maybe_train()
+        assert ph._successful_training_passes == before + 1
     finally:
         await ph.shutdown()
 
