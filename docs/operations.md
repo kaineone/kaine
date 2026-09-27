@@ -604,6 +604,13 @@ research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
 database and collection prefixes, so the two beings never share state.  Every
 completed step is appended to `steps.jsonl`.
 
+Nous is added at the fifth viewing. From that point on it chooses among its
+actions and learns what follows each one, and its learned transition model is
+preserved in each viewing's bundle, so later viewings resume from what it has
+learned. No module realizes Nous's intents, so what it learns is how its own
+intent events register in the workspace; its choices are recorded, not acted
+on.
+
 If a step ends for any reason other than a successful preservation, the
 runner records it as `failed:<reason>` and stops.  It never retries on its own
 and never deletes a preservation, state directory, or line.  A step with

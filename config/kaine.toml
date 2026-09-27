@@ -501,6 +501,17 @@ alert_salience = 0.8
 # efe_timeout_ms (Nous returns the last posterior rather than blocking the
 # cycle). Kept modest so a timeout nudges attention without dominating it.
 timeout_salience = 0.3
+# How much perceptual state is expected to persist across actions (0 = uniform,
+# 1 = identity). The rest is spread uniformly, so Nous starts out uncertain
+# about what any action does.
+# transition_persistence = 0.8
+# Confidence of the Dirichlet prior over perceptual transitions. Low values let
+# a few experiences dominate; high values keep the initial broad belief longer.
+# transition_concentration = 1.0
+# Upper bound on the total Dirichlet concentration any learned transition
+# column can hold. Caps how much evidence Nous keeps, so it stays able to
+# learn from change. Must be greater than transition_concentration.
+# transition_max_concentration = 1000.0
 
 [embedding]
 # One shared text embedder for Mnemos, Empatheia, Hypnos and the

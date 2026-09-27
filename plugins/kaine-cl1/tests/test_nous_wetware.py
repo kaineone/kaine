@@ -77,6 +77,42 @@ class FakeEngine:
         self.closed = True
 
 
+def test_drive_mode_records_taken_proposal():
+    """When drive mode overrides the silicon action, the inner engine is told."""
+    recorded = []
+
+    class StubInner:
+        actions = ("a", "b", "c", "d")
+
+        def step(self, snapshot):
+            return FakeResult(
+                posterior=[[1.0]],
+                policy_efe=[0.0, 1.0, 2.0, 3.0],
+                action_index=0,
+                action="a",
+            )
+
+        def record_taken_action(self, action_index):
+            recorded.append(action_index)
+
+    class StubBroker:
+        def exchange(self, module, requests, tag):
+            # Tissue spikes only in the channels for action 2, overriding the
+            # silicon choice of action 0.
+            spikes = [
+                types.SimpleNamespace(channel=ch)
+                for ch in territory.channels[:-2][4:6]
+            ]
+            return TerritoryObservation(tag=tag, spikes=spikes)
+
+    territory = ChannelTerritory(module="nous", channels=tuple(range(10)))
+    engine = WetwarePolicyEngine(StubInner(), StubBroker(), territory, mode="drive")
+    result = engine.step(None)
+    assert recorded == [2]
+    assert result.action_index == 2
+    assert result.action == "c"
+
+
 class FakeBroker:
     def __init__(self, spike_channels=None):
         self.calls = []

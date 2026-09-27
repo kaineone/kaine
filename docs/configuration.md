@@ -400,6 +400,9 @@ The complexity envelope `factors * max_states_per_factor * actions * planning_ho
 | `actions` | integer | `4` | Action space size: `no_op`, `request_think`, `request_speak`, `request_maintenance`. |
 | `planning_horizon` | integer | `1` | EFE planning horizon (steps). Higher values increase planning cost quadratically. |
 | `efe_timeout_ms` | float | `250.0` | Hard timeout for one EFE planning pass. On overrun, returns the last posterior and publishes `nous.timeout`. Must stay below one cycle period (~300 ms). |
+| `transition_persistence` | float | `0.8` | Dirichlet prior weight for the self-transition of each perceptual factor under every action. |
+| `transition_concentration` | float | `1.0` | Total prior concentration for each perceptual-factor transition. Lower values leave the model more uncertain and more open to learning from evidence. |
+| `transition_max_concentration` | float | `1000.0` | Upper bound on the evidence held in any perceptual transition column. A larger column is rescaled to this total with its proportions kept, so the being stays able to learn from change. |
 | `baseline_salience` | float | `0.4` | Salience of routine belief-update publications. |
 | `alert_salience` | float | `0.8` | Salience when EFE selects a non-trivial policy or a timeout occurs. |
 

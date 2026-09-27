@@ -931,6 +931,10 @@ def make_nous(
         "actions",
         "planning_horizon",
         "efe_timeout_ms",
+        # Generative-model transition prior.
+        "transition_persistence",
+        "transition_concentration",
+        "transition_max_concentration",
         # Module knobs.
         "baseline_salience",
         "alert_salience",
@@ -943,6 +947,9 @@ def make_nous(
     actions = int(cfg.pop("actions", 4))
     horizon = int(cfg.pop("planning_horizon", 1))
     efe_timeout_ms = float(cfg.pop("efe_timeout_ms", 250.0))
+    transition_persistence = float(cfg.pop("transition_persistence", 0.8))
+    transition_concentration = float(cfg.pop("transition_concentration", 1.0))
+    transition_max_concentration = float(cfg.pop("transition_max_concentration", 1000.0))
 
     if factors < 1 or max_states < 1 or actions < 1 or horizon < 1:
         raise ConfigurationError(
@@ -967,7 +974,12 @@ def make_nous(
 
     # Build the engine eagerly so a misconfigured envelope / missing reasoning
     # extra fails loudly at boot rather than mid-cycle.
-    model = build_generative_model(max_states_per_factor=max_states)
+    model = build_generative_model(
+        max_states_per_factor=max_states,
+        persistence=transition_persistence,
+        concentration=transition_concentration,
+        transition_max_concentration=transition_max_concentration,
+    )
     engine = PymdpEngine(model, efe_timeout_ms=efe_timeout_ms, policy_len=horizon)
 
     # The wrapper receives the engine KAINE built from [nous], so a plugin can

@@ -198,9 +198,10 @@ def test_real_pymdp_engine_per_action_efe_at_horizon_two():
         neg_efe = np.full(n_policies, -5.0, dtype=np.float32)
         neg_efe[target] = 10.0
 
-        def _fake_cycle(obs_batched):
+        def _fake_cycle(agent, obs_batched, prior):
             import jax.numpy as jnp
-            qs = [jnp.array(p) for p in engine._last_posterior]
+            # Same shape as the real cycle's beliefs: (batch, time, states).
+            qs = [jnp.array(p)[None, None, :] for p in engine._last_posterior]
             return qs, jnp.array(neg_efe)
 
         engine._jit_cycle = _fake_cycle

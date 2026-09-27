@@ -44,12 +44,12 @@ The encoder (`generative_model.encode_snapshot`) reads the snapshot's most-salie
 | Stream | Event type | Key payload fields | Salience |
 |---|---|---|---|
 | `nous.out` | `nous.belief` | `statement` (dominant latent label), `kind="belief"`, `frequency` (posterior max), `confidence` (1 − normalised entropy) | `alert_salience` when confidence ≥ 0.75, else `baseline_salience` |
-| `nous.out` | `nous.policy` | `policy` (action name), `expected_free_energy` (float), `horizon=1` | `baseline_salience` |
+| `nous.out` | `nous.policy` | `policy` (action name), `expected_free_energy` (float), `horizon`, `param_info_gain` | `baseline_salience` |
 | `nous.out` | `intent.act` | `kind` (`"think"` or `"speak"`), `about` (action name) | `baseline_salience` |
 | `nous.out` | `nous.timeout` | `elapsed_ms`, `num_factors`, `num_actions` | `timeout_salience` (0.3) |
 | `nous.out` | `nous.error` | `error_reason`, `elapsed_ms`, `num_factors`, `num_actions` | `timeout_salience` (0.3) |
 
-`no_op` and `request_maintenance` actions produce no `intent.act`. `request_think` maps to `kind="think"` (epistemic; no Praxis whitelist required). `request_speak` maps to `kind="speak"` (communicative; subject to Praxis). `nous.error` is published on a non-timeout inference crash: the engine returns stale priors and sets `EngineResult.error=True`, and `nous.belief`/`nous.policy` are skipped for that cycle so stale priors are never re-broadcast as a fresh computation — distinct from `nous.timeout`, which still publishes belief/policy from the last good posterior.
+`no_op` and `request_maintenance` actions produce no `intent.act`. `request_think` maps to `kind="think"` and `request_speak` to `kind="speak"`. No module realizes these intents: they are published on `nous.out`, which Volition, Praxis and Lingua do not read, and Hypnos counts them as unrealizable. A choice therefore reaches the world only through its own intent event, which re-enters the workspace like any other event, and that is what Nous can learn about. `nous.error` is published on a non-timeout inference crash: the engine keeps the carried belief, sets `EngineResult.error=True`, and skips `nous.belief`/`nous.policy` for that cycle so the unchanged prior is never re-broadcast as a fresh computation. No learning occurs on a timed-out or failed step; the next step resumes from the last carried posterior.
 
 ---
 
@@ -64,6 +64,9 @@ All keys live under `[nous]` in `config/kaine.toml`. See also [`../configuration
 | `actions` | `4` | Size of the action space |
 | `planning_horizon` | `1` | Policy length (single-step in v1) |
 | `efe_timeout_ms` | `250` | Hard EFE planning deadline (ms); on overrun returns last posterior |
+| `transition_persistence` | `0.8` | Dirichlet prior weight favouring perceptual-factor persistence |
+| `transition_concentration` | `1.0` | Dirichlet prior confidence (low = broad initial uncertainty) |
+| `transition_max_concentration` | `1000.0` | Upper bound on the evidence in any transition column; larger columns are rescaled, so the being stays able to learn from change |
 | `baseline_salience` | `0.4` | Default event salience |
 | `alert_salience` | `0.8` | Salience when belief confidence ≥ 0.75 |
 | `timeout_salience` | `0.3` | Salience for `nous.timeout` and `nous.error` diagnostics |
@@ -82,32 +85,38 @@ The model (`kaine/modules/nous/generative_model.py`) is a compact **four-factor,
 
 | Factor index | Name | States | Notes |
 |---|---|---|---|
-| 0 | `action_latent` | `no_op`, `request_think`, `request_speak`, `request_maintenance` | Controllable; B-matrix is deterministic (action → state) |
-| 1 | `salience_band` | `low`, `medium`, `high` | Uncontrollable; identity transition |
-| 2 | `affect_quadrant` | `calm_pleasant`, `excited_pleasant`, `calm_unpleasant`, `excited_unpleasant` | Derived from Thymos VAD |
-| 3 | `event_cluster` | `other`, `perception`, `affect`, `self` | Dominant event source bucketed |
+| 0 | `action_latent` | `no_op`, `request_think`, `request_speak`, `request_maintenance` | Controllable; the chosen action becomes the next action-latent state |
+| 1 | `salience_band` | `low`, `medium`, `high` | Transition beliefs are action-dependent and learned |
+| 2 | `affect_quadrant` | `calm_pleasant`, `excited_pleasant`, `calm_unpleasant`, `excited_unpleasant` | Derived from Thymos VAD; transition beliefs are action-dependent and learned |
+| 3 | `event_cluster` | `other`, `perception`, `affect`, `self` | Dominant event source bucketed; transition beliefs are action-dependent and learned |
 
-One observation modality per factor (square model). Likelihood **A**: identity for the action factor; soft-diagonal (confidence 0.9 by default) for perceptual factors. Preferences **C**: mildly prefer `salience_high` observation. Prior **D**: uniform over perceptual factors; `no_op` prior on the action latent. The online-growth seam (`register_event_cluster`) allows adding event-cluster states without growing factor count.
+One observation modality per factor (square model). Likelihood **A**: identity for the action factor; soft-diagonal (confidence 0.9 by default) for perceptual factors. Transition beliefs **B**: every perceptual factor has a separate Dirichlet prior over its next state for each action. At boot all perceptual factors share the same broad, uncertain prior: `transition_persistence` (default 0.8) weights the diagonal, and `transition_concentration` (default 1.0) keeps the prior weak. No action's effect is written into the model. After each step, the engine updates the Dirichlet belief for the action taken using the inferred pre-step and post-step states. Preferences **C**: mildly prefer `salience_high` observation, plus expected information gain about the still-uncertain transition beliefs. Because EFE includes that parameter information gain, Nous samples actions whose consequences it is less sure of; as its model sharpens, the salience preference pulls selection toward actions that bring salient observations. A fresh being samples its actions; a mature being's choices reflect what it has learned. Belief carries over: each step's prior is the previous posterior propagated through the learned transition beliefs under the action taken, not a reset to **D**. The initial **D** is uniform over perceptual factors with a `no_op` prior on the action latent; after the first step the posterior becomes the starting point for the next. The online-growth seam (`register_event_cluster`) allows adding event-cluster states without growing factor count.
 
 ### Inference cycle (engine)
 
 `kaine/modules/nous/engine.py` hosts `PymdpEngine`, which wraps a `pymdp.agent.Agent` (JAX):
 
 1. **Encode** — `encode_snapshot(snapshot, model)` maps the workspace broadcast to four integer observation indices.
-2. **JIT-compiled cycle** — a `jax.jit`'d function runs `Agent.infer_states` (variational message passing) then `Agent.infer_policies` (EFE per policy) in one traced call. Plain dispatch cost is ~130 ms/call; JIT reduces this to well under 1 ms on CPU.
-3. **Timeout guard** — the `_infer` call is submitted to a `ThreadPoolExecutor(max_workers=1)` with a deadline of `efe_timeout_ms` (250 ms default). On `FuturesTimeout`, the engine returns the last good posterior, sets `EngineResult.timed_out=True`, and the module publishes `nous.timeout` then continues normally.
-4. **Action selection** — the policy with the lowest EFE is selected; `EngineResult.action` is the string name.
+2. **Carry prior in** — the step's prior is the posterior carried from the previous step, propagated through the learned transition beliefs under the action that was taken (the initial prior **D** is used only on the first step). The action factor's observation is the action actually taken, and its transitions are held fixed.
+3. **JIT-compiled cycle** — a `jax.jit`'d function runs `Agent.infer_states` (variational message passing) then `Agent.infer_policies` (EFE per policy) in one traced call. A jitted step takes well under one millisecond on CPU.
+4. **Learning update** — inside the same timeout guard, the engine updates the Dirichlet transition beliefs (**pB**) for the action taken using the inferred pre-step and post-step states. A timed-out or failed step learns nothing and keeps the carried belief.
+5. **Timeout guard** — the `_infer` call is submitted to a `ThreadPoolExecutor(max_workers=1)` with a deadline of `efe_timeout_ms` (250 ms default). On `FuturesTimeout`, the engine returns the last good posterior, sets `EngineResult.timed_out=True`, and the module publishes `nous.timeout` then continues normally.
+6. **Action selection** — per-action EFE is the best EFE among the policies beginning with that action; the overall lowest-EFE policy is selected and `EngineResult.action` is its first action.
 
 ```mermaid
 flowchart TD
     WS[WorkspaceSnapshot] --> ENC[encode_snapshot]
+    PRIOR[carried posterior\n+ learned transitions\nunder last action] --> JIT
     ENC --> |obs indices| JIT[jax.jit cycle\ninfer_states + infer_policies]
-    JIT --> |posterior + EFE| SEL[lowest-EFE action]
+    JIT --> |posterior + EFE| LEARN[update learned transitions\nfor action taken]
+    LEARN --> SEL[lowest-EFE first action]
     SEL --> BELIEF[nous.belief]
     SEL --> POLICY[nous.policy]
     SEL --> INTENT[intent.act\nif speak/think]
-    JIT -- timeout --> LAST[return last posterior\nnous.timeout]
+    JIT -- timeout --> LAST[return last posterior\nlearn nothing\nnous.timeout]
 ```
+
+`nous.policy` reports the chosen action, the planning horizon, the per-policy expected free energy, and `param_info_gain`, which is true when expected free energy includes the information to be gained about the learned transitions.
 
 ### `nous.belief` contract (preserved, reinterpreted)
 
@@ -154,9 +163,9 @@ module = Nous(bus, engine=FakeEngine())
 
 ---
 
-## Zero-persistence note
+## Serialization and learned state
 
-`Nous.serialize()` emits only the last action label and numeric posteriors (no event content, no raw workspace data). The posteriors enable `NousMergeStrategy` to pick the lower-entropy fork on a lifecycle merge. No text or sense data is ever written to disk by Nous.
+`Nous.serialize()` includes a `learned` object that contains the Dirichlet transition-belief parameters and the carried posterior for every hidden-state factor. This learned state is preserved with the being and revived on its next boot, so each viewing resumes from the previous posterior rather than restarting from the initial prior. A snapshot that is missing the learned block starts from the prior and logs that fact. The posteriors still enable `NousMergeStrategy` to pick the lower-entropy fork on a lifecycle merge. No event content, workspace data, or text is ever written to disk by Nous; the serialized state is numeric structure only.
 
 ---
 
