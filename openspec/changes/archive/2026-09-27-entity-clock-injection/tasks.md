@@ -9,4 +9,4 @@
 ## 2. Verification
 
 - [x] 2.1 Tests at scale 1.0 (unchanged) and 0.5 (dilated) for each timer; Soma's subjective latency.
-- [ ] 2.2 Offline suite green; `openspec validate entity-clock-injection --strict`.
+- [x] 2.2 Offline suite green; `openspec validate entity-clock-injection --strict`.

@@ -17,4 +17,4 @@
 ## 4. Docs and verification
 
 - [x] 4.1 Mnemos, Empatheia, Hypnos, configuration, deployment-tiers, hardware and getting-started docs.
-- [ ] 4.2 Offline suite green; `openspec validate numpy-text-embedder --strict`.
+- [x] 4.2 Offline suite green; `openspec validate numpy-text-embedder --strict`.

@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change phantasia-dreamerv3. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Vendored danijar/dreamerv3 RSSM world model
 Phantasia SHALL vendor danijar/dreamerv3 under `external/dreamerv3/` at a pinned
 upstream commit hash recorded in `external/dreamerv3/UPSTREAM`, with an SPDX MIT
@@ -208,3 +210,9 @@ cognitive state per CAL Article 4.2(b).
 - **THEN** the bundle contains the checkpoint and the manifest inventory and
   restore notes reference it
 
+### Requirement: Only a pass that learned counts as consolidation
+A training pass SHALL report whether it updated learned parameters. Phantasia SHALL count a pass toward `successful_training_passes`, and save weights after it, only when it did. A world model that does not learn (the fake world model) SHALL never produce consolidation evidence.
+
+#### Scenario: The fake world model trains
+- **WHEN** Phantasia runs a sleep training pass on the fake world model
+- **THEN** `successful_training_passes` does not increase
