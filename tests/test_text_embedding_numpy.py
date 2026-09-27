@@ -614,6 +614,8 @@ def minilm_dir() -> Path:
     try:
         model_dir = resolve_model_dir("sentence-transformers/all-MiniLM-L6-v2")
     except FileNotFoundError:
+        # The model is not in the local cache: model_dir stays None and the
+        # test is skipped just below.
         pass
     if model_dir is None:
         pytest.skip("MiniLM model not cached")
