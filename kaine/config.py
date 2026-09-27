@@ -226,6 +226,19 @@ def validate_config_shape(config: dict[str, Any]) -> None:
     expected type and the actual type; the message never includes the
     offending value.
     """
+    embedding = config.get("embedding")
+    if embedding is not None:
+        if not isinstance(embedding, dict):
+            raise ConfigShapeError(
+                f"embedding expected table, got {type(embedding).__name__}"
+            )
+        for key in ("backend", "model_id", "device", "model_path"):
+            value = embedding.get(key)
+            if value is not None and not isinstance(value, str):
+                raise ConfigShapeError(
+                    f"embedding.{key} expected string, got {type(value).__name__}"
+                )
+
     modules = config.get("modules")
     if modules is not None:
         if not isinstance(modules, dict):

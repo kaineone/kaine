@@ -79,7 +79,7 @@ def test_propose_devices_multi_gpu():
     d = propose_device_assignments(_host(cuda=2))
     assert d["hypnos.voice_alignment.training_device"] == "cuda:0"
     assert d["topos.device"] == "cuda:1"
-    assert d["mnemos.device"] == "cpu"
+    assert d["embedding.device"] == "cpu"
     assert d["audition.emotion_device"] == "cpu"
 
 
@@ -87,7 +87,7 @@ def test_propose_devices_single_gpu():
     d = propose_device_assignments(_host(cuda=1))
     assert d["hypnos.voice_alignment.training_device"] == "cuda:0"
     assert d["topos.device"] == "cuda:0"
-    assert d["mnemos.device"] == "cpu"
+    assert d["embedding.device"] == "cpu"
 
 
 def test_propose_devices_cpu_only():

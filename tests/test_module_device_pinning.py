@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from kaine.boot import make_audition, make_mnemos, make_topos
+from kaine.boot import make_audition, make_topos
 from kaine.modules.audition.module import Audition
 from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
-from kaine.modules.mnemos.module import Mnemos
 from kaine.modules.topos.module import Topos
+from kaine.text_embedding import make_text_embedder
 from tests.systems._harness import SubsystemHarness
 
 
@@ -38,23 +38,12 @@ async def test_topos_factory_forwards_cuda_index():
 
 
 @pytest.mark.asyncio
-async def test_mnemos_factory_forwards_device_to_embedder():
-    async with SubsystemHarness() as h:
-        mnemos = make_mnemos(
-            h.bus,
-            {
-                "backend": "inmemory",
-                "collection_prefix": "mnemos_",
-                "short_term_capacity": 8,
-                "recall_top_k": 3,
-                "device": "cpu",
-                "embedder_model_id": "sentence-transformers/all-MiniLM-L6-v2",
-            },
-        )
-        assert isinstance(mnemos, Mnemos)
-        # Embedder is the default SentenceTransformerEmbedder; its
-        # preference is set but the model hasn't loaded.
-        assert mnemos._core._embedder._device_preference == "cpu"
+async def test_make_text_embedder_forwards_device_to_sentence_transformer():
+    embedder = make_text_embedder(
+        {"embedding": {"backend": "sentence_transformers", "device": "cpu"}}
+    )
+    # Construction only — the model isn't loaded yet.
+    assert embedder._device_preference == "cpu"
 
 
 @pytest.mark.asyncio

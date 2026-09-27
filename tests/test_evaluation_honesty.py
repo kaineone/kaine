@@ -37,6 +37,15 @@ from kaine.nexus.health import DEGRADED, DOWN, UP, nous_health_probe
 # ---------------------------------------------------------------------------
 
 
+class _FailingEmbedder:
+    def __init__(self) -> None:
+        self.load_called = False
+
+    async def load(self) -> None:
+        self.load_called = True
+        raise RuntimeError("forced load failure")
+
+
 def _event(source: str, type_: str, payload: dict) -> Event:
     return Event(
         source=source,
@@ -233,10 +242,10 @@ def test_require_semantic_embedder_can_be_set_true():
     assert cfg.require_semantic_embedder is True
 
 
-def test_require_semantic_embedder_raises_on_fallback(tmp_path):
-    """When require_semantic_embedder=True and sentence_transformers is
-    unavailable, _embedder_default must raise rather than silently
-    returning HashEmbedder."""
+def test_require_semantic_embedder_raises_on_fallback(tmp_path, monkeypatch):
+    """When require_semantic_embedder=True and make_text_embedder fails,
+    _embedder_default must raise rather than silently returning
+    HashEmbedder."""
     cfg = EvaluationConfig.from_mapping(
         {
             "require_semantic_embedder": True,
@@ -248,24 +257,18 @@ def test_require_semantic_embedder_raises_on_fallback(tmp_path):
     )
     registry = SidecarRegistry(bus=FakeBus(), config=cfg)
 
-    class _AlwaysFail:
-        def __init__(self, *a, **kw):
-            raise RuntimeError("forced failure")
+    def _always_fail(*a, **kw):
+        raise RuntimeError("forced failure")
 
-    # Patch the name in the registry module's namespace — that is what
-    # _embedder_default() resolves when it constructs the semantic embedder.
     import kaine.evaluation.registry as reg_mod
 
-    original_cls = reg_mod.SentenceTransformerTextEmbedder
-    reg_mod.SentenceTransformerTextEmbedder = _AlwaysFail
-    try:
-        with pytest.raises(RuntimeError, match="require_semantic_embedder"):
-            registry._embedder_default()
-    finally:
-        reg_mod.SentenceTransformerTextEmbedder = original_cls
+    monkeypatch.setattr(reg_mod, "make_text_embedder", _always_fail)
+
+    with pytest.raises(RuntimeError, match="require_semantic_embedder"):
+        registry._embedder_default()
 
 
-def test_no_require_semantic_embedder_falls_back_silently(tmp_path, caplog):
+def test_no_require_semantic_embedder_falls_back_silently(tmp_path, caplog, monkeypatch):
     """When require_semantic_embedder=False (default), fallback logs at ERROR
     level but returns HashEmbedder without raising."""
     import logging
@@ -281,23 +284,67 @@ def test_no_require_semantic_embedder_falls_back_silently(tmp_path, caplog):
     )
     registry = SidecarRegistry(bus=FakeBus(), config=cfg)
 
+    def _always_fail(*a, **kw):
+        raise RuntimeError("forced failure")
+
     import kaine.evaluation.registry as reg_mod
-    original_cls = reg_mod.SentenceTransformerTextEmbedder
 
-    class _AlwaysFail:
-        def __init__(self, *a, **kw):
-            raise RuntimeError("forced failure")
+    monkeypatch.setattr(reg_mod, "make_text_embedder", _always_fail)
 
-    reg_mod.SentenceTransformerTextEmbedder = _AlwaysFail
-    try:
-        with caplog.at_level(logging.ERROR, logger="kaine.evaluation.registry"):
-            result = registry._embedder_default()
-        assert isinstance(result, HashEmbedder)
-        assert any("LEXICAL" in r.message for r in caplog.records), (
-            "expected ERROR log mentioning LEXICAL"
-        )
-    finally:
-        reg_mod.SentenceTransformerTextEmbedder = original_cls
+    with caplog.at_level(logging.ERROR, logger="kaine.evaluation.registry"):
+        result = registry._embedder_default()
+    assert isinstance(result, HashEmbedder)
+    assert any("LEXICAL" in r.message for r in caplog.records), (
+        "expected ERROR log mentioning LEXICAL"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sidecar_resolve_embedder_fail_closed(tmp_path):
+    """An injected embedder whose load() raises must fail registry.start()
+    when require_semantic_embedder=True."""
+    embedder = _FailingEmbedder()
+    cfg = EvaluationConfig.from_mapping(
+        {
+            "enabled": True,
+            "require_semantic_embedder": True,
+            "paths": {
+                "trajectory_dir": str(tmp_path / "traj"),
+                "evaluation_logs": str(tmp_path / "eval"),
+            },
+        }
+    )
+    registry = SidecarRegistry(bus=FakeBus(), config=cfg, embedder=embedder)
+    registry.build = lambda: None  # isolate embedder resolution from observers
+
+    with pytest.raises(RuntimeError, match="require_semantic_embedder"):
+        await registry.start()
+
+    assert embedder.load_called is True
+
+
+@pytest.mark.asyncio
+async def test_sidecar_resolve_embedder_fallback(tmp_path):
+    """An injected embedder whose load() raises is replaced by HashEmbedder
+    when require_semantic_embedder=False."""
+    embedder = _FailingEmbedder()
+    cfg = EvaluationConfig.from_mapping(
+        {
+            "enabled": True,
+            "require_semantic_embedder": False,
+            "paths": {
+                "trajectory_dir": str(tmp_path / "traj"),
+                "evaluation_logs": str(tmp_path / "eval"),
+            },
+        }
+    )
+    registry = SidecarRegistry(bus=FakeBus(), config=cfg, embedder=embedder)
+    registry.build = lambda: None  # isolate embedder resolution from observers
+
+    await registry.start()
+
+    assert embedder.load_called is True
+    assert isinstance(registry._embedder_default(), HashEmbedder)
 
 
 # ---------------------------------------------------------------------------

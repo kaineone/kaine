@@ -637,7 +637,10 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
     _put("lingua", lingua_model_id)
     _put("evaluation_chat", eval_chat_model_id)
     _put("topos_encoder", (config.get("topos") or {}).get("encoder_model_id"))
-    _put("mnemos_embedder", (config.get("mnemos") or {}).get("embedder_model_id"))
+    from kaine.text_embedding import resolve_embedding_config
+    cfg = resolve_embedding_config(config)
+    _put("embedding_backend", cfg["backend"])
+    _put("embedding_model_id", cfg["model_id"])
     audition = config.get("audition") or {}
     _put("audition_stt", audition.get("stt_model"))
     _put("audition_emotion", audition.get("emotion_model_id"))
@@ -1441,6 +1444,8 @@ async def _boot_and_run(
     sidecar: SidecarRegistry | None = None
     research_active = research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
     if eval_cfg.enabled or research_active:
+        from kaine.boot import shared_embedder
+
         sidecar = SidecarRegistry(
             bus=bus,
             config=eval_cfg,
@@ -1449,6 +1454,7 @@ async def _boot_and_run(
             sleep_state_provider=_sleep_state_factory(registry),
             memory_source=_memory_source_factory(registry),
             cognitive_query_client=_cognitive_query_client_factory(registry, eval_cfg),
+            embedder=shared_embedder(registry, kaine_config),
         )
         try:
             await sidecar.start()

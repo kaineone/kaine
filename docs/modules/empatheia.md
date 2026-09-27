@@ -135,7 +135,7 @@ flowchart TD
 
 **`InMemoryAgentStore`**: `dict[str, AgentModel]` in process. Fast; no Qdrant; lossless `serialize()`/`deserialize()` via JSON.
 
-**`QdrantAgentStore`**: Uses the same Qdrant instance as Mnemos. Profile JSON is stored in the point payload under `"profile_json"`, keyed by `agent_id`. A behavioral summary embedding (from `all-MiniLM-L6-v2`) is stored alongside for future similarity search. A local `dict` cache avoids Qdrant roundtrips on hot-path `get()`. `serialize()` snapshots the local cache.
+**`QdrantAgentStore`**: Uses the same Qdrant instance as Mnemos. Profile JSON is stored in the point payload under `"profile_json"`, keyed by `agent_id`. A behavioral summary embedding from the shared `[embedding]` embedder (`all-MiniLM-L6-v2`, 384-dim) is stored alongside for future similarity search. A local `dict` cache avoids Qdrant roundtrips on hot-path `get()`. `serialize()` snapshots the local cache.
 
 ### Fork/merge (`EmpatheiaMergeStrategy`)
 

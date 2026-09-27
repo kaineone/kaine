@@ -7,15 +7,18 @@ from a retired phone to a datacenter, **trading capability for reach rather than
 changing identity**; today every tier still carries a PyTorch runtime. This
 document is the honest capability matrix: what each tier can and cannot do today.
 
-The portability cliff is the **PyTorch / transformers / sentence-transformers /
-ncps runtime**. Base dependencies include `torch`, `transformers`,
-`sentence-transformers`, `ncps`, `qdrant-client`, and `pynvml`, so a plain
-`pip install` of KAINE fails on 32-bit ARM and on Termux (there are no torch
-wheels for Android/Termux or 32-bit ARM). The `portability-program` change is
-staged to remove that cliff — Phase 2 introduces a torch-free core, Phase 3
-brings Termux and JAX-free reasoning, and Phase 4 adds residency and multi-node
-support. The tier ladder describes the intended backend set once those phases
-land; today's shipped backends are listed in the staging section.
+The portability cliff is the **PyTorch / transformers / JAX runtime**. KAINE's base
+dependencies are `redis`, `pydantic`, `psutil`, `numpy`, `httpx` and `cryptography`;
+torch, transformers, ncps, qdrant-client, sentence-transformers and pynvml live in
+extras (`core`, `vision`, `memory`, `nvidia`) that a module needs only on the backends
+that use them. Soma and Chronos default to a NumPy CfC and the memory embedder to a
+NumPy MiniLM, so none of them needs torch, except Soma's self-rhythm oscillator
+(used in gestation), which runs on snnTorch. Torch has no wheels for Android/Termux or
+32-bit ARM, so those hosts can run only the modules with torch-free backends. The
+`portability-program` change removes the remaining cliff in phases: Phase 3 brings
+Termux and JAX-free reasoning, and Phase 4 adds residency and multi-node support. The
+tier ladder describes the intended backend set once those phases land; today's shipped
+backends are listed in the staging section.
 
 ## Tier recommendation
 
@@ -105,7 +108,7 @@ shape, naming the problem.
 | **Speech-in (Audition STT)** | optional whisper.cpp-tiny batch (target) | whisper.cpp / faster-whisper (target) | faster-whisper > realtime | > realtime |
 | **Vocal emotion** | ✗ absent | ✗ absent | emotion2vec+ | emotion2vec+ |
 | **Speech-out (Vox TTS)** | ✗ absent | Piper (plain — target) | Chatterbox (expressive) | Chatterbox |
-| **Memory embeddings** | sentence-transformers MiniLM (torch, CPU) — ONNX/static is the Phase-2 target | sentence-transformers MiniLM (torch, CPU) — ONNX/static is the Phase-2 target | sentence-transformers (torch) | sentence-transformers |
+| **Memory embeddings** | NumPy MiniLM (`sentence_transformers` optional) | NumPy MiniLM (`sentence_transformers` optional) | NumPy MiniLM (`sentence_transformers` optional) | NumPy MiniLM (`sentence_transformers` optional) |
 | **Vector store (Mnemos)** | sqlite-vec (in-process) | sqlite-vec (in-process) | Qdrant (server) | Qdrant |
 | **Torch runtime required** | yes (today) — removed in portability-program Phase 2 | yes (today) — removed in portability-program Phase 2 | yes | yes |
 | **Unsupported / disabled by tier** | topos, audition, vox, empatheia, phantasia listed as unsupported; oscillator unsupported | vox listed as unsupported; vocal emotion disabled via `[audition].emotion_model_id = ""` | (none) | (none) |
@@ -123,8 +126,8 @@ Explicit **absences** (stated so a tier is never oversold):
 - **A ≥2B language model does not fit a ~512 MB Tier-0 host.** Tier 0 is a
   symbolic-reasoning + episodic-memory + perception node, not a conversational
   host.
-- **Torch is required wherever memory or vision runs today.** Topos needs it, and Mnemos, Empatheia and Hypnos
-  build sentence-transformers MiniLM embedders. Soma and Chronos do not need it:
+- **Torch is required wherever vision runs today.** Topos needs it. Mnemos, Empatheia and Hypnos
+  use the shared NumPy MiniLM embedder by default and only need torch when `[embedding].backend = "sentence_transformers"`. Soma and Chronos do not need it:
   their CfC networks run on NumPy by default.
 
 ## Per-tier install notes
@@ -135,19 +138,18 @@ when that backend is selected, so you install a tier's extras and no others.
 - **Tier 0 — edge / sensor node.** `llama-cpp-python` (in-process GGUF Lingua)
   and `sqlite-vec` (in-process Mnemos vector store). The tier lists topos,
   audition, vox, empatheia, and phantasia as unsupported, and the oscillator as
-  unsupported. **Torch is still required today**: Mnemos builds a
-  sentence-transformers MiniLM embedder, and Soma/Chronos run torch+ncps CfC
-  networks. A sub-1B GGUF model file. Measured: a full voice turn on a Raspberry
+  unsupported. Mnemos uses the shared NumPy MiniLM embedder; Soma and Chronos
+  default to NumPy CfC networks (their torch+ncps backend remains available). A sub-1B GGUF model file. Measured: a full voice turn on a Raspberry
   Pi Zero 2 W (512 MB) with whisper.cpp tiny.en + SmolLM2-360M + Flite takes
   37–46 s when loading one model at a time. The whisper.cpp-tiny batch STT,
   Piper TTS, ONNX vision, and ONNX/static embeddings backends are staged seams —
   when selected they degrade to their declared fallback.
 - **Tier 1 — embodied CPU agent.** As Tier 0, but keeps Topos on CPU and enables
-  audition. Vox and vocal emotion remain disabled. The intended ONNX MiniLM /
-  ONNX vision / whisper.cpp / Piper backends are staged seams; today the
-  torch-backed sentence-transformers embedder and llama.cpp Lingua run here.
+  audition. Vox and vocal emotion remain disabled. The intended ONNX vision /
+  whisper.cpp / Piper backends are staged seams; today the
+  NumPy MiniLM embedder and llama.cpp Lingua run here.
 - **Tier 2 — workstation (default).** Ollama for Lingua, Qdrant for Mnemos,
-  sentence-transformers (torch), faster-whisper + emotion2vec+ (torch/funasr),
+  shared NumPy MiniLM embedder (`sentence_transformers` optional), faster-whisper + emotion2vec+ (torch/funasr),
   Chatterbox. This is what `pip install -e .` + the first-run wizard provision
   today.
 - **Tier 3 — datacenter / multi-GPU.** The Tier-2 stack; scale up model ids,
@@ -160,8 +162,8 @@ when that backend is selected, so you install a tier's extras and no others.
 Shipped today: the backend-selection framework, Tier-2-preserving defaults, the
 `llama.cpp`/GGUF Lingua backend, the `sqlite-vec` Mnemos backend, the four tier
 profiles, the host probe, and a NumPy CfC for Soma and Chronos (the default;
-their torch+ncps backend remains available). The memory modules still use
-torch-backed sentence-transformers MiniLM embedders.
+their torch+ncps backend remains available). The memory modules default to the
+shared NumPy MiniLM embedder (`sentence_transformers` backend remains available).
 
 Not yet built: whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision, ONNX/static
 embeddings, and JAX-free Nous/Phantasia. Those backends are the focus

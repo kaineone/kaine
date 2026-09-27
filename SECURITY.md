@@ -253,8 +253,8 @@ content (CAL 4.3). See `docs/research-participation.md`.
 
 Residual risk: `kaine/modules/topos/encoder.py` calls
 `AutoImageProcessor.from_pretrained` / `AutoModel.from_pretrained`, and
-`kaine/modules/mnemos/embeddings.py` instantiates `SentenceTransformer`.
-These will hit `huggingface.co` on first run if the model is not in the local
+`kaine/text_embedding.py` instantiates `SentenceTransformer` only for the `sentence_transformers` backend.
+These will hit `huggingface.co` if the model is not in the local
 HuggingFace cache (telemetry is suppressed via `HF_HUB_DISABLE_TELEMETRY=1`).
 After the cache is populated they run offline. This is expected setup-time
 behavior (documented in `SETUP.md` first-boot checklist) and the runtime audit

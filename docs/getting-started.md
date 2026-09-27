@@ -148,7 +148,7 @@ modules need:
 | Extra | Unlocks |
 |---|---|
 | `core` | Topos; Soma and Chronos only with `cfc_backend = "torch"` — `torch` and `ncps` |
-| `memory` | Mnemos, Empatheia, Hypnos embedder — `sentence-transformers`, `qdrant-client` |
+| `memory` | Mnemos, Empatheia, Hypnos — `qdrant-client`; `sentence-transformers` only if `[embedding].backend = "sentence_transformers"` |
 | `memory-edge` | Mnemos `backend = "sqlite_vec"` — `sqlite-vec` |
 | `nexus` | `python -m kaine.nexus` — `fastapi`, `uvicorn`, `jinja2` |
 | `nvidia` | Soma GPU telemetry — `pynvml` (warning only if missing) |
@@ -805,31 +805,28 @@ class today; all of them still require PyTorch. See
 [docs/deployment-tiers.md](deployment-tiers.md) for the full tier definitions.
 
 - **Tier 0 — sensor node (`tier0.toml`).** Targets ~512 MB-class SBCs and
-  similar low-RAM hosts, but today it still depends on torch because Mnemos
-  builds a sentence-transformers MiniLM embedder. Soma and Chronos run their CfC
+  similar low-RAM hosts. Mnemos uses the shared NumPy MiniLM embedder; Soma and Chronos run their CfC
   networks on NumPy by default. The profile disables Topos, Audition,
   Vox, Empatheia and Phantasia; it uses the llama.cpp (llama-cpp-python) GGUF
   Lingua backend and sqlite-vec for Mnemos; it disables the oscillator and does
-  not change the subjective clock. Existing backends are llama.cpp Lingua and
-  sqlite-vec Mnemos; whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision,
-  ONNX/static embeddings and JAX-free Nous/Phantasia are not yet built; the
-  NumPy CfC is. Measured on a Raspberry Pi Zero 2 W (512 MB), a full voice turn using
+  not change the subjective clock. Existing backends are llama.cpp Lingua,
+  sqlite-vec Mnemos, and the NumPy CfC; whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision,
+  and JAX-free Nous/Phantasia are not yet built. Measured on a Raspberry Pi Zero 2 W (512 MB), a full voice turn using
   whisper.cpp tiny.en + SmolLM2-360M + Flite takes 37–46 s when loading one
   model at a time. The base install holds no torch or transformers stack; those
   come with the `core`, `memory` and `vision` extras. Soma and Chronos need no
-  torch on their default NumPy CfC backend; the torch-based extras have no wheels
+  torch on their default NumPy CfC backend; the `memory` extra needs no torch on its default NumPy embedder. The torch-based extras have no wheels
   for 32-bit ARM or Termux, and the original ARMv6 Pi Zero cannot host them.
 
 - **Tier 1 — embodied CPU agent (`tier1.toml`).** Runs on 4–8 GB-class CPU
   hosts such as 64-bit SBCs. It uses llama.cpp Lingua, sqlite-vec Mnemos with
-  CPU embeddings, Topos on CPU, and disables Vox and vocal emotion. It still
-  needs torch for the CfC and embedder modules; Nous and Phantasia need JAX
+  the NumPy CPU embedder, Topos on CPU, and disables Vox and vocal emotion. It still
+  needs torch for Topos; Nous and Phantasia need JAX
   for real function because their non-JAX engines are a non-reasoning fake and
   a dev-only non-learning stub.
 
 - **Tier 2/Tier 3 — workstation and server (`tier2.toml`, `tier3.toml`).**
-  Pin Ollama for Lingua and Qdrant for vector memory. They also require torch;
-  these remain the default workstation-class configurations.
+  Pin Ollama for Lingua and Qdrant for vector memory. The shared embedder defaults to NumPy; `sentence-transformers` is used only when `[embedding].backend = "sentence_transformers"`. These remain the default workstation-class configurations.
 
 Cycle processing runs at 10 Hz and conscious access at 3.33 Hz. A cycle
 overrun starts the next tick immediately. Subjective time tracks wall time ×

@@ -12,8 +12,8 @@ Implemented. Ships **disabled** — `[modules].mnemos = false` in `config/kaine.
 
 - Production backend: Qdrant (requires a running Qdrant container and `KAINE_QDRANT_API_KEY`).
 - Test/minimal backend: `InMemoryStorage` (no external services; `backend = "inmemory"`).
-- Embedder: `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~80 MB, CPU-pinned by default).
-- No extra install required for the module itself; sentence-transformers must be present (`.[memory]` or similar).
+- Embedder: shared `[embedding]` instance; default is the NumPy `all-MiniLM-L6-v2` backend (384-dim, ~80 MB, CPU-pinned by default). The `sentence_transformers` torch backend remains available.
+- No extra install required for the module itself; `sentence-transformers` is needed only when `[embedding].backend = "sentence_transformers"`. `qdrant-client` is required for the Qdrant storage backend.
 
 ---
 
@@ -62,8 +62,6 @@ All keys under `[mnemos]` and sub-tables. See also [`../configuration.md`](../co
 | `collection_prefix` | `"mnemos_"` | Qdrant collection name prefix |
 | `short_term_capacity` | `128` | In-process ring-buffer size; overflow consolidates to episodic |
 | `recall_top_k` | `5` | Default `k` for cosine-similarity recall |
-| `embedder_model_id` | `"sentence-transformers/all-MiniLM-L6-v2"` | HuggingFace model for embedding |
-| `device` | `"cpu"` | Embedder device (`"cpu"`, `"cuda"`, etc.) |
 | `baseline_salience` | `0.15` | Default salience |
 | `alert_salience` | `0.6` | Salience on high-affect recall |
 | `recall_on_workspace` | `true` | Whether recall fires against prior memories on each workspace broadcast tick |
@@ -75,7 +73,7 @@ All keys under `[mnemos]` and sub-tables. See also [`../configuration.md`](../co
 | `[mnemos.replay].recency_weight` | `0.3` | Weight on recency in replay score |
 | `[mnemos.replay].redact_content` | `true` | Strip `text` from sidecar/observer replay payloads |
 
-The Qdrant API key is read from `config/secrets.toml` (`[qdrant].api_key`) or the environment; Mnemos refuses to construct `QdrantStorage` without it.
+The embedder is configured in the shared `[embedding]` table; `[mnemos]` rejects `embedder_model_id` and `device` at boot with a message pointing to `[embedding].model_id` / `[embedding].device`. The Qdrant API key is read from `config/secrets.toml` (`[qdrant].api_key`) or the environment; Mnemos refuses to construct `QdrantStorage` without it.
 
 ---
 
@@ -108,9 +106,12 @@ flowchart TD
 
 Recall is throttled by `recall_cooldown_s` (default 5 s) to avoid overwhelming the bus with recall events on every tick.
 
-### Embedder (`SentenceTransformerEmbedder`)
+### Embedder
 
-Wraps `sentence-transformers/all-MiniLM-L6-v2` (384-dim). Loads lazily on first `encode()` call or at `initialize()`. Pins HF telemetry off (`HF_HUB_DISABLE_TELEMETRY=1`). Device is resolved by `kaine.hardware.resolve_device` — falls back gracefully.
+Mnemos uses the shared text embedder configured in `[embedding]`. The shared instance loads once and is reused by Mnemos, Empatheia, Hypnos, and the evaluation sidecar.
+
+- **NumPy backend** (default): `NumpyMiniLMEmbedder` in `kaine/text_embedding_numpy.py`. Runs the `all-MiniLM-L6-v2` BERT encoder from the model's own `model.safetensors`, `config.json`, and `vocab.txt`, with a built-in WordPiece tokenizer, mean pooling, and L2 normalisation. Needs only NumPy (SciPy is used for `erf` when present). Vectors are 384-dimensional, read from the model config. Matches the sentence-transformers backend within 1e-5 on identical token ids.
+- **Torch backend** (optional): `SentenceTransformerTextEmbedder` in `kaine/text_embedding.py`. `kaine/modules/mnemos/embeddings.py` re-exports it as `SentenceTransformerEmbedder` for back-compat.
 
 For tests: `FakeEmbedder` maps text to a deterministic 32-dim blake2b digest vector. No external dependencies.
 
@@ -150,7 +151,8 @@ Synaptic homeostasis (Tononi & Cirelli 2014): scales all in-memory activation ve
 | `kaine/modules/mnemos/module.py` | `Mnemos(BaseModule)` — tick driver, affect consumer, replay API |
 | `kaine/modules/mnemos/memory.py` | `MnemosCore` (store/recall/consolidate), `StoredMemory`, `RecallSummary`, `EmotionalRetriggerHook` |
 | `kaine/modules/mnemos/storage.py` | `MemoryStorage` protocol, `QdrantStorage`, `InMemoryStorage`, `RecalledMemory` |
-| `kaine/text_embedding.py` | `Embedder` protocol, `SentenceTransformerTextEmbedder`, `FakeEmbedder` — the boundary-neutral home shared by Mnemos, Hypnos, Empatheia, and the evaluation sidecar |
+| `kaine/text_embedding.py` | `Embedder` protocol, `SharedEmbedder`, `make_text_embedder`, `SentenceTransformerTextEmbedder`, `FakeEmbedder` — the boundary-neutral home shared by Mnemos, Hypnos, Empatheia, and the evaluation sidecar |
+| `kaine/text_embedding_numpy.py` | `NumpyMiniLMEmbedder` — built-in NumPy implementation of the all-MiniLM-L6-v2 BERT encoder |
 | `kaine/modules/mnemos/embeddings.py` | Back-compat re-export shim of `kaine.text_embedding` names for existing Mnemos import sites; no second implementation |
 | `kaine/modules/mnemos/replay.py` | `ReplayEngine`, `ReplayEntry`, `ReplayEvent`, `select_traces`, `build_replay_events` |
 | `kaine/boot.py` | `make_mnemos()` — Qdrant config, replay sub-table wiring |
@@ -188,6 +190,8 @@ events = await mnemos.replay_now()
 | `tests/test_mnemos_memory.py` | `MnemosCore` store/recall/consolidate with `FakeEmbedder` + `InMemoryStorage` |
 | `tests/test_mnemos_storage.py` | `InMemoryStorage` cosine search, `QdrantStorage` (mocked) |
 | `tests/test_mnemos_embeddings.py` | `FakeEmbedder` determinism, `SentenceTransformerEmbedder` lazy load |
+| `tests/test_text_embedding_numpy.py` | NumPy embedder: safetensors reader, WordPiece tokenizer and embedding parity with HuggingFace / sentence-transformers |
+| `tests/test_shared_embedder.py` | `SharedEmbedder` single load and no-op shutdown; one instance across modules and Spot rebuilds |
 | `tests/test_mnemos_replay.py` | `select_traces` scoring, `ReplayEngine` window guard, `ReplayWindowError` |
 | `tests/test_mnemos_replay_redact.py` | `redact_content` behavior in observer payloads |
 | `tests/test_mnemos_module.py` | Full `Mnemos` tick; affect caching; recall cooldown; `recall_before_store` ordering |

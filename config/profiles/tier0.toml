@@ -4,9 +4,8 @@
 # Role: symbolic reasoning + episodic memory + perception satellite, optionally
 # feeding a higher tier over the bus. The torch-free edge backends
 # (llama.cpp, sqlite-vec, whisper.cpp, Piper, ONNX vision/embeddings) are
-# staged seams; today the Tier-0 module set still requires torch because Soma
-# and Chronos use torch+ncps CfC networks and Mnemos/Empatheia/Hypnos build
-# sentence-transformers MiniLM embedders.
+# staged seams; Soma, Chronos and the Mnemos/Empatheia/Hypnos memory embedder
+# run on NumPy.
 #
 # This overlay is INERT and VOICE-FREE by contract (openspec: "Tier files
 # preserve the safety invariants"): it selects runtime backends and device/
@@ -38,4 +37,3 @@ backend = "llama_cpp"
 [mnemos]
 # In-process vector store — no Qdrant server, near-zero idle footprint.
 backend = "sqlite_vec"
-device = "cpu"

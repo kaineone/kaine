@@ -26,7 +26,8 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.store import AgentStore, InMemoryAgentStore
+from kaine.modules.empatheia.store import AgentStore, InMemoryAgentStore, QdrantAgentStore
+from kaine.text_embedding import Embedder
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class Empatheia(BaseModule):
         bus: AsyncBus,
         *,
         store: Optional[AgentStore] = None,
+        embedder: Optional[Embedder] = None,
         backend: str = "inmemory",
         collection: str = "empatheia_agents",
         speaker_label: str = "operator",
@@ -79,15 +81,16 @@ class Empatheia(BaseModule):
                     "Empatheia backend=qdrant requires qdrant_api_key — "
                     "set [qdrant].api_key in config/secrets.toml"
                 )
-            from kaine.modules.empatheia.store import QdrantAgentStore
-            from kaine.text_embedding import SentenceTransformerTextEmbedder
+            from kaine.text_embedding import make_text_embedder
 
-            embedder = SentenceTransformerTextEmbedder()
+            if embedder is None:
+                embedder = make_text_embedder({})
             self._store = QdrantAgentStore(
                 host=qdrant_host,
                 port=qdrant_port,
                 api_key=qdrant_api_key,
                 collection=collection,
+                latent_dim=embedder.latent_dim,
                 embedder=embedder,
             )
         else:
@@ -101,6 +104,10 @@ class Empatheia(BaseModule):
         return self._store
 
     async def initialize(self) -> None:
+        # Load the embedder before opening the Qdrant store so a missing model
+        # fails the module's start loudly instead of writing zero vectors.
+        if isinstance(self._store, QdrantAgentStore) and self._store._embedder is not None:
+            await self._store._embedder.load()
         await self._store.initialize()
         # Seed the audition cursor to "now" so we only process new events.
         try:

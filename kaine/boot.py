@@ -30,6 +30,12 @@ from kaine.config import require_known_keys
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
+from kaine.text_embedding import (
+    Embedder,
+    SharedEmbedder,
+    make_text_embedder,
+    resolve_embedding_config,
+)
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +68,23 @@ def _require_keys(section: dict[str, Any], allowed: set[str]) -> None:
 def _pop(section: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
     _require_keys(section, allowed)
     return {k: section[k] for k in section if k in allowed}
+
+
+def shared_embedder(
+    registry: ModuleRegistry, kaine_config: dict[str, Any]
+) -> SharedEmbedder:
+    """Return the registry-wide shared embedder, creating it on first need.
+
+    Public so the evaluation sidecar and any cycle entrypoint can build the
+    shared instance from ``[embedding]`` even when memory/social modules are
+    disabled.
+    """
+    existing: SharedEmbedder | None = getattr(registry, "shared_embedder", None)
+    if existing is not None:
+        return existing
+    shared = SharedEmbedder(make_text_embedder(kaine_config))
+    registry.shared_embedder = shared
+    return shared
 
 
 def _check_injections(
@@ -970,13 +993,14 @@ def make_mnemos(
 ) -> BaseModule:
     from kaine.modules.mnemos.module import Mnemos
 
+    # Spot-injected shared embedder; never a TOML key, so pop before validation.
+    embedder = section.pop("_embedder", None)
+
     allowed = {
         "backend",
         "collection_prefix",
         "short_term_capacity",
         "recall_top_k",
-        "embedder_model_id",
-        "device",  # forwarded as embedder_device_preference
         "baseline_salience",
         "alert_salience",
         "recall_on_workspace",
@@ -984,14 +1008,18 @@ def make_mnemos(
         "qdrant",
         "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content
     }
+    if "embedder_model_id" in section:
+        raise ConfigurationError(
+            "[mnemos].embedder_model_id is replaced by [embedding].model_id"
+        )
+    if "device" in section:
+        raise ConfigurationError("[mnemos].device is replaced by [embedding].device")
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     replay = section.get("replay") or {}
     kwargs: dict[str, Any] = {
-        k: section[k] for k in allowed - {"qdrant", "device", "replay"} if k in section
+        k: section[k] for k in allowed - {"qdrant", "replay"} if k in section
     }
-    if "device" in section:
-        kwargs["embedder_device_preference"] = section["device"]
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
     if "port" in qdrant:
@@ -1007,6 +1035,7 @@ def make_mnemos(
         kwargs["replay_recency_weight"] = float(replay["recency_weight"])
     if "redact_content" in replay:
         kwargs["replay_redact_content"] = bool(replay["redact_content"])
+    kwargs["embedder"] = embedder
     return Mnemos(bus, entity_clock=entity_clock, **kwargs)
 
 
@@ -1439,6 +1468,7 @@ def make_hypnos(
     phantasia: Optional[BaseModule] = None,
     kaine_config: Optional[dict[str, Any]] = None,
     entity_clock: Optional[EntityClock] = None,
+    embedder: Optional[Embedder] = None,
 ) -> BaseModule:
     from kaine.modules.hypnos.module import Hypnos
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
@@ -1538,12 +1568,8 @@ def make_hypnos(
     # (Hypnos never imports kaine.evaluation). Lazy: the heavy model only loads
     # the first sleep that actually builds pairs; absent the dep, magnitude
     # degrades to null and rate/counts still emit.
-    try:
-        from kaine.text_embedding import SentenceTransformerTextEmbedder
-
-        kwargs["consolidation_embedder"] = SentenceTransformerTextEmbedder()
-    except Exception:
-        log.debug("hypnos: consolidation embedder unavailable", exc_info=True)
+    if embedder is not None:
+        kwargs["consolidation_embedder"] = embedder
     # When the operator has opted in (config + env var) AND the
     # `[training]` extras importable, wire the real Unsloth-backed
     # trainer. Otherwise FakeTrainer ships the "no backend" reason.
@@ -1837,6 +1863,9 @@ def make_perception(
 def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.empatheia.module import Empatheia
 
+    # Spot-injected shared embedder; never a TOML key, so pop before validation.
+    embedder = section.pop("_embedder", None)
+
     allowed = {
         "backend",
         "collection",
@@ -1860,6 +1889,7 @@ def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         kwargs["qdrant_port"] = qdrant["port"]
     if "api_key" in qdrant:
         kwargs["qdrant_api_key"] = qdrant["api_key"]
+    kwargs["embedder"] = embedder
     return Empatheia(bus, **kwargs)
 
 
@@ -2162,6 +2192,9 @@ def construct_module(
     if name in ("topos", "audition", "soma"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
 
+    if name in ("mnemos", "empatheia"):
+        section["_embedder"] = shared_embedder(registry, kaine_config)
+
     if name == "hypnos":
         mnemos = registry.get("mnemos") if "mnemos" in registry else None
         thymos = registry.get("thymos") if "thymos" in registry else None
@@ -2175,6 +2208,7 @@ def construct_module(
             phantasia=phantasia,
             kaine_config=kaine_config,
             entity_clock=entity_clock,
+            embedder=shared_embedder(registry, kaine_config),
         )
 
     factory = SIMPLE_FACTORIES[name]
@@ -2497,13 +2531,13 @@ def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, An
                 str((kaine_config.get("topos") or {}).get("device", "auto")),
             )
         )
-    if "mnemos" in registry:
-        rows.append(
-            (
-                "mnemos.embedder",
-                str((kaine_config.get("mnemos") or {}).get("device", "auto")),
-            )
-        )
+    if any(m in registry for m in ("mnemos", "empatheia", "hypnos")):
+        cfg = resolve_embedding_config(kaine_config)
+        if cfg["backend"] == "sentence_transformers":
+            value = f"{cfg['backend']}:{cfg['device']}"
+        else:
+            value = "numpy:cpu"
+        rows.append(("embedding", value))
     if "audition" in registry:
         rows.append(
             (

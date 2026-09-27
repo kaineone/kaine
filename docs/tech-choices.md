@@ -19,7 +19,7 @@ This document records every major technology and dependency decision in KAINE, t
 | `snntorch` | Spiking LIF neurons (oscillatory layer) | MIT | CPU | `[oscillator]` |
 | `scipy` | PLV / Hilbert transform (oscillatory layer) | BSD-3-Clause | CPU | `[oscillator]` |
 | `ncps` (CfC networks) | Temporal / substrate forward models | Apache-2.0 | CPU (pinned) | — (core dep) |
-| Qdrant + `sentence-transformers` | Memory embeddings (all-MiniLM-L6-v2) | Apache-2.0 | CPU | — (core dep) |
+| Qdrant + shared text embedder | Memory embeddings (NumPy default, `sentence-transformers` optional) | Apache-2.0 | CPU | — (core dep) |
 | OpenAI-compatible model server | Language organ inference | per toolchain | GPU (cuda:0) | — (host service) |
 | Published KAINE organ GGUF (`kaineone/Qwen3.5-4B-abliterated-GGUF`) | Language organ weights | Apache-2.0 | GPU (cuda:0) | — (wizard-downloaded, turnkey-served) |
 | `unsloth` + `trl` + `peft` + `datasets` | Voice alignment DPO/QLoRA | Apache-2.0 / MIT | GPU (cuda:0) | `[training]` |
@@ -124,15 +124,15 @@ decode playlist media (cv2 video + PyAV audio). Install it with
 
 ---
 
-## Memory: Qdrant + sentence-transformers
+## Memory: Qdrant + shared text embedder
 
-**Role.** Qdrant provides vector storage for Mnemos's episodic, semantic, and procedural collections, and for Empatheia's agent profiles. The `sentence-transformers` library loads the `all-MiniLM-L6-v2` embedder (384-dim, ~80 MB) that converts text traces to vectors for semantic retrieval.
+**Role.** Qdrant provides vector storage for Mnemos's episodic, semantic, and procedural collections, and for Empatheia's agent profiles. The shared text embedder converts text traces to vectors for semantic retrieval. It defaults to the NumPy backend (`NumpyMiniLMEmbedder` in `kaine/text_embedding_numpy.py`), which runs `all-MiniLM-L6-v2` (384-dim, ~80 MB) from the model's own `model.safetensors`, `config.json`, and `vocab.txt` with a built-in WordPiece tokenizer. The `sentence-transformers` torch backend (`SentenceTransformerTextEmbedder`) remains available via `[embedding].backend = "sentence_transformers"`.
 
 **Why Qdrant.** Qdrant is an Apache-2.0 vector database with an async Python client (`AsyncQdrantClient`), mandatory API key authentication (required even on loopback), and a lightweight container footprint. It runs locally (port 6533, KAINE-owned compose stack) and has no runtime cloud dependency. Note: `AsyncQdrantClient.search()` was removed in client 1.12+; Mnemos uses `query_points()` with the vector via `query=` and results under `.points`.
 
-**Why all-MiniLM-L6-v2.** The model is ~80 MB, runs comfortably on CPU, and produces 384-dimensional embeddings sufficient for semantic recall. Pinning the embedder to CPU per paper §6.1 leaves `cuda:1` fully available for Topos (InternVideo-Next) and `cuda:0` for Lingua/Hypnos. Operators can override to a CUDA device via `[mnemos].device` if they have VRAM headroom.
+**Why all-MiniLM-L6-v2.** The model is ~80 MB, runs comfortably on CPU, and produces 384-dimensional embeddings sufficient for semantic recall. Pinning the embedder to CPU per paper §6.1 leaves `cuda:1` fully available for Topos (InternVideo-Next) and `cuda:0` for Lingua/Hypnos. Operators can override the torch backend device via `[embedding].device` if they have VRAM headroom; the NumPy backend ignores `device`.
 
-**CPU/local stance.** CPU by default. The embedder and Qdrant client both run locally with no required network dependency after the initial model download.
+**CPU/local stance.** CPU by default. The embedder and Qdrant client both run locally with no required network dependency after setup-time provisioning.
 
 **License.** `qdrant-client`: Apache-2.0. `sentence-transformers`: Apache-2.0. Qdrant server: Apache-2.0.
 
@@ -336,7 +336,7 @@ The shipped `kaine.toml` defaults reflect a dual-GPU reference configuration: a 
 | Lingua → model server (external) | cuda:0 (primary GPU, ~12 GB+ VRAM) | `CUDA_VISIBLE_DEVICES` in the model server's launch config |
 | Hypnos voice alignment training | cuda:0 | `[hypnos.voice_alignment].training_device` |
 | Topos InternVideo-Next encoder | cuda:1 (secondary GPU, ~8 GB VRAM) | `[topos].device` |
-| Mnemos sentence-transformer | cpu | `[mnemos].device` |
+| Shared text embedder (`sentence_transformers` backend only) | cpu | `[embedding].device` |
 | Audition emotion2vec+ | cpu | `[audition].emotion_device` |
 | Chronos CfC network | cpu (pinned in code) | n/a — pinned by `chronos/network.py` |
 | Chatterbox TTS (external) | cuda:1 (secondary GPU) | `CUDA_VISIBLE_DEVICES` in Chatterbox systemd unit |

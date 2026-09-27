@@ -140,7 +140,7 @@ def propose_device_assignments(host: dict[str, Any]) -> dict[str, str]:
         "phantasia.training_device": "cpu",  # jax[cpu] default; opt-in to GPU
         "topos.device": secondary,
         # Control / light paths always on CPU.
-        "mnemos.device": "cpu",
+        "embedding.device": "cpu",
         "audition.emotion_device": "cpu",
     }
 

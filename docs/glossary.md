@@ -309,7 +309,7 @@ instrument; the project's primary falsifiable test is the
 ### Mnemos
 
 The memory module. Mnemos maintains three Qdrant vector collections (episodic,
-semantic, procedural) embedded by all-MiniLM-L6-v2 (384-dim, on CPU). It recalls
+semantic, procedural) embedded by the shared all-MiniLM-L6-v2 embedder (384-dim, on CPU). It recalls
 prior memories on a perceptual cue before storing the current moment
 (complementary learning systems). Affect intensity tags memories and biases
 recall. During Hypnos consolidation, Mnemos participates in replay by
