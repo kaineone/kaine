@@ -21,6 +21,7 @@ real interactions) and merging emotion histograms via weighted average
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Optional, Protocol, Sequence, runtime_checkable
@@ -157,10 +158,22 @@ class QdrantAgentStore:
         self._initialized = False
         # Local cache so serialize() works without an async context.
         self._cache: dict[str, AgentModel] = {}
+        self._lock: asyncio.Lock | None = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def initialize(self) -> None:
-        if self._client is not None:
+        if self._initialized:
             return
+        if self._client is None:
+            await self._open_client()
+        await self._ensure_collection()
+        self._initialized = True
+
+    async def _open_client(self) -> None:
         import asyncio
 
         def _open():
@@ -174,8 +187,6 @@ class QdrantAgentStore:
             )
 
         self._client = await asyncio.to_thread(_open)
-        await self._ensure_collection()
-        self._initialized = True
 
     async def _ensure_collection(self) -> None:
         from qdrant_client import models  # type: ignore[import-untyped]
@@ -288,7 +299,8 @@ class QdrantAgentStore:
         if self._client is None:
             return
         try:
-            await self._put_strict(model)
+            async with self._get_lock():
+                await self._put_strict(model)
         except Exception:
             log.warning("QdrantAgentStore.put failed for %s", model.id, exc_info=True)
 
@@ -333,19 +345,20 @@ class QdrantAgentStore:
             raise RuntimeError(
                 "QdrantAgentStore is not initialized: no Qdrant client"
             )
-        try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
-            if self._collection in existing_names:
-                await self._client.delete_collection(collection_name=self._collection)
-        except Exception as exc:
-            raise RuntimeError(
-                f"QdrantAgentStore.replace_all failed deleting {self._collection!r}: {exc}"
-            ) from exc
-        await self._ensure_collection()
-        self._cache.clear()
-        for model in models:
-            await self._put_strict(model)
+        async with self._get_lock():
+            try:
+                existing = await self._client.get_collections()
+                existing_names = {c.name for c in existing.collections}
+                if self._collection in existing_names:
+                    await self._client.delete_collection(collection_name=self._collection)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"QdrantAgentStore.replace_all failed deleting {self._collection!r}: {exc}"
+                ) from exc
+            await self._ensure_collection()
+            self._cache.clear()
+            for model in models:
+                await self._put_strict(model)
 
     def serialize(self) -> bytes:
         """Lossless snapshot of all known profiles (from cache)."""

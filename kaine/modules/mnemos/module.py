@@ -36,6 +36,7 @@ log = logging.getLogger(__name__)
 
 class Mnemos(BaseModule):
     name: ClassVar[str] = "mnemos"
+    preservation_state_key: ClassVar[str | None] = "memory_state"
 
     def holds_external_resources(self) -> bool:
         return True

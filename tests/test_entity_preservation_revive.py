@@ -21,10 +21,12 @@ a revive that would drop a captured component raises.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -36,6 +38,7 @@ from kaine.lifecycle.preservation import PreservationError, ReviveError
 from kaine.modules.eidolon import Eidolon, SelfModel
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.module import Empatheia
+from kaine.modules.empatheia.store import QdrantAgentStore
 from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
 from kaine.modules.mnemos.storage import QdrantStorage, StorageError
 from kaine.modules.phantasia.encoder import observation_dim
@@ -447,6 +450,309 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
         await mnemos2.shutdown()
         await ph2.shutdown()
         await empatheia2.shutdown()
+    finally:
+        for m in reg.all_modules():
+            await m.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deserialize(
+    bus: AsyncBus, tmp_path: Path
+):
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+
+    empatheia = Empatheia(bus, backend="inmemory")
+    await empatheia.initialize()
+    await empatheia.store.put(
+        AgentModel(id="operator", label="operator", interaction_count=3)
+    )
+    reg.register(empatheia)
+
+    fm = ForkManager(tmp_path / "forks")
+    result = await fm.preserve_live(
+        reg,
+        reason="scoped-memory-preservation",
+        label="test-revive-routing",
+        out_root=tmp_path / "backups",
+        entity_name="aria",
+    )
+    assert result.ok
+    assert result.preservation_id
+    bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
+
+    reg2 = ModuleRegistry()
+    eid2 = Eidolon(
+        bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
+    )
+    await eid2.initialize()
+
+    deserialized_states: list[dict[str, Any]] = []
+    original_deserialize = eid2.deserialize
+
+    def _deserialize_spy(state: dict[str, Any]) -> None:
+        deserialized_states.append(copy.deepcopy(state))
+        original_deserialize(state)
+
+    eid2.deserialize = _deserialize_spy
+    reg2.register(eid2)
+
+    emb = FakeEmbedder(latent_dim=8)
+    await emb.load()
+    storage2 = InMemoryStorage(latent_dim=emb.latent_dim)
+    core2 = MnemosCore(
+        embedder=emb,
+        storage=storage2,
+        short_term_capacity=8,
+        collection_prefix="other_",
+    )
+    mnemos2 = Mnemos(bus, core=core2)
+    await mnemos2.initialize()
+    reg2.register(mnemos2)
+
+    wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
+    ph2 = Phantasia(
+        bus,
+        world_model=wm2,
+        backend="fake",
+        persist_weights=False,
+        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+    )
+    await ph2.initialize()
+    reg2.register(ph2)
+
+    empatheia2 = Empatheia(bus, backend="inmemory")
+    await empatheia2.initialize()
+
+    imported_states: list[dict[str, Any]] = []
+    original_import = empatheia2.import_preservation_state
+
+    async def _import_spy(state: dict[str, Any]) -> int:
+        imported_states.append(copy.deepcopy(state))
+        return await original_import(state)
+
+    empatheia2.import_preservation_state = _import_spy
+    reg2.register(empatheia2)
+
+    await fm.revive(bundle, reg2)
+
+    # Empatheia declares preservation_state_key="profiles", so revive routes to
+    # its async importer.
+    assert len(imported_states) == 1
+    assert "profiles" in imported_states[0]
+    assert imported_states[0]["profiles"]["operator"]["label"] == "operator"
+
+    # Eidolon has no preservation_state_key and no "memory_state" in its bundle,
+    # so it must fall back to deserialize.
+    assert len(deserialized_states) >= 1
+    assert all("memory_state" not in s for s in deserialized_states)
+
+    restored = await empatheia2.store.get("operator")
+    assert restored is not None
+    assert restored.label == "operator"
+
+    try:
+        await eid2.shutdown()
+        await mnemos2.shutdown()
+        await ph2.shutdown()
+        await empatheia2.shutdown()
+    finally:
+        for m in reg.all_modules():
+            await m.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
+    bus: AsyncBus, tmp_path: Path
+):
+    pytest.importorskip("qdrant_client")
+
+    class _FakeQdrantPoint:
+        def __init__(self, pid, vector, payload):
+            self.id = pid
+            self.vector = vector
+            self.payload = payload
+
+    class _FakeAsyncQdrant:
+        class _Colls:
+            def __init__(self, names):
+                self.collections = [type("C", (), {"name": n}) for n in names]
+
+        class _Count:
+            def __init__(self, n):
+                self.count = n
+
+        def __init__(self):
+            self.store: dict[str, list[_FakeQdrantPoint]] = {}
+
+        async def get_collections(self):
+            return self._Colls(list(self.store))
+
+        async def create_collection(self, collection_name, vectors_config=None, **kwargs):
+            self.store.setdefault(collection_name, [])
+
+        async def delete_collection(self, collection_name, **kwargs):
+            self.store.pop(collection_name, None)
+
+        async def upsert(self, collection_name, points, **kwargs):
+            coll = self.store.setdefault(collection_name, [])
+            by_id = {p.id: i for i, p in enumerate(coll)}
+            for p in points:
+                vec = list(p.vector) if p.vector is not None else []
+                payload = dict(p.payload) if p.payload is not None else {}
+                point = _FakeQdrantPoint(p.id, vec, payload)
+                if p.id in by_id:
+                    coll[by_id[p.id]] = point
+                else:
+                    coll.append(point)
+                    by_id[p.id] = len(coll) - 1
+
+        async def scroll(
+            self,
+            collection_name,
+            scroll_filter=None,
+            offset=None,
+            limit=10,
+            with_payload=True,
+            with_vectors=False,
+            **kwargs,
+        ):
+            pts = list(self.store.get(collection_name, []))
+            if with_vectors:
+                out_pts = pts
+            else:
+                out_pts = [
+                    _FakeQdrantPoint(
+                        p.id, None, p.payload if with_payload else {}
+                    )
+                    for p in pts
+                ]
+
+            def _matches_filter(p):
+                if scroll_filter is None:
+                    return True
+                must = getattr(scroll_filter, "must", None)
+                if not must:
+                    return True
+                payload = p.payload if p.payload is not None else {}
+                for cond in must:
+                    key = getattr(cond, "key", None)
+                    match = getattr(cond, "match", None)
+                    if key is None or match is None:
+                        continue
+                    value = getattr(match, "value", None)
+                    if payload.get(key) != value:
+                        return False
+                return True
+
+            filtered = [p for p in out_pts if _matches_filter(p)]
+            start = int(offset) if offset is not None else 0
+            end = start + limit
+            page = filtered[start:end]
+            next_offset = end if end < len(filtered) else None
+            return page, next_offset
+
+        async def count(self, collection_name, **kwargs):
+            return self._Count(len(self.store.get(collection_name, [])))
+
+        async def close(self, **kwargs):
+            pass
+
+    client = _FakeAsyncQdrant()
+    embedder = FakeEmbedder(latent_dim=4)
+
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+
+    src_store = QdrantAgentStore(
+        api_key="k",
+        collection="empatheia_agents",
+        latent_dim=4,
+        embedder=embedder,
+    )
+    src_store._client = client
+    src_emp = Empatheia(bus, store=src_store)
+    await src_emp.initialize()
+    operator_model = AgentModel(
+        id="operator", label="operator", interaction_count=3, reliability=0.9
+    )
+    await src_emp.store.put(operator_model)
+    reg.register(src_emp)
+
+    fm = ForkManager(tmp_path / "forks")
+    result = await fm.preserve_live(
+        reg,
+        reason="scoped-memory-preservation",
+        label="test-empatheia-qdrant-revive",
+        out_root=tmp_path / "backups",
+        entity_name="aria",
+    )
+    assert result.ok
+    assert result.preservation_id
+    bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
+
+    reg2 = ModuleRegistry()
+    eid2 = Eidolon(
+        bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
+    )
+    await eid2.initialize()
+    reg2.register(eid2)
+
+    emb = FakeEmbedder(latent_dim=8)
+    await emb.load()
+    storage2 = InMemoryStorage(latent_dim=emb.latent_dim)
+    core2 = MnemosCore(
+        embedder=emb,
+        storage=storage2,
+        short_term_capacity=8,
+        collection_prefix="other_",
+    )
+    mnemos2 = Mnemos(bus, core=core2)
+    await mnemos2.initialize()
+    reg2.register(mnemos2)
+
+    wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
+    ph2 = Phantasia(
+        bus,
+        world_model=wm2,
+        backend="fake",
+        persist_weights=False,
+        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+    )
+    await ph2.initialize()
+    reg2.register(ph2)
+
+    dst_store = QdrantAgentStore(
+        api_key="k",
+        collection="empatheia_agents",
+        latent_dim=4,
+        embedder=embedder,
+    )
+    dst_store._client = client
+    dst_emp = Empatheia(bus, store=dst_store)
+    await dst_emp.initialize()
+    stale_model = AgentModel(id="stale", label="stale", interaction_count=1)
+    await dst_emp.store.put(stale_model)
+    reg2.register(dst_emp)
+
+    await fm.revive(bundle, reg2)
+
+    profiles = await dst_emp.store.all_profiles()
+    assert set(profiles.keys()) == {"operator"}
+    assert profiles["operator"].label == "operator"
+
+    pts, _ = await client.scroll(
+        collection_name="empatheia_agents",
+        limit=10,
+        with_payload=True,
+        with_vectors=True,
+    )
+    assert len(pts) == 1
+    assert pts[0].vector == await dst_store._build_embedding(operator_model)
+
+    try:
+        await eid2.shutdown()
+        await mnemos2.shutdown()
+        await ph2.shutdown()
+        await dst_emp.shutdown()
     finally:
         for m in reg.all_modules():
             await m.shutdown()

@@ -448,10 +448,11 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
 
     for name, state in snap.modules.items():
         module = by_name[name]
-        # Mnemos (and any future async-restoring module) carries a richer
-        # capture that must be restored through its async importer.
+        # A module that declares a captured-state key routes revive through its
+        # async importer (e.g. Mnemos -> "memory_state", Empatheia -> "profiles").
         importer = getattr(module, "import_preservation_state", None)
-        if "memory_state" in state and callable(importer):
+        key = getattr(module, "preservation_state_key", None)
+        if key and key in state and callable(importer):
             try:
                 await importer(state)
             except Exception as exc:

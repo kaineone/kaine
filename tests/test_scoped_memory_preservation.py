@@ -89,7 +89,30 @@ class _FakeAsyncQdrant:
                 )
                 for p in pts
             ]
-        return out_pts, None
+
+        def _matches_filter(p):
+            if scroll_filter is None:
+                return True
+            must = getattr(scroll_filter, "must", None)
+            if not must:
+                return True
+            payload = p.payload if p.payload is not None else {}
+            for cond in must:
+                key = getattr(cond, "key", None)
+                match = getattr(cond, "match", None)
+                if key is None or match is None:
+                    continue
+                value = getattr(match, "value", None)
+                if payload.get(key) != value:
+                    return False
+            return True
+
+        filtered = [p for p in out_pts if _matches_filter(p)]
+        start = int(offset) if offset is not None else 0
+        end = start + limit
+        page = filtered[start:end]
+        next_offset = end if end < len(filtered) else None
+        return page, next_offset
 
     async def query_points(
         self,
@@ -118,8 +141,12 @@ class _FakeAsyncQdrant:
         scored.sort(key=lambda h: h.score, reverse=True)
         return type("QueryResponse", (), {"points": scored[:limit]})()
 
+    class _Count:
+        def __init__(self, n: int) -> None:
+            self.count = n
+
     async def count(self, collection_name, **kwargs):
-        return len(self.store.get(collection_name, []))
+        return self._Count(len(self.store.get(collection_name, [])))
 
     async def upsert(self, collection_name, points, **kwargs):
         coll = self.store.setdefault(collection_name, [])
@@ -184,6 +211,11 @@ async def test_qdrant_two_prefixes_scoped_export_import():
 
     results_b, _ = await core_b.recall("beta", collection="episodic")
     assert any("beta episodic" in r.text for r in results_b)
+
+    # a_* collections are untouched by importing into c_.
+    results_a, _ = await core_a.recall("alpha", collection="episodic")
+    assert any("alpha episodic" in r.text for r in results_a)
+    assert "a_episodic" in client.store
 
 
 @pytest.mark.asyncio
@@ -514,5 +546,186 @@ async def test_qdrant_replace_collection_drops_stale_points():
 
     result_after = await store.export(["c_episodic"])
     assert [p["id"] for p in result_after["c_episodic"]] == ["c"]
+
+
+@pytest.mark.asyncio
+async def test_qdrant_export_paginates_large_collection():
+    pytest.importorskip("qdrant_client")
+    client = _FakeAsyncQdrant()
+    embedder = FakeEmbedder(latent_dim=4)
+    storage = QdrantStorage(latent_dim=4, api_key="k")
+    storage._client = client
+    await storage.initialize()
+
+    vec = list(await embedder.encode("x"))
+    points = [
+        {
+            "id": f"p{i}",
+            "vector": vec,
+            "text": f"text {i}",
+            "payload": {"i": i},
+            "affect": None,
+        }
+        for i in range(300)
+    ]
+    await storage.replace_collection("big_episodic", points)
+    exported = await storage.export(["big_episodic"])
+    assert "big_episodic" in exported
+    assert len(exported["big_episodic"]) == 300
+    assert {p["id"] for p in exported["big_episodic"]} == {f"p{i}" for i in range(300)}
+
+
+@pytest.mark.asyncio
+async def test_import_absent_kind_empties_target():
+    embedder = FakeEmbedder(latent_dim=4)
+    storage = InMemoryStorage(latent_dim=4)
+    await storage.initialize()
+    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    await core.initialize()
+
+    await core.store("old semantic point", collection="semantic")
+    state = {
+        "collection_prefix": "x_",
+        "short_term": [],
+        "persisted": {"x_episodic": []},
+    }
+    n = await core.import_state(state)
+    assert n == 0
+
+    results, _ = await core.recall("old semantic", collection="semantic")
+    assert not any("old semantic point" in r.text for r in results)
+
+
+@pytest.mark.asyncio
+async def test_import_only_foreign_collections_raises():
+    embedder = FakeEmbedder(latent_dim=4)
+    storage = InMemoryStorage(latent_dim=4)
+    await storage.initialize()
+    core = MnemosCore(embedder, storage, collection_prefix="c_")
+    await core.initialize()
+
+    good_vec = list(await embedder.encode("good"))
+    state = {
+        "collection_prefix": "z_",
+        "short_term": [],
+        "persisted": {
+            "a_episodic": [
+                {"id": "p1", "vector": good_vec, "text": "alpha", "payload": {}, "affect": None}
+            ],
+        },
+    }
+    with pytest.raises(StorageError, match="none belongs to this bundle's prefix"):
+        await core.import_state(state)
+
+
+@pytest.mark.asyncio
+async def test_import_empty_collection_prefix_maps_kind_directly():
+    embedder = FakeEmbedder(latent_dim=4)
+    storage = InMemoryStorage(latent_dim=4)
+    await storage.initialize()
+    core = MnemosCore(embedder, storage, collection_prefix="")
+    await core.initialize()
+
+    vec = list(await embedder.encode("good"))
+    state = {
+        "collection_prefix": "",
+        "short_term": [],
+        "persisted": {
+            "episodic": [
+                {"id": "p1", "vector": vec, "text": "alpha", "payload": {}, "affect": None}
+            ],
+        },
+    }
+    n = await core.import_state(state)
+    assert n == 1
+
+    results, _ = await core.recall("alpha", collection="episodic")
+    assert any("alpha" in r.text for r in results)
+
+
+@pytest.mark.asyncio
+async def test_import_validation_failure_leaves_short_term_and_persisted_unchanged():
+    embedder = FakeEmbedder(latent_dim=4)
+    storage = InMemoryStorage(latent_dim=4)
+    await storage.initialize()
+    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    await core.initialize()
+
+    await core.store("old episodic point", collection="episodic")
+    await core.store("old semantic point", collection="semantic")
+    await core.store("stm entry")
+
+    good_vec = list(await embedder.encode("good"))
+    bad_state = {
+        "collection_prefix": "x_",
+        "short_term": [
+            {"text": "new stm", "payload": {}, "affect": None, "timestamp": 1.0}
+        ],
+        "persisted": {
+            "x_episodic": [
+                {"id": "p1", "vector": good_vec, "text": "new preserved", "payload": {}, "affect": None}
+            ],
+            "x_semantic": [
+                {"id": "bad", "vector": good_vec[:2], "text": "bad", "payload": {}, "affect": None}
+            ],
+        },
+    }
+    with pytest.raises(StorageError):
+        await core.import_state(bad_state)
+
+    results_e, _ = await core.recall("old episodic", collection="episodic")
+    assert any("old episodic point" in r.text for r in results_e)
+    results_s, _ = await core.recall("old semantic", collection="semantic")
+    assert any("old semantic point" in r.text for r in results_s)
+
+    assert len(core._short_term) == 1
+    assert core._short_term[0].text == "stm entry"
+
+
+@pytest.mark.asyncio
+async def test_sqlite_vec_import_absent_kind_empties_target(tmp_path: Path):
+    pytest.importorskip("sqlite_vec")
+    from kaine.modules.mnemos.storage import SqliteVecStorage
+
+    db_path = tmp_path / "mnemos.db"
+    storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
+    await storage.initialize()
+
+    embedder = FakeEmbedder(latent_dim=4)
+    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    await core.initialize()
+    await core.store("old semantic point", collection="semantic")
+
+    state = {
+        "collection_prefix": "x_",
+        "short_term": [],
+        "persisted": {"x_episodic": []},
+    }
+    await core.import_state(state)
+    assert await storage.count("x_semantic") == 0
+
+
+@pytest.mark.asyncio
+async def test_sqlite_vec_replace_collection_only_named_rows(tmp_path: Path):
+    pytest.importorskip("sqlite_vec")
+    from kaine.modules.mnemos.storage import SqliteVecStorage
+
+    db_path = tmp_path / "mnemos.db"
+    storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
+    await storage.initialize()
+
+    vec = [0.1, 0.2, 0.3, 0.4]
+    await storage.replace_collection(
+        "x_episodic",
+        [{"id": "a", "vector": vec, "text": "a", "payload": {}, "affect": None}],
+    )
+    await storage.replace_collection(
+        "x_semantic",
+        [{"id": "b", "vector": vec, "text": "b", "payload": {}, "affect": None}],
+    )
+    await storage.replace_collection("x_episodic", [])
+
+    assert await storage.count("x_episodic") == 0
+    assert await storage.count("x_semantic") == 1
 
 

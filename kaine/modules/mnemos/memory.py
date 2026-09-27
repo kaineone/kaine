@@ -232,33 +232,24 @@ class MnemosCore:
     async def import_state(self, state: dict[str, Any]) -> int:
         """Restore a store captured by :meth:`export_state`. Returns total points.
 
-        Rebuilds the short-term deque and re-imports persisted collections
-        under this core's own prefix. FAILS LOUDLY (propagates StorageError)
+        Re-imports persisted collections under this core's own prefix, then
+        rebuilds the short-term deque. FAILS LOUDLY (propagates StorageError)
         when the backend cannot re-import — revive must not yield a
         memory-poor lesser individual.
         """
-        self._short_term.clear()
-        for entry in state.get("short_term") or []:
-            affect = entry.get("affect")
-            self._short_term.append(
-                StoredMemory(
-                    text=str(entry.get("text", "")),
-                    payload=dict(entry.get("payload") or {}),
-                    affect=dict(affect) if affect else None,
-                    timestamp=float(entry.get("timestamp", 0.0)),
-                )
-            )
-        src_prefix = state.get("collection_prefix") or "mnemos_"
+        src_prefix = (
+            state["collection_prefix"] if "collection_prefix" in state else "mnemos_"
+        )
         persisted = state.get("persisted") or {}
         persisted_kinds = [k for k in DEFAULT_COLLECTIONS if k != "short_term"]
         mapping: dict[str, str] = {}
         for kind in persisted_kinds:
             src_name = f"{src_prefix}{kind}"
-            if src_name in persisted:
-                mapping[src_name] = self.collection_name(kind)
+            mapping[src_name] = self.collection_name(kind)
 
+        # Validate every point for every mapped kind before writing anything.
         for src_name, target_name in mapping.items():
-            for p in persisted[src_name]:
+            for p in persisted.get(src_name, []):
                 vec = list(p.get("vector") or [])
                 if len(vec) != self._storage.latent_dim:
                     raise StorageError(
@@ -270,10 +261,44 @@ class MnemosCore:
                         f"imported point in {src_name!r} -> {target_name!r} has non-finite vector"
                     )
 
+        # Refuse a revive whose persisted collections are all foreign to this bundle.
+        own_src_names = set(mapping.keys())
+        non_empty_names = {n for n, pts in persisted.items() if pts}
+        if non_empty_names and not (non_empty_names & own_src_names):
+            raise StorageError(
+                f"revive found memory collections but none belongs to this bundle's prefix "
+                f"{src_prefix!r}: {sorted(non_empty_names)}"
+            )
+
         total = 0
-        for src_name, target_name in mapping.items():
-            n = await self._storage.replace_collection(target_name, persisted[src_name])
-            total += n
+        replaced_kinds: list[str] = []
+        try:
+            for src_name, target_name in mapping.items():
+                n = await self._storage.replace_collection(
+                    target_name, persisted.get(src_name, [])
+                )
+                total += n
+                replaced_kinds.append(target_name)
+        except Exception:
+            if replaced_kinds:
+                log.error(
+                    "mnemos: replace_collection failed after replacing kinds: %s",
+                    replaced_kinds,
+                )
+            raise
+
+        # Rebuild short-term only after persisted replaces succeed.
+        self._short_term.clear()
+        for entry in state.get("short_term") or []:
+            affect = entry.get("affect")
+            self._short_term.append(
+                StoredMemory(
+                    text=str(entry.get("text", "")),
+                    payload=dict(entry.get("payload") or {}),
+                    affect=dict(affect) if affect else None,
+                    timestamp=float(entry.get("timestamp", 0.0)),
+                )
+            )
 
         for name, points in persisted.items():
             if name not in mapping:

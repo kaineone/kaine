@@ -535,16 +535,11 @@ class SqliteVecStorage:
                 raise StorageError("sqlite-vec replace_collection before initialize()")
             try:
                 db.execute("BEGIN")
-                cur = db.execute(
-                    "SELECT rowid FROM memories WHERE collection = ?", (name,)
+                db.execute(
+                    "DELETE FROM vec_memories WHERE rowid IN "
+                    "(SELECT rowid FROM memories WHERE collection = ?)",
+                    (name,),
                 )
-                rowids = [int(r[0]) for r in cur.fetchall()]
-                if rowids:
-                    placeholders = ",".join("?" for _ in rowids)
-                    db.execute(
-                        f"DELETE FROM vec_memories WHERE rowid IN ({placeholders})",
-                        rowids,
-                    )
                 db.execute("DELETE FROM memories WHERE collection = ?", (name,))
                 for p in points:
                     pid = str(p.get("id") or uuid.uuid4().hex)
@@ -809,7 +804,12 @@ class QdrantStorage:
                 raise StorageError(
                     f"qdrant replace_collection failed deleting {name!r}: {exc}"
                 ) from exc
-        await self.ensure_collection(name)
+        try:
+            await self.ensure_collection(name)
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant replace_collection failed recreating {name!r}: {exc}"
+            ) from exc
         total = 0
         batch_size = 256
         for i in range(0, len(points), batch_size):
