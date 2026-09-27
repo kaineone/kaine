@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change rename-audition-vox. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Vox module identity
 The voice organ SHALL be the module named `vox` (renamed from `audio_out`),
 implemented by the `Vox` class, publishing to the `vox.out` stream. Its behavior
@@ -30,3 +32,13 @@ be published after this change.
 - **WHEN** Vox writes synthesized audio to its sink
 - **THEN** the file is written under `state/vox/`
 
+### Requirement: Vox is silent in the womb
+While the entity is gestating, Vox SHALL be held dormant and SHALL render no audible output, because the womb offers no medium to speak into; it SHALL be activated at birth. Inner speech (Lingua) SHALL NOT be held.
+
+#### Scenario: Gestation
+- **WHEN** a gestating entity forms an utterance
+- **THEN** Vox renders nothing audible
+
+#### Scenario: Birth
+- **WHEN** the entity is born
+- **THEN** Vox is active and renders utterances as before

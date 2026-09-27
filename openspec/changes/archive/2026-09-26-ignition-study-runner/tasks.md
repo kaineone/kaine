@@ -10,4 +10,4 @@
 
 - [x] 2.1 Unit tests: plan validation; the overlay (exact module set, isolation keys, operator values kept, no secrets); resume from a partial `steps.jsonl`; a failed step halts; a double `init` refuses; the lock.
 - [x] 2.2 A dry run end to end with a stand-in cycle script (no entity): gestation → birth → P0, then two viewings per line, with the step records checked; a stand-in that exits 7, one that reports `ok: false`, and one that times out each halt the study with the right outcome.
-- [ ] 2.3 Offline suite green; `openspec validate ignition-study-runner --strict`.
+- [x] 2.3 Offline suite green; `openspec validate ignition-study-runner --strict`.
