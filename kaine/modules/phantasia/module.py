@@ -469,9 +469,9 @@ class Phantasia(BaseModule):
         if not self._training_enabled:
             return None
         outcome = self.train_now()
-        # Persist only after a real, successful pass — an aborted pass leaves
-        # the previous checkpoint untouched (last-known-good).
-        if outcome.steps > 0 and not outcome.aborted:
+        # Persist only after a pass that updated learned parameters — an
+        # aborted or non-learning pass leaves the checkpoint untouched.
+        if outcome.learned and not outcome.aborted:
             self._successful_training_passes += 1
             self._save_weights(reason="post-train")
         return outcome
@@ -486,7 +486,7 @@ class Phantasia(BaseModule):
         directly.
         """
         if not self._buffer:
-            return TrainOutcome(loss=0.0, steps=0)
+            return TrainOutcome(loss=0.0, steps=0, learned=False)
         trajectory = list(self._buffer)
         return self._wm.train(trajectory)
 

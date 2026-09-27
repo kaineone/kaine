@@ -60,6 +60,23 @@ def test_train_returns_outcome():
     assert math.isfinite(out.loss)
 
 
+def test_fake_train_reports_not_learned():
+    wm = FakeWorldModel(obs_dim=3)
+    out = wm.train([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+    assert out.learned is False
+
+
+def test_dreamerv3_train_reports_learned_after_update():
+    pytest.importorskip("jax", reason="JAX not available")
+    from kaine.modules.phantasia.world_model import load_world_model
+
+    wm = load_world_model("dreamerv3", obs_dim=4)
+    wm.observe([0.1] * 4)
+    out = wm.train([[0.1] * 4, [0.2] * 4, [0.3] * 4])
+    assert out.learned is True
+    assert not out.aborted
+
+
 def test_train_empty_trajectory_is_noop():
     wm = FakeWorldModel(obs_dim=3)
     out = wm.train([])

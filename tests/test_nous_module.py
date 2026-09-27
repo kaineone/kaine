@@ -20,6 +20,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.nous import FakeEngine, Nous
+from kaine.modules.nous.engine import EngineResult
 
 
 @pytest.fixture
@@ -48,6 +49,32 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
 async def _read(bus: AsyncBus, type_: str):
     entries = await bus.read("nous.out", last_id="0")
     return [e for _, e in entries if e.type == type_]
+
+
+class _FakeEngineHorizon2(FakeEngine):
+    @property
+    def policy_len(self) -> int:
+        return 2
+
+
+@pytest.mark.asyncio
+async def test_policy_event_publishes_configured_horizon(bus: AsyncBus):
+    fake = _FakeEngineHorizon2()
+    nous = Nous(bus, engine=fake)
+    await nous.initialize()
+    try:
+        result = EngineResult(
+            posterior=fake._posteriors[0],
+            policy_efe=fake._policy_efe,
+            action_index=1,
+            action=fake.actions[1],
+        )
+        await nous._publish_policy(result)
+        events = await _read(bus, "nous.policy")
+        assert len(events) == 1
+        assert events[0].payload["horizon"] == 2
+    finally:
+        await nous.shutdown()
 
 
 @pytest.mark.asyncio
