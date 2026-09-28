@@ -172,9 +172,14 @@ def test_plan_termux():
     assert plan.extras == "memory-edge"
     assert "pkg" in plan.system_packages
     assert "apt" not in plan.system_packages
+    runs_text = " ".join(plan.runs)
+    assert "soma" in runs_text
+    assert "chronos" in runs_text
+    assert "nous" in runs_text
     modules = {m for m, _ in plan.will_not_run}
-    assert {"soma", "chronos", "topos", "nous", "phantasia"}.issubset(modules)
+    assert {"topos", "phantasia"}.issubset(modules)
     assert any("qdrant" in m for m, _ in plan.will_not_run)
+    assert not any(m in {"soma", "chronos", "nous"} for m, _ in plan.will_not_run)
 
 
 def test_plan_unsupported():
@@ -224,7 +229,7 @@ def test_cli_json(monkeypatch, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["target"]["name"] == "termux"
     assert data["plan"]["extras"] == "memory-edge"
-    assert any(item["module"] == "soma" for item in data["plan"]["will_not_run"])
+    assert any(item["module"] == "topos" for item in data["plan"]["will_not_run"])
 
 
 def test_cli_unsupported_exit_code(monkeypatch, capsys):

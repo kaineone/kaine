@@ -16,7 +16,7 @@ This document is the authoritative reference for `config/kaine.toml` and the com
 |---|---|---|
 | `[audio]` | `pip install -e .[audio]` | Live microphone capture (`sounddevice`, `webrtcvad`, `funasr`, `librosa`) |
 | `[vision]` | `pip install -e .[vision]` | Live camera capture (`opencv-python-headless`) |
-| `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Nous (`inferactively-pymdp`, `jax[cpu]`) |
+| `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Nous (`inferactively-pymdp`, `jax[cpu]`) — only required for the `pymdp` backend |
 | `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 RSSM world model for Phantasia (`jax[cpu]`, `chex`, `einops`) |
 | `[oscillator]` | `pip install -e .[oscillator]` | Oscillatory binding layer (`snntorch`, `scipy`) |
 | `[training]` | `pip install -e .[training]` | Voice alignment DPO/QLoRA training (`unsloth`, `trl`, `peft`, `datasets`) |
@@ -254,7 +254,7 @@ Per-module enable flags. All ship as `false`. Enabling a module is a local-only 
 | `soma` | boolean | `false` | Predictive interoception (substrate monitoring, fatigue, homeostatic regulation). |
 | `chronos` | boolean | `false` | Temporal awareness and event-rhythm prediction. |
 | `topos` | boolean | `false` | Vision encoder (InternVideo-Next; DINOv2 fallback) and live camera. |
-| `nous` | boolean | `false` | Active inference engine (pymdp/JAX). Requires `[reasoning]` extra. |
+| `nous` | boolean | `false` | Active inference engine. Choose the backend with `[nous].backend`: `"pymdp"` (default; requires `[reasoning]` extra) or `"numpy"` (NumPy only, no extra). |
 | `mnemos` | boolean | `false` | Vector-store memory (Qdrant). |
 | `eidolon` | boolean | `false` | Self-model: values, norms, personality baseline, capability map. |
 | `thymos` | boolean | `false` | Affect (VAD dimensional state), drives, and affect coupling. |
@@ -389,12 +389,13 @@ Spatial attention over a frame: an arousal-modulated crop (the fovea) is derived
 
 ## `[nous]`
 
-Active inference engine (pymdp 1.0, JAX). Maintains a discrete generative model, runs belief updating, and selects policies through expected free energy (EFE) minimization. Requires the `[reasoning]` extra (`inferactively-pymdp` + `jax[cpu]`). KAINE uses CPU-only JAX; a one-line GPU-fallback notice from JAX is expected and benign. See [modules/nous.md](modules/nous.md).
+Active inference engine with two interchangeable backends. `backend = "pymdp"` (default) runs `inferactively-pymdp` 1.0 on JAX, jitted. `backend = "numpy"` runs a native NumPy engine and requires no extra. Both backends maintain the same discrete generative model, run belief updating, and select policies through expected free energy (EFE) minimization. The `[reasoning]` extra (`inferactively-pymdp` + `jax[cpu]`) is required only for the `pymdp` backend. KAINE uses CPU-only JAX when the `pymdp` backend is selected; a one-line GPU-fallback notice from JAX is expected and benign. See [modules/nous.md](modules/nous.md).
 
 The complexity envelope `factors * max_states_per_factor * actions * planning_horizon` is validated at boot. The default (4 * 4 * 4 * 1 = 64) is well below the 4096 threshold. Exceeding the threshold raises `ConfigurationError` before any module starts.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `backend` | string | `"pymdp"` | Backend selector: `"pymdp"` (JAX/jit; requires `[reasoning]` extra) or `"numpy"` (NumPy; no extra). Unknown values raise `ConfigurationError` at boot. |
 | `factors` | integer | `4` | Number of latent state factors: action latent, salience, affect, event cluster. |
 | `max_states_per_factor` | integer | `4` | Maximum states per factor. Scales the belief update cost. |
 | `actions` | integer | `4` | Action space size: `no_op`, `request_think`, `request_speak`, `request_maintenance`. |

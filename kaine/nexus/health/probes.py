@@ -164,17 +164,30 @@ async def probe_state_encryption(
     return await asyncio.to_thread(_check_key)
 
 
-async def nous_health_probe() -> tuple[str, str]:
-    """Probe Nous's active-inference backend (pymdp 1.0 + JAX).
+async def nous_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
+    """Probe Nous's active-inference backend (pymdp or NumPy).
 
-    Nous no longer wraps an external NAR binary; it runs active inference via
-    pymdp/JAX (the ``reasoning`` optional extra). The probe confirms both are
-    importable AND that the generative model can be built (a minimal cheap
-    construction). JAX on a CPU-only host logs a one-line GPU-fallback notice
-    at import — that is expected and does not affect the probe result.
+    The ``backend`` keyword selects which implementation is checked:
+    ``"pymdp"`` requires the ``reasoning`` extra (jax + inferactively-pymdp),
+    while ``"numpy"`` builds the pure-NumPy engine and runs a single step.
     """
 
     def _check() -> tuple[str, str]:
+        if backend == "numpy":
+            try:
+                from kaine.modules.nous.engine import encode_snapshot_default
+                from kaine.modules.nous.generative_model import build_generative_model
+                from kaine.modules.nous.numpy_engine import NumpyActiveInferenceEngine
+                engine = NumpyActiveInferenceEngine(build_generative_model())
+                engine.infer(encode_snapshot_default(engine.model))
+                engine.close()
+            except Exception as exc:
+                return DOWN, f"nous numpy backend failed: {exc}"
+            return UP, "nous numpy backend built and ran one step"
+
+        if backend != "pymdp":
+            return DEGRADED, f"nous backend {backend!r} is not recognised"
+
         try:
             import jax  # noqa: F401
             import pymdp  # noqa: F401
@@ -184,10 +197,6 @@ async def nous_health_probe() -> tuple[str, str]:
             devices = ", ".join(str(d) for d in jax.devices())
         except Exception:
             devices = "unknown"
-        # Importability alone is not enough — confirm the generative model
-        # can actually be built with the default (compact) parameter set.
-        # This catches missing numpy/dependency issues and config errors
-        # that only surface at construction time, not at import time.
         try:
             from kaine.modules.nous.generative_model import build_generative_model
             build_generative_model()

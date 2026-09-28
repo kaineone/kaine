@@ -122,6 +122,10 @@ def _chronos_torch_needed(config: dict) -> bool:
     return (config.get("chronos") or {}).get("cfc_backend", "numpy") == "torch"
 
 
+def _nous_pymdp_backend(config: dict) -> bool:
+    return (config.get("nous") or {}).get("backend", "pymdp") == "pymdp"
+
+
 #: Maps a module/service name to the requirements that must be satisfied when
 #: it is enabled.  The keys are the public names used by the config table
 #: ``[modules].<name>``; ``"nexus"`` is a service and is only checked when
@@ -169,8 +173,8 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("av", "audio", predicate=_audition_av_needed),
     ),
     "nous": (
-        Requirement("pymdp", "reasoning"),
-        Requirement("jax", "reasoning"),
+        Requirement("pymdp", "reasoning", predicate=_nous_pymdp_backend),
+        Requirement("jax", "reasoning", predicate=_nous_pymdp_backend),
     ),
     "phantasia": (
         Requirement("jax", "worldmodel", predicate=_phantasia_dreamerv3),

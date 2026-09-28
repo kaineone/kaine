@@ -931,6 +931,8 @@ def make_nous(
         "actions",
         "planning_horizon",
         "efe_timeout_ms",
+        # Active-inference backend selection.
+        "backend",
         # Generative-model transition prior.
         "transition_persistence",
         "transition_concentration",
@@ -974,13 +976,27 @@ def make_nous(
 
     # Build the engine eagerly so a misconfigured envelope / missing reasoning
     # extra fails loudly at boot rather than mid-cycle.
+    backend = str(cfg.pop("backend", "pymdp"))
+    if backend not in {"pymdp", "numpy"}:
+        raise ConfigurationError(
+            f"nous backend must be 'pymdp' or 'numpy', got {backend!r}"
+        )
+
     model = build_generative_model(
         max_states_per_factor=max_states,
         persistence=transition_persistence,
         concentration=transition_concentration,
         transition_max_concentration=transition_max_concentration,
     )
-    engine = PymdpEngine(model, efe_timeout_ms=efe_timeout_ms, policy_len=horizon)
+
+    if backend == "pymdp":
+        from kaine.modules.nous.engine import PymdpEngine
+        engine = PymdpEngine(model, efe_timeout_ms=efe_timeout_ms, policy_len=horizon)
+    else:
+        from kaine.modules.nous.numpy_engine import NumpyActiveInferenceEngine
+        engine = NumpyActiveInferenceEngine(
+            model, efe_timeout_ms=efe_timeout_ms, policy_len=horizon
+        )
 
     # The wrapper receives the engine KAINE built from [nous], so a plugin can
     # add to it without seeing the settings.
