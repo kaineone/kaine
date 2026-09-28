@@ -49,7 +49,7 @@ nvidia = [
 # video reader (OpenCV). Lazy-imported.
 vision = [
     "opencv-python-headless>=5.0.0.93,<6",
-    "transformers>=5.13.1,<6",
+    "transformers>=5.17.0,<6",
     "Pillow>=10,<12",
 ]
 full = [
