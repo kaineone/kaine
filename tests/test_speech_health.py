@@ -249,11 +249,23 @@ def test_probe_sherpa_stt_slow_load_returns_degraded_and_single_flight(
             assert len(calls) == 1
 
             block.set()
+            # The third probe either awaits the finishing load or, if the worker
+            # has already recorded it, reads the memo; both report the load.
             third = await probes_mod.probe_sherpa_stt(
                 model_dir=model_dir, model_id="custom", num_threads=2
             )
             assert third[0] == probes_mod.UP
-            assert "verified" in third[1]
+            assert "loaded and transcribed a test clip" in third[1]
+
+            # The worker records the memo before its future resolves, so once
+            # the third probe has returned, the next one is always served from
+            # the memo without another load.
+            fourth = await probes_mod.probe_sherpa_stt(
+                model_dir=model_dir, model_id="custom", num_threads=2
+            )
+            assert fourth[0] == probes_mod.UP
+            assert "verified" in fourth[1]
+            assert len(calls) == 1
 
         asyncio.run(_main())
     finally:
