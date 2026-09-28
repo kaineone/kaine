@@ -1,6 +1,6 @@
 ## 1. Fixtures
 
-- [ ] 1.1 `scripts/record_phantasia_golden.py` and committed fixtures from the JAX core: deterministic forward outputs, loss and full gradients (categorical and Gaussian; free bits active and inactive; sequence lengths 1 and 16), and a five-step `sgd_update` trajectory.
+- [x] 1.1 `scripts/record_phantasia_golden.py` and committed fixtures from the JAX core: deterministic forward outputs, loss and full gradients (categorical and Gaussian; free bits active and inactive; sequence lengths 1 and 16), and a five-step `sgd_update` trajectory.
 
 ## 2. Engine
 
