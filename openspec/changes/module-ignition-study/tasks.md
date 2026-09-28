@@ -10,7 +10,7 @@
 - [x] 1.8 `scoped-memory-preservation`: a bundle holds only the preserved being's memories; revive restores them into the reviving line's own collections and replaces their contents; Empatheia preserves its own profiles.
 - [x] 1.9 `numpy-text-embedder` task 3: every memory store, snapshot and bundle is stamped with its embedding space, and revive refuses to mix spaces.
 - [x] 1.10 `honest-planning-and-training` and `nous-learned-agency`: Nous's per-action EFE is correct at any horizon; only a learning pass counts as consolidation; Nous learns what follows its actions and preserves that model.
-- [ ] 1.11 Operator decision: whether Nous's intents drive real actions through the existing gates. No module realizes them today, so Nous's choices are recorded, not acted on.
+- [x] 1.11 Operator decision: whether Nous's intents drive real actions through the existing gates. Decided 2026-09-28: yes, through the existing gates (Nous proposes; Volition disposes). Implemented by OpenSpec change `nous-drives-action`; `[nous].drive_actions` records it per run and allows an observational ablation.
 
 ## 2. The study
 
