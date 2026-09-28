@@ -69,6 +69,21 @@ async def test_wired_surfaces_all_blocked_and_logged(tmp_path: Path):
         assert r.actual is Outcome.BLOCKED
 
 
+@pytest.mark.asyncio
+async def test_forced_nous_proposal_cases_blocked(tmp_path: Path):
+    target_ids = {
+        "forced.nous_proposal_inhibited",
+        "forced.nous_proposal_forged_act",
+    }
+    cases = [c for c in all_cases() if c.case_id in target_ids]
+    results = await run_suite(tmp_path, cases=cases)
+    assert len(results) == 2
+    for r in results:
+        assert r.case_id in target_ids
+        assert r.blocked, f"{r.case_id} not blocked: {r.detail}"
+        assert r.actual is Outcome.BLOCKED
+
+
 # ---------------------------------------------------------------------------
 # The full battery passes its own bar: zero findings, every surface 100% blocked.
 # The covenant surface was the only standing finding; it is gone (covenant

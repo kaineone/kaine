@@ -24,8 +24,10 @@ In the PP+GWT framing, Hypnos is the **offline maintenance and consolidation
 organ** — analogous to biological sleep. It:
 
 - Subscribes to `soma.out` watching for `soma.fatigue` threshold-crossing events
-  and `soma.regulation` `request_maintenance` advisories, triggering a
-  maintenance cycle in response to either.
+  and `soma.regulation` `request_maintenance` advisories, and to `volition.out`
+  for `intent.rest` requests, triggering a maintenance cycle in response to any
+  of these. Rest requests are honoured through the same sleep guards as fatigue
+  and regulation triggers.
 - Also maintains an interval-based safety net (`interval_seconds`, default 3600 s)
   so maintenance runs even if fatigue never crosses threshold.
 - Runs a sequential five-phase pipeline (non-interruptible once started).
@@ -47,6 +49,7 @@ Unsloth loads weights directly from `base_model_path`.
 |---|---|---|
 | `soma.out` | `soma.fatigue` | `crossed == true` fires an immediate maintenance cycle |
 | `soma.out` | `soma.regulation` | `action == "request_maintenance"` fires an immediate maintenance cycle (the homeostatic regulator escalating to request an earlier offline cycle) |
+| `volition.out` | `intent.rest` | A realized rest request starts an ordinary sleep, subject to the same sleep guards as fatigue and regulation triggers |
 | (interval) | — | Hypnos's own `hypnos-maintenance-poll` task polls `RestScheduler.is_due()` (subjective-clock paced) and triggers a maintenance cycle when due — the safety net fires even if fatigue never crosses |
 
 ---
@@ -55,9 +58,10 @@ Unsloth loads weights directly from `base_model_path`.
 
 | Stream | Event type | Description |
 |---|---|---|
-| `hypnos.out` | `hypnos.sleep.started` | Emitted at the top of `_run_pipeline()` |
+| `hypnos.out` | `hypnos.sleep.started` | Emitted at the top of `_run_pipeline()`. Ordinary sleeps carry no `trigger` field; requested sleeps carry `trigger: "requested"`. |
 | `hypnos.out` | `hypnos.sleep.completed` | Full summary dict: phases list, voice_alignment result, timing, `fatigue_triggered` flag. Guaranteed even when the pipeline raises: the aborted variant carries `{"aborted": true, "reason": <ExceptionTypeName>}` (content-free) so Soma always exits `_in_hypnos` and faster decay stops |
 | `hypnos.out` | `hypnos.association` | Phase-3 cross-period associations re-injected into the workspace |
+| `hypnos.out` | `hypnos.rest_request` | Rest-intent handling result: `accepted`, `reason` (`accepted`/`too_soon`/`busy`/`aborted`), `origin`, `proposal_id`. `accepted: true` is published immediately after `hypnos.sleep.started`; refusals are published immediately. |
 
 ---
 
@@ -70,6 +74,7 @@ Full reference: [`../configuration.md`](../configuration.md). Key `[hypnos]` key
 | `interval_seconds` | `3600.0` | Max interval between maintenance cycles (safety net) |
 | `max_deferral_seconds` | `600.0` | Maximum cumulative deferral of a due cycle |
 | `per_defer_seconds` | `60.0` | Time added per `try_defer()` call |
+| `requested_rest_min_interval_s` | `1800.0` | Minimum entity-time interval (seconds) since the last sleep ended before an `intent.rest` request is honoured |
 | `baseline_salience` | `0.5` | Salience for routine sleep events |
 | `alert_salience` | `0.8` | Salience for failed-phase events |
 

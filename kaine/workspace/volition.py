@@ -41,17 +41,27 @@ log = logging.getLogger(__name__)
 SPEAK = "speak"
 THINK = "think"
 ACT = "act"
+REST = "rest"
 
 # Bus transport for intents.
 VOLITION_SOURCE = "volition"
 VOLITION_STREAM = "volition.out"
+# Proposal outcomes are published under their own source so they land on
+# their own stream (the bus maps a source to "<source>.out"). No effector
+# reads it, so an inhibited snapshot still publishes nothing to volition.out.
+VOLITION_FEEDBACK_SOURCE = "volition_feedback"
+VOLITION_FEEDBACK_STREAM = "volition_feedback.out"
 
 # Event types used when an intent is published to the bus.
 INTENT_TYPES: dict[str, str] = {
     SPEAK: "intent.speak",
     THINK: "intent.think",
     ACT: "intent.act",
+    REST: "intent.rest",
 }
+
+# Event type used for Nous proposal outcomes on volition_feedback.out.
+PROPOSAL_OUTCOME_TYPE = "volition.proposal_outcome"
 
 # The source/type of a user-communication event the default policy is disposed
 # to answer (a transcribed utterance heard by the ears).
@@ -106,9 +116,15 @@ class Intent:
     seq: Optional[int] = None
     sig: Optional[str] = None
     interrupt: bool = False
+    origin: Optional[str] = None
+    proposal_id: Optional[str] = None
 
     def to_event_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"kind": self.kind, "about": self.about}
+        if self.origin is not None:
+            payload["origin"] = self.origin
+        if self.proposal_id is not None:
+            payload["proposal_id"] = self.proposal_id
         if self.entry_id is not None:
             payload["entry_id"] = self.entry_id
         # Emitted only when set so the wire payload stays minimal and non-Lingua
@@ -195,6 +211,16 @@ class DefaultActionSelectionPolicy:
         """Clear the one-in-flight guard (a prior speak intent has completed)."""
         self._speak_in_flight = False
 
+    def note_external_intent(self, kind: str, when: float | None = None) -> None:
+        """Arm this policy's own in-flight guard for ``kind`` as if it emitted it.
+
+        Only ``speak`` is guarded by the default policy; other kinds are no-ops.
+        """
+        if kind != SPEAK:
+            return
+        self._speak_in_flight = True
+        self._speak_armed_at = when if when is not None else self._clock()
+
     @staticmethod
     def _is_own_speech(event: Any) -> bool:
         """True for the entity's own (external or internal) speech output."""
@@ -237,16 +263,19 @@ class DefaultActionSelectionPolicy:
         return None
 
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
-        # If the entity's own external speech is now conscious, the prior
-        # speak intent has been realized — clear the in-flight guard.
-        if any(
-            event.source == OWN_EXTERNAL_SPEECH_SOURCE
-            for _, event in snapshot.selected_events
-        ):
-            self._speak_in_flight = False
-            self._speak_armed_at = float("-inf")
+        # Only the entity's own EXTERNAL speech clears the speak guard; inner
+        # monologue (internal_speech) is on a different channel and must not
+        # disarm it.
+        for _, event in snapshot.selected_events:
+            if (
+                event.source == OWN_EXTERNAL_SPEECH_SOURCE
+                and event.type == OWN_EXTERNAL_SPEECH_TYPE
+            ):
+                self._speak_in_flight = False
+                self._speak_armed_at = float("-inf")
+                break
         # C3 belt-and-suspenders: a guard armed longer than the timeout window
-        # without the entity's own speech becoming conscious is cleared, so a
+        # without the entity's own output becoming conscious is cleared, so a
         # failed realization (LLM error, dead organ) can never permanently
         # mute the entity. Uses the injected clock (subjective time in tests).
         if (
@@ -311,6 +340,12 @@ class Volition:
     def select(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         # Core safeguard (§37/§147): inhibited → silence, for every effector.
         if snapshot.inhibited:
+            observe = getattr(self._policy, "observe_inhibited", None)
+            if observe is not None:
+                try:
+                    observe(snapshot)
+                except Exception:
+                    log.warning("proposal outcome recording failed on inhibited snapshot", exc_info=True)
             return []
         try:
             intents = list(self._policy(snapshot))
@@ -318,6 +353,12 @@ class Volition:
             log.exception("action-selection policy raised; producing no intents")
             return []
         return [self._sign(intent) for intent in intents]
+
+    def proposal_outcomes(self, snapshot: WorkspaceSnapshot) -> list[dict]:
+        """Content-free outcomes for any Nous proposals seen on the last select."""
+        if hasattr(self._policy, "proposal_outcomes"):
+            return self._policy.proposal_outcomes(snapshot)
+        return []
 
     def _sign(self, intent: Intent) -> Intent:
         """Attach the provenance envelope to an ``act`` intent when signing is

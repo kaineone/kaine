@@ -62,6 +62,7 @@ def test_effective_memberships_are_golden():
         {
             "cycle.out",
             "volition.out",
+            "volition_feedback.out",
             "soma.out",
             "chronos.out",
             "topos.out",

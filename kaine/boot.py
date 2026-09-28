@@ -941,6 +941,8 @@ def make_nous(
         "baseline_salience",
         "alert_salience",
         "timeout_salience",
+        # Proposal/learning switch.
+        "drive_actions",
     }
     cfg = _pop(section, allowed)
 
@@ -1672,6 +1674,7 @@ def make_hypnos(
         "nous_step_burst",
         "baseline_salience",
         "alert_salience",
+        "requested_rest_min_interval_s",
         "voice_alignment",  # nested sub-table
         "consolidation",  # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
     }

@@ -279,6 +279,8 @@ class Lingua(BaseModule):
         self,
         about: str,
         snapshot: Optional[WorkspaceSnapshot] = None,
+        *,
+        origin: Optional[Any] = None,
     ) -> str:
         # `about` is the triggering input (a user utterance for external speech);
         # the LLM prompt is assembled from it plus the conscious workspace.
@@ -287,18 +289,22 @@ class Lingua(BaseModule):
             snapshot=snapshot,
             mode="external",
             stream=EXTERNAL_STREAM,
+            origin=origin,
         )
 
     async def think(
         self,
         about: str,
         snapshot: Optional[WorkspaceSnapshot] = None,
+        *,
+        origin: Optional[Any] = None,
     ) -> str:
         return await self._produce(
             about=about,
             snapshot=snapshot,
             mode="internal",
             stream=INTERNAL_STREAM,
+            origin=origin,
         )
 
     async def _intent_loop(self) -> None:
@@ -343,6 +349,10 @@ class Lingua(BaseModule):
         """Route one intent event to a (possibly preempting) generation task."""
         kind = str(event.payload.get("kind") or "")
         about = str(event.payload.get("about") or "")
+        origin = event.payload.get("origin")
+        if kind == "rest":
+            log.debug("ignoring rest intent")
+            return
         if not about or kind not in (SPEAK, THINK):
             return
         # Only a `speak` may interrupt; `think` never preempts outer speech.
@@ -360,18 +370,24 @@ class Lingua(BaseModule):
                 await self._settle_gen_task()
         self._gen_mode = "external" if kind == SPEAK else "internal"
         self._gen_task = asyncio.create_task(
-            self._realize_intent(kind, about), name=f"{self.name}-gen"
+            self._realize_intent(kind, about, origin), name=f"{self.name}-gen"
         )
 
-    async def _realize_intent(self, kind: str, about: str) -> None:
+    async def _realize_intent(self, kind: str, about: str, origin: Optional[Any] = None) -> None:
         """Produce one utterance. Runs as the held ``_gen_task``; a preempting
         interrupt cancels it, which propagates ``CancelledError`` out of the
         in-flight ``complete()`` call (the natural cancellation point)."""
         try:
             if kind == SPEAK:
-                await self.speak(about)
+                if origin is None:
+                    await self.speak(about)
+                else:
+                    await self.speak(about, origin=origin)
             elif kind == THINK:
-                await self.think(about)
+                if origin is None:
+                    await self.think(about)
+                else:
+                    await self.think(about, origin=origin)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -468,6 +484,7 @@ class Lingua(BaseModule):
         snapshot: Optional[WorkspaceSnapshot],
         mode: str,
         stream: str,
+        origin: Optional[Any] = None,
     ) -> str:
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest conscious coalition.
@@ -510,6 +527,9 @@ class Lingua(BaseModule):
             "prompt_length": len(ctx.prompt),
             "latency_ms": response.latency_ms,
         }
+        # Carry the realized intent's origin when present (content-free).
+        if origin is not None:
+            payload["origin"] = origin
         # External speech carries the triggering user input so the A/B divergence
         # observer can build its bare baseline. Internal data: eval logs only,
         # never the user-facing conversation surface.

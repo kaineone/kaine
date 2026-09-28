@@ -660,9 +660,16 @@ class CognitiveCycle:
 
         The cycle never calls effectors directly: it publishes intents to
         ``volition.out`` and effectors realize them off the bus. An inhibited
-        snapshot yields no intents (Volition's gate), so nothing is published.
+        snapshot yields no intents (Volition's gate), so nothing is published
+        there. Proposal outcomes always go to ``volition_feedback.out`` (when a
+        Nous proposal source is wired) so Nous can learn what happened.
         """
-        from kaine.workspace.volition import INTENT_TYPES, VOLITION_SOURCE
+        from kaine.workspace.volition import (
+            INTENT_TYPES,
+            PROPOSAL_OUTCOME_TYPE,
+            VOLITION_FEEDBACK_SOURCE,
+            VOLITION_SOURCE,
+        )
 
         try:
             intents = self._volition.select(snapshot)
@@ -685,6 +692,28 @@ class CognitiveCycle:
                 await self._bus.publish(event)
             except Exception:
                 log.exception("failed to publish %s intent", intent.kind)
+
+        # Publish content-free proposal outcomes for Nous learning. This runs
+        # even when the snapshot was inhibited (no intents above).
+        try:
+            outcomes = self._volition.proposal_outcomes(snapshot)
+        except Exception:
+            log.exception(
+                "volition proposal_outcomes raised on tick %d", self._tick_index
+            )
+            return
+        for outcome in outcomes:
+            try:
+                event = Event(
+                    source=VOLITION_FEEDBACK_SOURCE,
+                    type=PROPOSAL_OUTCOME_TYPE,
+                    payload=outcome,
+                    salience=0.0,
+                    timestamp=self._now(),
+                )
+                await self._bus.publish(event)
+            except Exception:
+                log.exception("failed to publish proposal outcome")
 
     async def apply_rate_control_event(self, payload: dict[str, Any]) -> bool:
         """Apply a `cycle.set_rates` payload. Returns True on success."""

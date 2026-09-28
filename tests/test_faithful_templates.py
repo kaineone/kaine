@@ -45,6 +45,18 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "expected_free_energy": -1.531,
         "horizon": 1,
     },
+    ("nous", "nous.proposal"): {
+        "proposal_id": "0f3c9a1e2b4d4c6f8a1b2c3d4e5f6a7b",
+        "action": "request_think",
+        "kind": "think",
+        "step": 12,
+        "preference": 0.42,
+    },
+    ("hypnos", "hypnos.rest_request"): {
+        "accepted": False,
+        "reason": "too_soon",
+        "origin": "nous",
+    },
     ("mnemos", "mnemos.recall"): {
         "count": 3,
         "collection": "episodic",

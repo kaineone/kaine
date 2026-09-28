@@ -70,20 +70,28 @@ _DIAGNOSTICS_EXCLUSIONS: frozenset[str] = frozenset(
     }
 )
 
+#: Additional module-produced streams that are not ``<module>.out``.
+_ADDITIONAL_PRODUCED_STREAMS: tuple[str, ...] = ("volition_feedback.out",)
+
 
 def canonical_module_streams() -> tuple[str, ...]:
     """The canonical ``<module>.out`` set."""
     return tuple(module_stream(name) for name in CANONICAL_MODULE_NAMES)
 
 
+def _all_produced_streams() -> tuple[str, ...]:
+    """Canonical module streams plus additional produced streams."""
+    return canonical_module_streams() + _ADDITIONAL_PRODUCED_STREAMS
+
+
 def curated_module_streams() -> tuple[str, ...]:
-    """Curated research-log streams: canonical set minus content streams."""
-    return tuple(s for s in canonical_module_streams() if s not in _CURATED_EXCLUSIONS)
+    """Curated research-log streams: produced streams minus content streams."""
+    return tuple(s for s in _all_produced_streams() if s not in _CURATED_EXCLUSIONS)
 
 
 def raw_archive_module_streams() -> tuple[str, ...]:
-    """Raw archive streams: the full canonical set."""
-    return canonical_module_streams()
+    """Raw archive streams: the full produced set."""
+    return _all_produced_streams()
 
 
 def diagnostics_streams() -> tuple[str, ...]:

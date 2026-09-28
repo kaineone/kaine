@@ -26,11 +26,16 @@ PAYLOAD_ALLOWLIST = frozenset(
         "input_triggered",
         "drive_triggered",
         "self_initiated",
+        "nous_initiated",
         "unrealizable_nous_intents",
         "realization_failed_count",
+        "nous_proposals_realized",
+        "nous_proposals_declined",
+        "nous_proposals_forwarded",
         "input_triggered_entry_ids",
         "drive_triggered_entry_ids",
         "self_initiated_entry_ids",
+        "nous_initiated_entry_ids",
         "event_types",
         "saliences",
     }
@@ -38,6 +43,25 @@ PAYLOAD_ALLOWLIST = frozenset(
 FORBIDDEN_CONTENT_KEYS = frozenset(
     {"text", "transcript", "utterance", "latent", "embedding", "prompt"}
 )
+
+
+def test_vox_synthesized_origin_nous_is_nous_initiated():
+    """Vox copies Lingua's origin, so a Nous utterance is attributed by it."""
+    intents = [
+        {"stream": "volition.out", "type": "intent.speak", "payload": {"kind": "speak", "entry_id": "e1"}},
+    ]
+    realizations = [
+        {
+            "stream": "vox.out",
+            "type": "vox.synthesized",
+            "payload": {"success": True, "entry_id": "e1", "origin": "nous"},
+        },
+    ]
+    report = classify_realizations([], intents, realizations)
+    assert report.realized_total == 1
+    assert report.nous_initiated == 1
+    assert report.input_triggered == 0
+    assert report.self_initiated == 0
 
 
 def _intent(entry_id=None, kind="intent.speak", stream="volition.out", salience=None):
@@ -54,6 +78,24 @@ def _realization(rtype="external_speech", entry_id=None, stream="lingua.external
     if entry_id is not None:
         payload["entry_id"] = entry_id
     return {"stream": stream, "type": rtype, "payload": payload}
+
+
+def test_realization_origin_uses_own_payload_not_last_intent():
+    """Precise attribution: speech is nous-initiated from its own origin."""
+    intents = [
+        {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e1", "origin": "nous"}},
+        {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e2"}},
+        {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e3", "origin": "nous"}},
+    ]
+    realizations = [
+        {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e1", "origin": "nous"}},
+        {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e2"}},
+        {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e3", "origin": "nous"}},
+    ]
+    report = classify_realizations([], intents, realizations)
+    assert report.nous_initiated == 2
+    assert report.self_initiated == 1
+    assert report.realized_total == 3
 
 
 def _broadcast(members):
@@ -222,6 +264,69 @@ def test_base_thesis_no_broadcasts_at_all():
     assert report.self_initiated == 1
 
 
+# --- Scenario: Nous-originated intents ---
+
+
+def test_nous_origin_think_realized_as_internal_speech_is_nous_initiated():
+    # Even with a drive in the coalition, origin "nous" wins first.
+    broadcasts = [_broadcast([_member("D1", "thymos.drive"), _member("E1", "mnemos.trace")])]
+    intents = [
+        _intent("E1", kind="intent.think", stream="volition.out", salience=0.7),
+    ]
+    intents[0]["payload"]["origin"] = "nous"
+    realizations = [_realization("internal_speech", entry_id="E1")]
+    report = classify_realizations(broadcasts, intents, realizations)
+    assert report.nous_initiated == 1
+    assert report.drive_triggered == 0
+    assert report.self_initiated == 0
+
+
+def test_nous_origin_requested_sleep_is_nous_initiated_rest():
+    broadcasts = []
+    intents = [
+        {"stream": "volition.out", "type": "intent.rest", "payload": {"origin": "nous", "entry_id": "R1", "salience": 0.6}},
+    ]
+    realizations = [
+        {"stream": "hypnos.out", "type": "hypnos.sleep.started", "payload": {"trigger": "requested", "entry_id": "R1"}},
+    ]
+    report = classify_realizations(broadcasts, intents, realizations)
+    assert report.realized_total == 1
+    assert report.nous_initiated == 1
+    assert "R1" in report.nous_initiated_entry_ids
+
+
+def test_proposal_outcome_counts():
+    outcomes = [
+        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p1", "realized": True}},
+        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False}},
+    ]
+    report = classify_realizations([], [], [], proposal_outcomes=outcomes)
+    assert report.nous_proposals_realized == 1
+    assert report.nous_proposals_declined == 1
+
+
+def test_proposal_outcome_counts_includes_forwarded():
+    outcomes = [
+        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p1", "realized": True}},
+        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False, "reason": "refractory"}},
+        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p3", "realized": False, "reason": "forwarded"}},
+    ]
+    report = classify_realizations([], [], [], proposal_outcomes=outcomes)
+    assert report.nous_proposals_realized == 1
+    assert report.nous_proposals_declined == 1
+    assert report.nous_proposals_forwarded == 1
+
+
+def test_any_intent_on_nous_out_is_unrealizable():
+    for kind in ("intent.act", "intent.speak", "intent.think", "intent.rest"):
+        report = classify_realizations(
+            [],
+            [{"stream": "nous.out", "type": kind, "payload": {"entry_id": "x"}}],
+            [],
+        )
+        assert report.unrealizable_nous_intents == 1, kind
+
+
 # --- Scenario: unrealizable nous intents counted separately ---
 
 
@@ -351,6 +456,15 @@ def test_research_event_taxonomy_registered():
     assert "latent" not in allowed
     assert "sleep_index" in allowed
     assert "unrealizable_nous_intents" in allowed
+    # Every numeric count the audit publishes reaches the research log; only
+    # the entry_id lists, event types and saliences stay in the sleep snapshot.
+    counts = {
+        key
+        for key in PAYLOAD_ALLOWLIST
+        if key not in {"event_types", "saliences"} and not key.endswith("_entry_ids")
+    }
+    assert counts <= allowed
+    assert allowed - {"audit_error"} <= PAYLOAD_ALLOWLIST
 
 
 def test_bus_workspace_read_path_exists():

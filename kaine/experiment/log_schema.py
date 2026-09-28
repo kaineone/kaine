@@ -78,6 +78,8 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     "nous.policy": {"confidence": UNIT},
     "nous.error": {"confidence": UNIT},
     "nous.timeout": {"confidence": UNIT},
+    # preference is a softmax probability in [0, 1] (nous.module).
+    "nous.proposal": {"preference": UNIT},
     # --- Affect / motivation (thymos.state: documented [-1,1]/[0,1]) ---
     "thymos.state": {
         "valence": SIGNED_UNIT,

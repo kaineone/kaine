@@ -102,6 +102,9 @@ class Hypnos(BaseModule):
         # measure infrastructure latency, like the cycle slip). Defaults to a
         # real-time clock → behavior-identical.
         entity_clock: Optional[EntityClock] = None,
+        # Minimum entity-time seconds between a sleep's end and a Nous-requested
+        # rest; bounds rest requests from an exploring Nous.
+        requested_rest_min_interval_s: float = 1800.0,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -171,6 +174,23 @@ class Hypnos(BaseModule):
         # Fatigue trigger state
         self._soma_cursor: str = "0"
         self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
+        # Nous/Volition rest-request handling
+        self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
+        self._entity_clock = entity_clock
+        self._volition_cursor: str = "0"
+        # Seed from boot time so a fresh boot or module restart cannot bypass
+        # the requested-rest interval. Fatigue/regulation triggers are
+        # unaffected; this only guards Nous/Volition rest requests.
+        self._last_sleep_ended_at: Optional[float] = (
+            self._entity_clock.now()
+            if self._entity_clock is not None
+            else time.monotonic()
+        )
+        self._requested_sleep_trigger: bool = False
+        # The rest request a requested sleep answers; acceptance is announced
+        # from inside the pipeline right after ``hypnos.sleep.started``.
+        self._pending_rest: Optional[dict[str, Any]] = None
+        self._requested_rest_accepted: bool = False
         # Sleep-time ignition audit (change sleep-ignition-audit): per-stream
         # cursors, seeded at initialize() to the CURRENT stream tails (the same
         # persisted-cursor pattern as _soma_cursor) so the first sleep audits
@@ -179,11 +199,13 @@ class Hypnos(BaseModule):
             stream: "0"
             for stream in (
                 "volition.out",
+                "volition_feedback.out",
                 "lingua.external",
                 "lingua.internal",
                 "praxis.out",
                 "nous.out",
                 "vox.out",
+                "hypnos.out",
             )
         }
         self._broadcast_cursor: str = "0"
@@ -246,6 +268,19 @@ class Hypnos(BaseModule):
             if isinstance(tail, bytes):
                 tail = tail.decode()
             self._broadcast_cursor = tail
+        # Seed cursor so we only process new volition intents from now on.
+        try:
+            latest = await self._bus.client.xrevrange("volition.out", count=1)
+        except Exception:
+            latest = []
+        if latest:
+            entry_id = latest[0][0]
+            if isinstance(entry_id, bytes):
+                entry_id = entry_id.decode()
+            self._volition_cursor = entry_id
+        self._tasks.append(
+            asyncio.create_task(self._volition_consumer_loop(), name="hypnos-volition-consumer")
+        )
         if self._fatigue_triggered:
             # Seed cursor so we only process new soma events from now on.
             try:
@@ -333,6 +368,41 @@ class Hypnos(BaseModule):
         except asyncio.CancelledError:
             raise
 
+    async def _volition_consumer_loop(self) -> None:
+        """Background loop: watch volition.out for rest requests.
+
+        Nous-originated ``intent.rest`` events (and any other rest intents)
+        request an entity-time sleep. Accepted requests start a maintenance
+        cycle with trigger ``"requested"``; refusals publish a content-free
+        ``hypnos.rest_request`` event.
+        """
+        try:
+            while not self._stopped.is_set():
+                try:
+                    entries, last_scanned = await self._bus.read_entries(
+                        "volition.out",
+                        last_id=self._volition_cursor,
+                        count=32,
+                        block_ms=0,
+                    )
+                    if last_scanned:
+                        self._volition_cursor = last_scanned
+                    if entries:
+                        for _, event in entries:
+                            if event.type != "intent.rest":
+                                continue
+                            payload = getattr(event, "payload", None) or {}
+                            await self._handle_rest_request(payload)
+                    else:
+                        await asyncio.sleep(0.05)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("hypnos volition consumer iteration failed")
+                    await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            raise
+
     async def _fatigue_triggered_enter_sleep_inner(self) -> None:
         """Fire a maintenance cycle in response to soma.fatigue threshold crossing."""
         try:
@@ -350,13 +420,109 @@ class Hypnos(BaseModule):
             # loser/HypnosBusyError branch) — it records the last trigger.
             self._sleep_pending = False
 
-    async def enter_sleep(self) -> dict[str, Any]:
+    async def _publish_rest_request(
+        self, accepted: bool, reason: str, origin: Any, proposal_id: Any = None
+    ) -> None:
+        """Emit the content-free ``hypnos.rest_request`` diagnostic.
+
+        Always salience 0.0 so the diagnostic never competes for the workspace.
+        """
+        payload = {"accepted": accepted, "reason": reason, "origin": origin}
+        if proposal_id is not None:
+            payload["proposal_id"] = proposal_id
+        try:
+            await self.publish(
+                "hypnos.rest_request",
+                payload,
+                salience=0.0,
+            )
+        except Exception:
+            log.warning("hypnos: rest_request publish failed", exc_info=True)
+
+    async def _handle_rest_request(self, payload: dict[str, Any]) -> None:
+        """Accept or refuse a Nous/Volition rest request.
+
+        Publishes a content-free ``hypnos.rest_request`` diagnostic at
+        salience 0.0 and, when accepted, starts a requested sleep through the
+        same guarded path as fatigue/regulation triggers. ``accepted: true`` is
+        announced from inside the pipeline immediately after
+        ``hypnos.sleep.started``; otherwise the reason is ``busy``,
+        ``too_soon`` or, if the pipeline starts and then aborts, ``aborted``.
+        """
+        origin = payload.get("origin")
+        proposal_id = payload.get("proposal_id")
+        if self._sleep_lock.locked() or self._sleep_pending:
+            await self._publish_rest_request(False, "busy", origin, proposal_id)
+            log.debug(
+                "hypnos: rest request refused (reason=busy, origin=%s, proposal_id=%s)",
+                origin, proposal_id,
+            )
+            return
+
+        now = self._entity_clock.now() if self._entity_clock is not None else time.monotonic()
+        last = self._last_sleep_ended_at
+        if last is not None and (now - last) < self._requested_rest_min_interval_s:
+            await self._publish_rest_request(False, "too_soon", origin, proposal_id)
+            log.debug(
+                "hypnos: rest request refused (reason=too_soon, origin=%s, proposal_id=%s)",
+                origin, proposal_id,
+            )
+            return
+
+        # Attempt the guarded start. Acceptance is published by the pipeline once
+        # the sleep has actually begun; if the guard loses the race, the task
+        # publishes busy; if the pipeline aborts, the task publishes aborted.
+        self._sleep_pending = True
+        self._requested_sleep_trigger = True
+        self._sleep_task = asyncio.create_task(
+            self._requested_enter_sleep(origin, proposal_id),
+            name="hypnos-requested-sleep",
+        )
+
+    async def _requested_enter_sleep(self, origin: Any, proposal_id: Any) -> None:
+        """Fire a maintenance cycle in response to an accepted rest request."""
+        pending = {"proposal_id": proposal_id, "origin": origin}
+        try:
+            self._pending_rest = pending
+            self._requested_rest_accepted = False
+            await self.enter_sleep(trigger="requested")
+        except HypnosBusyError:
+            log.debug(
+                "hypnos: requested sleep: already sleeping (origin=%s, proposal_id=%s)",
+                origin, proposal_id,
+            )
+            await self._publish_rest_request(False, "busy", origin, proposal_id)
+        except Exception:
+            log.exception(
+                "hypnos: requested sleep failed (origin=%s, proposal_id=%s)",
+                origin, proposal_id,
+            )
+            if self._requested_rest_accepted:
+                await self._publish_rest_request(False, "aborted", origin, proposal_id)
+            else:
+                await self._publish_rest_request(False, "busy", origin, proposal_id)
+        finally:
+            self._sleep_pending = False
+            self._requested_sleep_trigger = False
+            self._pending_rest = None
+            self._requested_rest_accepted = False
+
+    async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Returns a summary dict."""
         if self._sleep_lock.locked():
             raise HypnosBusyError("Hypnos sleep is already in progress")
 
         async with self._sleep_lock:
-            return await self._run_pipeline()
+            try:
+                if trigger is None:
+                    return await self._run_pipeline()
+                return await self._run_pipeline(trigger=trigger)
+            finally:
+                self._last_sleep_ended_at = (
+                    self._entity_clock.now()
+                    if self._entity_clock is not None
+                    else time.monotonic()
+                )
 
     def _suspend_perception(self) -> None:
         """Set locus to 'off' to suspend external perception during replay window.
@@ -449,7 +615,7 @@ class Hypnos(BaseModule):
             salience=self._baseline_salience,
         )
 
-    async def _run_pipeline_inner(self) -> dict[str, Any]:
+    async def _run_pipeline_inner(self, trigger: Optional[str] = None) -> dict[str, Any]:
         # Pipeline latency + the started_at/last_sleep_at marks measure REAL
         # infrastructure wall-time (how long the sleep work actually took / when
         # it ran), like the cycle's slip measurement — never the subjective
@@ -459,9 +625,18 @@ class Hypnos(BaseModule):
         start = time.monotonic()
         await self.publish(
             "hypnos.sleep.started",
-            {"started_at": time.time()},  # infrastructural: real time
+            # infrastructural: real time. "trigger" is present only for a
+            # requested rest, so ordinary sleeps publish exactly as before.
+            {"started_at": time.time(), **({"trigger": trigger} if trigger else {})},
             salience=self._baseline_salience,
         )
+        if trigger == "requested" and self._pending_rest is not None:
+            pending = self._pending_rest
+            self._pending_rest = None
+            self._requested_rest_accepted = True
+            await self._publish_rest_request(
+                True, "accepted", pending["origin"], pending.get("proposal_id")
+            )
         phase_results: list[PhaseResult] = []
 
         # --- Phase 1: Light Consolidation ---
@@ -511,6 +686,11 @@ class Hypnos(BaseModule):
         phase_results.append(voice_phase)
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
+        # Capture the previous sleep mark BEFORE overwriting it; the ignition
+        # audit window must start at the prior sleep (or boot), never the
+        # current one. The current sleep's own hypnos.sleep.started has a
+        # timestamp >= previous_sleep_at, so it is included in the window.
+        previous_sleep_at = self._last_sleep_at
         self._last_sleep_at = time.time()
         self._scheduler.mark_completed()
 
@@ -553,7 +733,7 @@ class Hypnos(BaseModule):
         # completed metadata — riding hypnos.sleep.completed into the
         # sleep_snapshots JSONL, carrying sleep_index.
         try:
-            summary["ignition_audit"] = await self._run_ignition_audit()
+            summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("hypnos: ignition audit step failed (continuing)", exc_info=True)
         # Publishing hypnos.sleep.completed causes Soma to reset its
@@ -582,7 +762,7 @@ class Hypnos(BaseModule):
         self._audit_cursors[stream] = cursor
         return events
 
-    async def _run_ignition_audit(self) -> dict[str, Any]:
+    async def _run_ignition_audit(self, since: Optional[float] = None) -> dict[str, Any]:
         """Sleep-time ignition audit (change sleep-ignition-audit) — pure data.
 
         Unconditional on every sleep: collects intents/realizations from
@@ -590,8 +770,8 @@ class Hypnos(BaseModule):
         ``praxis.out`` since the per-stream cursors, plus
         ``workspace.broadcast`` snapshots since the broadcast cursor (read via
         the decode-safe workspace path — never ``bus.range``, which cannot
-        decode broadcast entries), bounded to the window since
-        ``_last_sleep_at``. Classification itself is the PURE
+        decode broadcast entries), bounded to the window starting at ``since``.
+        ``None`` means from boot. Classification itself is the PURE
         ``classify_realizations`` — no bus, no I/O. The payload is content-free
         (counts, entry_ids, event types, salience values, sleep_index only);
         ``intent.act`` on ``nous.out`` is counted separately as unrealizable
@@ -604,8 +784,8 @@ class Hypnos(BaseModule):
 
         try:
             since_ms: Optional[float] = None
-            if self._last_sleep_at is not None:
-                since_ms = self._last_sleep_at * 1000.0
+            if since is not None:
+                since_ms = since * 1000.0
 
             def _in_window(entry_id: str) -> bool:
                 if since_ms is None:
@@ -617,13 +797,16 @@ class Hypnos(BaseModule):
 
             intents: list[dict[str, Any]] = []
             realizations: list[dict[str, Any]] = []
+            proposal_outcomes: list[dict[str, Any]] = []
             for stream in (
                 "volition.out",
+                "volition_feedback.out",
                 "lingua.external",
                 "lingua.internal",
                 "praxis.out",
                 "nous.out",
                 "vox.out",
+                "hypnos.out",
             ):
                 for entry_id, event in await self._drain_audit_stream(stream):
                     if not _in_window(entry_id):
@@ -635,6 +818,11 @@ class Hypnos(BaseModule):
                     }
                     if event.type.startswith("intent."):
                         intents.append(record)
+                    elif event.type == "volition.proposal_outcome":
+                        proposal_outcomes.append(record)
+                    elif event.type == "hypnos.sleep.started":
+                        # A requested sleep counts as a realized rest event.
+                        realizations.append(record)
                     else:
                         realizations.append(record)
             broadcasts: list[dict[str, Any]] = []
@@ -653,6 +841,7 @@ class Hypnos(BaseModule):
                 broadcasts,
                 intents,
                 realizations,
+                proposal_outcomes=proposal_outcomes,
                 sleep_index=self._sleep_count,
             )
             payload = report.as_payload()
@@ -666,6 +855,10 @@ class Hypnos(BaseModule):
                 "input": 0,
                 "drive": 0,
                 "self": 0,
+                "nous_initiated": 0,
+                "nous_proposals_realized": 0,
+                "nous_proposals_declined": 0,
+                "nous_proposals_forwarded": 0,
                 "audit_error": type(exc).__name__,
             }
         # Content-free bus event on hypnos.out. An intermediate publish must
@@ -935,7 +1128,7 @@ class Hypnos(BaseModule):
         else:
             log.info("hypnos: snapshot has no schedule; starting a fresh interval")
 
-    async def _run_pipeline(self) -> dict[str, Any]:
+    async def _run_pipeline(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """M2 — guarantee ``hypnos.sleep.completed`` is published.
 
         The pipeline body publishes the normal completed event on success.
@@ -947,7 +1140,9 @@ class Hypnos(BaseModule):
         faster_decay always stops.
         """
         try:
-            return await self._run_pipeline_inner()
+            if trigger is None:
+                return await self._run_pipeline_inner()
+            return await self._run_pipeline_inner(trigger=trigger)
         except Exception as exc:
             log.exception("hypnos: sleep pipeline aborted")
             try:

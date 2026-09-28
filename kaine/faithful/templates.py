@@ -323,6 +323,22 @@ def _t_hypnos_association(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
+def _t_nous_proposal(payload: dict[str, Any]) -> str:
+    kind = payload.get("kind")
+    if kind:
+        return f"Nous proposes to {kind}."
+    return "Nous proposes an action."
+
+
+def _t_hypnos_rest_request(payload: dict[str, Any]) -> str:
+    if payload.get("accepted"):
+        return "Rest request accepted."
+    reason = payload.get("reason")
+    if reason:
+        return f"Rest request declined ({reason})."
+    return "Rest request declined."
+
+
 def _t_eidolon_self_model(payload: dict[str, Any]) -> str:
     # Privacy: render counts and labels only — no raw text/transcript.
     values = payload.get("values") or []
@@ -361,12 +377,14 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("phantasia", "phantasia.world_error"): _t_phantasia_world_error,
     ("phantasia", "phantasia.scenario"): _t_phantasia_scenario,
     ("nous", "nous.timeout"): _t_nous_timeout,
+    ("nous", "nous.proposal"): _t_nous_proposal,
     ("audition", "audition.prosody"): _t_audition_prosody,
     ("vox", "vox.synthesized"): _t_vox_synthesized,
     ("mnemos", "mnemos.replay"): _t_mnemos_replay,
     ("hypnos", "hypnos.sleep.started"): _t_hypnos_sleep_started,
     ("hypnos", "hypnos.sleep.completed"): _t_hypnos_sleep_completed,
     ("hypnos", "hypnos.association"): _t_hypnos_association,
+    ("hypnos", "hypnos.rest_request"): _t_hypnos_rest_request,
     ("eidolon", "eidolon.self_model"): _t_eidolon_self_model,
 }
 

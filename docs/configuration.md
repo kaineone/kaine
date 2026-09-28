@@ -407,6 +407,7 @@ The complexity envelope `factors * max_states_per_factor * actions * planning_ho
 | `transition_max_concentration` | float | `1000.0` | Upper bound on the evidence held in any perceptual transition column. A larger column is rescaled to this total with its proportions kept, so the being stays able to learn from change. |
 | `baseline_salience` | float | `0.4` | Salience of routine belief-update publications. |
 | `alert_salience` | float | `0.8` | Salience when EFE selects a non-trivial policy or a timeout occurs. |
+| `drive_actions` | boolean | `true` | When `true`, Volition may realize conscious `nous.proposal` events as `intent.think`/`intent.speak`/`intent.rest`. When `false`, Nous stays observational: all proposals receive outcome `disabled` and are learned as `no_op`. |
 
 ---
 
@@ -764,6 +765,7 @@ Offline consolidation: multi-phase replay, synaptic downscaling, and optional vo
 | `interval_seconds` | float | `3600.0` | Maximum interval between consolidation runs (seconds). Also the timer-based fallback when fatigue triggering is used. |
 | `max_deferral_seconds` | float | `600.0` | Maximum total deferral allowed when the system tries to delay consolidation (seconds). |
 | `per_defer_seconds` | float | `60.0` | Amount of time deferred per deferral request. |
+| `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time interval (seconds) since the last sleep ended before an `intent.rest` request is honoured. |
 | `nous_step_burst` | integer | `200` | Reserved / currently unused: stored on `Hypnos` (`self._nous_step_burst`) at construction but never read — there is no such Nous offline phase. The related `nous_process` constructor param (always `None` from boot) is likewise stored and never read. |
 | `baseline_salience` | float | `0.5` | Salience of consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Salience on consolidation errors or welfare-relevant conditions. |

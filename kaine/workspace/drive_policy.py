@@ -93,6 +93,16 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
         """Clear the think one-in-flight guard (a prior think has completed)."""
         self._think_in_flight = False
 
+    def note_external_intent(self, kind: str, when: float | None = None) -> None:
+        """Arm the corresponding in-flight guard as if the policy emitted it."""
+        now = when if when is not None else self._guard_now()
+        if kind == SPEAK:
+            self._speak_in_flight = True
+            self._speak_armed_at = now
+        elif kind == THINK:
+            self._think_in_flight = True
+            self._think_armed_at = now
+
     def _clear_guards_on_own_output(self, snapshot: WorkspaceSnapshot) -> None:
         """Clear each guard when the entity's matching output is now conscious.
 

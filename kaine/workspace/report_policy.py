@@ -60,7 +60,14 @@ class SelfInitiatedReportPolicy:
     in-flight utterance always runs to completion (opt-in interruption).
     ``*_refractory_s`` are minimum intervals between reports, read off the injected
     ``clock`` (the entity's subjective clock in production; default monotonic).
+    ``guard_clock`` times the in-flight speak/think guards; in production it is
+    the real monotonic wall clock while ``clock`` remains subjective.
     """
+
+    # C3: the same guard timeout as the default and drive policies. A guard
+    # armed this long without the entity's matching output becoming conscious
+    # is cleared, so a failed realization cannot permanently mute the entity.
+    _GUARD_TIMEOUT_S = 48.0
 
     def __init__(
         self,
@@ -72,6 +79,7 @@ class SelfInitiatedReportPolicy:
         think_refractory_s: float = 3.0,
         sig_expiry_s: Optional[float] = None,
         clock: Optional[Callable[[], float]] = None,
+        guard_clock: Optional[Callable[[], float]] = None,
     ) -> None:
         if not 0.0 <= think_threshold <= report_threshold <= 1.0:
             raise ValueError(
@@ -99,8 +107,13 @@ class SelfInitiatedReportPolicy:
         self._speak_refractory_s = float(speak_refractory_s)
         self._think_refractory_s = float(think_refractory_s)
         self._clock = clock or time.monotonic
+        # The in-flight guards time real generation and playback, so the guard
+        # timeout reads wall time; refractory periods stay on the subjective clock.
+        self._guard_clock = guard_clock or time.monotonic
         self._speak_in_flight = False
         self._think_in_flight = False
+        self._speak_armed_at = float("-inf")
+        self._think_armed_at = float("-inf")
         # -inf so the first eligible report is never suppressed by refractory.
         self._last_speak_at = float("-inf")
         self._last_think_at = float("-inf")
@@ -132,10 +145,30 @@ class SelfInitiatedReportPolicy:
     def mark_realized(self) -> None:
         """Clear the speak one-in-flight guard (a prior utterance completed)."""
         self._speak_in_flight = False
+        self._speak_armed_at = float("-inf")
 
     def mark_think_realized(self) -> None:
         """Clear the think one-in-flight guard (a prior think completed)."""
         self._think_in_flight = False
+        self._think_armed_at = float("-inf")
+
+    def note_external_intent(self, kind: str, when: float | None = None) -> None:
+        """Arm the in-flight guard and refractory for ``kind`` as if emitted here.
+
+        Does not update the novelty signature. ``when`` sets the refractory
+        timestamps only; the guard is always armed on the wall-time
+        ``guard_clock``, so generation and playback latency is measured in real
+        seconds.
+        """
+        now = when if when is not None else float(self._clock())
+        if kind == SPEAK:
+            self._speak_in_flight = True
+            self._last_speak_at = now
+            self._speak_armed_at = float(self._guard_clock())
+        elif kind == THINK:
+            self._think_in_flight = True
+            self._last_think_at = now
+            self._think_armed_at = float(self._guard_clock())
 
     @staticmethod
     def _is_own_speech(event) -> bool:
@@ -150,8 +183,29 @@ class SelfInitiatedReportPolicy:
                 continue
             if event.type == OWN_EXTERNAL_SPEECH_TYPE:
                 self._speak_in_flight = False
+                self._speak_armed_at = float("-inf")
             elif event.type == OWN_INTERNAL_SPEECH_TYPE:
                 self._think_in_flight = False
+                self._think_armed_at = float("-inf")
+
+        # C3 belt-and-suspenders: a guard armed longer than the timeout window
+        # without the entity's own output becoming conscious is cleared, so a
+        # failed realization (LLM error, dead organ) can never permanently
+        # mute the entity. Uses the wall-time guard_clock so a failed
+        # realization recovers after real seconds.
+        guard_now = float(self._guard_clock())
+        if (
+            self._speak_in_flight
+            and (guard_now - self._speak_armed_at) >= self._GUARD_TIMEOUT_S
+        ):
+            self._speak_in_flight = False
+            self._speak_armed_at = float("-inf")
+        if (
+            self._think_in_flight
+            and (guard_now - self._think_armed_at) >= self._GUARD_TIMEOUT_S
+        ):
+            self._think_in_flight = False
+            self._think_armed_at = float("-inf")
 
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         if snapshot.inhibited:
@@ -192,6 +246,7 @@ class SelfInitiatedReportPolicy:
         ):
             # _speak_in_flight stays True (re-armed for the new utterance).
             self._last_speak_at = now
+            self._speak_armed_at = float(self._guard_clock())
             self._last_report_sig = signature
             self._sig_set_at = now
             return [
@@ -211,6 +266,7 @@ class SelfInitiatedReportPolicy:
             and not self._sig_blocks(signature, now)
         ):
             self._speak_in_flight = True
+            self._speak_armed_at = float(self._guard_clock())
             self._last_speak_at = now
             self._last_report_sig = signature
             self._sig_set_at = now
@@ -230,6 +286,7 @@ class SelfInitiatedReportPolicy:
             and (now - self._last_think_at) >= self._think_refractory_s
         ):
             self._think_in_flight = True
+            self._think_armed_at = float(self._guard_clock())
             self._last_think_at = now
             return [
                 Intent(

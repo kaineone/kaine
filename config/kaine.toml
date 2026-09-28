@@ -497,6 +497,11 @@ actions = 4                    # ACTION_SPACE: no_op/request_think/request_speak
 planning_horizon = 1
 efe_timeout_ms = 250           # hard guard; on overrun return last posterior + nous.timeout
 baseline_salience = 0.4
+# drive_actions: when true (default), Nous's chosen actions become proposals
+# that Volition may realize (think/speak via Lingua, rest via Hypnos) once they
+# win the workspace in a non-inhibited broadcast; Nous then learns from the
+# action actually taken. false = observational ablation (nothing is realized).
+drive_actions = true
 alert_salience = 0.8
 # Salience of the nous.timeout event emitted when EFE planning overruns
 # efe_timeout_ms (Nous returns the last posterior rather than blocking the
@@ -921,6 +926,8 @@ per_defer_seconds = 60.0
 nous_step_burst = 200
 baseline_salience = 0.5
 alert_salience = 0.8
+# Minimum entity-time seconds between a sleep's end and a Nous-requested rest; bounds rest requests from an exploring Nous.
+requested_rest_min_interval_s = 1800.0
 
 [hypnos.consolidation]
 # Whether Hypnos subscribes to soma.fatigue and triggers on threshold crossing.

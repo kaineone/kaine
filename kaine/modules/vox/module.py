@@ -253,6 +253,7 @@ class Vox(BaseModule):
         text: str,
         *,
         state: Optional[DimensionalState] = None,
+        origin: Optional[str] = None,
     ) -> SynthesisResult:
         """Direct synthesis API for tests and callers without a bus loop."""
         if self._dormant:
@@ -284,6 +285,7 @@ class Vox(BaseModule):
                     success=False,
                     error=f"text-to-speech unavailable: {self._tts_unavailable}",
                     salience=self._baseline_salience,
+                    origin=origin,
                 )
             log.debug("vox muted synthesis suppressed: %s", self._tts_unavailable)
             return SynthesisResult(
@@ -299,7 +301,7 @@ class Vox(BaseModule):
         if self._sink_enabled:
             await self._sink_audio(text, result)
         await self._play(result)
-        await self._publish_event(text, params, result, success=True)
+        await self._publish_event(text, params, result, success=True, origin=origin)
         return result
 
     def add_playback_tap(self, tap: Player) -> None:
@@ -400,6 +402,7 @@ class Vox(BaseModule):
         success: bool,
         error: Optional[str] = None,
         salience: Optional[float] = None,
+        origin: Optional[str] = None,
     ) -> None:
         payload: dict[str, Any] = {
             "text_length": len(text),
@@ -417,6 +420,8 @@ class Vox(BaseModule):
         }
         if error is not None:
             payload["error"] = error
+        if origin is not None:
+            payload["origin"] = origin
         if salience is None:
             salience = self._baseline_salience if success else self._alert_salience
         await self.publish("vox.synthesized", payload, salience=salience)
@@ -478,10 +483,11 @@ class Vox(BaseModule):
                 log.warning("failed to parse audition.prosody payload", exc_info=True)
         elif stream == self._lingua_stream:
             text = event.payload.get("text") or ""
+            origin = event.payload.get("origin")
             if not text:
                 return
             try:
-                await self.synthesize_text(text)
+                await self.synthesize_text(text, origin=origin)
             except Exception as exc:
                 log.exception("vox synthesis failed")
                 await self._publish_event(
@@ -493,6 +499,7 @@ class Vox(BaseModule):
                     ),
                     success=False,
                     error=f"{type(exc).__name__}: {exc}",
+                    origin=origin,
                 )
 
     def serialize(self) -> dict[str, Any]:
