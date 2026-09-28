@@ -214,15 +214,12 @@ def _model_fingerprint(model_dir: str, model_id: str | None) -> tuple:
                 entries.append((".verified", 0, 0))
             seen.add(".verified")
 
-        required_files: list[str] | None = None
-        try:
-            from kaine.setup import speech_models
+        from kaine.setup import speech_models
 
-            manifest = speech_models.MANIFEST.get(model_id)
-            if manifest is not None:
-                required_files = manifest.required_files
-        except Exception:
-            pass
+        required_files: list[str] | None = None
+        manifest = speech_models.MANIFEST.get(model_id)
+        if manifest is not None:
+            required_files = list(manifest.required_files)
 
         if required_files is not None:
             for rel in required_files:

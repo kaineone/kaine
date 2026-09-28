@@ -362,8 +362,8 @@ async def test_tts_construction_is_cheap(tmp_path, monkeypatch):
     fake = types.SimpleNamespace(
         OfflineTts=FakeTts,
         OfflineTtsConfig=lambda config: config,
-        OfflineTtsModelConfig=lambda **kw: types.SimpleNamespace(**kw),
-        OfflineTtsKokoroModelConfig=lambda **kw: types.SimpleNamespace(**kw),
+        OfflineTtsModelConfig=types.SimpleNamespace,
+        OfflineTtsKokoroModelConfig=types.SimpleNamespace,
     )
 
     SherpaKokoroTTS(_make_tts_dir(tmp_path), sherpa_module=fake)

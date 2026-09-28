@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
+import kaine.cycle.__main__ as cycle_main
 from kaine.backend_state import backend_failures, clear_backend_failures
 from kaine.boot import ConfigurationError, build_registry, make_audition, make_vox
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.cycle.__main__ import _make_rebuild_module
 from kaine.modules.audition import FakeEmotionClassifier, FakeSTTClient
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import SpeachesClient, TranscriptionResult
@@ -315,11 +315,9 @@ async def test_build_registry_refuses_boot_when_sherpa_package_missing(bus, monk
 
 
 def test_rebuild_module_raises_when_construct_returns_none(bus, monkeypatch):
-    import kaine.cycle.__main__ as cycle_main
-
     monkeypatch.setattr(cycle_main, "construct_module", lambda *args, **kwargs: None)
     registry = SimpleNamespace(entity_clock=None, plugins=[])
-    rebuild = _make_rebuild_module(bus, {}, registry, None)
+    rebuild = cycle_main._make_rebuild_module(bus, {}, registry, None)
     with pytest.raises(RuntimeError, match="cannot rebuild audition"):
         rebuild("audition")
 

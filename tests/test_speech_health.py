@@ -16,14 +16,6 @@ import pytest
 import kaine.nexus.health.probes as probes_mod
 import kaine.setup.speech_models as _speech_models_mod
 from kaine.nexus.health.config import build_dependency_specs
-from kaine.nexus.health.probes import (
-    DEGRADED,
-    DOWN,
-    UP,
-    clear_sherpa_probe_memo,
-    probe_sherpa_stt,
-    probe_sherpa_tts,
-)
 
 
 @pytest.fixture
@@ -37,9 +29,9 @@ def _patch_speech_models(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _clear_sherpa_memo():
-    clear_sherpa_probe_memo()
+    probes_mod.clear_sherpa_probe_memo()
     yield
-    clear_sherpa_probe_memo()
+    probes_mod.clear_sherpa_probe_memo()
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +68,7 @@ def _up_runner(detail: str):
 
     def _child(kind, args):
         calls.append((kind, args))
-        return UP, detail
+        return probes_mod.UP, detail
 
     return _child, calls
 
@@ -86,7 +78,7 @@ def _down_runner(detail: str):
 
     def _child(kind, args):
         calls.append((kind, args))
-        return DOWN, detail
+        return probes_mod.DOWN, detail
 
     return _child, calls
 
@@ -95,9 +87,9 @@ def test_probe_sherpa_stt_up_when_child_reports_up(monkeypatch):
     runner, calls = _up_runner("loaded and transcribed a test clip")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == UP
+    assert status == probes_mod.UP
     assert "loaded and transcribed a test clip" in detail
     assert len(calls) == 1
 
@@ -106,11 +98,11 @@ def test_probe_sherpa_stt_down_when_child_reports_down(monkeypatch):
     runner, calls = _down_runner("FileNotFoundError: missing encoder_model.ort")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_stt(
+        probes_mod.probe_sherpa_stt(
             model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2
         )
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert "FileNotFoundError" in detail
     assert "missing encoder_model.ort" in detail
 
@@ -119,14 +111,14 @@ def test_probe_sherpa_tts_up_when_child_reports_up(monkeypatch):
     runner, calls = _up_runner("loaded and synthesized a test word")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_tts(
+        probes_mod.probe_sherpa_tts(
             model_dir="/fake/tts",
             model_id="kokoro-en",
             speaker_id=0,
             num_threads=2,
         )
     )
-    assert status == UP
+    assert status == probes_mod.UP
     assert "loaded and synthesized a test word" in detail
     assert len(calls) == 1
 
@@ -135,14 +127,14 @@ def test_probe_sherpa_tts_down_when_child_reports_down(monkeypatch):
     runner, calls = _down_runner("FileNotFoundError: missing model.int8.onnx")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_tts(
+        probes_mod.probe_sherpa_tts(
             model_dir="/fake/tts",
             model_id="kokoro-en",
             speaker_id=0,
             num_threads=2,
         )
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert "FileNotFoundError" in detail
     assert "missing model.int8.onnx" in detail
 
@@ -151,14 +143,14 @@ def test_probe_sherpa_tts_down_on_empty_audio(monkeypatch):
     runner, calls = _down_runner("RuntimeError: synthesized audio was empty")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_tts(
+        probes_mod.probe_sherpa_tts(
             model_dir="/fake/tts",
             model_id="kokoro-en",
             speaker_id=0,
             num_threads=2,
         )
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert "empty" in detail.lower()
 
 
@@ -166,14 +158,14 @@ def test_probe_sherpa_stt_memo_reuses_up_result(monkeypatch):
     runner, calls = _up_runner("loaded and transcribed a test clip")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == UP
+    assert status == probes_mod.UP
     first_calls = len(calls)
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == UP
+    assert status == probes_mod.UP
     assert len(calls) == first_calls
     assert "verified" in detail
 
@@ -182,14 +174,14 @@ def test_probe_sherpa_stt_memo_reuses_down_result(monkeypatch):
     runner, calls = _down_runner("FileNotFoundError: missing encoder_model.ort")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     first_calls = len(calls)
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert len(calls) == first_calls
     assert "retry in" in detail
 
@@ -207,15 +199,15 @@ def test_probe_sherpa_stt_memo_retries_after_window(monkeypatch):
     runner, calls = _down_runner("FileNotFoundError: missing encoder_model.ort")
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
     status, _ = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     first_calls = len(calls)
     fake_time.now += 61.0
     status, _ = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="moonshine-base-en", num_threads=2)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert len(calls) == first_calls + 1
 
 
@@ -233,7 +225,7 @@ def test_probe_sherpa_stt_slow_load_returns_degraded_and_single_flight(
     def _child(kind, args):
         calls.append((kind, args))
         block.wait()
-        return UP, "loaded and transcribed a test clip"
+        return probes_mod.UP, "loaded and transcribed a test clip"
 
     monkeypatch.setattr(probes_mod, "_run_probe_child", _child)
     probes_mod.set_sherpa_probe_wait(0.1)
@@ -241,26 +233,26 @@ def test_probe_sherpa_stt_slow_load_returns_degraded_and_single_flight(
     try:
         async def _main():
             first = await asyncio.wait_for(
-                probe_sherpa_stt(
+                probes_mod.probe_sherpa_stt(
                     model_dir=model_dir, model_id="custom", num_threads=2
                 ),
                 timeout=2.0,
             )
-            assert first[0] == DEGRADED
+            assert first[0] == probes_mod.DEGRADED
             assert "in progress" in first[1].lower()
             assert len(calls) == 1
 
-            second = await probe_sherpa_stt(
+            second = await probes_mod.probe_sherpa_stt(
                 model_dir=model_dir, model_id="custom", num_threads=2
             )
-            assert second[0] == DEGRADED
+            assert second[0] == probes_mod.DEGRADED
             assert len(calls) == 1
 
             block.set()
-            third = await probe_sherpa_stt(
+            third = await probes_mod.probe_sherpa_stt(
                 model_dir=model_dir, model_id="custom", num_threads=2
             )
-            assert third[0] == UP
+            assert third[0] == probes_mod.UP
             assert "verified" in third[1]
 
         asyncio.run(_main())
@@ -279,19 +271,19 @@ def test_probe_sherpa_stt_up_dropped_on_mtime_change(monkeypatch, tmp_path):
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
 
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
     )
-    assert status == UP
+    assert status == probes_mod.UP
     first_calls = len(calls)
 
     new_mtime = time.time() + 3600
     os.utime(model_file, (new_mtime, new_mtime))
 
     status2, detail2 = asyncio.run(
-        probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
     )
     assert len(calls) == first_calls + 1
-    assert status2 == UP
+    assert status2 == probes_mod.UP
     # A changed file forces a fresh load, so this is not a remembered result.
     assert "verified" not in detail2
 
@@ -318,18 +310,18 @@ def test_probe_sherpa_stt_down_rechecked_early_on_new_file(
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
 
     status, _ = asyncio.run(
-        probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     first_calls = len(calls)
 
     fake_time.now += 5.0
     (p / "new.onnx").write_text("y")
 
     status2, detail2 = asyncio.run(
-        probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
     )
-    assert status2 == DOWN
+    assert status2 == probes_mod.DOWN
     assert len(calls) == first_calls + 1
     assert "missing encoder_model.ort" in detail2
 
@@ -344,34 +336,34 @@ def test_clear_sherpa_probe_memo_resets_both_maps(monkeypatch, tmp_path):
     monkeypatch.setattr(probes_mod, "_run_probe_child", runner)
 
     status, _ = asyncio.run(
-        probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
     )
-    assert status == UP
+    assert status == probes_mod.UP
     assert len(calls) == 1
 
     key = ("stt", model_dir, "custom", None, 2)
     with probes_mod._SHERPA_PROBE_LOCK:
         assert key in probes_mod._SHERPA_PROBE_MEMO
 
-    clear_sherpa_probe_memo()
+    probes_mod.clear_sherpa_probe_memo()
 
     with probes_mod._SHERPA_PROBE_LOCK:
         assert key not in probes_mod._SHERPA_PROBE_MEMO
         assert not probes_mod._SHERPA_INFLIGHT
 
     status2, _ = asyncio.run(
-        probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
+        probes_mod.probe_sherpa_stt(model_dir=model_dir, model_id="custom", num_threads=2)
     )
     assert len(calls) == 2
-    assert status2 == UP
+    assert status2 == probes_mod.UP
 
 
 def test_probe_child_process_exits_nonzero(monkeypatch):
     monkeypatch.setattr(probes_mod, "_CHILD_SCRIPT", "import os; os._exit(255)")
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="x", num_threads=1)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="x", num_threads=1)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert "255" in detail
 
 
@@ -383,9 +375,9 @@ def test_probe_child_process_times_out(monkeypatch):
         "import time; time.sleep(5)",
     )
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="x", num_threads=1)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="x", num_threads=1)
     )
-    assert status == DOWN
+    assert status == probes_mod.DOWN
     assert "exceeded" in detail.lower()
 
 
@@ -396,9 +388,9 @@ def test_probe_child_process_prints_json_up(monkeypatch):
         'import json; print(json.dumps({"status": "up", "detail": "child ok"}))',
     )
     status, detail = asyncio.run(
-        probe_sherpa_stt(model_dir="/fake/stt", model_id="x", num_threads=1)
+        probes_mod.probe_sherpa_stt(model_dir="/fake/stt", model_id="x", num_threads=1)
     )
-    assert status == UP
+    assert status == probes_mod.UP
     assert detail == "child ok"
 
 
@@ -483,7 +475,7 @@ def test_dependency_specs_unknown_audition_backend(_patch_speech_models):
     specs = _specs(audition_cfg={"backend": "whisper"})
     row = _spec_named(specs, "Audition backend 'whisper'")
     status, detail = asyncio.run(row.probe())
-    assert status == DEGRADED
+    assert status == probes_mod.DEGRADED
     assert "unknown [audition].backend" in detail
 
 
@@ -491,7 +483,7 @@ def test_dependency_specs_unknown_vox_backend(_patch_speech_models):
     specs = _specs(vox_cfg={"backend": "whisper"})
     row = _spec_named(specs, "Vox backend 'whisper'")
     status, detail = asyncio.run(row.probe())
-    assert status == DEGRADED
+    assert status == probes_mod.DEGRADED
     assert "unknown [vox].backend" in detail
 
 
