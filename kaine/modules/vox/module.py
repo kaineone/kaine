@@ -184,6 +184,8 @@ class Vox(BaseModule):
         return self._tts_client
 
     async def initialize(self) -> None:
+        if hasattr(self._tts_client, "warm_up"):
+            await self._tts_client.warm_up()
         if self._sink_enabled:
             self._sink_path.mkdir(parents=True, exist_ok=True)
         # Surface (but never auto-delete) any clips left by prior runs of the

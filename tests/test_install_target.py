@@ -203,7 +203,7 @@ def test_plan_desktop_cuda():
 
 def test_plan_jetson():
     plan = plan_for(Target("jetson", "cuda", "aarch64", "", {}))
-    assert plan.extras == "full"
+    assert plan.extras == "full,speech-edge"
 
 
 def test_plan_macos():

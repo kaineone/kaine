@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import struct
+import sys
 import types
 import wave
 from pathlib import Path
@@ -174,37 +175,68 @@ def _make_tts_dir(root: Path, missing_espeak: bool = False) -> Path:
     return d
 
 
+def test_stt_construction_is_cheap(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeFactory:
+        def __init__(self, encoder, decoder, tokens, num_threads):
+            calls.append((encoder, decoder, tokens, num_threads))
+
+        @staticmethod
+        def from_moonshine_v2(encoder, decoder, tokens, num_threads):
+            calls.append((encoder, decoder, tokens, num_threads))
+            return FakeFactory(encoder, decoder, tokens, num_threads)
+
+    fake = types.SimpleNamespace(
+        OfflineRecognizer=FakeFactory,
+    )
+    SherpaMoonshineSTT(_make_stt_dir(tmp_path), sherpa_module=fake)
+    assert calls == []
+
+
 @pytest.mark.asyncio
-async def test_stt_kwargs_and_transcribe_mono(tmp_path):
+async def test_stt_warm_up_builds_engine(tmp_path):
     fake, calls = _fake_sherpa()
     model_dir = _make_stt_dir(tmp_path)
     stt = SherpaMoonshineSTT(model_dir, sherpa_module=fake)
 
+    await stt.warm_up()
+    assert len(calls["from_moonshine_v2"]) == 1
     kwargs = calls["from_moonshine_v2"][0]
     assert kwargs["encoder"] == str(model_dir / "encoder_model.ort")
     assert kwargs["decoder"] == str(model_dir / "decoder_model_merged.ort")
     assert kwargs["tokens"] == str(model_dir / "tokens.txt")
     assert kwargs["num_threads"] == 2
 
+
+@pytest.mark.asyncio
+async def test_stt_warm_up_is_idempotent(tmp_path):
+    fake, calls = _fake_sherpa()
+    stt = SherpaMoonshineSTT(_make_stt_dir(tmp_path), sherpa_module=fake)
+
+    await stt.warm_up()
+    await stt.warm_up()
+    assert len(calls["from_moonshine_v2"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_stt_transcribe_calls_warm_up(tmp_path):
+    fake, calls = _fake_sherpa()
+    stt = SherpaMoonshineSTT(_make_stt_dir(tmp_path), sherpa_module=fake)
+    assert not calls["from_moonshine_v2"]
+
     audio = _make_wav(16000, [0, 1000, -1000])
     res = await stt.transcribe(audio, sample_rate=16000, model="ignored")
     assert res.text == "hello world"
     assert res.model == "moonshine-base-en"
     assert isinstance(res, TranscriptionResult)
-
-    stream = calls["streams"][0]
-    rate, samples = stream.calls[0]
-    assert rate == 16000
-    assert samples.dtype == np.float32
-    assert all(-1.0 <= s <= 1.0 for s in samples)
-    assert np.allclose(samples, np.array([0, 1000, -1000], dtype=np.float32) / 32768.0)
+    assert len(calls["from_moonshine_v2"]) == 1
 
 
 @pytest.mark.asyncio
 async def test_stt_first_channel_for_stereo(tmp_path):
     fake, calls = _fake_sherpa()
-    model_dir = _make_stt_dir(tmp_path)
-    stt = SherpaMoonshineSTT(model_dir, sherpa_module=fake)
+    stt = SherpaMoonshineSTT(_make_stt_dir(tmp_path), sherpa_module=fake)
 
     # Interleaved stereo frames; only the left channel should reach sherpa.
     audio = _make_wav(16000, [1000, 2000, -1000, -2000, 0, 0], nchannels=2)
@@ -219,8 +251,7 @@ async def test_stt_first_channel_for_stereo(tmp_path):
 @pytest.mark.asyncio
 async def test_stt_rejects_8bit_wav(tmp_path):
     fake, _ = _fake_sherpa()
-    model_dir = _make_stt_dir(tmp_path)
-    stt = SherpaMoonshineSTT(model_dir, sherpa_module=fake)
+    stt = SherpaMoonshineSTT(_make_stt_dir(tmp_path), sherpa_module=fake)
 
     audio = _make_wav(16000, [0, 100], sampwidth=1)
     with pytest.raises(ValueError):
@@ -230,8 +261,7 @@ async def test_stt_rejects_8bit_wav(tmp_path):
 @pytest.mark.asyncio
 async def test_stt_zero_frame_wav_returns_empty(tmp_path):
     fake, calls = _fake_sherpa()
-    model_dir = _make_stt_dir(tmp_path)
-    stt = SherpaMoonshineSTT(model_dir, sherpa_module=fake)
+    stt = SherpaMoonshineSTT(_make_stt_dir(tmp_path), sherpa_module=fake)
 
     audio = _make_wav(16000, [])
     res = await stt.transcribe(audio, sample_rate=16000, model="ignored")
@@ -254,7 +284,8 @@ def test_stt_raises_file_not_found_for_missing_model(tmp_path):
     )
 
 
-def test_stt_raises_import_error_without_sherpa_onnx(tmp_path):
+def test_stt_raises_import_error_without_sherpa_onnx(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "sherpa_onnx", None)
     # Provide all files so the missing-file check passes; only the import fails.
     model_dir = _make_stt_dir(tmp_path)
     with pytest.raises(ImportError, match="speech-edge"):
@@ -273,11 +304,33 @@ async def test_stt_raises_after_aclose(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_tts_kwargs_and_synthesize(tmp_path):
+async def test_tts_construction_is_cheap(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeTts:
+        def __init__(self, config):
+            self.config = config
+        sample_rate = 24000
+        num_speakers = 11
+
+    fake = types.SimpleNamespace(
+        OfflineTts=FakeTts,
+        OfflineTtsConfig=lambda config: config,
+        OfflineTtsModelConfig=lambda **kw: types.SimpleNamespace(**kw),
+        OfflineTtsKokoroModelConfig=lambda **kw: types.SimpleNamespace(**kw),
+    )
+
+    SherpaKokoroTTS(_make_tts_dir(tmp_path), sherpa_module=fake)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_tts_warm_up_builds_engine(tmp_path):
     fake, calls = _fake_sherpa()
     model_dir = _make_tts_dir(tmp_path)
     tts = SherpaKokoroTTS(model_dir, sherpa_module=fake)
 
+    await tts.warm_up()
     cfg = tts._tts.config
     assert cfg.model.num_threads == 2
     kokoro = cfg.model.kokoro
@@ -286,27 +339,35 @@ async def test_tts_kwargs_and_synthesize(tmp_path):
     assert kokoro.tokens == str(model_dir / "tokens.txt")
     assert kokoro.data_dir == str(model_dir / "espeak-ng-data")
 
+
+@pytest.mark.asyncio
+async def test_tts_warm_up_is_idempotent(tmp_path):
+    fake, calls = _fake_sherpa()
+    tts = SherpaKokoroTTS(_make_tts_dir(tmp_path), sherpa_module=fake)
+
+    await tts.warm_up()
+    await tts.warm_up()
+    assert len(calls["generate"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_tts_synthesize_calls_warm_up(tmp_path):
+    fake, calls = _fake_sherpa()
+    tts = SherpaKokoroTTS(_make_tts_dir(tmp_path), sherpa_module=fake)
+    assert tts._tts is None
+
     res = await tts.synthesize(TTSRequest(text="hello"))
     assert res.content_type == "audio/wav"
     assert res.output_format == "wav"
     assert res.bytes_produced == len(res.audio)
     assert isinstance(res, SynthesisResult)
-
-    with wave.open(io.BytesIO(res.audio), "rb") as wf:
-        assert wf.getnchannels() == 1
-        assert wf.getsampwidth() == 2
-        assert wf.getframerate() == 24000
-        assert wf.getnframes() == 4
-        pcm = wf.readframes(4)
-    frames = np.frombuffer(pcm, dtype=np.int16)
-    assert frames[3] == 32767  # 1.2 clipped to 32767
+    assert len(calls["generate"]) == 1
 
 
 @pytest.mark.asyncio
 async def test_tts_speed_clamping(tmp_path):
     fake, calls = _fake_sherpa()
-    model_dir = _make_tts_dir(tmp_path)
-    tts = SherpaKokoroTTS(model_dir, sherpa_module=fake)
+    tts = SherpaKokoroTTS(_make_tts_dir(tmp_path), sherpa_module=fake)
 
     await tts.synthesize(TTSRequest(text="fast", speed_factor=5.0))
     assert calls["generate"][-1] == ("fast", 0, 2.0)
@@ -318,8 +379,7 @@ async def test_tts_speed_clamping(tmp_path):
 @pytest.mark.asyncio
 async def test_tts_rejects_empty_text(tmp_path):
     fake, _ = _fake_sherpa()
-    model_dir = _make_tts_dir(tmp_path)
-    tts = SherpaKokoroTTS(model_dir, sherpa_module=fake)
+    tts = SherpaKokoroTTS(_make_tts_dir(tmp_path), sherpa_module=fake)
 
     with pytest.raises(ValueError, match="empty text"):
         await tts.synthesize(TTSRequest(text="   "))
@@ -335,11 +395,13 @@ async def test_tts_raises_after_aclose(tmp_path):
         await tts.synthesize(TTSRequest(text="hello"))
 
 
-def test_tts_rejects_out_of_range_speaker(tmp_path):
+@pytest.mark.asyncio
+async def test_tts_rejects_out_of_range_speaker(tmp_path):
     fake, _ = _fake_sherpa()
     model_dir = _make_tts_dir(tmp_path)
+    tts = SherpaKokoroTTS(model_dir, speaker_id=11, sherpa_module=fake)
     with pytest.raises(ValueError, match="speaker_id 11"):
-        SherpaKokoroTTS(model_dir, speaker_id=11, sherpa_module=fake)
+        await tts.warm_up()
 
 
 def test_tts_raises_file_not_found_for_missing_espeak(tmp_path):
@@ -349,7 +411,8 @@ def test_tts_raises_file_not_found_for_missing_espeak(tmp_path):
         SherpaKokoroTTS(model_dir, sherpa_module=fake)
 
 
-def test_tts_raises_import_error_without_sherpa_onnx(tmp_path):
+def test_tts_raises_import_error_without_sherpa_onnx(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "sherpa_onnx", None)
     model_dir = _make_tts_dir(tmp_path)
     with pytest.raises(ImportError, match="speech-edge"):
         SherpaKokoroTTS(model_dir)

@@ -6,21 +6,30 @@
 Nothing is downloaded at runtime.  Model weights live under
 ``models_dir() / "sherpa-onnx" /``.  Archives are pinned by URL, size and
 sha256, and are only ever extracted after both size and digest checks pass.
+
+A successful install writes ``model_dir / ".verified"`` (JSON).  The marker
+records the archive sha256 and the size of every regular file under the model
+directory, so a truncated or tampered install is detected and replaced on the
+next run.  Symlinked or dangling targets are replaced, never followed.  On
+Python builds without ``tarfile.data_filter`` (before 3.11.4), extraction
+writes each validated regular file by hand.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import sys
 import tarfile
 import tempfile
 import urllib.request
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 from kaine.model_paths import models_dir
 
@@ -96,7 +105,7 @@ MANIFEST: dict[str, SpeechModel] = {
         archive_name="kokoro-int8-en-v0_19.tar.bz2",
         size_bytes=103_248_205,
         sha256="c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd",
-        licence="Apache-2.0",
+        licence="Apache-2.0 (model); GPL-3.0-or-later (bundled espeak-ng-data)",
         top_dir="kokoro-int8-en-v0_19",
         required_files=(
             "model.int8.onnx",
@@ -116,12 +125,46 @@ def model_dir(model_id: str, root: Path | str | None = None) -> Path:
     return (Path(root) if root else models_dir()) / "sherpa-onnx" / model_id
 
 
+def _write_verified_marker(model: SpeechModel, target: Path) -> None:
+    """Write ``target / ".verified"`` with the archive sha256 and every file size."""
+    files: dict[str, int] = {}
+    for path in target.rglob("*"):
+        if path.is_file() and path.name != ".verified":
+            files[str(path.relative_to(target))] = path.stat().st_size
+    marker = {
+        "model_id": model.id,
+        "sha256": model.sha256,
+        "files": files,
+    }
+    with open(target / ".verified", "w", encoding="utf-8") as f:
+        json.dump(marker, f, indent=2, sort_keys=True)
+
+
+def _read_verified_marker(target: Path) -> dict[str, Any] | None:
+    """Return the parsed ``.verified`` marker, or ``None`` if it is missing or invalid."""
+    try:
+        with open(target / ".verified", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
 def is_installed(model_id: str, root: Path | str | None = None) -> bool:
-    """True iff every required file for ``model_id`` exists under its model dir."""
+    """True iff the verified marker is present, valid, and every file matches."""
     model = MANIFEST.get(model_id)
     if model is None:
         return False
     d = model_dir(model_id, root)
+    marker = _read_verified_marker(d)
+    if not marker:
+        return False
+    if marker.get("model_id") != model_id or marker.get("sha256") != model.sha256:
+        return False
+    for rel_path, size in (marker.get("files") or {}).items():
+        p = d / rel_path
+        if not p.exists() or p.stat().st_size != size:
+            return False
     return all((d / f).exists() for f in model.required_files)
 
 
@@ -164,7 +207,12 @@ def _default_downloader(
 
 
 def _validate_and_extract(tf: tarfile.TarFile, extract_dir: Path, top_dir: str) -> None:
-    """Manually validate every tar member, then extract with the ``data`` filter."""
+    """Manually validate every tar member, then extract safely.
+
+    On Python >= 3.11.4 ``tarfile.data_filter`` is available and we use the
+    ``data`` filter.  On older builds we write the validated members ourselves
+    with fixed permissions (0o644 for files, 0o755 for directories).
+    """
     base = extract_dir.resolve()
     members: list[tarfile.TarInfo] = []
     for member in tf.getmembers():
@@ -188,7 +236,24 @@ def _validate_and_extract(tf: tarfile.TarFile, extract_dir: Path, top_dir: str) 
                 f"rejected member {member.name}: resolves outside extraction dir"
             )
         members.append(member)
-    tf.extractall(path=str(extract_dir), members=members, filter="data")
+
+    if hasattr(tarfile, "data_filter"):
+        tf.extractall(path=str(extract_dir), members=members, filter="data")
+        return
+
+    for member in members:
+        dest = extract_dir / member.name
+        if member.isdir():
+            dest.mkdir(parents=True, exist_ok=True)
+            dest.chmod(0o755)
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            src = tf.extractfile(member)
+            if src is None:
+                raise ValueError(f"unable to read member {member.name}")
+            with open(dest, "wb") as out:
+                shutil.copyfileobj(src, out)
+            dest.chmod(0o644)
 
 
 def fetch(
@@ -265,21 +330,55 @@ def fetch(
                     detail=f"required file missing after extraction: {req}",
                 )
 
-        if target.exists():
-            if not is_installed(model_id, root_path):
+        try:
+            if target.is_symlink():
+                target.unlink()
+            elif target.exists():
                 if target.is_dir():
                     shutil.rmtree(target)
                 else:
                     target.unlink()
-            else:
-                return FetchResult(
-                    model_id=model_id, ok=True, detail="already installed", path=target
-                )
 
-        target.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(str(src), str(target))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(str(src), str(target))
+            _write_verified_marker(model, target)
+        except OSError as exc:
+            return FetchResult(
+                model_id=model_id, ok=False, detail=f"install failed: {exc}"
+            )
 
     return FetchResult(model_id=model_id, ok=True, detail="installed", path=target)
+
+
+def required_speech_models(config: dict) -> list[str]:
+    """Return the sherpa-onnx model ids that the config needs.
+
+    - STT when ``[audition].backend == "sherpa_onnx"`` and
+      ``[audition].transcription_enabled`` is true.
+    - TTS when ``[vox].backend == "sherpa_onnx"``.
+
+    Unknown ids are skipped with a warning.
+    """
+    ids: list[str] = []
+
+    audition = config.get("audition") or {}
+    if str(audition.get("backend", "speaches")).strip().lower() == "sherpa_onnx":
+        if bool(audition.get("transcription_enabled", False)):
+            stt_id = str(audition.get("sherpa_model_id", DEFAULT_STT)).strip()
+            if stt_id in MANIFEST:
+                ids.append(stt_id)
+            else:
+                warnings.warn(f"skipping unknown speech model id: {stt_id}")
+
+    vox = config.get("vox") or {}
+    if str(vox.get("backend", "chatterbox")).strip().lower() == "sherpa_onnx":
+        tts_id = str(vox.get("sherpa_model_id", DEFAULT_TTS)).strip()
+        if tts_id in MANIFEST:
+            ids.append(tts_id)
+        else:
+            warnings.warn(f"skipping unknown speech model id: {tts_id}")
+
+    return ids
 
 
 def main(
@@ -290,7 +389,12 @@ def main(
     """CLI: ``python -m kaine.setup.speech_models [--stt ID] [--tts ID] [--yes] [--root DIR]``."""
     parser = argparse.ArgumentParser(
         prog="python -m kaine.setup.speech_models",
-        description="Fetch pinned sherpa-onnx speech model weights.",
+        description=(
+            "Fetch pinned sherpa-onnx speech model weights. "
+            "Kokoro English is Apache-2.0 (model); "
+            "GPL-3.0-or-later (espeak-ng-data and the espeak-ng engine built into sherpa-onnx). "
+            "Each run prints the licence and asks for consent unless --yes."
+        ),
     )
     parser.add_argument("--stt", metavar="ID", help="STT model id to fetch")
     parser.add_argument("--tts", metavar="ID", help="TTS model id to fetch")

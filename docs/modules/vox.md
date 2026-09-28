@@ -47,7 +47,9 @@ Honest limits:
 - `vox.synthesized` `"voice"` is `"kokoro-en speaker N"` under sherpa-onnx.
 
 Model fetching:
-- Download models ahead of runtime with `python -m kaine.setup.speech_models [--tts ID] [--yes]`. The command shows name, size and licence and asks for consent. Archives are pinned by URL and sha256, verified, and extracted into `state/models/sherpa-onnx/`; the operation is idempotent and nothing downloads at runtime. Size: Kokoro English int8 103 MB (Apache-2.0).
+- Download models ahead of runtime with `python -m kaine.setup.speech_models [--tts ID] [--yes]`. The command shows name, size and licence and asks for consent. Archives are pinned by URL and sha256, verified, and extracted into `state/models/sherpa-onnx/`; the operation is idempotent and nothing downloads at runtime. Size: Kokoro English int8 103 MB. Licence: Apache-2.0 (model); GPL-3.0-or-later (espeak-ng-data and the espeak-ng engine built into sherpa-onnx).
+
+KAINE does not redistribute espeak-ng; the operator installs it with sherpa-onnx and the model, after the consent prompt shows both licences.
 
 Failure modes:
 - A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`).

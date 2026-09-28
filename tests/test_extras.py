@@ -216,10 +216,22 @@ def test_audition_sherpa_onnx_requires_speech_edge(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
         "modules": {"audition": True},
-        "audition": {"backend": "sherpa_onnx"},
+        "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
     }
     missing = check(config)
     assert any(
+        m.import_name == "sherpa_onnx" and m.extra == "speech-edge" for m in missing
+    )
+
+
+def test_audition_sherpa_onnx_transcription_off_requires_no_speech_edge(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"audition": True},
+        "audition": {"backend": "sherpa_onnx"},
+    }
+    missing = check(config)
+    assert not any(
         m.import_name == "sherpa_onnx" and m.extra == "speech-edge" for m in missing
     )
 

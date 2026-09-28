@@ -36,7 +36,7 @@ device = "cpu"
 [audition]
 # Vocal emotion (emotion2vec+/funasr) is a Tier-2-only faculty — no clean edge
 # port — so it is explicitly DISABLED here (empty model id → Null classifier).
-# Speech is still transcribed via sherpa-onnx; only vocal affect is absent, and reported so.
+# Vocal affect is absent (reported so); when transcription is enabled it runs through sherpa-onnx.
 emotion_model_id = ""
 emotion_device = "cpu"
 # Local speech recognition via sherpa-onnx (Tier 1 default; replaces Speaches).

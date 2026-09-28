@@ -34,6 +34,7 @@ class SherpaKokoroTTS:
         sherpa_module: Any | None = None,
     ) -> None:
         self._model_id = model_id
+        self._speaker_id = int(speaker_id)
         self._dir = Path(model_dir)
         self._num_threads = int(num_threads)
 
@@ -55,26 +56,8 @@ class SherpaKokoroTTS:
                     "Install it with: pip install 'kaine[speech-edge]'"
                 ) from exc
 
-        self._tts = so.OfflineTts(
-            so.OfflineTtsConfig(
-                model=so.OfflineTtsModelConfig(
-                    kokoro=so.OfflineTtsKokoroModelConfig(
-                        model=str(self._dir / "model.int8.onnx"),
-                        voices=str(self._dir / "voices.bin"),
-                        tokens=str(self._dir / "tokens.txt"),
-                        data_dir=str(self._dir / "espeak-ng-data"),
-                    ),
-                    num_threads=self._num_threads,
-                ),
-            )
-        )
-
-        if not (0 <= speaker_id < self._tts.num_speakers):
-            raise ValueError(
-                f"speaker_id {speaker_id} out of range [0, {self._tts.num_speakers})"
-            )
-        self._speaker_id = int(speaker_id)
-
+        self._sherpa_module = so
+        self._tts: Any | None = None
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="sherpa-tts"
         )
@@ -92,10 +75,44 @@ class SherpaKokoroTTS:
             return 1.0
         return max(0.5, min(2.0, float(speed_factor)))
 
+    async def warm_up(self) -> None:
+        """Build the offline TTS object in the engine's worker thread.
+
+        Idempotent: a second call is a no-op. Validates the speaker id once
+        the object exists. Raises on build or validation error.
+        """
+        if self._tts is not None:
+            return
+        loop = asyncio.get_running_loop()
+
+        def _build():
+            tts = self._sherpa_module.OfflineTts(
+                self._sherpa_module.OfflineTtsConfig(
+                    model=self._sherpa_module.OfflineTtsModelConfig(
+                        kokoro=self._sherpa_module.OfflineTtsKokoroModelConfig(
+                            model=str(self._dir / "model.int8.onnx"),
+                            voices=str(self._dir / "voices.bin"),
+                            tokens=str(self._dir / "tokens.txt"),
+                            data_dir=str(self._dir / "espeak-ng-data"),
+                        ),
+                        num_threads=self._num_threads,
+                    ),
+                )
+            )
+            if not (0 <= self._speaker_id < tts.num_speakers):
+                raise ValueError(
+                    f"speaker_id {self._speaker_id} out of range [0, {tts.num_speakers})"
+                )
+            return tts
+
+        self._tts = await loop.run_in_executor(self._executor, _build)
+
     async def synthesize(self, request: TTSRequest) -> SynthesisResult:
         """Synthesize ``request.text`` to a mono 16-bit WAV."""
         if self._executor is None:
             raise RuntimeError("sherpa-onnx TTS client is closed")
+
+        await self.warm_up()
 
         text = request.text
         if text is None or text.strip() == "":
@@ -104,6 +121,7 @@ class SherpaKokoroTTS:
         speed = self._resolve_speed(request.speed_factor)
 
         def _generate():
+            assert self._tts is not None
             return self._tts.generate(text, sid=self._speaker_id, speed=speed)
 
         loop = asyncio.get_running_loop()
@@ -138,3 +156,4 @@ class SherpaKokoroTTS:
         if self._executor is not None:
             self._executor.shutdown(wait=False)
             self._executor = None
+        self._tts = None

@@ -476,10 +476,27 @@ def _print_next_steps(
         line("  bash scripts/qdrant-bootstrap.sh      # vector memory")
     if modules.get("lingua"):
         line("  bash scripts/model-server-bootstrap.sh start   # language organ")
-    if modules.get("audition"):
+    audition_cfg = config.get("audition") or {}
+    audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
+    transcription_on = bool(audition_cfg.get("transcription_enabled", False))
+    vox_cfg = config.get("vox") or {}
+    vox_backend = str(vox_cfg.get("backend", "chatterbox")).strip().lower()
+
+    if modules.get("audition") and audition_backend == "speaches" and transcription_on:
         line("  start Speaches (STT) on CPU with medium.en")
-    if modules.get("vox"):
+    if modules.get("vox") and vox_backend == "chatterbox":
         line("  start Chatterbox (TTS)")
+
+    from kaine.setup import speech_models
+    speech_ids = speech_models.required_speech_models(config)
+    if speech_ids:
+        args: list[str] = []
+        for sid in speech_ids:
+            if speech_models.MANIFEST[sid].kind == "stt":
+                args.extend(["--stt", sid])
+            else:
+                args.extend(["--tts", sid])
+        line("  fetch speech models: python -m kaine.setup.speech_models " + " ".join(args))
 
     line()
     line("Then launch (two terminals):")

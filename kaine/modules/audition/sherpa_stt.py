@@ -51,12 +51,8 @@ class SherpaMoonshineSTT:
                     "Install it with: pip install 'kaine[speech-edge]'"
                 ) from exc
 
-        self._recognizer = so.OfflineRecognizer.from_moonshine_v2(
-            encoder=str(self._dir / "encoder_model.ort"),
-            decoder=str(self._dir / "decoder_model_merged.ort"),
-            tokens=str(self._dir / "tokens.txt"),
-            num_threads=self._num_threads,
-        )
+        self._sherpa_module = so
+        self._recognizer: Any | None = None
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="sherpa-stt"
         )
@@ -64,6 +60,23 @@ class SherpaMoonshineSTT:
     @property
     def base_url(self) -> str:
         return f"sherpa-onnx://{self._model_id}"
+
+    async def warm_up(self) -> None:
+        """Build the offline recogniser in the engine's worker thread.
+
+        Idempotent: a second call is a no-op. Raises on build error.
+        """
+        if self._recognizer is not None:
+            return
+        loop = asyncio.get_running_loop()
+        self._recognizer = await loop.run_in_executor(
+            self._executor,
+            self._sherpa_module.OfflineRecognizer.from_moonshine_v2,
+            str(self._dir / "encoder_model.ort"),
+            str(self._dir / "decoder_model_merged.ort"),
+            str(self._dir / "tokens.txt"),
+            self._num_threads,
+        )
 
     async def transcribe(
         self,
@@ -76,6 +89,8 @@ class SherpaMoonshineSTT:
         """Decode a 16-bit PCM WAV to text using the loaded Moonshine model."""
         if self._executor is None:
             raise RuntimeError("sherpa-onnx STT client is closed")
+
+        await self.warm_up()
 
         with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
             if wf.getsampwidth() != 2:
@@ -102,6 +117,7 @@ class SherpaMoonshineSTT:
         n = len(samples)
 
         def _decode() -> str:
+            assert self._recognizer is not None
             stream = self._recognizer.create_stream()
             stream.accept_waveform(rate, samples)
             self._recognizer.decode_stream(stream)
@@ -123,3 +139,4 @@ class SherpaMoonshineSTT:
         if self._executor is not None:
             self._executor.shutdown(wait=False)
             self._executor = None
+        self._recognizer = None

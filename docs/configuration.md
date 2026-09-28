@@ -15,7 +15,7 @@ This document is the authoritative reference for `config/kaine.toml` and the com
 | Extra flag | Command | Enables |
 |---|---|---|
 | `[audio]` | `pip install -e .[audio]` | Live microphone capture (`sounddevice`, `webrtcvad`, `funasr`, `librosa`) |
-| `[speech-edge]` | `pip install -e .[speech-edge]` | Torch-free speech backends: sherpa-onnx (Moonshine STT, Kokoro TTS) |
+| `[speech-edge]` | `pip install -e .[speech-edge]` | Torch-free speech backends: sherpa-onnx (Moonshine STT, Kokoro TTS). Kokoro model: Apache-2.0 (model); GPL-3.0-or-later (espeak-ng-data and the espeak-ng engine built into sherpa-onnx) |
 | `[vision]` | `pip install -e .[vision]` | Live camera capture (`opencv-python-headless`) |
 | `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Nous (`inferactively-pymdp`, `jax[cpu]`) — only required for the `pymdp` backend |
 | `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 JAX engine for Phantasia (`jax[cpu]`, `chex`, `einops`); the NumPy engine needs no extra |

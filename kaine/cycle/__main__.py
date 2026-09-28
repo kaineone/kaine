@@ -1534,7 +1534,7 @@ async def _boot_and_run(
                 def position_provider() -> tuple[int, int, str, float, bool] | None:
                     return None
 
-            audition_mod = registry.get("audition")
+            audition_mod = registry.get("audition") if "audition" in registry else None
             if audition_mod is not None and hasattr(
                 audition_mod, "playlist_audio_position"
             ):

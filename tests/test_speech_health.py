@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -34,12 +37,21 @@ class _FakeTTSResult:
 
 class _FakeSherpaSTT:
     _raise: BaseException | None = None
+    _block: threading.Event | None = None
+    _completion_event: threading.Event | None = None
     constructions: int = 0
 
     def __init__(self, model_dir: str, *, model_id, num_threads) -> None:
         type(self).constructions += 1
-        if self._raise is not None:
-            raise self._raise
+        block = type(self)._block
+        if block is not None:
+            block.wait()
+        raise_exc = type(self)._raise
+        if raise_exc is not None:
+            raise raise_exc
+        completion = type(self)._completion_event
+        if completion is not None:
+            completion.set()
 
     async def transcribe(self, audio_bytes, *, sample_rate, model, filename):
         return _FakeSTTResult("")
@@ -50,13 +62,22 @@ class _FakeSherpaSTT:
 
 class _FakeSherpaTTS:
     _raise: BaseException | None = None
+    _block: threading.Event | None = None
+    _completion_event: threading.Event | None = None
     _audio: bytes = b""
     constructions: int = 0
 
     def __init__(self, model_dir: str, *, model_id, speaker_id, num_threads) -> None:
         type(self).constructions += 1
-        if self._raise is not None:
-            raise self._raise
+        block = type(self)._block
+        if block is not None:
+            block.wait()
+        raise_exc = type(self)._raise
+        if raise_exc is not None:
+            raise raise_exc
+        completion = type(self)._completion_event
+        if completion is not None:
+            completion.set()
 
     async def synthesize(self, req):
         return _FakeTTSResult(self._audio)
@@ -81,8 +102,16 @@ def _clear_sherpa_memo():
     _FakeSherpaTTS.constructions = 0
     _FakeSherpaSTT._raise = None
     _FakeSherpaTTS._raise = None
+    _FakeSherpaSTT._block = None
+    _FakeSherpaTTS._block = None
+    _FakeSherpaSTT._completion_event = None
+    _FakeSherpaTTS._completion_event = None
     yield
     clear_sherpa_probe_memo()
+    _FakeSherpaSTT._block = None
+    _FakeSherpaTTS._block = None
+    _FakeSherpaSTT._completion_event = None
+    _FakeSherpaTTS._completion_event = None
 
 
 @pytest.fixture
@@ -249,6 +278,152 @@ def test_probe_sherpa_stt_memo_retries_after_window(_patch_engines, monkeypatch)
         assert _FakeSherpaSTT.constructions == first_constructions + 1
     finally:
         _FakeSherpaSTT._raise = None
+
+
+def test_probe_sherpa_stt_slow_load_returns_degraded_and_single_flight(
+    _patch_engines, tmp_path
+):
+    model_dir = str(tmp_path / "model")
+    p = Path(model_dir)
+    p.mkdir()
+    (p / "model.onnx").write_text("x")
+
+    done = threading.Event()
+    _FakeSherpaSTT._block = threading.Event()
+    _FakeSherpaSTT._completion_event = done
+
+    try:
+        async def _main():
+            first = await asyncio.wait_for(
+                probe_sherpa_stt(
+                    model_dir=model_dir, model_id="moonshine-base-en", num_threads=2
+                ),
+                timeout=2.0,
+            )
+            assert first[0] == DEGRADED
+            assert "in progress" in first[1].lower()
+            assert _FakeSherpaSTT.constructions == 1
+
+            second = await probe_sherpa_stt(
+                model_dir=model_dir, model_id="moonshine-base-en", num_threads=2
+            )
+            assert second[0] == DEGRADED
+            assert _FakeSherpaSTT.constructions == 1
+
+            _FakeSherpaSTT._block.set()
+            await asyncio.to_thread(done.wait, 5.0)
+
+            third = await probe_sherpa_stt(
+                model_dir=model_dir, model_id="moonshine-base-en", num_threads=2
+            )
+            assert third[0] == UP
+            assert "verified" in third[1]
+
+        asyncio.run(_main())
+    finally:
+        _FakeSherpaSTT._block.set()
+        _FakeSherpaSTT._block = None
+        _FakeSherpaSTT._completion_event = None
+
+
+def test_probe_sherpa_stt_up_dropped_on_mtime_change(_patch_engines, tmp_path):
+    model_dir = str(tmp_path / "model")
+    p = Path(model_dir)
+    p.mkdir()
+    model_file = p / "model.onnx"
+    model_file.write_text("x")
+
+    _FakeSherpaSTT.constructions = 0
+    status, detail = asyncio.run(
+        probe_sherpa_stt(model_dir=model_dir, model_id="moonshine-base-en", num_threads=2)
+    )
+    assert status == UP
+    first_constructions = _FakeSherpaSTT.constructions
+
+    new_mtime = time.time() + 3600
+    os.utime(model_file, (new_mtime, new_mtime))
+
+    status2, detail2 = asyncio.run(
+        probe_sherpa_stt(model_dir=model_dir, model_id="moonshine-base-en", num_threads=2)
+    )
+    assert _FakeSherpaSTT.constructions == first_constructions + 1
+    assert status2 == UP
+    # A changed file forces a fresh load, so this is not a remembered result.
+    assert "verified" not in detail2
+
+
+def test_probe_sherpa_stt_down_rechecked_early_on_new_file(
+    _patch_engines, tmp_path, monkeypatch
+):
+    import kaine.nexus.health.probes as probes_mod
+
+    class _FakeTime:
+        def __init__(self, now: float) -> None:
+            self.now = now
+
+        def monotonic(self) -> float:
+            return self.now
+
+    fake_time = _FakeTime(1000.0)
+    monkeypatch.setattr(probes_mod, "time", fake_time)
+
+    model_dir = str(tmp_path / "model")
+    p = Path(model_dir)
+    p.mkdir()
+    (p / "model.onnx").write_text("x")
+
+    _FakeSherpaSTT._raise = FileNotFoundError("missing encoder_model.ort")
+    _FakeSherpaSTT.constructions = 0
+    try:
+        status, _ = asyncio.run(
+            probe_sherpa_stt(model_dir=model_dir, model_id="moonshine-base-en", num_threads=2)
+        )
+        assert status == DOWN
+        first_constructions = _FakeSherpaSTT.constructions
+
+        fake_time.now += 5.0
+        (p / "new.onnx").write_text("y")
+
+        status2, detail2 = asyncio.run(
+            probe_sherpa_stt(model_dir=model_dir, model_id="moonshine-base-en", num_threads=2)
+        )
+        assert status2 == DOWN
+        assert _FakeSherpaSTT.constructions == first_constructions + 1
+        assert "missing encoder_model.ort" in detail2
+    finally:
+        _FakeSherpaSTT._raise = None
+
+
+def test_clear_sherpa_probe_memo_resets_both_maps(_patch_engines, tmp_path):
+    import kaine.nexus.health.probes as probes_mod
+
+    model_dir = str(tmp_path / "model")
+    p = Path(model_dir)
+    p.mkdir()
+    (p / "model.onnx").write_text("x")
+
+    _FakeSherpaSTT.constructions = 0
+    status, _ = asyncio.run(
+        probe_sherpa_stt(model_dir=model_dir, model_id="moonshine-base-en", num_threads=2)
+    )
+    assert status == UP
+    assert _FakeSherpaSTT.constructions == 1
+
+    key = ("stt", model_dir, "moonshine-base-en", None, 2)
+    with probes_mod._SHERPA_PROBE_LOCK:
+        assert key in probes_mod._SHERPA_PROBE_MEMO
+
+    clear_sherpa_probe_memo()
+
+    with probes_mod._SHERPA_PROBE_LOCK:
+        assert key not in probes_mod._SHERPA_PROBE_MEMO
+        assert not probes_mod._SHERPA_INFLIGHT
+
+    status2, _ = asyncio.run(
+        probe_sherpa_stt(model_dir=model_dir, model_id="moonshine-base-en", num_threads=2)
+    )
+    assert _FakeSherpaSTT.constructions == 2
+    assert status2 == UP
 
 
 def test_dependency_specs_sherpa_onnx_audition_row(_patch_speech_models):

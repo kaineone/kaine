@@ -100,6 +100,7 @@ class ProvisionPlan:
 
     organ_commands: tuple[tuple[str, ...], ...] = ()
     aux_models: tuple[AuxModel, ...] = ()
+    speech_models: tuple[str, ...] = ()
     # The InternVideo-Next weights fetch argv, present ONLY when the configured
     # (or default) encoder backend is ``internvideo_next``. Empty otherwise (the
     # DINOv2 backend fetches its weights as a plain aux model instead).
@@ -117,18 +118,32 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
     """The non-organ models provisioned as a plain ``hf download <repo>``, reading
     configured ids where present.
 
-    The vision encoder is backend-dependent and only DINOv2 is a plain repo
-    download: it appears here ONLY when ``[topos].encoder_backend = "dinov2"``.
+    The faster-distil-Whisper STT repo is fetched only when Audition uses the
+    Speaches backend; the Chatterbox TTS repo only when Vox uses the Chatterbox
+    backend.  The vision encoder is backend-dependent and only DINOv2 is a plain
+    repo download: it appears here ONLY when ``[topos].encoder_backend = "dinov2"``.
     The shipped default (``internvideo_next``) is a revision-pinned single-file
     fetch handled separately (see :func:`internvideo_next_fetch_cmd` and
     ``run_provision``), so it is deliberately NOT an ``AuxModel``."""
     cfg = config or {}
-    models = [
-        AuxModel(_cfg_repo(cfg, "audition", "stt_model_id", DEFAULT_STT_REPO),
-                 "speech-to-text (faster-distil-Whisper)"),
-        AuxModel(_cfg_repo(cfg, "audition", "model_id", DEFAULT_EMOTION_REPO),
-                 "emotion encoder (emotion2vec+)"),
-    ]
+    models: list[AuxModel] = []
+
+    audition = cfg.get("audition") or {}
+    if str(audition.get("backend", "speaches")).strip().lower() == "speaches":
+        models.append(
+            AuxModel(
+                _cfg_repo(cfg, "audition", "stt_model_id", DEFAULT_STT_REPO),
+                "speech-to-text (faster-distil-Whisper)",
+            )
+        )
+
+    models.append(
+        AuxModel(
+            _cfg_repo(cfg, "audition", "model_id", DEFAULT_EMOTION_REPO),
+            "emotion encoder (emotion2vec+)",
+        )
+    )
+
     if encoder_backend(cfg) == "dinov2":
         models.append(
             AuxModel(_cfg_repo(cfg, "topos", "encoder_model_id", DEFAULT_VISION_REPO),
@@ -141,10 +156,12 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
         if emb_repo == DEFAULT_EMBEDDER_REPO
         else f"memory embedder ({emb_repo})"
     )
-    models.extend([
-        AuxModel(emb_repo, emb_label),
-        AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"),
-    ])
+    models.append(AuxModel(emb_repo, emb_label))
+
+    vox = cfg.get("vox") or {}
+    if str(vox.get("backend", "chatterbox")).strip().lower() == "chatterbox":
+        models.append(AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"))
+
     return tuple(models)
 
 
@@ -157,6 +174,8 @@ def internvideo_next_fetch_cmd() -> tuple[str, ...]:
 
 def plan_provision(config: dict[str, Any]) -> ProvisionPlan:
     """Build the full setup-phase plan. Pure: downloads nothing."""
+    from kaine.setup import speech_models
+
     modules = config.get("modules") or {}
     backend = detect_organ_backend()
     organ_plan = plan_organ_download(modules, backend, config=config)
@@ -169,6 +188,7 @@ def plan_provision(config: dict[str, Any]) -> ProvisionPlan:
     return ProvisionPlan(
         organ_commands=organ_cmds,
         aux_models=aux_models(config),
+        speech_models=tuple(speech_models.required_speech_models(config)),
         internvideo_command=iv_cmd,
         _config=config,
     )
@@ -184,13 +204,18 @@ def run_provision(
     *,
     consent: bool = True,
     runner: Optional[Callable[..., Any]] = None,
+    speech_downloader: Optional[Callable[[str, str], None]] = None,
 ) -> tuple[list[OrganDownloadResult], list[ProvisionResult]]:
     """Provision every model weight. Real ``hf download`` per model.
 
     With ``consent=False`` nothing runs (returns empty lists). ``runner`` defaults
-    to ``subprocess.run`` and is injectable so tests never hit the network. Never
-    raises — a failed download is reported as ``ok=False``.
+    to ``subprocess.run`` and is injectable so tests never hit the network.
+    ``speech_downloader`` is forwarded to :func:`kaine.setup.speech_models.fetch`
+    for sherpa-onnx model archives. Never raises — a failed download is reported
+    as ``ok=False``.
     """
+    from kaine.setup import speech_models
+
     if not consent:
         return [], []
 
@@ -247,6 +272,19 @@ def run_provision(
                     detail=f"hf download failed ({type(exc).__name__}: {exc})",
                 )
             )
+
+    # Sherpa-onnx speech archives are fetched through the dedicated verifier.
+    for model_id in speech_models.required_speech_models(config):
+        res = speech_models.fetch(model_id, downloader=speech_downloader)
+        aux_results.append(
+            ProvisionResult(
+                repo=speech_models.MANIFEST[model_id].url,
+                purpose=speech_models.describe(model_id),
+                ok=res.ok,
+                detail=res.detail,
+            )
+        )
+
     return organ_results, aux_results
 
 

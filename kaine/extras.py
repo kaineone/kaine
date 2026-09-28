@@ -87,11 +87,15 @@ def _audition_av_needed(config: dict) -> bool:
 
 
 def _audition_sherpa(config: dict) -> bool:
-    return (config.get("audition") or {}).get("backend", "speaches") == "sherpa_onnx"
+    section = config.get("audition") or {}
+    backend = str(section.get("backend") or "speaches").strip().lower()
+    return backend == "sherpa_onnx" and bool(section.get("transcription_enabled", False))
 
 
 def _vox_sherpa(config: dict) -> bool:
-    return (config.get("vox") or {}).get("backend", "chatterbox") == "sherpa_onnx"
+    section = config.get("vox") or {}
+    backend = str(section.get("backend") or "chatterbox").strip().lower()
+    return backend == "sherpa_onnx"
 
 
 def _mnemos_qdrant(config: dict) -> bool:

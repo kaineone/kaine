@@ -45,8 +45,8 @@ Model fetching:
 - Download models ahead of runtime with `python -m kaine.setup.speech_models [--stt ID] [--yes]`. The command shows name, size and licence and asks for consent. Archives are pinned by URL and sha256, verified, and extracted into `state/models/sherpa-onnx/`; the operation is idempotent and nothing downloads at runtime. Sizes: Moonshine base English 111 MB (MIT), tiny English 30 MB (MIT).
 
 Failure modes:
-- A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`).
-- Missing model files leave the whole Audition module unregistered, so there is no hearing, acoustic salience or vocal emotion either. The reason is on the health surface, and the rest of the entity boots.
+- A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`) only when transcription is enabled; with transcription off no STT model is loaded.
+- A missing or corrupt Moonshine model disables transcription only, so Audition still hears and reports vocal emotion; the reason is logged, and the Nexus sherpa-onnx row shows DOWN.
 - The Nexus health surface probes Speaches only when `backend = "speaches"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; failures are retried after 60 s.
 
 Measured on a desktop CPU: Moonshine base transcribes a 3 s sentence in about 40 ms.

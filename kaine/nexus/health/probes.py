@@ -11,10 +11,12 @@ in :class:`~kaine.nexus.health.prober.HealthProber`).
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import threading
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,36 +31,120 @@ DEFAULT_PROBE_TIMEOUT_S = 2.0
 DEFAULT_CACHE_TTL_S = 5.0
 
 SHERPA_PROBE_RETRY_S = 60.0
+SHERPA_PROBE_WAIT_S = 1.5
+SHERPA_PROBE_MAX_FINGERPRINT_FILES = 5000
 
-_SHERPA_PROBE_MEMO: dict[tuple, tuple[str, str, float]] = {}
+_SHERPA_PROBE_MEMO: dict[tuple, tuple[str, str, float, tuple]] = {}
+_SHERPA_INFLIGHT: dict[tuple, concurrent.futures.Future] = {}
 _SHERPA_PROBE_LOCK = threading.Lock()
+_SHERPA_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="sherpa-probe"
+)
 
 
 def clear_sherpa_probe_memo() -> None:
-    """Reset the sherpa probe memo. For tests."""
+    """Reset the sherpa probe memo and single-flight map. For tests."""
     with _SHERPA_PROBE_LOCK:
         _SHERPA_PROBE_MEMO.clear()
+        _SHERPA_INFLIGHT.clear()
+
+
+def _model_fingerprint(model_dir: str) -> tuple:
+    """Return a stable fingerprint of the files under ``model_dir``."""
+    base = Path(model_dir)
+    try:
+        if not base.exists():
+            return ("missing", str(model_dir))
+        entries: list[tuple[str, int, int]] = []
+        total = 0
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            total += 1
+            if total > SHERPA_PROBE_MAX_FINGERPRINT_FILES:
+                continue
+            try:
+                st = path.stat()
+                entries.append((str(path.relative_to(base)), st.st_size, st.st_mtime_ns))
+            except OSError:
+                entries.append((str(path.relative_to(base)), 0, 0))
+        if total > SHERPA_PROBE_MAX_FINGERPRINT_FILES:
+            return ("too-many-files", total)
+        entries.sort(key=lambda item: item[0])
+        return tuple(entries)
+    except Exception as exc:
+        return ("error", type(exc).__name__, str(exc))
+
+
+def _sherpa_worker(
+    key: tuple,
+    model_dir: str,
+    runner: Callable[[], tuple[str, str]],
+) -> tuple[str, str]:
+    """Run the synchronous load/inference, then record the memo entry.
+
+    Success and failure are both handled inside the worker; the awaiting
+    coroutine only waits on the shared future.
+    """
+    fingerprint = _model_fingerprint(model_dir)
+    try:
+        status, detail = runner()
+    except Exception as exc:
+        status, detail = DOWN, f"{type(exc).__name__}: {exc}"
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_PROBE_MEMO[key] = (status, detail, time.monotonic(), fingerprint)
+        _SHERPA_INFLIGHT.pop(key, None)
+    return (status, detail)
+
+
+def _cleanup_inflight(key: tuple, fut: concurrent.futures.Future) -> None:
+    """Make sure the in-flight map is cleaned up once the future settles."""
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_INFLIGHT.pop(key, None)
 
 
 async def _cached_sherpa_probe(
     key: tuple,
-    runner: Callable[[], Awaitable[tuple[str, str]]],
+    model_dir: str,
+    runner: Callable[[], tuple[str, str]],
 ) -> tuple[str, str]:
-    """Return a cached UP result forever, or retry DOWN after ``SHERPA_PROBE_RETRY_S``."""
+    """Return a cached UP result if the files are unchanged, retry DOWN
+    after ``SHERPA_PROBE_RETRY_S``, and ensure at most one load per key is
+    actually running.
+
+    A load that takes longer than ``SHERPA_PROBE_WAIT_S`` returns DEGRADED
+    but keeps running in the background so it can be reused by later callers.
+    """
     now = time.monotonic()
+    fingerprint = _model_fingerprint(model_dir)
+
     with _SHERPA_PROBE_LOCK:
         cached = _SHERPA_PROBE_MEMO.get(key)
         if cached is not None:
-            status, detail, verified_at = cached
-            age = now - verified_at
-            if status == UP:
-                return UP, f"{detail} (verified {int(age)} s ago)"
-            if age < SHERPA_PROBE_RETRY_S:
-                retry_in = int(SHERPA_PROBE_RETRY_S - age)
-                return DOWN, f"{detail} (retry in {retry_in} s)"
-    status, detail = await runner()
-    with _SHERPA_PROBE_LOCK:
-        _SHERPA_PROBE_MEMO[key] = (status, detail, time.monotonic())
+            status, detail, verified_at, stored_fp = cached
+            if stored_fp == fingerprint:
+                age = now - verified_at
+                if status == UP:
+                    return UP, f"{detail} (verified {int(age)} s ago)"
+                if age < SHERPA_PROBE_RETRY_S:
+                    retry_in = int(SHERPA_PROBE_RETRY_S - age)
+                    return DOWN, f"{detail} (retry in {retry_in} s)"
+            # Fingerprint changed or retry window expired: drop the stale entry.
+            _SHERPA_PROBE_MEMO.pop(key, None)
+
+        fut = _SHERPA_INFLIGHT.get(key)
+        if fut is None:
+            fut = _SHERPA_EXECUTOR.submit(_sherpa_worker, key, model_dir, runner)
+            _SHERPA_INFLIGHT[key] = fut
+            fut.add_done_callback(lambda f: _cleanup_inflight(key, f))
+
+    # Wait on the in-flight load without letting the prober's timeout cancel it.
+    wrapped = asyncio.wrap_future(fut)
+    shielded = asyncio.shield(wrapped)
+    try:
+        status, detail = await asyncio.wait_for(shielded, timeout=SHERPA_PROBE_WAIT_S)
+    except asyncio.TimeoutError:
+        return DEGRADED, "sherpa-onnx model load in progress"
     return status, detail
 
 
@@ -160,7 +246,7 @@ async def probe_sherpa_stt(
 ) -> tuple[str, str]:
     """Probe the local sherpa-onnx Moonshine STT backend with a silent clip."""
 
-    async def _run() -> tuple[str, str]:
+    def _run() -> tuple[str, str]:
         try:
             from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
             from kaine.setup import speech_models
@@ -202,7 +288,7 @@ async def probe_sherpa_stt(
                     if client is not None:
                         asyncio.run(client.aclose())
 
-            await asyncio.to_thread(_infer)
+            _infer()
             return (
                 UP,
                 f"{model_id or speech_models.DEFAULT_STT} loaded and transcribed a test clip",
@@ -211,7 +297,7 @@ async def probe_sherpa_stt(
             return DOWN, f"{type(exc).__name__}: {exc}"
 
     key = ("stt", model_dir, model_id, None, num_threads)
-    return await _cached_sherpa_probe(key, _run)
+    return await _cached_sherpa_probe(key, model_dir, _run)
 
 
 async def probe_sherpa_tts(
@@ -223,7 +309,7 @@ async def probe_sherpa_tts(
 ) -> tuple[str, str]:
     """Probe the local sherpa-onnx Kokoro TTS backend by saying a short word."""
 
-    async def _run() -> tuple[str, str]:
+    def _run() -> tuple[str, str]:
         try:
             from kaine.modules.vox.client import TTSRequest
             from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
@@ -251,7 +337,7 @@ async def probe_sherpa_tts(
                     if client is not None:
                         asyncio.run(client.aclose())
 
-            await asyncio.to_thread(_infer)
+            _infer()
             return (
                 UP,
                 f"{model_id or speech_models.DEFAULT_TTS} loaded and synthesized a test word",
@@ -260,7 +346,7 @@ async def probe_sherpa_tts(
             return DOWN, f"{type(exc).__name__}: {exc}"
 
     key = ("tts", model_dir, model_id, speaker_id, num_threads)
-    return await _cached_sherpa_probe(key, _run)
+    return await _cached_sherpa_probe(key, model_dir, _run)
 
 
 async def probe_state_encryption(

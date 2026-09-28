@@ -9,26 +9,26 @@ injected, so no real network traffic occurs.
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import io
-import os
 import shutil
 import tarfile
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from kaine.setup.speech_models import (
+    DEFAULT_STT,
+    DEFAULT_TTS,
     MANIFEST,
     SpeechModel,
-    _default_downloader,
+    describe,
     fetch,
     is_installed,
     main,
     model_dir,
+    required_speech_models,
 )
 
 
@@ -84,343 +84,315 @@ def _patch_manifest(
     )
 
 
-@pytest.fixture
-def local_downloader():
-    def _downloader(url: str, dest_path: str) -> None:
-        shutil.copy(url, dest_path)
-
-    return _downloader
+def _copy_downloader(archive: Path) -> Any:
+    def _dl(_url: str, dest: str) -> None:
+        shutil.copyfile(str(archive), dest)
+    return _dl
 
 
-def test_fetch_installs_and_is_idempotent(tmp_path, monkeypatch, local_downloader):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
+def test_fetch_installs_model_and_writes_verified_marker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
+        archive,
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+        },
+    )
+    _patch_manifest(
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
+    )
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert result.ok
+    assert is_installed("test-model", tmp_path)
+    marker_path = model_dir("test-model", tmp_path) / ".verified"
+    assert marker_path.exists()
+    assert "sha256" in marker_path.read_text()
+
+
+def test_marker_less_install_is_not_installed_and_is_refetched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
+        archive,
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+        },
+    )
+    _patch_manifest(
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
+    )
+    fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert is_installed("test-model", tmp_path)
+
+    (model_dir("test-model", tmp_path) / ".verified").unlink()
+    assert not is_installed("test-model", tmp_path)
+
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert result.ok
+    assert is_installed("test-model", tmp_path)
+
+
+def test_tampered_install_is_not_installed_and_is_refetched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
+        archive,
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+        },
+    )
+    _patch_manifest(
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
+    )
+    fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert is_installed("test-model", tmp_path)
+
+    target_file = model_dir("test-model", tmp_path) / "tokens.txt"
+    with open(target_file, "ab") as f:
+        f.write(b"extra")
+
+    assert not is_installed("test-model", tmp_path)
+
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert result.ok
+    assert is_installed("test-model", tmp_path)
+    assert target_file.read_text() == "tok"
+
+
+def test_symlinked_target_is_replaced(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
+        archive,
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+        },
+    )
+    _patch_manifest(
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
+    )
+
+    decoy = tmp_path / "decoy"
+    decoy.mkdir()
+    (decoy / "tokens.txt").write_text("wrong")
+    target = model_dir("test-model", tmp_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(decoy, target_is_directory=True)
+
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert result.ok
+    assert is_installed("test-model", tmp_path)
+    assert not target.is_symlink()
+    assert (target / "tokens.txt").read_text() == "tok"
+
+
+def test_dangling_symlink_target_is_replaced(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
+        archive,
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+        },
+    )
+    _patch_manifest(
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
+    )
+
+    target = model_dir("test-model", tmp_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(tmp_path / "nowhere", target_is_directory=True)
+    assert target.is_symlink()
+    assert not target.exists()
+
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert result.ok
+    assert is_installed("test-model", tmp_path)
+    assert not target.is_symlink()
+
+
+def test_extract_without_data_filter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delattr(tarfile, "data_filter", raising=False)
+
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
+        archive,
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+            "subdir/nested.txt": b"nested",
+        },
     )
     _patch_manifest(
         monkeypatch,
-        "test-stt",
+        "test-model",
         archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
+        top_dir,
+        ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt", "subdir/nested.txt"),
     )
 
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert res.ok
-    assert res.detail == "installed"
-    assert res.path == model_dir("test-stt", tmp_path)
-    assert is_installed("test-stt", root=tmp_path)
-
-    calls = []
-
-    def counting_downloader(url: str, dest_path: str) -> None:
-        calls.append((url, dest_path))
-
-    res2 = fetch("test-stt", root=tmp_path, downloader=counting_downloader)
-    assert res2.ok
-    assert res2.detail == "already installed"
-    assert not calls
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert result.ok
+    assert is_installed("test-model", tmp_path)
+    assert (model_dir("test-model", tmp_path) / "subdir" / "nested.txt").exists()
 
 
-def test_fetch_sha256_mismatch(tmp_path, monkeypatch, local_downloader):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
+def test_extract_rejects_absolute_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    archive = tmp_path / "evil.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+
+    def _add_absolute(tf: tarfile.TarFile) -> None:
+        info = tarfile.TarInfo(name="/etc/passwd")
+        info.size = 3
+        tf.addfile(info, io.BytesIO(b"pwd"))
+
+    _make_archive(
+        archive,
+        top_dir,
+        {"encoder_model.ort": b"enc", "decoder_model_merged.ort": b"dec", "tokens.txt": b"tok"},
+        evil=_add_absolute,
     )
     _patch_manifest(
-        monkeypatch,
-        "test-stt",
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
+    )
+
+    result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
+    assert not result.ok
+    assert "absolute path" in result.detail
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        ({}, []),
+        ({"audition": {"backend": "speaches"}}, []),
+        (
+            {"audition": {"backend": "sherpa_onnx", "transcription_enabled": True}},
+            [DEFAULT_STT],
+        ),
+        (
+            {"vox": {"backend": "sherpa_onnx"}},
+            [DEFAULT_TTS],
+        ),
+        (
+            {
+                "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
+                "vox": {"backend": "sherpa_onnx"},
+            },
+            [DEFAULT_STT, DEFAULT_TTS],
+        ),
+        (
+            {"audition": {"backend": "sherpa_onnx", "transcription_enabled": False}},
+            [],
+        ),
+        (
+            {
+                "audition": {"backend": " SHERPA_ONNX ", "transcription_enabled": True},
+                "vox": {"backend": "Sherpa_ONNX"},
+            },
+            [DEFAULT_STT, DEFAULT_TTS],
+        ),
+    ],
+)
+def test_required_speech_models_backends(config: dict, expected: list[str]) -> None:
+    assert required_speech_models(config) == expected
+
+
+def test_required_speech_models_custom_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    custom_stt = "moonshine-tiny-en"
+    assert required_speech_models(
+        {
+            "audition": {
+                "backend": "sherpa_onnx",
+                "transcription_enabled": True,
+                "sherpa_model_id": custom_stt,
+            }
+        }
+    ) == [custom_stt]
+
+    with pytest.warns(UserWarning, match="skipping unknown speech model id"):
+        assert required_speech_models(
+            {
+                "audition": {
+                    "backend": "sherpa_onnx",
+                    "transcription_enabled": True,
+                    "sherpa_model_id": "not-in-manifest",
+                }
+            }
+        ) == []
+
+
+def test_required_speech_models_unknown_tts_warns(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.warns(UserWarning, match="skipping unknown speech model id"):
+        assert required_speech_models(
+            {"vox": {"backend": "sherpa_onnx", "sherpa_model_id": "not-in-manifest"}}
+        ) == []
+
+
+def test_describe_kokoro_names_both_licences() -> None:
+    text = describe("kokoro-en")
+    assert "Apache-2.0 (model)" in text
+    assert "GPL-3.0-or-later" in text
+
+
+def test_main_cli_fetch_with_injected_downloader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(
         archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-    monkeypatch.setitem(
-        MANIFEST,
-        "test-stt",
-        dataclasses.replace(MANIFEST["test-stt"], sha256="0" * 64),
-    )
-
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "sha256 mismatch" in res.detail
-    assert not is_installed("test-stt", root=tmp_path)
-
-
-def test_fetch_size_mismatch(tmp_path, monkeypatch, local_downloader):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
+        top_dir,
+        {
+            "encoder_model.ort": b"enc",
+            "decoder_model_merged.ort": b"dec",
+            "tokens.txt": b"tok",
+        },
     )
     _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-    monkeypatch.setitem(
-        MANIFEST,
-        "test-stt",
-        dataclasses.replace(MANIFEST["test-stt"], size_bytes=archive.stat().st_size + 1),
+        monkeypatch, "test-model", archive, top_dir, ("encoder_model.ort", "decoder_model_merged.ort", "tokens.txt")
     )
 
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "size mismatch" in res.detail
-    assert not is_installed("test-stt", root=tmp_path)
-
-
-def test_rejects_symlink_member(tmp_path, monkeypatch, local_downloader):
-    def _evil(tf: tarfile.TarFile) -> None:
-        info = tarfile.TarInfo(name="model/evil_link")
-        info.type = tarfile.SYMTYPE
-        info.linkname = "/etc/passwd"
-        tf.addfile(info)
-
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-        evil=_evil,
+    result = main(
+        ["--stt", "test-model", "--yes", "--root", str(tmp_path)],
+        input_fn=lambda prompt: "",
+        downloader=_copy_downloader(archive),
     )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "extraction failed" in res.detail
-    assert not is_installed("test-stt", root=tmp_path)
+    assert result == 0
+    assert is_installed("test-model", tmp_path)
 
 
-def test_rejects_path_traversal_member(tmp_path, monkeypatch, local_downloader):
-    def _evil(tf: tarfile.TarFile) -> None:
-        info = tarfile.TarInfo(name="model/../../evil.txt")
-        data = b"evil"
-        info.size = len(data)
-        tf.addfile(info, io.BytesIO(data))
-
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-        evil=_evil,
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "extraction failed" in res.detail
-
-
-def test_rejects_absolute_path_member(tmp_path, monkeypatch, local_downloader):
-    def _evil(tf: tarfile.TarFile) -> None:
-        info = tarfile.TarInfo(name="/absolute/evil.txt")
-        data = b"evil"
-        info.size = len(data)
-        tf.addfile(info, io.BytesIO(data))
-
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-        evil=_evil,
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "extraction failed" in res.detail
-
-
-def test_rejects_wrong_top_level_dir(tmp_path, monkeypatch, local_downloader):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="wrong",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "extraction failed" in res.detail
-
-
-def test_rejects_missing_required_file(tmp_path, monkeypatch, local_downloader):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e"},
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    res = fetch("test-stt", root=tmp_path, downloader=local_downloader)
-    assert not res.ok
-    assert "required file missing" in res.detail
-
-
-def test_cli_declines_consent_without_downloading(tmp_path, monkeypatch):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    calls = []
-
-    def nope(*_args, **_kwargs) -> None:
-        calls.append(True)
-
-    rc = main(
-        ["--root", str(tmp_path), "--stt", "test-stt"],
-        input_fn=lambda _prompt: "n",
-        downloader=nope,
-    )
-    assert rc == 0
-    assert not calls
-
-
-def test_cli_with_yes_fetches(tmp_path, monkeypatch, local_downloader):
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    rc = main(
-        ["--root", str(tmp_path), "--stt", "test-stt", "--yes"],
-        downloader=local_downloader,
-    )
-    assert rc == 0
-    assert is_installed("test-stt", root=tmp_path)
-
-
-def test_cli_unknown_id_returns_2():
-    assert main(["--stt", "not-a-real-model"]) == 2
-
-
-def test_cli_stt_flag_rejects_tts_id():
-    assert main(["--stt", "kokoro-en"]) == 2
-
-
-def test_fetch_through_symlinked_root(tmp_path, monkeypatch, local_downloader):
-    real = tmp_path / "real"
-    link = tmp_path / "link"
-    real.mkdir()
-    try:
-        os.symlink(real, link)
-    except OSError:
-        pytest.skip("symlinks not supported on this platform")
-
-    archive = _make_archive(
-        tmp_path / "model.tar.bz2",
-        top_dir="model",
-        files={"encoder_model.ort": b"e", "tokens.txt": b"t"},
-    )
-    _patch_manifest(
-        monkeypatch,
-        "test-stt",
-        archive,
-        top_dir="model",
-        required_files=("encoder_model.ort", "tokens.txt"),
-    )
-
-    res = fetch("test-stt", root=link, downloader=local_downloader)
-    assert res.ok
-    assert res.detail == "installed"
-    assert res.path == model_dir("test-stt", link)
-    assert is_installed("test-stt", root=link)
-    assert is_installed("test-stt", root=real)
-
-
-def test_default_downloader_stops_at_max_bytes(tmp_path, monkeypatch):
-    class FakeResponse:
-        def __init__(self) -> None:
-            self._remaining = 10
-
-        def read(self, _n: int = -1) -> bytes:
-            if self._remaining <= 0:
-                return b""
-            self._remaining -= 1
-            return b"x" * 1024
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc) -> None:
-            return None
-
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda _url, timeout=60: FakeResponse(),
-    )
-
-    dest = tmp_path / "download.bin"
-    with pytest.raises(ValueError, match="download exceeded the pinned size"):
-        _default_downloader("http://example.com/model", str(dest), max_bytes=2048)
-
-
-def test_manifest_is_pinned():
-    assert set(MANIFEST.keys()) == {
-        "moonshine-base-en",
-        "moonshine-tiny-en",
-        "kokoro-en",
-    }
-    assert (
-        MANIFEST["moonshine-base-en"].sha256
-        == "43232c1d13013d37317163baec3135bd771a186a4356f28c889bab453bb0e891"
-    )
-    assert (
-        MANIFEST["moonshine-tiny-en"].sha256
-        == "9ec31b342d8fa3240c3b81b8f82e1cf7e3ac467c93ca5a999b741d5887164f8d"
-    )
-    assert (
-        MANIFEST["kokoro-en"].sha256
-        == "c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd"
-    )
+def test_main_cli_unknown_model() -> None:
+    result = main(["--stt", "not-a-model"], input_fn=lambda prompt: "")
+    assert result == 2

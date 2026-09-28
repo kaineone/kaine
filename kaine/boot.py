@@ -1306,6 +1306,15 @@ def _live_mic_source_label(mode: str) -> str:
     return "live_mic"
 
 
+def _audition_sherpa_failure_reason() -> str:
+    from kaine.backend_state import backend_failures
+
+    for record in reversed(backend_failures()):
+        if record.module == "audition" and record.backend == "sherpa_onnx":
+            return record.reason
+    return "unknown failure"
+
+
 def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.audition.live import LiveMicConfig
     from kaine.modules.audition.module import Audition
@@ -1449,12 +1458,22 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     if "transcription_enabled" in section:
         kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
 
-    # Backend seam (openspec runtime-backends). The default "speaches" path is
-    # byte-for-byte behaviour-preserving: Audition builds its SpeachesClient
-    # exactly as before. Only a non-default backend resolves a client here.
-    backend = section.get("backend")
-    if backend in (None, "", "speaches"):
-        kwargs["backend"] = "speaches"
+    # Backend seam (openspec runtime-backends). The backend value is normalised
+    # once and all disclosures derive from the resolved backend.
+    backend = str(section.get("backend") or "speaches").strip().lower()
+    if backend not in ("speaches", "sherpa_onnx"):
+        raise ConfigurationError(
+            f"unknown audition backend {section.get('backend')!r}; "
+            "must be 'speaches' or 'sherpa_onnx'"
+        )
+
+    transcription_enabled = bool(kwargs.get("transcription_enabled", False))
+
+    # With transcription off, do not resolve or construct any STT backend. The
+    # gate guarantees the client is never called; Audition builds its default
+    # SpeachesClient, which is never used.
+    if backend == "speaches" or not transcription_enabled:
+        kwargs["backend"] = backend
         return Audition(bus, **kwargs)
 
     from kaine.modules.audition.stt_client import SpeachesClient, STTClient
@@ -1486,10 +1505,29 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         client = registry.resolve(backend)
     except UnknownBackendError as exc:
         raise ConfigurationError(str(exc)) from exc
+
+    from kaine.setup.speech_models import DEFAULT_STT
+
+    model_id = section.get("sherpa_model_id") or DEFAULT_STT
     if client is None:
-        return None
+        # Sherpa factory failed already (recorded and logged by resolve_backend).
+        # Hearing continues; transcription is simply disabled.
+        failure = _audition_sherpa_failure_reason()
+        log.warning(
+            "audition: sherpa-onnx transcription unavailable (%s); "
+            "hearing continues without transcription. "
+            "Fetch the model: python -m kaine.setup.speech_models --stt %s",
+            failure,
+            model_id,
+        )
+        kwargs["transcription_enabled"] = False
+        kwargs["backend"] = "sherpa_onnx"
+        kwargs["stt_model"] = model_id
+        return Audition(bus, **kwargs)
+
     kwargs["stt_client"] = client
     kwargs["backend"] = "sherpa_onnx"
+    kwargs["stt_model"] = model_id
     return Audition(bus, **kwargs)
 
 
@@ -1533,7 +1571,7 @@ def make_vox(
     }
     # Pop all top-level keys; handle mirroring sub-table separately.
     _require_keys(section, allowed)
-    backend = section.pop("backend", None)
+    backend = str(section.pop("backend", None) or "chatterbox").strip().lower()
     sherpa_model_dir = section.pop("sherpa_model_dir", None)
     sherpa_model_id = section.pop("sherpa_model_id", None)
     sherpa_speaker_id = section.pop("sherpa_speaker_id", 0)
@@ -1559,10 +1597,13 @@ def make_vox(
     if "decay_s" in mirroring_section:
         kw["mirror_decay_s"] = float(mirroring_section["decay_s"])
 
-    # Backend seam (openspec runtime-backends). The default "chatterbox" path
-    # is byte-for-byte behaviour-preserving: Vox builds its ChatterboxClient
-    # exactly as before. Only a non-default backend resolves a client here.
-    if backend in (None, "", "chatterbox"):
+    if backend not in ("chatterbox", "sherpa_onnx"):
+        raise ConfigurationError(
+            f"unknown vox backend {section.get('backend')!r}; "
+            "must be 'chatterbox' or 'sherpa_onnx'"
+        )
+
+    if backend == "chatterbox":
         kw["backend"] = "chatterbox"
         return Vox(bus, entity_clock=entity_clock, **kw)
 
@@ -1590,7 +1631,7 @@ def make_vox(
             num_threads=int(sherpa_num_threads),
         )
 
-    registry = BackendRegistry[TTSClient]("vox", default="chatterbox").register(
+    registry = BackendRegistry[TTSClient]("vox", default="sherpa_onnx").register(
         "chatterbox", _chatterbox_factory
     ).register("sherpa_onnx", _sherpa_factory)
     try:
@@ -1599,10 +1640,12 @@ def make_vox(
         raise ConfigurationError(str(exc)) from exc
     if client is None:
         return None
+
+    resolved_model_id = sherpa_model_id or DEFAULT_TTS
     kw["tts_client"] = client
     kw["backend"] = "sherpa_onnx"
     kw["applied_prosody"] = APPLIED_PROSODY
-    kw["voice_label"] = f"{sherpa_model_id or DEFAULT_TTS} speaker {int(sherpa_speaker_id)}"
+    kw["voice_label"] = f"{resolved_model_id} speaker {int(sherpa_speaker_id)}"
     return Vox(bus, entity_clock=entity_clock, **kw)
 
 

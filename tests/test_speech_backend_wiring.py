@@ -49,6 +49,7 @@ def test_make_audition_default_uses_speaches(bus):
     assert isinstance(audition, Audition)
     assert isinstance(audition._stt_client, SpeachesClient)
     assert audition._backend == "speaches"
+    assert audition._transcription_enabled is False
 
 
 def test_make_audition_sherpa_onnx(bus, monkeypatch):
@@ -68,9 +69,12 @@ def test_make_audition_sherpa_onnx(bus, monkeypatch):
     )
     monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_STT", "moonshine-base-en")
 
-    audition = make_audition(bus, {"backend": "sherpa_onnx", "perception_feed": {}})
+    audition = make_audition(
+        bus, {"backend": "sherpa_onnx", "transcription_enabled": True, "perception_feed": {}}
+    )
     assert isinstance(audition, Audition)
     assert audition._backend == "sherpa_onnx"
+    assert audition._stt_model == "moonshine-base-en"
     assert len(calls) == 1
     assert calls[0]["model_dir"] == "/fake/models/moonshine-base-en"
     assert calls[0]["model_id"] == "moonshine-base-en"
@@ -81,6 +85,7 @@ def test_make_audition_sherpa_onnx(bus, monkeypatch):
         bus,
         {
             "backend": "sherpa_onnx",
+            "transcription_enabled": True,
             "sherpa_model_id": "moonshine-tiny-en",
             "sherpa_num_threads": 4,
             "perception_feed": {},
@@ -97,7 +102,7 @@ def test_make_audition_unknown_backend_raises(bus):
         make_audition(bus, {"backend": "whisper", "perception_feed": {}})
 
 
-def test_make_audition_sherpa_failure_records_and_returns_none(bus, monkeypatch):
+def test_make_audition_sherpa_failure_disables_transcription(bus, monkeypatch, caplog):
     class BrokenSherpa:
         def __init__(self, *args, **kwargs):
             raise FileNotFoundError("model files missing")
@@ -108,12 +113,38 @@ def test_make_audition_sherpa_failure_records_and_returns_none(bus, monkeypatch)
     monkeypatch.setattr(
         "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
     )
+    monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_STT", "moonshine-base-en")
 
-    result = make_audition(bus, {"backend": "sherpa_onnx", "perception_feed": {}})
-    assert result is None
+    result = make_audition(
+        bus, {"backend": "sherpa_onnx", "transcription_enabled": True, "perception_feed": {}}
+    )
+    assert isinstance(result, Audition)
+    assert result._transcription_enabled is False
+    assert result._backend == "sherpa_onnx"
+    assert result._stt_model == "moonshine-base-en"
     failure = _backend_failure("audition", "sherpa_onnx")
     assert failure is not None
     assert "model files missing" in failure.reason
+    assert "sherpa-onnx transcription unavailable" in caplog.text
+    assert "python -m kaine.setup.speech_models --stt moonshine-base-en" in caplog.text
+
+
+def test_make_audition_transcription_off_with_sherpa_onnx_does_not_resolve(bus, monkeypatch):
+    calls = []
+
+    class FakeSherpa:
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "kaine.modules.audition.sherpa_stt.SherpaMoonshineSTT", FakeSherpa
+    )
+
+    audition = make_audition(bus, {"backend": "sherpa_onnx", "perception_feed": {}})
+    assert isinstance(audition, Audition)
+    assert audition._backend == "sherpa_onnx"
+    assert audition._transcription_enabled is False
+    assert calls == []
 
 
 def test_make_vox_default_uses_chatterbox(bus):
@@ -193,6 +224,36 @@ def test_make_vox_sherpa_failure_records_and_returns_none(bus, monkeypatch):
     assert "model files missing" in str(failure.get("reason") if isinstance(failure, dict) else failure)
 
 
+def test_make_vox_normalises_backend_and_prosody(bus, monkeypatch):
+    calls = []
+
+    class FakeSherpa:
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs)
+
+    monkeypatch.setattr("kaine.modules.vox.sherpa_tts.SherpaKokoroTTS", FakeSherpa)
+    monkeypatch.setattr(
+        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+    )
+    monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_TTS", "kokoro-en")
+
+    vox = make_vox(bus, {"backend": "chatterbox "})
+    assert isinstance(vox, Vox)
+    assert vox._backend == "chatterbox"
+    assert vox._applied_prosody == CHATTERBOX_PROSODY
+    # The Chatterbox path keeps the configured voice id; no label masks it.
+    assert vox._voice_label is None
+    assert calls == []
+
+    calls.clear()
+    vox2 = make_vox(bus, {"backend": " sherpa_onnx"})
+    assert isinstance(vox2, Vox)
+    assert vox2._backend == "sherpa_onnx"
+    assert vox2._applied_prosody == APPLIED_PROSODY
+    assert vox2._voice_label == "kokoro-en speaker 0"
+    assert len(calls) == 1
+
+
 async def _call_build_registry(bus, config):
     kwargs = {}
     params = inspect.signature(build_registry).parameters
@@ -206,7 +267,7 @@ async def _call_build_registry(bus, config):
 
 
 @pytest.mark.asyncio
-async def test_build_registry_skips_module_with_failed_backend(bus, monkeypatch):
+async def test_build_registry_registers_audition_despite_sherpa_failure(bus, monkeypatch):
     class BrokenSherpa:
         def __init__(self, *args, **kwargs):
             raise FileNotFoundError("no model files")
@@ -221,13 +282,15 @@ async def test_build_registry_skips_module_with_failed_backend(bus, monkeypatch)
 
     config = {
         "modules": {"audition": True, "vox": True},
-        "audition": {"backend": "sherpa_onnx"},
+        "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
         "vox": {},
         "perception_feed": {},
     }
     registry = await _call_build_registry(bus, config)
-    assert "audition" not in registry
+    assert "audition" in registry
     assert "vox" in registry
+    assert registry.get("audition")._transcription_enabled is False
+    assert registry.get("audition")._backend == "sherpa_onnx"
 
 
 @pytest.mark.asyncio
@@ -243,7 +306,7 @@ async def test_build_registry_refuses_boot_when_sherpa_package_missing(bus, monk
 
     config = {
         "modules": {"audition": True, "vox": True},
-        "audition": {"backend": "sherpa_onnx"},
+        "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
         "vox": {},
         "perception_feed": {},
     }
@@ -264,6 +327,7 @@ def test_rebuild_module_raises_when_construct_returns_none(bus, monkeypatch):
 @pytest.mark.asyncio
 async def test_audition_transcription_event_discloses_backend(bus, monkeypatch):
     captured = []
+    stt_model = "fake-stt"
 
     async def fake_publish(channel, payload, *, salience=None):
         captured.append((channel, payload))
@@ -273,7 +337,7 @@ async def test_audition_transcription_event_discloses_backend(bus, monkeypatch):
         stt_client=FakeSTTClient(responses=["hello world"]),
         backend="sherpa_onnx",
         emotion_classifier=FakeEmotionClassifier(),
-        stt_model="fake-stt",
+        stt_model=stt_model,
         transcription_enabled=True,
     )
     monkeypatch.setattr(audition, "publish", fake_publish)
@@ -282,6 +346,8 @@ async def test_audition_transcription_event_discloses_backend(bus, monkeypatch):
     await audition._publish_transcription(result, "mic", 16000, 32000)
     assert captured[-1][0] == "audition.transcription"
     assert captured[-1][1]["backend"] == "sherpa_onnx"
+    # A successful transcription reports the model that produced it.
+    assert captured[-1][1]["model"] == result.model
 
     captured.clear()
     await audition._publish_transcription_error(
@@ -292,6 +358,7 @@ async def test_audition_transcription_event_discloses_backend(bus, monkeypatch):
     )
     assert captured[-1][0] == "audition.transcription"
     assert captured[-1][1]["backend"] == "sherpa_onnx"
+    assert captured[-1][1]["model"] == stt_model
 
 
 @pytest.mark.asyncio
@@ -338,3 +405,21 @@ async def test_vox_synthesized_event_discloses_backend(bus, monkeypatch):
         "speed_factor",
     ]
     assert payload["voice"] == "(default)"
+
+
+def test_extras_audition_sherpa_requires_transcription_enabled():
+    from kaine.extras import _audition_sherpa
+
+    assert _audition_sherpa({"audition": {"backend": "sherpa_onnx", "transcription_enabled": True}})
+    assert not _audition_sherpa({"audition": {"backend": "sherpa_onnx"}})
+    assert not _audition_sherpa({"audition": {"backend": "sherpa_onnx", "transcription_enabled": False}})
+    assert not _audition_sherpa({"audition": {"backend": "speaches", "transcription_enabled": True}})
+
+
+def test_extras_vox_sherpa_normalised():
+    from kaine.extras import _vox_sherpa
+
+    assert _vox_sherpa({"vox": {"backend": "sherpa_onnx"}})
+    assert _vox_sherpa({"vox": {"backend": "Sherpa_ONNX "}})
+    assert not _vox_sherpa({"vox": {}})
+    assert not _vox_sherpa({"vox": {"backend": "chatterbox"}})

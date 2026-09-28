@@ -334,6 +334,8 @@ class Audition(BaseModule):
                     exc,
                 )
                 self._live_mic = None
+        if self._transcription_enabled and hasattr(self._stt_client, "warm_up"):
+            await self._stt_client.warm_up()
 
     async def shutdown(self) -> None:
         if self._live_mic is not None:
