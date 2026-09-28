@@ -1,7 +1,7 @@
 # nous-active-inference Specification
 
 ## Purpose
-TBD - created by archiving change nous-pymdp-swap. Update Purpose after archive.
+Nous is KAINE's deliberative reasoning module. It performs active inference over a compact discrete generative model: it updates beliefs about hidden states from each workspace broadcast, learns how its own actions change those states, and selects actions by expected free energy. This capability defines the engine contract (the pymdp engine, and a NumPy engine that computes the same thing), bounded planning, the belief and policy events, how intents leave Nous, and how its learned model persists across preservation.
 
 ## Requirements
 
@@ -190,3 +190,18 @@ Each step's prior SHALL be the previous posterior propagated through the learned
 #### Scenario: Revive keeps the being's sense of agency
 - **WHEN** a being is preserved and revived
 - **THEN** its learned transition beliefs and carried belief are the ones it had, and its next decision is the one it would have made
+
+### Requirement: A JAX-free Nous engine computes what the pymdp engine computes
+KAINE SHALL provide a NumPy active-inference engine, selected by `[nous].backend = "numpy"`, that reproduces the pymdp engine's state inference, per-policy expected free energy (utility, state information gain, and parameter information gain for learning models), policy enumeration, transition learning, prior propagation and learned-state format for KAINE's generative models, and that needs neither JAX nor pymdp. Its agreement with the pymdp engine SHALL be verified against golden fixtures recorded from the pymdp engine, on every host. A learned state saved by either engine SHALL load into the other.
+
+#### Scenario: A host without JAX
+- **WHEN** Nous runs with `backend = "numpy"` where JAX cannot be imported
+- **THEN** it infers, plans, learns and publishes as it does with the pymdp engine, and the extras check does not require the `reasoning` extra
+
+#### Scenario: The same decisions
+- **WHEN** both engines process the golden observation sequence from the same model
+- **THEN** their posteriors, per-policy EFE and learned transitions agree within 1e-4 and they choose the same actions
+
+#### Scenario: A being moves between hosts
+- **WHEN** a being preserved on a JAX host is revived on a host using the NumPy engine
+- **THEN** its learned model and carried belief load, and its next decision matches the one the pymdp engine would make
