@@ -25,7 +25,7 @@ Three defects stand in the way:
   - A minimum interval between requested rests is measured in entity time (`[hypnos].requested_rest_min_interval_s`). Hypnos's non-interruptibility, bounded deferral and operator-freeze preemption are unchanged.
   - An exploring Nous therefore cannot cause a sleep storm.
 - **Nous learns from the action actually taken.**
-  - Volition publishes a content-free `volition.proposal_outcome` (`proposal_id`, `realized`, `reason`) for every proposal it sees, on a separate `volition.feedback` stream. That stream carries no intents, so an inhibited snapshot still publishes nothing to `volition.out`.
+  - Volition publishes a content-free `volition.proposal_outcome` (`proposal_id`, `realized`, `reason`) for every proposal it sees, on its own stream, `volition_feedback.out` (source `volition_feedback`; the bus maps each source to `<source>.out`). That stream carries no intents, so an inhibited snapshot still publishes nothing to `volition.out`.
   - Before its next step, Nous records the taken action: the proposed action if realized, `no_op` otherwise (declined, inhibited, guarded, rate-limited, or never conscious).
   - An outcome that arrives after the next step is counted and not applied.
 - **Provenance and audit.**

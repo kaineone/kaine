@@ -38,7 +38,7 @@ adding to the registry propagates to all three consumers automatically.
 
 - **Consumers adapt to shipped producer payloads.** The taxonomy keys and
   field allowlists describe what producers actually emit today
-  (e.g. `intent.speak`/`intent.think`/`intent.act` from
+  (e.g. `intent.speak`/`intent.think`/`intent.act`/`intent.rest` from
   `kaine/workspace/volition.py`, `hypnos.sleep.started` `started_at`,
   `thymos.emotion` `emotion`, `topos.report`'s five content-free scalars,
   `audition.prosody` `f0_mean_hz`/`f0_std_hz`, `chronos.report`). Exact keys
@@ -63,18 +63,27 @@ Content-free and export-eligible. Emitted unconditionally on every sleep on
 `sleep_index`).
 
 The audit classifies each realized speech/action in the window since the
-previous sleep into a three-way taxonomy: **input-triggered** (coalition
+previous sleep into a four-way taxonomy, checked in order: **nous_initiated**
+(the realized intent carries `origin: "nous"`), **input-triggered** (coalition
 member of type `audition.transcription` / `mundus.chat`, directly or elsewhere
 in the winning coalition), **drive-triggered** (`thymos.drive` in the coalition
-path), or **self-initiated** (neither). Realization markers are
+path), or **self-initiated** (none of the above). Realization markers are
 `external_speech`, `internal_speech`, `vox.synthesized`, `praxis.action`;
-`realization_failed` is excluded. `intent.act` on `nous.out` is reported as a
-distinct **unrealizable** count — no effector reads `nous.out`, so these are
-wiring signals, never executed actions.
+`realization_failed` is excluded. A sleep started with `trigger: "requested"`
+is counted as a realized rest. Counts are published for
+`nous_proposals_realized`, `nous_proposals_declined` and
+`nous_proposals_forwarded`; forwarded rests are counted separately because
+Hypnos decides them, and an accepted one shows up as a requested sleep.
+`intent.*` events on
+`nous.out` are reported as a distinct **unrealizable** count — no effector reads
+`nous.out`, so these are wiring signals, never executed actions; this counter
+is a guard and should read zero.
 
 Research-log allowlist (numeric/categorical only): `sleep_index`,
 `realized_total`, `input_triggered`, `drive_triggered`, `self_initiated`,
-`unrealizable_nous_intents`, `realization_failed_count`. The per-category
+`nous_initiated`, `nous_proposals_realized`, `nous_proposals_declined`,
+`nous_proposals_forwarded`, `unrealizable_nous_intents`,
+`realization_failed_count`. The per-category
 entry_id lists, event types, and salience values remain in the
 sleep_snapshots payload only. No text, transcripts, or latent vectors ever
 leave the audit. Registry note: new event types must be added to the

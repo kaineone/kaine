@@ -1370,6 +1370,36 @@ async def _boot_and_run(
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
     intent_signer = IntentSigner(intent_secret, run_ctx.run_id)
+
+    # Nous proposal realization wraps the chosen policy when the Nous module is
+    # enabled. [nous].drive_actions (default true) disables the source for
+    # ablation runs while still recording proposal outcomes.
+    modules_cfg = kaine_config.get("modules") or {}
+    nous_cfg = kaine_config.get("nous") or {}
+    nous_enabled = bool(modules_cfg.get("nous", True))
+
+    def _wrap_policy(policy):
+        if not nous_enabled:
+            return policy
+        from kaine.workspace.nous_proposals import NousProposalSource
+
+        return NousProposalSource(
+            policy,
+            drive_actions=bool(nous_cfg.get("drive_actions", True)),
+            speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
+            think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
+            rest_min_interval_s=float(
+                (kaine_config.get("hypnos") or {}).get(
+                    "requested_rest_min_interval_s", 1800.0
+                )
+            ),
+            time_fn=(
+                registry.entity_clock.now
+                if getattr(registry, "entity_clock", None) is not None
+                else None
+            ),
+        )
+
     if policy_name == "self_initiated_report":
         # Self-initiated report gate: the entity speaks only from its own
         # precision-weighted surprise (no user-utterance / chatbot trigger).
@@ -1388,26 +1418,36 @@ async def _boot_and_run(
         # zero over a multi-day run. None (unset) preserves never-expire.
         _sig_expiry_raw = volition_cfg.get("sig_expiry_s")
         volition = Volition(
-            policy=SelfInitiatedReportPolicy(
-                report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
-                think_threshold=float(volition_cfg.get("think_threshold", 0.45)),
-                interrupt_threshold=(float(_interrupt_raw) if _interrupt_raw is not None else None),
-                speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
-                think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
-                sig_expiry_s=(float(_sig_expiry_raw) if _sig_expiry_raw is not None else None),
-                clock=_report_clock,
+            policy=_wrap_policy(
+                SelfInitiatedReportPolicy(
+                    report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
+                    think_threshold=float(volition_cfg.get("think_threshold", 0.45)),
+                    interrupt_threshold=(float(_interrupt_raw) if _interrupt_raw is not None else None),
+                    speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
+                    think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
+                    sig_expiry_s=(float(_sig_expiry_raw) if _sig_expiry_raw is not None else None),
+                    clock=_report_clock,
+                    guard_clock=registry.entity_clock.wall if registry.entity_clock is not None else None,
+                )
             ),
             signer=intent_signer,
             operator_sources=operator_sources,
         )
     elif drive_initiative:
         volition = Volition(
-            policy=DriveBiasedActionSelectionPolicy(operator_sources=operator_sources),
+            policy=_wrap_policy(
+                DriveBiasedActionSelectionPolicy(operator_sources=operator_sources)
+            ),
             signer=intent_signer,
             operator_sources=operator_sources,
         )
     else:
+        from kaine.workspace.volition import DefaultActionSelectionPolicy
+
         volition = Volition(
+            policy=_wrap_policy(
+                DefaultActionSelectionPolicy(operator_sources=operator_sources)
+            ),
             signer=intent_signer,
             operator_sources=operator_sources,
         )

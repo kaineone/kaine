@@ -12,7 +12,7 @@ The audit SHALL classify each realized speech/action/rest into exactly one categ
   - **drive-triggered:** `thymos.drive` is in the coalition path.
   - **self-initiated:** none of the above.
 
-The audit SHALL count Nous proposals realized and declined from `volition.proposal_outcome` events. It SHALL also count separately, as unrealizable and never among executed actions, any `intent.*` event published on `nous.out`. Nous itself publishes none, so this is a guard counter that should read zero.
+The audit SHALL count Nous proposals realized, declined and forwarded from `volition.proposal_outcome` events. A `forwarded` rest outcome SHALL count only as forwarded, never as declined, because Hypnos decides it. It SHALL also count separately, as unrealizable and never among executed actions, any `intent.*` event published on `nous.out`. Nous itself publishes none, so this is a guard counter that should read zero.
 
 The audit payload SHALL contain only counts, entry_ids, event types, salience values, and sleep_index; it SHALL NOT contain text, transcripts, or latent vectors.
 
@@ -38,7 +38,7 @@ The audit payload SHALL contain only counts, entry_ids, event types, salience va
 
 #### Scenario: nous proposals counted
 - **WHEN** `volition.proposal_outcome` events are published during the window
-- **THEN** the audit reports the counts of realized and declined Nous proposals
+- **THEN** the audit reports the counts of realized, declined and forwarded Nous proposals
 
 #### Scenario: audit content-free
 - **WHEN** the audit payload is emitted (bus event and PhaseResult metadata)

@@ -104,9 +104,14 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     # Real Volition intent types (kaine/workspace/volition.py) — EXACT keys,
     # no prefix matching: an unknown intent.* subtype is NOT logged.
-    "intent.speak": frozenset({"kind", "about_tag", "effector"}),
-    "intent.think": frozenset({"kind", "about_tag", "effector"}),
-    "intent.act": frozenset({"kind", "about_tag", "effector"}),
+    "intent.speak": frozenset({"kind", "about_tag", "effector", "origin"}),
+    "intent.think": frozenset({"kind", "about_tag", "effector", "origin"}),
+    "intent.act": frozenset({"kind", "about_tag", "effector", "origin"}),
+    "intent.rest": frozenset({"kind", "about_tag", "origin"}),
+    # Nous proposal / Volition feedback / Hypnos rest request (change nous-drives-action)
+    "nous.proposal": frozenset({"proposal_id", "action", "kind", "step", "preference"}),
+    "volition.proposal_outcome": frozenset({"proposal_id", "realized", "reason"}),
+    "hypnos.rest_request": frozenset({"accepted", "reason", "origin"}),
     # --- Prediction / precision ---
     "soma.report": frozenset({"prediction_error", "wellness", "fatigue_value", "alerts"}),
     "topos.report": frozenset(
@@ -192,6 +197,10 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "input_triggered",
             "drive_triggered",
             "self_initiated",
+            "nous_initiated",
+            "nous_proposals_realized",
+            "nous_proposals_declined",
+            "nous_proposals_forwarded",
             "unrealizable_nous_intents",
             "realization_failed_count",
         }

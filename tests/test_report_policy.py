@@ -109,7 +109,7 @@ def test_one_in_flight_prevents_backlog():
     clk = _Clock()
     p = _policy(clk)
     assert SPEAK in _kinds(p(_snap([("e1", "soma", 0.9)])))  # speaks, arms guard
-    clk.t = 100.0  # well past refractory, but guard still armed
+    clk.t = 40.0  # well past refractory, inside the guard timeout: still armed
     # No queued external report while a prior speak is in flight (think may go on).
     assert SPEAK not in _kinds(p(_snap([("e2", "chronos", 0.9)])))
 
@@ -230,7 +230,7 @@ def test_default_policy_never_interrupts():
     clk = _Clock()
     p = _policy(clk)
     assert _kinds(p(_snap([("e1", "soma", 0.9)]))) == [SPEAK]  # in flight
-    clk.t = 100.0
+    clk.t = 40.0  # inside the guard timeout, so the utterance is still in flight
     second = p(_snap([("e2", "topos", 0.99)]))  # would-be urgent
     assert all(not i.interrupt for i in second)
     assert SPEAK not in _kinds(second)

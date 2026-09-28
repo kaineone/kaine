@@ -44,9 +44,11 @@ This is the `persona ∪ working-memory ∪ input` shape described in CoALA /
 Generative Agents / GWA "Theater of Mind".
 
 Lingua is **intent-driven, not reflexive**: it never decides on its own to speak.
-The only trigger is a `speak` or `think` intent from the executive
+The only triggers are `speak` or `think` intents from the executive
 action-selection step (Volition), gated by inhibition and selected by
-`[volition].policy`.
+`[volition].policy`. Lingua ignores `intent.rest`, and Nous-originated
+(`origin: "nous"`) `think`/`speak` intents are realized like any other Volition
+intent.
 
 In the base-thesis form (`thesis_test`, `[volition].policy =
 "self_initiated_report"`), Lingua is an **output-only voice**: the

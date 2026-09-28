@@ -89,6 +89,24 @@ async def test_invalid_construction(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
+async def test_think_intent_origin_copied_to_internal_speech(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["inner thought"])
+    event = Event(
+        source="volition",
+        type="intent.think",
+        payload={"kind": "think", "about": "origin test", "origin": "nous"},
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await lingua._dispatch_intent(event)
+    entries = await _wait_for_entries(bus, INTERNAL_STREAM)
+    assert entries
+    payload_json = entries[0][1].get("payload") or entries[0][1]["payload"]
+    payload = json.loads(payload_json)
+    assert payload.get("origin") == "nous"
+
+
+@pytest.mark.asyncio
 async def test_speak_publishes_only_to_external(bus: AsyncBus, tmp_path: Path):
     lingua = _make_lingua(bus, tmp_path, responses=["spoken text"])
     out = await lingua.speak("hello")

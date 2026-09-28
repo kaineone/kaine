@@ -1037,6 +1037,28 @@ def test_intent_speak_think_act_survive_taxonomy():
     assert _allowed_fields("intent.teleport") is None
 
 
+def test_nous_action_event_types_in_taxonomy():
+    from kaine.evaluation.observers.research_event_observer import _allowed_fields
+
+    for event_type in (
+        "nous.proposal",
+        "intent.rest",
+        "volition.proposal_outcome",
+        "hypnos.rest_request",
+    ):
+        assert _allowed_fields(event_type) is not None, event_type
+
+    # Origin is retained on Volition intents. Lingua speech events are content
+    # and are deliberately not part of the research taxonomy.
+    assert "origin" in _allowed_fields("intent.speak")
+    assert "origin" in _allowed_fields("intent.think")
+    assert "origin" in _allowed_fields("intent.act")
+    rest_fields = _allowed_fields("intent.rest")
+    assert "about_tag" in rest_fields
+    assert "origin" in rest_fields
+    assert "about" not in rest_fields
+
+
 def test_workspace_selected_yields_coalition_metadata():
     from kaine.evaluation.observers.research_event_observer import (
         _workspace_metadata_record,

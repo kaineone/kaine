@@ -314,10 +314,19 @@ For a non-inhibited snapshot the default `DefaultActionSelectionPolicy`:
 - Does not form a speak intent about the entity's own prior external speech
   (no self-response loop).
 - Enforces a one-in-flight guard: does not emit a new `speak` intent while
-  a prior one is still being realized.
+  a prior one is still being realized. The guard clears when the entity's own
+  `external_speech` becomes conscious, or after 48 s of wall time without it, so a failed
+  realization never mutes the entity. The drive-biased and self-initiated report
+  policies keep a guard per kind (`speak`, `think`), each with the same timeout.
 
 Intents are published to `volition.out` with types `intent.speak`,
-`intent.think`, or `intent.act`.
+`intent.think`, `intent.act`, or `intent.rest`. Volition also realizes
+conscious Nous proposals: when a non-inhibited snapshot contains a
+`nous.proposal` event from `nous.out`, the `NousProposalSource` wrapper may turn
+it into an `intent.think`, `intent.speak`, or `intent.rest`, subject to the same
+in-flight, refractory, and self-response guards as the wrapped policy. The
+wrapped policy decides on the coalition with the proposals removed, and a
+realized Nous intent arms the wrapped policy's own guard for that kind.
 
 **Interruptible, redirectable speech.** An utterance is not committed once
 begun. Lingua runs each generation as a cancellable task, and the

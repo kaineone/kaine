@@ -136,33 +136,39 @@ async def test_broadcast_publishes_policy_event(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_epistemic_action_emitted_as_intent_act(bus: AsyncBus):
-    # request_think (index 1) has the lowest EFE -> a think intent.act.
+async def test_epistemic_action_emitted_as_proposal(bus: AsyncBus):
+    # request_think (index 1) has the lowest EFE -> a think proposal.
     fake = FakeEngine(policy_efe=[0.9, 0.05, 0.5, 0.7])
     nous = Nous(bus, engine=fake)
     await nous.initialize()
     try:
         await nous.on_workspace(_snapshot([_event()]))
-        intents = await _read(bus, "intent.act")
-        assert len(intents) == 1
-        payload = intents[0].payload
+        proposals = await _read(bus, "nous.proposal")
+        assert len(proposals) == 1
+        payload = proposals[0].payload
         assert payload["kind"] == "think"
-        # Source is nous; it published an intent, not a direct effector call.
-        assert intents[0].source == "nous"
+        assert payload["action"] == "request_think"
+        assert "proposal_id" in payload
+        assert "step" in payload
+        assert 0.0 <= payload["preference"] <= 1.0
+        # Source is nous; it published a proposal, not a direct effector call.
+        assert proposals[0].source == "nous"
+        intents = await _read(bus, "intent.act")
+        assert intents == []
     finally:
         await nous.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_no_op_emits_no_intent(bus: AsyncBus):
-    # no_op (index 0) lowest -> belief+policy but NO intent.act.
+async def test_no_op_emits_no_proposal(bus: AsyncBus):
+    # no_op (index 0) lowest -> belief+policy but NO proposal.
     fake = FakeEngine(policy_efe=[0.05, 0.5, 0.6, 0.7])
     nous = Nous(bus, engine=fake)
     await nous.initialize()
     try:
         await nous.on_workspace(_snapshot([_event()]))
-        intents = await _read(bus, "intent.act")
-        assert intents == []
+        proposals = await _read(bus, "nous.proposal")
+        assert proposals == []
         assert len(await _read(bus, "nous.belief")) == 1
     finally:
         await nous.shutdown()
@@ -322,3 +328,19 @@ async def test_timeout_still_publishes_belief_not_error(bus: AsyncBus):
         assert await _read(bus, "nous.error") == []
     finally:
         await nous.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_state_label_falls_back_to_positional_name(bus: AsyncBus):
+    from types import SimpleNamespace
+
+    engine = FakeEngine()
+    nous = Nous(bus, engine=engine)
+    engine.model = SimpleNamespace(state_labels=[("calm", "alert"), ("quiet",)])
+    assert nous._state_label(0, 1) == "alert"
+    # Out of range on either axis: a positional name, never an exception.
+    assert nous._state_label(1, 3) == "factor1_state3"
+    assert nous._state_label(5, 0) == "factor5_state0"
+    # No labels at all.
+    engine.model = None
+    assert nous._state_label(0, 0) == "factor0_state0"

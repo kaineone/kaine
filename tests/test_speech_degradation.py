@@ -203,7 +203,9 @@ async def test_muted_vox_publishes_baseline_failure_once_per_60s(bus: AsyncBus, 
 
     published = []
 
-    async def _capture(text, params, result, *, success, error=None, salience=None):
+    async def _capture(
+        text, params, result, *, success, error=None, salience=None, origin=None
+    ):
         published.append(
             {
                 "text": text,

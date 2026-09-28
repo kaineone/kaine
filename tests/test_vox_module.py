@@ -57,6 +57,37 @@ def _make_vox(bus: AsyncBus, tmp_path: Path, **overrides) -> Vox:
 
 
 @pytest.mark.asyncio
+async def test_lingua_external_origin_copied_to_vox_synthesized(
+    bus: AsyncBus, tmp_path: Path
+):
+    vox = _make_vox(bus, tmp_path)
+    await vox.initialize()
+    try:
+        await bus.client.xadd(
+            "lingua.external",
+            {
+                "source": "lingua",
+                "type": "lingua.external",
+                "salience": "0.5",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "causal_parent": "",
+                "payload": json.dumps({"text": "hello world", "origin": "nous"}),
+            },
+        )
+        synthesized = []
+        for _ in range(50):
+            await asyncio.sleep(0.02)
+            entries = await bus.read("vox.out", last_id="0")
+            synthesized = [e for _, e in entries if e.type == "vox.synthesized"]
+            if synthesized:
+                break
+        assert synthesized
+        assert synthesized[-1].payload.get("origin") == "nous"
+    finally:
+        await vox.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_invalid_construction(bus: AsyncBus, tmp_path: Path):
     with pytest.raises(ValueError):
         Vox(bus, tts_client=FakeTTSClient(), baseline_salience=2.0)

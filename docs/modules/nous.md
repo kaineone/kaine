@@ -24,7 +24,7 @@ Each time Syneidesis broadcasts a workspace snapshot (10 Hz), Nous:
 
 1. **Updates beliefs** — runs variational inference over a compact discrete generative model, producing a posterior over hidden states (salience band, affect quadrant, event cluster, action latent).
 2. **Selects a policy** — evaluates expected free energy (EFE) for each candidate action and picks the lowest-EFE policy.
-3. **Proposes an action** — emits the chosen action as an `intent.act` event on the Volition/intent path. **Nous proposes; the executive disposes.** Syneidesis inhibition and Praxis whitelists remain in full control of any outward action.
+3. **Proposes an action** — emits the chosen action as a `nous.proposal` event on `nous.out` when the selected action is `request_think`, `request_speak`, or `request_maintenance`. The proposal carries `proposal_id`, `action`, `kind` (`think`/`speak`/`rest`), `step`, and `preference` ∈ [0,1] — the softmax probability of the chosen action under its per-action expected free energy. Salience rises from `baseline_salience` to `alert_salience` with `preference`. **Nous proposes; the executive disposes.** Volition realizes conscious proposals as intents, but Syneidesis inhibition and the same flight/refractory/self-response guards that govern all Volition intents decide whether a proposal becomes action. Praxis does not gate Nous proposals.
 
 ---
 
@@ -45,11 +45,11 @@ The encoder (`generative_model.encode_snapshot`) reads the snapshot's most-salie
 |---|---|---|---|
 | `nous.out` | `nous.belief` | `statement` (dominant latent label), `kind="belief"`, `frequency` (posterior max), `confidence` (1 − normalised entropy) | `alert_salience` when confidence ≥ 0.75, else `baseline_salience` |
 | `nous.out` | `nous.policy` | `policy` (action name), `expected_free_energy` (float), `horizon`, `param_info_gain` | `baseline_salience` |
-| `nous.out` | `intent.act` | `kind` (`"think"` or `"speak"`), `about` (action name) | `baseline_salience` |
+| `nous.out` | `nous.proposal` | `proposal_id`, `action`, `kind` (`"think"`/`"speak"`/`"rest"`), `step`, `preference` ∈ [0,1] | rises from `baseline_salience` to `alert_salience` with `preference` |
 | `nous.out` | `nous.timeout` | `elapsed_ms`, `num_factors`, `num_actions` | `timeout_salience` (0.3) |
 | `nous.out` | `nous.error` | `error_reason`, `elapsed_ms`, `num_factors`, `num_actions` | `timeout_salience` (0.3) |
 
-`no_op` and `request_maintenance` actions produce no `intent.act`. `request_think` maps to `kind="think"` and `request_speak` to `kind="speak"`. No module realizes these intents: they are published on `nous.out`, which Volition, Praxis and Lingua do not read, and Hypnos counts them as unrealizable. A choice therefore reaches the world only through its own intent event, which re-enters the workspace like any other event, and that is what Nous can learn about. `nous.error` is published on a non-timeout inference crash: the engine keeps the carried belief, sets `EngineResult.error=True`, and skips `nous.belief`/`nous.policy` for that cycle so the unchanged prior is never re-broadcast as a fresh computation. No learning occurs on a timed-out or failed step; the next step resumes from the last carried posterior.
+`no_op` publishes no proposal and no `intent.*` event. `request_think`, `request_speak`, and `request_maintenance` produce a `nous.proposal` on `nous.out`. Volition's `NousProposalSource` wraps the configured action-selection policy; it considers the most salient proposal only when it is in the conscious coalition of a non-inhibited experiential broadcast, and turns it into an `intent.think`, `intent.speak`, or `intent.rest` on `volition.out` with `origin: "nous"`. For every proposal it sees, Volition publishes a content-free `volition.proposal_outcome` on `volition_feedback.out` reporting whether the proposal was `realized`, `inhibited`, `in_flight`, `refractory`, `superseded`, `self_response`, or `disabled`, or `forwarded` for a rest intent handed to Hypnos. At most one proposal-derived intent is emitted per snapshot, and it never displaces the wrapped policy's own intent (`superseded`). The wrapped policy decides on the coalition with every proposal removed, so it never acts on a proposal itself and decides the same way whether `drive_actions` is on or off. The same one-in-flight and refractory guards that apply to ordinary Volition intents also apply; no self-response is permitted. Before each step Nous reads those outcomes and records the action taken since the previous step: a think or speak from Volition's outcome if it was realized, and a rest from Hypnos's `hypnos.rest_request` acceptance because Volition forwards rest intents. An action that was realized at a failed or timed-out step stays pending and is recorded only once a step commits. Unknown outcome ids are counted in `unknown_outcomes`. The wrapped policy shares one guard state with Nous through `note_external_intent`; refractory durations come from `[volition].speak_refractory_s` and `think_refractory_s`. A choice reaches the world only when Volition or Hypnos realizes it as an intent; realized intents re-enter the workspace like any other event, and that is what Nous can learn about. Praxis and its whitelist are untouched: no Nous action is a Praxis effector action. `nous.error` is published on a non-timeout inference crash: the engine keeps the carried belief, sets `EngineResult.error=True`, and skips `nous.belief`/`nous.policy` for that cycle so the unchanged prior is never re-broadcast as a fresh computation. No learning occurs on a timed-out or failed step; the next step resumes from the last carried posterior.
 
 ---
 
@@ -71,6 +71,7 @@ All keys live under `[nous]` in `config/kaine.toml`. See also [`../configuration
 | `baseline_salience` | `0.4` | Default event salience |
 | `alert_salience` | `0.8` | Salience when belief confidence ≥ 0.75 |
 | `timeout_salience` | `0.3` | Salience for `nous.timeout` and `nous.error` diagnostics |
+| `drive_actions` | `true` | When `true`, Volition may realize conscious `nous.proposal` events as intents. When `false`, Nous stays observational: every proposal receives outcome `disabled` and is learned as `no_op`. |
 
 `make_nous` in `kaine/boot.py` validates the complexity envelope: `factors × max_states_per_factor × actions × planning_horizon` must not exceed 4096. The shipped defaults give a product of 64, well within budget.
 
@@ -117,7 +118,7 @@ flowchart TD
     LEARN --> SEL[lowest-EFE first action]
     SEL --> BELIEF[nous.belief]
     SEL --> POLICY[nous.policy]
-    SEL --> INTENT[intent.act\nif speak/think]
+    SEL --> PROPOSAL[nous.proposal\nif think/speak/rest]
     INFER -- timeout --> LAST[return last posterior\nlearn nothing\nnous.timeout]
 ```
 
@@ -187,6 +188,9 @@ module = Nous(bus, engine=FakeEngine())
 | `tests/test_numpy_aif_parity.py` | `NumpyAgent` reproduces golden `pymdp` actions and per-action EFE to `1e-4` |
 | `tests/test_numpy_nous_engine.py` | `NumpyActiveInferenceEngine` replays the golden learning trajectory; learned-state interchange with `PymdpEngine`; timeout, generation and load guards; runs with JAX blocked; step latency |
 | `tests/test_nous_health_probe_backend.py` | The Nexus health probe checks the configured `[nous].backend`; the NumPy probe runs with JAX blocked |
+| `tests/test_nous_proposals.py` | `nous.proposal` payloads, `no_op` suppression, salience, and outcome-learning integration |
+| `tests/test_nous_proposal_source.py` | Volition `NousProposalSource`: conscious-proposal gating, guard interaction, outcome publication |
+| `tests/test_nous_action_e2e.py` | End-to-end on a real bus: a conscious think proposal becomes an `intent.think` that Lingua realizes as internal speech; an inhibited one publishes nothing to `volition.out` |
 | `tests/systems/test_nous_subsystem.py` | End-to-end subsystem test |
 
 ---
@@ -195,4 +199,4 @@ module = Nous(bus, engine=FakeEngine())
 
 - Primary spec: [`openspec/specs/nous-active-inference/spec.md`](../../openspec/specs/nous-active-inference/spec.md) (pymdp swap)
 - NARS-era history (superseded, retired): [`openspec/changes/archive/2026-06-07-nous-pymdp-swap/`](../../openspec/changes/archive/2026-06-07-nous-pymdp-swap/) (the full-replacement change) and [`openspec/changes/archive/2026-05-20-nous/`](../../openspec/changes/archive/2026-05-20-nous/) (the original ONA integration)
-- Related modules: [Syneidesis](../architecture.md) (workspace broadcast), [Thymos](thymos.md) (affect quadrant input), [Mnemos](mnemos.md) (`nous.belief` consumer), [Eidolon](eidolon.md) (`nous.policy` consumer via self-inference), [Praxis](praxis.md) (whitelist gates `intent.act`)
+- Related modules: [Syneidesis](../architecture.md) (workspace broadcast), [Thymos](thymos.md) (affect quadrant input), [Mnemos](mnemos.md) (`nous.belief` consumer), [Eidolon](eidolon.md) (`nous.policy` consumer via self-inference), [Praxis](praxis.md) (realizes its own effector actions; does not gate Nous proposals)
