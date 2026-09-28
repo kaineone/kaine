@@ -1,7 +1,7 @@
 # phantasia Specification
 
 ## Purpose
-TBD - created by archiving change phantasia-dreamerv3. Update Purpose after archive.
+Phantasia is KAINE's world model and imagination module. It is a DreamerV3-style recurrent state-space model that predicts the next workspace observation while the being is awake, publishing its prediction error as a salience signal. During sleep it imagines trajectories seeded by replayed memories and trains in memory on waking experience. It is a world model only: it has no actor, critic or reward, and Nous selects actions. This capability defines the model and its engines (JAX, and a NumPy engine that trains the same model), what its events disclose, zero persistence of experience data, and the opt-in persistence of its learned weights.
 
 ## Requirements
 
@@ -127,7 +127,9 @@ human-readable plain text.
 ### Requirement: Backend is disclosed on every phantasia.* event
 
 Every `phantasia.*` event payload SHALL include a `"backend"` field naming the
-world-model backend that produced the signal (`"fake"` or `"dreamerv3"`).
+world-model backend that produced the signal (`"fake"` or `"dreamerv3"`), and an
+`"engine"` field naming the engine that computed it (`"jax"` or `"numpy"` for
+`"dreamerv3"`, `null` for `"fake"`).
 This requirement applies to `phantasia.world_error`, `phantasia.scenario`, and
 any future `phantasia.*` event types.
 
@@ -142,6 +144,10 @@ the shipped default produces.
 #### Scenario: scenario discloses backend
 - **WHEN** Phantasia generates and publishes `phantasia.scenario`
 - **THEN** the payload includes `"backend"` matching the configured backend name
+
+#### Scenario: events disclose the engine
+- **WHEN** Phantasia publishes any `phantasia.*` event with `backend = "dreamerv3"`
+- **THEN** the payload includes `"engine"` matching the configured engine
 
 #### Scenario: fake backend is documented as a non-learning stub
 - **WHEN** `config/kaine.toml` is inspected
@@ -216,3 +222,43 @@ A training pass SHALL report whether it updated learned parameters. Phantasia SH
 #### Scenario: The fake world model trains
 - **WHEN** Phantasia runs a sleep training pass on the fake world model
 - **THEN** `successful_training_passes` does not increase
+
+### Requirement: A JAX-free engine that computes and learns what the JAX core does
+
+Phantasia SHALL provide a NumPy engine for `backend = "dreamerv3"`, selected by `[phantasia].engine = "numpy"` (default `"jax"`). It SHALL run the same RSSM world model as `external/dreamerv3/rssm.py`: encoder, GRU, prior and posterior heads, categorical (straight-through) and Gaussian latents, decoder, observation filtering, imagination, and the DreamerV3 loss with KL balancing and free bits. Sleep training SHALL use hand-written reverse-mode gradients of that loss, with the same non-finite loss and gradient guards. The NumPy engine SHALL import neither JAX nor any JAX-dependent library. An unknown engine SHALL be a configuration error at boot.
+
+#### Scenario: Gradients match JAX
+- **WHEN** the committed golden fixtures are replayed on the NumPy engine, on a host with or without JAX
+- **THEN** the loss and every parameter gradient match the JAX core within rtol 1e-4 and atol 1e-6, for both latent kinds, with the free-bits floor active and inactive
+
+#### Scenario: Training matches JAX over several steps
+- **WHEN** five successive training steps run from the fixture's parameters on the fixture's sequence
+- **THEN** each step's loss matches JAX within rtol 1e-4, and the final parameters match within atol 1e-5
+
+#### Scenario: Gradients agree with finite differences without JAX
+- **WHEN** a surrogate of the Gaussian-latent loss, which holds each stop-gradiented side at its value under the current parameters, is differentiated by central finite differences in float64
+- **THEN** the NumPy engine's gradients agree within rtol 1e-4 on the sampled coordinates
+
+#### Scenario: Runs with JAX absent
+- **WHEN** a process with `jax`, `jaxlib`, `optax`, `chex` and `equinox` import-blocked builds the NumPy engine, then observes, imagines, trains, exports and imports
+- **THEN** every call succeeds and the process exits 0
+
+#### Scenario: A non-finite step installs nothing
+- **WHEN** a training pass produces a non-finite loss or gradient on the NumPy engine
+- **THEN** the pass is aborted, the parameters are unchanged, and the outcome reports `learned=False`
+
+### Requirement: Checkpoints are interchangeable between engines
+
+Both engines SHALL read and write learned weights through one shared codec with the `kaine-phantasia-rssm-npz-v1` format, float32 arrays, and the existing fail-closed validation. The checkpoint SHALL NOT record the engine.
+
+#### Scenario: JAX weights load on the NumPy engine
+- **WHEN** a checkpoint exported by the JAX engine is imported by the NumPy engine with the same configuration
+- **THEN** it loads, and the NumPy engine's next `observe` returns the error the JAX engine returns for the same observation, within 1e-5
+
+#### Scenario: NumPy weights load on the JAX engine
+- **WHEN** a checkpoint exported by the NumPy engine is imported by the JAX engine
+- **THEN** it loads and passes the same validation as a JAX-written checkpoint
+
+#### Scenario: Mismatch fails closed on either engine
+- **WHEN** a checkpoint whose header or array shapes differ from the running configuration is imported by either engine
+- **THEN** `CheckpointMismatchError` is raised and the running model is untouched
