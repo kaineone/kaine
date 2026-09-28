@@ -485,6 +485,7 @@ peripheral_height = 180
 foveal_size = 224                   # square foveal crop fed to the encoder
 
 [nous]
+# backend = "pymdp"  # "pymdp" (JAX/pymdp) or "numpy" (pure NumPy, no JAX)
 # Active inference engine (pymdp 1.0, JAX). Install the `reasoning` extra
 # (inferactively-pymdp + jax[cpu]) to enable; KAINE is CPU-only.
 # Complexity envelope — validated at startup by make_nous. The worst-case step

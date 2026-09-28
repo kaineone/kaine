@@ -37,3 +37,7 @@ backend = "llama_cpp"
 [mnemos]
 # In-process vector store — no Qdrant server, near-zero idle footprint.
 backend = "sqlite_vec"
+
+[nous]
+# Pure-NumPy active inference; no JAX/pymdp at this tier.
+backend = "numpy"

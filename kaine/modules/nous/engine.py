@@ -1,29 +1,29 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Active-inference engine for Nous (pymdp 1.0, JAX).
+"""Active-inference engine for Nous.
 
-The engine is the seam between KAINE's workspace and pymdp. Each broadcast it:
+The engine is the seam between KAINE's workspace and a backend active-inference
+implementation. Today there are two backends:
 
-1. encodes the :class:`WorkspaceSnapshot` to observation indices
-   (:func:`generative_model.encode_snapshot`),
-2. updates the posterior over hidden states (``Agent.infer_states``),
-3. selects a policy by EFE minimisation (``Agent.infer_policies`` →
-   negative expected free energy per policy),
-4. reads off the preferred action from the lowest-EFE policy.
+- :class:`PymdpEngine`: pymdp 1.0 / JAX (the historical backend).
+- :class:`NumpyActiveInferenceEngine` (in
+  :mod:`kaine.modules.nous.numpy_engine`): a pure-NumPy backend that reproduces
+  the same model contract and golden fixtures.
 
-It is reached behind the :class:`ActiveInferenceEngine` protocol so a
-:class:`FakeEngine` (scripted, no pymdp / no JAX) can substitute in module-level
-tests — and so a green build never requires pymdp *or* the retired ONA binary.
+Both share the same timeout guard, action-factor restore, evidence cap,
+learned-state interchange format and :class:`ActiveInferenceEngine` protocol.
+Only the backend math differs, through the abstract hooks on
+:class:`_EngineBase`.
 
 Timeout guard
 -------------
-EFE must not run unbounded inside the ~300 ms cognitive-cycle budget. The pymdp
-engine wraps the infer step in a :class:`~concurrent.futures.ThreadPoolExecutor`
-with an ``efe_timeout_ms`` deadline (default 250). On overrun it returns the
-**last computed posterior** and signals a timeout (via ``last_result.timed_out``
-plus a ``nous.timeout`` diagnostic published by the module) so the cycle is
-never blocked.
+EFE must not run unbounded inside the ~300 ms cognitive-cycle budget. The engine
+wraps the infer step in a :class:`~concurrent.futures.ThreadPoolExecutor` with
+an ``efe_timeout_ms`` deadline (default 250). On overrun it returns the **last
+computed posterior** and signals a timeout (via ``last_result.timed_out`` plus a
+``nous.timeout`` diagnostic published by the module) so the cycle is never
+blocked.
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ import logging
 import math
 import time
 import warnings
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass, field
@@ -142,12 +143,13 @@ class ActiveInferenceEngine(Protocol):
         ...
 
 
-class PymdpEngine:
-    """pymdp 1.0 (JAX) implementation of :class:`ActiveInferenceEngine`.
+class _EngineBase(ABC, ActiveInferenceEngine):
+    """Backend-agnostic Nous engine logic.
 
-    Constructs a :class:`pymdp.agent.Agent` from a :class:`GenerativeModel` and
-    runs belief updating + EFE policy selection per broadcast, bounded by
-    ``efe_timeout_ms``.
+    Concrete backends implement the abstract hooks for constructing an agent,
+    running one inference/planning cycle, converting posterior/prior objects to
+    and from plain lists, learning one transition, propagating a prior, and
+    reading/replacing the agent's transition arrays.
     """
 
     def __init__(
@@ -165,65 +167,37 @@ class PymdpEngine:
         self._policy_len = int(policy_len)
         self._num_iter = int(num_iter)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nous-efe")
-        self._agent = self._build_agent()
-        self._policies = self._read_policies()
-        self._jit_cycle = self._build_jit_cycle()
-        self._jit_learn = self._build_jit_learn()
-        self._jit_propagate = self._build_jit_propagate()
+
         # Fixed action-factor transition slices (factor 0). The engine restores
         # these after every learning update so the action latent can never be
         # learned away from the model's deterministic control dynamics.
-        self._orig_pB0_batched: Optional[Any] = None
-        self._orig_B0_batched: Optional[Any] = None
+        self._orig_B0 = np.asarray(self._model.B[ACTION_FACTOR]).copy()
+        self._orig_pB0: Optional[np.ndarray] = None
         if self._model.pB is not None:
-            import jax.numpy as jnp
-            self._orig_pB0_batched = jnp.array(self._model.pB[ACTION_FACTOR])[None]
-            self._orig_B0_batched = jnp.array(self._model.B[ACTION_FACTOR])[None]
-        # Carried prior: the previous posterior propagated under the action
-        # taken. Starts at the generative prior D.
-        self._prior: list[Any] = list(self._agent.D)
+            self._orig_pB0 = np.asarray(self._model.pB[ACTION_FACTOR]).copy()
+
+        # Build the backend agent. Subclasses decide what "native" form means.
+        self._agent = self._make_agent(None)
+        self._policies = self._policy_array(self._agent)
+        self._prior = self._initial_prior(self._agent)
+
+        # Carried prior bookkeeping.
         self._prev_qs: Optional[list[Any]] = None
         self._prev_action: Optional[int] = None
-        # Last committed posterior, used when the chosen action is overridden
-        # externally (e.g. CL1 drive mode) and the carried prior must follow.
         self._prev_qs_committed: Optional[list[Any]] = None
-        # Monotonic generation used to drop in-flight inference results that
-        # cross a load_learned_state call.
         self._generation = 0
-        # Last good posterior, used when a step times out.
+
+        # Last committed posterior / EFE, used when a step times out.
         self._last_posterior: list[list[float]] = [
             self._uniform(n) for n in self._model.num_states
         ]
         self._last_efe: list[float] = [0.0] * self._model.num_actions
-        # Warm up JAX tracing so the first live step is not the slow one.
-        try:
-            self._infer(encode_snapshot_default(self._model))
-        except Exception:
-            log.debug("pymdp warm-up step failed (non-fatal)", exc_info=True)
-        # Warm up the learning + propagation trace when transitions are learned.
-        if self._model.pB is not None:
-            try:
-                import jax
-                import jax.numpy as jnp
-                obs_batched = [jnp.array([o]) for o in encode_snapshot_default(self._model)]
-                qs_dummy = [jnp.full((1, n), 1.0 / n) for n in self._model.num_states]
-                beliefs = [jnp.concatenate([q, q], axis=1) for q in qs_dummy]
-                if self._policies is not None:
-                    row = jnp.asarray(self._policies[0:1, 0, :])
-                else:
-                    row = jnp.zeros((1, len(self._model.num_states)))
-                acts = row[:, None, :]
-                import equinox as eqx
-                _agent_tmp = self._jit_learn(self._agent, beliefs, obs_batched, acts)
-                _agent_tmp = eqx.tree_at(
-                    lambda ag: (ag.pB[ACTION_FACTOR], ag.B[ACTION_FACTOR]),
-                    _agent_tmp,
-                    (self._orig_pB0_batched, self._orig_B0_batched),
-                )
-                _ = self._jit_propagate(_agent_tmp, row, qs_dummy)
-                jax.block_until_ready(_)
-            except Exception:
-                log.debug("pymdp learning warm-up failed (non-fatal)", exc_info=True)
+
+        self._warm_up()
+
+    # ------------------------------------------------------------------ #
+    # Shared protocol surface
+    # ------------------------------------------------------------------ #
 
     @property
     def model(self) -> GenerativeModel:
@@ -239,112 +213,84 @@ class PymdpEngine:
 
     @property
     def uses_param_info_gain(self) -> bool:
+        """Most real backends exploit the pB parameter information gain."""
         return True
 
-    def _build_agent(self, pB: Optional[list[np.ndarray]] = None) -> Any:
-        import jax.numpy as jnp
-        from pymdp.agent import Agent
+    # ------------------------------------------------------------------ #
+    # Backend hooks (abstract)
+    # ------------------------------------------------------------------ #
 
-        A = [jnp.array(a)[None] for a in self._model.A]
-        C = [jnp.array(c)[None] for c in self._model.C]
-        D = [jnp.array(d)[None] for d in self._model.D]
-        if pB is None and self._model.pB is not None:
-            pB = self._model.pB
-        learning = pB is not None
-        B: list[Any] = []
-        if learning:
-            # Build the expected transitions from the Dirichlet counts so a
-            # revived agent's B matrices are the learned ones, not the generic
-            # model B.
-            for pb in pB:
-                pb_arr = jnp.array(pb)
-                col_sums = pb_arr.sum(axis=0, keepdims=True)
-                col_sums = jnp.where(col_sums == 0.0, 1.0, col_sums)
-                B.append((pb_arr / col_sums)[None])
-        else:
-            B = [jnp.array(b)[None] for b in self._model.B]
-        kwargs: dict[str, Any] = {}
-        if learning:
-            # Learned agency: transitions depend on the action and are learned.
-            kwargs.update(
-                pB=[jnp.array(pb)[None] for pb in pB],
-                B_action_dependencies=self._model.B_action_dependencies,
-                num_controls=[self._model.num_actions],
-                use_param_info_gain=True,
-                learn_B=True,
-            )
-        # The Agent constructor emits a benign equinox "JAX array set as static"
-        # warning from its static policy/dependency fields — expected on CPU.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            return Agent(
-                A=A,
-                B=B,
-                C=C,
-                D=D,
-                A_dependencies=self._model.A_dependencies,
-                policy_len=self._policy_len,
-                num_iter=self._num_iter,
-                **kwargs,
-            )
+    @abstractmethod
+    def _make_agent(self, pB: Optional[list[np.ndarray]]) -> Any:
+        """Build a backend agent from the engine model.
 
-    def _read_policies(self) -> Any:
-        """Cache the agent's policy matrix once at construction.
-
-        Returns the numpy array (or None if unavailable) so per-action EFE
-        grouping does not re-read it every cycle.
+        ``pB`` is an optional unbatched Dirichlet prior over transitions. When
+        ``None`` the agent should be built from the model's own pB (if the
+        model learns) or from the model's fixed B matrices.
         """
-        try:
-            # pymdp's Policies object indexes but has no length, so read its
-            # array attribute; np.asarray on the object itself never ends.
-            policies = self._agent.policies
-            arr = getattr(policies, "policy_arr", None)
-            return np.asarray(arr) if arr is not None else None
-        except Exception:
-            log.debug("pymdp policy array unavailable at construction", exc_info=True)
-            return None
 
-    def _build_jit_cycle(self) -> Any:
-        """JIT-compile infer_states + infer_policies into one traced function.
+    @abstractmethod
+    def _cycle(
+        self, agent: Any, obs: list[int], prior: Any
+    ) -> tuple[Any, np.ndarray]:
+        """Run one infer_states + infer_policies cycle.
 
-        Plain Python dispatch of the pymdp Agent methods costs ~130 ms/call;
-        jitting the whole cycle drops it to well under 1 ms (KAINE is CPU-only,
-        ~300 ms cycle budget). The traced function takes the agent, batched
-        observations and the carried empirical prior, and returns (qs, neg_efe)
-        as JAX arrays; we convert to Python lists only after `block_until_ready`.
+        Returns ``(qs, neg_efe)`` where ``qs`` is in the backend's native form
+        and ``neg_efe`` is a flat 1-D numpy array of negative expected free
+        energies per policy.
         """
-        import jax
 
-        def _cycle(
-            agent: Any, obs_batched: list[Any], prior: list[Any]
-        ) -> tuple[Any, Any]:
-            qs = agent.infer_states(obs_batched, empirical_prior=prior)
-            _q_pi, neg_efe = agent.infer_policies(qs)
-            return qs, neg_efe
+    @abstractmethod
+    def _posterior_lists(self, qs: Any) -> list[list[float]]:
+        """Convert backend qs to a list of normalised 1-D probability lists."""
 
-        return jax.jit(_cycle)
+    @abstractmethod
+    def _learn(
+        self, agent: Any, prev_qs: Any, qs: Any, row: np.ndarray, obs: list[int]
+    ) -> Any:
+        """One-step B learning for the taken action; returns a new agent."""
 
-    @staticmethod
-    def _build_jit_learn() -> Any:
-        """JIT-compile the transition (pB) learning update."""
-        import jax
+    @abstractmethod
+    def _propagate(self, agent: Any, row: np.ndarray, qs: Any) -> Any:
+        """Propagate a posterior through B under the given action row."""
 
-        def _learn(
-            agent: Any, beliefs: list[Any], obs: list[Any], acts: Any
-        ) -> Any:
-            return agent.infer_parameters(beliefs, obs, acts, beliefs_B=beliefs)
+    @abstractmethod
+    def _get_pB(self, agent: Any) -> list[np.ndarray]:
+        """Return unbatched numpy pB arrays (one per factor), or [] if none."""
 
-        return jax.jit(_learn)
+    @abstractmethod
+    def _get_B(self, agent: Any) -> list[np.ndarray]:
+        """Return unbatched numpy B arrays (one per factor)."""
 
-    @staticmethod
-    def _build_jit_propagate() -> Any:
-        """JIT-compile the prior propagation under a chosen action."""
-        import jax
+    @abstractmethod
+    def _with_pB_B(
+        self, agent: Any, pB: list[np.ndarray], B: list[np.ndarray]
+    ) -> Any:
+        """Return an agent whose pB/B arrays are replaced with the given ones."""
 
-        def _propagate(agent: Any, act: Any, qs: Any) -> Any:
-            return agent.update_empirical_prior(act, qs)
+    @abstractmethod
+    def _initial_prior(self, agent: Any) -> Any:
+        """Return the backend-native form of the initial carried prior."""
 
-        return jax.jit(_propagate)
+    @abstractmethod
+    def _prior_lists(self, prior: Any) -> list[list[float]]:
+        """Convert a backend-native prior to plain lists."""
+
+    @abstractmethod
+    def _prior_from_lists(self, lists: list[list[float]]) -> Any:
+        """Convert plain lists to a backend-native prior."""
+
+    @abstractmethod
+    def _policy_array(self, agent: Any) -> Optional[np.ndarray]:
+        """Return the agent's policy array as a numpy ndarray (or None)."""
+
+    @abstractmethod
+    def _warm_up(self) -> None:
+        """Backend-specific compile / warm-up. No-op for the NumPy backend."""
+
+    # ------------------------------------------------------------------ #
+    # Shared internals
+    # ------------------------------------------------------------------ #
 
     @staticmethod
     def _uniform(n: int) -> list[float]:
@@ -352,32 +298,30 @@ class PymdpEngine:
             return []
         return [1.0 / n] * n
 
+    def _first_step_row(self, action_index: int) -> np.ndarray:
+        """The first-step control row of a policy that begins with ``action_index``."""
+        if self._policies is None:
+            raise RuntimeError("policy array unavailable")
+        first = self._policies[:, 0, ACTION_FACTOR]
+        matches = np.flatnonzero(first == action_index)
+        if matches.size == 0:
+            raise RuntimeError(f"no policy begins with action {action_index}")
+        k = int(matches[0])
+        return self._policies[k : k + 1, 0, :]
+
     def _infer(
         self, obs: list[int]
     ) -> tuple[list[list[float]], list[float], int, Any, Any, Any]:
-        """Run infer_states + infer_policies and prepare the post-step update.
+        """Run infer + EFE and prepare the post-step update.
 
         Pure compute (no timeout, no side effects on ``self``). Returns the
         posterior, per-action EFE, chosen action, the raw qs, the agent that
         results from learning the previous transition (or the current agent if
-        there is no previous step), and the next carried prior. The caller
-        commits these to ``self`` only on a successful, non-timeout step.
+        there is no previous step), and the next carried prior.
         """
-        import jax
-        import jax.numpy as jnp
-
-        obs_batched = [jnp.array([int(o)]) for o in obs]
-        qs, neg_efe = self._jit_cycle(self._agent, obs_batched, self._prior)
-        jax.block_until_ready((qs, neg_efe))
-        posterior: list[list[float]] = []
-        for q in qs:
-            arr = np.asarray(q).reshape(-1)
-            s = float(arr.sum())
-            if s > 0:
-                arr = arr / s
-            posterior.append([float(x) for x in arr])
+        qs, neg_efe = self._cycle(self._agent, obs, self._prior)
+        posterior = self._posterior_lists(qs)
         neg = np.asarray(neg_efe).reshape(-1)
-        # EFE = -neg_efe (lower EFE is better).
         efe = [float(-x) for x in neg]
         n_actions = self._model.num_actions
 
@@ -395,7 +339,6 @@ class PymdpEngine:
                     f"Policy array {shape_info} but policy_len={self._policy_len}; "
                     f"cannot compute per-action EFE at horizon > 1"
                 )
-            # Without a cached policy array we cannot learn or propagate.
             return posterior, efe, best_idx, qs, self._agent, self._prior
 
         first = self._policies[:, 0, ACTION_FACTOR]
@@ -412,44 +355,30 @@ class PymdpEngine:
         best_idx = int(min(range(n_actions), key=lambda i: per_action_efe[i]))
 
         # Learn the previous transition, then propagate the posterior under the
-        # chosen action to become the next carried prior. These objects are
-        # returned to the caller; they are committed only on success.
+        # chosen action to become the next carried prior.
         agent = self._agent
         if (
             self._model.pB is not None
             and self._prev_qs is not None
             and self._prev_action is not None
         ):
-            beliefs = [jnp.concatenate([pq, q], axis=1) for pq, q in zip(self._prev_qs, qs)]
-            acts = jnp.asarray(self._first_step_row(self._prev_action))[:, None, :]
-            agent = self._jit_learn(agent, beliefs, obs_batched, acts)
-            jax.block_until_ready(agent)
-            # Restore the action factor exactly to the fixed model dynamics.
-            import equinox as eqx
-            agent = eqx.tree_at(
-                lambda ag: (ag.pB[ACTION_FACTOR], ag.B[ACTION_FACTOR]),
-                agent,
-                (self._orig_pB0_batched, self._orig_B0_batched),
-            )
-            # Bound perceptual evidence so learning stays responsive to change.
+            row = self._first_step_row(self._prev_action)
+            agent = self._learn(agent, self._prev_qs, qs, row, obs)
+            agent = self._restore_action_factor(agent)
             agent = self._cap_perceptual_transitions(agent)
-        row_a = jnp.asarray(self._first_step_row(best_idx))
-        prior = self._jit_propagate(agent, row_a, qs)
-        jax.block_until_ready(prior)
+
+        row_a = self._first_step_row(best_idx)
+        prior = self._propagate(agent, row_a, qs)
         return posterior, per_action_efe, best_idx, qs, agent, prior
 
-    def _first_step_row(self, action_index: int) -> Any:
-        """The first-step control row of a policy that begins with ``action_index``.
-
-        Policy ``k`` does not begin with action ``k`` once the horizon exceeds
-        one step, so the row is looked up by the policy's first action.
-        """
-        first = self._policies[:, 0, ACTION_FACTOR]
-        matches = np.flatnonzero(first == action_index)
-        if matches.size == 0:
-            raise RuntimeError(f"no policy begins with action {action_index}")
-        k = int(matches[0])
-        return self._policies[k : k + 1, 0, :]
+    def _restore_action_factor(self, agent: Any) -> Any:
+        """Lock factor 0 back to the model's original dynamics."""
+        B = self._get_B(agent)
+        B[ACTION_FACTOR] = self._orig_B0
+        pB = self._get_pB(agent)
+        if self._orig_pB0 is not None:
+            pB[ACTION_FACTOR] = self._orig_pB0
+        return self._with_pB_B(agent, pB, B)
 
     def _cap_perceptual_transitions(self, agent: Any) -> Any:
         """Bound the evidence Nous holds in perceptual transition counts.
@@ -459,29 +388,20 @@ class PymdpEngine:
         to change instead of freezing as counts grow toward float32 infinity.
         The action factor (factor 0) is excluded — it is restored separately.
         """
-        import equinox as eqx
-        import jax.numpy as jnp
-
         cap = self._model.transition_max_concentration
-        new_pB: list[Any] = []
-        new_B: list[Any] = []
+        pB = self._get_pB(agent)
+        B = self._get_B(agent)
         perceptual = list(range(1, self._model.num_factors))
         for f in perceptual:
-            # The agent's arrays are batched: (batch, next, previous, action), so
-            # a column (fixed previous state and action) sums over axis 1.
-            pb = agent.pB[f]
-            col_sums = pb.sum(axis=1, keepdims=True)
-            scale = jnp.where(col_sums > cap, cap / col_sums, 1.0)
+            pb = np.asarray(pB[f])
+            col_sums = pb.sum(axis=0, keepdims=True)
+            scale = np.where(col_sums > cap, cap / col_sums, 1.0)
             pb_scaled = pb * scale
-            b_sums = pb_scaled.sum(axis=1, keepdims=True)
-            b_sums = jnp.where(b_sums == 0.0, 1.0, b_sums)
-            new_pB.append(pb_scaled)
-            new_B.append(pb_scaled / b_sums)
-
-        def _perceptual_leaves(ag: Any) -> tuple[Any, ...]:
-            return tuple(ag.pB[f] for f in perceptual) + tuple(ag.B[f] for f in perceptual)
-
-        return eqx.tree_at(_perceptual_leaves, agent, tuple(new_pB) + tuple(new_B))
+            b_sums = pb_scaled.sum(axis=0, keepdims=True)
+            b_sums = np.where(b_sums == 0.0, 1.0, b_sums)
+            pB[f] = pb_scaled
+            B[f] = pb_scaled / b_sums
+        return self._with_pB_B(agent, pB, B)
 
     def seed_posterior(self, posterior: list[list[float]]) -> bool:
         if len(posterior) != len(self._model.num_states):
@@ -513,16 +433,7 @@ class PymdpEngine:
         return True
 
     def infer(self, obs: Sequence[int]) -> EngineResult:
-        """Run one belief-update + EFE policy-selection step on raw obs indices.
-
-        This is the engine core shared by the live cognitive loop and any
-        offline driver (e.g. the AIF-vs-RL benchmark): given one observation
-        index per modality it runs the *real* pymdp ``infer_states`` +
-        ``infer_policies`` (bounded by ``efe_timeout_ms``) and returns the
-        :class:`EngineResult`. :meth:`step` is the live entry-point — it merely
-        encodes a :class:`WorkspaceSnapshot` to obs and delegates here, so the
-        live module's behaviour is exactly this method's behaviour.
-        """
+        """Run one belief-update + EFE policy-selection step on raw obs indices."""
         obs = [int(o) for o in obs]
         start = time.perf_counter()
         captured_generation = self._generation
@@ -537,7 +448,6 @@ class PymdpEngine:
                 "EFE planning overran %.0f ms; returning last posterior",
                 self._efe_timeout_s * 1000.0,
             )
-            # Let the orphaned compute finish in the background; we move on.
             return EngineResult(
                 posterior=[list(p) for p in self._last_posterior],
                 policy_efe=list(self._last_efe),
@@ -603,13 +513,7 @@ class PymdpEngine:
         )
 
     def step(self, snapshot: Any) -> EngineResult:
-        """Live entry-point: encode the snapshot to obs and run one inference.
-
-        The being observes the action it actually took: overwrite the action
-        factor observation with the previously selected action (or ``no_op`` on
-        the first step). ``infer`` keeps whatever obs it is given for offline
-        callers.
-        """
+        """Live entry-point: encode the snapshot to obs and run one inference."""
         obs = encode_snapshot(snapshot, self._model)
         obs[ACTION_FACTOR] = self._prev_action if self._prev_action is not None else 0
         return self.infer(obs)
@@ -617,43 +521,27 @@ class PymdpEngine:
     def record_taken_action(self, action_index: int) -> None:
         """Tell the engine which action was actually executed.
 
-        Call this when an external wrapper (e.g. CL1 drive mode) overrides the
-        silicon-selected action. The carried prior is re-propagated from the
-        last committed posterior under the action that was actually taken, so
-        the next EFE step starts from the right empirical prior. No-op when
-        there is no committed step yet.
+        Call this when an external wrapper overrides the silicon-selected action.
+        The carried prior is re-propagated from the last committed posterior
+        under the action that was actually taken.
         """
         if self._prev_qs_committed is None:
             return
-        import jax.numpy as jnp
         self._prev_action = int(action_index)
-        row = jnp.asarray(self._first_step_row(action_index))
-        self._prior = self._jit_propagate(self._agent, row, self._prev_qs_committed)
+        row = self._first_step_row(action_index)
+        self._prior = self._propagate(self._agent, row, self._prev_qs_committed)
 
     def learned_state(self) -> dict[str, Any]:
         """Return the learned transition prior and carried belief.
 
-        Arrays are de-batched (the leading batch dimension added for pymdp is
-        removed) so the serialized form is human-readable and comparable to the
-        model's unbatched pB/D shapes. A model that does not learn its
-        transitions has no learned state to preserve.
+        Arrays are returned in unbatched numpy form so the serialized shape is
+        comparable to the model's pB/D shapes and interchangeable between
+        backends.
         """
         if self._model.pB is None:
             return {}
-        pB_out = []
-        for pb in self._agent.pB:
-            arr = np.asarray(pb)
-            if arr.ndim == 4 and arr.shape[0] == 1:
-                arr = arr[0]
-            pB_out.append(arr.tolist())
-
-        prior_out = []
-        for p in self._prior:
-            arr = np.asarray(p)
-            if arr.ndim == 2 and arr.shape[0] == 1:
-                arr = arr[0]
-            prior_out.append(arr.tolist())
-
+        pB_out = [arr.tolist() for arr in self._get_pB(self._agent)]
+        prior_out = self._prior_lists(self._prior)
         return {
             "pB": pB_out,
             "carried_prior": prior_out,
@@ -663,14 +551,14 @@ class PymdpEngine:
     def load_learned_state(self, state: dict[str, Any]) -> bool:
         """Validate and restore a serialized learned model.
 
-        Returns ``False`` and changes nothing on any shape mismatch or invalid
-        value; logs the reason at WARNING level. Any in-flight inference from
-        before this call is considered stale and is dropped at commit time.
+        Any in-flight inference from before this call is considered stale and
+        is dropped at commit time.
         """
         self._generation += 1
         if self._model.pB is None:
             log.warning("nous load_learned_state: this model does not learn its transitions")
             return False
+
         expected_shapes = [pb.shape for pb in self._model.pB]
         pB_raw = state.get("pB")
         prior_raw = state.get("carried_prior")
@@ -719,9 +607,7 @@ class PymdpEngine:
             log.warning("nous load_learned_state: carried_prior factor count mismatch")
             return False
 
-        import jax.numpy as jnp
-
-        new_prior: list[Any] = []
+        new_prior_lists: list[list[float]] = []
         for f, (raw, expected) in enumerate(zip(prior_raw, prior_expected)):
             try:
                 p = np.asarray(raw, dtype=np.float64)
@@ -733,9 +619,9 @@ class PymdpEngine:
                 )
                 return False
             if p.shape == expected:
-                p = p[None]
+                new_prior_lists.append(p.tolist())
             elif p.shape == (1,) + expected:
-                pass
+                new_prior_lists.append(p[0].tolist())
             else:
                 log.warning(
                     "nous load_learned_state: carried_prior factor %d shape %s "
@@ -751,12 +637,11 @@ class PymdpEngine:
                     "nous load_learned_state: carried_prior factor %d has invalid values", f
                 )
                 return False
-            new_prior.append(jnp.array(p))
 
         # All checks passed; commit the learned model.
-        self._agent = self._build_agent(new_pB)
-        self._policies = self._read_policies()
-        self._prior = new_prior
+        self._agent = self._make_agent(new_pB)
+        self._policies = self._policy_array(self._agent)
+        self._prior = self._prior_from_lists(new_prior_lists)
         self._prev_qs = None
         self._prev_qs_committed = None
         self._prev_action = last_action if isinstance(last_action, int) else None
@@ -764,6 +649,249 @@ class PymdpEngine:
 
     def close(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)
+
+
+class PymdpEngine(_EngineBase):
+    """pymdp 1.0 (JAX) implementation of :class:`ActiveInferenceEngine`."""
+
+    def __init__(
+        self,
+        model: Optional[GenerativeModel] = None,
+        *,
+        efe_timeout_ms: float = 250.0,
+        policy_len: int = 1,
+        num_iter: int = 8,
+    ) -> None:
+        # JIT functions are independent of any particular agent instance, so
+        # build them before the base class constructs the first agent.
+        self._jit_cycle = self._build_jit_cycle()
+        self._jit_learn = self._build_jit_learn()
+        self._jit_propagate = self._build_jit_propagate()
+        super().__init__(
+            model=model,
+            efe_timeout_ms=efe_timeout_ms,
+            policy_len=policy_len,
+            num_iter=num_iter,
+        )
+        # Kept for backward compatibility with tests that inspect batched slices.
+        self._orig_pB0_batched: Optional[Any] = None
+        self._orig_B0_batched: Optional[Any] = None
+        if self._model.pB is not None:
+            import jax.numpy as jnp
+            self._orig_pB0_batched = jnp.array(self._model.pB[ACTION_FACTOR])[None]
+            self._orig_B0_batched = jnp.array(self._model.B[ACTION_FACTOR])[None]
+
+    # ------------------------------------------------------------------ #
+    # Backend hooks
+    # ------------------------------------------------------------------ #
+
+    def _make_agent(self, pB: Optional[list[np.ndarray]]) -> Any:
+        import jax.numpy as jnp
+        from pymdp.agent import Agent
+
+        A = [jnp.array(a)[None] for a in self._model.A]
+        C = [jnp.array(c)[None] for c in self._model.C]
+        D = [jnp.array(d)[None] for d in self._model.D]
+
+        if pB is None and self._model.pB is not None:
+            pB = self._model.pB
+        learning = pB is not None
+
+        B: list[Any] = []
+        if learning:
+            for pb in pB:
+                pb_arr = jnp.array(pb)
+                col_sums = pb_arr.sum(axis=0, keepdims=True)
+                col_sums = jnp.where(col_sums == 0.0, 1.0, col_sums)
+                B.append((pb_arr / col_sums)[None])
+        else:
+            B = [jnp.array(b)[None] for b in self._model.B]
+
+        kwargs: dict[str, Any] = {}
+        if learning:
+            kwargs.update(
+                pB=[jnp.array(pb)[None] for pb in pB],
+                B_action_dependencies=self._model.B_action_dependencies,
+                num_controls=[self._model.num_actions],
+                use_param_info_gain=True,
+                learn_B=True,
+            )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return Agent(
+                A=A,
+                B=B,
+                C=C,
+                D=D,
+                A_dependencies=self._model.A_dependencies,
+                policy_len=self._policy_len,
+                num_iter=self._num_iter,
+                **kwargs,
+            )
+
+    def _cycle(self, agent: Any, obs: list[int], prior: Any) -> tuple[Any, np.ndarray]:
+        import jax
+        import jax.numpy as jnp
+
+        obs_batched = [jnp.array([int(o)]) for o in obs]
+        qs, neg_efe = self._jit_cycle(agent, obs_batched, prior)
+        jax.block_until_ready((qs, neg_efe))
+        return qs, np.asarray(neg_efe).reshape(-1)
+
+    def _posterior_lists(self, qs: Any) -> list[list[float]]:
+        posterior: list[list[float]] = []
+        for q in qs:
+            arr = np.asarray(q).reshape(-1)
+            s = float(arr.sum())
+            if s > 0:
+                arr = arr / s
+            posterior.append([float(x) for x in arr])
+        return posterior
+
+    def _learn(
+        self, agent: Any, prev_qs: Any, qs: Any, row: np.ndarray, obs: list[int]
+    ) -> Any:
+        import jax
+        import jax.numpy as jnp
+
+        beliefs = [jnp.concatenate([pq, q], axis=1) for pq, q in zip(prev_qs, qs)]
+        obs_batched = [jnp.array([int(o)]) for o in obs]
+        acts = jnp.asarray(row)[:, None, :]
+        agent = self._jit_learn(agent, beliefs, obs_batched, acts)
+        jax.block_until_ready(agent)
+        return agent
+
+    def _propagate(self, agent: Any, row: np.ndarray, qs: Any) -> Any:
+        import jax
+        import jax.numpy as jnp
+
+        prior = self._jit_propagate(agent, jnp.asarray(row), qs)
+        jax.block_until_ready(prior)
+        return prior
+
+    @staticmethod
+    def _unbatch_array(arr: Any) -> np.ndarray:
+        a = np.asarray(arr)
+        if a.ndim == 4 and a.shape[0] == 1:
+            a = a[0]
+        return a
+
+    def _get_pB(self, agent: Any) -> list[np.ndarray]:
+        pB = getattr(agent, "pB", None)
+        if pB is None:
+            return []
+        return [self._unbatch_array(pb) for pb in pB]
+
+    def _get_B(self, agent: Any) -> list[np.ndarray]:
+        return [self._unbatch_array(b) for b in agent.B]
+
+    def _with_pB_B(
+        self, agent: Any, pB: list[np.ndarray], B: list[np.ndarray]
+    ) -> Any:
+        import equinox as eqx
+        import jax.numpy as jnp
+
+        # equinox.tree_at needs a selector that picks the nodes out of the
+        # tree it is given (not nodes captured from `agent` beforehand).
+        B_batched = [jnp.array(b)[None] for b in B]
+        if pB and getattr(agent, "pB", None) is not None:
+            pB_batched = [jnp.array(pb)[None] for pb in pB]
+
+            def _select(ag: Any) -> tuple[Any, ...]:
+                return tuple(ag.pB) + tuple(ag.B)
+
+            return eqx.tree_at(_select, agent, tuple(pB_batched) + tuple(B_batched))
+
+        def _select_B(ag: Any) -> tuple[Any, ...]:
+            return tuple(ag.B)
+
+        return eqx.tree_at(_select_B, agent, tuple(B_batched))
+
+    def _initial_prior(self, agent: Any) -> Any:
+        return list(agent.D)
+
+    def _prior_lists(self, prior: Any) -> list[list[float]]:
+        return [np.asarray(p).reshape(-1).tolist() for p in prior]
+
+    def _prior_from_lists(self, lists: list[list[float]]) -> Any:
+        import jax.numpy as jnp
+        return [jnp.array(np.asarray(p, dtype=np.float64)[None]) for p in lists]
+
+    def _policy_array(self, agent: Any) -> Optional[np.ndarray]:
+        try:
+            policies = agent.policies
+            arr = getattr(policies, "policy_arr", None)
+            return np.asarray(arr) if arr is not None else None
+        except Exception:
+            log.debug("pymdp policy array unavailable at construction", exc_info=True)
+            return None
+
+    def _warm_up(self) -> None:
+        try:
+            self._infer(encode_snapshot_default(self._model))
+        except Exception:
+            log.debug("pymdp warm-up step failed (non-fatal)", exc_info=True)
+
+        if self._model.pB is None:
+            return
+
+        try:
+            import equinox as eqx
+            import jax
+            import jax.numpy as jnp
+
+            obs_batched = [jnp.array([o]) for o in encode_snapshot_default(self._model)]
+            qs_dummy = [jnp.full((1, n), 1.0 / n) for n in self._model.num_states]
+            beliefs = [jnp.concatenate([q, q], axis=1) for q in qs_dummy]
+            if self._policies is not None:
+                row = jnp.asarray(self._first_step_row(0))
+            else:
+                row = jnp.zeros((1, len(self._model.num_states)))
+            acts = row[:, None, :]
+            _agent_tmp = self._jit_learn(self._agent, beliefs, obs_batched, acts)
+            if self._orig_pB0_batched is not None and self._orig_B0_batched is not None:
+                _agent_tmp = eqx.tree_at(
+                    lambda ag: (ag.pB[ACTION_FACTOR], ag.B[ACTION_FACTOR]),
+                    _agent_tmp,
+                    (self._orig_pB0_batched, self._orig_B0_batched),
+                )
+            _ = self._jit_propagate(_agent_tmp, row, qs_dummy)
+            jax.block_until_ready(_)
+        except Exception:
+            log.debug("pymdp learning warm-up failed (non-fatal)", exc_info=True)
+
+    # ------------------------------------------------------------------ #
+    # pymdp-specific helpers
+    # ------------------------------------------------------------------ #
+
+    def _build_jit_cycle(self) -> Any:
+        import jax
+
+        def _cycle(agent: Any, obs_batched: list[Any], prior: list[Any]) -> tuple[Any, Any]:
+            qs = agent.infer_states(obs_batched, empirical_prior=prior)
+            _q_pi, neg_efe = agent.infer_policies(qs)
+            return qs, neg_efe
+
+        return jax.jit(_cycle)
+
+    @staticmethod
+    def _build_jit_learn() -> Any:
+        import jax
+
+        def _learn(agent: Any, beliefs: list[Any], obs: list[Any], acts: Any) -> Any:
+            return agent.infer_parameters(beliefs, obs, acts, beliefs_B=beliefs)
+
+        return jax.jit(_learn)
+
+    @staticmethod
+    def _build_jit_propagate() -> Any:
+        import jax
+
+        def _propagate(agent: Any, act: Any, qs: Any) -> Any:
+            return agent.update_empirical_prior(act, qs)
+
+        return jax.jit(_propagate)
 
 
 def encode_snapshot_default(model: GenerativeModel) -> list[int]:

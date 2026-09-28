@@ -269,17 +269,27 @@ def plan_for(target: Target) -> Plan:
 
     if target.name == "termux":
         extras = "memory-edge"
-        runs = ["mnemos (with sqlite_vec backend)", "memory", "edge", "thymos", "lingua", "syneidesis"]
+        runs = [
+            "mnemos (with sqlite_vec backend)",
+            "memory",
+            "edge",
+            "thymos",
+            "lingua",
+            "syneidesis",
+            "soma (NumPy CfC)",
+            "chronos (NumPy CfC)",
+            'nous (with [nous].backend = "numpy")',
+        ]
         will_not_run = [
-            ("soma", "needs torch (the core extra); no Termux build until the NumPy CfC, portability phase 2"),
-            ("chronos", "needs torch (the core extra); no Termux build until the NumPy CfC, portability phase 2"),
-            ("topos", "needs torch (the core extra); no Termux build until the NumPy CfC, portability phase 2"),
-            ("nous", "needs JAX (reasoning/worldmodel); portability phase 3"),
-            ("phantasia", "needs JAX (reasoning/worldmodel); portability phase 3"),
+            ("topos", "needs torch for its video encoder; no Termux build"),
+            ("phantasia", "its learned world model needs JAX; portability phase 3"),
             ("mnemos with qdrant", "no Qdrant build for Android; use [mnemos].backend = \"sqlite_vec\""),
         ]
         system_packages = {"pkg": list(_SYSTEM_PACKAGES["pkg"])}
-        notes = ["Termux is limited to the memory and edge extras until native wheels arrive."]
+        notes = [
+            "Termux installs the memory and edge extras only.",
+            'Nous needs [nous].backend = "numpy" there (Tier 0 and Tier 1 profiles set it).',
+        ]
     elif target.name == "unsupported":
         extras = ""
         runs = []

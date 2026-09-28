@@ -39,3 +39,7 @@ device = "cpu"
 # Speech is still transcribed; only vocal affect is absent, and reported so.
 emotion_model_id = ""
 emotion_device = "cpu"
+
+[nous]
+# NumPy-only active inference backend (no JAX/pymdp dependency).
+backend = "numpy"

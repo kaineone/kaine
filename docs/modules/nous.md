@@ -10,7 +10,7 @@ KAINE's reasoning organ: active-inference belief updating and policy selection o
 
 Implemented. Ships **disabled** — `[modules].nous = false` in `config/kaine.toml`.
 
-- Requires the `[reasoning]` optional extra: `inferactively-pymdp >= 1.0` and `jax[cpu]`.
+- Choose a backend with `[nous].backend`. The `"pymdp"` backend requires the `[reasoning]` optional extra: `inferactively-pymdp >= 1.0` and `jax[cpu]`. The `"numpy"` backend uses only NumPy and requires no extra.
 - No CUDA required; the JAX backend runs CPU-only within the ~300 ms cycle budget.
 - NARS/ONA (the previous symbolic reasoner) has been archived to `external/archive/nous_narsese/`; a future complementary symbolic module may draw on it.
 
@@ -59,6 +59,7 @@ All keys live under `[nous]` in `config/kaine.toml`. See also [`../configuration
 
 | Key | Default | Description |
 |---|---|---|
+| `backend` | `"pymdp"` | Active-inference backend: `"pymdp"` (JAX/jit; requires `[reasoning]` extra) or `"numpy"` (NumPy; no extra). Unknown values raise `ConfigurationError` at boot. |
 | `factors` | `4` | Number of hidden-state factors (complexity envelope) |
 | `max_states_per_factor` | `4` | State count cap per factor |
 | `actions` | `4` | Size of the action space |
@@ -94,11 +95,15 @@ One observation modality per factor (square model). Likelihood **A**: identity f
 
 ### Inference cycle (engine)
 
-`kaine/modules/nous/engine.py` hosts `PymdpEngine`, which wraps a `pymdp.agent.Agent` (JAX):
+`kaine/modules/nous/engine.py` hosts `_EngineBase` — the common machinery shared by both active-inference engines — plus `PymdpEngine`, `FakeEngine`, the `ActiveInferenceEngine` protocol, `EngineResult`, and `normalised_entropy`. `kaine/modules/nous/numpy_engine.py` hosts `NumpyActiveInferenceEngine`, which delegates fixed-point inference and learning to `NumpyAgent` in `kaine/modules/nous/numpy_aif.py`.
+
+Both backends implement the same generative model and mathematics: fixed-point state inference, full policy enumeration, expected free energy with utility, state information gain and transition-parameter information gain, Dirichlet transition learning, the carried prior, the evidence cap, and the fixed action factor. They share `_EngineBase` behaviour: the `efe_timeout_ms` guard, per-action EFE aggregation, learning bookkeeping, generation counter, `record_taken_action`, and `learned_state()` / `load_learned_state()`. A learned state saved by one engine loads into the other.
+
+Cycle steps common to both engines:
 
 1. **Encode** — `encode_snapshot(snapshot, model)` maps the workspace broadcast to four integer observation indices.
 2. **Carry prior in** — the step's prior is the posterior carried from the previous step, propagated through the learned transition beliefs under the action that was taken (the initial prior **D** is used only on the first step). The action factor's observation is the action actually taken, and its transitions are held fixed.
-3. **JIT-compiled cycle** — a `jax.jit`'d function runs `Agent.infer_states` (variational message passing) then `Agent.infer_policies` (EFE per policy) in one traced call. A jitted step takes well under one millisecond on CPU.
+3. **Inference + planning** — the engine runs variational state inference then computes expected free energy for each candidate policy. The `pymdp` backend performs this in one `jax.jit`'d call to `Agent.infer_states` + `Agent.infer_policies`, and warms up by tracing that JIT cycle once at boot. A jitted step takes well under one millisecond on CPU. The `numpy` backend uses explicit fixed-point message passing and a NumPy EFE sum over policies, needs no warm-up, and a median step on the default live model takes about 2 ms on a desktop CPU.
 4. **Learning update** — inside the same timeout guard, the engine updates the Dirichlet transition beliefs (**pB**) for the action taken using the inferred pre-step and post-step states. A timed-out or failed step learns nothing and keeps the carried belief.
 5. **Timeout guard** — the `_infer` call is submitted to a `ThreadPoolExecutor(max_workers=1)` with a deadline of `efe_timeout_ms` (250 ms default). On `FuturesTimeout`, the engine returns the last good posterior, sets `EngineResult.timed_out=True`, and the module publishes `nous.timeout` then continues normally.
 6. **Action selection** — per-action EFE is the best EFE among the policies beginning with that action; the overall lowest-EFE policy is selected and `EngineResult.action` is its first action.
@@ -106,14 +111,14 @@ One observation modality per factor (square model). Likelihood **A**: identity f
 ```mermaid
 flowchart TD
     WS[WorkspaceSnapshot] --> ENC[encode_snapshot]
-    PRIOR[carried posterior\n+ learned transitions\nunder last action] --> JIT
-    ENC --> |obs indices| JIT[jax.jit cycle\ninfer_states + infer_policies]
-    JIT --> |posterior + EFE| LEARN[update learned transitions\nfor action taken]
+    PRIOR[carried posterior\n+ learned transitions\nunder last action] --> INFER
+    ENC --> |obs indices| INFER[inference cycle\ninfer_states + infer_policies\npymdp: jax.jit]
+    INFER --> |posterior + EFE| LEARN[update learned transitions\nfor action taken]
     LEARN --> SEL[lowest-EFE first action]
     SEL --> BELIEF[nous.belief]
     SEL --> POLICY[nous.policy]
     SEL --> INTENT[intent.act\nif speak/think]
-    JIT -- timeout --> LAST[return last posterior\nlearn nothing\nnous.timeout]
+    INFER -- timeout --> LAST[return last posterior\nlearn nothing\nnous.timeout]
 ```
 
 `nous.policy` reports the chosen action, the planning horizon, the per-policy expected free energy, and `param_info_gain`, which is true when expected free energy includes the information to be gained about the learned transitions.
@@ -138,7 +143,9 @@ The payload shape is preserved from the NARS era so all consumers (Mnemos, Eidol
 | Path | Purpose |
 |---|---|
 | `kaine/modules/nous/module.py` | `Nous(BaseModule)` — tick driver, publications, action routing |
-| `kaine/modules/nous/engine.py` | `PymdpEngine`, `FakeEngine`, `ActiveInferenceEngine` protocol, `EngineResult`, `normalised_entropy` |
+| `kaine/modules/nous/engine.py` | `_EngineBase`, `PymdpEngine`, `FakeEngine`, `ActiveInferenceEngine` protocol, `EngineResult`, `normalised_entropy` |
+| `kaine/modules/nous/numpy_engine.py` | `NumpyActiveInferenceEngine` — NumPy active-inference backend |
+| `kaine/modules/nous/numpy_aif.py` | `NumpyAgent` — NumPy state inference, EFE, and Dirichlet learning |
 | `kaine/modules/nous/generative_model.py` | `build_generative_model()`, `encode_snapshot()`, A/B/C/D construction, `ACTION_SPACE` |
 | `kaine/boot.py` | `make_nous()` — complexity envelope validation, engine construction |
 | `external/archive/nous_narsese/` | Archived NARS/ONA reasoner (retired; kept for future symbolic module reference) |
@@ -147,10 +154,10 @@ The payload shape is preserved from the NARS era so all consumers (Mnemos, Eidol
 
 ## Enabling and use
 
-1. Install the reasoning extra: `.venv/bin/pip install -e '.[reasoning]'`
+1. Choose a backend in `[nous]`: `backend = "pymdp"` (default; requires the `[reasoning]` extra) or `backend = "numpy"` (NumPy only, no extra). For the `pymdp` backend, install the reasoning extra: `.venv/bin/pip install -e '.[reasoning]'`.
 2. Edit `config/kaine.toml`: set `[modules].nous = true`.
-3. JAX warms up on first boot (traces the JIT cycle against a dummy observation). The first live step is not the slow one.
-4. No external services required (Nous is fully local; pymdp runs in-process).
+3. The `pymdp` backend warms up by tracing the JIT cycle once at boot (against a dummy observation); the `numpy` backend needs no warm-up.
+4. No external services required (Nous is fully local; the `pymdp` backend runs in-process and the `numpy` backend uses only NumPy).
 
 To switch backends during testing, inject a `FakeEngine`:
 
@@ -177,6 +184,9 @@ module = Nous(bus, engine=FakeEngine())
 | `tests/test_nous_generative_model.py` | A/B/C/D shapes, `encode_snapshot` cases, `register_event_cluster` |
 | `tests/test_nous_module.py` | Full `Nous` tick with `FakeEngine`; `nous.belief`, `nous.policy`, `intent.act` payloads; timeout path; `nous.timeout` salience |
 | `tests/test_nous_health_probe.py` | Complexity envelope validation in `make_nous` |
+| `tests/test_numpy_aif_parity.py` | `NumpyAgent` reproduces golden `pymdp` actions and per-action EFE to `1e-4` |
+| `tests/test_numpy_nous_engine.py` | `NumpyActiveInferenceEngine` replays the golden learning trajectory; learned-state interchange with `PymdpEngine`; timeout, generation and load guards; runs with JAX blocked; step latency |
+| `tests/test_nous_health_probe_backend.py` | The Nexus health probe checks the configured `[nous].backend`; the NumPy probe runs with JAX blocked |
 | `tests/systems/test_nous_subsystem.py` | End-to-end subsystem test |
 
 ---

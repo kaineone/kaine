@@ -73,9 +73,8 @@ def build_dependency_specs(
     speaches_url = str(audition_cfg.get("speaches_url", "http://127.0.0.1:8000"))
     transcription_enabled = bool(audition_cfg.get("transcription_enabled", True))
     chatterbox_url = str(vox_cfg.get("chatterbox_url", "http://127.0.0.1:8883"))
-    # nous_cfg is retained in the signature for parity with other deps, but the
-    # active-inference backend has no binary path — the probe imports pymdp/jax.
-    del nous_cfg
+    # The Nous probe needs the configured backend so it checks the right engine.
+    nous_backend = str(nous_cfg.get("backend", "pymdp"))
 
     return [
         DependencySpec(
@@ -121,10 +120,16 @@ def build_dependency_specs(
             probe=lambda: probe_chatterbox(base_url=chatterbox_url),
         ),
         DependencySpec(
-            name="pymdp + JAX",
+            name=(
+                "pymdp + JAX"
+                if nous_backend == "pymdp"
+                else "NumPy active inference"
+                if nous_backend == "numpy"
+                else f"Nous backend {nous_backend!r}"
+            ),
             role="Nous (active inference)",
             module="nous",
-            probe=nous_health_probe,
+            probe=lambda: nous_health_probe(backend=nous_backend),
         ),
         DependencySpec(
             name="State encryption",
