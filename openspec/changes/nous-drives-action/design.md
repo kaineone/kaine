@@ -34,12 +34,12 @@
     - The existing one-in-flight guards for speak and think apply: they are the same guards, shared with the wrapped policy. The self-initiated report policy's refractory periods apply when it is the wrapped policy.
     - No self-response: a proposal whose only other coalition content is the entity's own speech is declined, as `"self_response"`.
   - `rest` gives a `rest` intent (`kind: "rest"`, `about: "rest"`, `origin: "nous"`).
-- **Outcome.** For EVERY `nous.proposal` it sees, Volition publishes `volition.proposal_outcome` on `volition.out` with `proposal_id`, `realized: bool` and `reason` ∈ {`"realized"`, `"inhibited"`, `"in_flight"`, `"refractory"`, `"superseded"`, `"self_response"`, `"disabled"`}.
-  - On an inhibited snapshot the step produces no intents. It still publishes outcome events for proposals in that coalition, which are not intents and not effector input.
+- **Outcome.** For EVERY `nous.proposal` it sees, Volition publishes `volition.proposal_outcome` on the `volition.feedback` stream (NOT `volition.out`, which stays intent-only and silent on inhibited snapshots) with `proposal_id`, `realized: bool` and `reason` ∈ {`"realized"`, `"inhibited"`, `"in_flight"`, `"refractory"`, `"superseded"`, `"self_response"`, `"disabled"`}.
+  - On an inhibited snapshot the step produces no intents and publishes nothing to `volition.out`. Outcomes for proposals in that coalition still go to `volition.feedback`, which no effector reads.
 - **Switch.** `[nous].drive_actions` (default `true`) controls the source. When `false`, the source is not installed and every proposal's outcome is `"disabled"`. That keeps Nous's learning honest in an ablation run.
 
 ### Nous learns from what was actually done
-- Nous reads `volition.out` for `volition.proposal_outcome` with a small consumer, the same peer-stream pattern other modules use, with its cursor seeded at the tail on boot.
+- Nous reads `volition.feedback` for `volition.proposal_outcome` with a small consumer, the same peer-stream pattern other modules use, with its cursor seeded at the tail on boot.
 - Before each engine step, it calls `record_taken_action(idx)` for its most recent proposal whose outcome has arrived: the proposed action's index if realized, otherwise the `no_op` index.
 - A proposal whose outcome has not arrived by the next step is treated as not taken (`no_op`), because nothing observed it happen. A late outcome is counted (`late_outcomes`) and ignored.
 - The CL1 drive-mode wrapper already calls `record_taken_action`. It keeps precedence for its own step (it runs inside `step()`), and the proposal feedback applies on top at the next step.

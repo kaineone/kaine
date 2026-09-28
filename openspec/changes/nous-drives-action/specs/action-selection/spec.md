@@ -23,11 +23,11 @@ transport. An intent that realizes a Nous proposal SHALL carry `origin: "nous"`.
 
 ### Requirement: Volition realizes conscious Nous proposals under the existing gates
 
-When `[nous].drive_actions` is true, Volition SHALL consider the newest `nous.proposal` in the conscious coalition of each non-inhibited experiential broadcast. It SHALL turn a `think` or `speak` proposal into a `think` or `speak` intent, and a `rest` proposal into a `rest` intent, each with `origin: "nous"`. The same inhibition gate, one-in-flight guards, refractory periods and no-self-response rule SHALL apply as to every other intent. At most one proposal-derived intent SHALL be produced per snapshot, and it SHALL NOT displace an intent the configured policy produced for the same snapshot. For every proposal it sees, Volition SHALL publish a content-free `volition.proposal_outcome` (`proposal_id`, `realized`, `reason`).
+When `[nous].drive_actions` is true, Volition SHALL consider the newest `nous.proposal` in the conscious coalition of each non-inhibited experiential broadcast. It SHALL turn a `think` or `speak` proposal into a `think` or `speak` intent, and a `rest` proposal into a `rest` intent, each with `origin: "nous"`. The same inhibition gate, one-in-flight guards, refractory periods and no-self-response rule SHALL apply as to every other intent. At most one proposal-derived intent SHALL be produced per snapshot, and it SHALL NOT displace an intent the configured policy produced for the same snapshot. For every proposal it sees, Volition SHALL publish a content-free `volition.proposal_outcome` (`proposal_id`, `realized`, `reason`) on the `volition.feedback` stream, never on `volition.out`.
 
 #### Scenario: An inhibited coalition never realizes a proposal
 - **WHEN** a `nous.proposal` is in the coalition of an inhibited snapshot
-- **THEN** no intent is produced and its outcome is `realized: false`, `reason: "inhibited"`
+- **THEN** no intent is produced, nothing is published to `volition.out`, and its outcome on `volition.feedback` is `realized: false`, `reason: "inhibited"`
 
 #### Scenario: A proposal that never became conscious is never realized
 - **WHEN** a `nous.proposal` is published but is not in any conscious coalition

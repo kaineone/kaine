@@ -1,11 +1,11 @@
 ## 1. Nous
 
 - [ ] 1.1 `nous.proposal` in place of `intent.act` on `nous.out`, with preference-scaled salience. `no_op` publishes nothing. The false Soma/maintenance comment is corrected.
-- [ ] 1.2 Taken-action feedback: consume `volition.proposal_outcome`; `record_taken_action` before each step; late outcomes counted.
+- [ ] 1.2 Taken-action feedback: consume `volition.proposal_outcome` from `volition.feedback`; `record_taken_action` before each step; late outcomes counted.
 
 ## 2. Volition
 
-- [ ] 2.1 `NousProposalSource` wrapping the configured policy: conscious-proposal realization under the shared guards, `origin: "nous"`, the `rest` kind, and outcome events for every proposal seen (including on inhibited snapshots).
+- [ ] 2.1 `NousProposalSource` wrapping the configured policy: conscious-proposal realization under the shared guards, `origin: "nous"`, the `rest` kind, and outcome events on `volition.feedback` for every proposal seen (including on inhibited snapshots). `volition.feedback` is added to the stream registry.
 - [ ] 2.2 `[nous].drive_actions` (default true) wiring in `kaine/cycle/__main__.py`; run identity records it.
 
 ## 3. Realization and audit
