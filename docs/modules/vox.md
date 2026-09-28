@@ -2,22 +2,59 @@
 
 **Gated** — built and tested, shipped disabled; held behind a positive base-thesis result (see [Architecture](../architecture.md)).
 
-The voice output organ — synthesizes KAINE's external speech via Chatterbox TTS,
-with Thymos affect modulating expressivity parameters and optional bounded
-prosodic mirroring of the interlocutor.
+The voice output organ — synthesizes KAINE's external speech via Chatterbox TTS
+or sherpa-onnx Kokoro, with Thymos affect modulating prosody and optional
+bounded prosodic mirroring of the interlocutor.
 
 ## Status
 
-Implemented. Ships **disabled** (`[modules].vox = false`). Requires a running
-Chatterbox TTS service. File-sink (`sink_enabled`) defaults to `false`;
-self-hearing suppression defaults to `true`. Prosodic mirroring ships
-**disabled** (`[vox.mirroring].enabled = false`) pending per-install enabling.
+Implemented. Ships **disabled** (`[modules].vox = false`). Backend is selected
+by `[vox].backend`: `"chatterbox"` (default; Chatterbox TTS service) or
+`"sherpa_onnx"` (Kokoro-82M int8 through sherpa-onnx; in-process, torch-free).
+File-sink (`sink_enabled`) defaults to `false`; self-hearing suppression
+defaults to `true`. Prosodic mirroring ships **disabled**
+(`[vox.mirroring].enabled = false`) pending per-install enabling. See
+[Backends](#backends).
 
 Extras required for prosody mirroring: Audition must be enabled and
 `prosody_enabled = true` in its config (requires `librosa`; install via
 `pip install -e .[audio]`).
 
 ---
+
+## Backends
+
+`[vox].backend` selects the synthesiser.
+
+| Backend | Engine | Default | Meaning |
+|---|---|---|---|
+| `chatterbox` | Chatterbox TTS service | yes | Expressive TTS via HTTP; supports `temperature`, `exaggeration`, `cfg_weight`, and `speed_factor`. |
+| `sherpa_onnx` | sherpa-onnx Kokoro | no | In-process, torch-free. Kokoro English int8 103 MB (Apache-2.0). |
+
+Keys under `[vox]`:
+
+- `backend` — `"chatterbox"` (default) or `"sherpa_onnx"`.
+- `sherpa_model_id` — `"kokoro-en"` (default).
+- `sherpa_model_dir` — model cache directory; default `<models dir>/sherpa-onnx/<id>`.
+- `sherpa_speaker_id` — `0`; public Kokoro preset with 11 speakers.
+- `sherpa_num_threads` — `2` ONNX Runtime threads.
+
+Honest limits:
+- Kokoro applies only `speed_factor` from the affect mapping and prosodic mirroring; `temperature`, `exaggeration`, and `cfg_weight` have no effect.
+- The voice is a preset speaker, so a being moved between backends does not keep its voice.
+- Kokoro speech is plain, not expressive.
+- `vox.synthesized` carries `"backend"` and `"prosody_applied"` — all four prosody parameters under Chatterbox, only `["speed_factor"]` under Kokoro.
+- `vox.synthesized` `"voice"` is `"kokoro-en speaker N"` under sherpa-onnx.
+
+Model fetching:
+- Download models ahead of runtime with `python -m kaine.setup.speech_models [--tts ID] [--yes]`. The command shows name, size and licence and asks for consent. Archives are pinned by URL and sha256, verified, and extracted into `state/models/sherpa-onnx/`; the operation is idempotent and nothing downloads at runtime. Size: Kokoro English int8 103 MB (Apache-2.0).
+
+Failure modes:
+- A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`).
+- Missing model files disable Vox only, with the reason on the health surface.
+- The Nexus health surface probes Chatterbox only when `backend = "chatterbox"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; failures are retried after 60 s.
+
+Measured on a desktop CPU: Kokoro synthesises a 3 s sentence in about 1.2 s cold.
 
 ## Responsibility
 
@@ -27,8 +64,9 @@ production. Vox:
 
 - Subscribes to `lingua.external` for text to synthesize.
 - Tracks the latest `thymos.state` to drive expressive synthesis parameters.
-- Maps the VAD state to Chatterbox `(temperature, exaggeration, cfg_weight,
-  speed_factor)` via a documented monotonic linear interpolation.
+- Maps the affect state to prosodic parameters. Under Chatterbox the full set
+  `(temperature, exaggeration, cfg_weight, speed_factor)` is used; under
+  Kokoro/sherpa-onnx only `speed_factor` has an effect.
 - Optionally blends a bounded prosodic residual from `audition.prosody` into
   those parameters (mirroring), with time-decay after the partner stops speaking.
 - Plays audio through the OS audio device.
@@ -53,7 +91,7 @@ production. Vox:
 
 | Stream | Event type | Description |
 |---|---|---|
-| `vox.out` | `vox.synthesized` | Synthesis result metadata: `text_length`, `bytes_produced`, `voice`, `exaggeration`, `cfg_weight`, `temperature`, `speed_factor`, `latency_ms`, `success` |
+| `vox.out` | `vox.synthesized` | Synthesis result metadata: `text_length`, `bytes_produced`, `voice`, `backend`, `prosody_applied`, `latency_ms`, `success`. Under Chatterbox `prosody_applied` lists `temperature`, `exaggeration`, `cfg_weight`, `speed_factor`; under Kokoro/sherpa-onnx it lists `["speed_factor"]` only |
 
 Audio is played to the OS audio device and optionally written to the file sink;
 audio bytes are **never** put on the bus.
@@ -66,6 +104,11 @@ Full reference: [`../configuration.md`](../configuration.md). Key `[vox]` keys:
 
 | Key | Default | Description |
 |---|---|---|
+| `backend` | `"chatterbox"` | Synthesis backend: `"chatterbox"` (Chatterbox TTS service) or `"sherpa_onnx"` (Kokoro via sherpa-onnx; in-process, torch-free) |
+| `sherpa_model_id` | `"kokoro-en"` | sherpa-onnx TTS model ID |
+| `sherpa_model_dir` | `<models dir>/sherpa-onnx/<id>` | Directory holding the downloaded sherpa-onnx model files |
+| `sherpa_speaker_id` | `0` | Kokoro speaker index (0–10) selected from the public preset |
+| `sherpa_num_threads` | `2` | ONNX Runtime threads for sherpa-onnx inference |
 | `chatterbox_url` | `"http://127.0.0.1:8883"` | Chatterbox TTS service URL |
 | `voice_mode` | `"predefined"` | `"predefined"` uses the operator's configured voice file |
 | `predefined_voice_id` | (unset) | **Required for `predefined` mode** — a voice filename your Chatterbox actually serves. Unset → Chatterbox returns 400 and Vox cannot speak. List with `curl -s http://127.0.0.1:8883/get_predefined_voices`; set e.g. `"Abigail.wav"`. |
@@ -108,7 +151,9 @@ to `ChatterboxParams`. The documented monotonic relationships:
 | `valence` ↑ | `speed_factor` ↑ | Linear within `[0.85, 1.15]`; 1.0 at valence=0 |
 
 When the state equals the default `DimensionalState()` (all zeros/baseline), the
-function returns the configured baseline values directly.
+function returns the configured baseline values directly. When `backend = "sherpa_onnx"`,
+the Kokoro model ignores `temperature`, `exaggeration`, and `cfg_weight`;
+only `speed_factor` is applied.
 
 ### Prosodic mirroring (vox-prosodic-mirroring)
 
@@ -125,8 +170,9 @@ additive residual on top of the affect-driven parameters:
 
 Each feature is normalised to `[-1, 1]` against its reference range. The nudge
 is `strength × normalised_residual × half_band_width`, then clamped to the
-documented band. The `predefined_voice_id` / speaker embedding is **never
-touched**; only expressive dynamics are adjusted.
+documented band. The speaker embedding / preset voice is **never
+touched**; only expressive dynamics are adjusted. When `backend = "sherpa_onnx"`,
+only the `speed_factor` nudge from `tempo_bpm` has any effect.
 
 The effective strength decays linearly to zero over `decay_s` seconds after the
 last `audition.prosody` event, so the mirror fades when the partner stops
@@ -177,10 +223,12 @@ released (transient).
 ## Enabling & use
 
 1. Set `[modules].vox = true` in `config/kaine.toml`.
-2. Start Chatterbox TTS — run with the operator's predefined voice available in
-   its `voices/` directory.
-3. Set `predefined_voice_id` to the voice filename served by Chatterbox. Do not
-   commit personal voice filenames to the repository.
+2. For `backend = "chatterbox"`, start Chatterbox TTS with the operator's
+   predefined voice in its `voices/` directory. For `backend = "sherpa_onnx"`,
+   fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`.
+3. For `backend = "chatterbox"`, set `predefined_voice_id` to the voice filename
+   served by Chatterbox (do not commit personal filenames). For `backend =
+   "sherpa_onnx"`, set `sherpa_speaker_id` to the desired Kokoro preset index.
 4. Enable Lingua (Vox subscribes to its output) and Thymos (for affect-driven
    expressivity).
 5. For prosodic mirroring: enable Audition with `prosody_enabled = true`, then

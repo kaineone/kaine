@@ -2,10 +2,10 @@
 #
 # Host class: ~512 MB-class single-board computer or a retired low-RAM phone.
 # Role: symbolic reasoning + episodic memory + perception satellite, optionally
-# feeding a higher tier over the bus. The torch-free edge backends
-# (llama.cpp, sqlite-vec, whisper.cpp, Piper, ONNX vision/embeddings) are
-# staged seams; Soma, Chronos and the Mnemos/Empatheia/Hypnos memory embedder
-# run on NumPy.
+# feeding a higher tier over the bus. The torch-free engines available are
+# llama.cpp, sqlite-vec, the NumPy CfC, the NumPy embedder, the NumPy Nous
+# engine and sherpa-onnx speech; speech is not enabled at Tier 0 for memory.
+# Soma, Chronos and the Mnemos/Empatheia/Hypnos memory embedder run on NumPy.
 #
 # This overlay is INERT and VOICE-FREE by contract (openspec: "Tier files
 # preserve the safety invariants"): it selects runtime backends and device/
@@ -22,8 +22,8 @@
 name = "tier0"
 unsupported_modules = [
     "topos",        # no vision runtime on a ~512 MB host
-    "audition",     # no STT/emotion at Tier 0 (optional whisper.cpp-tiny batch is manual)
-    "vox",          # no expressive TTS
+    "audition",     # no STT/emotion at Tier 0
+    "vox",          # no TTS at Tier 0
     "empatheia",
     "phantasia",
 ]

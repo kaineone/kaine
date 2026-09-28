@@ -539,8 +539,8 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
             "no torch runtime"
         ),
         "present": ["soma", "chronos", "nous", "mnemos (sqlite-vec)", "eidolon", "thymos"],
-        "degraded": ["lingua (sub-1B GGUF, slow)", "audio-in (optional whisper.cpp-tiny batch STT)"],
-        "absent": ["topos vision", "vocal emotion", "expressive TTS", "≥2B LLM"],
+        "degraded": ["lingua (sub-1B GGUF, slow)"],
+        "absent": ["topos vision", "speech in/out", "vocal emotion", "expressive TTS", "≥2B LLM"],
     },
     1: {
         "name": "embodied CPU agent",
@@ -548,10 +548,10 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
         "summary": "CPU multimodal at chat pace; periodic (not streaming) vision",
         "present": [
             "lingua (1–2B GGUF)",
-            "audio-in STT (whisper.cpp/faster-whisper)",
-            "audio-out TTS (Piper)",
+            "audio-in STT (Moonshine via sherpa-onnx)",
+            "audio-out TTS (Kokoro via sherpa-onnx; plain)",
             "mnemos embeddings (NumPy MiniLM)",
-            "topos vision (ONNX/dinov2.cpp, periodic)",
+            "topos vision (torch on CPU, periodic)",
         ],
         "degraded": ["vision is periodic, not streaming", "short contexts"],
         "absent": ["expressive TTS", "vocal emotion", "streaming vision"],

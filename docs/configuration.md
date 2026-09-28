@@ -15,6 +15,7 @@ This document is the authoritative reference for `config/kaine.toml` and the com
 | Extra flag | Command | Enables |
 |---|---|---|
 | `[audio]` | `pip install -e .[audio]` | Live microphone capture (`sounddevice`, `webrtcvad`, `funasr`, `librosa`) |
+| `[speech-edge]` | `pip install -e .[speech-edge]` | Torch-free speech backends: sherpa-onnx (Moonshine STT, Kokoro TTS) |
 | `[vision]` | `pip install -e .[vision]` | Live camera capture (`opencv-python-headless`) |
 | `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Nous (`inferactively-pymdp`, `jax[cpu]`) — only required for the `pymdp` backend |
 | `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 JAX engine for Phantasia (`jax[cpu]`, `chex`, `einops`); the NumPy engine needs no extra |
@@ -604,7 +605,7 @@ Additional keys accepted by `make_lingua` (not in the shipped file but valid to 
 
 ## `[audition]`
 
-Hearing module: live microphone voice-activity detection, STT via Speaches (faster-Whisper), vocal-emotion classification via emotion2vec+, and general acoustic (non-speech) perception. Raw audio stays in memory; it is never written to disk. See [modules/audition.md](modules/audition.md).
+Hearing module: live microphone voice-activity detection, STT via Speaches (faster-Whisper) or sherpa-onnx (Moonshine), vocal-emotion classification via emotion2vec+, and general acoustic (non-speech) perception. Raw audio stays in memory; it is never written to disk. See [modules/audition.md](modules/audition.md).
 
 **Base-thesis form:** the `thesis_test` profile ships `transcription_enabled = false` (unchanged from the shipped default — see below) and `general_audition = true`, so Audition contributes acoustic prediction error to the workspace but no transcript ever reaches Lingua.
 
@@ -615,8 +616,12 @@ Hearing module: live microphone voice-activity detection, STT via Speaches (fast
 | `arousal_window_min` / `arousal_window_max` | float | `0.15` / (module default) | Only read when `general_audition = true`. Bounds of the arousal-modulated acoustic analysis window (seconds); mirrors Topos's arousal-sized fovea for hearing. |
 | `acoustic_change_alert_threshold` | float | `0.35` | Small absolute FLOOR guard on the acoustic change-alert. Self-calibrating: the primary criterion is `acoustic_change_alert_factor` below; this floor only stops a large ratio over a near-static stream (tiny mean) from firing on noise. |
 | `acoustic_change_alert_factor` | float | `2.0` | Relative alert multiplier: an acoustic change alerts when it reaches this factor times the rolling-window mean of change scores (mirrors Topos's `change_alert_factor`). |
-| `speaches_url` | string | `"http://127.0.0.1:8000"` | URL of the Speaches STT service. Must be running with `--model medium.en` on CPU to avoid cuDNN crashes (see reference notes). Only reached when `transcription_enabled = true`. |
-| `stt_model` | string | `"Systran/faster-distil-whisper-medium.en"` | STT model ID that Speaches has loaded. Must match a served model or transcription 404s; list with `curl -s http://127.0.0.1:8000/v1/models`. |
+| `backend` | string | `"speaches"` | STT backend: `"speaches"` (Speaches/faster-whisper service) or `"sherpa_onnx"` (Moonshine via sherpa-onnx, in-process). |
+| `sherpa_model_id` | string | `"moonshine-base-en"` | sherpa-onnx STT model ID: `"moonshine-base-en"` or `"moonshine-tiny-en"`. |
+| `sherpa_model_dir` | string | `<models dir>/sherpa-onnx/<id>` | Directory holding the downloaded sherpa-onnx model files. |
+| `sherpa_num_threads` | integer | `2` | ONNX Runtime threads for sherpa-onnx inference. |
+| `speaches_url` | string | `"http://127.0.0.1:8000"` | URL of the Speaches STT service. Must be running with `--model medium.en` on CPU to avoid cuDNN crashes (see reference notes). Only reached when `transcription_enabled = true` and `backend = "speaches"`. |
+| `stt_model` | string | `"Systran/faster-distil-whisper-medium.en"` | STT model ID that Speaches has loaded. Must match a served model or transcription 404s; list with `curl -s http://127.0.0.1:8000/v1/models`. Only used when `backend = "speaches"`. |
 | `emotion_model_id` | string | `"emotion2vec/emotion2vec_plus_base"` | HuggingFace hub ID for the emotion2vec+ vocal emotion model (~90M params). Must resolve from the HuggingFace hub (not ModelScope, which 404s). |
 | `emotion_device` | string | `"cpu"` | Compute device for emotion2vec+. Pinned to CPU per paper §3.1. |
 | `request_timeout_s` | float | `60.0` | HTTP timeout for Speaches requests (seconds). |
@@ -700,12 +705,18 @@ Screen / window capture knobs — only read when `[perception_feed].mode = "scre
 
 ## `[vox]`
 
-Voice synthesis: Chatterbox TTS server with prosodic parameters modulated by Thymos affect state. See [modules/vox.md](modules/vox.md).
+Voice synthesis: Chatterbox TTS service or sherpa-onnx (Kokoro) with prosodic
+parameters modulated by Thymos affect state. See [modules/vox.md](modules/vox.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `chatterbox_url` | string | `"http://127.0.0.1:8883"` | URL of the Chatterbox TTS server. |
-| `voice_mode` | string | `"predefined"` | Voice mode: `"predefined"` (file-based speaker embedding). |
+| `backend` | string | `"chatterbox"` | Synthesis backend: `"chatterbox"` (Chatterbox TTS service) or `"sherpa_onnx"` (Kokoro via sherpa-onnx, in-process). |
+| `sherpa_model_id` | string | `"kokoro-en"` | sherpa-onnx TTS model ID. |
+| `sherpa_model_dir` | string | `<models dir>/sherpa-onnx/<id>` | Directory holding the downloaded sherpa-onnx model files. |
+| `sherpa_speaker_id` | integer | `0` | Kokoro speaker index (0–10) selected from the public preset. |
+| `sherpa_num_threads` | integer | `2` | ONNX Runtime threads for sherpa-onnx inference. |
+| `chatterbox_url` | string | `"http://127.0.0.1:8883"` | URL of the Chatterbox TTS server. Only used when `backend = "chatterbox"`. |
+| `voice_mode` | string | `"predefined"` | Voice mode: `"predefined"` (file-based speaker embedding). Only used when `backend = "chatterbox"`. |
 | `output_format` | string | `"wav"` | TTS output format passed to Chatterbox. |
 | `sink_path` | string | `"state/vox"` | Directory where synthesized audio files are written (when sink is enabled). |
 | `baseline_temperature` | float | `0.7` | Default sampling temperature for TTS. Modulated by Thymos affect. |
