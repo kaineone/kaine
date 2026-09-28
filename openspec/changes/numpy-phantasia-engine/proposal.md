@@ -11,9 +11,9 @@ Phantasia's world model (the DreamerV3 RSSM core in `external/dreamerv3/rssm.py`
   - `sgd_update` with the same non-finite loss and gradient guards (abort, keep the last good parameters).
 - **An engine key.** `[phantasia].engine` selects `"jax"` (default) or `"numpy"` for `backend = "dreamerv3"`. The backend name, and therefore what every `phantasia.*` event discloses as `backend`, is unchanged: both engines run the same learning model. Events additionally disclose `engine`.
 - **Parity is proven against JAX**, not asserted:
-  - golden fixtures recorded from the JAX core are committed as JSON: forward outputs on deterministic paths, loss values and full parameter gradients for categorical and Gaussian latents, with the free-bits floor both active and inactive, and a multi-step training trajectory;
+  - golden fixtures recorded from the JAX core are committed as compressed NPZ: forward outputs on deterministic paths, loss values and full parameter gradients for categorical and Gaussian latents, with the free-bits floor both active and inactive, and a multi-step training trajectory;
   - the NumPy engine reproduces them within stated tolerances on every host, including hosts without JAX;
-  - an independent JAX-free check: central finite differences of the NumPy loss on the Gaussian latent (the one whose loss is differentiable everywhere it is evaluated) agree with the NumPy gradients.
+  - an independent JAX-free check: on the Gaussian latent, central finite differences of a surrogate loss, which holds each stop-gradiented side fixed, agree with the NumPy gradients.
 - **Checkpoints are interchangeable.** Both engines read and write the same `kaine-phantasia-rssm-npz-v1` blob through one shared codec, so learned weights persisted on a JAX host load on a NumPy host and the other way round.
 - **The stack becomes engine-aware:** the extras check (`worldmodel` is needed only for the JAX engine), the install planner's Termux entry, and the Tier 1 profile.
 
