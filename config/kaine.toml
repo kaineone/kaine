@@ -690,6 +690,14 @@ alert_salience = 0.7
 
 [audition]
 speaches_url = "http://127.0.0.1:8000"
+# backend selects the speech recogniser: "speaches" (default; the Speaches
+# service above) or "sherpa_onnx" (Moonshine through sherpa-onnx; no torch, no
+# service; install the speech-edge extra and fetch the model with
+# python -m kaine.setup.speech_models --stt moonshine-base-en).
+backend = "speaches"
+# sherpa_model_id = "moonshine-base-en"   # or "moonshine-tiny-en"
+# sherpa_model_dir = ""                   # default: <models dir>/sherpa-onnx/<id>
+# sherpa_num_threads = 2
 # Speech-to-text is built but DEACTIVATED BY DEFAULT: in the base-thesis form the
 # entity hears sound as prediction error, never as a transcript, so no text reaches
 # the language organ. Set true (in an override, beyond the base thesis) to re-enable
@@ -857,6 +865,17 @@ recovery_cap_seconds = 300
 
 [vox]
 chatterbox_url = "http://127.0.0.1:8883"
+# backend selects the speech synthesiser: "chatterbox" (default; the Chatterbox
+# service above) or "sherpa_onnx" (Kokoro through sherpa-onnx; no torch, no
+# service; install the speech-edge extra and fetch the model with
+# python -m kaine.setup.speech_models --tts kokoro-en).
+# Kokoro honours only speed_factor from the affect/mirroring prosody; the other
+# voice parameters are fixed by the model and speaker preset.
+backend = "chatterbox"
+# sherpa_model_id = "kokoro-en"
+# sherpa_speaker_id = 0   # a public Kokoro preset speaker
+# sherpa_model_dir = ""   # default: <models dir>/sherpa-onnx/<id>
+# sherpa_num_threads = 2
 voice_mode = "predefined"
 # REQUIRED for voice_mode = "predefined": a voice filename your Chatterbox
 # instance actually serves. Chatterbox returns 400 ("Missing

@@ -102,27 +102,28 @@ shape, naming the problem.
 
 | Faculty | Tier 0 — edge/sensor | Tier 1 — CPU agent | Tier 2 — workstation | Tier 3 — datacenter |
 |---|---|---|---|---|
-| **Host (program target / runs today)** | target ~512 MB SBC / retired phone; today no 512 MB host runs the Tier 0 module set (torch and the embedders exceed the memory); the original Pi Zero (ARMv6) and Termux cannot install the torch stack at all | target 4–8 GB SBC / 8 GB phone; today 64-bit Linux SBCs with 4–8 GB (for example a Pi 4/5 or a Jetson) can run it on CPU, slowly; phones cannot until Phase 3 | 1–2 GPU workstation | multi-GPU server |
+| **Host (program target / runs today)** | target ~512 MB SBC / retired phone; no 512 MB host has been verified to run the Tier 0 module set; the original Pi Zero (ARMv6) cannot install the stack | target 4–8 GB SBC / 8 GB phone; today 64-bit Linux SBCs with 4–8 GB (for example a Pi 4/5 or a Jetson) can run it on CPU, slowly; Termux support for the NumPy engines and sherpa-onnx speech is built, and unproven on a device; Topos still needs torch | 1–2 GPU workstation | multi-GPU server |
 | **Language (Lingua)** | sub-1B GGUF, slow (llama.cpp) | 1–2B GGUF, chat pace (llama.cpp) | Gemma/Qwen on GPU (Ollama) | larger LLM, long context |
-| **Vision (Topos)** | ✗ absent | periodic, CPU (ONNX/dinov2.cpp — target) | streaming DINOv2/InternVideo (torch) | higher-rate |
-| **Speech-in (Audition STT)** | optional whisper.cpp-tiny batch (target) | whisper.cpp / faster-whisper (target) | faster-whisper > realtime | > realtime |
+| **Vision (Topos)** | ✗ absent | topos vision (torch on CPU, periodic) | streaming DINOv2/InternVideo (torch) | higher-rate |
+| **Speech-in (Audition STT)** | ✗ absent | Moonshine (sherpa-onnx) | faster-whisper > realtime | > realtime |
 | **Vocal emotion** | ✗ absent | ✗ absent | emotion2vec+ | emotion2vec+ |
-| **Speech-out (Vox TTS)** | ✗ absent | Piper (plain — target) | Chatterbox (expressive) | Chatterbox |
+| **Speech-out (Vox TTS)** | ✗ absent | Kokoro (sherpa-onnx; plain, speed-only prosody) | Chatterbox (expressive) | Chatterbox |
 | **Memory embeddings** | NumPy MiniLM (`sentence_transformers` optional) | NumPy MiniLM (`sentence_transformers` optional) | NumPy MiniLM (`sentence_transformers` optional) | NumPy MiniLM (`sentence_transformers` optional) |
 | **Vector store (Mnemos)** | sqlite-vec (in-process) | sqlite-vec (in-process) | Qdrant (server) | Qdrant |
-| **Torch runtime required** | yes (today) — removed in portability-program Phase 2 | yes (today) — removed in portability-program Phase 2 | yes | yes |
-| **Unsupported / disabled by tier** | topos, audition, vox, empatheia, phantasia listed as unsupported; oscillator unsupported | vox listed as unsupported; vocal emotion disabled via `[audition].emotion_model_id = ""` | (none) | (none) |
+| **Torch runtime required** | no | yes for Topos vision; optional `sentence_transformers` backend | yes | yes |
+| **Unsupported / disabled by tier** | topos, audition, vox, empatheia, phantasia listed as unsupported; oscillator unsupported; no speech (memory) | vocal emotion disabled via `[audition].emotion_model_id = ""` | (none) | (none) |
 
 Explicit **absences** (stated so a tier is never oversold):
 
-- **No expressive TTS and no vocal emotion below Tier 2.** emotion2vec+ (funasr)
+- **No vocal emotion below Tier 2, and no speech at Tier 0.** emotion2vec+ (funasr)
   has no clean edge port; it is a Tier-2-only faculty. Below it, vocal emotion is
   explicitly disabled (`[audition].emotion_model_id = ""`), not silently faked.
-  The tier lists vox as unsupported at Tier 0 and Tier 1; the pre-boot Tier-fit
-  check fails if an unsupported module is enabled.
+  Tier 0 lists Audition and Vox as unsupported for memory; the pre-boot Tier-fit
+  check fails if an unsupported module is enabled. Tier 1 has plain STT and TTS
+  through sherpa-onnx, not expressive TTS.
 - **Vision is periodic, not streaming, at Tier 1** — seconds per frame on the SBC
-  CPU. The ONNX/dinov2.cpp vision backend is not yet built; today Topos on CPU
-  still runs through the torch path where enabled.
+  CPU. The ONNX/dinov2.cpp vision backend is not built; today Topos on Tier 1
+  runs through the torch path where enabled.
 - **A ≥2B language model does not fit a ~512 MB Tier-0 host.** Tier 0 is a
   symbolic-reasoning + episodic-memory + perception node, not a conversational
   host.
@@ -140,16 +141,15 @@ when that backend is selected, so you install a tier's extras and no others.
   audition, vox, empatheia, and phantasia as unsupported, and the oscillator as
   unsupported. Nous runs on the NumPy active-inference backend and requires no JAX
   or `[reasoning]` extra. Mnemos uses the shared NumPy MiniLM embedder; Soma and Chronos
-  default to NumPy CfC networks (their torch+ncps backend remains available). A sub-1B GGUF model file. Measured: a full voice turn on a Raspberry
-  Pi Zero 2 W (512 MB) with whisper.cpp tiny.en + SmolLM2-360M + Flite takes
-  37–46 s when loading one model at a time. The whisper.cpp-tiny batch STT,
-  Piper TTS, ONNX vision, and ONNX/static embeddings backends are staged seams —
-  when selected they degrade to their declared fallback.
+  default to NumPy CfC networks (their torch+ncps backend remains available). A sub-1B GGUF model file. The torch-free engines available are llama.cpp,
+  sqlite-vec, the NumPy CfC, the NumPy embedder, the NumPy Nous engine and
+  sherpa-onnx speech; speech is not enabled at Tier 0 for memory. The ONNX vision
+  and ONNX/static embeddings backends are not built.
 - **Tier 1 — embodied CPU agent.** As Tier 0, but keeps Topos on CPU and enables
-  audition. Vox and vocal emotion remain disabled. Phantasia runs on the NumPy
-  engine (`engine = "numpy"`). The intended ONNX vision / whisper.cpp / Piper
-  backends are staged seams; today the NumPy MiniLM embedder and llama.cpp Lingua
-  run here.
+  Audition and Vox through sherpa-onnx. Vocal emotion remains disabled. Phantasia
+  runs on the NumPy engine (`engine = "numpy"`). The ONNX vision and ONNX/static
+  embeddings backends are not built; today the NumPy MiniLM embedder and
+  llama.cpp Lingua run here.
 - **Tier 2 — workstation (default).** Ollama for Lingua, Qdrant for Mnemos,
   shared NumPy MiniLM embedder (`sentence_transformers` optional), faster-whisper + emotion2vec+ (torch/funasr),
   Chatterbox. This is what `pip install -e .` + the first-run wizard provision
@@ -165,13 +165,12 @@ Shipped today: the backend-selection framework, Tier-2-preserving defaults, the
 `llama.cpp`/GGUF Lingua backend, the `sqlite-vec` Mnemos backend, the four tier
 profiles, the host probe, a NumPy CfC for Soma and Chronos (the default; their
 torch+ncps backend remains available), a JAX-free NumPy active-inference
-backend for Nous (`[nous].backend = "numpy"`), and a JAX-free NumPy engine for
-Phantasia (`[phantasia].engine = "numpy"`). The memory modules default to the
-shared NumPy MiniLM embedder (`sentence_transformers` backend remains available).
+backend for Nous (`[nous].backend = "numpy"`), a JAX-free NumPy engine for
+Phantasia (`[phantasia].engine = "numpy"`), and the sherpa-onnx speech backends
+for Audition (Moonshine STT) and Vox (Kokoro TTS). The memory modules default to
+the shared NumPy MiniLM embedder (`sentence_transformers` backend remains
+available).
 
-Not yet built: whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision, and
-ONNX/static embeddings. Those backends are the focus of the `portability-program`
-change (Phase 2 removes the torch requirement from the core, Phase 3 brings
-Termux, Phase 4 adds residency, arm64 images, and multi-node). Each backend
-is lazy-imported: a host that selects an unshipped backend degrades to its declared
-fallback with a surfaced reason rather than crashing boot.
+Not yet built: ONNX/dinov2.cpp vision and ONNX/static embeddings. There is no
+configuration key for either; Topos on a small host runs its torch encoder on the
+CPU.

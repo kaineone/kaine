@@ -132,8 +132,28 @@ async def check_services(
     the up/not_configured/else -> PASS/SKIP/FAIL mapping appropriate to a
     boot gate (a dashboard tolerates "degraded"; a boot gate must not).
     """
-    prober = load_health_prober(kaine_toml=kaine_toml, secrets_toml=secrets_toml)
-    snapshot = await prober.snapshot(force=True)
+    from kaine.nexus.health.probes import (
+        SHERPA_PROBE_CHILD_TIMEOUT_S,
+        get_sherpa_probe_wait,
+        set_sherpa_probe_wait,
+    )
+
+    # Sherpa loads run in a child process with a bounded timeout. Pre-boot must
+    # wait longer than that load before declaring it degraded, and the Nexus
+    # prober's outer timeout must be longer still so the child result can be
+    # returned. Network probes keep their own short timeouts, so raising the
+    # outer timeout here does not make them hang.
+    prev_wait = get_sherpa_probe_wait()
+    set_sherpa_probe_wait(SHERPA_PROBE_CHILD_TIMEOUT_S + 5)
+    try:
+        prober = load_health_prober(
+            kaine_toml=kaine_toml,
+            secrets_toml=secrets_toml,
+            probe_timeout_s=SHERPA_PROBE_CHILD_TIMEOUT_S + 10,
+        )
+        snapshot = await prober.snapshot(force=True)
+    finally:
+        set_sherpa_probe_wait(prev_wait)
     deps = snapshot.get("dependencies", [])
     results: list[CheckResult] = []
     for dep in deps:

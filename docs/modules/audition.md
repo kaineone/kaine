@@ -10,7 +10,7 @@ KAINE's hearing organ: a general acoustic front end (any sound → salience by c
 
 Implemented. Ships **disabled** — `[modules].audition = false` in `config/kaine.toml`.
 
-- Core STT requires a running **Speaches** server (OpenAI-compatible local STT; see the [operations troubleshooting](../operations.md#troubleshooting) notes).
+- STT backend is selected by `[audition].backend`: `"speaches"` (default; Speaches/faster-whisper service) or `"sherpa_onnx"` (Moonshine through sherpa-onnx; in-process, torch-free, no service). See [Backends](#backends).
 - Vocal emotion classification (`emotion2vec+`) requires the `[audio]` extras: `pip install -e .[audio]` (adds `funasr`). If `funasr` is absent, emotion degrades gracefully to neutral with a one-time warning.
 - Live microphone capture requires the `[audio]` extras (adds `sounddevice`, `webrtcvad`).
 - Prosody extraction (`audition.prosody`) additionally requires `librosa` from the `[audio]` extras.
@@ -21,6 +21,36 @@ Implemented. Ships **disabled** — `[modules].audition = false` in `config/kain
 
 ---
 
+## Backends
+
+`[audition].backend` selects the recogniser.
+
+| Backend | Engine | Default | Meaning |
+|---|---|---|---|
+| `speaches` | Speaches (faster-whisper) service | yes | OpenAI-compatible local STT server. Requires a running Speaches instance matching `stt_model`. |
+| `sherpa_onnx` | sherpa-onnx Moonshine | no | In-process, torch-free. Moonshine base English 111 MB (MIT) or tiny English 30 MB (MIT). |
+
+Keys under `[audition]`:
+
+- `backend` — `"speaches"` (default) or `"sherpa_onnx"`.
+- `sherpa_model_id` — `"moonshine-base-en"` (default) or `"moonshine-tiny-en"`.
+- `sherpa_model_dir` — model cache directory; default `<models dir>/sherpa-onnx/<id>`.
+- `sherpa_num_threads` — `2` ONNX Runtime threads.
+
+Honest limits:
+- sherpa-onnx STT still requires `transcription_enabled = true`; it runs on the same in-memory WAV window and publishes `audition.transcription`.
+- The `audition.transcription` event carries a `"backend"` field (`"speaches"` or `"sherpa_onnx"`).
+
+Model fetching:
+- Download models ahead of runtime with `python -m kaine.setup.speech_models [--stt ID] [--yes]`. The command shows name, size and licence and asks for consent. Archives are pinned by URL and sha256, verified, and extracted into `state/models/sherpa-onnx/`; the operation is idempotent and nothing downloads at runtime. Sizes: Moonshine base English 111 MB (MIT), tiny English 30 MB (MIT).
+
+Failure modes:
+- A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`) only when transcription is enabled; with transcription off no STT model is loaded.
+- A missing or corrupt Moonshine model disables transcription only, so Audition still hears and reports vocal emotion; the reason is logged, and the Nexus sherpa-onnx row shows DOWN.
+- The Nexus health surface probes Speaches only when `backend = "speaches"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; failures are retried after 60 s.
+
+Measured on a desktop CPU: Moonshine base transcribes a 3 s sentence in about 40 ms.
+
 ## Responsibility
 
 In the PP+GWT framing, Audition is the entity's **acoustic channel**. Speech-to-text transcription is gated off by default (`transcription_enabled = false`, both in the shipped `config/kaine.toml` and in the `thesis_test` profile) — a spoken utterance never becomes a text transcript inside the workspace unless an operator explicitly re-enables it. In the base-thesis form (`general_audition = true`), Audition is a full perceptual sense — deliberately the auditory mirror of Topos foveation: it represents *any* sound, scores its salience by change and prediction error, attends it under an arousal-set window, and publishes a content-free `audition.perception` event, so the entity hears the *sound* of speech (and everything else) as prediction error, never as words. Vocal-emotion classification still runs on detected-speech windows (an affect signal, not a transcript); STT only runs, as a gated specialization, when `transcription_enabled = true` (see [General auditory perception](#general-auditory-perception)).
@@ -28,7 +58,7 @@ In the PP+GWT framing, Audition is the entity's **acoustic channel**. Speech-to-
 On each utterance boundary (detected by the VAD in `LiveMicrophone`, or on a direct `process_audio()` call):
 
 0. **General acoustic perception (when `general_audition` is enabled)** — the window is first encoded to a general acoustic embedding and scored for salience over that embedding (`audition.perception`), so a non-speech sound reaches the workspace. A voice-activity heuristic then gates the speech path below; non-speech windows return without transcription. When disabled, this step is skipped and every window is treated as speech (the existing pipeline, byte-for-byte unchanged).
-1. **Emotion classification always runs; STT runs only when `transcription_enabled = true`** — `Emotion2vecClassifier.classify()` runs `funasr` inference in a thread on every detected-speech window; `SpeachesClient.transcribe()` POSTs in-memory WAV bytes to the Speaches server only when the STT gate is on. When both run they start together via `asyncio.gather()`.
+1. **Emotion classification always runs; STT runs only when `transcription_enabled = true`** — `Emotion2vecClassifier.classify()` runs `funasr` inference in a thread on every detected-speech window; the selected STT backend transcribes the in-memory WAV bytes only when the STT gate is on. With `backend = "speaches"`, `SpeachesClient.transcribe()` POSTs to the Speaches server; with `backend = "sherpa_onnx"`, sherpa-onnx Moonshine transcribes in-process. When both emotion and STT run they start together via `asyncio.gather()`.
 2. **Auditory forward model steps** — `AuditoryForwardModel` receives a 9-dim feature vector built from the emotion-class distribution (7 dims), normalised utterance duration (1 dim), and mean RMS energy (1 dim). The L2 prediction error against the model's prior prediction weights the salience of the published events: an emotionally unexpected utterance is more salient than a predicted one.
 3. **Prosody extraction (optional)** — when `prosody_enabled = true`, a fire-and-forget task computes F0 statistics (via `librosa.pyin`), RMS energy, and speaking rate (via `librosa.feature.tempo`) from the in-memory float32 audio array, publishing them as `audition.prosody`. The NumPy array is released as soon as the function returns; nothing touches disk.
 4. **Self-hearing suppression** — a shared `SpeakingGate` (wired by `boot.build_registry`) prevents Audition from transcribing the entity's own voice during Vox playback.
@@ -56,7 +86,7 @@ All events are published to the **`audition.out`** stream.
 | Event type | Payload fields | Salience |
 |---|---|---|
 | `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `encoder_model_id`, `attended_window` | `baseline_salience` normally; `alert_salience` when the normalised prediction error ≥ 2× its rolling mean **or** the acoustic change ≥ `acoustic_change_alert_threshold` |
-| `audition.transcription` | `text`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error` | `baseline_salience` (0.4) normally; raised toward `alert_salience` (0.8) by high prediction error; `alert_salience` on STT failure |
+| `audition.transcription` | `text`, `backend`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error` | `baseline_salience` (0.4) normally; raised toward `alert_salience` (0.8) by high prediction error; `alert_salience` on STT failure |
 | `audition.emotion` | `category`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error` | `baseline_salience` for neutral; `alert_salience` for non-neutral; further raised by high prediction error |
 | `audition.prosody` | `source_label`, `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std`, `tempo_bpm` | `baseline_salience` (always) |
 
@@ -72,6 +102,10 @@ Section `[audition]` in `config/kaine.toml`. See also [../configuration.md](../c
 
 | Key | Default | Meaning |
 |---|---|---|
+| `backend` | `"speaches"` | Speech-to-text backend: `"speaches"` (Speaches/faster-whisper service) or `"sherpa_onnx"` (Moonshine via sherpa-onnx; in-process, torch-free) |
+| `sherpa_model_id` | `"moonshine-base-en"` | sherpa-onnx STT model ID: `"moonshine-base-en"` or `"moonshine-tiny-en"` |
+| `sherpa_model_dir` | `<models dir>/sherpa-onnx/<id>` | Directory holding the downloaded sherpa-onnx model files |
+| `sherpa_num_threads` | `2` | ONNX Runtime threads for sherpa-onnx inference |
 | `speaches_url` | `"http://127.0.0.1:8000"` | Base URL of the running Speaches STT server |
 | `transcription_enabled` | `false` | Speech-to-text gate. **Off by default** in both the shipped config and `thesis_test`: when false the STT model is never invoked and no `audition.transcription` event is published — only acoustic-perception prediction error and the affect signals (emotion/prosody) reach the workspace. The STT code is preserved, only bypassed. Set `true` in a local override (beyond the base-thesis form) to re-enable the full pipeline |
 | `stt_model` | `"Systran/faster-distil-whisper-medium.en"` | Speaches model ID for transcription — must match a model your Speaches instance has loaded, or transcription 404s (list with `curl -s http://127.0.0.1:8000/v1/models`) |
@@ -204,10 +238,16 @@ audition = true
 capture_enabled = true    # requires pip install -e .[audio]
 ```
 
-Start Speaches before enabling Audition. Run Whisper on CPU with model `medium.en` to avoid 404 / cuDNN crashes (see [operations troubleshooting](../operations.md#troubleshooting)):
+For `backend = "speaches"`, start Speaches before enabling Audition. Run Whisper on CPU with model `medium.en` to avoid 404 / cuDNN crashes (see [operations troubleshooting](../operations.md#troubleshooting)):
 
 ```bash
 speaches --model medium.en --device cpu
+```
+
+For `backend = "sherpa_onnx"`, fetch the model before enabling Audition:
+
+```bash
+python -m kaine.setup.speech_models --stt moonshine-base-en
 ```
 
 To enable prosody extraction:

@@ -11,7 +11,16 @@ in :class:`~kaine.nexus.health.prober.HealthProber`).
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -24,6 +33,301 @@ NOT_CONFIGURED = "not_configured"
 
 DEFAULT_PROBE_TIMEOUT_S = 2.0
 DEFAULT_CACHE_TTL_S = 5.0
+
+SHERPA_PROBE_RETRY_S = 60.0
+SHERPA_PROBE_WAIT_S = 1.5
+SHERPA_PROBE_CHILD_TIMEOUT_S = 300.0
+
+_SHERPA_PROBE_MEMO: dict[tuple, tuple[str, str, float, tuple]] = {}
+_SHERPA_INFLIGHT: dict[tuple, concurrent.futures.Future] = {}
+_SHERPA_PROBE_LOCK = threading.Lock()
+_SHERPA_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="sherpa-probe"
+)
+
+
+def set_sherpa_probe_wait(seconds: float) -> None:
+    """Set how long callers wait before a slow load is reported DEGRADED."""
+    global SHERPA_PROBE_WAIT_S
+    SHERPA_PROBE_WAIT_S = seconds
+
+
+def get_sherpa_probe_wait() -> float:
+    """Return the current slow-load wait threshold."""
+    return SHERPA_PROBE_WAIT_S
+
+
+def clear_sherpa_probe_memo() -> None:
+    """Reset the sherpa probe memo and single-flight map. For tests."""
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_PROBE_MEMO.clear()
+        _SHERPA_INFLIGHT.clear()
+
+
+_CHILD_SCRIPT = r'''
+import asyncio
+import io
+import json
+import sys
+import wave
+
+
+async def _main():
+    args = json.loads(sys.argv[1])
+    kind = args["kind"]
+    client = None
+    try:
+        if kind == "stt":
+            from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
+            from kaine.setup import speech_models
+
+            client = SherpaMoonshineSTT(
+                args["model_dir"],
+                model_id=args.get("model_id"),
+                num_threads=args.get("num_threads", 1),
+            )
+            warm_up = getattr(client, "warm_up", None)
+            if warm_up is not None:
+                await warm_up()
+
+            n_samples = int(16000 * 0.5)
+            pcm = b"\x00\x00" * n_samples
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
+                wf.writeframes(pcm)
+            audio = buf.getvalue()
+
+            await client.transcribe(
+                audio,
+                sample_rate=16000,
+                model=args.get("model_id"),
+                filename="silence.wav",
+            )
+            detail = (
+                f"{args.get('model_id') or speech_models.DEFAULT_STT} "
+                "loaded and transcribed a test clip"
+            )
+        else:
+            from kaine.modules.vox.client import TTSRequest
+            from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
+            from kaine.setup import speech_models
+
+            client = SherpaKokoroTTS(
+                args["model_dir"],
+                model_id=args.get("model_id"),
+                speaker_id=args.get("speaker_id", 0),
+                num_threads=args.get("num_threads", 1),
+            )
+            warm_up = getattr(client, "warm_up", None)
+            if warm_up is not None:
+                await warm_up()
+
+            req = TTSRequest(text="ok")
+            result = await client.synthesize(req)
+            if not getattr(result, "audio", b""):
+                raise RuntimeError("synthesized audio was empty")
+            detail = (
+                f"{args.get('model_id') or speech_models.DEFAULT_TTS} "
+                "loaded and synthesized a test word"
+            )
+
+        print(json.dumps({"status": "up", "detail": detail}))
+    except Exception as exc:
+        print(json.dumps({"status": "down", "detail": f"{type(exc).__name__}: {exc}"}))
+    finally:
+        if client is not None:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
+
+asyncio.run(_main())
+'''
+
+
+def _run_probe_child(kind: str, args: dict[str, Any]) -> tuple[str, str]:
+    """Run the sherpa load/inference in an isolated child process.
+
+    Factored out so unit tests can replace the subprocess boundary with a
+    synchronous fake.
+    """
+    child_args = dict(args)
+    child_args["kind"] = kind
+    argv = [sys.executable, "-c", _CHILD_SCRIPT, json.dumps(child_args)]
+    env = os.environ.copy()
+
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=SHERPA_PROBE_CHILD_TIMEOUT_S,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return DOWN, f"model load exceeded {SHERPA_PROBE_CHILD_TIMEOUT_S} s; killed"
+
+    last_stderr = "no stderr"
+    if proc.stderr and proc.stderr.strip():
+        last_stderr = proc.stderr.strip().splitlines()[-1]
+
+    if proc.returncode != 0:
+        return DOWN, f"probe process exited with status {proc.returncode}: {last_stderr}"
+
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if not lines:
+        return DOWN, f"probe process exited with status {proc.returncode}: {last_stderr}"
+
+    try:
+        result = json.loads(lines[-1])
+        return result["status"], result["detail"]
+    except Exception:
+        return DOWN, f"probe process exited with status {proc.returncode}: {last_stderr}"
+
+
+def _model_fingerprint(model_dir: str, model_id: str | None) -> tuple:
+    """Return a stable fingerprint of the files that matter for ``model_dir``.
+
+    For known model ids this is the manifest's required files (using a
+    directory's own stat for directory entries such as ``espeak-ng-data``) plus
+    the ``.verified`` marker. Unknown ids fall back to the top-level files of
+    the directory only, with no recursion.
+    """
+    base = Path(model_dir)
+    try:
+        if not base.exists():
+            return ("missing", str(model_dir))
+
+        entries: list[tuple[str, int, int]] = []
+        seen: set[str] = set()
+
+        verified = base / ".verified"
+        if verified.exists():
+            try:
+                st = verified.stat()
+                entries.append((".verified", st.st_size, st.st_mtime_ns))
+            except OSError:
+                entries.append((".verified", 0, 0))
+            seen.add(".verified")
+
+        from kaine.setup import speech_models
+
+        required_files: list[str] | None = None
+        manifest = speech_models.MANIFEST.get(model_id)
+        if manifest is not None:
+            required_files = list(manifest.required_files)
+
+        if required_files is not None:
+            for rel in required_files:
+                if rel in seen:
+                    continue
+                p = base / rel
+                if not p.exists():
+                    continue
+                try:
+                    st = p.stat()
+                    entries.append((rel, st.st_size, st.st_mtime_ns))
+                except OSError:
+                    entries.append((rel, 0, 0))
+                seen.add(rel)
+        else:
+            for p in base.iterdir():
+                if not p.is_file():
+                    continue
+                rel = p.name
+                if rel in seen:
+                    continue
+                try:
+                    st = p.stat()
+                    entries.append((rel, st.st_size, st.st_mtime_ns))
+                except OSError:
+                    entries.append((rel, 0, 0))
+                seen.add(rel)
+
+        entries.sort(key=lambda item: item[0])
+        return tuple(entries)
+    except Exception as exc:
+        return ("error", type(exc).__name__, str(exc))
+
+
+def _sherpa_worker(
+    key: tuple,
+    model_dir: str,
+    model_id: str | None,
+    runner: Callable[[], tuple[str, str]],
+) -> tuple[str, str]:
+    """Run the synchronous load/inference, then record the memo entry.
+
+    Success and failure are both handled inside the worker; the awaiting
+    coroutine only waits on the shared future.
+    """
+    fingerprint = _model_fingerprint(model_dir, model_id)
+    try:
+        status, detail = runner()
+    except Exception as exc:
+        status, detail = DOWN, f"{type(exc).__name__}: {exc}"
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_PROBE_MEMO[key] = (status, detail, time.monotonic(), fingerprint)
+        _SHERPA_INFLIGHT.pop(key, None)
+    return status, detail
+
+
+def _cleanup_inflight(key: tuple, fut: concurrent.futures.Future) -> None:
+    """Make sure the in-flight map is cleaned up once the future settles."""
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_INFLIGHT.pop(key, None)
+
+
+async def _cached_sherpa_probe(
+    key: tuple,
+    model_dir: str,
+    model_id: str | None,
+    runner: Callable[[], tuple[str, str]],
+) -> tuple[str, str]:
+    """Return a cached UP result if the files are unchanged, retry DOWN
+    after ``SHERPA_PROBE_RETRY_S``, and ensure at most one load per key is
+    actually running.
+
+    A load that takes longer than ``SHERPA_PROBE_WAIT_S`` returns DEGRADED
+    but keeps running in the background so it can be reused by later callers.
+    """
+    now = time.monotonic()
+    fingerprint = await asyncio.to_thread(_model_fingerprint, model_dir, model_id)
+
+    with _SHERPA_PROBE_LOCK:
+        cached = _SHERPA_PROBE_MEMO.get(key)
+        if cached is not None:
+            status, detail, verified_at, stored_fp = cached
+            if stored_fp == fingerprint:
+                age = now - verified_at
+                if status == UP:
+                    return UP, f"{detail} (verified {int(age)} s ago)"
+                if age < SHERPA_PROBE_RETRY_S:
+                    retry_in = int(SHERPA_PROBE_RETRY_S - age)
+                    return DOWN, f"{detail} (retry in {retry_in} s)"
+            # Fingerprint changed or retry window expired: drop the stale entry.
+            _SHERPA_PROBE_MEMO.pop(key, None)
+
+        fut = _SHERPA_INFLIGHT.get(key)
+        if fut is None:
+            fut = _SHERPA_EXECUTOR.submit(
+                _sherpa_worker, key, model_dir, model_id, runner
+            )
+            _SHERPA_INFLIGHT[key] = fut
+            fut.add_done_callback(lambda f: _cleanup_inflight(key, f))
+
+    # Wait on the in-flight load without letting the prober's timeout cancel it.
+    wrapped = asyncio.wrap_future(fut)
+    shielded = asyncio.shield(wrapped)
+    try:
+        status, detail = await asyncio.wait_for(shielded, timeout=SHERPA_PROBE_WAIT_S)
+    except asyncio.TimeoutError:
+        return DEGRADED, "sherpa-onnx model load in progress"
+    return status, detail
 
 
 def _now_iso() -> str:
@@ -114,6 +418,48 @@ async def probe_chatterbox(*, base_url: str) -> tuple[str, str]:
     if resp.status_code < 500:
         return UP, f"responding (HTTP {resp.status_code})"
     return DEGRADED, f"HTTP {resp.status_code}"
+
+
+async def probe_sherpa_stt(
+    *,
+    model_dir: str,
+    model_id: str | None,
+    num_threads: int,
+) -> tuple[str, str]:
+    """Probe the local sherpa-onnx Moonshine STT backend with a silent clip."""
+
+    def _run() -> tuple[str, str]:
+        args = {
+            "model_dir": model_dir,
+            "model_id": model_id,
+            "num_threads": num_threads,
+        }
+        return _run_probe_child("stt", args)
+
+    key = ("stt", model_dir, model_id, None, num_threads)
+    return await _cached_sherpa_probe(key, model_dir, model_id, _run)
+
+
+async def probe_sherpa_tts(
+    *,
+    model_dir: str,
+    model_id: str | None,
+    speaker_id: int,
+    num_threads: int,
+) -> tuple[str, str]:
+    """Probe the local sherpa-onnx Kokoro TTS backend by saying a short word."""
+
+    def _run() -> tuple[str, str]:
+        args = {
+            "model_dir": model_dir,
+            "model_id": model_id,
+            "speaker_id": speaker_id,
+            "num_threads": num_threads,
+        }
+        return _run_probe_child("tts", args)
+
+    key = ("tts", model_dir, model_id, speaker_id, num_threads)
+    return await _cached_sherpa_probe(key, model_dir, model_id, _run)
 
 
 async def probe_state_encryption(

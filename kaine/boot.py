@@ -40,7 +40,7 @@ from kaine.text_embedding import (
 log = logging.getLogger(__name__)
 
 
-ModuleFactory = Callable[[AsyncBus, dict[str, Any]], BaseModule]
+ModuleFactory = Callable[[AsyncBus, dict[str, Any]], Optional[BaseModule]]
 
 
 class ConfigurationError(ValueError):
@@ -1306,6 +1306,15 @@ def _live_mic_source_label(mode: str) -> str:
     return "live_mic"
 
 
+def _audition_sherpa_failure_reason() -> str:
+    from kaine.backend_state import backend_failures
+
+    for record in reversed(backend_failures()):
+        if record.module == "audition" and record.backend == "sherpa_onnx":
+            return record.reason
+    return "unknown failure"
+
+
 def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.audition.live import LiveMicConfig
     from kaine.modules.audition.module import Audition
@@ -1318,6 +1327,13 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "request_timeout_s",
         "baseline_salience",
         "alert_salience",
+        # Runtime backend selection (openspec runtime-backends). "speaches"
+        # (default) uses the HTTP service above; "sherpa_onnx" runs Moonshine
+        # in-process through sherpa-onnx (no torch, no service).
+        "backend",
+        "sherpa_model_dir",
+        "sherpa_model_id",
+        "sherpa_num_threads",
         # Live microphone (eyes-and-ears). Off by default.
         "capture_enabled",
         "capture_device",
@@ -1441,6 +1457,77 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # STT gate (default true = unchanged). When false, no transcript path.
     if "transcription_enabled" in section:
         kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
+
+    # Backend seam (openspec runtime-backends). The backend value is normalised
+    # once and all disclosures derive from the resolved backend.
+    backend = str(section.get("backend") or "speaches").strip().lower()
+    if backend not in ("speaches", "sherpa_onnx"):
+        raise ConfigurationError(
+            f"unknown audition backend {section.get('backend')!r}; "
+            "must be 'speaches' or 'sherpa_onnx'"
+        )
+
+    transcription_enabled = bool(kwargs.get("transcription_enabled", False))
+
+    # With transcription off, do not resolve or construct any STT backend. The
+    # gate guarantees the client is never called; Audition builds its default
+    # SpeachesClient, which is never used.
+    if backend == "speaches" or not transcription_enabled:
+        kwargs["backend"] = backend
+        return Audition(bus, **kwargs)
+
+    from kaine.modules.audition.stt_client import SpeachesClient, STTClient
+    from kaine.modules.backends import BackendRegistry, UnknownBackendError
+
+    speaches_url = str(section.get("speaches_url", "http://127.0.0.1:8000"))
+    timeout_s = float(section.get("request_timeout_s", 60.0))
+
+    def _speaches_factory() -> STTClient:
+        return SpeachesClient(base_url=speaches_url, timeout_s=timeout_s)
+
+    def _sherpa_factory() -> STTClient:
+        from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
+        from kaine.setup.speech_models import DEFAULT_STT, model_dir
+
+        model_id = section.get("sherpa_model_id") or DEFAULT_STT
+        model_dir_path = section.get("sherpa_model_dir") or model_dir(model_id)
+        num_threads = int(section.get("sherpa_num_threads", 2))
+        return SherpaMoonshineSTT(
+            model_dir_path,
+            model_id=model_id,
+            num_threads=num_threads,
+        )
+
+    registry = BackendRegistry[STTClient]("audition", default="speaches").register(
+        "speaches", _speaches_factory
+    ).register("sherpa_onnx", _sherpa_factory)
+    try:
+        client = registry.resolve(backend)
+    except UnknownBackendError as exc:
+        raise ConfigurationError(str(exc)) from exc
+
+    from kaine.setup.speech_models import DEFAULT_STT
+
+    model_id = section.get("sherpa_model_id") or DEFAULT_STT
+    if client is None:
+        # Sherpa factory failed already (recorded and logged by resolve_backend).
+        # Hearing continues; transcription is simply disabled.
+        failure = _audition_sherpa_failure_reason()
+        log.warning(
+            "audition: sherpa-onnx transcription unavailable (%s); "
+            "hearing continues without transcription. "
+            "Fetch the model: python -m kaine.setup.speech_models --stt %s",
+            failure,
+            model_id,
+        )
+        kwargs["transcription_enabled"] = False
+        kwargs["backend"] = "sherpa_onnx"
+        kwargs["stt_model"] = model_id
+        return Audition(bus, **kwargs)
+
+    kwargs["stt_client"] = client
+    kwargs["backend"] = "sherpa_onnx"
+    kwargs["stt_model"] = model_id
     return Audition(bus, **kwargs)
 
 
@@ -1472,11 +1559,32 @@ def make_vox(
         "alert_salience",
         "lingua_external_stream",
         "thymos_state_stream",
+        # Runtime backend selection (openspec runtime-backends). "chatterbox"
+        # (default) uses the HTTP service above; "sherpa_onnx" runs Kokoro
+        # in-process through sherpa-onnx (no torch, no service).
+        "backend",
+        "sherpa_model_dir",
+        "sherpa_model_id",
+        "sherpa_speaker_id",
+        "sherpa_num_threads",
         "mirroring",  # nested sub-table: enabled, mirror_strength, mirror_ceiling, decay_s
     }
     # Pop all top-level keys; handle mirroring sub-table separately.
     _require_keys(section, allowed)
-    kw: dict[str, Any] = {k: section[k] for k in allowed - {"mirroring"} if k in section}
+    raw_backend = section.get("backend")
+    backend = str(raw_backend or "chatterbox").strip().lower()
+    sherpa_model_dir = section.pop("sherpa_model_dir", None)
+    sherpa_model_id = section.pop("sherpa_model_id", None)
+    sherpa_speaker_id = section.pop("sherpa_speaker_id", 0)
+    sherpa_num_threads = section.pop("sherpa_num_threads", 2)
+    backend_keys = {
+        "backend",
+        "sherpa_model_dir",
+        "sherpa_model_id",
+        "sherpa_speaker_id",
+        "sherpa_num_threads",
+    }
+    kw: dict[str, Any] = {k: section[k] for k in allowed - {"mirroring"} - backend_keys if k in section}
     # [vox.mirroring] sub-table.
     mirroring_section = section.get("mirroring") or {}
     mirroring_allowed = {"enabled", "mirror_strength", "mirror_ceiling", "decay_s"}
@@ -1489,6 +1597,56 @@ def make_vox(
         kw["mirror_ceiling"] = float(mirroring_section["mirror_ceiling"])
     if "decay_s" in mirroring_section:
         kw["mirror_decay_s"] = float(mirroring_section["decay_s"])
+
+    if backend not in ("chatterbox", "sherpa_onnx"):
+        raise ConfigurationError(
+            f"unknown vox backend {raw_backend!r}; "
+            "must be 'chatterbox' or 'sherpa_onnx'"
+        )
+
+    if backend == "chatterbox":
+        kw["backend"] = "chatterbox"
+        return Vox(bus, entity_clock=entity_clock, **kw)
+
+    from kaine.modules.backends import BackendRegistry, UnknownBackendError
+    from kaine.modules.vox.client import ChatterboxClient, TTSClient
+    from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY
+    from kaine.setup.speech_models import DEFAULT_TTS
+
+    chatterbox_url = str(kw.get("chatterbox_url", "http://127.0.0.1:8883"))
+    timeout_s = float(kw.get("request_timeout_s", 120.0))
+
+    def _chatterbox_factory() -> TTSClient:
+        return ChatterboxClient(base_url=chatterbox_url, timeout_s=timeout_s)
+
+    def _sherpa_factory() -> TTSClient:
+        from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
+        from kaine.setup.speech_models import model_dir
+
+        model_id = sherpa_model_id or DEFAULT_TTS
+        model_dir_path = sherpa_model_dir or model_dir(model_id)
+        return SherpaKokoroTTS(
+            model_dir_path,
+            model_id=model_id,
+            speaker_id=int(sherpa_speaker_id),
+            num_threads=int(sherpa_num_threads),
+        )
+
+    registry = BackendRegistry[TTSClient]("vox", default="sherpa_onnx").register(
+        "chatterbox", _chatterbox_factory
+    ).register("sherpa_onnx", _sherpa_factory)
+    try:
+        client = registry.resolve(backend)
+    except UnknownBackendError as exc:
+        raise ConfigurationError(str(exc)) from exc
+    if client is None:
+        return None
+
+    resolved_model_id = sherpa_model_id or DEFAULT_TTS
+    kw["tts_client"] = client
+    kw["backend"] = "sherpa_onnx"
+    kw["applied_prosody"] = APPLIED_PROSODY
+    kw["voice_label"] = f"{resolved_model_id} speaker {int(sherpa_speaker_id)}"
     return Vox(bus, entity_clock=entity_clock, **kw)
 
 
@@ -2180,6 +2338,12 @@ def build_registry(
             intent_secret=intent_secret,
             injections=plugin_injections(plugins, name),
         )
+        if module is None:
+            log.warning(
+                "module %s not registered: its configured backend could not load (see the health surface)",
+                name,
+            )
+            continue
         registry.register(module)
         log.info("registered module %s", name)
 
@@ -2214,13 +2378,17 @@ def construct_module(
     entity_clock: Optional[EntityClock] = None,
     intent_secret: Optional[bytes] = None,
     injections: Optional[Mapping[str, Any]] = None,
-) -> BaseModule:
+) -> Optional[BaseModule]:
     """Construct a single module exactly as `build_registry` would.
 
     Copies the module's section from ``kaine_config``, wires the shared
     perception feed for Topos/Audition/Soma, injects ``entity_clock`` into
     clocked factories, injects ``intent_secret`` into Praxis, and dispatches
     plugin injections to Chronos, Soma and Nous.
+
+    Returns ``None`` when the module's factory returns ``None`` — i.e. its
+    configured backend could not load. The caller is responsible for skipping
+    registration and surfacing the reason.
     """
     if name not in SIMPLE_FACTORIES and name != "hypnos":
         raise ConfigurationError(f"unknown module {name!r}")

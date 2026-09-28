@@ -212,6 +212,62 @@ def test_audition_needs_audio_when_capture_enabled(monkeypatch):
     assert any(m.import_name == "webrtcvad" for m in missing)
 
 
+def test_audition_sherpa_onnx_requires_speech_edge(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"audition": True},
+        "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
+    }
+    missing = check(config)
+    assert any(
+        m.import_name == "sherpa_onnx" and m.extra == "speech-edge" for m in missing
+    )
+
+
+def test_audition_sherpa_onnx_transcription_off_requires_no_speech_edge(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"audition": True},
+        "audition": {"backend": "sherpa_onnx"},
+    }
+    missing = check(config)
+    assert not any(
+        m.import_name == "sherpa_onnx" and m.extra == "speech-edge" for m in missing
+    )
+
+
+def test_audition_default_requires_no_sherpa_onnx(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"audition": True},
+        "audition": {},
+    }
+    missing = check(config)
+    assert not any(m.import_name == "sherpa_onnx" for m in missing)
+
+
+def test_vox_sherpa_onnx_requires_speech_edge(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"vox": True},
+        "vox": {"backend": "sherpa_onnx"},
+    }
+    missing = check(config)
+    assert any(
+        m.import_name == "sherpa_onnx" and m.extra == "speech-edge" for m in missing
+    )
+
+
+def test_vox_default_requires_no_sherpa_onnx(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"vox": True},
+        "vox": {},
+    }
+    missing = check(config)
+    assert not missing
+
+
 def test_audition_playlist_requires_av_and_webrtcvad_not_sounddevice(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {

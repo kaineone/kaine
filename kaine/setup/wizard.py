@@ -158,15 +158,25 @@ def _apply_device_address(cfg: dict[str, Any], address: str, value: str) -> None
 def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[str]:
     """Compute the optional-dependency extras implied by the chosen modules.
 
-    Module-based: nous→reasoning, audition+capture→audio, topos+capture→vision,
-    oscillator.enabled→oscillator, hypnos.voice_alignment→training,
-    phantasia dreamerv3→worldmodel.
+    Module-based:
+    - nous + [nous].backend == "pymdp" -> reasoning
+    - audition + capture -> audio
+    - topos + capture -> vision
+    - oscillator.enabled -> oscillator
+    - hypnos.voice_alignment -> training
+    - phantasia + [phantasia].backend == "dreamerv3" + [phantasia].engine == "jax"
+      -> worldmodel
+
+    Speech-edge:
+    - audition enabled, backend == "sherpa_onnx" and transcription_enabled ->
+      speech-edge
+    - vox enabled, backend == "sherpa_onnx" -> speech-edge
 
     Perception-feed-based (closes the gap that the shipped ``capture_enabled =
     off`` hides for research runs): the top-level ``[perception_feed].mode``
     implies the decode/capture deps independently of the per-module capture
-    flags. ``mode == "playlist"`` decodes media → both ``vision`` (cv2 video) and
-    ``audio`` (av audio-track decode). ``mode == "live"`` opens real devices →
+    flags. ``mode == "playlist"`` decodes media -> both ``vision`` (cv2 video) and
+    ``audio`` (av audio-track decode). ``mode == "live"`` opens real devices ->
     both ``vision`` (camera) and ``audio`` (mic). ``mode == "seeded"`` is pure
     numpy synthesis and implies NOTHING (no cv2/av). The returned list is
     de-duplicated.
@@ -179,7 +189,15 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     phantasia_cfg = shipped.get("phantasia") or {}
     feed_mode = str((shipped.get("perception_feed") or {}).get("mode") or "off")
 
-    if modules.get("nous"):
+    audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
+    transcription_on = bool(audition_cfg.get("transcription_enabled", False))
+    vox_cfg = shipped.get("vox") or {}
+    vox_backend = str(vox_cfg.get("backend", "chatterbox")).strip().lower()
+    nous_backend = str((shipped.get("nous") or {}).get("backend", "pymdp")).strip().lower()
+    phantasia_backend = str(phantasia_cfg.get("backend", "dreamerv3")).strip().lower()
+    phantasia_engine = str(phantasia_cfg.get("engine", "jax")).strip().lower()
+
+    if modules.get("nous") and nous_backend == "pymdp":
         extras.append("reasoning")
     if modules.get("audition") and bool(audition_cfg.get("capture_enabled")):
         extras.append("audio")
@@ -189,8 +207,18 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
         extras.append("oscillator")
     if modules.get("hypnos") and bool(hypnos_va.get("enabled")):
         extras.append("training")
-    if modules.get("phantasia") and str(phantasia_cfg.get("backend")) == "dreamerv3":
+    if (
+        modules.get("phantasia")
+        and phantasia_backend == "dreamerv3"
+        and phantasia_engine == "jax"
+    ):
         extras.append("worldmodel")
+    if (
+        modules.get("audition")
+        and audition_backend == "sherpa_onnx"
+        and transcription_on
+    ) or (modules.get("vox") and vox_backend == "sherpa_onnx"):
+        extras.append("speech-edge")
     # Perception-feed deps: playlist decodes media; live opens devices. Both
     # surfaces (video + audio) are driven from the one [perception_feed] source,
     # so both extras are implied. seeded synthesis needs neither — add nothing.
@@ -647,35 +675,41 @@ def run_wizard(
             )
         _set(cfg, "lingua", "model_id", model_id)
 
-    if modules.get("vox"):
-        voices = discovered.get("voices") or []
-        if voices:
-            line("  Chatterbox voices: " + ", ".join(str(v) for v in voices))
-        default_voice = str(shipped_vox.get("predefined_voice_id", "")) or (
-            str(voices[0]) if voices else ""
-        )
-        if defaults:
-            voice_id = default_voice
-        else:
-            voice_id = ""
-            while not voice_id:
-                voice_id = _ask(
-                    input_fn,
-                    f"  [vox].predefined_voice_id (REQUIRED when vox is on) "
-                    f"[{default_voice}]: ",
-                    default=default_voice,
-                )
-                if not voice_id:
-                    line("    a voice id is required when vox is enabled.")
-        # vox enabled REQUIRES a voice id; if defaults left it blank, disable vox
-        # rather than write an unusable config.
-        if voice_id:
-            _set(cfg, "vox", "predefined_voice_id", voice_id)
-        else:
-            cfg["modules"]["vox"] = False
-            line("    no voice id available; disabling vox.")
+    audition_backend = str(shipped_audition.get("backend", "speaches")).strip().lower()
 
-    if modules.get("audition"):
+    if modules.get("vox"):
+        vox_backend = str(shipped_vox.get("backend", "chatterbox")).strip().lower()
+        if vox_backend == "chatterbox":
+            voices = discovered.get("voices") or []
+            if voices:
+                line("  Chatterbox voices: " + ", ".join(str(v) for v in voices))
+            default_voice = str(shipped_vox.get("predefined_voice_id", "")) or (
+                str(voices[0]) if voices else ""
+            )
+            if defaults:
+                voice_id = default_voice
+            else:
+                voice_id = ""
+                while not voice_id:
+                    voice_id = _ask(
+                        input_fn,
+                        f"  [vox].predefined_voice_id (REQUIRED when vox is on) "
+                        f"[{default_voice}]: ",
+                        default=default_voice,
+                    )
+                    if not voice_id:
+                        line("    a voice id is required when vox is enabled.")
+            # vox enabled REQUIRES a voice id; if defaults left it blank, disable vox
+            # rather than write an unusable config.
+            if voice_id:
+                _set(cfg, "vox", "predefined_voice_id", voice_id)
+            else:
+                cfg["modules"]["vox"] = False
+                line("    no voice id available; disabling vox.")
+        else:
+            line("  Vox speaks through sherpa-onnx Kokoro (preset speaker [vox].sherpa_speaker_id); no Chatterbox voice needed.")
+
+    if modules.get("audition") and audition_backend == "speaches":
         stt_models = discovered.get("stt_models") or []
         if stt_models:
             line("  Speaches STT models: " + ", ".join(str(s) for s in stt_models))

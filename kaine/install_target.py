@@ -278,6 +278,8 @@ def plan_for(target: Target) -> Plan:
             "syneidesis",
             "soma (NumPy CfC)",
             "chronos (NumPy CfC)",
+            'audition (with [audition].backend = "sherpa_onnx")',
+            'vox (with [vox].backend = "sherpa_onnx")',
             'nous (with [nous].backend = "numpy")',
             'phantasia (with [phantasia].engine = "numpy")',
         ]
@@ -289,6 +291,8 @@ def plan_for(target: Target) -> Plan:
         notes = [
             "Termux installs the memory and edge extras only.",
             'Nous needs [nous].backend = "numpy" and Phantasia needs [phantasia].engine = "numpy" there (the Tier 1 profile sets both; the Tier 0 profile sets the Nous backend and lists Phantasia as unsupported).',
+            'Speech needs the speech-edge extra and its models: pkg install python-numpy, then pip install sherpa-onnx, then python -m kaine.setup.speech_models. The sherpa-onnx Termux wheels are new upstream and unproven on a device here.',
+            'Audition on Termux: set [audition].vad_backend = "rms" (webrtcvad ships only in the audio extra, which pulls torch).',
         ]
     elif target.name == "unsupported":
         extras = ""
@@ -297,7 +301,10 @@ def plan_for(target: Target) -> Plan:
         system_packages = {}
         notes = [f"Installation refused: {target.reason}"]
     else:
-        extras = "full"
+        if target.name in ("aarch64-cpu", "jetson"):
+            extras = "full,speech-edge"
+        else:
+            extras = "full"
         runs = ["all modules"]
         will_not_run = []
         system_packages = {k: list(v) for k, v in _SYSTEM_PACKAGES.items()}

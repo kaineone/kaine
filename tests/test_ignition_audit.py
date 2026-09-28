@@ -60,6 +60,30 @@ def _broadcast(members):
     return {"selected": list(members)}
 
 
+def _vox_synthesized(success=True, entry_id=None):
+    payload = {"success": success}
+    if entry_id is not None:
+        payload["entry_id"] = entry_id
+    return {"stream": "vox.synthesized", "type": "vox.synthesized", "payload": payload}
+
+
+def test_vox_synthesized_failure_counts_as_realization_failed():
+    intents = [_intent(entry_id="e1")]
+    realizations = [_vox_synthesized(success=False, entry_id="e1")]
+    report = classify_realizations([], intents, realizations)
+    assert report.realization_failed_count == 1
+    assert report.realized_total == 0
+
+
+def test_vox_synthesized_success_still_realized():
+    intents = [_intent(entry_id="e1")]
+    realizations = [_vox_synthesized(success=True, entry_id="e1")]
+    report = classify_realizations([], intents, realizations)
+    assert report.realized_total == 1
+    assert report.realization_failed_count == 0
+    assert report.self_initiated == 1
+
+
 def _member(entry_id, mtype, salience=0.5, source=None):
     m = {"entry_id": entry_id, "type": mtype, "salience": salience}
     if source is not None:

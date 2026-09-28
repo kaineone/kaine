@@ -118,9 +118,10 @@ def classify_realizations(
     ``source``, ``type``, ``salience``). ``intents`` and ``realizations`` are
     event records ``{"stream", "type", "payload"}`` in stream order.
 
-    A realization (external_speech / internal_speech / vox.synthesized /
-    praxis.action, excluding realization_failed) is linked to the most recent
-    prior intent of the matching kind: via the realization payload's
+    A successful realization (external_speech / internal_speech /
+    vox.synthesized with success=True / praxis.action, excluding
+    realization_failed and vox.synthesized with success=False) is linked to the
+    most recent prior intent of the matching kind: via the realization payload's
     ``entry_id`` when present, else the most recent intent of that kind. The
     intent's ``entry_id`` is then matched against broadcast coalition members:
     input-triggered if the resolved member's source/type is an external-input
@@ -184,6 +185,11 @@ def classify_realizations(
         if event_type == REALIZATION_FAILED:
             report.realization_failed_count += 1
             continue
+        if event_type == "vox.synthesized":
+            payload = rec.get("payload") or {}
+            if payload.get("success") is False:
+                report.realization_failed_count += 1
+                continue
         kind = _realization_kind(event_type)
         if kind is None:
             continue

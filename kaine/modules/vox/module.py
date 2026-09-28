@@ -59,6 +59,8 @@ from kaine.modules.vox.playback import (
 
 log = logging.getLogger(__name__)
 
+CHATTERBOX_PROSODY = ("temperature", "exaggeration", "cfg_weight", "speed_factor")
+
 
 class Vox(BaseModule):
     name: ClassVar[str] = "vox"
@@ -73,6 +75,9 @@ class Vox(BaseModule):
         tts_client: Optional[TTSClient] = None,
         player: Optional[Player] = None,
         entity_clock: Optional[EntityClock] = None,
+        backend: str = "chatterbox",
+        applied_prosody: tuple[str, ...] = CHATTERBOX_PROSODY,
+        voice_label: Optional[str] = None,
         chatterbox_url: str = "http://127.0.0.1:8883",
         voice_mode: str = "predefined",
         predefined_voice_id: Optional[str] = None,
@@ -113,6 +118,10 @@ class Vox(BaseModule):
         self._player: Player = player or build_player(
             playback_enabled=playback_enabled, output_device=output_device
         )
+        self._backend = backend
+        self._tts_unavailable: str | None = None
+        self._applied_prosody = applied_prosody
+        self._voice_label = voice_label
         self._voice_mode = voice_mode
         self._voice_id = predefined_voice_id
         self._output_format = output_format
@@ -127,6 +136,7 @@ class Vox(BaseModule):
         self._baseline_cfg_weight = float(baseline_cfg_weight)
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
+        self._muted_last_published: Optional[float] = None
         self._lingua_stream = lingua_external_stream
         self._thymos_stream = thymos_state_stream
         self._cursors: dict[str, str] = {}
@@ -176,6 +186,21 @@ class Vox(BaseModule):
         return self._tts_client
 
     async def initialize(self) -> None:
+        if hasattr(self._tts_client, "warm_up"):
+            try:
+                await self._tts_client.warm_up()
+            except Exception as exc:
+                self._tts_unavailable = f"{type(exc).__name__}: {exc}"
+                from kaine.backend_state import record_backend_failure
+
+                record_backend_failure(
+                    "vox", self._backend, f"{type(exc).__name__}: {exc}"
+                )
+                log.warning(
+                    "text-to-speech disabled: %s",
+                    exc,
+                    exc_info=True,
+                )
         if self._sink_enabled:
             self._sink_path.mkdir(parents=True, exist_ok=True)
         # Surface (but never auto-delete) any clips left by prior runs of the
@@ -233,6 +258,34 @@ class Vox(BaseModule):
         if self._dormant:
             log.debug("vox dormant: suppressing utterance")
             self._suppressed_while_dormant += 1
+            return SynthesisResult(
+                audio=b"",
+                content_type="",
+                latency_ms=0.0,
+                output_format=self._output_format,
+                bytes_produced=0,
+            )
+        if self._tts_unavailable:
+            now = self._clock.now()
+            if self._muted_last_published is None or now - self._muted_last_published >= 60.0:
+                self._muted_last_published = now
+                result = SynthesisResult(
+                    audio=b"",
+                    content_type="",
+                    latency_ms=0.0,
+                    output_format=self._output_format,
+                    bytes_produced=0,
+                )
+                params = self._params_for(self._current_state)
+                await self._publish_event(
+                    text,
+                    params,
+                    result,
+                    success=False,
+                    error=f"text-to-speech unavailable: {self._tts_unavailable}",
+                    salience=self._baseline_salience,
+                )
+            log.debug("vox muted synthesis suppressed: %s", self._tts_unavailable)
             return SynthesisResult(
                 audio=b"",
                 content_type="",
@@ -346,22 +399,26 @@ class Vox(BaseModule):
         *,
         success: bool,
         error: Optional[str] = None,
+        salience: Optional[float] = None,
     ) -> None:
         payload: dict[str, Any] = {
             "text_length": len(text),
             "bytes_produced": result.bytes_produced if success else 0,
             "output_format": result.output_format if success else self._output_format,
-            "voice": self._voice_id or "(default)",
+            "voice": self._voice_label or self._voice_id or "(default)",
             "exaggeration": params.exaggeration,
             "cfg_weight": params.cfg_weight,
             "temperature": params.temperature,
             "speed_factor": params.speed_factor,
             "latency_ms": result.latency_ms if success else 0.0,
             "success": success,
+            "backend": self._backend,
+            "prosody_applied": list(self._applied_prosody),
         }
         if error is not None:
             payload["error"] = error
-        salience = self._baseline_salience if success else self._alert_salience
+        if salience is None:
+            salience = self._baseline_salience if success else self._alert_salience
         await self.publish("vox.synthesized", payload, salience=salience)
 
     async def _consumer_loop(self) -> None:

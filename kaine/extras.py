@@ -86,6 +86,18 @@ def _audition_av_needed(config: dict) -> bool:
     return _perception_mode(config) == "playlist"
 
 
+def _audition_sherpa(config: dict) -> bool:
+    section = config.get("audition") or {}
+    backend = str(section.get("backend") or "speaches").strip().lower()
+    return backend == "sherpa_onnx" and bool(section.get("transcription_enabled", False))
+
+
+def _vox_sherpa(config: dict) -> bool:
+    section = config.get("vox") or {}
+    backend = str(section.get("backend") or "chatterbox").strip().lower()
+    return backend == "sherpa_onnx"
+
+
 def _mnemos_qdrant(config: dict) -> bool:
     return (config.get("mnemos") or {}).get("backend", "qdrant") == "qdrant"
 
@@ -175,6 +187,10 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("sounddevice", "audio", predicate=_audition_sounddevice_needed),
         Requirement("webrtcvad", "audio", predicate=_audition_webrtcvad_needed),
         Requirement("av", "audio", predicate=_audition_av_needed),
+        Requirement("sherpa_onnx", "speech-edge", predicate=_audition_sherpa),
+    ),
+    "vox": (
+        Requirement("sherpa_onnx", "speech-edge", predicate=_vox_sherpa),
     ),
     "nous": (
         Requirement("pymdp", "reasoning", predicate=_nous_pymdp_backend),

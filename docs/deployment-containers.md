@@ -59,8 +59,12 @@ docker compose -f compose/kaine.yml --profile setup run --rm kaine-provision
 
 This runs `python -m kaine.setup.provision`, which downloads the abliterated
 organ, distil-Whisper, Chatterbox, emotion2vec+, DINOv2-small, and all-MiniLM
-via real `hf download`. It is the **only** phase that fetches models; runtime
-sets `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`.
+via real `hf download`. It also downloads the sherpa-onnx speech archives
+(Apache-2.0 Kokoro model plus GPL-3.0-or-later espeak-ng data), but only when
+Audition or Vox selects `"sherpa_onnx"`, and only if the operator passes
+`--speech-models` or sets `KAINE_PROVISION_SPEECH_MODELS=1` after the plan
+shows each archive's name, size and licence. It is the **only** phase that
+fetches models; runtime sets `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`.
 
 ## Bring-up (no entity)
 
