@@ -5,7 +5,7 @@
 ## 2. Engine
 
 - [x] 2.1 `kaine/modules/phantasia/rssm_numpy.py`: forward pieces, loss, hand-written backpropagation through time, `sgd_update` with the non-finite guards, `rollout`, NumPy initialisation.
-- [ ] 2.2 A shared checkpoint codec in `world_model.py`; `NumpyDreamerV3WorldModel`; `load_world_model` engine selection.
+- [x] 2.2 A shared checkpoint codec in `world_model.py`; `NumpyDreamerV3WorldModel`; `load_world_model` engine selection.
 - [ ] 2.3 `[phantasia].engine` through boot; `engine` on every `phantasia.*` event; extras, install planner and Tier 1 profile are engine-aware.
 
 ## 3. Verification and docs

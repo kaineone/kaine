@@ -161,7 +161,8 @@ def initial_state(cfg: RSSMConfig) -> RSSMState:
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
-    return 1.0 / (1.0 + np.exp(-x))
+    e = np.exp(-np.abs(x))
+    return np.where(x >= 0, 1.0 / (1.0 + e), e / (1.0 + e))
 
 
 def _apply_dense(params: dict[str, np.ndarray], x: np.ndarray) -> np.ndarray:
