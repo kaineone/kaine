@@ -368,12 +368,14 @@ class Nous(BaseModule):
         )
 
     def _state_label(self, factor_idx: int, state_idx: int) -> str:
+        # A state without a label (for example one added by online growth)
+        # falls back to a positional name rather than failing the tick.
         model = getattr(self._engine, "model", None)
-        if model is not None:
-            try:
-                return model.state_labels[factor_idx][state_idx]
-            except (IndexError, AttributeError):
-                pass
+        labels = getattr(model, "state_labels", None)
+        if labels is not None and 0 <= factor_idx < len(labels):
+            factor_labels = labels[factor_idx]
+            if 0 <= state_idx < len(factor_labels):
+                return factor_labels[state_idx]
         return f"factor{factor_idx}_state{state_idx}"
 
     def serialize(self) -> dict[str, Any]:

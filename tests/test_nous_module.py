@@ -328,3 +328,19 @@ async def test_timeout_still_publishes_belief_not_error(bus: AsyncBus):
         assert await _read(bus, "nous.error") == []
     finally:
         await nous.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_state_label_falls_back_to_positional_name(bus: AsyncBus):
+    from types import SimpleNamespace
+
+    engine = FakeEngine()
+    nous = Nous(bus, engine=engine)
+    engine.model = SimpleNamespace(state_labels=[("calm", "alert"), ("quiet",)])
+    assert nous._state_label(0, 1) == "alert"
+    # Out of range on either axis: a positional name, never an exception.
+    assert nous._state_label(1, 3) == "factor1_state3"
+    assert nous._state_label(5, 0) == "factor5_state0"
+    # No labels at all.
+    engine.model = None
+    assert nous._state_label(0, 0) == "factor0_state0"
