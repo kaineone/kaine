@@ -1,12 +1,12 @@
 ## 1. Models and consent
 
-- [ ] 1.1 `kaine/setup/speech_models.py`: pinned manifest (URL, sha256, size, licence), consent prompt, verified download, safe extraction, idempotence; the provisioning plan lists the archives when a sherpa backend is selected.
+- [x] 1.1 `kaine/setup/speech_models.py`: pinned manifest (URL, sha256, size, licence), consent prompt, verified download, safe extraction, idempotence; the provisioning plan lists the archives when a sherpa backend is selected.
 - [x] 1.2 Fetch the archives once on the development host and pin their digests (done in design; installing `sherpa-onnx` into the venv for the live tests needs the operator's consent).
 
 ## 2. Engines
 
-- [ ] 2.1 `SherpaMoonshineSTT` behind `STTClient`: WAV decode, single-thread executor, clear construction errors.
-- [ ] 2.2 `SherpaKokoroTTS` behind `TTSClient`: speed-only prosody, 16-bit WAV at the native rate, clear construction errors.
+- [x] 2.1 `SherpaMoonshineSTT` behind `STTClient`: WAV decode, single-thread executor, clear construction errors.
+- [x] 2.2 `SherpaKokoroTTS` behind `TTSClient`: speed-only prosody, 16-bit WAV at the native rate, clear construction errors.
 
 ## 3. Wiring and disclosure
 
