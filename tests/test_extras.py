@@ -280,6 +280,16 @@ def test_phantasia_dreamerv3_needs_worldmodel(monkeypatch):
     assert any(m.import_name == "jax" and m.extra == "worldmodel" for m in missing)
 
 
+def test_phantasia_numpy_engine_needs_nothing(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
+    config = {
+        "modules": {"phantasia": True},
+        "phantasia": {"backend": "dreamerv3", "engine": "numpy"},
+    }
+    missing = check(config)
+    assert not missing
+
+
 def test_phantasia_fake_backend_needs_nothing(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {"modules": {"phantasia": True}, "phantasia": {"backend": "fake"}}

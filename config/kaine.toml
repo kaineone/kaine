@@ -1061,6 +1061,10 @@ port = 6533
 #                         event discloses backend = "fake" so it can never be
 #                         mistaken for the learning model.
 backend = "dreamerv3"          # shipped default; "fake" = dev-only EMA fallback
+# engine selects what computes backend = "dreamerv3": "jax" (default; the
+# [worldmodel] extra) or "numpy" (no extra; for hosts without JAX such as
+# Termux). Both run and train the same model and read each other's checkpoints.
+engine = "jax"
 # Sleep-time, in-memory training. Off by default; never writes to disk.
 training_enabled = false
 training_device = "cpu"        # jax[cpu] default; GPU is opt-in per hardware split

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""World-model protocol + a zero-dep fake + the real DreamerV3 adapter.
+"""World-model protocol + a zero-dep fake + the real DreamerV3 adapters.
 
 `WorldModel` is the thin contract Phantasia depends on:
 
@@ -21,8 +21,15 @@ code) and is used by ALL tests, keeping the suite green without the
 
 `DreamerV3WorldModel` wraps the vendored RSSM core (``external/dreamerv3``). It
 is imported ONLY when the ``dreamerv3`` backend is selected via
-:func:`load_world_model`; that import fails gracefully with a clear message when
-JAX / the extra is absent, and never breaks ``import``-ing this module.
+:func:`load_world_model` with ``engine="jax"``; that import fails gracefully with
+a clear message when JAX / the extra is absent, and never breaks ``import``-ing
+this module.
+
+`NumpyDreamerV3WorldModel` is the JAX-free twin: it runs and trains the same
+RSSM architecture using the NumPy engine in
+``kaine.modules.phantasia.rssm_numpy``. Fresh initialisation draws a different
+random set of parameters than the JAX engine for the same constructor seed,
+while both engines read and write one checkpoint format, so checkpoints interchange.
 
 WORLD MODEL ONLY: neither implementation has an actor, critic, reward head, or
 return head. Nous owns action selection. ``parameter_names()`` exposes the param
@@ -30,8 +37,12 @@ tree's top-level names so tests can assert no actor/critic tensors exist.
 """
 from __future__ import annotations
 
+import io
+import json
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -48,11 +59,11 @@ class TrainOutcome:
 class CheckpointMismatchError(RuntimeError):
     """A weight checkpoint does not match the running world-model config.
 
-    Raised by :meth:`DreamerV3WorldModel.import_params` (and propagated by
-    Phantasia at initialize) instead of silently discarding the checkpoint —
-    throwing away learned weights without operator consent would destroy
-    entity experience. The operator resolves it by moving/deleting the file
-    or reverting the config change that caused the mismatch."""
+    Raised by ``import_params`` (and propagated by Phantasia at initialize)
+    instead of silently discarding the checkpoint — throwing away learned
+    weights without operator consent would destroy entity experience. The
+    operator resolves it by moving/deleting the file or reverting the config
+    change that caused the mismatch."""
 
 
 @runtime_checkable
@@ -89,6 +100,117 @@ class WorldModel(Protocol):
     def parameter_names(self) -> list[str]:
         """Top-level parameter-group names (for actor/critic-absence checks)."""
         ...
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by both real backends
+# ---------------------------------------------------------------------------
+
+
+def _coerce_np_float32(params: dict[str, dict[str, Any]]) -> dict[str, dict[str, np.ndarray]]:
+    """Return a deep copy of a parameter tree cast to float32 NumPy arrays."""
+    return {
+        group: {name: np.asarray(arr, dtype=np.float32) for name, arr in sub.items()}
+        for group, sub in params.items()
+    }
+
+
+# ---------------------------------------------------------------------------
+# Shared checkpoint codec (JAX and NumPy engines use identical blobs)
+# ---------------------------------------------------------------------------
+
+
+_CHECKPOINT_FORMAT = "kaine-phantasia-rssm-npz-v1"
+
+
+def _rssm_config_header(cfg: Any, extra: dict[str, Any] | None) -> dict[str, Any]:
+    """Build the JSON header that is embedded in every RSSM checkpoint.
+
+    The header records RSSM dimensions and caller-supplied metadata. It does NOT
+    record which engine produced the blob, so JAX and NumPy checkpoints are
+    interchangeable.
+    """
+    return {
+        "format": _CHECKPOINT_FORMAT,
+        "obs_dim": int(cfg.obs_dim),
+        "deter_dim": int(cfg.deter_dim),
+        "stoch_dim": int(cfg.stoch_dim),
+        "stoch_classes": int(cfg.stoch_classes),
+        "hidden_dim": int(cfg.hidden_dim),
+        "latent_kind": str(cfg.latent_kind),
+        "extra": {k: extra[k] for k in sorted(extra)} if extra else {},
+    }
+
+
+def _encode_checkpoint(params: dict[str, dict[str, Any]], header: dict[str, Any]) -> bytes:
+    """Serialize an RSSM parameter tree and header to opaque in-memory NPZ bytes."""
+    arrays: dict[str, Any] = {
+        f"{group}/{name}": np.asarray(arr)
+        for group, sub in params.items()
+        for name, arr in sub.items()
+    }
+    header_json = json.dumps(header, sort_keys=True)
+    buf = io.BytesIO()
+    # 0-d unicode array: loads without allow_pickle.
+    np.savez(buf, __header__=np.asarray(header_json), **arrays)
+    return buf.getvalue()
+
+
+def _decode_checkpoint(
+    blob: bytes,
+    expected_header: dict[str, Any],
+    current_params: dict[str, dict[str, np.ndarray]],
+) -> dict[str, dict[str, np.ndarray]]:
+    """Validate and decode a checkpoint blob, returning float32 NumPy arrays.
+
+    Raises :class:`CheckpointMismatchError` on any header or shape mismatch,
+    leaving the caller's parameter tree untouched.
+    """
+    try:
+        data = np.load(io.BytesIO(blob), allow_pickle=False)
+        header = json.loads(str(data["__header__"][()]))
+    except Exception as exc:
+        raise CheckpointMismatchError(
+            f"checkpoint is not a readable {_CHECKPOINT_FORMAT} blob: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    mismatches = [
+        f"{key}: checkpoint={header.get(key)!r} running={expected_header[key]!r}"
+        for key in expected_header
+        if header.get(key) != expected_header[key]
+    ]
+    if mismatches:
+        raise CheckpointMismatchError(
+            "checkpoint config does not match the running world model: "
+            + "; ".join(mismatches)
+        )
+
+    new_params: dict[str, Any] = {}
+    for group, sub in current_params.items():
+        new_params[group] = {}
+        for name, cur in sub.items():
+            key = f"{group}/{name}"
+            if key not in data:
+                raise CheckpointMismatchError(f"checkpoint is missing array {key!r}")
+            arr = np.asarray(data[key], dtype=np.float32)
+            if tuple(arr.shape) != tuple(cur.shape):
+                raise CheckpointMismatchError(
+                    f"array {key!r} has shape {tuple(arr.shape)}, "
+                    f"expected {tuple(cur.shape)}"
+                )
+            new_params[group][name] = arr
+
+    unexpected = (
+        set(data.files) - {"__header__"}
+        - {f"{g}/{n}" for g, sub in current_params.items() for n in sub}
+    )
+    if unexpected:
+        raise CheckpointMismatchError(
+            f"checkpoint contains unexpected arrays: {sorted(unexpected)}"
+        )
+
+    return new_params
 
 
 # ---------------------------------------------------------------------------
@@ -206,17 +328,17 @@ def _isnan(x: float) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# DreamerV3WorldModel — real adapter over the vendored RSSM (extra-gated)
+# DreamerV3WorldModel — JAX-backed adapter over the vendored RSSM
 # ---------------------------------------------------------------------------
 
 
 class DreamerV3WorldModel:
     """Real WorldModel backed by the vendored DreamerV3 RSSM core.
 
-    Imported only by :func:`load_world_model` when backend="dreamerv3". Requires
-    JAX (the ``[worldmodel]`` extra); construction raises a clear ImportError
-    otherwise. Holds all parameters and recurrent state in memory and writes
-    NOTHING to disk — the upstream checkpoint/replay-flush hooks are not wired.
+    Imported only by :func:`load_world_model` when backend="dreamerv3" and
+    engine="jax". Requires JAX (the ``[worldmodel]`` extra); construction raises
+    a clear ImportError otherwise. Holds all parameters and recurrent state in
+    memory and writes NOTHING to disk.
     """
 
     def __init__(
@@ -238,9 +360,9 @@ class DreamerV3WorldModel:
             from external.dreamerv3 import rssm as _rssm
         except ImportError as exc:  # pragma: no cover - covered by missing-extra path
             raise ImportError(
-                "Phantasia backend 'dreamerv3' requires the [worldmodel] extra "
+                "Phantasia backend 'dreamerv3' engine='jax' requires the [worldmodel] extra "
                 "(jax). Install it with: pip install '.[worldmodel]' — or set "
-                "[phantasia].backend = \"fake\"."
+                '[phantasia].backend = "fake" / engine = "numpy".'
             ) from exc
 
         self._rssm = _rssm
@@ -298,20 +420,6 @@ class DreamerV3WorldModel:
 
     # -- weight persistence codec (opt-in via Phantasia persist_weights) ---
 
-    _CHECKPOINT_FORMAT = "kaine-phantasia-rssm-npz-v1"
-
-    def _config_header(self, extra: dict[str, Any] | None) -> dict[str, Any]:
-        return {
-            "format": self._CHECKPOINT_FORMAT,
-            "obs_dim": int(self._cfg.obs_dim),
-            "deter_dim": int(self._cfg.deter_dim),
-            "stoch_dim": int(self._cfg.stoch_dim),
-            "stoch_classes": int(self._cfg.stoch_classes),
-            "hidden_dim": int(self._cfg.hidden_dim),
-            "latent_kind": str(self._cfg.latent_kind),
-            "extra": {k: extra[k] for k in sorted(extra)} if extra else {},
-        }
-
     def export_params(self, *, extra: dict[str, Any] | None = None) -> bytes:
         """Serialize the RSSM param tree to opaque bytes (in-memory NPZ).
 
@@ -321,21 +429,7 @@ class DreamerV3WorldModel:
         ONLY learned world-model parameters — never observations, the
         trajectory buffer, or anything raw-sense-derived.
         """
-        import io
-        import json
-
-        import numpy as np
-
-        arrays: dict[str, Any] = {
-            f"{group}/{name}": np.asarray(arr)
-            for group, sub in self._params.items()
-            for name, arr in sub.items()
-        }
-        header = json.dumps(self._config_header(extra), sort_keys=True)
-        buf = io.BytesIO()
-        # 0-d unicode array: loads without allow_pickle.
-        np.savez(buf, __header__=np.asarray(header), **arrays)
-        return buf.getvalue()
+        return _encode_checkpoint(self._params, _rssm_config_header(self._cfg, extra))
 
     def import_params(self, blob: bytes, *, extra: dict[str, Any] | None = None) -> None:
         """Install previously exported parameters, failing closed on mismatch.
@@ -345,57 +439,118 @@ class DreamerV3WorldModel:
         :class:`CheckpointMismatchError` and leaves the model untouched.
         The recurrent state is reset (it belonged to the prior weights).
         """
-        import io
-        import json
-
         import jax.numpy as jnp
-        import numpy as np
 
-        try:
-            data = np.load(io.BytesIO(blob), allow_pickle=False)
-            header = json.loads(str(data["__header__"][()]))
-        except Exception as exc:
-            raise CheckpointMismatchError(
-                f"checkpoint is not a readable {self._CHECKPOINT_FORMAT} blob: "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
-
-        expected = self._config_header(extra)
-        mismatches = [
-            f"{key}: checkpoint={header.get(key)!r} running={expected[key]!r}"
-            for key in expected
-            if header.get(key) != expected[key]
-        ]
-        if mismatches:
-            raise CheckpointMismatchError(
-                "checkpoint config does not match the running world model: "
-                + "; ".join(mismatches)
-            )
-
-        new_params: dict[str, Any] = {}
-        for group, sub in self._params.items():
-            new_params[group] = {}
-            for name, cur in sub.items():
-                key = f"{group}/{name}"
-                if key not in data:
-                    raise CheckpointMismatchError(f"checkpoint is missing array {key!r}")
-                arr = data[key]
-                if tuple(arr.shape) != tuple(cur.shape):
-                    raise CheckpointMismatchError(
-                        f"array {key!r} has shape {tuple(arr.shape)}, "
-                        f"expected {tuple(cur.shape)}"
-                    )
-                new_params[group][name] = jnp.asarray(arr, dtype=jnp.float32)
-        unexpected = (
-            set(data.files) - {"__header__"}
-            - {f"{g}/{n}" for g, sub in self._params.items() for n in sub}
+        decoded = _decode_checkpoint(
+            blob, _rssm_config_header(self._cfg, extra), self._params
         )
-        if unexpected:
-            raise CheckpointMismatchError(
-                f"checkpoint contains unexpected arrays: {sorted(unexpected)}"
-            )
+        self._params = {
+            group: {name: jnp.asarray(arr, dtype=jnp.float32) for name, arr in sub.items()}
+            for group, sub in decoded.items()
+        }
+        self.reset_state()
 
-        self._params = new_params
+
+# ---------------------------------------------------------------------------
+# NumpyDreamerV3WorldModel — JAX-free NumPy-backed adapter
+# ---------------------------------------------------------------------------
+
+
+class NumpyDreamerV3WorldModel:
+    """JAX-free DreamerV3 WorldModel backed by ``kaine.modules.phantasia.rssm_numpy``.
+
+    This adapter uses only NumPy and the standard library. A fresh initialisation
+    for a given ``seed`` is a different random draw than the JAX engine's
+    initialisation for the same seed, but :meth:`export_params` / :meth:`import_params`
+    use the same codec, so checkpoints interchange between engines.
+    """
+
+    def __init__(
+        self,
+        obs_dim: int,
+        *,
+        deter_dim: int = 64,
+        stoch_dim: int = 16,
+        stoch_classes: int = 8,
+        hidden_dim: int = 64,
+        latent_kind: str = "categorical",
+        learning_rate: float = 1e-3,
+        kl_balance: float = 0.8,
+        kl_free_bits: float = 0.1,
+        kl_scale: float = 1.0,
+        seed: int = 0,
+    ) -> None:
+        from kaine.modules.phantasia import rssm_numpy as _rssm
+
+        self._rssm = _rssm
+        self.obs_dim = int(obs_dim)
+        self._cfg = _rssm.RSSMConfig(
+            obs_dim=self.obs_dim,
+            deter_dim=deter_dim,
+            stoch_dim=stoch_dim,
+            stoch_classes=stoch_classes,
+            hidden_dim=hidden_dim,
+            latent_kind=latent_kind,
+            learning_rate=learning_rate,
+            kl_balance=kl_balance,
+            kl_free_bits=kl_free_bits,
+            kl_scale=kl_scale,
+        )
+        self._params = _coerce_np_float32(_rssm.init_params(self._cfg, seed=seed))
+        self._state = _rssm.initial_state(self._cfg)
+
+    def observe(self, obs: list[float]) -> float:
+        arr = np.asarray(obs, dtype=np.float32)
+        predicted = self._rssm.predict_next_obs(self._cfg, self._params, self._state)
+        self._state = self._rssm.observe_step(
+            self._cfg, self._params, self._state, arr, rng=None
+        )
+        err = float(np.mean(np.abs(predicted - arr)))
+        return _clip01(err)
+
+    def imagine(self, horizon: int) -> list[list[float]]:
+        outs = self._rssm.rollout(
+            self._cfg, self._params, self._state, int(horizon), seed=0
+        )
+        return [[float(v) for v in row] for row in outs]
+
+    def train(self, trajectory: list[list[float]]) -> TrainOutcome:
+        if not trajectory:
+            return TrainOutcome(loss=0.0, steps=0)
+        seq = np.asarray(trajectory, dtype=np.float32)
+        result = self._rssm.sgd_update(self._cfg, self._params, seq, steps=1)
+        if result.aborted:
+            # last-known-good params returned; do NOT install corrupted weights.
+            return TrainOutcome(
+                loss=result.loss, steps=0, aborted=True, reason=result.reason
+            )
+        self._params = _coerce_np_float32(result.params)
+        return TrainOutcome(loss=float(result.loss), steps=1, aborted=False, learned=True)
+
+    def reset_state(self) -> None:
+        self._state = self._rssm.initial_state(self._cfg)
+
+    def parameter_names(self) -> list[str]:
+        # Top-level param groups — all world-model. No actor/critic/reward/return.
+        return sorted(self._params.keys())
+
+    def export_params(self, *, extra: dict[str, Any] | None = None) -> bytes:
+        """Serialize the RSSM param tree to opaque bytes (in-memory NPZ).
+
+        Shares one codec with :class:`DreamerV3WorldModel`; blobs are
+        interchangeable between engines.
+        """
+        return _encode_checkpoint(self._params, _rssm_config_header(self._cfg, extra))
+
+    def import_params(self, blob: bytes, *, extra: dict[str, Any] | None = None) -> None:
+        """Install previously exported parameters, failing closed on mismatch.
+
+        Validates header and array shapes before installing. Resets the recurrent
+        state, which belonged to the prior weights.
+        """
+        self._params = _decode_checkpoint(
+            blob, _rssm_config_header(self._cfg, extra), self._params
+        )
         self.reset_state()
 
 
@@ -404,22 +559,42 @@ class DreamerV3WorldModel:
 # ---------------------------------------------------------------------------
 
 
-def load_world_model(backend: str, obs_dim: int, **kwargs: Any) -> WorldModel:
+def load_world_model(
+    backend: str, obs_dim: int, *, engine: str = "jax", **kwargs: Any
+) -> WorldModel:
     """Construct a WorldModel for the configured backend.
 
-    ``backend="fake"`` (or "inmemory") → :class:`FakeWorldModel` (no deps).
-    ``backend="dreamerv3"`` → :class:`DreamerV3WorldModel` (requires the
-    ``[worldmodel]`` extra; a clear ImportError is raised if it is absent).
+    * ``backend="fake"`` (or ``"inmemory"`` / ``"none"``) → :class:`FakeWorldModel`
+      (no deps; ``engine`` is ignored).
+    * ``backend="dreamerv3"`` + ``engine="jax"`` (default) →
+      :class:`DreamerV3WorldModel` (requires the ``[worldmodel]`` extra).
+    * ``backend="dreamerv3"`` + ``engine="numpy"`` →
+      :class:`NumpyDreamerV3WorldModel` (JAX-free).
     """
     if backend in ("fake", "inmemory", "none"):
         decay = float(kwargs.get("decay", 0.5))
         return FakeWorldModel(obs_dim, decay=decay)
+
     if backend == "dreamerv3":
         allowed = {
-            "deter_dim", "stoch_dim", "stoch_classes", "hidden_dim",
-            "latent_kind", "learning_rate", "kl_balance", "kl_free_bits",
-            "kl_scale", "seed",
+            "deter_dim",
+            "stoch_dim",
+            "stoch_classes",
+            "hidden_dim",
+            "latent_kind",
+            "learning_rate",
+            "kl_balance",
+            "kl_free_bits",
+            "kl_scale",
+            "seed",
         }
         sub = {k: v for k, v in kwargs.items() if k in allowed}
-        return DreamerV3WorldModel(obs_dim, **sub)
+        if engine == "jax":
+            return DreamerV3WorldModel(obs_dim, **sub)
+        if engine == "numpy":
+            return NumpyDreamerV3WorldModel(obs_dim, **sub)
+        raise ValueError(
+            f"unknown phantasia engine {engine!r} (expected 'jax' or 'numpy')"
+        )
+
     raise ValueError(f"unknown phantasia backend {backend!r}")

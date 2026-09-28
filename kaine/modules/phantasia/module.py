@@ -81,6 +81,7 @@ class Phantasia(BaseModule):
         *,
         world_model: Optional[WorldModel] = None,
         backend: str = "dreamerv3",
+        engine: str = "jax",
         training_enabled: bool = False,
         training_device: str = "cpu",
         trajectory_buffer_size: int = 512,
@@ -112,12 +113,15 @@ class Phantasia(BaseModule):
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._backend = str(backend)
+        self._engine = str(engine) if self._backend == "dreamerv3" else None
 
         self._obs_dim = observation_dim()
         if world_model is not None:
             self._wm = world_model
         else:
-            self._wm = load_world_model(backend, self._obs_dim, **(world_model_kwargs or {}))
+            self._wm = load_world_model(
+                backend, self._obs_dim, engine=engine, **(world_model_kwargs or {})
+            )
 
         # Opt-in learned-weight persistence. Honesty guard: requires a world
         # model with REAL learned parameters to export — the fake EMA stub
@@ -351,6 +355,8 @@ class Phantasia(BaseModule):
                 # Discloses which world-model backend produced this signal.
                 # "fake" = non-learning EMA stub; "dreamerv3" = real RSSM.
                 "backend": self._backend,
+                # "engine" names the engine that computed it ("jax" / "numpy"; None for the fake stub).
+                "engine": self._engine,
             },
             salience=salience,
         )
@@ -453,6 +459,7 @@ class Phantasia(BaseModule):
             # "fake" = non-learning EMA stub (no learned dynamics);
             # "dreamerv3" = real RSSM with trained recurrent latents.
             "backend": self._backend,
+            "engine": self._engine,
         }
         await self.publish(
             "phantasia.scenario",
@@ -504,6 +511,7 @@ class Phantasia(BaseModule):
         """
         return {
             "backend": self._backend,
+            "engine": self._engine,
             "checkpoint_path": self._checkpoint_path,
             "persist_weights": self._persist_weights,
             "encoder_version": ENCODER_VERSION,
@@ -549,6 +557,7 @@ class Phantasia(BaseModule):
                     "this preservation (nothing learned to capture)"
                 ),
                 "backend": self._backend,
+                "engine": self._engine,
             }
         if not self._save_weights(reason="preserve"):
             raise RuntimeError(
@@ -561,6 +570,7 @@ class Phantasia(BaseModule):
             "captured": True,
             "checkpoint_path": self._checkpoint_path,
             "backend": self._backend,
+            "engine": self._engine,
             "encoder_version": ENCODER_VERSION,
         }
 

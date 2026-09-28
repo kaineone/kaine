@@ -1932,6 +1932,7 @@ def make_phantasia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
 
     allowed = {
         "backend",
+        "engine",
         "training_enabled",
         "training_device",
         "trajectory_buffer_size",
@@ -1947,6 +1948,7 @@ def make_phantasia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     kwargs: dict[str, Any] = {}
     for k in (
         "backend",
+        "engine",
         "training_enabled",
         "training_device",
         "trajectory_buffer_size",
@@ -1966,6 +1968,12 @@ def make_phantasia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     world_model = section.get("world_model") or {}
     if world_model:
         kwargs["world_model_kwargs"] = dict(world_model)
+
+    engine = section.get("engine", "jax")
+    if engine not in {"jax", "numpy"}:
+        raise ConfigurationError(
+            f"[phantasia].engine must be \"jax\" or \"numpy\", got {engine!r}"
+        )
     return Phantasia(bus, **kwargs)
 
 

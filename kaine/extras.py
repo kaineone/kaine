@@ -110,8 +110,12 @@ def _embedding_torch_backend(config: dict) -> bool:
     return resolve_embedding_config(config)["backend"] == "sentence_transformers"
 
 
-def _phantasia_dreamerv3(config: dict) -> bool:
-    return (config.get("phantasia") or {}).get("backend", "dreamerv3") == "dreamerv3"
+def _phantasia_jax_engine(config: dict) -> bool:
+    phantasia = config.get("phantasia") or {}
+    return (
+        phantasia.get("backend", "dreamerv3") == "dreamerv3"
+        and phantasia.get("engine", "jax") == "jax"
+    )
 
 
 def _soma_torch_needed(config: dict) -> bool:
@@ -177,7 +181,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("jax", "reasoning", predicate=_nous_pymdp_backend),
     ),
     "phantasia": (
-        Requirement("jax", "worldmodel", predicate=_phantasia_dreamerv3),
+        Requirement("jax", "worldmodel", predicate=_phantasia_jax_engine),
     ),
     "nexus": (
         Requirement("fastapi", "nexus"),

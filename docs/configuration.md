@@ -17,7 +17,7 @@ This document is the authoritative reference for `config/kaine.toml` and the com
 | `[audio]` | `pip install -e .[audio]` | Live microphone capture (`sounddevice`, `webrtcvad`, `funasr`, `librosa`) |
 | `[vision]` | `pip install -e .[vision]` | Live camera capture (`opencv-python-headless`) |
 | `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Nous (`inferactively-pymdp`, `jax[cpu]`) — only required for the `pymdp` backend |
-| `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 RSSM world model for Phantasia (`jax[cpu]`, `chex`, `einops`) |
+| `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 JAX engine for Phantasia (`jax[cpu]`, `chex`, `einops`); the NumPy engine needs no extra |
 | `[oscillator]` | `pip install -e .[oscillator]` | Oscillatory binding layer (`snntorch`, `scipy`) |
 | `[training]` | `pip install -e .[training]` | Voice alignment DPO/QLoRA training (`unsloth`, `trl`, `peft`, `datasets`) |
 
@@ -264,7 +264,7 @@ Per-module enable flags. All ship as `false`. Enabling a module is a local-only 
 | `audition` | boolean | `false` | Hearing: STT via Speaches, vocal-emotion via emotion2vec+. |
 | `hypnos` | boolean | `false` | Offline consolidation: replay, downscaling, voice alignment. Constructed in a second pass after Mnemos/Nous/Thymos/Phantasia. |
 | `empatheia` | boolean | `false` | Social cognition / theory of mind, agent profiling. |
-| `phantasia` | boolean | `false` | World model (DreamerV3 RSSM core). Requires `[worldmodel]` extra for the real backend. |
+| `phantasia` | boolean | `false` | World model (DreamerV3 RSSM core). The JAX engine requires the `[worldmodel]` extra; the NumPy engine needs no extra. |
 | `perception` | boolean | `false` | Embodiment helper: perception locus arbiter (physical-XOR-virtual sense gating). |
 | `mundus` | boolean | `false` | Embodiment control plane: routes perception/action to a body through a pluggable adapter (`[mundus].adapter`). Additionally requires the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1`. |
 
@@ -828,16 +828,17 @@ Social cognition / theory-of-mind module. Builds agent models (emotional pattern
 
 ## `[phantasia]`
 
-World-model / imagination module. Implements a DreamerV3-style RSSM core (clean-room JAX re-implementation in `external/dreamerv3/rssm.py`). World model only — no actor or critic; action selection remains in Nous. Ships disabled with the `"fake"` backend that needs no extra dependencies. See [modules/phantasia.md](modules/phantasia.md).
+World-model / imagination module. Implements a DreamerV3-style RSSM core. It ships disabled (`[modules].phantasia = false`). When enabled, `backend = "dreamerv3"` is the default and runs on either the JAX engine (`engine = "jax"`, requires the `[worldmodel]` extra) or the NumPy engine (`engine = "numpy"`, no extra). The `"fake"` backend is a dev-only non-learning EMA stub. World model only — no actor or critic; action selection remains in Nous. See [modules/phantasia.md](modules/phantasia.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `backend` | string | `"fake"` | World-model backend: `"fake"` (no-op, used by tests and when the `[worldmodel]` extra is absent) or `"dreamerv3"` (requires the `[worldmodel]` extra). |
+| `backend` | string | `"dreamerv3"` | World-model backend: `"dreamerv3"` (real RSSM; either engine) or `"fake"` (dev-only non-learning EMA stub, no dependencies). |
+| `engine` | string | `"jax"` | Compute engine for the `"dreamerv3"` backend: `"jax"` (`DreamerV3WorldModel`; requires the `[worldmodel]` extra) or `"numpy"` (`NumpyDreamerV3WorldModel`; no extra). An unknown value raises `ConfigurationError` at boot. |
 | `training_enabled` | boolean | `false` | Enable sleep-time in-memory world-model training. When enabled, training runs during Hypnos consolidation and never writes trajectory data to disk. |
-| `training_device` | string | `"cpu"` | Compute device for training. `jax[cpu]` by default; GPU is opt-in per the hardware split. |
+| `training_device` | string | `"cpu"` | JAX compute device for training; only applies when `engine = "jax"`. GPU is opt-in per the hardware split. |
 | `trajectory_buffer_size` | integer | `512` | Bounded in-memory waking-trajectory ring buffer size (events). Never serialized to disk. |
 | `rollout_horizon` | integer | `8` | Imagined-trajectory length for offline scenario generation. |
-| `persist_weights` | boolean | `false` | Persist learned world-model weights across restarts. Requires `backend = "dreamerv3"` (a configuration error with the `"fake"` stub). Saved atomically after each successful sleep-training pass and on graceful shutdown; loaded at boot; encrypted at rest when `[security.state_encryption]` is enabled. An incompatible checkpoint fails the boot closed. The trajectory buffer is never persisted regardless. |
+| `persist_weights` | boolean | `false` | Persist learned world-model weights across restarts. Requires `backend = "dreamerv3"` (a configuration error with the `"fake"` stub). Applies to both the JAX and NumPy engines. Saved atomically after each successful sleep-training pass and on graceful shutdown; loaded at boot; encrypted at rest when `[security.state_encryption]` is enabled. An incompatible checkpoint fails the boot closed. The trajectory buffer is never persisted regardless. |
 | `checkpoint_path` | string | `"state/phantasia/world_model.ckpt"` | Where the weight checkpoint lives. Included in the decommission backup bundle (CAL 4.2(b)) and removed by entity-state deletion. |
 
 ### `[phantasia.salience]`

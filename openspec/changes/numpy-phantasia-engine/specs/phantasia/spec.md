@@ -13,7 +13,7 @@ Phantasia SHALL provide a NumPy engine for `backend = "dreamerv3"`, selected by 
 - **THEN** each step's loss matches JAX within rtol 1e-4, and the final parameters match within atol 1e-5
 
 #### Scenario: Gradients agree with finite differences without JAX
-- **WHEN** the Gaussian-latent loss is differentiated by central finite differences in float64
+- **WHEN** a surrogate of the Gaussian-latent loss, which holds each stop-gradiented side at its value under the current parameters, is differentiated by central finite differences in float64
 - **THEN** the NumPy engine's gradients agree within rtol 1e-4 on the sampled coordinates
 
 #### Scenario: Runs with JAX absent

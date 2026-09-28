@@ -88,7 +88,7 @@ async def test_world_error_carries_no_scenario_content(bus: AsyncBus):
             # Salience-only signal: no imagined/scenario fields.
             for banned in ("scenario", "trajectory", "step_magnitudes", "rollout", "imagined"):
                 assert banned not in keys
-            assert keys <= {"world_error", "salience", "tick_index", "backend"}
+            assert keys <= {"world_error", "salience", "tick_index", "backend", "engine"}
     finally:
         await ph.shutdown()
 
