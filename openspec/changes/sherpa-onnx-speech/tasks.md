@@ -17,6 +17,6 @@
 ## 4. Verification and docs
 
 - [ ] 4.1 Unit tests with injected fakes (no sherpa needed); live tests that load the real models and transcribe a synthesised utterance (Kokoro → WAV → Moonshine round trip). Live tests are skipped only when the package or models are absent, and the PR records a run where they executed.
-- [ ] 4.2 Docs: Audition, Vox, configuration, deployment tiers (including the staged-seam correction).
+- [x] 4.2 Docs: Audition, Vox, configuration, deployment tiers (including the staged-seam correction).
 - [ ] 4.3 Offline suite green; `openspec validate sherpa-onnx-speech --strict`.
 - [ ] 4.4 On-device: install on the Pixel 6a under Termux and run the live round trip there (operator step; record the result or leave this unchecked with the reason).

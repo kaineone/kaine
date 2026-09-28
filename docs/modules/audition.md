@@ -46,7 +46,7 @@ Model fetching:
 
 Failure modes:
 - A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`).
-- Missing model files disable Audition STT only, with the reason on the health surface.
+- Missing model files leave the whole Audition module unregistered, so there is no hearing, acoustic salience or vocal emotion either. The reason is on the health surface, and the rest of the entity boots.
 - The Nexus health surface probes Speaches only when `backend = "speaches"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; failures are retried after 60 s.
 
 Measured on a desktop CPU: Moonshine base transcribes a 3 s sentence in about 40 ms.
