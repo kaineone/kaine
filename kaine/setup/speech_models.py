@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import tarfile
@@ -150,6 +151,98 @@ def _read_verified_marker(target: Path) -> dict[str, Any] | None:
         return None
 
 
+_TOKEN_LINE = re.compile(r"^(.*) (\d+)$", re.DOTALL)
+
+
+def validate_tokens_file(p: Path | str) -> None:
+    """Validate a sherpa-onnx ``tokens.txt`` in Python before any native load.
+
+    Every non-empty line must end with a non-negative integer id separated by a
+    single ASCII space from the token.  The token may be empty or contain spaces.
+    """
+    path = Path(p)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"tokens.txt is not valid UTF-8: {exc}") from exc
+    except OSError as exc:
+        raise ValueError(f"tokens.txt cannot be read: {exc}") from exc
+
+    if "\x00" in text:
+        raise ValueError("tokens.txt contains a NUL byte")
+
+    found = 0
+    for raw in text.split("\n"):
+        line = raw.rstrip("\r")
+        if line == "":
+            continue
+        m = _TOKEN_LINE.match(line)
+        if m is None:
+            raise ValueError(
+                f"tokens.txt line is not '<token> <integer id>': {line!r}"
+            )
+        id_str = m.group(2)
+        try:
+            idx = int(id_str)
+        except ValueError as exc:
+            raise ValueError(
+                f"tokens.txt trailing value is not an integer: {id_str!r}"
+            ) from exc
+        if idx < 0:
+            raise ValueError(f"tokens.txt integer id must be non-negative: {idx}")
+        found += 1
+
+    if found == 0:
+        raise ValueError("tokens.txt contains no token lines")
+
+
+def _verify_error(model_id: str, path: Path, reason: str) -> str:
+    model = MANIFEST.get(model_id)
+    flag = "--stt" if model and model.kind == "stt" else "--tts"
+    return (
+        f"model verification failed for {model_id} at {path}: {reason}. "
+        f"Reinstall with python -m kaine.setup.speech_models "
+        f"{flag} {model_id} [--root DIR]"
+    )
+
+
+def verify_model_dir(model_id: str, path: Path | str) -> None:
+    """Raise ``ValueError`` unless ``path`` is a fully verified model directory."""
+    model = MANIFEST.get(model_id)
+    if model is None:
+        raise ValueError(
+            f"unknown model id: {model_id}. "
+            f"Install with python -m kaine.setup.speech_models --stt/--tts {model_id} [--root DIR]"
+        )
+    d = Path(path)
+    marker = _read_verified_marker(d)
+    if marker is None:
+        raise ValueError(_verify_error(model_id, d, "missing or invalid .verified marker"))
+
+    if marker.get("model_id") != model_id or marker.get("sha256") != model.sha256:
+        raise ValueError(
+            _verify_error(model_id, d, ".verified marker does not match the manifest")
+        )
+
+    for rel_path, size in (marker.get("files") or {}).items():
+        p = d / rel_path
+        if not p.exists() or p.stat().st_size != size:
+            raise ValueError(
+                _verify_error(model_id, d, f"file size mismatch for {rel_path}")
+            )
+
+    for req in model.required_files:
+        if not (d / req).exists():
+            raise ValueError(
+                _verify_error(model_id, d, f"required file missing: {req}")
+            )
+
+    try:
+        validate_tokens_file(d / "tokens.txt")
+    except ValueError as exc:
+        raise ValueError(_verify_error(model_id, d, str(exc))) from exc
+
+
 def is_installed(model_id: str, root: Path | str | None = None) -> bool:
     """True iff the verified marker is present, valid, and every file matches."""
     model = MANIFEST.get(model_id)
@@ -165,7 +258,13 @@ def is_installed(model_id: str, root: Path | str | None = None) -> bool:
         p = d / rel_path
         if not p.exists() or p.stat().st_size != size:
             return False
-    return all((d / f).exists() for f in model.required_files)
+    if not all((d / f).exists() for f in model.required_files):
+        return False
+    try:
+        validate_tokens_file(d / "tokens.txt")
+    except ValueError:
+        return False
+    return True
 
 
 def describe(model_id: str) -> str:

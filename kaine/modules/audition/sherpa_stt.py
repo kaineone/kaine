@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from kaine.modules.audition.stt_client import TranscriptionResult
+from kaine.setup import speech_models
 
 
 class SherpaMoonshineSTT:
@@ -28,6 +29,7 @@ class SherpaMoonshineSTT:
         model_id: str = "moonshine-base-en",
         num_threads: int = 2,
         sherpa_module: Any | None = None,
+        _verify: bool = True,
     ) -> None:
         self._model_id = model_id
         self._dir = Path(model_dir)
@@ -50,6 +52,9 @@ class SherpaMoonshineSTT:
                     "sherpa_onnx is required for the local speech backend. "
                     "Install it with: pip install 'kaine[speech-edge]'"
                 ) from exc
+
+        if _verify:
+            speech_models.verify_model_dir(model_id, self._dir)
 
         self._sherpa_module = so
         self._recognizer: Any | None = None

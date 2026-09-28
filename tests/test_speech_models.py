@@ -46,7 +46,9 @@ def _make_archive(
     files: dict[str, bytes | str] | None = None,
     evil: Any = None,
 ) -> Path:
-    files = files or {}
+    files = dict(files or {})
+    if "tokens.txt" in files:
+        files["tokens.txt"] = "a 0\nb 1\n"
     with tarfile.open(path, "w:bz2") as tf:
         for relpath, content in files.items():
             data = content.encode() if isinstance(content, str) else content
@@ -172,7 +174,7 @@ def test_tampered_install_is_not_installed_and_is_refetched(
     result = fetch("test-model", root=tmp_path, downloader=_copy_downloader(archive))
     assert result.ok
     assert is_installed("test-model", tmp_path)
-    assert target_file.read_text() == "tok"
+    assert target_file.read_text() == "a 0\nb 1\n"
 
 
 def test_symlinked_target_is_replaced(
@@ -204,7 +206,7 @@ def test_symlinked_target_is_replaced(
     assert result.ok
     assert is_installed("test-model", tmp_path)
     assert not target.is_symlink()
-    assert (target / "tokens.txt").read_text() == "tok"
+    assert (target / "tokens.txt").read_text() == "a 0\nb 1\n"
 
 
 def test_dangling_symlink_target_is_replaced(

@@ -1571,7 +1571,8 @@ def make_vox(
     }
     # Pop all top-level keys; handle mirroring sub-table separately.
     _require_keys(section, allowed)
-    backend = str(section.pop("backend", None) or "chatterbox").strip().lower()
+    raw_backend = section.get("backend")
+    backend = str(raw_backend or "chatterbox").strip().lower()
     sherpa_model_dir = section.pop("sherpa_model_dir", None)
     sherpa_model_id = section.pop("sherpa_model_id", None)
     sherpa_speaker_id = section.pop("sherpa_speaker_id", 0)
@@ -1599,7 +1600,7 @@ def make_vox(
 
     if backend not in ("chatterbox", "sherpa_onnx"):
         raise ConfigurationError(
-            f"unknown vox backend {section.get('backend')!r}; "
+            f"unknown vox backend {raw_backend!r}; "
             "must be 'chatterbox' or 'sherpa_onnx'"
         )
 

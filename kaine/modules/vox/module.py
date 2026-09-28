@@ -119,6 +119,7 @@ class Vox(BaseModule):
             playback_enabled=playback_enabled, output_device=output_device
         )
         self._backend = backend
+        self._tts_unavailable: str | None = None
         self._applied_prosody = applied_prosody
         self._voice_label = voice_label
         self._voice_mode = voice_mode
@@ -185,7 +186,20 @@ class Vox(BaseModule):
 
     async def initialize(self) -> None:
         if hasattr(self._tts_client, "warm_up"):
-            await self._tts_client.warm_up()
+            try:
+                await self._tts_client.warm_up()
+            except Exception as exc:
+                self._tts_unavailable = f"{type(exc).__name__}: {exc}"
+                from kaine.backend_state import record_backend_failure
+
+                record_backend_failure(
+                    "vox", self._backend, f"{type(exc).__name__}: {exc}"
+                )
+                log.warning(
+                    "text-to-speech disabled: %s",
+                    exc,
+                    exc_info=True,
+                )
         if self._sink_enabled:
             self._sink_path.mkdir(parents=True, exist_ok=True)
         # Surface (but never auto-delete) any clips left by prior runs of the
@@ -240,6 +254,8 @@ class Vox(BaseModule):
         state: Optional[DimensionalState] = None,
     ) -> SynthesisResult:
         """Direct synthesis API for tests and callers without a bus loop."""
+        if self._tts_unavailable:
+            raise RuntimeError(f"text-to-speech unavailable: {self._tts_unavailable}")
         if self._dormant:
             log.debug("vox dormant: suppressing utterance")
             self._suppressed_while_dormant += 1

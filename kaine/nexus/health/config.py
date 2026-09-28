@@ -84,8 +84,8 @@ def build_dependency_specs(
     transcription_enabled = bool(audition_cfg.get("transcription_enabled", True))
     chatterbox_url = str(vox_cfg.get("chatterbox_url", "http://127.0.0.1:8883"))
 
-    audition_backend = str(audition_cfg.get("backend", "speaches"))
-    vox_backend = str(vox_cfg.get("backend", "chatterbox"))
+    audition_backend = str(audition_cfg.get("backend") or "speaches").strip().lower()
+    vox_backend = str(vox_cfg.get("backend") or "chatterbox").strip().lower()
 
     def _audition_sherpa_model_dir() -> str:
         d = audition_cfg.get("sherpa_model_dir")

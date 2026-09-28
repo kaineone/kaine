@@ -15,10 +15,56 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
+from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT as _SherpaMoonshineSTT
 from kaine.modules.audition.stt_client import STTClient, TranscriptionResult
 from kaine.modules.vox.client import SynthesisResult, TTSClient, TTSRequest
-from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY, SherpaKokoroTTS
+from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY
+from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS as _SherpaKokoroTTS
+
+
+class SherpaMoonshineSTT(_SherpaMoonshineSTT):
+    """Test wrapper: fake-module tests use fake files, so skip on-disk verification."""
+    def __init__(self, *args, _verify: bool = False, **kwargs):
+        super().__init__(*args, _verify=_verify, **kwargs)
+
+
+class SherpaKokoroTTS(_SherpaKokoroTTS):
+    """Test wrapper: fake-module tests use fake files, so skip on-disk verification."""
+    def __init__(self, *args, _verify: bool = False, **kwargs):
+        super().__init__(*args, _verify=_verify, **kwargs)
+
+
+def _real_looking_stt_dir(tmp_path: Path, *, tokens: str = "a 0\n") -> Path:
+    d = tmp_path / "stt"
+    d.mkdir()
+    (d / "encoder_model.ort").write_text("x", encoding="utf-8")
+    (d / "decoder_model_merged.ort").write_text("x", encoding="utf-8")
+    (d / "tokens.txt").write_text(tokens, encoding="utf-8")
+    return d
+
+
+def test_stt_construction_without_marker_raises(tmp_path: Path) -> None:
+    d = _real_looking_stt_dir(tmp_path)
+    with pytest.raises(ValueError, match="missing or invalid .verified marker"):
+        _SherpaMoonshineSTT(d, sherpa_module=types.SimpleNamespace(), _verify=True)
+
+
+def test_stt_construction_rejects_bad_tokens(tmp_path: Path) -> None:
+    from kaine.setup.speech_models import MANIFEST, _write_verified_marker
+    d = _real_looking_stt_dir(tmp_path, tokens="\x00\x01")
+    _write_verified_marker(MANIFEST["moonshine-base-en"], d)
+    with pytest.raises(ValueError, match="tokens.txt"):
+        _SherpaMoonshineSTT(d, sherpa_module=types.SimpleNamespace(), _verify=True)
+
+
+def test_tts_construction_without_marker_raises(tmp_path: Path) -> None:
+    d = tmp_path / "tts"
+    d.mkdir()
+    for name in ("model.int8.onnx", "voices.bin", "tokens.txt"):
+        (d / name).write_text("x", encoding="utf-8")
+    (d / "espeak-ng-data").mkdir()
+    with pytest.raises(ValueError, match="missing or invalid .verified marker"):
+        _SherpaKokoroTTS(d, sherpa_module=types.SimpleNamespace(), _verify=True)
 
 
 def _make_wav(rate: int, frames, nchannels: int = 1, sampwidth: int = 2) -> bytes:

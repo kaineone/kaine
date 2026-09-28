@@ -5,47 +5,80 @@
 
 from __future__ import annotations
 
-import inspect
+import tomllib
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from kaine.setup import wizard
+from kaine.setup.wizard import run_wizard
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SHIPPED = REPO_ROOT / "config" / "kaine.toml"
 
 
-def _call_wizard(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Any,
-    host: dict[str, Any],
+def _shipped() -> dict[str, Any]:
+    with SHIPPED.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def _host(*, cuda: int = 0) -> dict[str, Any]:
+    cuda_devices = [
+        {
+            "index": i,
+            "device": f"cuda:{i}",
+            "name": f"GPU{i}",
+            "total_vram_gb": 24.0,
+            "free_vram_gb": 20.0,
+        }
+        for i in range(cuda)
+    ]
+    return {
+        "backend": "cuda" if cuda else "cpu",
+        "device": "cuda" if cuda else "cpu",
+        "cuda_devices": cuda_devices,
+        "gpu_count": cuda,
+        "cpu_count": 16,
+    }
+
+
+class _Answers:
+    """Scripted input_fn: pops answers in order; empty string if exhausted."""
+
+    def __init__(self, answers: list[str]):
+        self._answers = list(answers)
+        self.prompts: list[str] = []
+
+    def __call__(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self._answers.pop(0) if self._answers else ""
+
+
+def _run_wizard(
     *,
+    host: dict[str, Any],
+    shipped_config: dict[str, Any],
     defaults: bool = True,
-) -> tuple[Any, list[str]]:
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    answers = _Answers([])
     lines: list[str] = []
 
-    fn = getattr(wizard, "run_setup_wizard", None)
-    if fn is None:
-        pytest.skip("wizard.run_setup_wizard is not available")
+    result = run_wizard(
+        input_fn=answers,
+        out=lines.append,
+        host=host,
+        shipped_config=shipped_config,
+        defaults=defaults,
+    )
 
-    sig = inspect.signature(fn)
-    kwargs: dict[str, Any] = {
-        "input_fn": lambda prompt: "",
-        "line": lines.append,
-        "host": host,
-        "defaults": defaults,
-    }
-    for name, default in (
-        ("probe_services", None),
-        ("probe_trainer", None),
-        ("guidance_fn", None),
-        ("operator_path", tmp_path / "operator.toml"),
-    ):
-        if name in sig.parameters:
-            kwargs[name] = default
-
-    result = fn(**kwargs)
     if isinstance(result, tuple):
-        return result[0], lines
-    return result, lines
+        config = result[0]
+    elif hasattr(result, "config"):
+        config = result.config
+    else:
+        config = result["config"]
+    return config, answers.prompts, lines
 
 
 @pytest.mark.parametrize(
@@ -98,35 +131,48 @@ def _call_wizard(
         ),
     ],
 )
-def test_implied_extras(modules: dict[str, bool], shipped: dict[str, Any], expected: list[str]) -> None:
+def test_implied_extras(
+    modules: dict[str, bool], shipped: dict[str, Any], expected: list[str]
+) -> None:
     assert wizard.implied_extras(modules, shipped) == expected
 
 
-def test_defaults_keeps_vox_enabled_with_sherpa_backend(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+def test_vox_sherpa_onnx_skips_chatterbox_voice_prompt(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(wizard, "DEFAULT_MODULE_SET", {"vox": True})
-    host = {
-        "target": {"name": "desktop-cpu"},
-        "shipped_config": {"vox": {"backend": "sherpa_onnx"}},
-    }
-    cfg, lines = _call_wizard(monkeypatch, tmp_path, host, defaults=True)
-    assert cfg["modules"]["vox"] is True
-    assert any("sherpa-onnx Kokoro" in line for line in lines)
-    assert not any("no voice id available" in line for line in lines)
-    assert "predefined_voice_id" not in cfg.get("vox", {})
+    shipped = _shipped()
+    shipped.setdefault("vox", {})["backend"] = "sherpa_onnx"
+    shipped["vox"].pop("predefined_voice_id", None)
+
+    config, prompts, lines = _run_wizard(
+        host=_host(),
+        shipped_config=shipped,
+        defaults=True,
+    )
+
+    assert config["modules"]["vox"] is True
+    combined = "\n".join(prompts + lines)
+    assert "[vox].predefined_voice_id" not in combined
+    assert "no Chatterbox voice needed" in combined
 
 
-def test_defaults_disables_vox_when_chatterbox_has_no_voice(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+def test_audition_sherpa_onnx_skips_speaches_stt_prompt(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(wizard, "DEFAULT_MODULE_SET", {"vox": True})
-    host = {
-        "target": {"name": "desktop-cpu"},
-        "shipped_config": {
-            "vox": {"backend": "chatterbox", "predefined_voice_id": ""}
-        },
-    }
-    cfg, lines = _call_wizard(monkeypatch, tmp_path, host, defaults=True)
-    assert cfg["modules"]["vox"] is False
-    assert any("no voice id available" in line for line in lines)
+    monkeypatch.setattr(wizard, "DEFAULT_MODULE_SET", {"audition": True})
+    shipped = _shipped()
+    shipped.setdefault("audition", {})["backend"] = "sherpa_onnx"
+
+    config, prompts, lines = _run_wizard(
+        host=_host(),
+        shipped_config=shipped,
+        defaults=True,
+    )
+
+    assert config["modules"]["audition"] is True
+    # The wizard writes only the overrides it sets; the backend stays as shipped.
+    combined = "\n".join(prompts + lines)
+    assert "stt_model_id" not in combined
+    assert "Speaches" not in combined
+    assert "STT model" not in combined

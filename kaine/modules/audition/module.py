@@ -335,7 +335,20 @@ class Audition(BaseModule):
                 )
                 self._live_mic = None
         if self._transcription_enabled and hasattr(self._stt_client, "warm_up"):
-            await self._stt_client.warm_up()
+            try:
+                await self._stt_client.warm_up()
+            except Exception as exc:
+                self._transcription_enabled = False
+                from kaine.backend_state import record_backend_failure
+
+                record_backend_failure(
+                    "audition", self._backend, f"{type(exc).__name__}: {exc}"
+                )
+                log.warning(
+                    "hearing continues without transcription: %s",
+                    exc,
+                    exc_info=True,
+                )
 
     async def shutdown(self) -> None:
         if self._live_mic is not None:

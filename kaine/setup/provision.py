@@ -203,16 +203,19 @@ def run_provision(
     config: dict[str, Any],
     *,
     consent: bool = True,
+    speech_consent: bool = False,
     runner: Optional[Callable[..., Any]] = None,
     speech_downloader: Optional[Callable[[str, str], None]] = None,
 ) -> tuple[list[OrganDownloadResult], list[ProvisionResult]]:
     """Provision every model weight. Real ``hf download`` per model.
 
-    With ``consent=False`` nothing runs (returns empty lists). ``runner`` defaults
-    to ``subprocess.run`` and is injectable so tests never hit the network.
-    ``speech_downloader`` is forwarded to :func:`kaine.setup.speech_models.fetch`
-    for sherpa-onnx model archives. Never raises — a failed download is reported
-    as ``ok=False``.
+    With ``consent=False`` nothing runs (returns empty lists). Sherpa-onnx speech
+    archives are downloaded only when both ``consent`` and ``speech_consent`` are
+    true; otherwise a single ``ok=False`` result records that they were not
+    fetched. ``runner`` defaults to ``subprocess.run`` and is injectable so tests
+    never hit the network. ``speech_downloader`` is forwarded to
+    :func:`kaine.setup.speech_models.fetch` for sherpa-onnx model archives. Never
+    raises — a failed download is reported as ``ok=False``.
     """
     from kaine.setup import speech_models
 
@@ -274,7 +277,21 @@ def run_provision(
             )
 
     # Sherpa-onnx speech archives are fetched through the dedicated verifier.
-    for model_id in speech_models.required_speech_models(config):
+    required_speech = speech_models.required_speech_models(config)
+    if required_speech and not speech_consent:
+        aux_results.append(
+            ProvisionResult(
+                repo="sherpa-onnx speech models",
+                purpose="speech models (not fetched)",
+                ok=False,
+                detail=(
+                    "speech models need explicit consent: re-run with --speech-models "
+                    "or KAINE_PROVISION_SPEECH_MODELS=1 after reading the licences above"
+                ),
+            )
+        )
+    for model_id in (required_speech if speech_consent else []):
+        print(speech_models.describe(model_id))
         res = speech_models.fetch(model_id, downloader=speech_downloader)
         aux_results.append(
             ProvisionResult(
@@ -295,7 +312,27 @@ def _load_config() -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    organ_results, aux_results = run_provision(_load_config())
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description="Provision every model weight once.")
+    parser.add_argument(
+        "--speech-models",
+        action="store_true",
+        help="download sherpa-onnx speech archives after the plan shows their licences",
+    )
+    args = parser.parse_args(argv)
+    speech_consent = args.speech_models or os.environ.get("KAINE_PROVISION_SPEECH_MODELS") == "1"
+
+    config = _load_config()
+    from kaine.setup import speech_models
+    planned_speech = speech_models.required_speech_models(config)
+    if planned_speech:
+        print("Planned sherpa-onnx speech archives:")
+        for model_id in planned_speech:
+            print(f"  - {speech_models.describe(model_id)}")
+
+    organ_results, aux_results = run_provision(config, speech_consent=speech_consent)
     ok = True
     for r in organ_results:
         status = "ok" if r.ok else "FAILED"

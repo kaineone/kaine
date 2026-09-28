@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from kaine.modules.vox.client import SynthesisResult, TTSRequest
+from kaine.setup import speech_models
 
 APPLIED_PROSODY = ("speed_factor",)
 
@@ -32,6 +33,7 @@ class SherpaKokoroTTS:
         speaker_id: int = 0,
         num_threads: int = 2,
         sherpa_module: Any | None = None,
+        _verify: bool = True,
     ) -> None:
         self._model_id = model_id
         self._speaker_id = int(speaker_id)
@@ -55,6 +57,9 @@ class SherpaKokoroTTS:
                     "sherpa_onnx is required for the local speech backend. "
                     "Install it with: pip install 'kaine[speech-edge]'"
                 ) from exc
+
+        if _verify:
+            speech_models.verify_model_dir(model_id, self._dir)
 
         self._sherpa_module = so
         self._tts: Any | None = None
