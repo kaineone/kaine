@@ -279,16 +279,16 @@ def plan_for(target: Target) -> Plan:
             "soma (NumPy CfC)",
             "chronos (NumPy CfC)",
             'nous (with [nous].backend = "numpy")',
+            'phantasia (with [phantasia].engine = "numpy")',
         ]
         will_not_run = [
             ("topos", "needs torch for its video encoder; no Termux build"),
-            ("phantasia", "its learned world model needs JAX; portability phase 3"),
             ("mnemos with qdrant", "no Qdrant build for Android; use [mnemos].backend = \"sqlite_vec\""),
         ]
         system_packages = {"pkg": list(_SYSTEM_PACKAGES["pkg"])}
         notes = [
             "Termux installs the memory and edge extras only.",
-            'Nous needs [nous].backend = "numpy" there (Tier 0 and Tier 1 profiles set it).',
+            'Nous needs [nous].backend = "numpy" and Phantasia needs [phantasia].engine = "numpy" there (the Tier 1 profile sets both; the Tier 0 profile sets the Nous backend and lists Phantasia as unsupported).',
         ]
     elif target.name == "unsupported":
         extras = ""

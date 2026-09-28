@@ -146,9 +146,10 @@ when that backend is selected, so you install a tier's extras and no others.
   Piper TTS, ONNX vision, and ONNX/static embeddings backends are staged seams —
   when selected they degrade to their declared fallback.
 - **Tier 1 — embodied CPU agent.** As Tier 0, but keeps Topos on CPU and enables
-  audition. Vox and vocal emotion remain disabled. The intended ONNX vision /
-  whisper.cpp / Piper backends are staged seams; today the
-  NumPy MiniLM embedder and llama.cpp Lingua run here.
+  audition. Vox and vocal emotion remain disabled. Phantasia runs on the NumPy
+  engine (`engine = "numpy"`). The intended ONNX vision / whisper.cpp / Piper
+  backends are staged seams; today the NumPy MiniLM embedder and llama.cpp Lingua
+  run here.
 - **Tier 2 — workstation (default).** Ollama for Lingua, Qdrant for Mnemos,
   shared NumPy MiniLM embedder (`sentence_transformers` optional), faster-whisper + emotion2vec+ (torch/funasr),
   Chatterbox. This is what `pip install -e .` + the first-run wizard provision
@@ -163,14 +164,14 @@ when that backend is selected, so you install a tier's extras and no others.
 Shipped today: the backend-selection framework, Tier-2-preserving defaults, the
 `llama.cpp`/GGUF Lingua backend, the `sqlite-vec` Mnemos backend, the four tier
 profiles, the host probe, a NumPy CfC for Soma and Chronos (the default; their
-torch+ncps backend remains available), and a JAX-free NumPy active-inference
-backend for Nous (`[nous].backend = "numpy"`). The memory modules default to the
+torch+ncps backend remains available), a JAX-free NumPy active-inference
+backend for Nous (`[nous].backend = "numpy"`), and a JAX-free NumPy engine for
+Phantasia (`[phantasia].engine = "numpy"`). The memory modules default to the
 shared NumPy MiniLM embedder (`sentence_transformers` backend remains available).
 
-Not yet built: whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision, ONNX/static
-embeddings, and JAX-free Phantasia. Phantasia's learned world model still needs
-JAX. Those backends are the focus of the `portability-program` change (Phase 2
-removes the torch requirement from the core, Phase 3 brings Termux and JAX-free
-Phantasia, Phase 4 adds residency, arm64 images, and multi-node). Each backend
+Not yet built: whisper.cpp STT, Piper/Kokoro local TTS, ONNX vision, and
+ONNX/static embeddings. Those backends are the focus of the `portability-program`
+change (Phase 2 removes the torch requirement from the core, Phase 3 brings
+Termux, Phase 4 adds residency, arm64 images, and multi-node). Each backend
 is lazy-imported: a host that selects an unshipped backend degrades to its declared
 fallback with a surfaced reason rather than crashing boot.

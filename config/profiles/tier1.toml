@@ -43,3 +43,7 @@ emotion_device = "cpu"
 [nous]
 # NumPy-only active inference backend (no JAX/pymdp dependency).
 backend = "numpy"
+
+[phantasia]
+# NumPy engine for the DreamerV3 world model (no JAX dependency).
+engine = "numpy"
