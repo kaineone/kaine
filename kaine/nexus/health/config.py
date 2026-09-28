@@ -11,16 +11,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from kaine.setup import speech_models
+
 from .prober import DependencySpec, HealthProber
 from .probes import (
     DEFAULT_CACHE_TTL_S,
     DEFAULT_PROBE_TIMEOUT_S,
+    DEGRADED,
     NOT_CONFIGURED,
     nous_health_probe,
     probe_chat_llm,
     probe_chatterbox,
     probe_qdrant,
     probe_redis,
+    probe_sherpa_stt,
+    probe_sherpa_tts,
     probe_speaches,
     probe_state_encryption,
 )
@@ -31,6 +36,11 @@ log = logging.getLogger(__name__)
 async def _async_not_configured(reason: str) -> tuple[str, str]:
     """Neutral skip result for a dependency the runtime will not use."""
     return NOT_CONFIGURED, reason
+
+
+async def _async_degraded(reason: str) -> tuple[str, str]:
+    """Warning result for a dependency that is configured but not recognised."""
+    return DEGRADED, reason
 
 
 def build_dependency_specs(
@@ -73,8 +83,129 @@ def build_dependency_specs(
     speaches_url = str(audition_cfg.get("speaches_url", "http://127.0.0.1:8000"))
     transcription_enabled = bool(audition_cfg.get("transcription_enabled", True))
     chatterbox_url = str(vox_cfg.get("chatterbox_url", "http://127.0.0.1:8883"))
+
+    audition_backend = str(audition_cfg.get("backend", "speaches"))
+    vox_backend = str(vox_cfg.get("backend", "chatterbox"))
+
+    def _audition_sherpa_model_dir() -> str:
+        d = audition_cfg.get("sherpa_model_dir")
+        if d:
+            return str(d)
+        return str(
+            speech_models.model_dir(
+                audition_cfg.get("sherpa_model_id") or speech_models.DEFAULT_STT
+            )
+        )
+
+    def _vox_sherpa_model_dir() -> str:
+        d = vox_cfg.get("sherpa_model_dir")
+        if d:
+            return str(d)
+        return str(
+            speech_models.model_dir(
+                vox_cfg.get("sherpa_model_id") or speech_models.DEFAULT_TTS
+            )
+        )
+
+    audition_sherpa_model_id = (
+        audition_cfg.get("sherpa_model_id") or speech_models.DEFAULT_STT
+    )
+    vox_sherpa_model_id = vox_cfg.get("sherpa_model_id") or speech_models.DEFAULT_TTS
+    audition_sherpa_num_threads = int(audition_cfg.get("sherpa_num_threads", 2))
+    vox_sherpa_num_threads = int(vox_cfg.get("sherpa_num_threads", 2))
+    vox_sherpa_speaker_id = int(vox_cfg.get("sherpa_speaker_id", 0))
+
     # The Nous probe needs the configured backend so it checks the right engine.
     nous_backend = str(nous_cfg.get("backend", "pymdp"))
+
+    speech_rows: list[DependencySpec] = []
+    if audition_backend == "speaches":
+        speech_rows.append(
+            DependencySpec(
+                name="Speaches (STT)",
+                role="Audition",
+                module="audition",
+                # STT-ectomy: with transcription disabled the run never calls
+                # the STT backend, so the probe reports not-configured (SKIP).
+                probe=(
+                    (lambda: _async_not_configured("transcription disabled"))
+                    if not transcription_enabled
+                    else (lambda: probe_speaches(base_url=speaches_url))
+                ),
+            )
+        )
+    elif audition_backend == "sherpa_onnx":
+        speech_rows.append(
+            DependencySpec(
+                name="sherpa-onnx (Moonshine)",
+                role="Audition",
+                module="audition",
+                probe=(
+                    (lambda: _async_not_configured("transcription disabled"))
+                    if not transcription_enabled
+                    else (
+                        lambda _mdir=_audition_sherpa_model_dir(),
+                        _mid=audition_sherpa_model_id,
+                        _nt=audition_sherpa_num_threads: probe_sherpa_stt(
+                            model_dir=_mdir,
+                            model_id=_mid,
+                            num_threads=_nt,
+                        )
+                    )
+                ),
+            )
+        )
+    else:
+        speech_rows.append(
+            DependencySpec(
+                name=f"Audition backend {audition_backend!r}",
+                role="Audition",
+                module="audition",
+                probe=lambda: _async_degraded(
+                    f"unknown [audition].backend {audition_backend!r}; expected \"speaches\" or \"sherpa_onnx\""
+                ),
+            )
+        )
+
+    if vox_backend == "chatterbox":
+        speech_rows.append(
+            DependencySpec(
+                name="Chatterbox (TTS)",
+                role="Vox",
+                module="vox",
+                probe=lambda: probe_chatterbox(base_url=chatterbox_url),
+            )
+        )
+    elif vox_backend == "sherpa_onnx":
+        speech_rows.append(
+            DependencySpec(
+                name="sherpa-onnx (Kokoro)",
+                role="Vox",
+                module="vox",
+                probe=(
+                    lambda _mdir=_vox_sherpa_model_dir(),
+                    _mid=vox_sherpa_model_id,
+                    _sid=vox_sherpa_speaker_id,
+                    _nt=vox_sherpa_num_threads: probe_sherpa_tts(
+                        model_dir=_mdir,
+                        model_id=_mid,
+                        speaker_id=_sid,
+                        num_threads=_nt,
+                    )
+                ),
+            )
+        )
+    else:
+        speech_rows.append(
+            DependencySpec(
+                name=f"Vox backend {vox_backend!r}",
+                role="Vox",
+                module="vox",
+                probe=lambda: _async_degraded(
+                    f"unknown [vox].backend {vox_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
+                ),
+            )
+        )
 
     return [
         DependencySpec(
@@ -101,24 +232,7 @@ def build_dependency_specs(
                 base_url=chat_url, model_id=model_id, api_key=chat_api_key
             ),
         ),
-        DependencySpec(
-            name="Speaches (STT)",
-            role="Audition",
-            module="audition",
-            # STT-ectomy: with transcription disabled the run never calls
-            # Speaches, so the probe reports not-configured (SKIP), not down.
-            probe=(
-                (lambda: _async_not_configured("transcription disabled"))
-                if not transcription_enabled
-                else (lambda: probe_speaches(base_url=speaches_url))
-            ),
-        ),
-        DependencySpec(
-            name="Chatterbox (TTS)",
-            role="Vox",
-            module="vox",
-            probe=lambda: probe_chatterbox(base_url=chatterbox_url),
-        ),
+        *speech_rows,
         DependencySpec(
             name=(
                 "pymdp + JAX"

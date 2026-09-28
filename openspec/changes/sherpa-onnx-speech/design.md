@@ -29,7 +29,8 @@
   - `[vox].backend`: `"chatterbox"` (default) | `"sherpa_onnx"`.
   - Each is resolved in `make_audition`/`make_vox` through a `BackendRegistry` per module, with no fallback declared for `sherpa_onnx`.
   - An unknown name is a `ConfigurationError`.
-  - A factory failure (the import, or model files) is recorded with `record_backend_failure`, and the module is not registered. The boot continues, and the health surface shows the reason.
+  - A missing `sherpa-onnx` package is caught first by the existing extras pre-flight, which refuses the boot and names the `speech-edge` extra, as for every missing optional dependency.
+  - A factory failure at construction (missing or corrupt model files, an invalid speaker) is recorded with `record_backend_failure`, and the module is not registered. The boot continues, and the health surface shows the reason.
 - **New keys**, added to the boot allow-lists and `config/kaine.toml` with comments:
   - `[audition].sherpa_model_dir` (default empty, meaning `models_dir() / "sherpa-onnx" / "moonshine-base-en"`);
   - `[audition].sherpa_num_threads` (default 2);

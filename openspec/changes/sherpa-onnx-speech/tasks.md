@@ -10,9 +10,9 @@
 
 ## 3. Wiring and disclosure
 
-- [ ] 3.1 `[audition].backend` / `[vox].backend` through `BackendRegistry` in boot; the new keys; failure disables the module with a surfaced reason.
-- [ ] 3.2 `backend` on `audition.transcription` and `vox.synthesized`; `prosody_applied` on `vox.synthesized`.
-- [ ] 3.3 Extras (`speech-edge`), health probes, pre-boot and first-run checks, install planner, Tier 1 profile, `.gitignore`.
+- [x] 3.1 `[audition].backend` / `[vox].backend` through `BackendRegistry` in boot; the new keys; failure disables the module with a surfaced reason.
+- [x] 3.2 `backend` on `audition.transcription` and `vox.synthesized`; `prosody_applied` on `vox.synthesized`.
+- [x] 3.3 Extras (`speech-edge`), health probes, pre-boot and first-run checks, install planner, Tier 1 profile, `.gitignore`.
 
 ## 4. Verification and docs
 

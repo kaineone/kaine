@@ -59,6 +59,8 @@ from kaine.modules.vox.playback import (
 
 log = logging.getLogger(__name__)
 
+CHATTERBOX_PROSODY = ("temperature", "exaggeration", "cfg_weight", "speed_factor")
+
 
 class Vox(BaseModule):
     name: ClassVar[str] = "vox"
@@ -73,6 +75,9 @@ class Vox(BaseModule):
         tts_client: Optional[TTSClient] = None,
         player: Optional[Player] = None,
         entity_clock: Optional[EntityClock] = None,
+        backend: str = "chatterbox",
+        applied_prosody: tuple[str, ...] = CHATTERBOX_PROSODY,
+        voice_label: Optional[str] = None,
         chatterbox_url: str = "http://127.0.0.1:8883",
         voice_mode: str = "predefined",
         predefined_voice_id: Optional[str] = None,
@@ -113,6 +118,9 @@ class Vox(BaseModule):
         self._player: Player = player or build_player(
             playback_enabled=playback_enabled, output_device=output_device
         )
+        self._backend = backend
+        self._applied_prosody = applied_prosody
+        self._voice_label = voice_label
         self._voice_mode = voice_mode
         self._voice_id = predefined_voice_id
         self._output_format = output_format
@@ -351,13 +359,15 @@ class Vox(BaseModule):
             "text_length": len(text),
             "bytes_produced": result.bytes_produced if success else 0,
             "output_format": result.output_format if success else self._output_format,
-            "voice": self._voice_id or "(default)",
+            "voice": self._voice_label or self._voice_id or "(default)",
             "exaggeration": params.exaggeration,
             "cfg_weight": params.cfg_weight,
             "temperature": params.temperature,
             "speed_factor": params.speed_factor,
             "latency_ms": result.latency_ms if success else 0.0,
             "success": success,
+            "backend": self._backend,
+            "prosody_applied": list(self._applied_prosody),
         }
         if error is not None:
             payload["error"] = error

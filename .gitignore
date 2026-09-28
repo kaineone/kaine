@@ -123,6 +123,9 @@ hf-cache/
 # explicitly as belt-and-suspenders so the weights never land in git.
 state/models/internvideo_next_base_p14_res224_f16/
 
+# sherpa-onnx speech models fetched by `python -m kaine.setup.speech_models`.
+state/models/sherpa-onnx/
+
 # Test artifacts
 .pytest_cache/
 .coverage

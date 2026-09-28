@@ -774,7 +774,7 @@ def _make_rebuild_module(
         # One construction path with build_registry (boot.construct_module):
         # the same clock, the same Praxis intent secret, the same perception
         # feed for Topos/Audition, and Hypnos rebuilt with its siblings.
-        return construct_module(
+        result = construct_module(
             name,
             bus,
             kaine_config,
@@ -785,6 +785,9 @@ def _make_rebuild_module(
             # asked for a fresh object exactly as at boot.
             injections=plugin_injections(registry.plugins, name),
         )
+        if result is None:
+            raise RuntimeError(f"cannot rebuild {name}: its configured backend could not load")
+        return result
 
     return rebuild_module
 

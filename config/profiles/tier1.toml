@@ -18,7 +18,7 @@
 [tier]
 name = "tier1"
 unsupported_modules = [
-    "vox",  # no expressive TTS below Tier 2 (Piper edge backend not yet shipped)
+    # none: speech runs on sherpa-onnx below Tier 2
 ]
 oscillator_supported = true
 
@@ -36,9 +36,11 @@ device = "cpu"
 [audition]
 # Vocal emotion (emotion2vec+/funasr) is a Tier-2-only faculty — no clean edge
 # port — so it is explicitly DISABLED here (empty model id → Null classifier).
-# Speech is still transcribed; only vocal affect is absent, and reported so.
+# Speech is still transcribed via sherpa-onnx; only vocal affect is absent, and reported so.
 emotion_model_id = ""
 emotion_device = "cpu"
+# Local speech recognition via sherpa-onnx (Tier 1 default; replaces Speaches).
+backend = "sherpa_onnx"
 
 [nous]
 # NumPy-only active inference backend (no JAX/pymdp dependency).
@@ -47,3 +49,7 @@ backend = "numpy"
 [phantasia]
 # NumPy engine for the DreamerV3 world model (no JAX dependency).
 engine = "numpy"
+
+[vox]
+# Local speech synthesis via sherpa-onnx (Tier 1 default; replaces Chatterbox).
+backend = "sherpa_onnx"

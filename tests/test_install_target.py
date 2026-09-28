@@ -177,6 +177,8 @@ def test_plan_termux():
     assert "chronos" in runs_text
     assert "nous" in runs_text
     assert "phantasia" in runs_text
+    assert "audition" in runs_text
+    assert "vox" in runs_text
     modules = {m for m, _ in plan.will_not_run}
     assert "topos" in modules
     assert "phantasia" not in modules

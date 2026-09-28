@@ -11,6 +11,9 @@ in :class:`~kaine.nexus.health.prober.HealthProber`).
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,6 +27,39 @@ NOT_CONFIGURED = "not_configured"
 
 DEFAULT_PROBE_TIMEOUT_S = 2.0
 DEFAULT_CACHE_TTL_S = 5.0
+
+SHERPA_PROBE_RETRY_S = 60.0
+
+_SHERPA_PROBE_MEMO: dict[tuple, tuple[str, str, float]] = {}
+_SHERPA_PROBE_LOCK = threading.Lock()
+
+
+def clear_sherpa_probe_memo() -> None:
+    """Reset the sherpa probe memo. For tests."""
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_PROBE_MEMO.clear()
+
+
+async def _cached_sherpa_probe(
+    key: tuple,
+    runner: Callable[[], Awaitable[tuple[str, str]]],
+) -> tuple[str, str]:
+    """Return a cached UP result forever, or retry DOWN after ``SHERPA_PROBE_RETRY_S``."""
+    now = time.monotonic()
+    with _SHERPA_PROBE_LOCK:
+        cached = _SHERPA_PROBE_MEMO.get(key)
+        if cached is not None:
+            status, detail, verified_at = cached
+            age = now - verified_at
+            if status == UP:
+                return UP, f"{detail} (verified {int(age)} s ago)"
+            if age < SHERPA_PROBE_RETRY_S:
+                retry_in = int(SHERPA_PROBE_RETRY_S - age)
+                return DOWN, f"{detail} (retry in {retry_in} s)"
+    status, detail = await runner()
+    with _SHERPA_PROBE_LOCK:
+        _SHERPA_PROBE_MEMO[key] = (status, detail, time.monotonic())
+    return status, detail
 
 
 def _now_iso() -> str:
@@ -114,6 +150,117 @@ async def probe_chatterbox(*, base_url: str) -> tuple[str, str]:
     if resp.status_code < 500:
         return UP, f"responding (HTTP {resp.status_code})"
     return DEGRADED, f"HTTP {resp.status_code}"
+
+
+async def probe_sherpa_stt(
+    *,
+    model_dir: str,
+    model_id: str | None,
+    num_threads: int,
+) -> tuple[str, str]:
+    """Probe the local sherpa-onnx Moonshine STT backend with a silent clip."""
+
+    async def _run() -> tuple[str, str]:
+        try:
+            from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
+            from kaine.setup import speech_models
+        except Exception as exc:
+            return DOWN, f"{type(exc).__name__}: {exc}"
+
+        try:
+            import io
+            import wave
+
+            n_samples = int(16000 * 0.5)
+            pcm = b"\x00\x00" * n_samples
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
+                wf.writeframes(pcm)
+            audio = buf.getvalue()
+
+            def _infer() -> Any:
+                client = None
+                try:
+                    client = SherpaMoonshineSTT(
+                        model_dir,
+                        model_id=model_id,
+                        num_threads=num_threads,
+                    )
+                    result = asyncio.run(
+                        client.transcribe(
+                            audio,
+                            sample_rate=16000,
+                            model=model_id,
+                            filename="silence.wav",
+                        )
+                    )
+                    return result
+                finally:
+                    if client is not None:
+                        asyncio.run(client.aclose())
+
+            await asyncio.to_thread(_infer)
+            return (
+                UP,
+                f"{model_id or speech_models.DEFAULT_STT} loaded and transcribed a test clip",
+            )
+        except Exception as exc:
+            return DOWN, f"{type(exc).__name__}: {exc}"
+
+    key = ("stt", model_dir, model_id, None, num_threads)
+    return await _cached_sherpa_probe(key, _run)
+
+
+async def probe_sherpa_tts(
+    *,
+    model_dir: str,
+    model_id: str | None,
+    speaker_id: int,
+    num_threads: int,
+) -> tuple[str, str]:
+    """Probe the local sherpa-onnx Kokoro TTS backend by saying a short word."""
+
+    async def _run() -> tuple[str, str]:
+        try:
+            from kaine.modules.vox.client import TTSRequest
+            from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
+            from kaine.setup import speech_models
+        except Exception as exc:
+            return DOWN, f"{type(exc).__name__}: {exc}"
+
+        try:
+            req = TTSRequest(text="ok")
+
+            def _infer() -> Any:
+                client = None
+                try:
+                    client = SherpaKokoroTTS(
+                        model_dir,
+                        model_id=model_id,
+                        speaker_id=speaker_id,
+                        num_threads=num_threads,
+                    )
+                    result = asyncio.run(client.synthesize(req))
+                    if not getattr(result, "audio", b""):
+                        raise RuntimeError("synthesized audio was empty")
+                    return result
+                finally:
+                    if client is not None:
+                        asyncio.run(client.aclose())
+
+            await asyncio.to_thread(_infer)
+            return (
+                UP,
+                f"{model_id or speech_models.DEFAULT_TTS} loaded and synthesized a test word",
+            )
+        except Exception as exc:
+            return DOWN, f"{type(exc).__name__}: {exc}"
+
+    key = ("tts", model_dir, model_id, speaker_id, num_threads)
+    return await _cached_sherpa_probe(key, _run)
 
 
 async def probe_state_encryption(

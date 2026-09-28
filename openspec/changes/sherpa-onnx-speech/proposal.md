@@ -26,7 +26,8 @@ sherpa-onnx (k2-fsa, Apache-2.0) is one torch-free runtime that runs speech reco
   - `audition.transcription` keeps its `model` field.
   - The addition is the same under every backend, so selecting a backend does not change the event shape.
 - **Failure degrades; it does not crash**, as `runtime-backends` requires:
-  - A missing `sherpa-onnx` package, or missing or corrupt model files, disables that one module with a structured reason on the health surface.
+  - Missing or corrupt model files disable that one module with a structured reason on the health surface.
+  - A missing `sherpa-onnx` package refuses the boot through the existing extras check, naming the `speech-edge` extra, as for every other missing optional dependency.
   - There is no silent fallback to a service the host does not have.
 - **Models are fetched only with operator consent:**
   - The model archives are pinned by URL and sha256 in code.

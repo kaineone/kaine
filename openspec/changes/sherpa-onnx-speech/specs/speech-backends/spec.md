@@ -13,8 +13,12 @@ Audition SHALL select its speech recogniser with `[audition].backend` (`"speache
 - **THEN** Audition publishes an `audition.transcription` whose text contains the sentence's words, with `backend` `"sherpa_onnx"`
 
 #### Scenario: A missing model disables only that organ
-- **WHEN** a sherpa backend is selected but its package or model directory is missing
+- **WHEN** a sherpa backend is selected and the package is installed, but its model directory is missing or incomplete
 - **THEN** that module is not registered, a structured reason naming the backend and the setup command is logged and shown on the health surface, and the rest of the entity boots
+
+#### Scenario: A missing package refuses the boot with an install hint
+- **WHEN** a sherpa backend is selected for an enabled module and the `sherpa-onnx` package is not installed
+- **THEN** the pre-boot extras check refuses to boot, naming the module and the `speech-edge` extra, as it does for every other missing optional dependency
 
 ### Requirement: Speech events disclose the backend and what reached the voice
 

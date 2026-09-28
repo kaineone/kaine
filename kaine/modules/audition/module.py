@@ -58,6 +58,7 @@ class Audition(BaseModule):
         bus: AsyncBus,
         *,
         stt_client: Optional[STTClient] = None,
+        backend: str = "speaches",
         emotion_classifier: Optional[EmotionClassifier] = None,
         speaches_url: str = "http://127.0.0.1:8000",
         stt_model: str = "Systran/faster-distil-whisper-medium.en",
@@ -124,6 +125,7 @@ class Audition(BaseModule):
         self._stt_client: STTClient = stt_client or SpeachesClient(
             base_url=speaches_url, timeout_s=request_timeout_s
         )
+        self._backend = backend
         # Vocal emotion is a Tier-2-only faculty (emotion2vec+ has no clean edge
         # port). An empty emotion_model_id explicitly disables it — the Tier-0/1
         # case — via the Null classifier, which still lets speech be transcribed
@@ -591,6 +593,7 @@ class Audition(BaseModule):
                 "audio_bytes_length": int(audio_bytes_length),
                 "latency_ms": result.latency_ms,
                 "prediction_error": prediction_error,
+                "backend": self._backend,
             },
             salience=salience,
         )
@@ -613,6 +616,7 @@ class Audition(BaseModule):
                 "audio_bytes_length": int(audio_bytes_length),
                 "latency_ms": 0.0,
                 "error": f"{type(exc).__name__}: {exc}",
+                "backend": self._backend,
             },
             salience=self._alert_salience,
         )

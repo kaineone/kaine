@@ -34,6 +34,9 @@ memory = [
 memory-edge = [
     "sqlite-vec>=0.1,<1",
 ]
+speech-edge = [
+    "sherpa-onnx>=1.13.8,<2",
+]
 nexus = [
     "fastapi>=0.139.0,<1",
     "uvicorn[standard]>=0.51.0,<1",
