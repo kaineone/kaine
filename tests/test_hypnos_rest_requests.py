@@ -3,6 +3,7 @@
 """Tests for Nous/Volition rest-request handling in Hypnos."""
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -271,10 +272,9 @@ async def test_volition_consumer_loop_publishes_rest_request(hypnos):
         await asyncio.sleep(0.05)
 
     task.cancel()
-    try:
+    # The consumer loop ends by cancellation; that is the expected exit.
+    with contextlib.suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
 
     assert requests
     assert any(r.payload.get("proposal_id") == "loop-p1" for _, r in requests)
