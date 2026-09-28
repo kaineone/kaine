@@ -1,6 +1,6 @@
 ## 1. Models and consent
 
-- [x] 1.1 `kaine/setup/speech_models.py`: pinned manifest (URL, sha256, size, licence), consent prompt, verified download, safe extraction, idempotence; the provisioning plan lists the archives when a sherpa backend is selected.
+- [ ] 1.1 `kaine/setup/speech_models.py`: pinned manifest (URL, sha256, size, licence), consent prompt, verified download, safe extraction, idempotence; the provisioning plan lists the archives when a sherpa backend is selected.
 - [x] 1.2 Fetch the archives once on the development host and pin their digests (done in design; installing `sherpa-onnx` into the venv for the live tests needs the operator's consent).
 
 ## 2. Engines
@@ -12,7 +12,7 @@
 
 - [x] 3.1 `[audition].backend` / `[vox].backend` through `BackendRegistry` in boot; the new keys; failure disables the module with a surfaced reason.
 - [x] 3.2 `backend` on `audition.transcription` and `vox.synthesized`; `prosody_applied` on `vox.synthesized`.
-- [x] 3.3 Extras (`speech-edge`), health probes, pre-boot and first-run checks, install planner, Tier 1 profile, `.gitignore`.
+- [ ] 3.3 Extras (`speech-edge`), health probes, pre-boot and first-run checks, install planner, Tier 1 profile, `.gitignore`.
 
 ## 4. Verification and docs
 
