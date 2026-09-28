@@ -1,7 +1,7 @@
 ## 1. Models and consent
 
 - [ ] 1.1 `kaine/setup/speech_models.py`: pinned manifest (URL, sha256, size, licence), consent prompt, verified download, safe extraction, idempotence; the provisioning plan lists the archives when a sherpa backend is selected.
-- [ ] 1.2 Fetch the archives once on the development host (with the operator's consent to install `sherpa-onnx` into the venv) and pin their digests.
+- [x] 1.2 Fetch the archives once on the development host and pin their digests (done in design; installing `sherpa-onnx` into the venv for the live tests needs the operator's consent).
 
 ## 2. Engines
 

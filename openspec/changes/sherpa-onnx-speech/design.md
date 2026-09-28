@@ -37,7 +37,7 @@
   - `[vox].sherpa_speaker_id` (default 0, a public preset);
   - `[vox].sherpa_num_threads` (default 2).
 - **`SherpaMoonshineSTT`** (`kaine/modules/audition/sherpa_stt.py`) implements `STTClient`.
-  - Construction imports `sherpa_onnx`, validates the model directory, and builds `OfflineRecognizer.from_moonshine(...)`. It raises a clear error if anything is missing.
+  - Construction imports `sherpa_onnx`, validates the model directory (`encoder_model.ort`, `decoder_model_merged.ort`, `tokens.txt`), and builds `OfflineRecognizer.from_moonshine_v2(encoder=, decoder=, tokens=, num_threads=)`. It raises a clear error if anything is missing.
   - `transcribe`:
     - decodes the WAV (16-bit PCM, mono or first channel) to float32 in [−1, 1];
     - creates a stream and calls `accept_waveform(sample_rate, samples)` (sherpa-onnx resamples);
@@ -45,7 +45,7 @@
   - Inference runs in a dedicated `ThreadPoolExecutor(max_workers=1)`, so the event loop never blocks and the recogniser is never used concurrently.
   - `aclose` shuts the executor down.
 - **`SherpaKokoroTTS`** (`kaine/modules/vox/sherpa_tts.py`) implements `TTSClient`.
-  - Construction builds `OfflineTts` with `OfflineTtsKokoroModelConfig(model, voices, tokens, data_dir)`.
+  - Construction builds `OfflineTts(OfflineTtsConfig(model=OfflineTtsModelConfig(kokoro=OfflineTtsKokoroModelConfig(model=model.int8.onnx, voices=voices.bin, tokens=tokens.txt, data_dir=espeak-ng-data), num_threads=)))`, and validates `speaker_id` against `num_speakers`.
   - `synthesize(req)` calls `generate(req.text, sid=speaker_id, speed=req.speed_factor)` in the worker thread. It clamps the speed to the range sherpa-onnx accepts, converts the float samples to 16-bit PCM, and returns WAV bytes at `audio.sample_rate`.
   - Other request fields are ignored, and that is disclosed (below).
   - An empty or whitespace text returns an error, as Chatterbox would reject it.
@@ -57,9 +57,16 @@
 
 ### Models and consent
 - `kaine/setup/speech_models.py` holds a manifest of the sherpa-onnx model archives. Each entry has an id, URL, sha256, size, licence and target directory.
-  - Moonshine base English (int8), MIT, is the STT default. Moonshine tiny is listed for hosts that need it smaller.
-  - Kokoro English, Apache-2.0, is the TTS default.
-  - The sha256 values are computed when the archives are first fetched during implementation, and pinned in code. An archive whose digest differs is rejected.
+  - The archives are sherpa-onnx release assets (`https://github.com/k2-fsa/sherpa-onnx/releases/download/<tag>/<name>`), fetched and hashed on 2026-09-27:
+
+| id | archive | size | sha256 | licence |
+|---|---|---|---|---|
+| `moonshine-base-en` (STT default) | `asr-models/sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2` | 111,266,225 B | `43232c1d13013d37317163baec3135bd771a186a4356f28c889bab453bb0e891` | MIT |
+| `moonshine-tiny-en` | `asr-models/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27.tar.bz2` | 29,858,559 B | `9ec31b342d8fa3240c3b81b8f82e1cf7e3ac467c93ca5a999b741d5887164f8d` | MIT |
+| `kokoro-en` (TTS default) | `tts-models/kokoro-int8-en-v0_19.tar.bz2` | 103,248,205 B | `c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd` | Apache-2.0 |
+
+  - An archive whose digest differs is rejected. The archives contain only regular files and directories.
+  - Verified on the development host with sherpa-onnx 1.13.8 imported from a scratch directory (not installed): Kokoro speaker 0 synthesised "The quick brown fox jumps over the lazy dog." (24 kHz, 11 speakers, 1.3 s cold), and Moonshine base transcribed it back exactly in 40 ms. Half a second of silence transcribes to an empty string.
 - `python -m kaine.setup.speech_models [--stt ID] [--tts ID] [--yes]`:
   - prints each archive's name, size and licence;
   - asks for confirmation unless `--yes`;
