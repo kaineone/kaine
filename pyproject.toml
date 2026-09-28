@@ -50,7 +50,7 @@ nvidia = [
 vision = [
     "opencv-python-headless>=5.0.0.93,<6",
     "transformers>=5.13.1,<6",
-    "Pillow>=10,<12",
+    "Pillow>=12.3.0,<13",
 ]
 full = [
     "kaine[core,memory,memory-edge,nexus,nvidia,vision,audio,reasoning,worldmodel,oscillator]",
