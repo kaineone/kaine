@@ -21,7 +21,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import sys
 import tarfile
@@ -126,8 +125,18 @@ def model_dir(model_id: str, root: Path | str | None = None) -> Path:
     return (Path(root) if root else models_dir()) / "sherpa-onnx" / model_id
 
 
+def _sha256_file(p: Path) -> str:
+    """Return the SHA-256 hex digest of a file, hashing in 64 KiB chunks."""
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _write_verified_marker(model: SpeechModel, target: Path) -> None:
-    """Write ``target / ".verified"`` with the archive sha256 and every file size."""
+    """Write ``target / ".verified"`` with the archive sha256, every file size,
+    and the digest of ``tokens.txt``."""
     files: dict[str, int] = {}
     for path in target.rglob("*"):
         if path.is_file() and path.name != ".verified":
@@ -136,6 +145,7 @@ def _write_verified_marker(model: SpeechModel, target: Path) -> None:
         "model_id": model.id,
         "sha256": model.sha256,
         "files": files,
+        "tokens_sha256": _sha256_file(target / "tokens.txt"),
     }
     with open(target / ".verified", "w", encoding="utf-8") as f:
         json.dump(marker, f, indent=2, sort_keys=True)
@@ -151,14 +161,13 @@ def _read_verified_marker(target: Path) -> dict[str, Any] | None:
         return None
 
 
-_TOKEN_LINE = re.compile(r"^(.*) (\d+)$", re.DOTALL)
-
-
 def validate_tokens_file(p: Path | str) -> None:
     """Validate a sherpa-onnx ``tokens.txt`` in Python before any native load.
 
-    Every non-empty line must end with a non-negative integer id separated by a
-    single ASCII space from the token.  The token may be empty or contain spaces.
+    Mirrors sherpa-onnx's ``ReadTokens``: each non-empty line is either a single
+    non-negative integer id (the space token, allowed once) or a symbol followed
+    by its non-negative integer id.  Duplicate symbols and duplicate ids are
+    both allowed.
     """
     path = Path(p)
     try:
@@ -172,24 +181,38 @@ def validate_tokens_file(p: Path | str) -> None:
         raise ValueError("tokens.txt contains a NUL byte")
 
     found = 0
-    for raw in text.split("\n"):
+    single_field_seen = False
+    for line_no, raw in enumerate(text.split("\n"), start=1):
         line = raw.rstrip("\r")
         if line == "":
             continue
-        m = _TOKEN_LINE.match(line)
-        if m is None:
+        fields = line.split()
+        if len(fields) == 1:
+            if single_field_seen:
+                raise ValueError(
+                    f"tokens.txt line {line_no} is not '<token> <id>' or '<id>': {line!r}"
+                )
+            id_str = fields[0]
+            kind = "one-field"
+        elif len(fields) == 2:
+            id_str = fields[1]
+            kind = "two-field"
+        else:
             raise ValueError(
-                f"tokens.txt line is not '<token> <integer id>': {line!r}"
+                f"tokens.txt line {line_no} is not '<token> <id>' or '<id>': {line!r}"
             )
-        id_str = m.group(2)
         try:
             idx = int(id_str)
         except ValueError as exc:
             raise ValueError(
-                f"tokens.txt trailing value is not an integer: {id_str!r}"
+                f"tokens.txt line {line_no} is not '<token> <id>' or '<id>': {line!r}"
             ) from exc
         if idx < 0:
-            raise ValueError(f"tokens.txt integer id must be non-negative: {idx}")
+            raise ValueError(
+                f"tokens.txt line {line_no} is not '<token> <id>' or '<id>': {line!r}"
+            )
+        if kind == "one-field":
+            single_field_seen = True
         found += 1
 
     if found == 0:
@@ -237,6 +260,17 @@ def verify_model_dir(model_id: str, path: Path | str) -> None:
                 _verify_error(model_id, d, f"required file missing: {req}")
             )
 
+    expected_tokens_sha256 = marker.get("tokens_sha256")
+    if expected_tokens_sha256 is None:
+        raise ValueError(
+            _verify_error(model_id, d, "missing tokens_sha256 in .verified marker")
+        )
+    actual_tokens_sha256 = _sha256_file(d / "tokens.txt")
+    if actual_tokens_sha256 != expected_tokens_sha256:
+        raise ValueError(
+            _verify_error(model_id, d, "tokens.txt digest mismatch")
+        )
+
     try:
         validate_tokens_file(d / "tokens.txt")
     except ValueError as exc:
@@ -254,6 +288,13 @@ def is_installed(model_id: str, root: Path | str | None = None) -> bool:
         return False
     if marker.get("model_id") != model_id or marker.get("sha256") != model.sha256:
         return False
+
+    expected_tokens_sha256 = marker.get("tokens_sha256")
+    if expected_tokens_sha256 is None:
+        return False
+    if not (d / "tokens.txt").exists() or _sha256_file(d / "tokens.txt") != expected_tokens_sha256:
+        return False
+
     for rel_path, size in (marker.get("files") or {}).items():
         p = d / rel_path
         if not p.exists() or p.stat().st_size != size:

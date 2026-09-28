@@ -38,11 +38,14 @@
   - **Loading off the event loop.** Construction validates the model files only. The sherpa model loads in the engine's worker thread through an async `warm_up()`, which the module awaits in `initialize()`. Neither a boot nor a Spot restart stalls the event loop on a model load.
   - **A failed warm-up degrades; it never aborts the boot.** A corrupt model or an invalid speaker id raises from `warm_up()`, and the module catches it in `initialize()`:
     - Audition disables transcription.
-    - Vox marks its synthesiser unavailable. It stays registered, and every utterance publishes `vox.synthesized` with `success = false` and the reason, without calling the engine.
+    - Vox marks its synthesiser unavailable and stays registered.
+      - While dormant it publishes nothing, as always.
+      - Otherwise, at most once per 60 s of entity time, it publishes `vox.synthesized` with `success = false`, the reason, and baseline salience, without calling the engine.
+      - The Hypnos ignition audit counts a failed `vox.synthesized` as a failed realisation, not a realised utterance.
     - Both record the failure with `record_backend_failure` and log it.
   - **Native-exit protection.** sherpa-onnx calls `exit()` from native code on a malformed `tokens.txt`, and no Python exception can catch that. So before any native load the engines:
-    - require a model directory whose `.verified` marker matches the manifest (sizes of every file);
-    - parse `tokens.txt` in Python: every non-empty line is a token and an integer id.
+    - require a model directory whose `.verified` marker matches the manifest (sizes of every file) and whose `tokens.txt` matches the sha256 recorded at install;
+    - parse `tokens.txt` in Python exactly as sherpa-onnx does: a whitespace split giving either one field (the id of the space token, at most once) or two fields (symbol and id). Duplicate symbols are allowed, because the genuine Moonshine files contain them.
 
     A directory that fails either check is refused with an actionable error. A custom `sherpa_model_dir` must therefore be populated by `python -m kaine.setup.speech_models --root`.
 - **New keys**, added to the boot allow-lists and `config/kaine.toml` with comments:

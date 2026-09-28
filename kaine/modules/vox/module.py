@@ -136,6 +136,7 @@ class Vox(BaseModule):
         self._baseline_cfg_weight = float(baseline_cfg_weight)
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
+        self._muted_last_published: Optional[float] = None
         self._lingua_stream = lingua_external_stream
         self._thymos_stream = thymos_state_stream
         self._cursors: dict[str, str] = {}
@@ -254,11 +255,37 @@ class Vox(BaseModule):
         state: Optional[DimensionalState] = None,
     ) -> SynthesisResult:
         """Direct synthesis API for tests and callers without a bus loop."""
-        if self._tts_unavailable:
-            raise RuntimeError(f"text-to-speech unavailable: {self._tts_unavailable}")
         if self._dormant:
             log.debug("vox dormant: suppressing utterance")
             self._suppressed_while_dormant += 1
+            return SynthesisResult(
+                audio=b"",
+                content_type="",
+                latency_ms=0.0,
+                output_format=self._output_format,
+                bytes_produced=0,
+            )
+        if self._tts_unavailable:
+            now = self._clock.now()
+            if self._muted_last_published is None or now - self._muted_last_published >= 60.0:
+                self._muted_last_published = now
+                result = SynthesisResult(
+                    audio=b"",
+                    content_type="",
+                    latency_ms=0.0,
+                    output_format=self._output_format,
+                    bytes_produced=0,
+                )
+                params = self._params_for(self._current_state)
+                await self._publish_event(
+                    text,
+                    params,
+                    result,
+                    success=False,
+                    error=f"text-to-speech unavailable: {self._tts_unavailable}",
+                    salience=self._baseline_salience,
+                )
+            log.debug("vox muted synthesis suppressed: %s", self._tts_unavailable)
             return SynthesisResult(
                 audio=b"",
                 content_type="",
@@ -372,6 +399,7 @@ class Vox(BaseModule):
         *,
         success: bool,
         error: Optional[str] = None,
+        salience: Optional[float] = None,
     ) -> None:
         payload: dict[str, Any] = {
             "text_length": len(text),
@@ -389,7 +417,8 @@ class Vox(BaseModule):
         }
         if error is not None:
             payload["error"] = error
-        salience = self._baseline_salience if success else self._alert_salience
+        if salience is None:
+            salience = self._baseline_salience if success else self._alert_salience
         await self.publish("vox.synthesized", payload, salience=salience)
 
     async def _consumer_loop(self) -> None:
