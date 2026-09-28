@@ -12,4 +12,4 @@
 
 - [x] 3.1 Parity tests against the fixtures (no JAX needed), finite-difference gradient checks, checkpoint interchange in both directions, a JAX-blocked subprocess test, and the latency budget.
 - [x] 3.2 Docs: the Phantasia module page, configuration, deployment tiers.
-- [ ] 3.3 Offline suite green; `openspec validate numpy-phantasia-engine --strict`.
+- [x] 3.3 Offline suite green; `openspec validate numpy-phantasia-engine --strict`.
