@@ -132,7 +132,10 @@ Persistent named volumes: `kaine-redis-data`, `kaine-qdrant-data`,
 forks, preservation bundles, individuation, world/self models, control state,
 audit/incident logs), `kaine-eval-data` (`/app/data/evaluation` on both the
 cycle and Nexus — the run manifests under `runs/` plus every evaluation
-observer's output), and `kaine-trajectory` (`/app/data/workspace_trajectory`).
+observer's output), `kaine-backups` (`/app/backups` — preservation bundles
+from the divergence monitor and welfare response), `kaine-ignition`
+(`/app/data/ignition` — the film-aligned ignition log), and
+`kaine-trajectory` (`/app/data/workspace_trajectory`).
 `kaine-state` keeps owner-only (0700/0600) permissions inside the container and
 survives `down`/`up`; research output survives it too — nothing the run
 produces lives on the ephemeral container layer.

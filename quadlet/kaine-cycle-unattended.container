@@ -39,6 +39,10 @@ Volume=kaine-state.volume:/app/state
 Volume=kaine-models.volume:/models:ro
 Volume=kaine-eval-data.volume:/app/data/evaluation
 Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
+# Preservation bundles (durable, never raw sense data).
+Volume=kaine-backups.volume:/app/backups
+# Film-aligned ignition log research data (durable, never raw sense data).
+Volume=kaine-ignition.volume:/app/data/ignition
 Tmpfs=/app/state/perception
 # Share the user's D-Bus session bus so a desktop caretaker channel can send
 # notifications. The image must contain `gdbus`. This channel does NOT work
