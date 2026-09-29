@@ -3,14 +3,14 @@
 - [ ] 1.2 The study runner requests the seed's preservation only after the bloom is complete.
 
 ## 2. Transition
-- [ ] 2.1 `kaine/modules/perception_transition.py`:
+- [x] 2.1 `kaine/modules/perception_transition.py`:
   - pure crossfade functions: a monotonic alpha curve with fixed endpoints, a video blend, and an audio fade-in;
   - video and audio transition sources wrapping the playlist sources.
-- [ ] 2.2 Boot wiring. Build the transition when the conditions hold. Start the playlist clock paused under `transition` and release it at the fade's end. Log the reason when no transition is rendered.
-- [ ] 2.3 `[perception_feed].transition_seconds` (default 20) in config/kaine.toml. The step manifest records it.
+- [x] 2.2 Boot wiring. Build the transition when the conditions hold. Start the playlist clock paused under `transition` and release it at the fade's end. Log the reason when no transition is rendered.
+- [x] 2.3 `[perception_feed].transition_seconds` (default 20) and `transition_audio_fade_seconds` (default 3) in config/kaine.toml. The run manifest records both and whether the transition is active.
 
 ## 3. Verification
-- [ ] 3.1 Tests:
+- [x] 3.1 Tests:
   - determinism: identical frames and samples from one seed;
   - fade endpoints and bounds;
   - film time zero at the end of the fade;

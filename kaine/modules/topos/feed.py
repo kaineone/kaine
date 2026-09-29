@@ -1029,6 +1029,29 @@ class PlaylistSource:
             self._clock.set_duration(self._item_idx, frame_count / float(item.fps))
         return True
 
+    def first_frame(self) -> Any | None:
+        """Decode the programme's opening frame (item 0, media frame 0).
+
+        Uses a private capture on the same decode path as ``read()`` and never
+        starts, reads or registers anything on the shared clock, so the
+        programme's position is untouched. Requires a verified source
+        (``open()`` first); returns ``None`` when the frame cannot be decoded.
+        The frame lives only in memory.
+        """
+        if not self._verified or self._cv2 is None or not self._manifest.items:
+            return None
+        cap = self._cv2.VideoCapture(str(self._resolve(self._manifest.items[0])))
+        try:
+            if not cap.isOpened():
+                return None
+            ok, frame = cap.read()
+            return frame if ok else None
+        finally:
+            try:
+                cap.release()
+            except Exception:
+                log.debug("playlist VideoCapture.release raised", exc_info=True)
+
     def _advance_item(self) -> bool:
         if self._cap is not None:
             try:

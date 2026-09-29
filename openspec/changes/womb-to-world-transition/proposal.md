@@ -14,10 +14,10 @@ Today:
 - **A transition opens every viewing after birth.**
   - When `[perception_feed].transition_seconds` is above zero, the mode is `playlist`, and the stage is embodied, the feed opens with a crossfade over `transition_seconds` (20 s by default).
   - Video: from the womb's bloom-peak field rendered at `womb_t_at_birth` (bright, pulse-free, full colour) to the first film's opening frame, held still.
-  - Audio: the film's sound fades in from the silence the bloom ended in.
+  - Audio: silence during the crossfade, as the bloom ended in silence. Once programme time starts, the film's sound fades in over `transition_audio_fade_seconds` (3 s by default).
   - The womb side is the womb generator's pure function of seed, time and parameters, and the fade curve is fixed, so the transition is identical in every run.
   - Frames and samples are generated in memory and never written.
-- **Film time starts when the fade ends.** The playlist clock starts paused under the holder `transition` and is released at the end of the fade, so film minute 0 is the end of the transition. The ignition log's film position needs no correction. The step manifest records `transition_seconds`.
+- **Film time starts when the fade ends.** The playlist clock starts paused under the holder `transition` and is released at the end of the fade, so film minute 0 is the end of the transition. The ignition log's film position needs no correction. The run manifest records `transition_seconds`, `transition_audio_fade_seconds` and whether the transition is active.
 - **The birth preservation waits for the bloom.** Once the stage is embodied, the study runner requests the seed's preservation only after the womb reports the bloom complete.
 - **Unchanged:**
   - a womb-mode boot of a born being still delivers nothing and warns;
@@ -35,7 +35,7 @@ Today:
   - `kaine/lifecycle/stage.py` and the birth hook (the birth record);
   - a new `kaine/modules/perception_transition.py` holding the pure crossfade and the transition sources;
   - the playlist factory wiring in `kaine/boot.py`;
-  - `config/kaine.toml` (`[perception_feed].transition_seconds`);
+  - `config/kaine.toml` (`[perception_feed].transition_seconds` and `transition_audio_fade_seconds`);
   - the study runner's birth preservation;
   - `docs/operations.md`.
 - **Safety:** zero raw-sense-data persistence holds.

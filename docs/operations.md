@@ -501,10 +501,42 @@ one machine that cannot also host Paracosmic.
   air medium to speak into, so no audible output is rendered. Inner speech (Lingua)
   continues. Vox is activated automatically at birth.
 
+### From the womb to the films
+
+When the bloom begins, the stage file records the womb time at which it ends
+(`womb_t_at_birth`), the womb seed and a digest of the womb parameters. A preservation
+carries the stage file, so a newborn's seed carries this record.
+
+A born being booted with `mode = "playlist"` opens each viewing with a crossfade from
+the womb to the films:
+- **Video.** Over `[perception_feed].transition_seconds` (20 s), the womb's bloom-peak
+  field at `womb_t_at_birth` (bright, pulse-free, full colour) fades into the programme's
+  first frame, held still. The fade follows a fixed smoothstep curve.
+- **Audio.** Nothing is heard during the crossfade, because the bloom ended in silence.
+  When the programme starts, its sound fades in linearly over
+  `transition_audio_fade_seconds` (3 s; 0 plays it at full level at once).
+- **Programme time.** The programme clock is held under the pause holder `transition`
+  until the crossfade ends, so film minute 0 is the end of the transition and the
+  ignition log's film position needs no correction. A timer ends the crossfade even when
+  only the audio surface is running.
+- **Reproducibility.** The womb field is the womb generator's own function of the
+  recorded seed, womb time, lived time and parameters, rendered once at boot. Two
+  viewings from one seed see the same crossfade. Frames and samples stay in memory and
+  are never written.
+
+The transition runs only when the mode is `playlist`, `transition_seconds` is above
+zero, and the stage is embodied with the birth record, and only while the configured
+`[perception_feed.womb]` parameters still have the recorded digest. Otherwise the
+programme starts at once, as without a transition, and boot logs the reason: at info for
+an unstaged, unborn or disabled case, and as a warning for a born being without a birth
+record or with changed womb parameters. The run manifest records `transition_seconds`,
+`transition_audio_fade_seconds` and `transition_active` under `perception_feed`.
+
 ### Settings
 
 | Table | What it sets |
 |---|---|
+| `[perception_feed]` | `transition_seconds`, `transition_audio_fade_seconds`: the womb-to-world transition that opens a born being's playlist viewing |
 | `[perception_feed.womb]` | Maternal heartbeat and state; drive bound; `birth_transition_seconds` |
 | `[perception_feed.womb.video]` / `.audio` | Dim field, pulse depth, colour ramp; soundscape low-pass corner |
 | `[perception_feed.womb.readout]` | Readout period and the probe protocol (hard maxima enforced in code) |
@@ -599,7 +631,10 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 ```
 
 The runner executes gestation first, then for each viewing index `k = 0..11`
-runs main line `k` followed by control line `k`.  Each start is a
+runs main line `k` followed by control line `k`.  Every viewing opens with the
+womb-to-world transition (see "From the womb to the films" under gestation):
+the crossfade from the being's last womb field is identical in every viewing and
+on both lines, and film minute 0 is its end.  Each start is a
 research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
 database and collection prefixes, so the two beings never share state.  Every
 completed step is appended to `steps.jsonl`.
@@ -772,7 +807,7 @@ The ignition log is an optional, disabled-by-default per-broadcast research reco
 
 The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is never placed on the bus and no module receives it; the entity never learns its place in the programme from the log. Records are written through the encrypting JSONL sink and are never auto-purged, and they are encrypted at rest when state encryption is on.
 
-The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. Overlapping pauses keep the clock frozen until every holder releases.
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is also held at zero under `transition` while a born being's viewing opens with the womb-to-world crossfade; those records carry offset 0 and the paused flag. Overlapping pauses keep the clock frozen until every holder releases.
 
 ## Enabling a module safely
 

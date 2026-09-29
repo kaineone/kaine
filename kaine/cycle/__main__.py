@@ -1130,7 +1130,9 @@ async def _boot_and_run(
         version=_kaine_version,
         # Reproducible perception-feed covariate — gathered at the boot layer
         # (allowed to touch kaine.modules) and passed in as data.
-        perception_feed=gather_perception_feed_descriptor(kaine_config),
+        perception_feed=gather_perception_feed_descriptor(
+            kaine_config, stage_state=stage_state
+        ),
         plugins=plugins.manifest_entry(),
         revived_from=revive.revived_from if revive is not None else None,
         timing=timing,
