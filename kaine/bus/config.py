@@ -75,6 +75,30 @@ def load_secrets_doc(secrets_toml: Optional[Path] = None) -> dict:
     return _read_toml(secrets_toml)
 
 
+def resolve_redis_auth(
+    env: Optional[dict[str, str]] = None,
+    secrets_toml: Optional[Path] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve Redis username and password from environment and secrets.
+
+    Precedence mirrors :func:`load_bus_config` for env and secrets:
+    ``KAINE_REDIS_USERNAME``/``KAINE_REDIS_PASSWORD`` win over the
+    ``[redis].username``/``[redis].password`` entries in ``config/secrets.toml``.
+    Empty strings are treated as absent.
+    """
+    env = env if env is not None else os.environ
+    redis_secrets = load_secrets_doc(secrets_toml).get("redis") or {}
+
+    def _coerce(value: Optional[str]) -> Optional[str]:
+        if value == "":
+            return None
+        return value
+
+    username = _coerce(env.get("KAINE_REDIS_USERNAME") or redis_secrets.get("username"))
+    password = _coerce(env.get("KAINE_REDIS_PASSWORD") or redis_secrets.get("password"))
+    return username, password
+
+
 def load_bus_config(
     kaine_toml: Optional[Path] = None,
     secrets_toml: Optional[Path] = None,

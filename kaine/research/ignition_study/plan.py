@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from kaine.boot import known_module_names
 
@@ -73,6 +74,18 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     redis = plan["redis"]
     if not isinstance(redis, dict) or "base_url" not in redis or "db" not in redis:
         raise ValueError("redis must contain base_url and db")
+
+    parsed = urlsplit(redis["base_url"])
+    if parsed.username or parsed.password:
+        raise ValueError(
+            "redis.base_url must not contain credentials; the password comes from "
+            "KAINE_REDIS_PASSWORD or config/secrets.toml"
+        )
+    if parsed.scheme not in ("redis", "rediss"):
+        raise ValueError("redis.base_url scheme must be redis or rediss")
+    if parsed.path not in ("", "/"):
+        raise ValueError("redis.base_url path must be empty or '/'")
+
     dbs = redis["db"]
     if not isinstance(dbs, dict) or set(dbs.keys()) != set(LINES):
         raise ValueError(f"redis.db must contain exactly {LINES}")

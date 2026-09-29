@@ -14,7 +14,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import quote, urlsplit
 
+from kaine.bus.config import resolve_redis_auth
 from kaine.cycle.preserve_watch import read_request, read_result
 from kaine.research.ignition_study.overlay import build_overlay
 from kaine.research.ignition_study.plan import LOCK_FILE, STEPS_FILE, load_plan
@@ -229,9 +231,26 @@ class StudyRunner:
 
         env = dict(os.environ)
         env["KAINE_RESEARCH_MODE"] = "1"
-        env["KAINE_REDIS_URL"] = (
-            f"{self.plan['redis']['base_url']}/{self.plan['redis']['db'][line]}"
+
+        username, password = resolve_redis_auth(
+            env, secrets_toml=repo_root / "config" / "secrets.toml"
         )
+        if not password:
+            raise StudyError(
+                "no Redis password found for the study runner; set KAINE_REDIS_PASSWORD "
+                "or add the password to config/secrets.toml [redis].password"
+            )
+        parsed = urlsplit(self.plan["redis"]["base_url"])
+        quoted_password = quote(password, safe="")
+        if username:
+            auth = f"{quote(username, safe='')}:{quoted_password}@"
+        else:
+            auth = f":{quoted_password}@"
+        env["KAINE_REDIS_URL"] = (
+            f"{parsed.scheme}://{auth}{parsed.netloc}/"
+            f"{self.plan['redis']['db'][line]}"
+        )
+
         env["KAINE_MODELS_DIR"] = models_dir
 
         argv = list(self.cycle_command)
