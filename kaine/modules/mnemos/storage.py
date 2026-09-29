@@ -13,16 +13,20 @@ CLS collections, so selecting a backend never changes Mnemos's semantics.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Callable, Protocol, Sequence, TypeVar, runtime_checkable
 
 from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION, stamp_point_id
 
 log = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 _REQUIRED_STAMP_KEYS = frozenset({"model_id", "dim", "pooling", "normalized"})
 
@@ -315,6 +319,14 @@ class SqliteVecStorage:
     ``sqlite_vec`` is imported lazily inside :meth:`initialize` (mirroring
     :class:`QdrantStorage`'s lazy ``qdrant_client`` import), so a Tier-2 install
     that never selects this backend does not need the dependency.
+
+    Thread affinity: a ``sqlite3`` connection may only be used on the thread
+    that created it, and one connection is not safe for concurrent use. The
+    store therefore owns a dedicated single-worker executor for the life of
+    the connection: it is opened, used and closed on that one thread, and
+    every call is serialised through it (:meth:`_run`). The event loop's
+    shared default executor (``asyncio.to_thread``) would instead hand each
+    call to whichever worker is free, which need not be the opening thread.
     """
 
     def __init__(
@@ -330,15 +342,31 @@ class SqliteVecStorage:
         self._db_path = str(db_path)
         self._distance = distance
         self._db: Any = None
+        # The one thread that owns ``self._db``; set and cleared with it.
+        self._executor: ThreadPoolExecutor | None = None
 
     @property
     def latent_dim(self) -> int:
         return self._latent_dim
 
+    async def _run(self, fn: Callable[[Any], _T]) -> _T:
+        """Run ``fn(db)`` on the connection's owning thread.
+
+        ``fn`` receives the open connection. Before :meth:`initialize` or
+        after :meth:`shutdown` it receives ``None`` and runs inline; each
+        caller turns that into its own not-open outcome without touching
+        SQLite. The connection is bound at submission, so a call queued before
+        :meth:`shutdown` completes on the live connection ahead of the close.
+        """
+        executor, db = self._executor, self._db
+        if executor is None or db is None:
+            return fn(None)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(executor, fn, db)
+
     async def initialize(self) -> None:
         if self._db is not None:
             return
-        import asyncio
 
         def _open() -> Any:
             import os
@@ -377,15 +405,38 @@ class SqliteVecStorage:
             db.commit()
             return db
 
-        self._db = await asyncio.to_thread(_open)
+        executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mnemos-sqlite"
+        )
+        loop = asyncio.get_running_loop()
+        try:
+            db = await loop.run_in_executor(executor, _open)
+        except BaseException:
+            executor.shutdown(wait=False)
+            raise
+        if self._db is not None:
+            # A concurrent initialize() won the race; keep its connection.
+            await loop.run_in_executor(executor, db.close)
+            executor.shutdown(wait=False)
+            return
+        self._db, self._executor = db, executor
 
     async def shutdown(self) -> None:
-        if self._db is not None:
-            db, self._db = self._db, None
-            try:
-                db.close()
-            except Exception:
-                log.warning("sqlite-vec close failed", exc_info=True)
+        db, executor = self._db, self._executor
+        if db is None or executor is None:
+            return
+        # New calls see a closed store from here on; calls already queued on
+        # the owning thread still run first (FIFO), then the close.
+        self._db, self._executor = None, None
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(executor, db.close)
+        except Exception:
+            log.warning("sqlite-vec close failed", exc_info=True)
+        finally:
+            # The close was the last queued job, so this only retires the
+            # now-idle worker thread.
+            executor.shutdown(wait=True)
 
     async def ensure_collection(self, name: str) -> None:
         # Collections are a metadata column, not a separate table — nothing to
@@ -402,7 +453,6 @@ class SqliteVecStorage:
         affect: dict[str, Any] | None,
         point_id: str | None = None,
     ) -> str:
-        import asyncio
         import struct
 
         if len(vector) != self._latent_dim:
@@ -414,9 +464,9 @@ class SqliteVecStorage:
         payload_json = json.dumps(payload or {})
         affect_json = json.dumps(affect) if affect else None
 
-        def _write() -> None:
-            db = self._db
-            assert db is not None
+        def _write(db: Any) -> None:
+            if db is None:
+                raise StorageError("sqlite-vec store is not open")
             cur = db.execute(
                 "SELECT rowid FROM memories WHERE collection = ? AND point_id = ?",
                 (collection, pid),
@@ -439,7 +489,7 @@ class SqliteVecStorage:
                 )
             db.commit()
 
-        await asyncio.to_thread(_write)
+        await self._run(_write)
         return pid
 
     def _insert_point_sync(
@@ -475,7 +525,6 @@ class SqliteVecStorage:
         query_vector: list[float],
         limit: int,
     ) -> list[RecalledMemory]:
-        import asyncio
         import struct
 
         blob = struct.pack(
@@ -485,8 +534,7 @@ class SqliteVecStorage:
         if k == 0:
             return []
 
-        def _query() -> list[RecalledMemory]:
-            db = self._db
+        def _query(db: Any) -> list[RecalledMemory]:
             if db is None:
                 raise StorageError("sqlite-vec search before initialize()")
             try:
@@ -519,14 +567,13 @@ class SqliteVecStorage:
                 )
             return out
 
-        return await asyncio.to_thread(_query)
+        return await self._run(_query)
 
     async def delete(self, collection: str, point_id: str) -> None:
-        import asyncio
 
-        def _del() -> None:
-            db = self._db
-            assert db is not None
+        def _del(db: Any) -> None:
+            if db is None:
+                raise StorageError("sqlite-vec store is not open")
             cur = db.execute(
                 "SELECT rowid FROM memories WHERE collection = ? AND point_id = ?",
                 (collection, point_id),
@@ -539,13 +586,11 @@ class SqliteVecStorage:
             db.execute("DELETE FROM memories WHERE rowid = ?", (rowid,))
             db.commit()
 
-        await asyncio.to_thread(_del)
+        await self._run(_del)
 
     async def count(self, collection: str, strict: bool = False) -> int:
-        import asyncio
 
-        def _count() -> int:
-            db = self._db
+        def _count(db: Any) -> int:
             if db is None:
                 if strict:
                     raise StorageError("sqlite-vec count before initialize()")
@@ -563,14 +608,12 @@ class SqliteVecStorage:
                     ) from exc
                 return 0
 
-        return await asyncio.to_thread(_count)
+        return await self._run(_count)
 
     async def vector_dim(self, collection: str) -> int | None:
-        import asyncio
         import re
 
-        def _dim() -> int | None:
-            db = self._db
+        def _dim(db: Any) -> int | None:
             if db is None:
                 raise StorageError("sqlite-vec vector_dim before initialize()")
             try:
@@ -604,17 +647,15 @@ class SqliteVecStorage:
                 )
             return int(match.group(1))
 
-        return await asyncio.to_thread(_dim)
+        return await self._run(_dim)
 
     async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
-        import asyncio
         import struct
 
         if not collections:
             return {}
 
-        def _export() -> dict[str, list[dict[str, Any]]]:
-            db = self._db
+        def _export(db: Any) -> dict[str, list[dict[str, Any]]]:
             if db is None:
                 raise StorageError("sqlite-vec export before initialize()")
             out: dict[str, list[dict[str, Any]]] = {}
@@ -642,10 +683,9 @@ class SqliteVecStorage:
                 raise StorageError(f"sqlite-vec export failed: {exc}") from exc
             return out
 
-        return await asyncio.to_thread(_export)
+        return await self._run(_export)
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
-        import asyncio
 
         for p in points:
             vec = list(p.get("vector") or [])
@@ -655,8 +695,7 @@ class SqliteVecStorage:
                     f"(dim {len(vec)} != {self._latent_dim} or non-finite)"
                 )
 
-        def _replace() -> int:
-            db = self._db
+        def _replace(db: Any) -> int:
             if db is None:
                 raise StorageError("sqlite-vec replace_collection before initialize()")
             try:
@@ -684,13 +723,11 @@ class SqliteVecStorage:
                     f"sqlite-vec replace_collection failed for {name!r}: {exc}"
                 ) from exc
 
-        return await asyncio.to_thread(_replace)
+        return await self._run(_replace)
 
     async def read_stamp(self, key: str) -> dict | None:
-        import asyncio
 
-        def _read() -> dict | None:
-            db = self._db
+        def _read(db: Any) -> dict | None:
             if db is None:
                 raise StorageError("sqlite-vec read_stamp before initialize()")
             try:
@@ -715,13 +752,11 @@ class SqliteVecStorage:
                     f"sqlite-vec read_stamp failed for {key!r}: {exc}"
                 ) from exc
 
-        return await asyncio.to_thread(_read)
+        return await self._run(_read)
 
     async def write_stamp(self, key: str, stamp: dict) -> None:
-        import asyncio
 
-        def _write() -> None:
-            db = self._db
+        def _write(db: Any) -> None:
             if db is None:
                 raise StorageError("sqlite-vec write_stamp before initialize()")
             try:
@@ -736,7 +771,7 @@ class SqliteVecStorage:
                     f"sqlite-vec write_stamp failed for {key!r}: {exc}"
                 ) from exc
 
-        await asyncio.to_thread(_write)
+        await self._run(_write)
 
 
 class QdrantStorage:

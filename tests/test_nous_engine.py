@@ -125,23 +125,90 @@ pytestmark_real = pytest.mark.skipif(
 )
 
 
+def _jit_cache_sizes(engine) -> tuple[int, int, int]:
+    jitted = (engine._jit_cycle, engine._jit_learn, engine._jit_propagate)
+    for fn in jitted:
+        assert hasattr(fn, "_cache_size"), (
+            "jax.jit functions no longer expose _cache_size(); update this test "
+            "to count compilations another way (do not drop the check)"
+        )
+    return tuple(fn._cache_size() for fn in jitted)
+
+
 @pytestmark_real
-def test_real_pymdp_engine_runs_within_budget():
+def test_real_pymdp_engine_compiles_nothing_after_construction():
+    """Construction compiles every jitted path a live step takes.
+
+    JAX compiles once per argument shape, and a compile costs ~100x a
+    steady-state step (about 100 ms against about 1 ms on a desktop, seconds
+    on a loaded CI runner). A compile left for the first live step lands inside
+    the EFE deadline, so the first learning step overran it. This checks that
+    directly and deterministically: the jit caches do not grow across the first
+    live steps, which include the first learning step.
+    """
     from kaine.modules.nous.engine import PymdpEngine
 
     engine = PymdpEngine(efe_timeout_ms=10_000.0)
     try:
-        # Warm, then measure a single step.
-        engine.step(_snap())
-        start = time.perf_counter()
-        result = engine.step(_snap())
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        assert not result.timed_out
-        assert len(result.posterior) == 4
-        assert len(result.policy_efe) == 4
-        assert result.action in engine.actions
-        # Generous bound — the benchmark asserts the real <=200ms median.
-        assert elapsed_ms < 1000.0
+        after_construction = _jit_cache_sizes(engine)
+        assert all(n >= 1 for n in after_construction)
+        for _ in range(4):
+            engine.step(_snap())
+        assert _jit_cache_sizes(engine) == after_construction
+    finally:
+        engine.close()
+
+
+@pytestmark_real
+def test_real_pymdp_engine_runs_within_budget():
+    """The median live step fits inside the engine's own EFE deadline.
+
+    What this protects: a Nous step must fit its per-tick deadline,
+    ``efe_timeout_ms`` (engine default 250 ms, inside the ~300 ms cognitive
+    cycle); a step that overruns it returns the stale posterior. The budget is
+    therefore that documented default, read from the engine, not a number of
+    our own.
+
+    How it measures, and why: the median of several consecutive steps from a
+    freshly constructed engine, so one descheduled step on a shared runner
+    cannot fail the test, while a systematic slowdown of the step (the thing
+    worth catching) still moves the median. One-time JIT compilation is
+    excluded because it belongs to construction; the companion test
+    ``test_real_pymdp_engine_compiles_nothing_after_construction`` proves no
+    compile leaks into these steps, so nothing here has to be warmed first.
+    The first learning step is among the samples.
+
+    CI-noise allowance: a desktop median is about 1-2 ms, so the 250 ms budget
+    leaves a margin of more than 100x for a slow or contended runner. The
+    tighter 200 ms median target on real hardware is asserted by
+    ``scripts/benchmark_nous_efe.py``, not here.
+    """
+    import inspect
+    import statistics
+
+    from kaine.modules.nous.engine import PymdpEngine
+
+    budget_ms = float(
+        inspect.signature(PymdpEngine).parameters["efe_timeout_ms"].default
+    )
+    # Measure raw compute: a generous deadline so the guard never trips here.
+    engine = PymdpEngine(efe_timeout_ms=10_000.0)
+    try:
+        samples_ms: list[float] = []
+        for _ in range(9):
+            start = time.perf_counter()
+            result = engine.step(_snap())
+            samples_ms.append((time.perf_counter() - start) * 1000.0)
+            assert not result.timed_out
+            assert not result.error
+            assert len(result.posterior) == 4
+            assert len(result.policy_efe) == 4
+            assert result.action in engine.actions
+        median_ms = statistics.median(samples_ms)
+        assert median_ms < budget_ms, (
+            f"median step {median_ms:.1f} ms >= EFE deadline {budget_ms:.0f} ms "
+            f"(samples: {[round(x, 1) for x in samples_ms]})"
+        )
     finally:
         engine.close()
 
