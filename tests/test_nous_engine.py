@@ -10,6 +10,7 @@ exercises the real :class:`PymdpEngine` only when the reasoning extra is present
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import pytest
@@ -125,36 +126,54 @@ pytestmark_real = pytest.mark.skipif(
 )
 
 
-def _jit_cache_sizes(engine) -> tuple[int, int, int]:
-    jitted = (engine._jit_cycle, engine._jit_learn, engine._jit_propagate)
-    for fn in jitted:
-        assert hasattr(fn, "_cache_size"), (
-            "jax.jit functions no longer expose _cache_size(); update this test "
-            "to count compilations another way (do not drop the check)"
-        )
-    return tuple(fn._cache_size() for fn in jitted)
+@contextmanager
+def _jax_compile_events():
+    """Record every JAX trace/lower/compile event raised inside the block.
+
+    Uses the public ``jax.monitoring`` duration events rather than a jitted
+    function's private ``_cache_size()``: that reads jax's process-wide C++
+    fast-path cache, which holds a fixed number of entries across all jitted
+    functions and evicts once a long test session has filled it, so it can
+    read 0 for a function that did compile. A compile event is the thing
+    that costs time inside a tick, whatever cache served the call.
+    """
+    import jax.monitoring as monitoring
+
+    events: list[str] = []
+
+    def _listener(event: str, duration_secs: float, **kwargs) -> None:
+        if event.startswith("/jax/core/compile/"):
+            events.append(event)
+
+    monitoring.register_event_duration_secs_listener(_listener)
+    try:
+        yield events
+    finally:
+        monitoring.unregister_event_duration_listener(_listener)
 
 
 @pytestmark_real
 def test_real_pymdp_engine_compiles_nothing_after_construction():
     """Construction compiles every jitted path a live step takes.
 
-    JAX compiles once per argument shape, and a compile costs ~100x a
-    steady-state step (about 100 ms against about 1 ms on a desktop, seconds
-    on a loaded CI runner). A compile left for the first live step lands inside
-    the EFE deadline, so the first learning step overran it. This checks that
-    directly and deterministically: the jit caches do not grow across the first
-    live steps, which include the first learning step.
+    JAX traces and compiles once per argument shape, and a compile costs ~100x
+    a steady-state step (about 100 ms against about 1 ms on a desktop, seconds
+    on a loaded CI runner). A compile left for the first live step lands
+    inside the EFE deadline, so the first learning step overran it. This
+    checks that directly: no JAX trace, lowering or compile happens during the
+    first live steps of a freshly constructed engine, which include the first
+    learning step. Compilations by earlier tests in the same process can only
+    remove compile events here, never add them, so test order cannot fail it.
     """
     from kaine.modules.nous.engine import PymdpEngine
 
     engine = PymdpEngine(efe_timeout_ms=10_000.0)
     try:
-        after_construction = _jit_cache_sizes(engine)
-        assert all(n >= 1 for n in after_construction)
-        for _ in range(4):
-            engine.step(_snap())
-        assert _jit_cache_sizes(engine) == after_construction
+        with _jax_compile_events() as events:
+            for _ in range(4):
+                result = engine.step(_snap())
+                assert not result.timed_out and not result.error
+        assert events == []
     finally:
         engine.close()
 
