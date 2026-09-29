@@ -75,16 +75,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(redis, dict) or "base_url" not in redis or "db" not in redis:
         raise ValueError("redis must contain base_url and db")
 
-    parsed = urlsplit(redis["base_url"])
-    if parsed.username or parsed.password:
-        raise ValueError(
-            "redis.base_url must not contain credentials; the password comes from "
-            "KAINE_REDIS_PASSWORD or config/secrets.toml"
-        )
-    if parsed.scheme not in ("redis", "rediss"):
-        raise ValueError("redis.base_url scheme must be redis or rediss")
-    if parsed.path not in ("", "/"):
-        raise ValueError("redis.base_url path must be empty or '/'")
+    validate_redis_base_url(redis["base_url"])
 
     dbs = redis["db"]
     if not isinstance(dbs, dict) or set(dbs.keys()) != set(LINES):
@@ -169,6 +160,23 @@ def init_study(
 
     return plan
 
+
+def validate_redis_base_url(base_url: str) -> None:
+    """Validate that a Redis base URL contains no credentials, path, or bad scheme.
+
+    Raises:
+        ValueError: If the URL is malformed. The message never includes the URL text.
+    """
+    parsed = urlsplit(base_url)
+    if parsed.username or parsed.password:
+        raise ValueError(
+            "redis.base_url must not contain credentials; the password comes from "
+            "KAINE_REDIS_PASSWORD or config/secrets.toml"
+        )
+    if parsed.scheme not in ("redis", "rediss"):
+        raise ValueError("redis.base_url scheme must be redis or rediss")
+    if parsed.path not in ("", "/"):
+        raise ValueError("redis.base_url path must be empty or '/'")
 
 def load_plan(study_dir: Path | str) -> dict[str, Any]:
     """Load the plan from an existing study directory."""

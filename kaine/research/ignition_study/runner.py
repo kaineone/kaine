@@ -19,7 +19,12 @@ from urllib.parse import quote, urlsplit
 from kaine.bus.config import resolve_redis_auth
 from kaine.cycle.preserve_watch import read_request, read_result
 from kaine.research.ignition_study.overlay import build_overlay
-from kaine.research.ignition_study.plan import LOCK_FILE, STEPS_FILE, load_plan
+from kaine.research.ignition_study.plan import (
+    LOCK_FILE,
+    STEPS_FILE,
+    load_plan,
+    validate_redis_base_url,
+)
 from kaine.research.ignition_study.toml_writer import dumps
 
 log = logging.getLogger(__name__)
@@ -66,6 +71,10 @@ class StudyRunner:
     ) -> None:
         self.study_dir = Path(study_dir).resolve()
         self.plan = load_plan(self.study_dir)
+        try:
+            validate_redis_base_url(self.plan["redis"]["base_url"])
+        except ValueError as exc:
+            raise StudyError(f"study.json: {exc}") from None
         self.steps_path = self.study_dir / STEPS_FILE
         self.cycle_command = list(cycle_command or [sys.executable, "-m", "kaine.cycle"])
         self.control_command = list(

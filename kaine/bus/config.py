@@ -81,6 +81,11 @@ def resolve_redis_auth(
 ) -> tuple[Optional[str], Optional[str]]:
     """Resolve Redis username and password from environment and secrets.
 
+    This function reads only the environment and ``config/secrets.toml``.
+    It never reads ``[redis].password`` or ``[redis].username`` from
+    ``kaine.toml`` or the operator file, because credentials do not belong in
+    configuration files.
+
     Precedence mirrors :func:`load_bus_config` for env and secrets:
     ``KAINE_REDIS_USERNAME``/``KAINE_REDIS_PASSWORD`` win over the
     ``[redis].username``/``[redis].password`` entries in ``config/secrets.toml``.
@@ -89,14 +94,9 @@ def resolve_redis_auth(
     env = env if env is not None else os.environ
     redis_secrets = load_secrets_doc(secrets_toml).get("redis") or {}
 
-    def _coerce(value: Optional[str]) -> Optional[str]:
-        if value == "":
-            return None
-        return value
-
-    username = _coerce(env.get("KAINE_REDIS_USERNAME") or redis_secrets.get("username"))
-    password = _coerce(env.get("KAINE_REDIS_PASSWORD") or redis_secrets.get("password"))
-    return username, password
+    username = env.get("KAINE_REDIS_USERNAME") or redis_secrets.get("username")
+    password = env.get("KAINE_REDIS_PASSWORD") or redis_secrets.get("password")
+    return username or None, password or None
 
 
 def load_bus_config(

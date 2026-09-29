@@ -193,3 +193,38 @@ def test_password_not_recorded(tmp_path: Path, known_modules, monkeypatch):
     encoded = "p%40ss%3Aw%2Frd"
     assert encoded not in study_text
     assert encoded not in steps_text
+
+
+def test_resume_rejects_legacy_plan_with_credentials(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
+    study_dir = _create_study(tmp_path, viewings=2)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+
+    study_path = study_dir / "study.json"
+    plan = json.loads(study_path.read_text())
+    plan["redis"]["base_url"] = "redis://:oldpw@127.0.0.1:6479"
+    study_path.write_text(json.dumps(plan))
+
+    with pytest.raises(StudyError, match="study.json") as exc_info:
+        _runner(study_dir, script)
+    assert "oldpw" not in str(exc_info.value)
+
+
+def test_resume_rejects_legacy_plan_with_path(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
+    study_dir = _create_study(tmp_path, viewings=2)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+
+    study_path = study_dir / "study.json"
+    plan = json.loads(study_path.read_text())
+    plan["redis"]["base_url"] = "redis://127.0.0.1:6479/3"
+    study_path.write_text(json.dumps(plan))
+
+    with pytest.raises(StudyError, match="study.json"):
+        _runner(study_dir, script)
