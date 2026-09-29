@@ -21,14 +21,14 @@
 - [x] 2.3 The ignition analysis and its report.
 - [x] 2.4 A dry run of the runner end to end with a tiny stand-in programme and no entity (fakes), before the real run.
 - [ ] 2.5 The real run: `init`, then `run` through the seed, branch, repeat and accumulate steps, with state encryption configured, started by the operator.
-- [ ] 2.6 The runner follows the seed and branch protocol (revised 2026-09-28):
+- [x] 2.6 The runner follows the seed and branch protocol (revised 2026-09-28):
   - the step order seed, branch 0, repeat, then branch k and accumulate k;
   - start bundles as specified;
   - a working directory and collection prefixes per branch step, per repeat, and per accumulate line;
   - every step on an empty, study-owned bus database, flushed by the runner. The runner refuses a plan whose database numbers include the operator's.
 - [ ] 2.7 The seed step's birth is automatic. The runner waits for the birth bloom to complete before preserving, and the preservation records the womb's time at birth.
 - [ ] 2.8 A `kaine-study` compose service built from the cycle image, with the cycle's configuration, secrets and media mounts and a durable study volume. The runner resolves `/models` and the bus by service name inside it. Operator docs.
-- [ ] 2.9 The analysis compares branch k against branch 0, branch 0 against the repeat, and accumulate k against branch k, and states the revised limits.
+- [x] 2.9 The analysis compares branch k against branch 0, branch 0 against the repeat, and accumulate k against branch k, and states the revised limits.
 - [ ] 2.10 A dry run of the revised runner end to end with the stand-in cycle, before the real run.
 
 ## 3. Hardware leg (portability program phases 1–4; paused 2026-09-28 except the desktop and, next, the Orin Nano Super)

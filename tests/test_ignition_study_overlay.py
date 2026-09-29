@@ -63,10 +63,9 @@ def plan(repo):
         "programme": {"manifest": str(repo / "programme.toml"), "sha256": "a" * 64},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "main": 11, "control": 12},
+            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
-        "collections": {"gestation": "g_", "main": "m_", "control": "c_"},
-        "viewings_per_line": 2,
+        "collections": {"gestation": "g_", "branch": "b_", "repeat": "r_", "accumulate": "a_"},
     }
 
 
@@ -83,9 +82,9 @@ def test_overlay_gestation_modules(repo, plan):
     assert "playlist_manifest" not in overlay["perception_feed"]
 
 
-def test_overlay_main_modules_accumulate(repo, plan):
+def test_overlay_branch_modules_accumulate(repo, plan):
     overlay0, enabled0, _ = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert enabled0 == {"soma", "chronos", "topos"}
@@ -93,37 +92,57 @@ def test_overlay_main_modules_accumulate(repo, plan):
     assert overlay0["perception_feed"]["playlist_manifest"] == plan["programme"]["manifest"]
 
     overlay1, enabled1, _ = build_overlay(
-        plan, "main", "viewing", 1, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 1, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert enabled1 == {"soma", "chronos", "topos", "thymos"}
     assert overlay1["modules"]["thymos"] is True
     assert overlay1["modules"]["mnemos"] is False
 
-
-def test_overlay_control_only_base(repo, plan):
-    overlay, enabled, _ = build_overlay(
-        plan, "control", "viewing", 1, repo, repo / "config" / "kaine.toml",
+    overlay2, enabled2, _ = build_overlay(
+        plan, "accumulate", "viewing", 2, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
-    assert enabled == {"soma", "chronos", "topos"}
-    assert overlay["modules"]["thymos"] is False
+    assert enabled2 == {"soma", "chronos", "topos", "thymos", "mnemos"}
+
+
+def test_overlay_repeat_only_base(repo, plan):
+    for k in (0, 1, 2):
+        overlay, enabled, _ = build_overlay(
+            plan, "repeat", "viewing", k, repo, repo / "config" / "kaine.toml",
+            repo / "config" / "kaine.operator.toml",
+        )
+        assert enabled == {"soma", "chronos", "topos"}
+        assert overlay["modules"]["thymos"] is False
+        assert overlay["modules"]["mnemos"] is False
 
 
 def test_overlay_isolation_keys(repo, plan):
-    for line in ["gestation", "main", "control"]:
+    for line in ["gestation", "branch", "repeat", "accumulate"]:
         overlay, _, _ = build_overlay(
             plan, line, "gestation" if line == "gestation" else "viewing",
             0, repo, repo / "config" / "kaine.toml",
             repo / "config" / "kaine.operator.toml",
         )
-        assert overlay["mnemos"]["collection_prefix"] == plan["collections"][line]
-        assert overlay["empatheia"]["collection"] == plan["collections"][line]
+        expected = plan["collections"][line]
+        if line == "branch":
+            expected = f"{expected}0_"
+        assert overlay["mnemos"]["collection_prefix"] == expected
+        assert overlay["empatheia"]["collection"] == expected
+
+
+def test_overlay_branch_collection_prefix_includes_k(repo, plan):
+    overlay, _, _ = build_overlay(
+        plan, "branch", "viewing", 1, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert overlay["mnemos"]["collection_prefix"] == "b_1_"
+    assert overlay["empatheia"]["collection"] == "b_1_"
 
 
 def test_overlay_operator_values_kept(repo, plan):
     overlay, _, _ = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert overlay["inference"]["server"] == "http://operator.local:8080"
@@ -131,21 +150,23 @@ def test_overlay_operator_values_kept(repo, plan):
 
 def test_overlay_phantasia_and_preservation(repo, plan):
     overlay, _, _ = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert overlay["ignition_log"]["enabled"] is True
+    assert overlay["ignition_log"]["directory"] == "data/ignition"
     assert overlay["research_event_log"]["enabled"] is True
     assert overlay["preservation"]["divergence_monitor"]["enabled"] is True
     assert overlay["preservation"]["welfare_response"]["enabled"] is True
     assert overlay["phantasia"]["training_enabled"] is True
     assert overlay["phantasia"]["persist_weights"] is True
     assert overlay["developmental_stage"]["enabled"] is True
+    assert overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
 
 
 def test_overlay_absolute_encoder_dir(repo, plan):
     overlay, _, models_dir = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     expected = str((repo / "state" / "models").resolve())
@@ -171,17 +192,25 @@ def test_overlay_self_rhythm_enabled_gestation(repo, plan):
     assert overlay["soma"]["self_rhythm_enabled"] is True
 
 
-def test_overlay_self_rhythm_enabled_main_viewing(repo, plan):
+def test_overlay_self_rhythm_enabled_branch_viewing(repo, plan):
     overlay, _, _ = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert overlay["soma"]["self_rhythm_enabled"] is True
 
 
-def test_overlay_self_rhythm_enabled_control_viewing(repo, plan):
+def test_overlay_self_rhythm_enabled_repeat_viewing(repo, plan):
     overlay, _, _ = build_overlay(
-        plan, "control", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "repeat", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert overlay["soma"]["self_rhythm_enabled"] is True
+
+
+def test_overlay_self_rhythm_enabled_accumulate_viewing(repo, plan):
+    overlay, _, _ = build_overlay(
+        plan, "accumulate", "viewing", 1, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert overlay["soma"]["self_rhythm_enabled"] is True
@@ -192,9 +221,19 @@ def test_overlay_self_rhythm_overrides_operator_false(repo, plan):
     op.write_text(
         "[soma]\n"
         "self_rhythm_enabled = false\n"
+        "[developmental_stage]\n"
+        "require_operator_ack_for_birth = true\n"
     )
-    overlay, _, _ = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
-        op,
-    )
-    assert overlay["soma"]["self_rhythm_enabled"] is True
+    for line, kind, k in [
+        ("gestation", "gestation", 0),
+        ("branch", "viewing", 0),
+        ("branch", "viewing", 2),
+        ("repeat", "viewing", 0),
+        ("accumulate", "viewing", 1),
+    ]:
+        overlay, _, _ = build_overlay(
+            plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
+        )
+        # Study settings win over the operator's own file on every step.
+        assert overlay["soma"]["self_rhythm_enabled"] is True
+        assert overlay["developmental_stage"]["require_operator_ack_for_birth"] is False

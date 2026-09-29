@@ -559,11 +559,12 @@ revive began, run the same revive again to complete it.
 
 ## Running the module-ignition study
 
-The module-ignition study (`module-ignition-study`) is a controlled
-longitudinal run: one gestation, then a main line and a control line each
-viewing the same programme for twelve four-hour sessions.  The runner makes the
-procedure repeatable and records exactly what happened so mistakes such as
-starting from the wrong preservation or sharing memory collections cannot occur.
+The module-ignition study (`module-ignition-study`) follows a seed-and-branch
+protocol. One gestation produces the seed: the being preserved just after its
+birth. Every branch step and the repeat start from that seed; the accumulate
+line carries one being forward from branch 0. The runner makes the procedure
+repeatable and records exactly what happened so mistakes such as starting from
+the wrong preservation or sharing memory collections cannot occur.
 
 Before creating a study:
 
@@ -583,14 +584,30 @@ python -m kaine.research.ignition_study init \
     --programme-manifest /path/to/programme.toml \
     [--base-modules ...] [--order ...] \
     [--redis-base-url redis://127.0.0.1:6479] \
-    [--db-gestation 10 --db-main 11 --db-control 12] \
-    [--viewings-per-line 12]
+    [--db-gestation 10 --db-branch 11 --db-repeat 12 --db-accumulate 13]
 ```
 
+The default base set is Soma, Chronos, Topos, Audition, Lingua, Thymos and
+Hypnos; the default order is Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox,
+Praxis, Perception and Mundus. K, the number of module steps, is the length of
+the order.
+
 This creates `studies/<study-id>/` containing `study.json`, empty
-`steps.jsonl`, and the three line directories `gestation/`, `main/`, and
-`control/`.  Each line directory symlinks `config/kaine.toml` and
-`config/profiles` to the repository configuration.
+`steps.jsonl`, and the step working directories `gestation/`, `branch/<k>/`
+for k = 0..K, `repeat/` and `accumulate/`. Each symlinks `config/kaine.toml`
+and `config/profiles` to the repository configuration.
+
+Every line has its own bus database, a number in 1..15. The runner flushes a
+step's database before the step starts, so it refuses any plan whose database
+numbers include the operator's: database 0, or the database the bus itself
+resolves from the operator's configuration (`config/kaine.toml`,
+`config/kaine.operator.toml`, `config/secrets.toml` and the runner's own
+environment, including a `KAINE_REDIS_URL` or `[redis].url` and its `?db=`).
+It checks again immediately before every flush, and refuses to run when that
+database cannot be determined. Each database it flushes carries the key
+`kaine:study:owner` naming the study; the runner refuses to flush a database
+another study owns, so two studies on one Redis server never flush each
+other's bus.
 
 Run or resume the study:
 
@@ -598,23 +615,34 @@ Run or resume the study:
 python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 ```
 
-The runner executes gestation first, then for each viewing index `k = 0..11`
-runs main line `k` followed by control line `k`.  Each start is a
-research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
-database and collection prefixes, so the two beings never share state.  Every
-completed step is appended to `steps.jsonl`.
+The runner runs one start at a time, in this order:
 
-Modules are added in the study's module order (default: Thymos, Mnemos,
-Hypnos, Phantasia, Nous, and so on), one per viewing: viewing index `k` enables
-the first `k` modules of the order, so `k = 0` adds none and Nous is enabled
-from `k = 5`. With `[nous].drive_actions` on (the shipped default), Nous's
+1. the seed (`gestation`): the local womb with automatic birth. When the being
+   is embodied, the runner waits until the birth bloom ends, then preserves it.
+   The bloom ends at the stage file's `birth_bloom_ends_at`; without it, the
+   runner waits the step's configured
+   `[perception_feed.womb].birth_transition_seconds` plus a margin, or the
+   30-second maximum plus the margin when that value cannot be read;
+2. branch 0, from the seed, with the base set;
+3. the repeat, from the seed, with the base set;
+4. for k = 1..K: branch k, from the seed, with the base set plus the first k
+   modules of the order; then accumulate k, with the same modules, from branch
+   0's preservation (k = 1) or accumulate k−1's.
+
+Each start is a research-mode boot (`KAINE_RESEARCH_MODE=1`) on an empty bus
+database. Each branch step has its own collection prefix
+(`<branch prefix><k>_`); the repeat and the accumulate line each have their
+own. Every step is appended to `steps.jsonl`, with its film-aligned ignition
+log under the step's working directory at `data/ignition`.
+
+With the default order, Nous is enabled from k = 3. With `[nous].drive_actions` on (the shipped default), Nous's
 chosen actions become proposals that the executive realizes as `think`,
 `speak`, or `rest` intents, subject to the same Volition guards as every other
 intent; Hypnos accepts a rest request no more often than
 `requested_rest_min_interval_s`, and Vox marks the origin of speech that
 follows a Nous proposal. Nous learns what follows each action it takes, and
 its learned transition model is preserved in each viewing's bundle, so later
-viewings resume from what it has learned.
+accumulate steps resume from what it has learned.
 
 If a step ends for any reason other than a successful preservation, the
 runner records it as `failed:<reason>` and stops.  It never retries on its own
@@ -623,9 +651,17 @@ Phantasia enabled also needs its bundle's `manifest.json` to report
 `world_model_captured: true`; otherwise it fails as
 `failed:world_model_not_captured` (or `failed:manifest_unreadable`), so a line
 never continues from a being that lost its learned world model.  Each step
-record carries `world_model_captured` (null when Phantasia is off).  Resume from the
-last successful preservation, or re-run the failed step from the same start
-bundle with:
+record carries `world_model_captured` (null when Phantasia is off).  After an
+interruption, `run` resumes at the first incomplete step and never repeats a
+completed one. If the runner stopped after the seed's birth preservation
+succeeded but before recording it, the next run records that preservation as
+the seed instead of gestating a second being. If a timeout preservation fails,
+the runner leaves the being running, records the step as `failed:critical`
+with the cycle's pid, and exits with status 3. The runner never flushes a
+database or starts a cycle while a cycle the study started is still running
+(it identifies the cycle by `/proc/<pid>/cmdline`, never by pid alone), so
+stop that being yourself first. After a failure it stops again until you
+re-run the failed step from its recorded start bundle with:
 
 ```bash
 python -m kaine.research.ignition_study run --study-dir studies/<study-id> --retry-failed
@@ -677,16 +713,27 @@ Per viewing, the report records:
 - **Data quality**: record count, programme-time gaps longer than 10 s, and
   dropped records inferred from gaps in the sink sequence.
 
-Per step, the report compares the main line against the control line and each
-step against the previous one on the same line, including film-minute profile
-correlations. Correlations are reported as "not computed" when the two profiles
-share fewer than 30 bins, and as undefined when either profile is constant.
+Per-viewing measures are computed for every completed viewing of the `branch`,
+`repeat` and `accumulate` lines; gestation is not a viewing. K is the number of
+modules in the plan's `order`. The report's `comparisons` section holds three
+families, each with the per-measure differences and the film-minute profile
+correlation:
 
-The **limits** section is part of every report: modules are added in one fixed
-order, so each effect is conditional on earlier modules and on the being's
-history; the control line removes familiarity but not order; Praxis, Perception
-and the Mundus stub have no input channel on this host and are expected nulls;
-and there is one being per line, so no significance testing is performed.
+- **Module effect from the seed**: branch k − branch 0, for k = 1..K.
+- **Noise floor**: branch 0 − the repeat of branch 0.
+- **Familiarity and history**: accumulate k − branch k, for k = 1..K.
+
+A comparison whose two viewings are not both complete is reported as `pending`
+and is not computed. Correlations are reported as "not computed" when the two
+profiles share fewer than 30 bins, and as undefined when either profile is
+constant.
+
+The **limits** section is part of every report: there is one being per
+condition and nothing is tested for significance; the noise floor is a single
+repeat, and differences smaller than it are not evidence; modules are added in
+one fixed order; the accumulate line mixes familiarity with module history,
+because there is no rewatch-only line; and Praxis, Perception and Mundus have no
+input channel on this host and are expected nulls.
 
 ## Entity decommission
 
