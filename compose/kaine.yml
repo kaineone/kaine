@@ -320,6 +320,10 @@ services:
       - kaine-eval-data:/app/data/evaluation
       # Workspace-trajectory records, likewise durable and shared with Nexus.
       - kaine-trajectory:/app/data/workspace_trajectory
+      # Preservation bundles (durable, never raw sense data).
+      - kaine-backups:/app/backups
+      # Film-aligned ignition log records (durable, never raw sense data).
+      - kaine-ignition:/app/data/ignition
       # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
       # raw-sense-data persistence, design §7). Long-form with mode 1777 because a
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
@@ -387,3 +391,10 @@ volumes:
   # Workspace-trajectory records, durable across down/up, shared with Nexus.
   kaine-trajectory:
     name: kaine-trajectory
+  # Preservation bundles from the divergence monitor and welfare response
+  # (durable, never raw sense data).
+  kaine-backups:
+    name: kaine-backups
+  # Film-aligned ignition log records (durable, never raw sense data).
+  kaine-ignition:
+    name: kaine-ignition
