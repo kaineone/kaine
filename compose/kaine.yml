@@ -326,6 +326,10 @@ services:
       - kaine-backups:/app/backups
       # Film-aligned ignition log records (durable, never raw sense data).
       - kaine-ignition:/app/data/ignition
+      # Nexus record (`[research_event_log.nexus_record]`): local-only, never
+      # exported; what Nexus displays after its privacy filter. ~2 GB per
+      # four-hour viewing.
+      - kaine-nexus-record:/app/data/nexus_record
       # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
       # raw-sense-data persistence, design §7). Long-form with mode 1777 because a
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
@@ -469,3 +473,7 @@ volumes:
   # Film-aligned ignition log records (durable, never raw sense data).
   kaine-ignition:
     name: kaine-ignition
+  # Local-only record of what Nexus displays, after its privacy filter. Never
+  # exported. About 2 GB per four-hour viewing.
+  kaine-nexus-record:
+    name: kaine-nexus-record

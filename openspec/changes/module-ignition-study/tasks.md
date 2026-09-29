@@ -12,7 +12,7 @@
 - [x] 1.10 `honest-planning-and-training` and `nous-learned-agency`: Nous's per-action EFE is correct at any horizon; only a learning pass counts as consolidation; Nous learns what follows its actions and preserves that model.
 - [x] 1.11 Operator decision: whether Nous's intents drive real actions through the existing gates. Decided 2026-09-28: yes, through the existing gates (Nous proposes; Volition disposes). Implemented by OpenSpec change `nous-drives-action`; `[nous].drive_actions` records it per run and allows an observational ablation.
 - [x] 1.12 `womb-to-world-transition`: every viewing that follows birth begins with a deterministic crossfade from the womb's bloom field into the programme. Film time starts when the fade ends.
-- [ ] 1.13 `run-recording`: every run persists what Nexus displays (privacy-filtered) and Lingua's external utterances. Inner speech is never recorded.
+- [x] 1.13 `run-recording`: every run persists what Nexus displays (privacy-filtered) and Lingua's external utterances. Inner speech is never recorded.
 
 ## 2. The study
 

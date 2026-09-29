@@ -891,6 +891,15 @@ as speech addressed to the entity.
 
 ---
 
+### Run recording
+
+Two optional, disabled-by-default recorders keep a local record of a run. The module-ignition study turns both on.
+
+- **External-utterance log** (`[research_event_log.external_utterances]`). Subscribes only to `lingua.external` and writes one record per external speech event: the entity's spoken text and its timestamps. It lands in `state/research/external_utterances/` on the `kaine-state` volume.
+- **Nexus record** (`[research_event_log.nexus_record]`). Subscribes to the streams the Nexus bridge reads and writes exactly the payload Nexus displays after its privacy filter, plus the stream name and entry id. It lands in `data/nexus_record/`, which the containerized cycle mounts from the `kaine-nexus-record` volume. Expect about 2 GB per four-hour viewing.
+
+Neither recorder ever records inner speech (`lingua.internal` is never subscribed to), bystander input (`user_input`), or anything the privacy filter removes. Both write through the encrypting JSONL sink, so files are encrypted at rest when state encryption is on. Both are local only and never exported: neither is part of the research bundle or the metrics allowlist. `retention_days = 0` keeps records forever.
+
 ### Ignition log
 
 The ignition log is an optional, disabled-by-default per-broadcast research record. When enabled in `[ignition_log]`, the cycle writes one JSONL record for every successful workspace broadcast. Each record contains:
