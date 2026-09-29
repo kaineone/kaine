@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -90,6 +91,7 @@ class StudyRunner:
         run: Any = subprocess.run,
         flush_db: Callable[[str], None] | None = None,
         redis_client_factory: Callable[[str], Any] | None = None,
+        disk_usage: Callable[[Path], Any] | None = None,
         cycle_alive: Callable[[int], bool] | None = None,
     ) -> None:
         self.study_dir = Path(study_dir).resolve()
@@ -124,6 +126,7 @@ class StudyRunner:
 
             flush_db = _claim_and_flush
         self.flush_db = flush_db
+        self.disk_usage = disk_usage or shutil.disk_usage
         self.cycle_alive = cycle_alive or _cycle_process_alive
         self._lock_fd: Any | None = None
         self._load_state()
@@ -173,6 +176,11 @@ class StudyRunner:
             seq.append(("branch", i))
             seq.append(("accumulate", i))
         return seq
+
+    def _disk_floor_bytes(self, total: float) -> float:
+        """Minimum free bytes the study requires on its filesystem."""
+        min_free_gb = float(self.plan.get("min_free_gb", 20.0))
+        return max(min_free_gb * (2**30), total * 0.05)
 
     def _next_step(self, retry_failed: bool = False) -> dict[str, Any]:
         sequence = self._step_sequence()
@@ -522,6 +530,18 @@ class StudyRunner:
         # runner's own environment, never the child's ``env`` above.
         self._check_operator_bus()
 
+        # Guard the filesystem that holds the study directory before any
+        # flush or spawn.  Nothing is recorded if the guard fails.
+        usage = self.disk_usage(self.study_dir)
+        floor = self._disk_floor_bytes(float(usage.total))
+        if float(usage.free) < floor:
+            free_gib = float(usage.free) / (2**30)
+            required_gib = floor / (2**30)
+            raise StudyError(
+                f"free disk space at {self.study_dir} is {free_gib:.1f} GiB, "
+                f"below required floor {required_gib:.1f} GiB"
+            )
+
         # Every step starts on an empty bus: flush the step's own study
         # database (never the operator's; see validate_redis_dbs), which this
         # study claims on the server so no other study flushes it.
@@ -565,6 +585,8 @@ class StudyRunner:
         run_id: str | None = None
         exit_code: int | None = None
         timeout_requested = False
+        disk_low_requested = False
+        disk_low_preserved: bool | None = None
         birth_requested = False
         first_embodied_wall: float | None = None
 
@@ -615,6 +637,55 @@ class StudyRunner:
                                     "Birth preservation request did not succeed for %s",
                                     line,
                                 )
+
+                usage = self.disk_usage(self.study_dir)
+                floor = self._disk_floor_bytes(float(usage.total))
+                if (
+                    float(usage.free) < floor
+                    and not disk_low_requested
+                    and not timeout_requested
+                ):
+                    disk_low_requested = True
+                    _, disk_low_result, _, disk_low_matched = self._request_preserve(
+                        line_dir,
+                        "disk_low",
+                        stop=True,
+                        wait=self.preserve_wait_seconds,
+                    )
+                    disk_low_preserved = (
+                        bool(disk_low_result.get("ok"))
+                        if disk_low_result
+                        else disk_low_matched
+                    )
+                    if not disk_low_matched:
+                        log.critical(
+                            "Disk-low preservation failed for %s; the process is still "
+                            "running and the operator must decide what to do.",
+                            line,
+                        )
+                        critical = {
+                            "line": line,
+                            "step": k,
+                            "modules": sorted(modules_set),
+                            "world_model_captured": None,
+                            "started_at": started_at,
+                            "ended_at": _utc_iso(),
+                            "exit_code": None,
+                            "revived_from": step.get("revived_from"),
+                            "preservation_id": None,
+                            "bundle": None,
+                            "run_id": run_id,
+                            "ignition_log_dir": str(line_dir / IGNITION_LOG_DIR),
+                            "overlay_sha256": overlay_hash,
+                            "outcome": "failed:critical",
+                            "pid": child_pid,
+                        }
+                        self._append_step(critical)
+                        self.last_failed = critical
+                        raise StudyCritical(
+                            f"disk_low preservation failed for {line} step {k}; "
+                            f"pid {child_pid} is still running"
+                        )
 
                 elapsed = now - start_clock
                 if elapsed > budget and not timeout_requested:
@@ -675,6 +746,8 @@ class StudyRunner:
             result,
             timeout_requested,
             revived_from=step.get("revived_from"),
+            disk_low_requested=disk_low_requested,
+            disk_low_preserved=disk_low_preserved,
         )
 
         world_model_captured: bool | None = None
@@ -703,6 +776,9 @@ class StudyRunner:
             "outcome": outcome,
             "pid": child_pid,
         }
+
+        if disk_low_requested:
+            record["disk_low_preserved"] = bool(disk_low_preserved)
 
         return self._finish_record(record)
 
@@ -810,7 +886,12 @@ class StudyRunner:
         result: dict[str, Any] | None,
         timeout_requested: bool,
         revived_from: str | None,
+        disk_low_requested: bool = False,
+        disk_low_preserved: bool | None = None,
     ) -> str:
+        if disk_low_requested:
+            return "failed:disk_low"
+
         if timeout_requested:
             if (
                 result

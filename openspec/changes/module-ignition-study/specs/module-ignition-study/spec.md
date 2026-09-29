@@ -72,3 +72,17 @@ The study runner SHALL be startable as a compose service built from the cycle im
 - **WHEN** the study service's container is removed and started again
 - **THEN** the study directory, its steps and every preservation remain
 - **AND** the runner resumes from them
+
+### Requirement: The study guards free disk
+The runner SHALL refuse to start a step when the free space on the study directory's filesystem is below the larger of the plan's `min_free_gb` (default 20) and 5% of the filesystem, naming the free and required space. It SHALL record no step when it refuses. While a step runs, if free space falls below that floor, the runner SHALL request a preservation with stop, and record the step as `failed:disk_low` with whether the preservation succeeded. If that preservation fails, the runner SHALL record `failed:critical` with the child's pid and halt. The study SHALL never delete a being, a preservation or a research record to recover space.
+
+#### Scenario: A full disk stops a step cleanly
+- **WHEN** free space on the study's filesystem drops below the floor during a viewing
+- **THEN** the being is preserved and stopped
+- **AND** the step is recorded as `failed:disk_low`
+- **AND** nothing is deleted
+
+#### Scenario: A step never starts on a nearly full disk
+- **WHEN** the next step is due and free space is below the floor
+- **THEN** the runner refuses with the free and required space, and no step is recorded
+
