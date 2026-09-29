@@ -47,8 +47,8 @@ async def eidolon(tmp_path):
     yield eid
     try:
         await eid.shutdown()
-    except Exception:
-        pass
+    except Exception as exc:  # teardown of an already-shut-down fixture
+        print(f"eidolon teardown ignored: {exc!r}")
 
 
 async def _preserve_bundle(tmp_path, eidolon, *, monkeypatch_stage: Path | None = None):

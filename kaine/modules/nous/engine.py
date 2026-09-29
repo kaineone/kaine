@@ -137,10 +137,10 @@ class ActiveInferenceEngine(Protocol):
 
     @property
     def actions(self) -> tuple[str, ...]:
-        ...
+        """The ordered action names the engine selects among."""
 
     def step(self, snapshot: Any) -> EngineResult:
-        ...
+        """Run one inference step over ``snapshot`` and return the result."""
 
 
 class _EngineBase(ABC, ActiveInferenceEngine):
