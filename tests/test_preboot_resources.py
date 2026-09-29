@@ -458,3 +458,32 @@ async def test_run_async_checks_includes_resources(monkeypatch):
     monkeypatch.setattr(preboot, "check_resources", _resources)
     results = await preboot.run_async_checks({"modules": {}})
     assert [r.name for r in results] == ["Bus budget"]
+
+
+def test_extra_disk_paths_adds_row(tmp_path):
+    state = tmp_path / "state"
+    data = tmp_path / "data"
+    extra = tmp_path / "studies"
+    for directory in (state, data, extra):
+        directory.mkdir()
+    config = {
+        "preboot": {
+            **preboot.PREBOOT_DEFAULTS,
+            "state_root": str(state),
+            "data_root": str(data),
+            "extra_disk_paths": [str(extra)],
+        }
+    }
+    rows = preboot.check_disk(
+        config,
+        disk_usage=lambda p: type("U", (), {"total": 2**40, "free": 2**39})(),
+        device_of=lambda p: 1,
+    )
+    details = " ".join(r.detail for r in rows)
+    assert str(extra) in details
+
+
+def test_extra_disk_paths_non_list_refused():
+    config = {"preboot": {"extra_disk_paths": "studies"}}
+    with pytest.raises(ValueError, match=r"\[preboot\]\.extra_disk_paths"):
+        preboot.durable_paths(config)

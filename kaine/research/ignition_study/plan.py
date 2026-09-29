@@ -110,6 +110,14 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(plan[key], (int, float)) or plan[key] <= 0:
             raise ValueError(f"{key} must be positive")
 
+    plan.setdefault("min_free_gb", 20.0)
+    if (
+        isinstance(plan["min_free_gb"], bool)
+        or not isinstance(plan["min_free_gb"], (int, float))
+        or plan["min_free_gb"] < 0
+    ):
+        raise ValueError("min_free_gb must be a number >= 0")
+
     return plan
 
 

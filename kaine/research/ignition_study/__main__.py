@@ -70,6 +70,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         },
         "viewing_budget_seconds": args.viewing_budget_seconds,
         "gestation_budget_seconds": args.gestation_budget_seconds,
+        "min_free_gb": args.min_free_gb,
     }
     validate_plan(plan)
 
@@ -163,6 +164,11 @@ def main(argv: list[str] | None = None) -> int:
         "--gestation-budget-seconds",
         type=float,
         default=DEFAULT_GESTATION_BUDGET_SECONDS,
+    )
+    init_p.add_argument(
+        "--min-free-gb",
+        type=float,
+        default=20.0,
     )
 
     run_p = sub.add_parser("run", help="run or resume the study")

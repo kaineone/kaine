@@ -201,6 +201,8 @@ data_root = "data"
 disk_fail_min_free_gb = 10.0
 disk_fail_min_free_percent = 5.0
 disk_warn_min_free_gb = 20.0
+# Extra paths (relative to cwd) for the pre-boot disk check, e.g. ["studies"].
+extra_disk_paths = []
 
 [remote_bridge]
 # Remote perception bridge — WebSocket ingress/egress so the operator can
