@@ -682,3 +682,22 @@ def test_kaine_cycle_unattended_container_design(tmp_path: Path):
     assert "KAINE_CYCLE_UNATTENDED=1" in generated
 
     # Do NOT run systemd-analyze on quadlet output; it is not a plain unit file.
+
+
+# --------------------------------------------------------------------------
+# run-recording 2.2 — the Nexus record directory is on a durable volume
+# --------------------------------------------------------------------------
+def test_nexus_record_dir_is_on_a_durable_volume_in_every_cycle_deployment():
+    cfg = tomllib.loads((_REPO_ROOT / "config" / "kaine.toml").read_text())
+    log_dir = cfg["research_event_log"]["nexus_record"]["log_dir"]
+    target = "/app/" + log_dir
+
+    doc = _load_compose()
+    assert "kaine-nexus-record" in doc["volumes"]
+    cycle_mounts = [str(v) for v in doc["services"]["kaine-cycle"]["volumes"]]
+    assert f"kaine-nexus-record:{target}" in cycle_mounts
+
+    assert (_QUADLET / "kaine-nexus-record.volume").is_file()
+    for unit in ("kaine-cycle.container", "kaine-cycle-unattended.container"):
+        text = (_QUADLET / unit).read_text()
+        assert f"Volume=kaine-nexus-record.volume:{target}" in text, unit

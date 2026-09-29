@@ -320,6 +320,10 @@ services:
       - kaine-eval-data:/app/data/evaluation
       # Workspace-trajectory records, likewise durable and shared with Nexus.
       - kaine-trajectory:/app/data/workspace_trajectory
+      # Nexus record (`[research_event_log.nexus_record]`): local-only, never
+      # exported; what Nexus displays after its privacy filter. ~2 GB per
+      # four-hour viewing.
+      - kaine-nexus-record:/app/data/nexus_record
       # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
       # raw-sense-data persistence, design §7). Long-form with mode 1777 because a
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
@@ -387,3 +391,7 @@ volumes:
   # Workspace-trajectory records, durable across down/up, shared with Nexus.
   kaine-trajectory:
     name: kaine-trajectory
+  # Local-only record of what Nexus displays, after its privacy filter. Never
+  # exported. About 2 GB per four-hour viewing.
+  kaine-nexus-record:
+    name: kaine-nexus-record

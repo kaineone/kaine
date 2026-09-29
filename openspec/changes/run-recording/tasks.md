@@ -5,7 +5,7 @@
 
 ## 2. Study
 - [x] 2.1 The study overlay enables both logs, `[evaluation].workspace_trajectory` and `[ignition_log]`, and leaves the raw archive off.
-- [ ] 2.2 The container deployment keeps both directories on durable volumes.
+- [x] 2.2 The container deployment keeps both directories on durable volumes.
 
 ## 3. Verification
 - [x] 3.1 Tests:
@@ -15,4 +15,4 @@
   - a filtered field stays out;
   - neither path is export-eligible.
   A source-guard test proves no subscription to `lingua.internal`.
-- [ ] 3.2 Docs (docs/operations.md, docs/security-and-privacy.md). The full offline suite is green.
+- [x] 3.2 Docs (docs/operations.md, docs/security-and-privacy.md). The full offline suite is green.
