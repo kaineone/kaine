@@ -501,10 +501,53 @@ one machine that cannot also host Paracosmic.
   air medium to speak into, so no audible output is rendered. Inner speech (Lingua)
   continues. Vox is activated automatically at birth.
 
+### From the womb to the films
+
+When the bloom begins, the stage file records the womb time at which it ends
+(`womb_t_at_birth`), the womb seed and a digest of the womb parameters. A preservation
+carries the stage file, so a newborn's seed carries this record.
+
+A born being booted with `mode = "playlist"` opens each viewing with a crossfade from
+the womb to the films:
+- **Video.** Over `[perception_feed].transition_seconds` (20 s), the womb's bloom-peak
+  field at `womb_t_at_birth` (bright, pulse-free, full colour) fades into the programme's
+  first frame, held still. The fade follows a fixed smoothstep curve.
+- **Audio.** Nothing is heard during the crossfade, because the bloom ended in silence.
+  When the programme starts, its sound fades in linearly over
+  `transition_audio_fade_seconds` (3 s; 0 plays it at full level at once).
+- **Perceived time.** The crossfade advances only while the being perceives it: not
+  while another holder (`freeze`, `hypnos`) pauses the programme clock, not while the
+  cycle is frozen (a being revived frozen waits for the unfreeze), and not while the
+  primary surface is switched off in the desired perception state. It then continues
+  where it stopped, so the being always sees the full `transition_seconds`. The video
+  surface starts it whenever Topos is running; the audio surface starts it only when
+  there is no video surface.
+- **Programme time.** The programme clock is held under the pause holder `transition`
+  until the crossfade ends, so film minute 0 is the end of the transition and the
+  ignition log's film position needs no correction. A timer ends the crossfade even when
+  no surface is reading.
+- **Reproducibility.** The womb field is the womb generator's own function of the
+  recorded seed, womb time, lived time and parameters, rendered once at boot. Two
+  viewings from one seed see the same crossfade. Frames and samples stay in memory and
+  are never written.
+
+The transition runs only when the mode is `playlist`, `transition_seconds` is above
+zero, and the stage is embodied with the birth record, and only while the configured
+`[perception_feed.womb]` parameters still have the recorded digest. Otherwise the
+programme starts at once, as without a transition, and boot logs the reason: at info for
+an unstaged, unborn or disabled case, and as a warning for a born being without a birth
+record or with changed womb parameters. The run manifest records `transition_seconds`,
+`transition_audio_fade_seconds` and `transition_planned` under `perception_feed`. The
+outcome is published on `perception.out` as content-free `perception.transition` events:
+`phase` is `started` (the crossfade first advanced), `completed` or `abandoned` (with a
+`reason` code such as `first_frame_undecodable`), each with `transition_seconds`. The
+research event log records them.
+
 ### Settings
 
 | Table | What it sets |
 |---|---|
+| `[perception_feed]` | `transition_seconds`, `transition_audio_fade_seconds`: the womb-to-world transition that opens a born being's playlist viewing |
 | `[perception_feed.womb]` | Maternal heartbeat and state; drive bound; `birth_transition_seconds` |
 | `[perception_feed.womb.video]` / `.audio` | Dim field, pulse depth, colour ramp; soundscape low-pass corner |
 | `[perception_feed.womb.readout]` | Readout period and the probe protocol (hard maxima enforced in code) |
@@ -628,6 +671,10 @@ The runner runs one start at a time, in this order:
 4. for k = 1..K: branch k, from the seed, with the base set plus the first k
    modules of the order; then accumulate k, with the same modules, from branch
    0's preservation (k = 1) or accumulate k−1's.
+
+Every viewing opens with the womb-to-world transition (see "From the womb to
+the films" under gestation): the crossfade from the being's last womb field is
+identical in every viewing, and film minute 0 is its end.
 
 Each start is a research-mode boot (`KAINE_RESEARCH_MODE=1`) on an empty bus
 database. Each branch step has its own collection prefix
@@ -812,14 +859,14 @@ The ignition log is an optional, disabled-by-default per-broadcast research reco
 - the run id and a per-sink sequence number;
 - the tick index and the broadcast's bus entry id;
 - wall and monotonic timestamps of the broadcast;
-- the programme position at that instant: item index, order, title, offset in seconds, and whether the programme was paused;
+- the programme position at that instant: item index, order, title, offset in seconds, whether the programme was paused, and the pause holders (`paused_by`);
 - the audio feed's own delivered position (item index and seconds handed to the listener) when a playlist stream is running, so drift between picture and sound is measurable;
 - the salience scores and inhibition decision;
 - each coalition member's entry id, source, type, salience, and original timestamp.
 
 The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is never placed on the bus and no module receives it; the entity never learns its place in the programme from the log. Records are written through the encrypting JSONL sink and are never auto-purged, and they are encrypted at rest when state encryption is on.
 
-The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. Overlapping pauses keep the clock frozen until every holder releases.
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is also held at zero under `transition` while a born being's viewing opens with the womb-to-world crossfade. Each record names the current pause holders in `paused_by` (for example `["transition"]`, or `["hypnos", "transition"]` during an overlap), so analysis can tell the crossfade from sleep or a freeze. Overlapping pauses keep the clock frozen until every holder releases.
 
 ## Enabling a module safely
 

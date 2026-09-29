@@ -792,6 +792,11 @@ prosody_enabled = false
 mode = "off"
 seed = 0                        # seeded: both surfaces are a pure function of this
 playlist_manifest = ""          # playlist: path to the shared checksummed manifest
+# playlist, born from the womb: each viewing opens with a crossfade from the womb's
+# last field to the programme's first frame, held still; programme time starts
+# when it ends. Needs the birth record in the stage file. 0 disables it.
+transition_seconds = 20.0
+transition_audio_fade_seconds = 3.0  # programme sound fades in over this once it starts (0 = no fade)
 
 [perception_feed.video]         # seeded-video knobs (geometry from [topos])
 surprise_interval = 150         # shared cross-modal cadence of surprise events
