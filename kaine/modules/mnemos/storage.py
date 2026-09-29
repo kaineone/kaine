@@ -93,13 +93,17 @@ class RecalledMemory:
 @runtime_checkable
 class MemoryStorage(Protocol):
     @property
-    def latent_dim(self) -> int: ...
+    def latent_dim(self) -> int:
+        """Protocol member: latent dim."""
 
-    async def initialize(self) -> None: ...
+    async def initialize(self) -> None:
+        """Protocol member: initialize."""
 
-    async def shutdown(self) -> None: ...
+    async def shutdown(self) -> None:
+        """Protocol member: shutdown."""
 
-    async def ensure_collection(self, name: str) -> None: ...
+    async def ensure_collection(self, name: str) -> None:
+        """Protocol member: ensure collection."""
 
     async def upsert(
         self,
@@ -120,19 +124,26 @@ class MemoryStorage(Protocol):
         limit: int,
     ) -> list[RecalledMemory]: ...
 
-    async def delete(self, collection: str, point_id: str) -> None: ...
+    async def delete(self, collection: str, point_id: str) -> None:
+        """Protocol member: delete."""
 
-    async def count(self, collection: str, strict: bool = False) -> int: ...
+    async def count(self, collection: str, strict: bool = False) -> int:
+        """Protocol member: count."""
 
-    async def vector_dim(self, collection: str) -> int | None: ...
+    async def vector_dim(self, collection: str) -> int | None:
+        """Protocol member: vector dim."""
 
-    async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]: ...
+    async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
+        """Protocol member: export."""
 
-    async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int: ...
+    async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
+        """Protocol member: replace collection."""
 
-    async def read_stamp(self, key: str) -> dict | None: ...
+    async def read_stamp(self, key: str) -> dict | None:
+        """Protocol member: read stamp."""
 
-    async def write_stamp(self, key: str, stamp: dict) -> None: ...
+    async def write_stamp(self, key: str, stamp: dict) -> None:
+        """Protocol member: write stamp."""
 
 
 def _cosine(a: list[float], b: list[float]) -> float:

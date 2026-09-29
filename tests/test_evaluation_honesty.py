@@ -260,7 +260,7 @@ def test_require_semantic_embedder_raises_on_fallback(tmp_path, monkeypatch):
     def _always_fail(*a, **kw):
         raise RuntimeError("forced failure")
 
-    import kaine.evaluation.registry as reg_mod
+    from kaine.evaluation import registry as reg_mod
 
     monkeypatch.setattr(reg_mod, "make_text_embedder", _always_fail)
 
@@ -287,7 +287,7 @@ def test_no_require_semantic_embedder_falls_back_silently(tmp_path, caplog, monk
     def _always_fail(*a, **kw):
         raise RuntimeError("forced failure")
 
-    import kaine.evaluation.registry as reg_mod
+    from kaine.evaluation import registry as reg_mod
 
     monkeypatch.setattr(reg_mod, "make_text_embedder", _always_fail)
 
