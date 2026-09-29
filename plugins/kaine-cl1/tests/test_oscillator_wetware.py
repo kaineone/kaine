@@ -10,7 +10,6 @@ os.environ.setdefault("CL_SDK_ACCELERATED_TIME", "1")
 os.environ.setdefault("CL_SDK_VISUALISATION", "0")
 
 import math  # noqa: E402
-import types  # noqa: E402
 
 import cl.sim as clsim  # noqa: E402
 import numpy as np  # noqa: E402
@@ -22,7 +21,7 @@ from kaine_cl1.backends.oscillator import (  # noqa: E402
     _hilbert_phase,
 )
 from kaine_cl1.plugin import Cl1Plugin  # noqa: E402
-from kaine_cl1.substrate.broker import SubstrateBroker  # noqa: E402
+from kaine_cl1.substrate.broker import SubstrateBroker, TerritoryObservation  # noqa: E402
 from kaine_cl1.substrate.session import SubstrateConfig, SubstrateSession  # noqa: E402
 
 
@@ -54,6 +53,17 @@ def substrate():
 
     session.close()
     clsim.clear_simulator_data_source()
+
+
+def _quiet_window(territory):
+    """A completed window with no spikes, as the broker returns it."""
+    return TerritoryObservation(
+        module=territory.module,
+        channels=territory.channels,
+        spikes=[],
+        from_timestamp=0,
+        frame_count=1,
+    )
 
 
 def _plv(pa: list[float], pb: list[float]) -> float:
@@ -127,7 +137,7 @@ def test_set_frequency_halves_the_drive(monkeypatch):
             requests_log.append(requests)
 
     def run_tick():
-        return {"x": types.SimpleNamespace(spikes=[])}
+        return {"x": _quiet_window(t)}
 
     monkeypatch.setattr(b, "queue_stim", queue_stim)
     monkeypatch.setattr(b, "run_cognitive_tick", run_tick)
@@ -165,7 +175,7 @@ def test_bad_drive_is_clamped(monkeypatch):
     monkeypatch.setattr(
         b,
         "run_cognitive_tick",
-        lambda: {"x": types.SimpleNamespace(spikes=[])},
+        lambda: {"x": _quiet_window(t)},
     )
 
     osc = WetwareOscillator(b, t)

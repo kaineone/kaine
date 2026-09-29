@@ -25,6 +25,7 @@
 
 | Date | Change |
 | --- | --- |
+| 2026-09-28 | cl1 oscillator-own-response (plugins/kaine-cl1) |
 | 2026-09-26 | cl1 nous-revive-seeding (plugins/kaine-cl1) |
 | 2026-09-26 | cl1 nous-on-wetware (plugins/kaine-cl1) |
 | 2026-09-26 | plugin-engine-wrapper |

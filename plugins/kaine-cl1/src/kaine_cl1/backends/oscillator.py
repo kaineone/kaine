@@ -5,8 +5,8 @@
 
 A module's binding phase is read from the rhythm of its own substrate territory
 instead of a silicon LIF population. Semantics match the silicon oscillator so
-PLV coherence means the same thing on both. See
-`openspec/changes/oscillator-on-wetware/`.
+PLV coherence means the same thing on both. See the
+`oscillator-wetware-backend` spec in `openspec/specs/`.
 """
 from __future__ import annotations
 
@@ -75,6 +75,8 @@ class WetwareOscillator:
         self._drive_scale = 1.0
         self._history: deque[float] = deque(maxlen=2 * plv_window)
         self._failures = 0
+        self._step_count = 0
+        self._last_recorded_tag: int | None = None
 
     @property
     def drive_scale(self) -> float:
@@ -89,10 +91,14 @@ class WetwareOscillator:
         return self._failures
 
     def step(self, drive: float) -> None:
-        """Convert salience drive into a stimulation level and record firing.
+        """Convert salience drive into a stimulation level and record the response.
 
-        In beat mode the returned observation is the territory's latest completed
-        window, so the response to this step's stimulation arrives one tick later.
+        Each sample is the firing fraction of the window that answers this oscillator's own
+        stimulation. Before the substrate follows KAINE's cycle, that is the window this step
+        runs. Once it follows the cycle, it is the response to the previous step, however many
+        cycle ticks ago, so a module that publishes rarely still records its own response and
+        not background firing. A response is recorded once, and a step before any response
+        exists records nothing.
         """
         d = float(drive)
         if not math.isfinite(d) or d < 0.0:
@@ -111,10 +117,15 @@ class WetwareOscillator:
             else:
                 requests = []
 
-            obs = self._broker.exchange(self._module, requests)
-            fired = {spike.channel for spike in obs.spikes if spike.channel in self._channel_set}
-            fraction = len(fired) / len(self._channels) if self._channels else 0.0
-            self._history.append(fraction)
+            self._step_count += 1
+            obs = self._broker.exchange(self._module, requests, tag=self._step_count)
+            if obs.tag is not None and obs.tag != self._last_recorded_tag:
+                fired = {
+                    spike.channel for spike in obs.spikes if spike.channel in self._channel_set
+                }
+                fraction = len(fired) / len(self._channels) if self._channels else 0.0
+                self._history.append(fraction)
+                self._last_recorded_tag = obs.tag
         except Exception as exc:
             self._failures += 1
             if self._failures == 1 or self._failures % _WARN_EVERY == 0:
