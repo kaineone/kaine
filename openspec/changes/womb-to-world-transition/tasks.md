@@ -1,6 +1,6 @@
 ## 1. Birth record
-- [ ] 1.1 Record `womb_t_at_birth`, the womb seed and a parameter digest in the stage file when the bloom completes, and report bloom completion (in runtime.json).
-- [ ] 1.2 The study runner requests the seed's preservation only after the bloom is complete.
+- [x] 1.1 Record `womb_t_at_birth`, the womb seed and a parameter digest in the stage file when the bloom completes, and report bloom completion (in runtime.json).
+- [x] 1.2 The study runner requests the seed's preservation only after the bloom is complete.
 
 ## 2. Transition
 - [x] 2.1 `kaine/modules/perception_transition.py`:
@@ -16,4 +16,4 @@
   - film time zero at the end of the fade;
   - no writes;
   - no transition without a birth record.
-- [ ] 3.2 Docs (docs/operations.md, gestation and the study). The full offline suite is green.
+- [x] 3.2 Docs (docs/operations.md, gestation and the study). The full offline suite is green.
