@@ -89,10 +89,12 @@ services:
       - "yes"
       - --appendfsync
       - everysec
-      # 4gb ceiling; noeviction retained below — the bus fails loud rather
-      # than silently evicting events.
+      # Memory ceiling, host-configurable through KAINE_REDIS_MAXMEMORY in
+      # compose/.env (default 4gb). noeviction is kept below: the bus fails
+      # loud rather than silently evicting events. `python -m kaine.preboot`
+      # checks the configured stream caps fit ("Bus budget" row).
       - --maxmemory
-      - 4gb
+      - ${KAINE_REDIS_MAXMEMORY:-4gb}
       - --maxmemory-policy
       - noeviction
       - --save
@@ -320,6 +322,14 @@ services:
       - kaine-eval-data:/app/data/evaluation
       # Workspace-trajectory records, likewise durable and shared with Nexus.
       - kaine-trajectory:/app/data/workspace_trajectory
+      # Preservation bundles (durable, never raw sense data).
+      - kaine-backups:/app/backups
+      # Film-aligned ignition log records (durable, never raw sense data).
+      - kaine-ignition:/app/data/ignition
+      # Nexus record (`[research_event_log.nexus_record]`): local-only, never
+      # exported; what Nexus displays after its privacy filter. ~2 GB per
+      # four-hour viewing.
+      - kaine-nexus-record:/app/data/nexus_record
       # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
       # raw-sense-data persistence, design §7). Long-form with mode 1777 because a
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
@@ -336,6 +346,71 @@ services:
     # DELIBERATELY no restart policy on kaine-cycle: an entity process never
     # auto-restarts. Spot handles module-level recovery in-process; a dead
     # cycle is an operator decision, never a supervisor's.
+    logging: *default-logging
+
+  # ---- the module-ignition study runner: profile-gated, never default up ---
+  # Runs `python -m kaine.research.ignition_study` inside the cycle image so the
+  # child cycles it starts reach the bus by service name and the weights at
+  # /models. Each child boot is a research-mode boot the study runner starts
+  # itself; the gate variables below are copied from kaine-cycle and are NOT
+  # defaulted permissive. Study directories live on the durable kaine-studies
+  # volume at /app/studies. The operator's media (the programme manifest and
+  # the films it names) are added by the local compose overlay as read-only
+  # mounts at the same absolute paths the manifest records.
+  #
+  #   docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
+  #     init --study-id <id> --repo-root /app ...
+  #   docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
+  #     run --study-dir studies/<id>
+  kaine-study:
+    <<: [*kaine-image, *gpu-card1]
+    profiles: [study]
+    container_name: kaine-study
+    # Keeps the image's tini + entrypoint (owner-only volume perms) and appends
+    # the runner, so `run --rm kaine-study <subcommand> ...` passes the
+    # subcommand straight to `python -m kaine.research.ignition_study`.
+    entrypoint:
+      - /usr/bin/tini
+      - --
+      - /usr/local/bin/kaine-entrypoint
+      - python
+      - -m
+      - kaine.research.ignition_study
+    environment:
+      KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
+      # On the compose bridge network the bus is reached by SERVICE NAME, not the
+      # host-facing 127.0.0.1:6479 mapping the shipped config/kaine.toml targets.
+      # load_bus_config honours KAINE_REDIS_URL over the toml host/port, so this
+      # redirects the bus for the containerized cycle without editing that config.
+      KAINE_REDIS_URL: redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
+      KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
+      KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+      # Encryption-at-rest key (design §7); empty unless the operator sets it.
+      KAINE_STATE_KEY: ${KAINE_STATE_KEY:-}
+      # Model weights live on the shared read-mostly kaine-models volume, apart
+      # from the entity-state volume — the encoder + embedder load from here.
+      KAINE_MODELS_DIR: /models
+      # Boot gates: NOT defaulted to a permissive value. The operator must pass
+      # them on the command line to boot the entity.
+      KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
+      KAINE_RESEARCH_MODE: ${KAINE_RESEARCH_MODE:-}
+    volumes:
+      - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
+      - ../config/secrets.toml:/app/config/secrets.toml:ro
+      # Provisioned weights, read-only from the shared model volume.
+      - kaine-models:/models:ro
+      # No kaine-state, perception tmpfs, kaine-eval-data or kaine-trajectory: every step runs inside /app/studies/<id>, so a study never touches a live being's volumes.
+      # Durable study directories (study.json, steps.jsonl, line directories,
+      # analysis). Survives down/up; the runner resumes from it.
+      - kaine-studies:/app/studies
+    depends_on:
+      kaine-redis:
+        condition: service_healthy
+      kaine-qdrant:
+        condition: service_healthy
+    # DELIBERATELY no restart policy on kaine-study: a study run is an operator
+    # decision, and the child cycles it starts are entities that never
+    # auto-restart. A halted study is resumed by running it again.
     logging: *default-logging
 
   # ---- setup one-shot: provision images + ALL model weights (design §6) --
@@ -387,3 +462,18 @@ volumes:
   # Workspace-trajectory records, durable across down/up, shared with Nexus.
   kaine-trajectory:
     name: kaine-trajectory
+  # Study directories for the module-ignition study: plan, step log, per-line
+  # config links and analysis reports.
+  kaine-studies:
+    name: kaine-studies
+  # Preservation bundles from the divergence monitor and welfare response
+  # (durable, never raw sense data).
+  kaine-backups:
+    name: kaine-backups
+  # Film-aligned ignition log records (durable, never raw sense data).
+  kaine-ignition:
+    name: kaine-ignition
+  # Local-only record of what Nexus displays, after its privacy filter. Never
+  # exported. About 2 GB per four-hour viewing.
+  kaine-nexus-record:
+    name: kaine-nexus-record

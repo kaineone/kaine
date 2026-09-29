@@ -115,6 +115,28 @@ def _load_lifecycle_config() -> dict[str, Any]:
     return data.get("lifecycle") or {}
 
 
+def _warn_ignored_snapshot_retention(lifecycle_cfg: dict[str, Any]) -> None:
+    """Warn when a config still sets the removed snapshot count cap.
+
+    ``[lifecycle].max_snapshots_retained`` used to delete the oldest snapshot
+    directories. The fork root holds preserved beings, and infrastructure
+    never deletes an entity, so the key is accepted and ignored.
+    """
+    raw = lifecycle_cfg.get("max_snapshots_retained")
+    if raw is None:
+        return
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 1
+    if value > 0:
+        log.warning(
+            "[lifecycle].max_snapshots_retained is ignored: snapshots are never "
+            "deleted by infrastructure (removing an entity's state is the "
+            "CAL-gated decommission path only); remove the key from your config"
+        )
+
+
 def _build_fork_manager(
     lifecycle_cfg_loader: Any,
     encryption_section_loader: Any,
@@ -145,13 +167,9 @@ def _build_fork_manager(
             adapter_merger_name, config_section=adapter_merge_section
         )
         snapshots_path = str(lifecycle_cfg.get("snapshots_path", "state/forks"))
-        max_retained = int(lifecycle_cfg.get("max_snapshots_retained", 64))
+        _warn_ignored_snapshot_retention(lifecycle_cfg)
         return (
-            ForkManager(
-                snapshots_path,
-                adapter_merger=adapter_merger,
-                max_snapshots_retained=max_retained,
-            ),
+            ForkManager(snapshots_path, adapter_merger=adapter_merger),
             None,
         )
     except Exception:

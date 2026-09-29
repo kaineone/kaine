@@ -73,6 +73,11 @@ class ForkManager:
     `<id>/snapshot.json`. The manager never starts or stops any module
     — `restore` only calls `deserialize` on already-instantiated
     modules.
+
+    The manager never deletes a snapshot. The root holds preserved beings
+    and Spot escalation snapshots, and removing an entity's state is the
+    CAL-gated decommission path only (`kaine.lifecycle.decommission`).
+    Disk space is checked before boot by `python -m kaine.preboot`.
     """
 
     def __init__(
@@ -82,7 +87,6 @@ class ForkManager:
         strategies: dict[str, MergeStrategy] | None = None,
         default_strategy: MergeStrategy | None = None,
         adapter_merger: AdapterMerger | None = None,
-        max_snapshots_retained: int = 64,
     ) -> None:
         self._root = Path(root)
         self._root.mkdir(parents=True, exist_ok=True)
@@ -97,7 +101,6 @@ class ForkManager:
         # `merger_from_name` from `[lifecycle]` config (or pass one directly)
         # override this.
         self._adapter_merger: AdapterMerger = adapter_merger or merger_from_name("auto")
-        self._max_retained = int(max_snapshots_retained)
 
     @property
     def root(self) -> Path:
@@ -128,7 +131,6 @@ class ForkManager:
             metadata=dict(metadata or {}),
         )
         save_snapshot(self._root, snap)
-        self._enforce_retention()
         return snap
 
     def restore(self, snapshot_id: str, registry: _RegistryLike) -> ForkSnapshot:
@@ -167,7 +169,6 @@ class ForkManager:
             metadata={**parent.metadata, **(metadata or {}), "shed": sorted(shed_set)},
         )
         save_snapshot(self._root, child)
-        self._enforce_retention()
         return child
 
     def merge(
@@ -244,7 +245,6 @@ class ForkManager:
             metadata=combined_meta,
         )
         save_snapshot(self._root, merged)
-        self._enforce_retention()
         return merged
 
     async def preserve_live(
@@ -294,34 +294,6 @@ class ForkManager:
 
     def load(self, snapshot_id: str) -> ForkSnapshot:
         return load_snapshot(self._root, snapshot_id)
-
-    def _enforce_retention(self) -> None:
-        if self._max_retained <= 0:
-            return
-        ids = self.list_snapshots()
-        if len(ids) <= self._max_retained:
-            return
-        # Order by the snapshot file's mtime rather than decrypting+parsing every
-        # snapshot just to read its ``timestamp`` field — the file's mtime tracks
-        # write order (oldest first), which is exactly the eviction order. An
-        # unstattable file sorts as oldest (0.0) so it is evicted first.
-        files: list[tuple[float, str]] = []
-        for snap_id in ids:
-            try:
-                mtime = (self._root / snap_id / "snapshot.json").stat().st_mtime
-            except OSError:
-                mtime = 0.0
-            files.append((mtime, snap_id))
-        files.sort()
-        excess = len(files) - self._max_retained
-        for _, snap_id in files[:excess]:
-            target_dir = self._root / snap_id
-            try:
-                for path in target_dir.iterdir():
-                    path.unlink()
-                target_dir.rmdir()
-            except Exception:
-                log.warning("failed to evict snapshot %s", snap_id, exc_info=True)
 
 
 def merger_from_name(

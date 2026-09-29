@@ -31,6 +31,32 @@ log = logging.getLogger(__name__)
 DEFAULT_PERSISTENCE_PATH = Path("state/eidolon/self_model.json")
 
 
+#: How many sources an episode reports in ``top_sources``.
+_EPISODE_TOP_SOURCES = 5
+
+
+def _episode_entry(
+    *, onset: float, end: float, peak: float, count: int, sources: dict[str, int]
+) -> dict[str, Any]:
+    """One identity-history entry summarising a drift episode.
+
+    ``timestamp`` (the onset), ``score`` (the peak) and ``top_sources`` keep
+    the field names of the older per-alert entries so existing readers work.
+    """
+    ranked = sorted(sources.items(), key=lambda item: (-item[1], item[0]))
+    return {
+        "kind": "drift_episode",
+        "timestamp": onset,
+        "onset": onset,
+        "end": end,
+        "score": peak,
+        "peak_score": peak,
+        "count": count,
+        "sources": dict(sources),
+        "top_sources": [name for name, _ in ranked[:_EPISODE_TOP_SOURCES]],
+    }
+
+
 class Eidolon(BaseModule):
     name: ClassVar[str] = "eidolon"
 
@@ -45,8 +71,8 @@ class Eidolon(BaseModule):
         save_interval_s: float = 30.0,
         internal_speech_stream: str = "lingua.internal",
         external_speech_stream: str = "lingua.external",
-        identity_history_cap: int = 256,
-        voice_observations_cap: int = 256,
+        identity_history_cap: int = 0,
+        voice_observations_cap: int = 0,
         baseline_salience: float = 0.05,
         alert_salience: float = 0.7,
         # Self-inference engine (eidolon-self-inference change).
@@ -62,10 +88,10 @@ class Eidolon(BaseModule):
             raise ValueError("drift_threshold must be >= 0")
         if save_interval_s <= 0:
             raise ValueError("save_interval_s must be positive")
-        if identity_history_cap <= 0:
-            raise ValueError("identity_history_cap must be positive")
-        if voice_observations_cap <= 0:
-            raise ValueError("voice_observations_cap must be positive")
+        if identity_history_cap < 0:
+            raise ValueError("identity_history_cap must be >= 0 (0 = no cap)")
+        if voice_observations_cap < 0:
+            raise ValueError("voice_observations_cap must be >= 0 (0 = no cap)")
         self._persistence_path = Path(persistence_path)
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
@@ -77,6 +103,10 @@ class Eidolon(BaseModule):
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._model: SelfModel = SelfModel()
+        # Whether the newest identity_history entry is a drift episode that is
+        # still open (the last broadcast alerted). In memory only: after a
+        # restart the next alert opens a new episode.
+        self._episode_open = False
         self._internal_cursor = "$"
         self._external_cursor = "$"
         self._last_save_at: float = 0.0
@@ -189,6 +219,9 @@ class Eidolon(BaseModule):
         sources = [ev.source for _, ev in snapshot.selected_events]
         result = self._drift.observe(sources)
         is_alert = result.score >= self._drift_threshold
+        if not is_alert:
+            # The score fell below the threshold: the drift episode ends.
+            self._episode_open = False
         if is_alert:
             self._drift_count += 1
             await self._record_drift(result)
@@ -204,23 +237,65 @@ class Eidolon(BaseModule):
             )
 
     async def _record_drift(self, result: DriftResult) -> None:
-        history = list(self._model.identity_history)
-        history.append(
-            {
-                # Wall-clock event stamp (epoch) recording WHEN this drift was
-                # observed — a persisted "when in the world" mark, not a cognitive
-                # duration/cadence. Like the cycle's event-timestamp seam it stays
-                # on real time, not the subjective EntityClock (which measures
-                # felt durations, not absolute moments).
-                # infrastructural: real time, not subjective
-                "timestamp": time.time(),
-                "score": result.score,
-                "top_sources": list(result.top_drifted_sources),
-            }
-        )
-        if len(history) > self._identity_history_cap:
-            history = history[-self._identity_history_cap :]
-        self._model = self._model.with_updates(identity_history=history)
+        """Record one alerting broadcast into the current drift episode.
+
+        identity_history holds one entry per contiguous drift EPISODE: a run of
+        broadcasts whose score stays at or above the threshold. The episode
+        summarises every alert in it (onset, end, peak score, count, and how
+        often each source was among the top drifted sources), so nothing is
+        lost while a sustained shift adds one entry rather than one per
+        broadcast. The episode closes when a broadcast scores below the
+        threshold.
+
+        The list is owned by this module and updated in place, never copied
+        per alert. An entry is replaced with a new dict rather than mutated,
+        so a save serializing the model in another thread never sees a dict
+        change size under it.
+        """
+        # Wall-clock event stamp (epoch) recording WHEN this drift was
+        # observed — a persisted "when in the world" mark, not a cognitive
+        # duration/cadence. Like the cycle's event-timestamp seam it stays
+        # on real time, not the subjective EntityClock (which measures
+        # felt durations, not absolute moments).
+        # infrastructural: real time, not subjective
+        now = time.time()
+        score = float(result.score)
+        top = list(result.top_drifted_sources)
+        history = self._model.identity_history
+        last = history[-1] if history else None
+        if (
+            self._episode_open
+            and isinstance(last, dict)
+            and last.get("kind") == "drift_episode"
+        ):
+            sources = dict(last.get("sources") or {})
+            for source in top:
+                sources[source] = int(sources.get(source, 0)) + 1
+            peak = max(float(last.get("peak_score", score)), score)
+            history[-1] = _episode_entry(
+                onset=float(last.get("onset", now)),
+                end=now,
+                peak=peak,
+                count=int(last.get("count", 0)) + 1,
+                sources=sources,
+            )
+        else:
+            history.append(
+                _episode_entry(
+                    onset=now,
+                    end=now,
+                    peak=score,
+                    count=1,
+                    sources={source: 1 for source in top},
+                )
+            )
+            self._episode_open = True
+            # identity_history is the entity's own record of how its self-model
+            # has drifted: 0 (the default) keeps every episode. A positive cap
+            # keeps the most recent N episodes.
+            cap = self._identity_history_cap
+            if cap > 0 and len(history) > cap:
+                del history[: len(history) - cap]
 
     async def _internal_speech_loop(self) -> None:
         await self._speech_loop(self._internal_speech_stream, "internal")
@@ -285,8 +360,12 @@ class Eidolon(BaseModule):
         }
         observations = list(self._model.voice_observations)
         observations.append(observation)
-        if len(observations) > self._voice_observations_cap:
-            observations = observations[-self._voice_observations_cap :]
+        # voice_observations is the entity's memory of its developing voice:
+        # 0 (the default) keeps every entry; a positive cap keeps the most
+        # recent N entries.
+        voice_cap = self._voice_observations_cap
+        if voice_cap > 0 and len(observations) > voice_cap:
+            observations = observations[-voice_cap:]
         if channel == "internal":
             new_count = self._model.internal_speech_count + 1
             self._model = self._model.with_updates(

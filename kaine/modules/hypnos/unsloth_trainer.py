@@ -429,12 +429,16 @@ class UnslothDPOTrainer:
             log.exception("hot_swap dispatch raised; adapter remains promoted")
             hot_swap_status = {"mode": config.hot_swap_mode, "ok": False}
 
-        # 10. Retention sweep — never evict `current`.
-        try:
-            evicted = prune(adapter_output_dir, keep=int(config.adapter_retention))
-        except Exception:
-            log.exception("adapter retention prune failed")
-            evicted = []
+        # 10. Retention sweep — only when the operator set a positive cap
+        # (0, the default, keeps every accepted adapter); never evicts
+        # `current`.
+        evicted: list[Path] = []
+        if int(config.adapter_retention) > 0:
+            try:
+                evicted = prune(adapter_output_dir, keep=int(config.adapter_retention))
+            except Exception:
+                log.exception("adapter retention prune failed")
+                evicted = []
 
         return TrainingResult(
             accepted=True,

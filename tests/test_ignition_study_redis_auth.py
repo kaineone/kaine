@@ -47,6 +47,13 @@ def known_modules(monkeypatch):
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
     monkeypatch.delenv("KAINE_REDIS_USERNAME", raising=False)
+    monkeypatch.delenv("KAINE_REDIS_URL", raising=False)
+    for name in (
+        "IGNITION_STANDIN_SCENARIO",
+        "IGNITION_STANDIN_MANIFEST",
+        "IGNITION_STANDIN_BLOOM_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
     return names
 
 
@@ -73,9 +80,15 @@ def _make_plan(tmp_path: Path, base_url: str = "redis://127.0.0.1:6479") -> dict
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": base_url,
-            "db": {"gestation": 10, "main": 11, "control": 12},
+            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
-        "collections": {"gestation": "r_g_", "main": "r_m_", "control": "r_c_"},
+        "collections": {
+            "gestation": "r_g_",
+            "branch": "r_b_",
+            "repeat": "r_r_",
+            "accumulate": "r_a_",
+        },
+        # A legacy field from the two-line protocol: ignored, never an error.
         "viewings_per_line": 2,
         "viewing_budget_seconds": 5.0,
         "gestation_budget_seconds": 5.0,
@@ -152,9 +165,11 @@ def test_runner_embeds_escaped_password(tmp_path: Path, known_modules, monkeypat
         for line in (study_dir / "env_log.jsonl").read_text().splitlines()
         if line.strip()
     ]
-    by_line = {e["line"]: e for e in env_logs}
-    for line, db in [("gestation", 10), ("main", 11), ("control", 12)]:
-        url = by_line[line]["redis_url"]
+    assert {e["line"] for e in env_logs} == {"gestation", "branch", "repeat", "accumulate"}
+    dbs = {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13}
+    for entry in env_logs:
+        db = dbs[entry["line"]]
+        url = entry["redis_url"]
         assert (
             load_bus_config(
                 env={"KAINE_REDIS_URL": url},

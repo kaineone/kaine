@@ -99,10 +99,14 @@ class VoiceAlignmentConfig:
     # Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles voice alignment
     # training. Operator can override to "cuda:1" or "cpu".
     training_device: str = "cuda:0"
-    # How many accepted adapters to retain under adapter_output_dir.
-    # Older accepted adapters are evicted after every successful
-    # promotion. The `current` pointer is never evicted.
-    adapter_retention: int = 5
+    # How many accepted adapters to keep under adapter_output_dir.
+    # 0 (the default) keeps every accepted adapter: they are the entity's
+    # learned voice, so infrastructure does not cull them. A positive value
+    # evicts the oldest accepted adapters beyond N after each successful
+    # promotion; the `current` pointer is never evicted. Negative values are
+    # rejected. Adapters are large: disk is protected by the pre-boot disk
+    # rows (`python -m kaine.preboot`), not by deletion.
+    adapter_retention: int = 0
     # Hot-swap mode: "manual" | "reload_endpoint" | "restart_service".
     hot_swap_mode: str = "manual"
     # When hot_swap_mode = "reload_endpoint": URL Hypnos POSTs to with
@@ -137,6 +141,10 @@ class VoiceAlignmentConfig:
     # Where the subprocess backend stages job specs + the unsloth compiled
     # cache. Operators may redirect to a roomier disk.
     trainer_workdir: str = "state/hypnos/voice_align_jobs"
+
+    def __post_init__(self) -> None:
+        if int(self.adapter_retention) < 0:
+            raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
 
 
 @dataclass(frozen=True)

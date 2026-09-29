@@ -11,6 +11,8 @@
 - [x] 1.9 `numpy-text-embedder` task 3: every memory store, snapshot and bundle is stamped with its embedding space, and revive refuses to mix spaces.
 - [x] 1.10 `honest-planning-and-training` and `nous-learned-agency`: Nous's per-action EFE is correct at any horizon; only a learning pass counts as consolidation; Nous learns what follows its actions and preserves that model.
 - [x] 1.11 Operator decision: whether Nous's intents drive real actions through the existing gates. Decided 2026-09-28: yes, through the existing gates (Nous proposes; Volition disposes). Implemented by OpenSpec change `nous-drives-action`; `[nous].drive_actions` records it per run and allows an observational ablation.
+- [x] 1.12 `womb-to-world-transition`: every viewing that follows birth begins with a deterministic crossfade from the womb's bloom field into the programme. Film time starts when the fade ends.
+- [x] 1.13 `run-recording`: every run persists what Nexus displays (privacy-filtered) and Lingua's external utterances. Inner speech is never recorded.
 
 ## 2. The study
 
@@ -18,9 +20,18 @@
 - [x] 2.2 The study runner: line roots and isolation, the step loop, the step manifests, resumable after an interruption; it refuses a step whose preservation did not capture the world model while Phantasia is enabled.
 - [x] 2.3 The ignition analysis and its report.
 - [x] 2.4 A dry run of the runner end to end with a tiny stand-in programme and no entity (fakes), before the real run.
-- [ ] 2.5 The real run: `init`, then `run` across both lines, with state encryption configured, started by the operator.
+- [ ] 2.5 The real run: `init`, then `run` through the seed, branch, repeat and accumulate steps, with state encryption configured, started by the operator.
+- [x] 2.6 The runner follows the seed and branch protocol (revised 2026-09-28):
+  - the step order seed, branch 0, repeat, then branch k and accumulate k;
+  - start bundles as specified;
+  - a working directory and collection prefixes per branch step, per repeat, and per accumulate line;
+  - every step on an empty, study-owned bus database, flushed by the runner. The runner refuses a plan whose database numbers include the operator's.
+- [x] 2.7 The seed step's birth is automatic. The runner waits for the birth bloom to complete before preserving, and the preservation records the womb's time at birth.
+- [x] 2.8 A `kaine-study` compose service built from the cycle image, with the cycle's configuration, secrets and media mounts and a durable study volume. The runner resolves `/models` and the bus by service name inside it. Operator docs.
+- [x] 2.9 The analysis compares branch k against branch 0, branch 0 against the repeat, and accumulate k against branch k, and states the revised limits.
+- [x] 2.10 A dry run of the revised runner end to end with the stand-in cycle, before the real run.
 
-## 3. Hardware leg (portability program phases 1–4)
+## 3. Hardware leg (portability program phases 1–4; paused 2026-09-28 except the desktop and, next, the Orin Nano Super)
 
 - [x] 3.1 Phase 1: slim base dependencies into extras; native Redis and Qdrant install paths; one installer for x86-64 and aarch64 that detects the target.
 - [x] 3.2 Phase 2: torch-free core backends and slip-driven automatic time dilation.

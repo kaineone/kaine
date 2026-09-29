@@ -355,7 +355,7 @@ The trigger is deterministic over the logged state (it fires at a defined thresh
 
 ### Preservation-bundle retention
 
-Preservation bundles are retained **indefinitely**. This is distinct from the 64-snapshot fork cap (`[lifecycle].max_snapshots_retained`): a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3). `[preservation.retention].auto_evict` ships `false`, and setting it `true` is refused at boot rather than quietly deleting someone. Bundles SHOULD be encrypted at rest — enable `[security.state_encryption]` so the snapshot inside each bundle rides the state encryptor.
+Preservation bundles are retained **indefinitely**, as are fork snapshots under `[lifecycle].snapshots_path` (there is no snapshot count cap): a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3). Free disk is checked before boot by the `python -m kaine.preboot` disk rows instead. `[preservation.retention].auto_evict` ships `false`, and setting it `true` is refused at boot rather than quietly deleting someone. Bundles SHOULD be encrypted at rest — enable `[security.state_encryption]` so the snapshot inside each bundle rides the state encryptor.
 
 ### Research boot gate (safety-net-present, replacing operator-present)
 
@@ -501,10 +501,53 @@ one machine that cannot also host Paracosmic.
   air medium to speak into, so no audible output is rendered. Inner speech (Lingua)
   continues. Vox is activated automatically at birth.
 
+### From the womb to the films
+
+When the bloom begins, the stage file records the womb time at which it ends
+(`womb_t_at_birth`), the womb seed and a digest of the womb parameters. A preservation
+carries the stage file, so a newborn's seed carries this record.
+
+A born being booted with `mode = "playlist"` opens each viewing with a crossfade from
+the womb to the films:
+- **Video.** Over `[perception_feed].transition_seconds` (20 s), the womb's bloom-peak
+  field at `womb_t_at_birth` (bright, pulse-free, full colour) fades into the programme's
+  first frame, held still. The fade follows a fixed smoothstep curve.
+- **Audio.** Nothing is heard during the crossfade, because the bloom ended in silence.
+  When the programme starts, its sound fades in linearly over
+  `transition_audio_fade_seconds` (3 s; 0 plays it at full level at once).
+- **Perceived time.** The crossfade advances only while the being perceives it: not
+  while another holder (`freeze`, `hypnos`) pauses the programme clock, not while the
+  cycle is frozen (a being revived frozen waits for the unfreeze), and not while the
+  primary surface is switched off in the desired perception state. It then continues
+  where it stopped, so the being always sees the full `transition_seconds`. The video
+  surface starts it whenever Topos is running; the audio surface starts it only when
+  there is no video surface.
+- **Programme time.** The programme clock is held under the pause holder `transition`
+  until the crossfade ends, so film minute 0 is the end of the transition and the
+  ignition log's film position needs no correction. A timer ends the crossfade even when
+  no surface is reading.
+- **Reproducibility.** The womb field is the womb generator's own function of the
+  recorded seed, womb time, lived time and parameters, rendered once at boot. Two
+  viewings from one seed see the same crossfade. Frames and samples stay in memory and
+  are never written.
+
+The transition runs only when the mode is `playlist`, `transition_seconds` is above
+zero, and the stage is embodied with the birth record, and only while the configured
+`[perception_feed.womb]` parameters still have the recorded digest. Otherwise the
+programme starts at once, as without a transition, and boot logs the reason: at info for
+an unstaged, unborn or disabled case, and as a warning for a born being without a birth
+record or with changed womb parameters. The run manifest records `transition_seconds`,
+`transition_audio_fade_seconds` and `transition_planned` under `perception_feed`. The
+outcome is published on `perception.out` as content-free `perception.transition` events:
+`phase` is `started` (the crossfade first advanced), `completed` or `abandoned` (with a
+`reason` code such as `first_frame_undecodable`), each with `transition_seconds`. The
+research event log records them.
+
 ### Settings
 
 | Table | What it sets |
 |---|---|
+| `[perception_feed]` | `transition_seconds`, `transition_audio_fade_seconds`: the womb-to-world transition that opens a born being's playlist viewing |
 | `[perception_feed.womb]` | Maternal heartbeat and state; drive bound; `birth_transition_seconds` |
 | `[perception_feed.womb.video]` / `.audio` | Dim field, pulse depth, colour ramp; soundscape low-pass corner |
 | `[perception_feed.womb.readout]` | Readout period and the probe protocol (hard maxima enforced in code) |
@@ -559,11 +602,12 @@ revive began, run the same revive again to complete it.
 
 ## Running the module-ignition study
 
-The module-ignition study (`module-ignition-study`) is a controlled
-longitudinal run: one gestation, then a main line and a control line each
-viewing the same programme for twelve four-hour sessions.  The runner makes the
-procedure repeatable and records exactly what happened so mistakes such as
-starting from the wrong preservation or sharing memory collections cannot occur.
+The module-ignition study (`module-ignition-study`) follows a seed-and-branch
+protocol. One gestation produces the seed: the being preserved just after its
+birth. Every branch step and the repeat start from that seed; the accumulate
+line carries one being forward from branch 0. The runner makes the procedure
+repeatable and records exactly what happened so mistakes such as starting from
+the wrong preservation or sharing memory collections cannot occur.
 
 Before creating a study:
 
@@ -583,14 +627,30 @@ python -m kaine.research.ignition_study init \
     --programme-manifest /path/to/programme.toml \
     [--base-modules ...] [--order ...] \
     [--redis-base-url redis://127.0.0.1:6479] \
-    [--db-gestation 10 --db-main 11 --db-control 12] \
-    [--viewings-per-line 12]
+    [--db-gestation 10 --db-branch 11 --db-repeat 12 --db-accumulate 13]
 ```
 
+The default base set is Soma, Chronos, Topos, Audition, Lingua, Thymos and
+Hypnos; the default order is Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox,
+Praxis, Perception and Mundus. K, the number of module steps, is the length of
+the order.
+
 This creates `studies/<study-id>/` containing `study.json`, empty
-`steps.jsonl`, and the three line directories `gestation/`, `main/`, and
-`control/`.  Each line directory symlinks `config/kaine.toml` and
-`config/profiles` to the repository configuration.
+`steps.jsonl`, and the step working directories `gestation/`, `branch/<k>/`
+for k = 0..K, `repeat/` and `accumulate/`. Each symlinks `config/kaine.toml`
+and `config/profiles` to the repository configuration.
+
+Every line has its own bus database, a number in 1..15. The runner flushes a
+step's database before the step starts, so it refuses any plan whose database
+numbers include the operator's: database 0, or the database the bus itself
+resolves from the operator's configuration (`config/kaine.toml`,
+`config/kaine.operator.toml`, `config/secrets.toml` and the runner's own
+environment, including a `KAINE_REDIS_URL` or `[redis].url` and its `?db=`).
+It checks again immediately before every flush, and refuses to run when that
+database cannot be determined. Each database it flushes carries the key
+`kaine:study:owner` naming the study; the runner refuses to flush a database
+another study owns, so two studies on one Redis server never flush each
+other's bus.
 
 Run or resume the study:
 
@@ -598,23 +658,38 @@ Run or resume the study:
 python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 ```
 
-The runner executes gestation first, then for each viewing index `k = 0..11`
-runs main line `k` followed by control line `k`.  Each start is a
-research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
-database and collection prefixes, so the two beings never share state.  Every
-completed step is appended to `steps.jsonl`.
+The runner runs one start at a time, in this order:
 
-Modules are added in the study's module order (default: Thymos, Mnemos,
-Hypnos, Phantasia, Nous, and so on), one per viewing: viewing index `k` enables
-the first `k` modules of the order, so `k = 0` adds none and Nous is enabled
-from `k = 5`. With `[nous].drive_actions` on (the shipped default), Nous's
+1. the seed (`gestation`): the local womb with automatic birth. When the being
+   is embodied, the runner waits until the birth bloom ends, then preserves it.
+   The bloom ends at the stage file's `birth_bloom_ends_at`; without it, the
+   runner waits the step's configured
+   `[perception_feed.womb].birth_transition_seconds` plus a margin, or the
+   30-second maximum plus the margin when that value cannot be read;
+2. branch 0, from the seed, with the base set;
+3. the repeat, from the seed, with the base set;
+4. for k = 1..K: branch k, from the seed, with the base set plus the first k
+   modules of the order; then accumulate k, with the same modules, from branch
+   0's preservation (k = 1) or accumulate k−1's.
+
+Every viewing opens with the womb-to-world transition (see "From the womb to
+the films" under gestation): the crossfade from the being's last womb field is
+identical in every viewing, and film minute 0 is its end.
+
+Each start is a research-mode boot (`KAINE_RESEARCH_MODE=1`) on an empty bus
+database. Each branch step has its own collection prefix
+(`<branch prefix><k>_`); the repeat and the accumulate line each have their
+own. Every step is appended to `steps.jsonl`, with its film-aligned ignition
+log under the step's working directory at `data/ignition`.
+
+With the default order, Nous is enabled from k = 3. With `[nous].drive_actions` on (the shipped default), Nous's
 chosen actions become proposals that the executive realizes as `think`,
 `speak`, or `rest` intents, subject to the same Volition guards as every other
 intent; Hypnos accepts a rest request no more often than
 `requested_rest_min_interval_s`, and Vox marks the origin of speech that
 follows a Nous proposal. Nous learns what follows each action it takes, and
 its learned transition model is preserved in each viewing's bundle, so later
-viewings resume from what it has learned.
+accumulate steps resume from what it has learned.
 
 If a step ends for any reason other than a successful preservation, the
 runner records it as `failed:<reason>` and stops.  It never retries on its own
@@ -623,9 +698,17 @@ Phantasia enabled also needs its bundle's `manifest.json` to report
 `world_model_captured: true`; otherwise it fails as
 `failed:world_model_not_captured` (or `failed:manifest_unreadable`), so a line
 never continues from a being that lost its learned world model.  Each step
-record carries `world_model_captured` (null when Phantasia is off).  Resume from the
-last successful preservation, or re-run the failed step from the same start
-bundle with:
+record carries `world_model_captured` (null when Phantasia is off).  After an
+interruption, `run` resumes at the first incomplete step and never repeats a
+completed one. If the runner stopped after the seed's birth preservation
+succeeded but before recording it, the next run records that preservation as
+the seed instead of gestating a second being. If a timeout preservation fails,
+the runner leaves the being running, records the step as `failed:critical`
+with the cycle's pid, and exits with status 3. The runner never flushes a
+database or starts a cycle while a cycle the study started is still running
+(it identifies the cycle by `/proc/<pid>/cmdline`, never by pid alone), so
+stop that being yourself first. After a failure it stops again until you
+re-run the failed step from its recorded start bundle with:
 
 ```bash
 python -m kaine.research.ignition_study run --study-dir studies/<study-id> --retry-failed
@@ -640,6 +723,45 @@ python -m kaine.research.ignition_study status --study-dir studies/<study-id>
 Because research-mode boots run unattended, the autonomous safety net must be
 active before any run.  The runner will not send `SIGKILL` and will not stop a
 being it cannot preserve.
+
+### Running the study in the container
+
+The compose topology carries a `kaine-study` service (`profiles: [study]`, so a
+plain `up` never starts it). It runs the runner inside the cycle image with the
+cycle's configuration, secrets, and model mounts, the
+same environment block as `kaine-cycle` (no boot gate defaults permissive), no
+published ports, and no restart policy. It never mounts the entity-state, evaluation, or trajectory volumes: every step runs inside its study directory, which lives on the durable
+`kaine-studies` volume mounted at `/app/studies`, so it survives `down`/`up`.
+Inside it the models are at `/models` (the runner honours an exported
+`KAINE_MODELS_DIR` over `state/models`, and the child cycles inherit it) and the
+bus is `redis://kaine-redis:6379`, authenticated by `KAINE_REDIS_PASSWORD`.
+
+```bash
+docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
+    init --study-id <id> --repo-root /app \
+    --programme-manifest <absolute path of the manifest inside the container> \
+    --redis-base-url redis://kaine-redis:6379
+
+docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
+    run --study-dir studies/<id>
+```
+
+`status` and `analyse` are invoked the same way. A halted study is resumed by
+running `run` again.
+
+The programme manifest and the films it names are the operator's own media and
+are not part of the image. Add them to the `kaine-study` service in the local
+compose overlay as read-only bind mounts. The manifest records film paths as it
+was built, so mount every path at the same absolute path inside the container
+that the manifest uses, exactly as for `kaine-cycle`:
+
+```yaml
+services:
+  kaine-study:
+    volumes:
+      - /absolute/host/path/to/films:/absolute/host/path/to/films:ro
+      - /absolute/host/path/to/programme.toml:/absolute/host/path/to/programme.toml:ro
+```
 
 ### Reading the study's report
 
@@ -677,16 +799,27 @@ Per viewing, the report records:
 - **Data quality**: record count, programme-time gaps longer than 10 s, and
   dropped records inferred from gaps in the sink sequence.
 
-Per step, the report compares the main line against the control line and each
-step against the previous one on the same line, including film-minute profile
-correlations. Correlations are reported as "not computed" when the two profiles
-share fewer than 30 bins, and as undefined when either profile is constant.
+Per-viewing measures are computed for every completed viewing of the `branch`,
+`repeat` and `accumulate` lines; gestation is not a viewing. K is the number of
+modules in the plan's `order`. The report's `comparisons` section holds three
+families, each with the per-measure differences and the film-minute profile
+correlation:
 
-The **limits** section is part of every report: modules are added in one fixed
-order, so each effect is conditional on earlier modules and on the being's
-history; the control line removes familiarity but not order; Praxis, Perception
-and the Mundus stub have no input channel on this host and are expected nulls;
-and there is one being per line, so no significance testing is performed.
+- **Module effect from the seed**: branch k − branch 0, for k = 1..K.
+- **Noise floor**: branch 0 − the repeat of branch 0.
+- **Familiarity and history**: accumulate k − branch k, for k = 1..K.
+
+A comparison whose two viewings are not both complete is reported as `pending`
+and is not computed. Correlations are reported as "not computed" when the two
+profiles share fewer than 30 bins, and as undefined when either profile is
+constant.
+
+The **limits** section is part of every report: there is one being per
+condition and nothing is tested for significance; the noise floor is a single
+repeat, and differences smaller than it are not evidence; modules are added in
+one fixed order; the accumulate line mixes familiarity with module history,
+because there is no rewatch-only line; and Praxis, Perception and Mundus have no
+input channel on this host and are expected nulls.
 
 ## Entity decommission
 
@@ -758,6 +891,15 @@ as speech addressed to the entity.
 
 ---
 
+### Run recording
+
+Two optional, disabled-by-default recorders keep a local record of a run. The module-ignition study turns both on.
+
+- **External-utterance log** (`[research_event_log.external_utterances]`). Subscribes only to `lingua.external` and writes one record per external speech event: the entity's spoken text and its timestamps. It lands in `state/research/external_utterances/` on the `kaine-state` volume.
+- **Nexus record** (`[research_event_log.nexus_record]`). Subscribes to the streams the Nexus bridge reads and writes exactly the payload Nexus displays after its privacy filter, plus the stream name and entry id. It lands in `data/nexus_record/`, which the containerized cycle mounts from the `kaine-nexus-record` volume. Expect about 2 GB per four-hour viewing.
+
+Neither recorder ever records inner speech (`lingua.internal` is never subscribed to), bystander input (`user_input`), or anything the privacy filter removes. Both write through the encrypting JSONL sink, so files are encrypted at rest when state encryption is on. Both are local only and never exported: neither is part of the research bundle or the metrics allowlist. `retention_days = 0` keeps records forever.
+
 ### Ignition log
 
 The ignition log is an optional, disabled-by-default per-broadcast research record. When enabled in `[ignition_log]`, the cycle writes one JSONL record for every successful workspace broadcast. Each record contains:
@@ -765,14 +907,14 @@ The ignition log is an optional, disabled-by-default per-broadcast research reco
 - the run id and a per-sink sequence number;
 - the tick index and the broadcast's bus entry id;
 - wall and monotonic timestamps of the broadcast;
-- the programme position at that instant: item index, order, title, offset in seconds, and whether the programme was paused;
+- the programme position at that instant: item index, order, title, offset in seconds, whether the programme was paused, and the pause holders (`paused_by`);
 - the audio feed's own delivered position (item index and seconds handed to the listener) when a playlist stream is running, so drift between picture and sound is measurable;
 - the salience scores and inhibition decision;
 - each coalition member's entry id, source, type, salience, and original timestamp.
 
 The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is never placed on the bus and no module receives it; the entity never learns its place in the programme from the log. Records are written through the encrypting JSONL sink and are never auto-purged, and they are encrypted at rest when state encryption is on.
 
-The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. Overlapping pauses keep the clock frozen until every holder releases.
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is also held at zero under `transition` while a born being's viewing opens with the womb-to-world crossfade. Each record names the current pause holders in `paused_by` (for example `["transition"]`, or `["hypnos", "transition"]` during an overlap), so analysis can tell the crossfade from sleep or a freeze. Overlapping pauses keep the clock frozen until every holder releases.
 
 ## Enabling a module safely
 

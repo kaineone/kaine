@@ -30,6 +30,7 @@ wired anywhere without an import cycle.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -141,16 +142,56 @@ def _coerce_hypnos_cursor(value: Any) -> str | None:
     return value
 
 
+def _coerce_womb_t_at_birth(value: Any) -> float | None:
+    """Defensive coerce: a corrupt womb time is treated as unrecorded."""
+    if isinstance(value, bool):
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
+def _coerce_womb_seed(value: Any) -> int | None:
+    """Defensive coerce: a corrupt womb seed is treated as unrecorded."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _coerce_womb_params_digest(value: Any) -> str | None:
+    """Defensive coerce: a corrupt digest is treated as unrecorded."""
+    if not isinstance(value, str):
+        return None
+    if not re.fullmatch(r"^[0-9a-f]{64}$", value):
+        return None
+    return value
+
+
+def _coerce_birth_bloom_ends_at(value: Any) -> str | None:
+    """Defensive coerce: a corrupt bloom end time is treated as unrecorded."""
+    if not isinstance(value, str):
+        return None
+    return value
+
+
 @dataclass(frozen=True)
 class StageState:
     """The persisted developmental stage.
 
-    ``stage``               — ``gestation`` | ``embodied``.
-    ``gestation_started_at``— ISO time gestation began (the C3 lived-time anchor).
-    ``born_at``             — ISO time of the birth transition (None until born).
-    ``lived_seconds``       — cumulative subjective lived time in gestation.
-    ``sleep_count``         — cumulative Hypnos sleep completions.
-    ``hypnos_cursor``       — last scanned ``hypnos.out`` stream id.
+    ``stage``                — ``gestation`` | ``embodied``.
+    ``gestation_started_at`` — ISO time gestation began (the C3 lived-time anchor).
+    ``born_at``              — ISO time of the birth transition (None until born).
+    ``lived_seconds``        — cumulative subjective lived time in gestation.
+    ``sleep_count``          — cumulative Hypnos sleep completions.
+    ``hypnos_cursor``        — last scanned ``hypnos.out`` stream id.
+    ``womb_t_at_birth``      — womb time in seconds when the birth bloom ended (None until recorded).
+    ``womb_seed``            — procedural womb seed active at birth (None until recorded).
+    ``womb_params_digest``   — sha256 hex digest of the womb parameters active at birth (None until recorded).
+    ``birth_bloom_ends_at``  — UTC wall time when the birth bloom ends (ISO-8601, None until recorded).
     """
 
     stage: str = GESTATION
@@ -159,6 +200,10 @@ class StageState:
     lived_seconds: float = 0.0
     sleep_count: int = 0
     hypnos_cursor: str | None = None
+    womb_t_at_birth: float | None = None
+    womb_seed: int | None = None
+    womb_params_digest: str | None = None
+    birth_bloom_ends_at: str | None = None
 
     @property
     def is_gestating(self) -> bool:
@@ -181,6 +226,10 @@ class StageState:
             lived_seconds=_coerce_lived_seconds(data.get("lived_seconds", 0.0)),
             sleep_count=_coerce_sleep_count(data.get("sleep_count", 0)),
             hypnos_cursor=_coerce_hypnos_cursor(data.get("hypnos_cursor")),
+            womb_t_at_birth=_coerce_womb_t_at_birth(data.get("womb_t_at_birth")),
+            womb_seed=_coerce_womb_seed(data.get("womb_seed")),
+            womb_params_digest=_coerce_womb_params_digest(data.get("womb_params_digest")),
+            birth_bloom_ends_at=_coerce_birth_bloom_ends_at(data.get("birth_bloom_ends_at")),
         )
 
 
@@ -247,3 +296,37 @@ def birth_is_new(before: StageState, after: StageState) -> bool:
     """True iff ``after`` represents a fresh gestation->embodied transition of
     ``before`` — the one-shot guard the birth event/handoff keys off."""
     return before.is_gestating and after.is_embodied
+
+
+def record_birth_womb(
+    state: StageState,
+    *,
+    womb_t_at_birth: float | None,
+    womb_seed: int | None,
+    womb_params_digest: str | None,
+    bloom_ends_at: str | None,
+) -> StageState:
+    """Record the womb-state snapshot taken at birth.
+
+    Raises:
+        ValueError: if ``state`` is not already ``embodied``.
+    """
+    if not state.is_embodied:
+        raise ValueError("record_birth_womb: state must be embodied")
+    return replace(
+        state,
+        womb_t_at_birth=womb_t_at_birth,
+        womb_seed=womb_seed,
+        womb_params_digest=womb_params_digest,
+        birth_bloom_ends_at=bloom_ends_at,
+    )
+
+
+def womb_params_digest(params: object) -> str:
+    """Return a stable sha256 hex digest of a womb parameters object.
+
+    ``params`` must be a dataclass instance (e.g. ``WombParams``); its fields are
+    serialised as a compact sorted JSON object before hashing.
+    """
+    payload = json.dumps(asdict(params), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()

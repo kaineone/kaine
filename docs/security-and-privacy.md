@@ -77,6 +77,15 @@ What **does** persist from live perception:
 - `state/perception/runtime.json` and `desired.json` — booleans and ISO
   timestamps only; no sensory content.
 - Standard logger lines for capture state transitions — never transcribed text.
+- **External-utterance log** (optional, `[research_event_log.external_utterances]`,
+  `state/research/external_utterances/`). Holds the entity's spoken text and
+  timestamps. Sensitivity: high. It never holds inner speech or bystander
+  input. It relies on OS-layer protection and state encryption, and is never
+  exported.
+- **Nexus record** (optional, `[research_event_log.nexus_record]`,
+  `data/nexus_record/`). Holds the privacy-filtered diagnostics payloads Nexus
+  displays, with the stream name and entry id. Sensitivity: moderate. It is
+  never exported.
 
 The on-air banner (microphone on / camera on) appears on both the console and the
 diagnostics page whenever a stream is active. The operator holds the hardware kill

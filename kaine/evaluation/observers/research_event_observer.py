@@ -112,6 +112,9 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "nous.proposal": frozenset({"proposal_id", "action", "kind", "step", "preference"}),
     "volition.proposal_outcome": frozenset({"proposal_id", "realized", "reason"}),
     "hypnos.rest_request": frozenset({"accepted", "reason", "origin"}),
+    # Womb-to-world transition outcome (perception.out): phase is
+    # started/completed/abandoned; reason is a fixed code on abandon.
+    "perception.transition": frozenset({"phase", "transition_seconds", "reason"}),
     # --- Prediction / precision ---
     "soma.report": frozenset({"prediction_error", "wellness", "fatigue_value", "alerts"}),
     "topos.report": frozenset(

@@ -263,7 +263,7 @@ learning_rate = 5e-5
 dpo_beta = 0.1
 capability_loss_threshold = 0.05
 training_device = "cuda:0"
-adapter_retention = 5
+adapter_retention = 0   # 0 = keep every accepted adapter
 hot_swap_mode = "manual"      # "manual" | "reload_endpoint" | "restart_service"
 ```
 

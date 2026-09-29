@@ -65,8 +65,10 @@ Optionally:
 - `capability_loss_threshold` — adapter is rejected if
   `cap_before - cap_after > threshold`. Default `0.05`.
 - `adapter_retention` — how many accepted adapters to keep under
-  `adapter_output_dir`. Default `5`. The `current` symlink target
-  is never evicted.
+  `adapter_output_dir`. Default `0`: every accepted adapter is kept,
+  because adapters are the entity's learned voice; disk is checked by
+  the pre-boot disk rows instead. A positive value evicts the oldest
+  adapters beyond N. The `current` symlink target is never evicted.
 
 ## Capability-loss veto
 

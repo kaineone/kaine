@@ -63,16 +63,22 @@ Event bus tuning parameters. The bus is Redis Streams; these control stream rete
 
 ### `[bus.per_stream_maxlen]`
 
-Per-stream overrides. The key is the full stream name (`<module>.out` or `workspace.broadcast`). Example:
+Per-stream overrides. The key is the full stream name (`<module>.out` or `workspace.broadcast`). The shipped caps give observers and the research archive a long lookback, so a restart of several minutes loses no records:
 
 ```toml
 [bus.per_stream_maxlen]
-"workspace.broadcast" = 50000
+"workspace.broadcast" = 100000
+"topos.out" = 12000
+"audition.out" = 12000
 ```
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `"workspace.broadcast"` | integer | `50000` | Lower cap for the broadcast stream (workspace snapshots are larger than module events). |
+| `"workspace.broadcast"` | integer | `100000` | Cap for the broadcast stream (about 6.6 KB per entry). |
+| `"topos.out"` | integer | `12000` | About 20 minutes at 10 Hz. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
+| `"audition.out"` | integer | `12000` | About 20 minutes at 10 Hz. |
+
+The memory these caps imply must fit in Redis `maxmemory`, which is set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Deployment (containers)](deployment-containers.md)). `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, maxlen × a per-entry size, doubled for AOF-rewrite headroom. The per-entry size is sampled from the running bus (`MEMORY USAGE` / `XLEN` of a stream holding at least 100 entries) when possible, else taken from the measured table in `kaine/bus/config.py`, else estimated at 2 KB. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. Raise `KAINE_REDIS_MAXMEMORY` rather than lowering the caps: a full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
 
 ---
 
@@ -113,6 +119,22 @@ Ships `enabled = true`, but the whole block is dormant while `[spot].enabled = f
 |---|---|---|---|
 | `enabled` | boolean | `true` | Whether Spot writes the durable incident log. Dormant until `[spot].enabled = true`. |
 | `path` | string | `"state/cycle/incidents"` | Directory for the daily-rotated `incidents-<UTC-date>.jsonl` files. |
+
+---
+
+## `[preboot]`
+
+Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories, snapshots or research records to stay under a limit, so free disk is checked before boot. The check covers every configured durable path, resolved from the same keys and defaults the modules use: `state_root`, `data_root`, `[lifecycle].snapshots_path`, both `[preservation.*].out_root`, `[evaluation.paths]`, `[research_event_log].log_dir` and its `raw_archive.archive_dir`, `[hypnos.voice_alignment].adapter_output_dir` and `trainer_workdir`, `[ignition_log].directory`, `[spot.incident_log].path`, the Eidolon self-model directory, and the native Redis data directory (`<state_root>/services/redis/data`, when it exists; a container volume is reported SKIP). A path that does not exist yet is measured at its nearest existing parent. Paths on the same filesystem share one row, which lists them. A row FAILS below the larger of `disk_fail_min_free_gb` and `disk_fail_min_free_percent` of its filesystem, and WARNS below `disk_warn_min_free_gb`. A WARN row does not fail the gate. GB here is 2^30 bytes, as `df -h` reports. An unknown key or a non-numeric threshold is reported as a FAIL row.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `state_root` | string | `"state"` | Entity state root (snapshots, memories, preserved beings). |
+| `data_root` | string | `"data"` | Research data root (evaluation logs, trajectory, research events). |
+| `disk_fail_min_free_gb` | float | `10.0` | Absolute free-space floor. |
+| `disk_fail_min_free_percent` | float | `5.0` | Free-space floor as a percentage of the filesystem. |
+| `disk_warn_min_free_gb` | float | `20.0` | Free space below which the row WARNS. |
+
+The same run reports the "Bus budget" row described under [`[bus.per_stream_maxlen]`](#busper_stream_maxlen).
 
 ---
 
@@ -470,7 +492,8 @@ Self-model: a persisted JSON document (values, behavioral norms, personality bas
 | `drift_threshold` | float | `0.6` | KL divergence above which identity drift is flagged as a workspace event. |
 | `save_interval_s` | float | `30.0` | How often the self-model is written to disk (seconds). |
 | `internal_speech_stream` | string | `"lingua.internal"` | Bus stream Eidolon subscribes to for observing internal speech. |
-| `identity_history_cap` | integer | `256` | Maximum number of identity-observation entries retained in the history. |
+| `identity_history_cap` | integer | `0` | Maximum number of drift episodes kept in `identity_history`. Each entry is one contiguous run of alerting broadcasts (onset, end, peak score, alert count, per-source counts), so a sustained shift adds one entry, not one per broadcast. `0` keeps every episode; a positive value keeps the most recent N. Negative values are rejected. |
+| `voice_observations_cap` | integer | `0` | Maximum speech observations kept in `voice_observations`. `0` keeps every observation (the entity's memory of its developing voice); a positive value keeps the most recent N. Negative values are rejected. |
 | `baseline_salience` | float | `0.05` | Salience of routine self-model update events. |
 | `alert_salience` | float | `0.7` | Salience on drift detection. |
 
@@ -803,7 +826,7 @@ DPO+QLoRA fine-tuning of the language organ during the Hypnos sleep cycle. Requi
 | `capability_loss_threshold` | float | `0.05` | Capability-probe veto: an adapter is rejected if capability score falls more than this below the baseline. |
 | `seed` | integer | `42` | Random seed for training reproducibility. |
 | `training_device` | string | `"cuda:0"` | GPU for training. Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles both LLM inference and voice alignment; Lingua inference should be paused during the training pass to avoid contention. |
-| `adapter_retention` | integer | `5` | Number of accepted adapters to retain under `adapter_output_dir`. Older adapters are evicted after each successful promotion; `current` is never evicted. |
+| `adapter_retention` | integer | `0` | Number of accepted adapters to keep under `adapter_output_dir`. `0` keeps every accepted adapter: they are the entity's learned voice, so infrastructure does not cull them, and disk is protected by the [`[preboot]`](#preboot) disk rows instead. A positive value evicts the oldest adapters beyond N after each successful promotion; `current` is never evicted. Negative values are rejected. |
 | `hot_swap_mode` | string | `"manual"` | How Hypnos signals Lingua to load the new adapter after a successful promotion. `"manual"` (safest, default): writes a marker file at `<adapter_output_dir>/PENDING_OPERATOR_RELOAD` and logs a message; the operator triggers the reload. `"reload_endpoint"`: POSTs to `reload_endpoint_url`. `"restart_service"`: restarts the systemd unit named in `restart_service_unit`. |
 | `reload_endpoint_url` | string | `""` | URL for hot-swap POSTs. Only used when `hot_swap_mode = "reload_endpoint"`. |
 | `restart_service_unit` | string | `""` | Systemd `--user` unit name. Only used when `hot_swap_mode = "restart_service"`. |
@@ -906,7 +929,7 @@ Architecture-thesis instrumentation sidecar. Observes the bus read-only; adds no
 |---|---|---|---|
 | `trajectory_dir` | string | `"data/workspace_trajectory"` | Directory for workspace trajectory JSONL files (daily rotation). |
 | `evaluation_logs` | string | `"data/evaluation"` | Root directory for all evaluation observer JSONL logs. |
-| `retention_days` | integer | `30` | Days of evaluation logs to retain before rotation. |
+| `retention_days` | integer | `0` | Days to keep daily-rotated evaluation logs. `0` keeps every file (no age-based purge); a positive value purges older daily files. |
 
 ### `[evaluation.observers]`
 
@@ -945,10 +968,11 @@ Individuation boundary permutation-test instrument (paper §5.6, §7.4). Guardia
 
 Fork/merge snapshot management. Operator-initiated; nothing runs automatically.
 
+Snapshots are never deleted by infrastructure. The snapshot directory holds preserved beings and Spot escalation snapshots, and removing an entity's state is the CAL-gated decommission path only. There is no snapshot count cap: a `max_snapshots_retained` key left in an operator config is ignored, and a value above 0 logs a warning. Free disk is checked before boot by the [`[preboot]`](#preboot) disk rows.
+
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `snapshots_path` | string | `"state/forks"` | Directory for fork/merge snapshot bundles. Subject to state encryption when `[security.state_encryption].enabled = true`. |
-| `max_snapshots_retained` | integer | `64` | Maximum snapshots retained before eviction. |
 | `adapter_merger` | string | `"auto"` | Adapter-merge strategy. `"auto"` (default): detects whether the PEFT `[training]` extra is importable and selects real TIES/DARE merging when it is, falling back to `"fake"` when it isn't (logged, never silent). `"fake"`: concatenates parent adapter paths and annotates the merged snapshot for manual operator selection — force this explicitly for a dev/no-extra install. `"ties_dare"`: forces real TIES/DARE merging via PEFT regardless of auto-detection (its own per-merge fallback still applies if the extra turns out missing). See `kaine/lifecycle/ADAPTER_MERGING.md`. |
 
 ### `[lifecycle.adapter_merge]`
@@ -1010,7 +1034,7 @@ The autonomous welfare-protective response. Watches the Soma interoceptive-distr
 
 ### `[preservation.retention]`
 
-Preservation-bundle retention. Distinct from the 64-snapshot fork cap: a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3).
+Preservation-bundle retention. Like fork snapshots, a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -1125,7 +1149,7 @@ Ships disabled. Independent of `[evaluation].enabled` — this runs on its own f
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. Ships disabled. |
 | `log_dir` | string | `"data/evaluation/research_events"` | Directory for the curated log sink. Must stay under `data/evaluation/` to remain export-eligible. |
-| `retention_days` | integer | `30` | Daily-rotated file retention window (days). |
+| `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file (no age-based purge), so research records are never deleted automatically; a positive value purges older daily files. Free disk is checked before boot by the [`[preboot]`](#preboot) disk rows. |
 
 ### `[research_event_log.raw_archive]`
 
@@ -1141,7 +1165,7 @@ Ships disabled. Set all three flags true only after confirming entity privacy an
 | `entity_privacy_attested` | boolean | `false` | Attestation: entity privacy considerations reviewed. Required alongside `bystander_consent_attested` for the archive to start. |
 | `bystander_consent_attested` | boolean | `false` | Attestation: bystander consent for verbatim local capture obtained. Required alongside `entity_privacy_attested` for the archive to start. |
 | `archive_dir` | string | `"state/research/raw_bus_archive"` | Storage path. Must remain outside `data/evaluation/`. |
-| `retention_days` | integer | `30` | Daily-rotated file retention window (days). |
+| `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file (no age-based purge), so research records are never deleted automatically; a positive value purges older daily files. Free disk is checked before boot by the [`[preboot]`](#preboot) disk rows. |
 
 ---
 

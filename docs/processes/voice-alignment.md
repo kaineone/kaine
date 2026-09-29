@@ -297,7 +297,8 @@ Promotion sequence:
 1. `os.replace(<timestamp>.tmp, <timestamp>)` — atomic directory rename.
 2. Create a new temp symlink pointing to the new directory.
 3. `os.replace(<tmp_symlink>, current)` — atomic symlink swing.
-4. Run retention: evict oldest directories beyond `adapter_retention` cap.
+4. Run retention only when `adapter_retention` is positive: evict oldest directories beyond the cap.
+   The default `0` keeps every accepted adapter.
    The target of `current` is always protected even if it is the oldest.
 
 Concurrent readers (e.g. Lingua in a future auto-reload mode) never see a
@@ -398,7 +399,7 @@ dpo_beta = 0.1
 capability_loss_threshold = 0.05
 seed = 42
 training_device = "cuda:0"    # or "cpu"; see hardware.py for auto-selection
-adapter_retention = 5
+adapter_retention = 0   # 0 = keep every accepted adapter
 hot_swap_mode = "manual"
 reload_endpoint_url = ""      # for hot_swap_mode = "reload_endpoint"
 restart_service_unit = ""     # for hot_swap_mode = "restart_service"

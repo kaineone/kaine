@@ -4,7 +4,7 @@
 """The five Hypnos sleep phases (paper §3.3.5).
 
 Phase ordering (non-negotiable; paper-canonical):
-  1. light_consolidation  — weak-trace decay; strong-trace tagging; oscillator
+  1. light_consolidation  — short-term to episodic transfer (nothing dropped); oscillator
                             frequency reduction across all active modules.
   2. deep_consolidation   — global activation downscaling (Tononi & Cirelli 2014)
                             + perception-suspended replay window.
@@ -88,12 +88,13 @@ async def light_consolidation(
     active_modules: list[Any] | None = None,
     frequency_scale: float = 0.5,
 ) -> PhaseResult:
-    """Phase 1: weak-trace decay, strong-trace tagging, oscillator frequency hook.
+    """Phase 1: short-term to episodic transfer and the oscillator frequency hook.
 
-    Weak traces are pruned via ``consolidate_now()`` (which moves short-term
-    to episodic, dropping low-salience items).  Strong traces are tagged for
-    deep consolidation (no-op at this stage — tagging is implicit in the
-    existing salience scoring).
+    Calls ``consolidate_now()``, which moves every short-term entry into
+    episodic memory and drops nothing: no trace is deleted in this phase, and
+    ``entries_consolidated`` counts the entries moved. Strong traces are
+    tagged for deep consolidation (no-op at this stage — tagging is implicit
+    in the existing salience scoring).
 
     The oscillator frequency-reduction hook (``set_frequency(scale)``) is
     invoked on all provided *active_modules*.  When no oscillatory-layer is
@@ -118,7 +119,7 @@ async def light_consolidation(
     metadata["frequency_scale"] = frequency_scale
     metadata["modules_frequency_called"] = called_modules
 
-    # --- Consolidation (weak-trace pruning / strong-trace promotion) ---
+    # --- Consolidation (short-term to episodic; nothing is dropped) ---
     if mnemos is None:
         metadata["consolidation_skipped"] = "no Mnemos available"
         return PhaseResult(

@@ -87,8 +87,9 @@ def prepare_revive(bundle: str | Path) -> RevivePlan:
         try:
             manifest = json.loads(manifest_path.read_text())
             preservation_id = manifest.get("preservation_id")
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as exc:
+            # The id is informational only; a stage read below still gates revival.
+            log.debug("could not read preservation_id from %s: %s", manifest_path, exc)
 
     try:
         stage = read_bundle_stage(bundle)
