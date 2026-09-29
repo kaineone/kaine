@@ -1623,6 +1623,35 @@ bystander_consent_attested = false
 archive_dir = "state/research/raw_bus_archive"
 retention_days = 30
 
+[research_event_log.external_utterances]
+# OPTIONAL local-only external-speech recorder. NEVER export-eligible.
+#
+# Subscribes ONLY to lingua.external and writes one record per external_speech
+# event to state/research/external_utterances/. The record contains the text
+# field only; user_input (bystander speech) and all other payload fields are
+# dropped. It NEVER subscribes to lingua.internal or lingua.out, so inner speech
+# is never recorded.
+#
+# Local only, never exported.
+enabled = false
+log_dir = "state/research/external_utterances"
+# 0 = keep forever.
+retention_days = 0
+
+[research_event_log.nexus_record]
+# OPTIONAL local-only Nexus diagnostics recorder. NEVER export-eligible.
+#
+# Subscribes to the same diagnostics_streams() the Nexus bridge reads and, for
+# each event, writes exactly the payload produced by PrivacyFilter with
+# dev_content_override=false (the same filter the bridge applies), plus the
+# stream name and entry id. Filter failures drop the event with a warning.
+#
+# Local only, never exported. Expected size ~2 GB per four-hour viewing.
+enabled = false
+log_dir = "data/nexus_record"
+# 0 = keep forever.
+retention_days = 0
+
 # In-process ignition log (film-aligned-ignition-log).
 #
 # Records every successful workspace broadcast with programme position, audio
