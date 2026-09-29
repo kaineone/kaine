@@ -82,7 +82,7 @@ async def _drive_one_cycle_tick(
     task = asyncio.create_task(soma._cycle_consumer_loop())
     await asyncio.wait_for(processed, timeout=1.0)
     soma._stopped.set()
-    await task
+    await asyncio.wait_for(task, timeout=5.0)
 
 
 @pytest.mark.parametrize("scale, expected_delta", [(1.0, 2.0), (0.5, 1.0)])

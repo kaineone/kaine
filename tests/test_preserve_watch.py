@@ -178,7 +178,7 @@ async def test_watcher_run_loops_until_stop_event(tmp_path):
 
     task = asyncio.create_task(watcher.run(stop_event))
     await stop_soon()
-    await task
+    await asyncio.wait_for(task, timeout=5.0)
 
     assert len(calls) >= 1
 
