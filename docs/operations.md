@@ -359,6 +359,8 @@ Preservation bundles are retained **indefinitely**, as are fork snapshots under 
 
 ### Research boot gate (safety-net-present, replacing operator-present)
 
+`[preboot].extra_disk_paths` adds custom directories (for example a study directory on another drive) to the pre-boot disk check.
+
 For an unsupervised run the operator-present requirement is **replaced** by a safety-net-present gate. Selecting research mode (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) makes the boot refuse to start — with an operator-facing message and a distinct exit code (`5`), no traceback — unless all of the following hold:
 
 1. preservation is enabled (`[preservation.divergence_monitor].enabled`),
@@ -601,6 +603,8 @@ interrupted start leaves it unchanged. If a start is interrupted after the
 revive began, run the same revive again to complete it.
 
 ## Running the module-ignition study
+
+The study runner guards the filesystem that holds the study directory: before each step it refuses to start if free space is below `max(min_free_gb, 5%)`; during a step it requests a `disk_low` preservation, stops the cycle, and records `failed:disk_low` (with `disk_low_preserved` noting whether the preservation succeeded). Set `--min-free-gb` at `init` to raise or lower the cap; the default is 20.0 GiB.
 
 The module-ignition study (`module-ignition-study`) follows a seed-and-branch
 protocol. One gestation produces the seed: the being preserved just after its

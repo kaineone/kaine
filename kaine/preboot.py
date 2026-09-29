@@ -542,6 +542,7 @@ PREBOOT_DEFAULTS: dict[str, Any] = {
     "disk_fail_min_free_gb": 10.0,
     "disk_fail_min_free_percent": 5.0,
     "disk_warn_min_free_gb": 20.0,
+    "extra_disk_paths": [],
 }
 _GIB = 2**30
 
@@ -784,6 +785,13 @@ def _preboot_settings(config: dict[str, Any]) -> dict[str, Any]:
         if isinstance(default, str):
             if not isinstance(value, str) or not value:
                 raise ValueError(f"[preboot].{key} must be a non-empty string")
+        elif isinstance(default, list):
+            if not isinstance(value, list) or not all(
+                isinstance(v, str) and v for v in value
+            ):
+                raise ValueError(
+                    f"[preboot].{key} must be a list of non-empty strings"
+                )
         elif isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
             raise ValueError(f"[preboot].{key} must be a number >= 0")
         settings[key] = value
@@ -877,6 +885,8 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
             ),
         ),
     ]
+    for extra in settings.get("extra_disk_paths", []):
+        paths.append(("[preboot].extra_disk_paths", Path(extra)))
     return paths
 
 
