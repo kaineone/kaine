@@ -28,7 +28,7 @@ from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.config import NexusRecordConfig
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.stream_registry import diagnostics_streams
-from kaine.nexus.privacy import PrivacyFilter
+from kaine.privacy_filter import PrivacyFilter
 
 log = logging.getLogger(__name__)
 
