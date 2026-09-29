@@ -13,6 +13,8 @@ A `WetwareOscillator` records one firing-fraction sample each time its module pu
 
 It uses the broker's tagged exchange from nous-on-wetware, and adds no broker code.
 
+Also fixed here: `test_drive_mode_records_taken_proposal` (added by #251) built its `TerritoryObservation` with only `tag` and `spikes`, so it raised TypeError. No CI job runs the plugin suite, so it merged red. Its stub now builds a complete observation.
+
 ## Impact
 
 - Affected spec: `oscillator-wetware-backend` (modified requirement "Module phase can be sourced from the substrate").
