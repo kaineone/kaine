@@ -88,7 +88,7 @@ The system SHALL route all model work through a single priority-class work queue
 - **THEN** the manager terminates it at the next safe point, surfaces the preemption failure and the interactive job's actual delay, and the interactive job proceeds.
 
 ### Requirement: Keep-resident TTL and warm-path guarantees
-The system SHALL keep each model resident for a configurable keep-resident TTL (a global default with per-organ override) measured from its most recent job, and SHALL refresh the TTL on every job dispatched to it. While a model is resident and within its TTL, jobs targeting it SHALL be served on the warm path — dispatched to the resident model with no unload and no reload — and eviction SHALL prefer expired, lower-priority, or older models over a model warm within its TTL. When the TTL expires with no in-flight and no queued work for that model, the system SHALL unload it using the mechanism the engine provides (in-process release or an unload endpoint), confirm the unload before reclaiming, return its footprint to the budget, and record the unload. Unloading SHALL preserve fast-reload conditions — weights remain on disk and mapped or page-cached where the platform allows — so a later job reloads the model automatically without operator action. The system SHALL require every rung's artifact to be memory-mappable, and SHALL budget every admission on the rung's calibrated peak footprint rather than its file size.
+The system SHALL keep each model resident for a configurable keep-resident TTL (a global default with per-organ override) measured from its most recent job, and SHALL refresh the TTL on every job dispatched to it. While a model is resident and within its TTL, jobs targeting it SHALL be served on the warm path — dispatched to the resident model with no unload and no reload — and eviction SHALL prefer expired, lower-priority, or older models over a model warm within its TTL. When the TTL expires with no in-flight and no queued work for that model, the system SHALL unload it using the mechanism the engine provides (in-process release or an unload endpoint), confirm the unload before reclaiming, return its footprint to the budget, and record the unload. Unloading SHALL preserve fast-reload conditions — weights remain on disk and mapped or page-cached where the platform allows — so a later job reloads the model automatically without operator action. The system SHALL prefer memory-mapped artifacts where the engine supports them, SHALL record in the footprint catalogue whether each rung maps its weights, and SHALL budget every admission on the rung's calibrated peak footprint rather than its file size, whether or not the rung maps its weights.
 
 #### Scenario: Warm path serves back-to-back work
 - **WHEN** a job targets a model that is resident and within its keep-resident TTL,
@@ -125,9 +125,9 @@ When a model fails to load — the engine crashes, memory is exhausted, the engi
 - **WHEN** the selected rung's model files are absent from the host,
 - **THEN** the manager treats that rung as unavailable with the reason surfaced, degrades to a lighter installed rung where one exists, and does not download or install anything without operator consent.
 
-#### Scenario: TTS downshifts with a surfaced reason
-- **WHEN** Kokoro cannot be admitted on a loaded host and Kitten micro is installed and fits
-- **THEN** the turn runs on Kitten micro and the operator sees "TTS downgraded Kokoro-82M → Kitten micro: insufficient memory while \<holder\> resident".
+#### Scenario: STT downshifts with a surfaced reason
+- **WHEN** `moonshine-base-en` cannot be admitted on a loaded host and `moonshine-tiny-en` is installed and fits
+- **THEN** the turn runs on `moonshine-tiny-en` and the operator sees "STT downgraded moonshine-base-en → moonshine-tiny-en: insufficient memory while \<holder\> resident".
 
 #### Scenario: Honest refusal instead of silence
 - **WHEN** no STT rung can be admitted for a voice turn
@@ -160,12 +160,79 @@ KAINE SHALL preserve the dual-GPU x86_64 workstation default and ROCm, XPU, MPS,
 - **THEN** its inputs, outputs, and workspace interactions are identical to its contract; only latency, residency timing, and — where the ladder substituted an engine — voice or transcription character differ, with any substitution surfaced.
 
 ### Requirement: Honest statement of limits
-KAINE SHALL state at plan time and at runtime which requested configurations do not fit the budget and what the consequence feels like — including Chatterbox plus a chat model on an 8 GB host (per-turn swapping, load-dominated TTFA), on-device chat-LLM training (workstation-class, refused on small budgets), and Piper's measured disadvantage — and SHALL refuse a schedule that would thrash rather than run it silently.
+KAINE SHALL state at plan time and at runtime which requested configurations do not fit the budget and what the consequence feels like — including Chatterbox plus a chat model on an 8 GB host (per-turn swapping, load-dominated TTFA) and on-device chat-LLM training (workstation-class, refused on small budgets) — and SHALL refuse a schedule that would thrash rather than run it silently.
 
 #### Scenario: Infeasible pairing is named at plan time
 - **WHEN** the operator selects Chatterbox plus a 7–8B chat model on an 8 GB host
-- **THEN** the plan surfaces that these cannot be resident together, that per-turn swapping will make TTFA load-dominated, and offers Kokoro or a larger host as the remedy.
+- **THEN** the plan surfaces that these cannot be resident together, that per-turn swapping will make TTFA load-dominated, and offers the `sherpa_onnx` Kokoro rung or a larger host as the remedy.
 
 #### Scenario: Unschedulable work is refused, not thrashed
 - **WHEN** a requested combination exceeds even time multiplexing, such as training the chat model while serving voice on an 8 GB board
 - **THEN** the planner refuses the schedule with an explanation of the envelope and runs nothing that would silently degrade the interactive class.
+
+### Requirement: Footprint calibration and fit report
+The system SHALL provide a calibration command that loads each enabled component's configured backend on the host in isolation, runs one representative inference, and records the component's measured peak resident footprint (system memory, and device memory on discrete hosts) in a local, content-free footprint catalogue. The command SHALL load components only with operator consent, SHALL NOT download any model itself, and SHALL skip a component whose model is absent while naming it. The system SHALL produce a fit report from the residency budget, the catalogue and the enabled module set, stating whether the set co-resides and, if not, the shortfall, the multiplexing plan (pinned organ, multiplexed organs, the rung each organ would use) and the expected feel. The admission ledger SHALL use the larger of the catalogued and the live-observed footprint for each rung, and SHALL NOT fall back to download or file sizes when a footprint is unknown; an uncalibrated rung SHALL be reported as uncalibrated and admitted only when the budget can hold the rung's worst-case estimate supplied by its backend, with the uncertainty surfaced.
+
+#### Scenario: Calibration measures and records footprints
+- **WHEN** the operator runs the calibration command and consents on a host with Lingua, Audition (`sherpa_onnx`) and Vox (`sherpa_onnx`) enabled and their models present
+- **THEN** each component's backend is loaded in isolation, one inference is run, its peak resident footprint is recorded in the catalogue with backend, model id, host class and timestamp, and no text, audio or latent is written
+
+#### Scenario: Absent model is skipped, not fetched
+- **WHEN** the calibration command reaches a component whose model files are absent
+- **THEN** it skips that component, names it with the command that would acquire it, and downloads nothing
+
+#### Scenario: Fit report on a host where everything co-resides
+- **WHEN** the catalogued footprints of every enabled component, plus the reserve, fit within the budget
+- **THEN** the fit report states that the set co-resides, the residency manager stays passive, and no multiplexing plan is proposed
+
+#### Scenario: Fit report on a host that must multiplex
+- **WHEN** the catalogued footprints exceed the budget
+- **THEN** the fit report states the shortfall in bytes, names the pinned organ and the organs that will be multiplexed with the rung each will use, and describes the expected feel of the resulting swaps
+
+### Requirement: Reversible unload on engine clients
+Every in-process engine client whose model the residency manager may release SHALL provide an idempotent `ensure_loaded()` and an `unload()` that releases the model's memory while leaving the client usable, so that a later `ensure_loaded()` loads the model again without reconstructing the client or restarting its module. `unload()` SHALL wait for in-flight inference to finish before releasing. Terminal shutdown (`aclose()`) SHALL remain separate. External model services (the organ's server, Chatterbox, Speaches) SHALL be released and re-admitted through a controller that stops and starts the service and confirms its health, in the manner of the existing organ-window controller.
+
+#### Scenario: Unload and reload an STT client
+- **WHEN** the manager unloads the `sherpa_onnx` STT client after its TTL and a later transcription request arrives
+- **THEN** the client's model memory is released on unload, the client object remains usable, and the next request triggers `ensure_loaded()`, which reloads the model and serves the request with an identical result to a never-unloaded client
+
+#### Scenario: Unload waits for in-flight inference
+- **WHEN** `unload()` is called while an inference on that client is running
+- **THEN** the inference completes normally and the model is released immediately afterwards
+
+### Requirement: One owner of model memory
+The residency manager SHALL be the single owner of model residency on the host. The Hypnos organ window SHALL request the organ's release and re-admission through the manager, and the manager SHALL count the training footprint in its ledger for the window's duration; when the manager is passive, the organ window SHALL behave exactly as it does without the manager. No other component SHALL stop, start, load or unload a model outside the manager.
+
+#### Scenario: Voice-alignment training on a multiplexed host
+- **WHEN** Hypnos opens the organ window on a host whose manager is multiplexing organs
+- **THEN** the window's unload, training and reload go through the manager, the training footprint is held in the ledger until reload, other admissions see that footprint as occupied, and consumers of the organ keep their existing `organ_resting` deferral
+
+### Requirement: Residency waits are not faults
+A module waiting for admission or for its model to load SHALL keep its liveness heartbeat. The manager SHALL publish each rung's `loading` state, and the module supervisor (Spot) SHALL treat a module whose model is loading within the load's measured bound as alive. A load that exceeds its bound SHALL be handled as a residency failure (ladder-down, surfaced) and SHALL NOT by itself trigger a Spot restart.
+
+#### Scenario: A slow load does not trip the watchdog
+- **WHEN** Spot polls while a module's model is loading and the load is still within its measured bound
+- **THEN** Spot reports the module alive and takes no freeze or restart action
+
+### Requirement: Perception queued without persistence while STT is not resident
+When STT is enabled and its rung is not resident, audio segments that arrive SHALL wait in a bounded in-memory queue, bounded by count and by age, with the oldest segments dropped first and every drop counted and surfaced. Queued audio SHALL never be written to disk or to any persistent store.
+
+#### Scenario: Speech arrives during a load
+- **WHEN** a user utterance's audio segments arrive while the STT rung is loading
+- **THEN** the segments are held in memory, transcribed in order once the rung is resident, and nothing is written to disk
+
+#### Scenario: Queue bound is exceeded
+- **WHEN** segments keep arriving past the queue's count or age bound
+- **THEN** the oldest segments are dropped, the drop count is surfaced in residency status, and no segment is persisted
+
+### Requirement: Residency fit in the pre-boot check
+The pre-boot check SHALL include a `Residency fit` row computed from the fit report. It SHALL PASS when the enabled set co-resides; it SHALL PASS with the multiplexing plan shown when the set is schedulable by multiplexing; it SHALL FAIL, naming the shortfall, only when not even the pinned organ together with the lightest installed rung of every other enabled organ can be scheduled; and it SHALL SKIP, saying so, when no footprint catalogue exists yet, pointing to the calibration command.
+
+#### Scenario: Multiplexed host passes with its plan
+- **WHEN** the pre-boot check runs on an 8 GB unified host whose enabled set does not co-reside but is schedulable
+- **THEN** the `Residency fit` row PASSES and shows which organs are multiplexed and with which rungs
+
+#### Scenario: No calibration yet
+- **WHEN** the pre-boot check runs and no footprint catalogue exists
+- **THEN** the `Residency fit` row SKIPS and names the calibration command
+

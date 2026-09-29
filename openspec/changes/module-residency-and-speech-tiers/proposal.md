@@ -1,104 +1,61 @@
 ## Why
 
-KAINE is meant to be hyper-portable and hyper-scalable. Today, when the first-run wizard meets a host that is too small, its answer is to disable modules. That is the wrong answer: it trades capability away instead of scheduling for it. The right answer is to time-multiplex a small memory budget — queue the work a module needs, load the model that does it, run it, unload it, move to the next. Capability through scheduling, not capability through amputation. Done well, speech and perception feel close to realtime even on an 8 GB board.
+KAINE is meant to be hyper-portable and hyper-scalable: the same mind on refurbished phones, single-board computers and multi-GPU servers, slower on weak hardware but with every module present. Today, a host that cannot hold every model at once has two answers, and both trade capability away:
 
-Unified memory is what makes this cheap rather than heroic. On an integrated-memory host — the motivating example is a Jetson Orin Nano Super (aarch64, Ampere sm_87, JetPack 7.2, CUDA 13.2, Ubuntu 24.04, Python 3.12, 915 GB NVMe, and 8 GB of unified memory shared between CPU and GPU), though the design must not be specific to it — there is no PCIe hop. "Loading onto the GPU" is just making pages resident. With mmap'd GGUF weights over fast NVMe, the cost of a swap is dominated by page-cache warmth, not bus transfer, so time-multiplexing is *cheaper* on this class of hardware than on a discrete-GPU host. NVIDIA's own Jetson guidance points the same way (run headless, prefer llama.cpp, 4-bit quantise; a full VLM pipeline fits an Orin Nano 8 GB), and published work streams a 26B MoE's routed experts off SSD on an 8 GB Orin Nano with bit-identical logits. Residency scheduling scales up as well as down: on hosts where everything fits — the dual-GPU x86_64 workstation default, and the ROCm, XPU, MPS, and CPU-only paths — the scheduler simply never needs to evict, and behaviour is unchanged.
+- **The tier recommender stops at a warning.** For an accelerator host with a memory budget between the 6 GB and 16 GB floors (the 8 GB unified-memory Jetson Orin Nano Super is the motivating example), `recommend_tier()` returns "Tier 2 with module residency required". Its reason text says residency is not yet implemented, and it advises keeping the vision and voice extras off.
+- **Smaller tiers list modules as unsupported.** A tier file's `[tier].unsupported_modules` makes the pre-boot `Tier fit` row FAIL until the operator disables those modules.
 
-The LLM tier needs no new machinery. `llama-swap` (v201, April 2026, 3k+ stars) is a mature OpenAI-compatible proxy: it maps model names to upstream commands, auto-unloads after a configurable TTL, exposes `POST /api/models/unload` and `POST /api/models/unload/<model>`, and uses "groups" to control which models may coexist. llama.cpp's `llama-server` now has a built-in router mode for dynamic model switching without restarts. Either fits KAINE's existing `[lingua].chat_url` key with no architectural change, because the lingua organ is already reached over an OpenAI-compatible endpoint. KAINE reuses this art; it does not build a model manager.
+The right answer is to time-multiplex a memory budget. Queue the work a module needs, load the model that does it, run it, release the model when the memory is needed, and move to the next item. This is capability through scheduling, not through amputation.
 
-The speech ladder gets a correction grounded in 2026 measurements. For TTS, Kokoro-82M (82M params, ~327 MB, Apache-2.0, ONNX, RTF ~0.03 on GPU, several times realtime on CPU) is the right new default middle rung — the best quality-per-byte on the ladder. KittenTTS (nano ~15M params / ~25 MB INT8, micro ~40M, mini ~80M) is small enough for a phone or a Pi, but it is a v0.8 developer preview with reported nano INT8 issues, so it is an opt-in rung, never a silent fallback. Piper is widely assumed to be the light option; 2026 benchmarks put it at ~2.6 GB peak memory and ~1720 ms first-token latency — worse than Kokoro on both axes — so Piper is a compatibility rung, not the lightweight default, and this change declines to repeat the common assumption. For STT, Moonshine (245M params, sub-200 ms on edge, ONNX exported to the memory-mappable `.ort` flatbuffer, outperforming Whisper tiny and small at smaller size) is the strongest candidate for making the voice loop feel realtime, because it processes variable-length audio segments instead of Whisper's fixed 30-second chunks — the single biggest source of perceived lag in a streaming loop; Moonshine v2 adds a sliding-window position-free streaming encoder. whisper.cpp tiny/base remains the floor.
+Unified memory makes this cheap. With no PCIe hop, "loading onto the GPU" is making pages resident, and with memory-mappable weights on fast NVMe the cost of a swap is dominated by page-cache warmth. The design keys on that host class (CPU and accelerator share one pool), never on a board. On hosts where everything fits (the dual-GPU x86_64 workstation, ROCm, XPU, MPS, CPU-only) the scheduler never needs to evict, and behaviour is unchanged.
 
-Sequencing. A PENDING (not yet archived) change, `portability-tiers`, already proposes the capabilities `runtime-backends` (per-component backend selection), `deployment-tiers` (named tier profiles), and `host-probe`, and its backend table currently lists Piper for TTS and whisper.cpp for STT. Because `runtime-backends` is not yet in `openspec/specs/`, this change MUST NOT emit a `## MODIFIED Requirements` delta against it. It therefore ADDs new capabilities only — `model-residency` and `speech-tiers` — and records the correction here explicitly: Kokoro and Moonshine, not Piper, are the recommended light rungs. When `portability-tiers` lands, its backend table should inherit that correction rather than the Piper assumption.
+**What has changed since this change was first proposed.** The change was drafted (#118) while `portability-tiers` was pending. Since then:
 
-Finally, the limits are stated, not hidden. Some combinations do not fit an 8 GB unified budget, and KAINE will say which ones and what they would feel like — a pause while models swap, not a silently missing organ. Nothing here touches the cognitive cycle, the workspace, or any module's semantics; only when and where a model is resident, and which engine realises an organ, may change. No heavy download or install happens without operator consent, every downgrade is surfaced with its reason, and disabling a module remains the last resort.
+- `portability-tiers` was archived (2026-09-17). `runtime-backends`, `deployment-tiers` and `host-probe` are living specs, and `deployment-tiers` already names the outcome this change delivers ("Tier 2 with module residency required", including an explicit 8 GB unified Jetson scenario). This change builds on those specs; it needs no MODIFIED delta against them, because it implements a state they already describe.
+- `sherpa-onnx-speech` (#260) shipped torch-free speech: Moonshine STT and Kokoro TTS as the `sherpa_onnx` backend of `[audition].backend` and `[vox].backend`, through `BackendRegistry` fallback chains, with consent-gated model downloads (`python -m kaine.setup.speech_models`). The speech ladder in this change is therefore expressed over those existing backends and model ids instead of new engines.
+- The earlier draft said the first-run wizard disables modules on small hosts. It does not: the wizard keeps the selected module set and records a tier only on consent. The blockers are the recommender's warning and the `Tier fit` row, as described above.
+- The earlier draft assumed facts the code does not have. Nothing records a model's resident footprint (only download sizes), the tier budget is computed from total rather than available memory, and no engine can be unloaded and reloaded: `aclose()` on the sherpa clients is terminal, and Topos, the emotion classifier and the embedders only load. The one working unload/reload is the Hypnos voice-alignment organ window.
+
+**Measure first.** Because resident footprints are unknown, the first deliverable is measurement: a calibration tool that loads each enabled component's backend on the host, records its peak resident footprint, and reports whether the enabled set fits the budget. On an 8 GB unified host with a 2–4B organ, the measured answer may be that most of the stack co-resides, which would narrow what must be multiplexed. The scheduler is then built against measured numbers, not published figures.
+
+The limits are stated, not hidden. Some combinations do not fit an 8 GB budget, and KAINE says which and what they would feel like: a pause while models swap, never a silently missing organ. Nothing here touches the cognitive cycle, the workspace or any module's semantics; only when and where a model is resident, and which engine realises an organ, may change.
 
 ## What Changes
 
-- **ADD capability `model-residency`.** A scheduler that time-multiplexes a configurable memory budget (auto-sized on first run, operator-overridable) across modules: queue the work, load the model that serves it, run it, release it when the memory is needed next, admit the following item. On hosts where everything fits, it is a no-op.
-- **ADD capability `speech-tiers`.** Ordered engine ladders for the speech organ. TTS: Chatterbox (top) → Kokoro-82M (new default middle rung) → KittenTTS (opt-in only) → Piper (compatibility only). STT: Speaches/faster-whisper `medium.en` (current default) → Moonshine (recommended light rung) → whisper.cpp tiny/base (floor). Automatic degradation stops at Kokoro and Moonshine; the rungs below require explicit operator choice.
-- **Delegate LLM residency.** `[lingua].chat_url` may point at llama-swap (groups, TTL, unload endpoints) or llama.cpp router mode; KAINE performs no LLM model management of its own, but its scheduler accounts for what the proxy holds resident.
-- **Surface every decision.** Each engine selection, downgrade, and disablement is reported with the chosen rung and the reason, in first-run wizard output and runtime status. Disabling a module happens only after every rung of its ladder has failed.
-- **Consent and honesty.** No model or engine is downloaded or installed without operator consent, and the wizard states which combinations do not fit and what the resulting experience feels like.
-- **The wizard's answer changes.** On a small host, the first-run wizard now produces a schedule — a budget, ladders, and surfaced trade-offs — not a list of amputated modules.
-- **Unchanged.** The cognitive cycle, the workspace, every module's semantics, and all existing backends (dual-GPU x86_64 default, ROCm, XPU, MPS, CPU-only). Only when and where models are resident, and which engine realises an organ, may change.
-- **Sequencing.** Spec deltas are `## ADDED Requirements` only (`openspec/specs/model-residency/spec.md`, `openspec/specs/speech-tiers/spec.md`), with no MODIFIED deltas against the pending `portability-tiers` change.
+- **Footprint calibration and a fit report (first).**
+  - `python -m kaine.setup.footprint` loads each enabled component's configured backend on this host (with operator consent), measures its peak resident footprint (system memory and, on discrete hosts, device memory), and records it in a local, content-free footprint catalogue.
+  - The fit report states the residency budget derived from available memory minus a reserve, whether the enabled set co-resides, and, if not, the shortfall and which components would be time-multiplexed.
+- **Capability `module-residency` (ADDED).** One residency manager per host owns a ledger-based budget, admission control, demand-driven eviction, a keep-resident TTL, one pinned always-hot organ, two work lanes (interactive and background) with a preemption contract, and surfaced residency events. On hosts where everything fits it is passive.
+- **Reversible unload.** Engine clients gain an `ensure_loaded()` / `unload()` pair that releases the model and can load it again, without closing the client: the sherpa STT and TTS clients, the Topos encoders, the emotion classifier and the text embedders. External services (the organ's `llama-server`, Chatterbox, Speaches) are stopped and started through the same controller pattern the Hypnos organ window already uses.
+- **LLM residency is delegated.** `[lingua].chat_url` may point at llama-swap or llama.cpp's router mode. KAINE performs no LLM model management of its own; the manager reconciles what the proxy holds into its ledger and uses the proxy's unload API. The default (`llm_proxy = "none"`) keeps today's single `llama-server`.
+- **Capability `speech-backend-tiers` (ADDED), over existing backends.**
+  - TTS: `chatterbox` → `sherpa_onnx` with `kokoro-en`.
+  - STT: `speaches` (faster-whisper `medium.en`) → `sherpa_onnx` with `moonshine-base-en` → `sherpa_onnx` with `moonshine-tiny-en`.
+  - The host probe recommends the lightest rungs that fit on constrained budgets, and the operator decides. Downgrades are surfaced with reasons; acquisition stays consent-gated. KittenTTS, Piper and whisper.cpp are no longer part of this change (see Decisions in `design.md`).
+- **Integration with what already runs.** The Hypnos organ window becomes a client of the residency manager, not a second owner of the organ's memory. Spot never reads a residency wait as a hang. Audio that arrives while STT is not resident waits in a bounded in-memory queue and is never written to disk. Slow swaps show up as cycle slip, which the existing automatic time dilation can absorb.
+- **Pre-boot and wizard.** A `Residency fit` row reports the fit plan (PASS when everything co-resides, PASS with the multiplexing plan when it is scheduled, FAIL only when not even the pinned organ and the lightest rungs can be scheduled). The wizard shows the fit report and the multiplexing plan instead of the "not yet implemented" warning.
+- **Unchanged.** The cognitive cycle, the workspace, every module's semantics, every existing backend, and the default `llm_proxy = "none"` path.
 
-The change ADDs the following capabilities and requirements:
+## Capabilities
 
-### Requirement: Time-multiplexed model residency
-KAINE SHALL satisfy a module's need for a model by scheduling residency within a configurable memory budget — queueing the work, loading the model that serves it, running it, and releasing the model when the memory is needed for the next queued item — and SHALL NOT disable a module merely because its model cannot remain permanently resident.
+### New Capabilities
+- `module-residency`: time-multiplexed model residency within a measured memory budget, with calibration, admission, eviction, pinning, preemption, LLM delegation, surfaced events, and honest limits.
+- `speech-backend-tiers`: ordered speech ladders over the existing `[audition].backend` and `[vox].backend` values and sherpa model ids, with probe recommendation, surfaced downgrades, consent-gated acquisition, and voice-latency measurement.
 
-#### Scenario: Small host multiplexes organs
-- **WHEN** a module submits work whose model is not resident and the memory budget cannot hold that model beside what is already resident
-- **THEN** KAINE queues the work, makes room by unloading per its eviction policy, loads the required model, executes the work, returns the result, and continues with the next queued item — with no module disabled
+### Modified Capabilities
+- (none) `deployment-tiers` already specifies "Tier 2 with module residency required"; `runtime-backends` already specifies fallback chains and surfaced failures; `host-probe` is unchanged. This change implements behaviour those specs anticipate.
 
-#### Scenario: Large host never churns
-- **WHEN** the host's budget can hold every requested model at once, as on the dual-GPU x86_64 workstation default or on ROCm, XPU, MPS, or CPU-only hosts where nothing needs evicting
-- **THEN** KAINE keeps all models resident and inserts no queue-then-unload churn, preserving today's behaviour exactly
+## Impact
 
-### Requirement: Disabling a module is the last resort
-KAINE SHALL disable a module only after every rung of that organ's engine ladder has failed to load or execute within the memory budget, and SHALL surface the disablement together with its reason.
-
-#### Scenario: No rung fits
-- **WHEN** every backend for an organ, from heaviest to lightest, fails to load or execute within the budget
-- **THEN** KAINE disables only that module, records and surfaces the reason in wizard output and runtime status, and every other module continues to operate
-
-### Requirement: LLM residency is delegated to the existing endpoint
-KAINE SHALL obtain LLM load and unload behaviour from the OpenAI-compatible endpoint configured at `[lingua].chat_url` — for example llama-swap with groups, a TTL, and its unload endpoints, or llama.cpp server router mode — and SHALL NOT implement its own LLM model manager.
-
-#### Scenario: llama-swap behind the existing key
-- **WHEN** `[lingua].chat_url` points at a llama-swap proxy that maps model names to upstream commands, auto-unloads after a TTL, and exposes `POST /api/models/unload`
-- **THEN** KAINE issues chat requests to that endpoint unchanged, the proxy performs all loading and unloading, and the lingua organ's architecture is unchanged
-
-#### Scenario: The scheduler accounts for what the proxy holds
-- **WHEN** the endpoint is holding an LLM resident and a speech or perception request needs the remaining budget
-- **THEN** the scheduler treats the proxy's resident footprint as occupied and multiplexes only the remainder, using the proxy's unload endpoints or TTL rather than managing LLM memory itself
-
-### Requirement: Scheduling changes timing, not semantics
-KAINE SHALL confine this change to when and where models are resident and which engine realises each organ; the cognitive cycle, the workspace, and every module's semantics SHALL remain unchanged.
-
-#### Scenario: Delayed organ, identical behaviour
-- **WHEN** residency scheduling makes an organ wait for its model to load before it can answer
-- **THEN** the module's outputs and the cognitive cycle's behaviour are unchanged — only that turn's latency and the residency timing differ
-
-### Requirement: Ordered TTS ladder with Kokoro as the default light rung
-KAINE SHALL realise TTS through an ordered ladder — Chatterbox (expressive, GPU-served) at the top, Kokoro-82M as the default middle rung, KittenTTS as an opt-in rung, and Piper as a compatibility rung — and SHALL select the heaviest rung that fits the host's memory budget.
-
-#### Scenario: Downgrade to Kokoro
-- **WHEN** the host cannot keep Chatterbox resident within the memory budget
-- **THEN** KAINE degrades TTS to Kokoro-82M, surfaces the downgrade with its reason, and speech continues at several times realtime on CPU or GPU
-
-### Requirement: Ordered STT ladder with Moonshine as the recommended light rung
-KAINE SHALL realise STT through an ordered ladder — Speaches/faster-whisper `medium.en` (the current default), Moonshine as the recommended light rung, and whisper.cpp tiny/base as the floor — and SHALL prefer Moonshine on constrained hosts because it transcribes variable-length audio segments rather than Whisper's fixed 30-second chunks.
-
-#### Scenario: Downgrade to Moonshine
-- **WHEN** the host cannot keep the Whisper `medium.en` backend resident within the memory budget
-- **THEN** KAINE degrades STT to Moonshine (or whisper.cpp tiny/base beneath it), surfaces the downgrade with its reason, and the voice loop's perceived latency improves because transcription no longer waits on 30-second chunk boundaries
-
-### Requirement: KittenTTS and Piper require explicit operator choice
-KAINE SHALL offer KittenTTS and Piper only when the operator explicitly selects them — KittenTTS because it is a v0.8 developer preview with reported nano INT8 issues, Piper because at ~2.6 GB peak memory and ~1720 ms first-token latency it is worse than Kokoro on both axes and serves as a compatibility rung only — and SHALL NOT reach either rung by silent fallback.
-
-#### Scenario: Automatic degradation stops before them
-- **WHEN** the scheduler walks the TTS ladder downward and the next rung would be KittenTTS or Piper without an explicit operator selection
-- **THEN** automatic degradation stops at Kokoro-82M and KAINE surfaces the situation with the reasons and the opt-in choices, instead of silently landing on a developer-preview or compatibility engine
-
-### Requirement: Surfaced degradation with reasons
-KAINE SHALL surface every engine selection, downgrade, and disablement with the chosen rung and the reason, in first-run wizard output and in runtime status; degradation SHALL never be silent.
-
-#### Scenario: The wizard reports the ladder position
-- **WHEN** the first-run wizard or the runtime scheduler selects a rung below the top for any organ
-- **THEN** the operator sees the from-rung, the to-rung, and the reason — for example, "Chatterbox → Kokoro-82M: the 8 GB unified budget cannot hold Chatterbox alongside the LLM"
-
-### Requirement: Consent-gated acquisition
-KAINE SHALL NOT download or install any model or engine without operator consent.
-
-#### Scenario: Weights missing locally
-- **WHEN** a selected rung's weights or runtime are not present on the host
-- **THEN** KAINE asks the operator before acquiring anything, proceeds only on approval, and offers the next lighter rung already on disk as an alternative
-
-### Requirement: Honest statement of limits
-KAINE SHALL state which engine combinations do not fit a given host and what the resulting experience would feel like, rather than claiming capability the hardware cannot deliver.
-
-#### Scenario: Queue waits are predicted, not discovered
-- **WHEN** the wizard determines that time-multiplexing will make a full voice turn wait on a model load or unload round-trip
-- **THEN** it reports the expected feel — for example, that the first spoken reply may pause while models swap — and lists the combinations it rejected, so the operator can decide with open eyes
+- **New code:** `kaine/residency/` (budget, ledger, manager, planner, lanes, events), `kaine/setup/footprint.py` (calibration and fit report), a llama-swap config generator under `kaine/setup/`.
+- **Changed code:**
+  - engine clients gain `ensure_loaded()` / `unload()`: `kaine/modules/audition/sherpa_stt.py`, `kaine/modules/vox/sherpa_tts.py`, `kaine/modules/topos/encoder.py`, `kaine/modules/audition/emotion.py`, `kaine/text_embedding.py`;
+  - `kaine/modules/hypnos/organ_window.py` routes through the manager;
+  - `kaine/cycle/spot.py` treats residency waits as liveness;
+  - `kaine/modules/audition/module.py` gets the bounded audio queue;
+  - `kaine/preboot.py` gets the `Residency fit` row;
+  - `kaine/hardware.py` gets the recommender reason text;
+  - `kaine/setup/wizard.py` shows the fit report;
+  - `config/kaine.toml` gets an optional `[residency]` section whose defaults preserve today's behaviour.
+- **Docs:** `docs/deployment-tiers.md`, `docs/hardware.md`, `docs/deployment-headless-host.md`, `docs/modules/audition.md`, `docs/modules/vox.md`, a new residency guide, and measured results under `docs/benchmarks/`.
+- **Operator steps:** calibration and latency runs on the Orin Nano Super and the Pixel 6a, which need the devices.

@@ -2,7 +2,7 @@
 
 ## Context
 
-KAINE's portability story currently ends at "this host is too small, so the wizard disables modules." That is amputation, not portability. This change replaces it with time multiplexing: one memory budget, a residency manager that loads the model a module needs, runs the work, unloads it, and moves to the next. Capability through scheduling.
+KAINE's portability story currently ends at a warning. For an accelerator host between the 6 GB and 16 GB budget floors the tier recommender returns "Tier 2 with module residency required" and says residency is not implemented; smaller tiers list modules as unsupported, and the pre-boot `Tier fit` row fails until the operator disables them. That is amputation, not portability. This change replaces it with time multiplexing: one memory budget, a residency manager that loads the model a module needs, runs the work, unloads it, and moves to the next. Capability through scheduling.
 
 The design targets a **host class**, not a machine. The motivating host — an 8 GB unified-memory aarch64 board with fast NVMe — is the sharpest instance of the class "CPU and accelerator share one physical memory pool." Apple Silicon under MPS and CPU-only boards belong to the same class; the dual-GPU x86_64 workstation, ROCm, and XPU hosts belong to the discrete class. Nothing below keys on a specific SoC, GPU architecture, or OS image.
 
@@ -11,13 +11,46 @@ Two verified findings anchor everything below:
 - **Unified memory inverts the swap-cost model.** With no PCIe hop, "loading onto the GPU" is making pages resident. Against mmap'd weights on NVMe, reload cost is dominated by page-cache warmth, so time multiplexing is *cheaper* on this class of host than on discrete-GPU machines — and published work streaming a 26B MoE's routed experts off SSD on an 8 GB board with bit-identical logits shows the same scheduling scales up as well as down.
 - **Do not rebuild the LLM tier.** llama-swap (OpenAI-compatible proxy; per-model TTL; `POST /api/models/unload` and `POST /api/models/unload/<model>`; exclusive groups) and llama-server's built-in router mode already solve dynamic model swapping behind exactly the endpoint KAINE's `[lingua].chat_url` already abstracts.
 
-## Sequencing relative to `portability-tiers`
+## What this builds on
 
-`portability-tiers` is pending, not archived: `runtime-backends`, `deployment-tiers`, and `host-probe` are not yet in `openspec/specs/`. Therefore:
+`portability-tiers` was archived on 2026-09-17, so its capabilities are living specs:
 
-- Every spec delta in this change is an `## ADDED Requirements` block on new capabilities (model residency, the speech ladder, voice latency targets). This change emits **no** `## MODIFIED Requirements` against anything from `portability-tiers`.
-- This change's proposal records the correction in its `## Why`: `portability-tiers`' backend table lists Piper for TTS and whisper.cpp for STT as the light rungs, but 2026 measurements contradict Piper-as-light (~2.6 GB peak, ~1720 ms first-token — worse than Kokoro-82M on both axes). **Kokoro and Moonshine are the recommended light rungs.** When `portability-tiers` archives, a small follow-up reconciles its table; until then this change's rung ids are self-contained.
-- The `[residency]` config and rung ids introduced here are shaped so that `runtime-backends`' per-component backend keys can adopt the rung ids as values later, without migration.
+- `deployment-tiers` already specifies the recommender's "Tier 2 with module residency required" outcome for a 6–16 GB accelerator budget, including an 8 GB unified Jetson scenario. This change implements that state; it needs no MODIFIED delta.
+- `runtime-backends` already specifies `[<module>].backend` selection through fallback chains, with failures surfaced instead of crashing boot. The speech ladder is expressed in those terms.
+- `host-probe` is unchanged; the residency budget is derived by the manager at run time (below), not by the probe.
+
+Existing code the design reuses rather than rebuilds:
+
+| Need | Reuse |
+|---|---|
+| Unified vs discrete detection, total and available memory with provenance | `kaine/hostmem.py`: `classify_accelerator_memory`, `system_memory_pool` (`MemTotal`/`MemAvailable`) |
+| Per-device free memory on discrete hosts | `describe_host().cuda_devices` in `kaine/hardware.py` |
+| The trigger | `recommend_tier().residency_required` and `memory_budget_gb` |
+| Engine ladders and fallback | `BackendRegistry` in `kaine/modules/backends.py` (`register(name, factory, fallback=)`, `resolve_backend`) |
+| The surfaced-reason channel | `kaine/backend_state.py` (`record_backend_failure`) and the Nexus health block that shows it |
+| Lazy engine load | the sherpa clients' idempotent `warm_up()` |
+| Consent-gated model acquisition | `kaine/setup/speech_models.py` (`MANIFEST`, `describe()`, `fetch`) and `kaine/setup/provision.py` |
+| Stopping and starting an external model server | `OrganServerController` in `kaine/modules/hypnos/organ_window.py` and `kaine/setup/model_server.py` (`cmd_start`, `cmd_stop`, `health_check`) |
+| Consumers that defer while the organ is absent | `kaine/organ_window_state.py` and the `organ_resting` path in `kaine/modules/lingua/client.py` |
+| Accounting what an LLM server holds | `GET /v1/models`, as `kaine/cycle/preflight.py` already does |
+
+What is new: a budget from available memory with a reserve; resident-footprint measurements; reversible unload on engine clients; the manager, planner and lanes; residency events; the llama-swap template and unload calls; the `Residency fit` pre-boot row; and the wizard's fit report.
+
+## Measure first
+
+No registry records how much memory a loaded model occupies. `speech_models.SpeechModel.size_bytes` is the archive download size, and the only hard-coded footprints are the organ window's constants. File size is not a usable admission figure. Admission must budget peak resident memory, which includes runtime arenas, KV cache and activations.
+
+So the first deliverable is calibration:
+
+- **`python -m kaine.setup.footprint`.** For each enabled component with a model (the Lingua organ via its server, the Audition STT backend, the Vox TTS backend, the Topos encoder, the emotion classifier, the text embedder), it loads the configured backend in isolation and runs one representative inference. It records peak resident memory: RSS for in-process engines, the server process's RSS for external services, and device memory on discrete hosts. Loading is consent-gated, because it may pull weights; it never downloads anything itself, and it skips a component whose model is absent, saying so.
+- **The footprint catalogue.** A local file (`state/residency/footprints.json`, content-free: component, backend, model id, measured bytes, host class, timestamp, KAINE version). Live measurements refresh it, and the ledger uses the larger of the catalogued and observed figures.
+- **The fit report.** The report takes the budget (available memory minus the reserve), the catalogue and the enabled set, and states:
+  - whether the set co-resides;
+  - if it does not, the shortfall, the plan (what is pinned, what is multiplexed, which rung each organ would use) and the expected feel.
+
+  The wizard, the pre-boot row and `scripts/probe-host` all show the same report.
+
+Calibration is the first task and gates the rest of the order. The measured Orin and Pixel numbers decide the defaults (reserve, TTLs, pin, which organs route through the manager first), and they replace the published figures quoted below wherever the two differ.
 
 ## Semantic freeze
 
@@ -29,7 +62,7 @@ Four host-local pieces:
 
 1. **Residency manager** — one per host. Owns the budget ledger, admission control, eviction, TTL expiry, the pin, and the pressure valve. Every model residency change in KAINE goes through it.
 2. **Work scheduler** — two lanes (interactive, background) with deadlines and a preemption contract.
-3. **Rung catalogue** — per organ, an ordered ladder of engine rungs with calibrated peak footprints, artifact formats, licences, and a selection policy (`auto`, `opt-in`, `compat`).
+3. **Rung catalogue** — per organ, an ordered ladder of `(backend, model id)` rungs with calibrated peak footprints from the footprint catalogue, whether the weights are mapped, and licences.
 4. **LLM delegation** — llama-swap or llama-server router mode behind the existing `[lingua].chat_url`; the residency manager reconciles, never owns, LLM processes.
 
 ## Residency manager
@@ -48,7 +81,7 @@ Per model artifact (a "rung instance"):
 
 | From | Trigger | To | Notes |
 |---|---|---|---|
-| `absent` | consented install | `cold` | wizard or `kaine install <rung>` |
+| `absent` | consented install | `cold` | the wizard or `python -m kaine.setup.speech_models` / provisioning |
 | `cold` | admission granted | `loading` | admission control (below) |
 | `loading` | readiness probe passes | `resident` | HTTP health for servers; for ONNX rungs, constructed session **plus one warmup inference**, so arena allocation lands before the first real request |
 | `loading` | load failure | `cold` | reason recorded; ladder walks down |
@@ -68,7 +101,7 @@ headroom = available_system_memory − reserve − Σ(ledger footprints)
 
 - `available_system_memory` is the kernel's reported available memory (`MemAvailable` on Linux, the host OS equivalent elsewhere), clamped by the cgroup memory limit when KAINE runs containerised.
 - `reserve` (default `max(1 GiB, 10% of physical RAM)`, configurable) protects the OS and non-KAINE processes; on the 8 GB class this leaves roughly 6–7 GB schedulable.
-- Ledger footprints are **calibrated peak RSS** per rung — weights + runtime overhead + KV/activation at the configured context — measured at packaging time and refreshed from live measurements. File size is never the admission metric; Piper's ~2.6 GB peak against a small artifact is the standing counterexample.
+- Ledger footprints are **calibrated peak RSS** per rung — weights + runtime overhead + KV/activation at the configured context — measured on the host by the calibration tool and refreshed from live measurements. File size is never the admission metric: runtime arenas, KV cache and activations routinely exceed the artifact's size.
 - Discrete-accelerator hosts (dual-GPU x86_64, ROCm, XPU) budget accelerator-resident rungs against the device's free memory as reported by its runtime, and CPU-resident rungs against the same system ledger. MPS and CPU-only hosts budget entirely on system memory.
 - A **pressure valve** watches available system memory: if external processes drive it toward the reserve, warm (TTL-idle) rungs are unloaded LRU-first and the event is surfaced.
 
@@ -92,7 +125,7 @@ Exactly one organ may be pinned (`[residency].pin`, default `lingua`; `none` all
 
 ### When a request cannot be admitted
 
-Ladder-down first, always with a surfaced reason ("TTS: Kokoro-82M → Kitten micro; consolidation job held 1.1 GB"). If no installed rung fits, an interactive request is refused **honestly**: the voice loop speaks a short truthful message ("I can't load speech right now — memory is held by the consolidation job") and the same reason appears in the text surface; a background job is parked with its queue position and wait reason. A module is disabled only after every rung fails, the disablement is announced with reasons and recovery conditions, and it re-enables itself automatically when headroom returns. Nothing degrades silently.
+Ladder-down first, always with a surfaced reason ("STT: moonshine-base-en → moonshine-tiny-en; consolidation job held 1.1 GB"). If no installed rung fits, an interactive request is refused **honestly**: the voice loop speaks a short truthful message ("I can't load speech right now — memory is held by the consolidation job") and the same reason appears in the text surface; a background job is parked with its queue position and wait reason. A module is disabled only after every rung fails, the disablement is announced with reasons and recovery conditions, and it re-enables itself automatically when headroom returns. Nothing degrades silently.
 
 ## Work queue and priority classes
 
@@ -117,8 +150,8 @@ On unified memory this is cheap: releasing residency is `munmap`/process stop, a
 
 Reload cost is the whole game, so the warm path is a set of obligations:
 
-- **mmap-able artifacts only.** GGUF for llama.cpp; ONNX or the memory-mappable `.ort` flatbuffer for speech rungs (Moonshine ships exactly this). A rung whose loader copies the artifact into anonymous memory is flagged in the catalogue and admitted on measured peak RSS with a warning.
-- **Calibrated footprints.** Admission budgets peak RSS measured on a reference workload at packaging time and refreshed live — never file size.
+- **Prefer memory-mapped artifacts.** GGUF for llama.cpp is mapped. sherpa-onnx loads its ONNX models into process memory, so a speech reload pays a read from disk (from page cache when warm) rather than a page fault. The catalogue records whether each rung maps its weights, and admission budgets the measured peak either way.
+- **Calibrated footprints.** Admission budgets the peak resident memory measured on this host by the calibration tool (see "Measure first") and refreshed live, never file size.
 - **Keep-resident TTL.** After a job completes, the rung stays `resident` for `[residency].ttl_seconds` (default 120 s; per-rung override; the LLM tier's TTL is delegated to the proxy, below). A conversational exchange is a burst of turns seconds apart: within the TTL, the next turn reuses the live STT/TTS/LLM processes and pays **zero** load cost — the conversational turn does not pay the load cost twice. TTL refreshes on every use; expiry unloads; pressure may evict earlier.
 - **Page-cache warmth after unload.** Once TTL-unloaded, file-backed pages often remain cached, so a reload re-faults from cache rather than NVMe. The manager may estimate warmth with `mincore()` and report it in status output, while admission always budgets the cold number — warmth is a bonus, never a budget.
 - **Warmup on load.** `loading` includes one dummy inference so ONNX arena allocation and CUDA module load land before the readiness probe, keeping first-real-request latency honest.
@@ -126,31 +159,32 @@ Reload cost is the whole game, so the warm path is a set of obligations:
 
 ## Speech ladder
 
-Selection policies: `auto` (eligible for automatic selection when installed and fitting), `opt-in` (never selected automatically, never a silent fallback), `compat` (for compatibility with existing deployments; explicit configuration required).
+The ladder uses the backends and models that exist today (`runtime-backends`, `sherpa-onnx-speech`). A rung is a `(backend, model id)` pair:
 
-**TTS, heaviest to lightest:**
+**TTS (`[vox].backend`), heaviest to lightest:**
 
-| Rung | Engine | Figures | Policy | Notes |
-|---|---|---|---|---|
-| `tts-expressive` | Chatterbox | heaviest of the ladder; GPU-served | `auto` | current default top rung; expressive |
-| `tts-standard` | Kokoro-82M | 82M params, ~327 MB; ONNX; RTF ~0.03 on GPU, several× realtime on CPU; Apache-2.0 | `auto` | **new default middle rung**; best quality-per-byte |
-| `tts-nano` | KittenTTS micro / mini | micro ~40M params / ~41 MB; mini ~80M / ~80 MB; ONNX; CPU-only; 8 English voices | `opt-in` | |
-| `tts-pico` | KittenTTS nano | ~15M params / ~25 MB INT8; ONNX; CPU-only | `opt-in` | v0.8 developer preview; nano INT8 has reported issues — never a silent fallback |
-| `tts-compat` | Piper (VITS/ONNX) | ~2.6 GB peak memory; ~1720 ms first-token latency (2026 benchmarks) | `compat` | compatibility with existing Piper assets only; **not** the lightweight default — the common assumption is wrong |
+| Rung | Backend | Model | Notes |
+|---|---|---|---|
+| `tts-expressive` | `chatterbox` | Chatterbox (served over HTTP) | the current default top rung; expressive; GPU-served |
+| `tts-standard` | `sherpa_onnx` | `kokoro-en` (Kokoro-82M, int8 ONNX, Apache-2.0 model; espeak-ng data GPL-3.0-or-later, operator-installed, never redistributed) | the light rung; CPU-capable |
 
-**STT, heaviest to lightest:**
+**STT (`[audition].backend`), heaviest to lightest:**
 
-| Rung | Engine | Figures | Policy | Notes |
-|---|---|---|---|---|
-| `stt-heavy` | Speaches / faster-whisper `medium.en` (CPU) | heavy | `auto` | current default; retained as the quality rung where it fits |
-| `stt-standard` | Moonshine | 245M params; sub-200 ms latency on edge; ONNX exported to memory-mappable `.ort`; variable-length segments; v2 sliding-window position-free streaming encoder | `auto` | **new default**; variable-length segments remove Whisper's fixed 30-second chunks — the single biggest source of perceived lag in the streaming voice loop |
-| `stt-light` | whisper.cpp tiny/base | the floor | `auto` | last automatic rung |
+| Rung | Backend | Model | Notes |
+|---|---|---|---|
+| `stt-heavy` | `speaches` | faster-whisper `medium.en` (served over HTTP) | the current default; the quality rung where it fits |
+| `stt-standard` | `sherpa_onnx` | `moonshine-base-en` (MIT) | variable-length segments instead of Whisper's fixed 30-second chunks, which is the biggest source of perceived lag in a streaming loop |
+| `stt-light` | `sherpa_onnx` | `moonshine-tiny-en` (MIT) | the floor |
 
-Traversal rules: automatic selection considers only installed `auto` rungs that fit the budget; the highest such rung wins. On a workstation that is the current default pair (Chatterbox, Speaches `medium.en`) — unchanged. On an 8 GB unified host, where Chatterbox cannot coexist with the pinned chat model, it lands on Kokoro + Moonshine — derived from the budget, not from a host table. `opt-in` and `compat` rungs are skipped by automatic traversal and the skip is noted in the surfaced reason. Traversal never downloads: a missing best-fit rung yields a surfaced install hint (`kaine install tts-standard`, ≈327 MB) and the next installed rung serves. All weight downloads and engine installs, at wizard time or later, are explicit and consent-gated.
+Traversal rules:
+
+- Automatic selection considers only installed rungs that fit the budget; the heaviest such rung wins. On a workstation that is the current default pair, unchanged. On an 8 GB unified host, where the measured Chatterbox footprint cannot co-reside with the pinned organ, it lands on the sherpa rungs. The outcome is derived from the budget, not from a host table.
+- Traversal never downloads. When the best-fitting rung is absent, the next installed rung serves, with a surfaced hint to run `python -m kaine.setup.speech_models` (which shows name, size and licence, and asks for consent).
+- A rung change between `sherpa_onnx` models is a model-id change within one backend; a change between `chatterbox` and `sherpa_onnx`, or `speaches` and `sherpa_onnx`, is a backend change through the existing `BackendRegistry` fallback.
 
 ## Latency targets
 
-Targets for the reference budget class — 8 GB unified memory, Kokoro + Moonshine + a 3–4B 4-bit chat model, all TTL-resident:
+Targets for the reference budget class — 8 GB unified memory, the `sherpa_onnx` Kokoro and Moonshine rungs + a 2–4B 4-bit organ, all TTL-resident:
 
 | Metric | Definition | Warm | Cold (one rung loads) |
 |---|---|---|---|
@@ -187,6 +221,29 @@ groups:
 
 Installing llama-swap or enabling router mode is a wizard step and, like every heavy install, consent-gated. A remote `chat_url` (cloud endpoint) has zero local footprint; the ledger simply excludes the LLM tier and the residency machinery governs speech and perception alone.
 
+## Integration with what already runs
+
+- **The Hypnos organ window.** Voice-alignment training unloads the organ, trains, and reloads it (`run_with_organ_window`). There must be one owner of the organ's memory. The window therefore requests the organ's release and re-admission through the manager, and the manager counts the training footprint in the ledger for the window's duration. The window's shared state file and the consumers' `organ_resting` deferral stay as they are. When the manager is passive (everything fits, or a second GPU has room), the window behaves exactly as today.
+- **Spot.** Spot calls a module hung when its heartbeat is older than `heartbeat_timeout_s` while a task runs and the entity is not sleeping. A residency wait must never look like a hang:
+  - a module awaiting admission or a load keeps its heartbeat;
+  - the manager publishes its `loading` state, and Spot treats a module whose model is loading within the load's measured bound as alive;
+  - a load that exceeds its bound is a residency failure (ladder-down, surfaced), not a Spot restart.
+- **Cycle timing.** Organ calls are asynchronous, so a load delays that organ's output, not the tick. When loads do push work past tick boundaries, the overrun is recorded as slip, as today. The existing automatic dilation (`[cycle].auto_time_scale`, off by default) is the mechanism that slows subjective time instead of distorting the dynamics. The fit report recommends enabling it on hosts whose plan multiplexes an interactive organ.
+- **Perception while STT is not resident.** Audio segments that arrive while the STT rung is loading wait in a bounded in-memory queue: bounded by count and age, oldest dropped first, with the drop counted and surfaced. They are never written to disk; zero raw-sense-data persistence is unchanged. With `[audition].transcription_enabled = false` (the shipped default) there is nothing to queue.
+- **Privacy.** Residency events and the footprint catalogue are content-free: component, backend, model id, bytes, durations, reasons. No text, audio or latent ever appears in them.
+
+## Decisions
+
+- **KittenTTS, Piper and whisper.cpp are dropped from this change.**
+  - `moonshine-tiny-en` (about 30 MB archive) gives the STT ladder a floor inside the backend that already ships, so a separate whisper.cpp engine is not needed.
+  - KittenTTS is a developer preview.
+  - Piper measures worse than Kokoro on both memory and latency, and KAINE has no existing Piper voices to be compatible with.
+
+  Any of them can return later as its own change if a measured host needs it.
+- **Calibration before scheduling.** The planner and its defaults are built against measured footprints, not published ones.
+- **No MODIFIED deltas.** The archived `deployment-tiers` already specifies the residency-required recommendation, and `runtime-backends` already specifies fallback. This change adds two capabilities and implements what those specs anticipate. The recommender's reason text, which today says residency is not implemented, is code, not spec.
+- **Tier 0's `unsupported_modules` list is out of scope.** It was written when those modules had no torch-free backend. Revisiting it is a separate change once the torch-free backends are measured.
+
 ## Non-regression and semantic freeze
 
 The dual-GPU x86_64 workstation default, ROCm, XPU, MPS, and CPU-only hosts are preserved by construction: `llm_proxy` defaults to `none`; discrete hosts budget on device memory as before; automatic ladder selection lands on the highest fitting installed `auto` rung, which on a workstation is the current default pair. No module's semantics move; only timing and engine realisation vary.
@@ -195,12 +252,11 @@ The dual-GPU x86_64 workstation default, ROCm, XPU, MPS, and CPU-only hosts are 
 
 A scheduler that lies about its envelope is amputation with extra steps:
 
-- **What fits on the 8 GB class.** A 3–4B 4-bit chat model (~2–2.5 GB) pinned, plus Kokoro (~327 MB) and Moonshine, plus the reserve — comfortable, with room for a background job. This is the intended sweet spot and the basis of the warm TTFA target.
+- **What is expected to fit on the 8 GB class.** A 2–4B 4-bit organ (about 2–2.5 GB) pinned, plus Kokoro and Moonshine through sherpa-onnx, plus the reserve, with room for a background job. This is the intended sweet spot and the basis of the warm TTFA target. The calibration run confirms or corrects it.
 - **Chatterbox on 8 GB does not coexist** with a useful chat model. Selecting it means per-turn swapping (chat out, Chatterbox in, back again): TTFA becomes load-dominated — seconds, not 1.5 s — and the voice loop feels pause-y. The plan says so when Chatterbox is chosen on a small budget.
 - **Larger chat models are borderline.** A 7–8B Q4 model (~4.5–5 GB) plus both speech rungs is tight on 8 GB; KAINE will run it but surfaces tightness and more frequent pin evictions.
 - **Training does not fit small hosts.** Fine-tuning the chat LLM is workstation-class background work; on an 8 GB board the planner refuses the schedule with an explanation. Sleep-phase consolidation (summarisation, indexing) does fit — it is chunked and yields.
-- **Piper is not the small-host answer.** ~2.6 GB peak and ~1720 ms first-token latency are worse than Kokoro on both axes; it exists as a compatibility rung, full stop.
-- **KittenTTS nano is a preview.** v0.8 developer preview with reported nano INT8 issues: opt-in, surfaced, never a silent fallback.
+- **Published figures are not measurements.** The sizes and latencies quoted in this design come from upstream publications and are placeholders until the calibration and latency runs on the reference hosts replace them.
 
 ## Risks and mitigations
 

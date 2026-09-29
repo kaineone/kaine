@@ -1,66 +1,72 @@
-## 1. Spec deltas and sequencing guards
+## 1. Spec deltas and sequencing
 
-- [ ] 1.1 Confirm that `portability-tiers` is still PENDING (not archived) and that `runtime-backends`, `deployment-tiers`, and `host-probe` are absent from `openspec/specs/`; record the check in the change notes. If `portability-tiers` has since been archived, rebase this change's deltas against the archived specs before any other task.
-- [ ] 1.2 Write `openspec/changes/module-residency-and-speech-tiers/specs/module-residency/spec.md` containing only `## ADDED Requirements` (memory budget probe; residency queue with load–run–unload and idle TTL; surfaced residency events; wizard schedules instead of disabling), and verify by grep that the file emits no `## MODIFIED Requirements` delta against `runtime-backends`, `deployment-tiers`, or `host-probe`.
-- [ ] 1.3 Write `openspec/changes/module-residency-and-speech-tiers/specs/speech-tiers/spec.md` containing only `## ADDED Requirements` covering the TTS ladder, the STT ladder, opt-in and compatibility rung restrictions, downgrade-with-reason, consent-gated acquisition, and honest limits.
-- [ ] 1.4 Check whether the first-run wizard's small-host behaviour is a requirement under `openspec/specs/`; if it is, emit a `## MODIFIED Requirements` delta in this change replacing disable-on-small-host with schedule-on-small-host; if it is not, capture the behaviour as an ADDED requirement inside `module-residency`. Record which path was taken.
-- [ ] 1.5 Verify the proposal's `## Why` states the sequencing relationship to `portability-tiers` (this change builds on `runtime-backends`, `deployment-tiers`, and `host-probe` once they are archived, and emits no delta against them now) and records the correction that Kokoro and Moonshine — not Piper — are the recommended light rungs; leave a coordination note for the `portability-tiers` authors about its Piper backend-table row rather than editing their pending change.
-- [ ] 1.6 Run `openspec validate module-residency-and-speech-tiers --strict` until it passes with zero errors and warnings.
+- [x] 1.1 `portability-tiers` was archived on 2026-09-17: `runtime-backends`, `deployment-tiers` and `host-probe` are living specs. The deltas are revised against them. `deployment-tiers` already specifies "Tier 2 with module residency required", so this change needs no MODIFIED delta (recorded in `design.md`, Decisions).
+- [x] 1.2 `specs/module-residency/spec.md` is `## ADDED Requirements` only, and adds calibration and the fit report, reversible unload, one owner of model memory, residency waits that are not faults, the bounded perception queue, and the `Residency fit` pre-boot row.
+- [x] 1.3 `specs/speech-backend-tiers/spec.md` is rewritten over the existing `[vox].backend` / `[audition].backend` values and sherpa model ids. KittenTTS, Piper and whisper.cpp are dropped (recorded in `design.md`, Decisions).
+- [x] 1.4 The small-host premise is corrected. The wizard does not disable modules. The blockers are the recommender's "not yet implemented" warning and the `Tier fit` row on tiers with `unsupported_modules`. The behaviour is captured as ADDED requirements in `module-residency` (fit report, `Residency fit` row).
+- [x] 1.5 `openspec validate module-residency-and-speech-tiers --strict` passes.
 
-## 2. Memory budget probe and residency scheduler
+## 2. Measure first: calibration and the fit report
 
-- [ ] 2.1 Implement the memory-budget probe reporting total memory, unified-vs-discrete topology, and per-accelerator free memory, deriving a residency budget minus a configurable OS reserve; capability detection only, no board or product-name branches.
-- [ ] 2.2 Add an optional `[residency]` config section (OS reserve, per-organ idle-unload TTLs, per-organ rung override) whose defaults preserve today's behaviour on every existing host when unset.
-- [ ] 2.3 Implement the residency planner as a pure, unit-testable function: organ demands (model sizes from the rung registries) plus budget in; plan out — which models co-reside, which time-multiplex, which rung each organ uses.
-- [ ] 2.4 Implement the residency executor: per-organ job queues with ensure-load → run → record; an idle-TTL unloader; support for in-process ONNX sessions (create/free) and external services (start/stop or HTTP unload) behind one interface; prefer mmap-backed weight access (GGUF, `.ort` flatbuffers) so reload cost is dominated by page-cache warmth.
-- [ ] 2.5 Emit structured residency events (load_start, load_end with duration, unload, evict, downgrade with reason) to the existing operator status surface and logs.
-- [ ] 2.6 Route organ model use through the executor for the speech organs and any other heavy organ, with a recorded diff-scope review confirming no changes to cognitive-cycle, workspace, or module-semantics files — only engine wiring and scheduling.
+- [ ] 2.1 Residency budget: available system memory (`hostmem.system_memory_pool`), clamped by any cgroup limit, minus a reserve (default `max(1 GiB, 10% of physical RAM)`). On discrete hosts, per-device free memory for accelerator-resident rungs. Unified versus discrete comes from `hostmem.classify_accelerator_memory`. No board or product-name branches.
+- [ ] 2.2 `python -m kaine.setup.footprint`: with consent, load each enabled component's configured backend in isolation, run one representative inference, and measure peak resident memory (in-process RSS; the server process's RSS for external services; device memory on discrete hosts). Skip and name absent models; never download.
+- [ ] 2.3 Footprint catalogue at `state/residency/footprints.json`: component, backend, model id, bytes, whether the weights are mapped, host class, timestamp, KAINE version; content-free; refreshed by live observations.
+- [ ] 2.4 Fit report as a pure function (budget, catalogue, enabled set, ladders → co-resides or plan with shortfall, pinned organ, multiplexed organs, rung per organ, expected feel), shown by the calibration command, `scripts/probe-host` and the wizard.
+- [ ] 2.5 Operator step: run calibration on this desktop, the Orin Nano Super and the Pixel 6a, and commit the results under `docs/benchmarks/`. Use them to set the defaults in 3.x (reserve, TTLs, pin, which organs route through the manager first), and record any published figure they contradict.
 
-## 3. LLM residency via the existing chat endpoint
+## 3. Reversible unload
 
-- [ ] 3.1 Ship a generated llama-swap config template derived from KAINE config — model name → upstream llama.cpp server command, coexistence groups, TTL unload — with `[lingua].chat_url` pointed at the proxy, and document llama.cpp `llama-server` router mode as the drop-in alternative.
-- [ ] 3.2 Add a config-compatibility test asserting the `[lingua].chat_url` key and schema are unchanged, plus a repository check that no first-party LLM model loader, registry, or manager was added.
-- [ ] 3.3 Map organ-level exclusivity onto llama-swap groups where two LLM models must never co-reside, and surface proxy load/unload events in residency status when the proxy exposes them, degrading quietly to proxy logs when it does not.
+- [ ] 3.1 `ensure_loaded()` / `unload()` on `SherpaMoonshineSTT` and `SherpaKokoroTTS`: releasing the model keeps the client and its executor usable, `unload()` waits for in-flight inference, and `aclose()` stays terminal.
+- [ ] 3.2 The same pair on the Topos encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them).
+- [ ] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`.
+- [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured).
 
-## 4. TTS rung ladder
+## 4. Residency manager
 
-- [ ] 4.1 Create the TTS rung registry with metadata used for planning and consent: `chatterbox` (top rung, GPU-served, expressive, current default), `kokoro` (82M params, ~327 MB, Apache-2.0, ONNX, RTF ~0.03 on GPU), `kitten` (nano ~15M/~25 MB INT8, micro ~40M, mini ~80M; developer preview; opt-in only), `piper` (compatibility; measured ~2.6 GB peak, ~1720 ms first audio).
-- [ ] 4.2 Implement the Kokoro-82M engine behind the existing TTS organ interface, with its ONNX session created and freed by the residency executor.
-- [ ] 4.3 Implement the KittenTTS engine, selectable only via explicit operator opt-in configuration and excluded from planner auto-selection and from every automatic fallback path.
-- [ ] 4.4 Implement the Piper engine as a compatibility rung that is never auto-selected, surfacing its measured memory and latency when explicitly chosen.
-- [ ] 4.5 Wire default selection — constrained budget selects Kokoro, ample budget (including the dual-GPU x86_64 workstation profile) keeps Chatterbox — with every selection or downgrade surfaced with its reason.
+- [ ] 4.1 `[residency]` config (enabled, reserve, `ttl_seconds` with per-rung overrides, `pin`, `prewarm`, `llm_proxy = "none"`, queue bounds). The defaults leave the manager passive on every existing host.
+- [ ] 4.2 Ledger and state machine (`absent`, `cold`, `loading`, `resident`, `unloading`), with serialised admission and demand-driven eviction (TTL-expired, then background class, then least recently used; never pinned or in-flight).
+- [ ] 4.3 Two lanes (interactive, background) with deadlines. Preemption uses the yield contract (grace 2 s, hard timeout 10 s, resume from checkpoint).
+- [ ] 4.4 Pinning, keep-resident TTL, prewarm, and the pressure valve (unload warm rungs, least recently used first, as available memory nears the reserve).
+- [ ] 4.5 Content-free residency events (`load_start`, `load_end` with duration, `unload`, `evict`, `downgrade` with reason, `queue_drop`) on the operator status surface and in logs.
+- [ ] 4.6 Route the speech organs, the Topos encoder, the emotion classifier and the embedder through the manager. Record a diff-scope review showing no changes to cognitive-cycle, workspace or module-semantics files.
 
-## 5. STT rung ladder
+## 5. Integration
 
-- [ ] 5.1 Create the STT rung registry: `speaches` (faster-whisper `medium.en`, heavy, current default), `moonshine` (245M params, ONNX `.ort`, variable-length segments, sub-200 ms target), `whispercpp` (tiny/base floor).
-- [ ] 5.2 Implement the Moonshine engine behind the existing STT organ interface, feeding variable-length audio segments with no fixed 30-second chunking, and add the Moonshine v2 sliding-window streaming encoder as an opt-in flag.
-- [ ] 5.3 Implement the whisper.cpp tiny/base floor rung for hosts where even Moonshine cannot be scheduled.
-- [ ] 5.4 Wire default selection — constrained budget selects Moonshine, ample budget keeps Speaches `medium.en` — with selections and downgrades surfaced with reasons.
+- [ ] 5.1 Hypnos organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive.
+- [ ] 5.2 Spot: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a restart. Test this with the Spot self-test harness.
+- [ ] 5.3 Audition: bounded in-memory queue (count and age) for audio that arrives while STT is not resident; oldest dropped first; drops counted and surfaced; never persisted. Test that no queued audio reaches disk.
+- [ ] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides.
 
-## 6. Degradation, consent, and first-run scheduling
+## 6. LLM residency via the existing chat endpoint
 
-- [ ] 6.1 Implement the shared downgrade manager: on load failure or budget miss, move to the next selectable lighter rung, record and surface the reason; skip preview rungs (KittenTTS) automatically and never prefer Piper over Kokoro automatically; disable a module only when no rung runs, after surfacing and recording the reason.
-- [ ] 6.2 Implement consent-gated acquisition: an engine/model manifest with name, size, and license; a prompt before any first download or install; recorded decisions; and downgrade-with-reason when consent is declined.
-- [ ] 6.3 Rework the first-run wizard small-host path: propose a residency schedule (rungs, multiplexing plan, expected latencies), request consent for downloads, keep modules enabled, and reduce module disabling to an explicit, reasoned last resort.
-- [ ] 6.4 Add honest-limits output: when a requested combination does not fit the probed budget, state that it does not fit, quantify the shortfall, and describe the scheduled alternative's expected feel.
-- [ ] 6.5 Add a scope guard to the change checklist and CI: the diff touches only scheduler, engine adapters, config, wizard, and docs — no cognitive-cycle, workspace, or module-semantics files.
+- [ ] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[lingua].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated.
+- [ ] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls.
+- [ ] 6.3 A config-compatibility test showing `[lingua].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added.
 
-## 7. Tests and no-regression matrix
+## 7. Speech ladder
 
-- [ ] 7.1 Unit tests: budget probe (fixture `/proc/meminfo`, mock accelerators, unified vs discrete), planner (tight budget yields a multiplex plan, ample budget yields co-residency), executor lifecycle (ensure-load, run, idle-TTL unload), downgrade ordering (including KittenTTS and Piper exclusion from automatic selection), and the consent gate.
-- [ ] 7.2 Integration test "small unified host": with the probe mocked to an 8 GB unified budget (or under a cgroup memory cap), run a full voice turn needing STT + LLM + TTS that cannot co-reside; assert every stage completes, the peak resident set matches the plan and stays under budget, no module is disabled, and residency events fire for each load and unload.
-- [ ] 7.3 Contract tests against a mocked llama-swap: a request for a non-resident model triggers load-on-demand; `POST /api/models/unload` and `POST /api/models/unload/<model>` unload; exclusive groups swap models; all exercised through the unchanged `[lingua].chat_url`.
-- [ ] 7.4 Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs, excluding timing.
-- [ ] 7.5 No-regression, x86_64 CUDA dual-GPU workstation: existing defaults (Chatterbox TTS, Speaches `medium.en` STT, existing LLM path) unchanged, the scheduler no-ops when everything co-resides, and the full suite is green on the CUDA CI job.
-- [ ] 7.6 No-regression, ROCm: backend selection and defaults unchanged and the full suite green (CI runner where available, otherwise a documented manual run with results recorded in the change notes).
-- [ ] 7.7 No-regression, Intel XPU: same criteria as 7.6.
-- [ ] 7.8 No-regression, Apple MPS: same criteria as 7.6.
-- [ ] 7.9 No-regression, CPU-only: same criteria as 7.6, plus verification that the CPU-viable rungs (Kokoro, Moonshine, whisper.cpp, KittenTTS) are selectable with no GPU present.
-- [ ] 7.10 Consent test in a network-isolated environment: with consent unset, first use of a non-downloaded rung prompts or downgrades and performs zero network downloads; with consent recorded, the download proceeds once and is idempotent on subsequent runs.
+- [ ] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue.
+- [ ] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded.
+- [ ] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status.
+- [ ] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced.
 
-## 8. Latency measurement, documentation, and validation
+## 8. Pre-boot, wizard and recommender
 
-- [ ] 8.1 Build a latency-measurement harness that records, per rung: cold and page-cache-warm model load time; STT segment latency (Moonshine variable-length vs whisper fixed 30-second chunk); TTS time-to-first-audio and RTF; LLM time-to-first-token including swap-in; end-to-end voice-turn latency; and peak resident memory — emitting structured JSON plus a markdown table.
-- [ ] 8.2 Run the harness on the 8 GB unified-memory reference board (the motivating Jetson Orin Nano Super class host) and on the dual-GPU x86_64 workstation; commit results under `docs/benchmarks/`; include a table of combinations that do not fit with quantified shortfalls and a qualitative description of the resulting feel; flag any published figure the measurement contradicts (Kokoro RTF ~0.03 on GPU, Moonshine sub-200 ms, Piper ~2.6 GB / ~1720 ms).
-- [ ] 8.3 Write operator documentation: the speech ladder page (stating explicitly that Piper is a compatibility rung, not the lightweight default, and KittenTTS is opt-in), the residency scheduling guide (budget, TTLs, llama-swap groups, what multiplexing feels like), and the honest-limits section.
-- [ ] 8.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes; the change contains no `## MODIFIED Requirements` delta against `runtime-backends`, `deployment-tiers`, or `host-probe`; and every checkbox above is checked or explicitly deferred with a reason in the change notes.
+- [ ] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue.
+- [ ] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost.
+- [ ] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer.
+
+## 9. Tests and no-regression
+
+- [ ] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate.
+- [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
+- [ ] 9.3 Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
+- [ ] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green.
+- [ ] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent.
+
+## 10. Measurement, documentation and validation
+
+- [ ] 10.1 Latency harness: cold and warm load time per rung; STT segment latency; TTS time-to-first-audio and real-time factor; organ first token including swap-in; end-to-end voice turn; peak resident memory. Output is JSON plus a markdown table.
+- [ ] 10.2 Operator step: run the harness on the Orin Nano Super, the Pixel 6a and this desktop; commit results under `docs/benchmarks/`, with a table of combinations that do not fit, their shortfalls and their feel.
+- [ ] 10.3 Docs: a residency guide (budget, calibration, TTLs, pin, llama-swap, what multiplexing feels like, honest limits), plus updates to `docs/deployment-tiers.md`, `docs/hardware.md`, `docs/deployment-headless-host.md`, `docs/modules/audition.md` and `docs/modules/vox.md`.
+- [ ] 10.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes, and every task is checked or deferred with its reason.
