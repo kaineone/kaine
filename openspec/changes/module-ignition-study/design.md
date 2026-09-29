@@ -1,32 +1,61 @@
 # Design — `module-ignition-study`
 
-## Lines and isolation
+## Steps and lines
 
-- **Working directory.** Every state path in KAINE is relative to the process's working directory: the stage file, the Eidolon self-model, perception state, control files and runtime state. Each line therefore runs from its own directory (`studies/<study-id>/<line>/`), holding a `config/` that overlays the study profile and its own `state/`.
-- **Memory.** The Qdrant collection names (`[mnemos].collection_prefix`, `[empatheia].collection`) and the bus database (`[bus].db`) are set per line. A Qdrant import upserts rather than replacing, so lines must never share collections.
-- **Research log.** Each line's research event log goes to its own directory.
+- **Step order:**
+  1. seed (gestation);
+  2. branch 0;
+  3. repeat;
+  4. then, for k = 1…9, branch k followed by accumulate k.
 
-## Steps
+  One start at a time.
+- **The seed.** A gestation run with staging on, the local womb and automatic birth (`require_operator_ack_for_birth = false`).
+  - When `runtime.json` reports the embodied stage, the runner waits until the birth bloom has completed (the womb reports born), then requests a preservation with stop.
+  - That preservation is the seed, S. The stage file in S carries the womb's time at birth.
+- **Branch k.** Revive S with the base set plus `order[:k]`.
+- **Repeat.** Revive S with the base set, exactly as branch 0.
+- **Accumulate k (k ≥ 1).** Step 1 revives branch 0's preservation. Each later step revives accumulate k−1's preservation, with the base set plus `order[:k]`.
+- **Each viewing.** Mode `playlist` with the four-film manifest, the transition at the start, and preserve-and-stop at the end. The runner records the step manifest: line, step, module set, start bundle, preservation, run id and the recording paths.
 
-- **Step 0: gestation.** A base-thesis entity with staging on and the local womb. It is born under `faculty-relative-birth` once its readiness holds.
-- **Birth.** At birth the womb blooms and falls silent. The runner preserves the being and stops it: preservation P0.
-- **Forking.** Both lines are revived from P0. Each line's step k revives the preservation from its own step k−1. The main line adds the k-th module in the order; the control line keeps the base five.
-- **Each viewing.** Mode `playlist` with the four-film manifest. At the end of the programme, `film-end-preserve` freezes, preserves and stops. The runner records the step manifest: line, step, module set, preservation ids, run id and research-log path.
-- **Order within a step.** The main and control steps run one after the other on one host (never together): main k, then control k.
+## Isolation
+
+- **Working directory.** Every state path is relative to the working directory. Each branch and repeat run therefore runs from its own directory, `studies/<id>/branch/<k>/` and `studies/<id>/repeat/`, and the accumulate line from `studies/<id>/accumulate/`.
+- **Memory collections.** Collection prefixes are per branch step, per repeat, and per accumulate line. A revive restores the bundle's memories into the run's own collections.
+- **Bus.** Every step starts on an empty, dedicated bus database. The runner owns only the study's database numbers, which must differ from the operator's, and flushes that database before the step starts.
+
+## Hosting
+
+- **Inside the cycle image.** The runner runs as a compose service from the cycle image, with the operator config, the secrets file and the media overlay mounted exactly as for `kaine-cycle`.
+  - Each step's cycle is a subprocess in that container.
+  - The bus and the organ are reached by service name, and the models from `/models`.
+- **Durable storage.** The study directory is a durable volume on the operator's chosen storage. Preservations land under the study directory, never in the container's writable layer.
+
+## Recording and privacy
+
+- **Every run persists:**
+  - the research event log (content-free);
+  - the workspace trajectory (content-scrubbed);
+  - the film-aligned ignition log;
+  - a record of every stream Nexus displays, after the same privacy filter Nexus applies;
+  - Lingua's external utterances (local only, never export-eligible).
+- **Inner speech** (`lingua.internal`, `internal_speech`) is never recorded. See `run-recording`.
+- **Raw sense data is never persisted.** The raw bus archive stays off.
 
 ## Ignition analysis
 
-- **Inputs.** The research event log's workspace broadcasts, with the fields restored by `film-aligned-ignition-log`: entry ids, run id, broadcast time and film position.
-- **Per viewing:**
-  - broadcasts per minute;
-  - coalition size;
-  - share of broadcasts containing each module;
-  - salience distribution;
-  - broadcasts per film-minute (aligned by film position, so Hypnos's pauses do not smear time).
-- **Per step:** the main-minus-control difference, and the change from step k−1 on each line.
-- **Output.** Content-free: counts, rates and module shares only. No percept content leaves the logs.
+- **Per viewing:** the living spec's content-free measures.
+- **Comparisons:**
+  - branch k − branch 0 (a faculty's effect from the seed);
+  - branch 0 − repeat (the noise floor, one sample);
+  - accumulate k − branch k (familiarity and history);
+  - the film-minute profiles of all runs.
+- **Output** is content-free.
+- **Claude Science** receives only the metrics-only bundle, with operator consent.
 
 ## What this study cannot show
 
-- **It is not a clean per-module experiment.** The main line accumulates modules in one order. An effect at step k is that module's effect *given* the modules before it and the being's history, not its isolated effect. The control line removes familiarity, not order.
-- **Faculties without an input channel on this host are expected nulls:** Praxis, Perception and the Mundus stub. They are reported as such.
+- **One being per condition.** Every comparison is n = 1, and the noise floor comes from one repeat. Differences smaller than the repeat's are not evidence of anything.
+- **Branch k adds modules in a fixed order.** Its effect is the k-th module's effect given the modules before it, not in isolation.
+- **The accumulate line mixes familiarity with module history.** No line rewatches without gaining modules.
+- **Faculties without an input channel on this host are expected nulls:** Praxis without effectors, Perception without locus requests, and Mundus without an approved body.
+- **Vox needs a speech backend** that fits beside Topos, so the study uses the CPU backend.
