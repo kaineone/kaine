@@ -267,6 +267,7 @@ source_modules = [
     "kaine.persistence",
     "kaine.remote",
     "kaine.research",
+    "kaine.residency",
     "kaine.security",
     "kaine.setup",
     "kaine.transfer",
