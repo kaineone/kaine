@@ -89,10 +89,12 @@ services:
       - "yes"
       - --appendfsync
       - everysec
-      # 4gb ceiling; noeviction retained below — the bus fails loud rather
-      # than silently evicting events.
+      # Memory ceiling, host-configurable through KAINE_REDIS_MAXMEMORY in
+      # compose/.env (default 4gb). noeviction is kept below: the bus fails
+      # loud rather than silently evicting events. `python -m kaine.preboot`
+      # checks the configured stream caps fit ("Bus budget" row).
       - --maxmemory
-      - 4gb
+      - ${KAINE_REDIS_MAXMEMORY:-4gb}
       - --maxmemory-policy
       - noeviction
       - --save

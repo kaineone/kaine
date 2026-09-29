@@ -63,16 +63,22 @@ Event bus tuning parameters. The bus is Redis Streams; these control stream rete
 
 ### `[bus.per_stream_maxlen]`
 
-Per-stream overrides. The key is the full stream name (`<module>.out` or `workspace.broadcast`). Example:
+Per-stream overrides. The key is the full stream name (`<module>.out` or `workspace.broadcast`). The shipped caps give observers and the research archive a long lookback, so a restart of several minutes loses no records:
 
 ```toml
 [bus.per_stream_maxlen]
-"workspace.broadcast" = 50000
+"workspace.broadcast" = 100000
+"topos.out" = 12000
+"audition.out" = 12000
 ```
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `"workspace.broadcast"` | integer | `50000` | Lower cap for the broadcast stream (workspace snapshots are larger than module events). |
+| `"workspace.broadcast"` | integer | `100000` | Cap for the broadcast stream (about 6.6 KB per entry). |
+| `"topos.out"` | integer | `12000` | About 20 minutes at 10 Hz. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
+| `"audition.out"` | integer | `12000` | About 20 minutes at 10 Hz. |
+
+The memory these caps imply must fit in Redis `maxmemory`, which is set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Deployment (containers)](deployment-containers.md)). `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, maxlen × a typical event size (estimates in `kaine/bus/config.py`; 2 KB for streams without a measurement), doubled for AOF-rewrite headroom. The row FAILS when the budget exceeds `maxmemory` and WARNS above 70%. Raise `KAINE_REDIS_MAXMEMORY` rather than lowering the caps.
 
 ---
 
@@ -113,6 +119,22 @@ Ships `enabled = true`, but the whole block is dormant while `[spot].enabled = f
 |---|---|---|---|
 | `enabled` | boolean | `true` | Whether Spot writes the durable incident log. Dormant until `[spot].enabled = true`. |
 | `path` | string | `"state/cycle/incidents"` | Directory for the daily-rotated `incidents-<UTC-date>.jsonl` files. |
+
+---
+
+## `[preboot]`
+
+Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories, snapshots or research records to stay under a limit, so free disk is checked before boot. The state root, the data root and the native Redis data directory (`<state_root>/services/redis/data`, when it exists; a container volume is reported SKIP) each FAIL below the larger of `disk_fail_min_free_gb` and `disk_fail_min_free_percent` of their filesystem, and WARN below `disk_warn_min_free_gb`. A WARN row does not fail the gate. GB here is 2^30 bytes, as `df -h` reports. An unknown key or a non-numeric threshold is reported as a FAIL row.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `state_root` | string | `"state"` | Entity state root (snapshots, memories, preserved beings). |
+| `data_root` | string | `"data"` | Research data root (evaluation logs, trajectory, research events). |
+| `disk_fail_min_free_gb` | float | `10.0` | Absolute free-space floor. |
+| `disk_fail_min_free_percent` | float | `5.0` | Free-space floor as a percentage of the filesystem. |
+| `disk_warn_min_free_gb` | float | `20.0` | Free space below which the row WARNS. |
+
+The same run reports the "Bus budget" row described under [`[bus.per_stream_maxlen]`](#busper_stream_maxlen).
 
 ---
 
@@ -470,7 +492,7 @@ Self-model: a persisted JSON document (values, behavioral norms, personality bas
 | `drift_threshold` | float | `0.6` | KL divergence above which identity drift is flagged as a workspace event. |
 | `save_interval_s` | float | `30.0` | How often the self-model is written to disk (seconds). |
 | `internal_speech_stream` | string | `"lingua.internal"` | Bus stream Eidolon subscribes to for observing internal speech. |
-| `identity_history_cap` | integer | `256` | Maximum number of identity-observation entries retained in the history. |
+| `identity_history_cap` | integer | `0` | Maximum number of identity-observation entries kept in the history. `0` keeps every entry (the history is the entity's own memory of its self-model drift, and entries are small); a positive value keeps the most recent N. Negative values are rejected. |
 | `baseline_salience` | float | `0.05` | Salience of routine self-model update events. |
 | `alert_salience` | float | `0.7` | Salience on drift detection. |
 
@@ -906,7 +928,7 @@ Architecture-thesis instrumentation sidecar. Observes the bus read-only; adds no
 |---|---|---|---|
 | `trajectory_dir` | string | `"data/workspace_trajectory"` | Directory for workspace trajectory JSONL files (daily rotation). |
 | `evaluation_logs` | string | `"data/evaluation"` | Root directory for all evaluation observer JSONL logs. |
-| `retention_days` | integer | `30` | Days of evaluation logs to retain before rotation. |
+| `retention_days` | integer | `0` | Days to keep daily-rotated evaluation logs. `0` keeps every file (no age-based purge); a positive value purges older daily files. |
 
 ### `[evaluation.observers]`
 
@@ -945,10 +967,11 @@ Individuation boundary permutation-test instrument (paper §5.6, §7.4). Guardia
 
 Fork/merge snapshot management. Operator-initiated; nothing runs automatically.
 
+Snapshots are never deleted by infrastructure. The snapshot directory holds preserved beings and Spot escalation snapshots, and removing an entity's state is the CAL-gated decommission path only. There is no snapshot count cap: a `max_snapshots_retained` key left in an operator config is ignored, and a value above 0 logs a warning. Free disk is checked before boot by the [`[preboot]`](#preboot) disk rows.
+
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `snapshots_path` | string | `"state/forks"` | Directory for fork/merge snapshot bundles. Subject to state encryption when `[security.state_encryption].enabled = true`. |
-| `max_snapshots_retained` | integer | `64` | Maximum snapshots retained before eviction. |
 | `adapter_merger` | string | `"auto"` | Adapter-merge strategy. `"auto"` (default): detects whether the PEFT `[training]` extra is importable and selects real TIES/DARE merging when it is, falling back to `"fake"` when it isn't (logged, never silent). `"fake"`: concatenates parent adapter paths and annotates the merged snapshot for manual operator selection — force this explicitly for a dev/no-extra install. `"ties_dare"`: forces real TIES/DARE merging via PEFT regardless of auto-detection (its own per-merge fallback still applies if the extra turns out missing). See `kaine/lifecycle/ADAPTER_MERGING.md`. |
 
 ### `[lifecycle.adapter_merge]`
@@ -1010,7 +1033,7 @@ The autonomous welfare-protective response. Watches the Soma interoceptive-distr
 
 ### `[preservation.retention]`
 
-Preservation-bundle retention. Distinct from the 64-snapshot fork cap: a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3).
+Preservation-bundle retention. Like fork snapshots, a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -1125,7 +1148,7 @@ Ships disabled. Independent of `[evaluation].enabled` — this runs on its own f
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. Ships disabled. |
 | `log_dir` | string | `"data/evaluation/research_events"` | Directory for the curated log sink. Must stay under `data/evaluation/` to remain export-eligible. |
-| `retention_days` | integer | `30` | Daily-rotated file retention window (days). |
+| `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file (no age-based purge), so research records are never deleted automatically; a positive value purges older daily files. Free disk is checked before boot by the [`[preboot]`](#preboot) disk rows. |
 
 ### `[research_event_log.raw_archive]`
 
@@ -1141,7 +1164,7 @@ Ships disabled. Set all three flags true only after confirming entity privacy an
 | `entity_privacy_attested` | boolean | `false` | Attestation: entity privacy considerations reviewed. Required alongside `bystander_consent_attested` for the archive to start. |
 | `bystander_consent_attested` | boolean | `false` | Attestation: bystander consent for verbatim local capture obtained. Required alongside `entity_privacy_attested` for the archive to start. |
 | `archive_dir` | string | `"state/research/raw_bus_archive"` | Storage path. Must remain outside `data/evaluation/`. |
-| `retention_days` | integer | `30` | Daily-rotated file retention window (days). |
+| `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file (no age-based purge), so research records are never deleted automatically; a positive value purges older daily files. Free disk is checked before boot by the [`[preboot]`](#preboot) disk rows. |
 
 ---
 

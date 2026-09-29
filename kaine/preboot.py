@@ -38,7 +38,13 @@ loop — only read-only probes and throwaway round-trips):
                   rather than the welfare net silently failing to preserve a
                   diverging or distressed individual at the first live
                   crossing (paper §3.7 / §6.2).
-  5. CONFIG     — which boot mode this run would take (operator-supervised vs
+  5. RESOURCES  — whether the bus's configured stream caps fit in Redis
+                  ``maxmemory`` (the "Bus budget" row), and whether the state
+                  root, the data root and the native Redis data directory have
+                  enough free disk. KAINE does not delete memories or research
+                  records to stay under a limit, so these limits are checked
+                  here, before boot, instead of being hit during a run.
+  6. CONFIG     — which boot mode this run would take (operator-supervised vs
                   research), which modules are enabled, whether the tier being
                   recorded can actually run the enabled modules, and whether
                   the preservation config would fail closed
@@ -46,12 +52,12 @@ loop — only read-only probes and throwaway round-trips):
                   monitor is enabled).
 
 Every check is best-effort and NEVER raises out of this module — a check that
-cannot run reports the honest gap as a FAIL/SKIP row with a reason, never a
-silent pass and never an uncaught traceback (mirrors the "never raises"
+cannot run reports the honest gap as a FAIL/WARN/SKIP row with a reason, never
+a silent pass and never an uncaught traceback (mirrors the "never raises"
 contract of ``kaine.nexus.health`` and ``kaine.setup.organ``).
 
-Exit code is non-zero iff any check reports FAIL, so this composes as a CI /
-boot-script gate: ``python -m kaine.preboot && python -m kaine.cycle``.
+Exit code is non-zero iff any check reports FAIL (a WARN row reports a risk
+but does not fail the gate), so this composes as a CI / boot-script gate: ``python -m kaine.preboot && python -m kaine.cycle``.
 """
 
 from __future__ import annotations
@@ -60,17 +66,25 @@ import argparse
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from kaine.boot import (
     _build_perception_feed_audio_factory,
     _build_perception_feed_video_factory,
 )
-from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_runtime_config
+from kaine.bus.config import BusConfig, maxlen_for, typical_event_bytes
+from kaine.bus.schema import module_stream
+from kaine.config import (
+    OPERATOR_CONFIG_PATH,
+    SHIPPED_CONFIG_PATH,
+    load_runtime_config,
+    require_known_keys,
+)
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
 from kaine.nexus import health
@@ -84,11 +98,14 @@ log = logging.getLogger(__name__)
 PASS = "PASS"
 FAIL = "FAIL"
 SKIP = "SKIP"
+# A risk worth the operator's attention that does not block boot.
+WARN = "WARN"
 
 GROUP_SERVICES = "SERVICES"
 GROUP_ORGAN = "ORGAN"
 GROUP_PERCEPTION = "PERCEPTION"
 GROUP_WELFARE = "WELFARE NET (preserve -> revive dry run)"
+GROUP_RESOURCES = "RESOURCES (bus memory + disk)"
 GROUP_CONFIG = "CONFIG SANITY"
 
 # Default location of the operator-provided 32-byte state-encryption key.
@@ -110,7 +127,7 @@ class CheckResult:
 
     group: str
     name: str
-    status: str  # PASS | FAIL | SKIP
+    status: str  # PASS | WARN | FAIL | SKIP
     detail: str = ""
 
 
@@ -484,7 +501,305 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
 
 
 # ---------------------------------------------------------------------------
-# 5. CONFIG SANITY
+# 5. RESOURCES — bus memory budget + free disk
+# ---------------------------------------------------------------------------
+
+# Redis rewrites the append-only file by forking; copy-on-write pages during
+# the rewrite can approach the dataset size, so the budget doubles the
+# estimated stream memory.
+BUS_BUDGET_HEADROOM_FACTOR = 2
+# Above this fraction of maxmemory the budget row WARNs.
+BUS_BUDGET_WARN_FRACTION = 0.70
+# Wall-clock ceiling for reading maxmemory from the server.
+BUS_PROBE_TIMEOUT_S = 5.0
+
+# Streams every run produces, whatever modules are enabled.
+_CORE_BUDGET_STREAMS: tuple[str, ...] = ("workspace.broadcast", "cycle.out")
+# Streams an enabled module produces besides its own ``<module>.out``.
+_EXTRA_MODULE_STREAMS: dict[str, tuple[str, ...]] = {
+    "lingua": ("lingua.internal", "lingua.external"),
+    "nous": ("volition.out", "volition_feedback.out"),
+}
+
+# ``[preboot]`` defaults. GB here is 2**30 bytes, as ``df -h`` reports.
+PREBOOT_DEFAULTS: dict[str, Any] = {
+    "state_root": "state",
+    "data_root": "data",
+    "disk_fail_min_free_gb": 10.0,
+    "disk_fail_min_free_percent": 5.0,
+    "disk_warn_min_free_gb": 20.0,
+}
+_GIB = 2**30
+
+
+def _fmt_gib(n_bytes: float) -> str:
+    return f"{n_bytes / _GIB:.2f} GiB"
+
+
+def budget_streams(modules: dict[str, Any]) -> list[str]:
+    """The streams a run with ``modules`` enabled produces, in stable order.
+
+    Low-rate operational streams (lifecycle, welfare, preservation,
+    individuation) are not counted; their volume is negligible next to the
+    module streams.
+    """
+    streams: list[str] = list(_CORE_BUDGET_STREAMS)
+    for name in sorted(k for k, v in modules.items() if v):
+        for stream in (module_stream(name), *_EXTRA_MODULE_STREAMS.get(name, ())):
+            if stream not in streams:
+                streams.append(stream)
+    return streams
+
+
+def bus_budget(config: dict[str, Any]) -> tuple[int, list[tuple[str, int]]]:
+    """Estimated Redis memory, in bytes, that the configured caps imply.
+
+    Returns the budget (sum of maxlen x typical event size over
+    :func:`budget_streams`, times :data:`BUS_BUDGET_HEADROOM_FACTOR`) and the
+    per-stream estimates before headroom, largest first. Raises on a malformed
+    ``[bus]`` table.
+    """
+    bus_cfg = config.get("bus") or {}
+    if not isinstance(bus_cfg, dict):
+        raise ValueError("[bus] is not a table")
+    per_stream = bus_cfg.get("per_stream_maxlen") or {}
+    if not isinstance(per_stream, dict):
+        raise ValueError("[bus.per_stream_maxlen] is not a table")
+    caps = BusConfig(
+        default_maxlen=int(bus_cfg.get("default_maxlen", BusConfig.default_maxlen)),
+        per_stream_maxlen={str(k): int(v) for k, v in per_stream.items()},
+    )
+    modules = config.get("modules") or {}
+    per: list[tuple[str, int]] = [
+        (stream, maxlen_for(caps, stream) * typical_event_bytes(stream))
+        for stream in budget_streams(modules if isinstance(modules, dict) else {})
+    ]
+    per.sort(key=lambda item: item[1], reverse=True)
+    total = sum(n for _, n in per) * BUS_BUDGET_HEADROOM_FACTOR
+    return total, per
+
+
+async def _read_server_maxmemory() -> int:
+    """Read ``maxmemory`` from the configured KAINE Redis through the bus client."""
+    import redis.asyncio as aioredis
+
+    from kaine.bus.client import AsyncBus
+    from kaine.bus.config import load_bus_config
+
+    bus_cfg = load_bus_config()
+    client = aioredis.from_url(
+        bus_cfg.url,
+        decode_responses=True,
+        socket_connect_timeout=BUS_PROBE_TIMEOUT_S,
+        socket_timeout=BUS_PROBE_TIMEOUT_S,
+    )
+    bus = AsyncBus(bus_cfg, client=client)
+    try:
+        return await bus.server_maxmemory()
+    finally:
+        try:
+            await bus.close()
+        except Exception:
+            log.debug("bus close after maxmemory probe failed", exc_info=True)
+
+
+async def check_bus_budget(
+    config: dict[str, Any],
+    *,
+    read_maxmemory: Optional[Callable[[], Awaitable[int]]] = None,
+) -> list[CheckResult]:
+    """Compare the bus memory the stream caps imply with Redis ``maxmemory``.
+
+    FAIL when the budget exceeds ``maxmemory``, WARN above
+    :data:`BUS_BUDGET_WARN_FRACTION` of it, WARN when ``maxmemory`` cannot be
+    read or is 0 (no limit), PASS otherwise. ``read_maxmemory`` is an async
+    callable returning bytes; it defaults to a real ``CONFIG GET maxmemory``.
+    """
+    name = "Bus budget"
+    try:
+        budget, per = bus_budget(config)
+    except Exception as exc:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                name,
+                FAIL,
+                f"could not compute the bus budget from [bus]: {type(exc).__name__}: {exc}",
+            )
+        ]
+    largest = ", ".join(f"{stream} {_fmt_gib(n)}" for stream, n in per[:3])
+    basis = (
+        f"budget {_fmt_gib(budget)} (maxlen x typical event size over "
+        f"{len(per)} streams, x{BUS_BUDGET_HEADROOM_FACTOR} for AOF rewrite; "
+        f"largest: {largest})"
+    )
+    reader = read_maxmemory or _read_server_maxmemory
+    try:
+        maxmemory = int(await asyncio.wait_for(reader(), BUS_PROBE_TIMEOUT_S))
+    except Exception as exc:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                name,
+                WARN,
+                f"could not read Redis maxmemory ({type(exc).__name__}: {exc}); "
+                f"{basis}; make sure KAINE_REDIS_MAXMEMORY is at least the budget",
+            )
+        ]
+    if maxmemory <= 0:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                name,
+                WARN,
+                "Redis maxmemory is 0 (no limit): the bus can grow into all host "
+                f"memory; {basis}; set KAINE_REDIS_MAXMEMORY",
+            )
+        ]
+    vs = f"{basis} vs maxmemory {_fmt_gib(maxmemory)}"
+    if budget > maxmemory:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                name,
+                FAIL,
+                f"{vs}: the bus would fill Redis and halt the entity; raise "
+                "KAINE_REDIS_MAXMEMORY (compose/.env) and restart Redis",
+            )
+        ]
+    if budget > BUS_BUDGET_WARN_FRACTION * maxmemory:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                name,
+                WARN,
+                f"{vs}: above {BUS_BUDGET_WARN_FRACTION:.0%} of the cap; consider "
+                "raising KAINE_REDIS_MAXMEMORY",
+            )
+        ]
+    return [CheckResult(GROUP_RESOURCES, name, PASS, vs)]
+
+
+def _preboot_settings(config: dict[str, Any]) -> dict[str, Any]:
+    """Merge ``[preboot]`` over :data:`PREBOOT_DEFAULTS`, validating it.
+
+    Raises ``ValueError`` naming an unknown key or a wrongly-typed value.
+    """
+    section = config.get("preboot")
+    if section is None:
+        section = {}
+    if not isinstance(section, dict):
+        raise ValueError("[preboot] is not a table")
+    require_known_keys(section, set(PREBOOT_DEFAULTS), "[preboot]")
+    settings = dict(PREBOOT_DEFAULTS)
+    for key, value in section.items():
+        default = PREBOOT_DEFAULTS[key]
+        if isinstance(default, str):
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"[preboot].{key} must be a non-empty string")
+        elif isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise ValueError(f"[preboot].{key} must be a number >= 0")
+        settings[key] = value
+    return settings
+
+
+def _nearest_existing(path: Path) -> Path:
+    """``path`` or its closest existing ancestor (a root may not exist yet)."""
+    candidate = path
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return candidate
+
+
+def check_disk(
+    config: dict[str, Any],
+    *,
+    disk_usage: Optional[Callable[[Path], Any]] = None,
+) -> list[CheckResult]:
+    """Free-disk rows for the state root, the data root and the Redis data dir.
+
+    FAIL below max(``disk_fail_min_free_gb``, ``disk_fail_min_free_percent`` of
+    the filesystem), WARN below ``disk_warn_min_free_gb``, PASS otherwise. The
+    Redis row measures the native data directory
+    (``<state_root>/services/redis/data``); a container volume is not
+    resolvable from the host and is reported SKIP.
+    """
+    usage_fn = disk_usage or shutil.disk_usage
+    try:
+        settings = _preboot_settings(config)
+    except ValueError as exc:
+        return [CheckResult(GROUP_RESOURCES, "Disk free", FAIL, str(exc))]
+
+    fail_gb = float(settings["disk_fail_min_free_gb"])
+    fail_pct = float(settings["disk_fail_min_free_percent"])
+    warn_gb = float(settings["disk_warn_min_free_gb"])
+    state_root = Path(settings["state_root"])
+    data_root = Path(settings["data_root"])
+    redis_dir = state_root / "services" / "redis" / "data"
+
+    targets: list[tuple[str, Path, bool]] = [
+        ("Disk free (state root)", state_root, True),
+        ("Disk free (data root)", data_root, True),
+        ("Disk free (Redis data)", redis_dir, False),
+    ]
+    results: list[CheckResult] = []
+    for name, path, walk_up in targets:
+        if walk_up:
+            measured = _nearest_existing(path)
+        elif path.is_dir():
+            measured = path
+        else:
+            results.append(
+                CheckResult(
+                    GROUP_RESOURCES,
+                    name,
+                    SKIP,
+                    f"no native Redis data directory at {path}; a container "
+                    "volume is not measured from the host",
+                )
+            )
+            continue
+        try:
+            usage = usage_fn(measured)
+        except OSError as exc:
+            results.append(
+                CheckResult(
+                    GROUP_RESOURCES,
+                    name,
+                    FAIL,
+                    f"{path}: could not read disk usage: {type(exc).__name__}: {exc}",
+                )
+            )
+            continue
+        total = float(usage.total)
+        free = float(usage.free)
+        fail_floor = max(fail_gb * _GIB, total * fail_pct / 100.0)
+        where = str(path) if measured == path else f"{path} (measured at {measured})"
+        detail = f"{where}: {_fmt_gib(free)} free of {_fmt_gib(total)}"
+        if free < fail_floor:
+            status = FAIL
+            detail += (
+                f"; below the floor {_fmt_gib(fail_floor)} "
+                f"(max of {fail_gb:g} GiB and {fail_pct:g}%) — free space before boot"
+            )
+        elif free < warn_gb * _GIB:
+            status = WARN
+            detail += f"; below {warn_gb:g} GiB"
+        else:
+            status = PASS
+        results.append(CheckResult(GROUP_RESOURCES, name, status, detail))
+    return results
+
+
+async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
+    """The RESOURCES group: the bus budget row, then the disk-free rows."""
+    results = await check_bus_budget(config)
+    results.extend(check_disk(config))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 6. CONFIG SANITY
 # ---------------------------------------------------------------------------
 
 
@@ -686,7 +1001,7 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
 
 
 async def run_async_checks(config: dict[str, Any]) -> list[CheckResult]:
-    """Run the async checks (1-4) in order, never letting one crash the rest.
+    """Run the async checks (1-5) in order, never letting one crash the rest.
 
     Each check function already catches its own internal failures and turns
     them into FAIL rows; this outer guard exists only for the unexpected
@@ -707,6 +1022,7 @@ async def run_async_checks(config: dict[str, Any]) -> list[CheckResult]:
         (GROUP_ORGAN, check_organ(config)),
         (GROUP_PERCEPTION, check_perception(config)),
         (GROUP_WELFARE, check_welfare(config)),
+        (GROUP_RESOURCES, check_resources(config)),
     ]
     for group, coro in checks:
         try:
@@ -720,7 +1036,7 @@ async def run_async_checks(config: dict[str, Any]) -> list[CheckResult]:
 
 
 def render_table(results: list[CheckResult]) -> str:
-    """Render an aligned, grouped PASS/FAIL/SKIP table."""
+    """Render an aligned, grouped PASS/WARN/FAIL/SKIP table."""
     if not results:
         return "(no checks ran)"
     name_w = max(len(r.name) for r in results)
@@ -740,10 +1056,12 @@ def render_table(results: list[CheckResult]) -> str:
 def verdict_line(results: list[CheckResult]) -> str:
     n_pass = sum(1 for r in results if r.status == PASS)
     n_fail = sum(1 for r in results if r.status == FAIL)
+    n_warn = sum(1 for r in results if r.status == WARN)
     n_skip = sum(1 for r in results if r.status == SKIP)
     overall = PASS if n_fail == 0 else FAIL
     return (
-        f"VERDICT: {overall}  ({len(results)} checks: {n_pass} pass, {n_fail} fail, {n_skip} skip)"
+        f"VERDICT: {overall}  ({len(results)} checks: {n_pass} pass, {n_fail} fail, "
+        f"{n_warn} warn, {n_skip} skip)"
     )
 
 
@@ -763,8 +1081,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m kaine.preboot",
         description=(
             "Pre-boot dry-run: verify the whole supporting stack — services, "
-            "the organ, perception delivery, and the welfare preserve/revive "
-            "net — actually WORK before booting the KAINE entity. Never "
+            "the organ, perception delivery, the welfare preserve/revive "
+            "net, and bus memory and disk headroom — actually WORK before "
+            "booting the KAINE entity. Never "
             "boots the entity itself."
         ),
     )

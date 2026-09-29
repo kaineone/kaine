@@ -67,7 +67,7 @@ All keys under `[eidolon]` and `[eidolon.self_inference]`. See also [`../configu
 | `internal_speech_stream` | `"lingua.internal"` | Stream to observe for internal speech |
 | `external_speech_stream` | `"lingua.external"` | Stream to observe for external (spoken-out) speech |
 | `voice_observations_cap` | `256` | Max buffered speech observations kept before older entries are trimmed |
-| `identity_history_cap` | `256` | Max drift records kept in `identity_history` |
+| `identity_history_cap` | `0` | Max drift records kept in `identity_history`; `0` keeps every record, a positive value keeps the most recent N |
 | `baseline_salience` | `0.05` | Default event salience |
 | `alert_salience` | `0.7` | Salience on drift alert |
 | `[eidolon.self_inference].enabled` | `false` | Opt-in; must be `true` to activate self-inference |

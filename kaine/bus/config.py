@@ -180,3 +180,26 @@ def load_bus_config(
 
 def maxlen_for(config: BusConfig, stream: str) -> int:
     return config.per_stream_maxlen.get(stream, config.default_maxlen)
+
+
+#: Typical serialized size of one stream entry, in bytes. These are ESTIMATES
+#: measured on a live bus (Redis memory per entry, including stream overhead),
+#: used only by the pre-boot "Bus budget" row to estimate how much Redis memory
+#: the configured maxlen caps imply. They are not limits and nothing enforces
+#: them. A stream that is not listed uses DEFAULT_TYPICAL_EVENT_BYTES.
+TYPICAL_EVENT_BYTES: dict[str, int] = {
+    "topos.out": 40_000,
+    "workspace.broadcast": 6_600,
+    "chronos.out": 1_300,
+    "soma.out": 550,
+    "cycle.out": 250,
+    "audition.out": 400,
+}
+
+#: Estimate for streams without a measured size.
+DEFAULT_TYPICAL_EVENT_BYTES = 2_000
+
+
+def typical_event_bytes(stream: str) -> int:
+    """Estimated bytes one entry of ``stream`` occupies in Redis."""
+    return TYPICAL_EVENT_BYTES.get(stream, DEFAULT_TYPICAL_EVENT_BYTES)

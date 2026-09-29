@@ -45,7 +45,7 @@ class Eidolon(BaseModule):
         save_interval_s: float = 30.0,
         internal_speech_stream: str = "lingua.internal",
         external_speech_stream: str = "lingua.external",
-        identity_history_cap: int = 256,
+        identity_history_cap: int = 0,
         voice_observations_cap: int = 256,
         baseline_salience: float = 0.05,
         alert_salience: float = 0.7,
@@ -62,8 +62,8 @@ class Eidolon(BaseModule):
             raise ValueError("drift_threshold must be >= 0")
         if save_interval_s <= 0:
             raise ValueError("save_interval_s must be positive")
-        if identity_history_cap <= 0:
-            raise ValueError("identity_history_cap must be positive")
+        if identity_history_cap < 0:
+            raise ValueError("identity_history_cap must be >= 0 (0 = no cap)")
         if voice_observations_cap <= 0:
             raise ValueError("voice_observations_cap must be positive")
         self._persistence_path = Path(persistence_path)
@@ -218,8 +218,12 @@ class Eidolon(BaseModule):
                 "top_sources": list(result.top_drifted_sources),
             }
         )
-        if len(history) > self._identity_history_cap:
-            history = history[-self._identity_history_cap :]
+        # identity_history is the entity's own record of how its self-model
+        # has drifted: 0 (the default) keeps every entry. A positive cap keeps
+        # the most recent N entries.
+        cap = self._identity_history_cap
+        if cap > 0 and len(history) > cap:
+            history = history[-cap:]
         self._model = self._model.with_updates(identity_history=history)
 
     async def _internal_speech_loop(self) -> None:

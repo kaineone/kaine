@@ -139,14 +139,15 @@ class RawArchiveConfig:
         Storage path. MUST remain outside ``data/evaluation/`` (default
         ``state/research/raw_bus_archive``).
     retention_days:
-        Daily-rotated file retention window (default 30).
+        Daily-rotated file retention window in days. Default 0 = keep
+        (no age-based purge); a positive value purges older daily files.
     """
 
     enabled: bool = False
     entity_privacy_attested: bool = False
     bystander_consent_attested: bool = False
     archive_dir: str = "state/research/raw_bus_archive"
-    retention_days: int = 30
+    retention_days: int = 0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "RawArchiveConfig":
@@ -190,14 +191,15 @@ class ResearchEventLogConfig:
         Directory for the curated log sink (under ``data/evaluation/``). The
         final path component MUST be ``research_events`` to be export-eligible.
     retention_days:
-        Daily-rotated file retention window (default 30).
+        Daily-rotated file retention window in days. Default 0 = keep
+        (no age-based purge); a positive value purges older daily files.
     raw_archive:
         Nested config for the OPTIONAL local-only raw bus archive.
     """
 
     enabled: bool = False
     log_dir: str = "data/evaluation/research_events"
-    retention_days: int = 30
+    retention_days: int = 0
     raw_archive: RawArchiveConfig = field(default_factory=RawArchiveConfig)
 
     @classmethod
@@ -215,7 +217,7 @@ class ResearchEventLogConfig:
 class EvaluationPaths:
     trajectory_dir: str = "data/workspace_trajectory"
     evaluation_logs: str = "data/evaluation"
-    retention_days: int = 30
+    retention_days: int = 0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "EvaluationPaths":

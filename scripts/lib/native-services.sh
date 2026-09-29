@@ -350,6 +350,19 @@ native_bootstrap_redis() {
   local logs_dir="$svc_dir/logs"
   local conf="$svc_dir/redis.conf"
   local pidfile="$svc_dir/redis.pid"
+  # Memory ceiling: KAINE_REDIS_MAXMEMORY from the environment, else from
+  # compose/.env (the variable the container path reads), else 4gb.
+  # noeviction stays: the bus fails loud rather than dropping events.
+  local maxmemory="${KAINE_REDIS_MAXMEMORY:-}"
+  if [[ -z "$maxmemory" && -f "$root/compose/.env" ]]; then
+    maxmemory=$(grep -E '^KAINE_REDIS_MAXMEMORY=' "$root/compose/.env" | tail -n1 | cut -d= -f2- || true)
+    maxmemory=${maxmemory%$'\r'}
+  fi
+  maxmemory="${maxmemory:-4gb}"
+  if [[ ! "$maxmemory" =~ ^[0-9]+([kKmMgG][bB]?)?$ ]]; then
+    echo "==> KAINE_REDIS_MAXMEMORY must be a Redis memory size such as 4gb or 12gb" >&2
+    return 1
+  fi
 
   if ! command -v redis-server >/dev/null 2>&1; then
     if is_termux; then
@@ -372,7 +385,7 @@ dir $data_dir
 pidfile $pidfile
 logfile $logs_dir/redis.log
 daemonize no
-maxmemory 4gb
+maxmemory $maxmemory
 maxmemory-policy noeviction
 protected-mode yes
 save ""

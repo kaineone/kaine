@@ -10,12 +10,16 @@ Network=kaine.network
 PublishPort=127.0.0.1:6479:6379
 Volume=kaine-redis-data.volume:/data
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
-Exec=redis-server --requirepass ${KAINE_REDIS_PASSWORD} --bind 0.0.0.0 --protected-mode yes --appendonly yes --appendfsync everysec --maxmemory 4gb --maxmemory-policy noeviction --save ""
+Exec=redis-server --requirepass ${KAINE_REDIS_PASSWORD} --bind 0.0.0.0 --protected-mode yes --appendonly yes --appendfsync everysec --maxmemory ${KAINE_REDIS_MAXMEMORY} --maxmemory-policy noeviction --save ""
 HealthCmd=redis-cli -a "$KAINE_REDIS_PASSWORD" ping
 HealthInterval=10s
 HealthRetries=5
 
 [Service]
+# Default Redis memory ceiling for the Exec= line. A KAINE_REDIS_MAXMEMORY line
+# in compose/.env overrides it: systemd applies EnvironmentFile= after
+# Environment=.
+Environment=KAINE_REDIS_MAXMEMORY=4gb
 # Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).
 EnvironmentFile=@KAINE_ROOT@/compose/.env
 Restart=always

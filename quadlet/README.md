@@ -33,6 +33,12 @@ kept up to date by `scripts/redis-bootstrap.sh` and
 loads that file through `[Service] EnvironmentFile=`. Never export secrets in a
 shell; the systemd user manager does not inherit shell environment.
 
+The same file sets the Redis memory ceiling: `kaine-redis.container` defaults
+`KAINE_REDIS_MAXMEMORY` to `4gb` with `[Service] Environment=`, and a
+`KAINE_REDIS_MAXMEMORY=12gb` line in `compose/.env` overrides it (systemd
+applies `EnvironmentFile=` after `Environment=`). Restart `kaine-redis` after
+changing it.
+
 Enable linger so the services survive logout and reboot:
 
 ```bash

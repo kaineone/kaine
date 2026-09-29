@@ -156,6 +156,23 @@ class AsyncBus:
             )
         self._audited = True
 
+    async def server_maxmemory(self) -> int:
+        """Return the server's ``maxmemory`` in bytes (0 means no limit).
+
+        Reads ``CONFIG GET maxmemory``. Raises when the command is refused or
+        the reply carries no usable value, so a caller can report that the
+        limit is unknown instead of assuming one.
+        """
+        reply = await self._client.config_get("maxmemory")
+        value = (reply or {}).get("maxmemory")
+        if value is None:
+            value = (reply or {}).get(b"maxmemory")
+        if isinstance(value, bytes):
+            value = value.decode()
+        if value is None or str(value).strip() == "":
+            raise ValueError("CONFIG GET maxmemory returned no value")
+        return int(str(value).strip())
+
     async def publish(self, event: Event) -> str:
         stream = module_stream(event.source)
         ensure_writable(stream, event.source)

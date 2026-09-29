@@ -134,8 +134,13 @@ observer's output), and `kaine-trajectory` (`/app/data/workspace_trajectory`).
 survives `down`/`up`; research output survives it too — nothing the run
 produces lives on the ephemeral container layer.
 
-Redis runs with a 4 GB `--maxmemory` ceiling and `noeviction` (the bus fails
-loud rather than silently dropping events); every service logs through the
+Redis runs with a `--maxmemory` ceiling set by `KAINE_REDIS_MAXMEMORY` in
+`compose/.env` (default `4gb`) and `noeviction` (the bus fails loud rather than
+silently dropping events, so a full Redis halts the entity). Size it to the
+bus: `python -m kaine.preboot` reports a "Bus budget" row that FAILS when the
+configured stream caps would not fit and WARNS above 70% of the cap. The
+Quadlet unit reads the same variable from `compose/.env` and defaults to `4gb`;
+restart Redis after changing it. Every service logs through the
 shared `json-file` rotation anchor (50 MB × 3 files). `config/profiles/` is
 baked into the image, so `KAINE_PROFILE=thesis_test` resolves in-container
 without a bind mount. The image also bakes `ARG GIT_SHA` into

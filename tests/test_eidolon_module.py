@@ -346,6 +346,51 @@ async def test_identity_history_capped(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_identity_history_cap_keeps_most_recent(bus: AsyncBus, tmp_path: Path):
+    eidolon = Eidolon(
+        bus,
+        persistence_path=tmp_path / "m.json",
+        drift_threshold=0.0,
+        identity_history_cap=4,
+        save_interval_s=60,
+    )
+    await eidolon.initialize()
+    try:
+        for i in range(10):
+            await eidolon.on_workspace(_snapshot([f"src{i}"]))
+        stamps = [h["timestamp"] for h in eidolon.model.identity_history]
+        assert stamps == sorted(stamps)
+        assert "src9" in eidolon.model.identity_history[-1]["top_sources"]
+    finally:
+        await eidolon.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_identity_history_uncapped_by_default(bus: AsyncBus, tmp_path: Path):
+    """Cap 0 (the shipped default) keeps every identity-history entry."""
+    eidolon = Eidolon(
+        bus,
+        persistence_path=tmp_path / "m.json",
+        drift_threshold=0.0,
+        save_interval_s=60,
+    )
+    assert eidolon._identity_history_cap == 0
+    await eidolon.initialize()
+    try:
+        for i in range(300):
+            await eidolon.on_workspace(_snapshot([f"src{i}"]))
+        assert len(eidolon.model.identity_history) == 300
+    finally:
+        await eidolon.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_identity_history_cap_negative_rejected(bus: AsyncBus, tmp_path: Path):
+    with pytest.raises(ValueError):
+        Eidolon(bus, persistence_path=tmp_path / "m.json", identity_history_cap=-1)
+
+
+@pytest.mark.asyncio
 async def test_serialize_roundtrips(bus: AsyncBus, tmp_path: Path):
     eidolon = Eidolon(
         bus,
