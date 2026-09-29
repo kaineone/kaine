@@ -835,10 +835,16 @@ class PymdpEngine(_EngineBase):
         action-factor restore → evidence cap → ``_propagate``) on the real
         posterior ``qs`` rather than hand-built stand-ins; a stand-in of a
         different shape compiles a variant no live step uses and leaves the
-        first live learning step to compile inside the EFE deadline. Pure: the
-        results are discarded and no engine state changes.
+        first live learning step to compile inside the EFE deadline.
+
+        Model-agnostic: the observation is index 0 in every modality of *this*
+        engine's model (compilation keys on shape and dtype, not value), so it
+        never assumes Nous's default factor layout; benchmark and task models
+        have their own. Pure: every helper returns new values, the results are
+        discarded, and no engine attribute is assigned, so a warmed engine
+        behaves exactly like an unwarmed one apart from the compile caches.
         """
-        obs = encode_snapshot_default(self._model)
+        obs = [0] * self._model.num_modalities
         try:
             _posterior, _efe, best_idx, qs, _agent, _prior = self._infer(obs)
         except Exception:

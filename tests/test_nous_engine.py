@@ -159,6 +159,80 @@ def test_real_pymdp_engine_compiles_nothing_after_construction():
         engine.close()
 
 
+def _benchmark_task_model():
+    # A model with its own factor layout (not Nous's default salience/affect/
+    # event factors) and no transition learning.
+    from kaine.evaluation.benchmarks.active_inference.aif_agent import (
+        build_model_for_env,
+    )
+    from kaine.evaluation.benchmarks.active_inference.envs import ExploitationPOMDP
+
+    return build_model_for_env(ExploitationPOMDP(n=3, obs_noise=0.02))
+
+
+def _small_learning_model():
+    # Nous's layout with non-default cardinalities; learns its transitions.
+    from kaine.modules.nous.generative_model import build_generative_model
+
+    return build_generative_model(event_clusters=("alpha", "beta"))
+
+
+def _engine_state(engine) -> dict:
+    return {
+        "B": [b.tolist() for b in engine._get_B(engine._agent)],
+        "pB": [pb.tolist() for pb in engine._get_pB(engine._agent)],
+        "prior": engine._prior_lists(engine._prior),
+        "prev_action": engine._prev_action,
+        "prev_qs": None
+        if engine._prev_qs is None
+        else engine._posterior_lists(engine._prev_qs),
+        "last_posterior": engine._last_posterior,
+        "last_efe": engine._last_efe,
+        "generation": engine._generation,
+        "learned": engine.learned_state(),
+    }
+
+
+@pytestmark_real
+@pytest.mark.parametrize(
+    "make_model", [_benchmark_task_model, _small_learning_model],
+    ids=["benchmark-task-model", "non-default-learning-model"],
+)
+def test_real_pymdp_warm_up_has_no_side_effects(make_model, monkeypatch):
+    """A warmed engine behaves exactly like an unwarmed one on the same inputs.
+
+    The warm-up exists only to fill the jit caches. It must work on any model,
+    not only Nous's default layout, and it must not learn, move the carried
+    prior or otherwise change what the engine computes.
+    """
+    from kaine.modules.nous.engine import PymdpEngine
+
+    model = make_model()
+    warmed = PymdpEngine(model, efe_timeout_ms=10_000.0)
+    with monkeypatch.context() as m:
+        m.setattr(PymdpEngine, "_warm_up", lambda self: None)
+        unwarmed = PymdpEngine(model, efe_timeout_ms=10_000.0)
+    try:
+        assert _engine_state(warmed) == _engine_state(unwarmed)
+        observations = [
+            [0] * model.num_modalities,
+            [n - 1 for n in model.num_obs],
+            [min(1, n - 1) for n in model.num_obs],
+            [0] * model.num_modalities,
+        ]
+        for obs in observations:
+            a, b = warmed.infer(obs), unwarmed.infer(obs)
+            assert not a.timed_out and not a.error, a.error_reason
+            assert not b.timed_out and not b.error, b.error_reason
+            assert (a.posterior, a.policy_efe, a.action_index) == (
+                b.posterior, b.policy_efe, b.action_index,
+            )
+            assert _engine_state(warmed) == _engine_state(unwarmed)
+    finally:
+        warmed.close()
+        unwarmed.close()
+
+
 @pytestmark_real
 def test_real_pymdp_engine_runs_within_budget():
     """The median live step fits inside the engine's own EFE deadline.
