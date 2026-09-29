@@ -156,6 +156,41 @@ class AsyncBus:
             )
         self._audited = True
 
+    async def server_maxmemory(self) -> int:
+        """Return the server's ``maxmemory`` in bytes (0 means no limit).
+
+        Reads ``CONFIG GET maxmemory``. Raises when the command is refused or
+        the reply carries no usable value, so a caller can report that the
+        limit is unknown instead of assuming one.
+        """
+        reply = await self._client.config_get("maxmemory")
+        value = (reply or {}).get("maxmemory")
+        if value is None:
+            value = (reply or {}).get(b"maxmemory")
+        if isinstance(value, bytes):
+            value = value.decode()
+        if value is None or str(value).strip() == "":
+            raise ValueError("CONFIG GET maxmemory returned no value")
+        return int(str(value).strip())
+
+    async def stream_entry_bytes(self, stream: str, *, min_entries: int = 100) -> Optional[int]:
+        """Measured Redis memory per entry of ``stream``, or None.
+
+        ``MEMORY USAGE`` of the stream key divided by ``XLEN``. Returns None
+        when the stream holds fewer than ``min_entries`` entries (the fixed
+        per-key overhead would dominate) or the server refuses the command.
+        """
+        try:
+            length = int(await self._client.xlen(stream))
+            if length < max(1, min_entries):
+                return None
+            usage = await self._client.memory_usage(stream)
+        except ResponseError:
+            return None
+        if not usage:
+            return None
+        return max(1, int(usage) // length)
+
     async def publish(self, event: Event) -> str:
         stream = module_stream(event.source)
         ensure_writable(stream, event.source)

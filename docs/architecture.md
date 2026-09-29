@@ -206,7 +206,10 @@ Authentication (`requirepass`) is mandatory and enforced at `AsyncBus.audit()`;
 the bus refuses to start against an unauthenticated or externally-bound Redis.
 
 **Retention.** Streams are trimmed by approximate MAXLEN on every publish.
-Default cap: 100,000 entries; `workspace.broadcast` cap: 50,000 entries.
+Default cap: 100,000 entries, including `workspace.broadcast`; `topos.out`
+and `audition.out`: 12,000 entries (about 20 minutes at 10 Hz). The memory the
+caps imply is checked against Redis `maxmemory` before boot by
+`python -m kaine.preboot`.
 Overrides are set per-stream under `[bus.per_stream_maxlen]` in
 [configuration.md](configuration.md).
 

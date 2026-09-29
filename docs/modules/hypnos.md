@@ -105,7 +105,7 @@ Full reference: [`../configuration.md`](../configuration.md). Key `[hypnos]` key
 | `dpo_beta` | `0.1` | DPO beta (KL-regularization weight) |
 | `capability_loss_threshold` | `0.05` | Max acceptable capability regression |
 | `training_device` | `"cuda:0"` | Device for Unsloth training |
-| `adapter_retention` | `5` | Number of accepted adapters to keep |
+| `adapter_retention` | `0` | Number of accepted adapters to keep; `0` keeps every adapter (the entity's learned voice), a positive value evicts the oldest beyond N |
 | `hot_swap_mode` | `"manual"` | `"manual"` / `"reload_endpoint"` / `"restart_service"` |
 | `reload_endpoint_url` | `""` | URL Hypnos POSTs `{"adapter_path": "<path>"}` to when `hot_swap_mode = "reload_endpoint"` |
 | `restart_service_unit` | `""` | Systemd `--user` unit name restarted when `hot_swap_mode = "restart_service"` |
@@ -278,7 +278,7 @@ When the real trainer runs:
    capability_loss_threshold`, the adapter is rejected (capability-loss veto).
 8. On pass: promote tmp → final directory; swing the `current` symlink.
 9. Hot-swap notification per `hot_swap_mode`.
-10. Retention prune: keep at most `adapter_retention` accepted adapters.
+10. Retention prune, only when `adapter_retention` is positive: keep at most that many accepted adapters. The default `0` keeps them all.
 
 ### Deferral
 

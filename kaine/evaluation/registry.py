@@ -34,7 +34,9 @@ from kaine.evaluation.memory_probes import (
 from kaine.evaluation.observers.ablation_observer import AblationObserver
 from kaine.evaluation.observers.coherence_observer import CoherenceObserver
 from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
+from kaine.evaluation.observers.external_utterance_log import ExternalUtteranceLog
 from kaine.evaluation.observers.fatigue_observer import FatigueObserver
+from kaine.evaluation.observers.nexus_record import NexusRecord
 from kaine.evaluation.observers.nous_policy_observer import NousPolicyObserver
 from kaine.evaluation.observers.prediction_error_observer import PredictionErrorObserver
 from kaine.evaluation.observers.raw_bus_archive_consumer import RawBusArchiveConsumer
@@ -110,7 +112,10 @@ class SidecarRegistry:
         """True when any research-event-log component is enabled, regardless of
         the evaluation sidecar master flag."""
         return bool(
-            self._research_cfg.enabled or self._research_cfg.raw_archive.enabled
+            self._research_cfg.enabled
+            or self._research_cfg.raw_archive.enabled
+            or self._research_cfg.external_utterances.enabled
+            or self._research_cfg.nexus_record.enabled
         )
 
     @property
@@ -207,9 +212,9 @@ class SidecarRegistry:
         return sink
 
     def _build_research_components(self) -> None:
-        """Construct the curated research event observer and/or the local-only
-        raw archive consumer, each on its OWN config gate — independent of the
-        evaluation sidecar master flag (``self._config.enabled``)."""
+        """Construct research-event-log observers, each on its OWN config gate —
+        independent of the evaluation sidecar master flag
+        (``self._config.enabled``)."""
         rcfg = self._research_cfg
         if rcfg.enabled:
             sink = self._make_sink_at(
@@ -225,6 +230,26 @@ class SidecarRegistry:
             )
             self._observers.append(
                 RawBusArchiveConsumer(self._bus, sink, rcfg.raw_archive)
+            )
+        if rcfg.external_utterances.enabled:
+            # LOCAL-ONLY: external-speech stream, no inner speech, no bystander input.
+            sink = self._make_sink_at(
+                rcfg.external_utterances.log_dir,
+                "external_utterances",
+                rcfg.external_utterances.retention_days,
+            )
+            self._observers.append(
+                ExternalUtteranceLog(self._bus, sink, rcfg.external_utterances)
+            )
+        if rcfg.nexus_record.enabled:
+            # LOCAL-ONLY: exact Nexus-diagnostics display after privacy filter.
+            sink = self._make_sink_at(
+                rcfg.nexus_record.log_dir,
+                "nexus_record",
+                rcfg.nexus_record.retention_days,
+            )
+            self._observers.append(
+                NexusRecord(self._bus, sink, rcfg.nexus_record)
             )
 
     def build(self) -> None:

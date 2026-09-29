@@ -114,7 +114,8 @@ class MemoryStorage(Protocol):
         payload: dict[str, Any],
         affect: dict[str, Any] | None,
         point_id: str | None = None,
-    ) -> str: ...
+    ) -> str:
+        """Protocol member: upsert."""
 
     async def search(
         self,
@@ -122,7 +123,8 @@ class MemoryStorage(Protocol):
         *,
         query_vector: list[float],
         limit: int,
-    ) -> list[RecalledMemory]: ...
+    ) -> list[RecalledMemory]:
+        """Protocol member: search."""
 
     async def delete(self, collection: str, point_id: str) -> None:
         """Protocol member: delete."""

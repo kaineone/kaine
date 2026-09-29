@@ -133,9 +133,10 @@ RUN if ! command -v python3.12 >/dev/null 2>&1; then \
 # are established by the entrypoint on the mounted volumes, never baked in. The
 # entity state volume mounts at /app/state (the app writes state CWD-relative
 # under WORKDIR /app, below), so that dir must exist kaine-owned in the image for
-# a freshly created named volume to inherit owner-only perms.
+# a freshly created named volume to inherit owner-only perms. /app/studies is
+# the module-ignition study volume's mountpoint, kaine-owned for the same reason.
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin kaine \
- && mkdir -p /app/state /models \
+ && mkdir -p /app/state /app/studies /models \
  && chown -R kaine:kaine /app /models
 
 COPY --from=build /opt/venv /opt/venv

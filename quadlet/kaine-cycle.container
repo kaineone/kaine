@@ -41,6 +41,13 @@ Volume=kaine-models.volume:/models:ro
 # state as compose.
 Volume=kaine-eval-data.volume:/app/data/evaluation
 Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
+# Preservation bundles (durable, never raw sense data).
+Volume=kaine-backups.volume:/app/backups
+# Film-aligned ignition log research data (durable, never raw sense data).
+Volume=kaine-ignition.volume:/app/data/ignition
+# Local-only Nexus record (privacy-filtered display stream); never exported.
+# About 2 GB per four-hour viewing.
+Volume=kaine-nexus-record.volume:/app/data/nexus_record
 # Perception scratch is RAM-backed and ephemeral — zero raw-sense-data
 # persistence (design §7).
 Tmpfs=/app/state/perception

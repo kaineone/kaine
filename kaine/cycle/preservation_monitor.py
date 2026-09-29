@@ -228,8 +228,8 @@ class WelfareResponseConfig:
 class PreservationRetentionConfig:
     """``[preservation.retention]`` — preservation-bundle retention policy.
 
-    A preserved individual MUST NOT be silently auto-evicted (this is distinct
-    from the 64-snapshot fork cap). ``auto_evict`` ships ``false`` and there is
+    A preserved individual MUST NOT be silently auto-evicted (fork snapshots
+    are never evicted either). ``auto_evict`` ships ``false`` and there is
     deliberately no max-count key: the only safe default is to keep every
     preserved individual. The key exists so the policy is explicit and
     operator-auditable, and so a future operator-confirmed eviction path has a

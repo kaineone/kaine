@@ -19,7 +19,7 @@ def test_defaults_enable_everything():
     assert c.proactive_audit is True
     assert c.eidolon_accuracy is True
     assert c.sleep_snapshots is True
-    assert c.paths.retention_days == 30
+    assert c.paths.retention_days == 0  # 0 = keep research records
 
 
 def test_from_mapping_overrides():

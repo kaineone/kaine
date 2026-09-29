@@ -94,23 +94,38 @@ class RawArchiveConfinementError(ValueError):
 _EXPORT_ALLOWLIST_ROOT = "data/evaluation"
 
 
-def assert_raw_archive_outside_export_allowlist(archive_dir: str) -> None:
-    """Fail closed when ``archive_dir`` resolves under ``data/evaluation/``.
+def _assert_path_outside_export_allowlist(
+    path: str, config_key: str, details: str
+) -> None:
+    """Fail closed when ``path`` resolves under ``data/evaluation/``.
 
     Uses ``Path.resolve().is_relative_to`` (Python 3.12) against the resolved
-    export-allowlist root so symlink/``..`` games cannot smuggle the raw archive
-    into the export tree. Enforced at config-load AND at consumer ``start()``.
+    export-allowlist root so symlink/``..`` games cannot smuggle local-only
+    data into the export tree. Enforced at config-load AND at consumer
+    ``start()``.
     """
-    resolved = Path(archive_dir).resolve()
+    resolved = Path(path).resolve()
     allowlist_root = Path(_EXPORT_ALLOWLIST_ROOT).resolve()
     if resolved == allowlist_root or resolved.is_relative_to(allowlist_root):
         raise RawArchiveConfinementError(
-            f"raw archive archive_dir ({archive_dir!r}) resolves under the "
+            f"{config_key} ({path!r}) resolves under the "
             f"metrics-export allowlist root ({_EXPORT_ALLOWLIST_ROOT}/): "
-            f"{resolved}. The raw archive captures verbatim conversation content "
-            "and is never export-eligible — set archive_dir to a path OUTSIDE "
-            f"{_EXPORT_ALLOWLIST_ROOT}/ (e.g. the default state/research/raw_bus_archive)."
+            f"{resolved}. {details}"
         )
+
+
+def assert_raw_archive_outside_export_allowlist(archive_dir: str) -> None:
+    """Fail closed when ``archive_dir`` resolves under ``data/evaluation/``.
+
+    Delegates to the shared path guard; retained for call-site compatibility.
+    """
+    _assert_path_outside_export_allowlist(
+        archive_dir,
+        "raw archive archive_dir",
+        "The raw archive captures verbatim conversation content "
+        "and is never export-eligible — set archive_dir to a path OUTSIDE "
+        f"{_EXPORT_ALLOWLIST_ROOT}/ (e.g. the default state/research/raw_bus_archive).",
+    )
 
 
 @dataclass(frozen=True)
@@ -139,14 +154,15 @@ class RawArchiveConfig:
         Storage path. MUST remain outside ``data/evaluation/`` (default
         ``state/research/raw_bus_archive``).
     retention_days:
-        Daily-rotated file retention window (default 30).
+        Daily-rotated file retention window in days. Default 0 = keep
+        (no age-based purge); a positive value purges older daily files.
     """
 
     enabled: bool = False
     entity_privacy_attested: bool = False
     bystander_consent_attested: bool = False
     archive_dir: str = "state/research/raw_bus_archive"
-    retention_days: int = 30
+    retention_days: int = 0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "RawArchiveConfig":
@@ -165,6 +181,98 @@ class RawArchiveConfig:
                 data.get("bystander_consent_attested", cls.bystander_consent_attested)
             ),
             archive_dir=archive_dir,
+            retention_days=int(data.get("retention_days", cls.retention_days)),
+        )
+
+
+@dataclass(frozen=True)
+class ExternalUtterancesConfig:
+    """Parameters for the OPTIONAL local-only external-utterance recorder.
+
+    Subscribes only to ``lingua.external`` and writes one record per
+    ``external_speech`` event to ``state/research/external_utterances/``.
+    The record contains the ``text`` field only; bystander ``user_input`` and
+    all other payload fields are dropped. Never subscribes to other speech
+    streams, so inner speech is never recorded.
+
+    NEVER export-eligible: writes outside ``data/evaluation/``.
+
+    Attributes
+    ----------
+    enabled:
+        Master gate. Default false.
+    log_dir:
+        Storage path. MUST remain outside ``data/evaluation/``.
+    retention_days:
+        Daily-rotated file retention window (default 0 = keep forever).
+    """
+
+    enabled: bool = False
+    log_dir: str = "state/research/external_utterances"
+    retention_days: int = 0
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any] | None) -> "ExternalUtterancesConfig":
+        data = dict(data or {})
+        log_dir = str(data.get("log_dir", cls.log_dir))
+        # Fail closed at config-load: local-only recorders must never resolve
+        # under the metrics-export allowlist root.
+        _assert_path_outside_export_allowlist(
+            log_dir,
+            "external_utterances log_dir",
+            "The external-utterance recorder captures external speech text and "
+            "is never export-eligible — set log_dir to a path OUTSIDE "
+            f"{_EXPORT_ALLOWLIST_ROOT}/.",
+        )
+        return cls(
+            enabled=bool(data.get("enabled", cls.enabled)),
+            log_dir=log_dir,
+            retention_days=int(data.get("retention_days", cls.retention_days)),
+        )
+
+
+@dataclass(frozen=True)
+class NexusRecordConfig:
+    """Parameters for the OPTIONAL local-only Nexus diagnostics recorder.
+
+    Subscribes to the same streams as the Nexus diagnostics bridge and writes
+    one record per event to ``data/nexus_record/``. Each record contains
+    exactly the payload produced by ``PrivacyFilter`` with
+    ``dev_content_override=false`` (the same filter the bridge applies), plus
+    stream name and entry id.
+
+    NEVER export-eligible: writes outside ``data/evaluation/``.
+
+    Attributes
+    ----------
+    enabled:
+        Master gate. Default false.
+    log_dir:
+        Storage path. MUST remain outside ``data/evaluation/``.
+    retention_days:
+        Daily-rotated file retention window (default 0 = keep forever).
+    """
+
+    enabled: bool = False
+    log_dir: str = "data/nexus_record"
+    retention_days: int = 0
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any] | None) -> "NexusRecordConfig":
+        data = dict(data or {})
+        log_dir = str(data.get("log_dir", cls.log_dir))
+        # Fail closed at config-load: local-only recorders must never resolve
+        # under the metrics-export allowlist root.
+        _assert_path_outside_export_allowlist(
+            log_dir,
+            "nexus_record log_dir",
+            "The Nexus diagnostics recorder captures the filtered diagnostics "
+            "display and is never export-eligible — set log_dir to a path OUTSIDE "
+            f"{_EXPORT_ALLOWLIST_ROOT}/.",
+        )
+        return cls(
+            enabled=bool(data.get("enabled", cls.enabled)),
+            log_dir=log_dir,
             retention_days=int(data.get("retention_days", cls.retention_days)),
         )
 
@@ -190,15 +298,22 @@ class ResearchEventLogConfig:
         Directory for the curated log sink (under ``data/evaluation/``). The
         final path component MUST be ``research_events`` to be export-eligible.
     retention_days:
-        Daily-rotated file retention window (default 30).
+        Daily-rotated file retention window in days. Default 0 = keep
+        (no age-based purge); a positive value purges older daily files.
     raw_archive:
         Nested config for the OPTIONAL local-only raw bus archive.
+    external_utterances:
+        Nested config for the OPTIONAL local-only external-utterance recorder.
+    nexus_record:
+        Nested config for the OPTIONAL local-only Nexus diagnostics recorder.
     """
 
     enabled: bool = False
     log_dir: str = "data/evaluation/research_events"
-    retention_days: int = 30
+    retention_days: int = 0
     raw_archive: RawArchiveConfig = field(default_factory=RawArchiveConfig)
+    external_utterances: ExternalUtterancesConfig = field(default_factory=ExternalUtterancesConfig)
+    nexus_record: NexusRecordConfig = field(default_factory=NexusRecordConfig)
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "ResearchEventLogConfig":
@@ -208,6 +323,8 @@ class ResearchEventLogConfig:
             log_dir=str(data.get("log_dir", cls.log_dir)),
             retention_days=int(data.get("retention_days", cls.retention_days)),
             raw_archive=RawArchiveConfig.from_mapping(data.get("raw_archive")),
+            external_utterances=ExternalUtterancesConfig.from_mapping(data.get("external_utterances")),
+            nexus_record=NexusRecordConfig.from_mapping(data.get("nexus_record")),
         )
 
 
@@ -215,7 +332,7 @@ class ResearchEventLogConfig:
 class EvaluationPaths:
     trajectory_dir: str = "data/workspace_trajectory"
     evaluation_logs: str = "data/evaluation"
-    retention_days: int = 30
+    retention_days: int = 0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "EvaluationPaths":

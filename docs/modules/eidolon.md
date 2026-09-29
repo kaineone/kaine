@@ -66,8 +66,8 @@ All keys under `[eidolon]` and `[eidolon.self_inference]`. See also [`../configu
 | `save_interval_s` | `30.0` | Periodic self-model save interval |
 | `internal_speech_stream` | `"lingua.internal"` | Stream to observe for internal speech |
 | `external_speech_stream` | `"lingua.external"` | Stream to observe for external (spoken-out) speech |
-| `voice_observations_cap` | `256` | Max buffered speech observations kept before older entries are trimmed |
-| `identity_history_cap` | `256` | Max drift records kept in `identity_history` |
+| `voice_observations_cap` | `0` | Max speech observations kept in `voice_observations`; `0` keeps every observation, a positive value keeps the most recent N |
+| `identity_history_cap` | `0` | Max drift episodes kept in `identity_history`; `0` keeps every episode, a positive value keeps the most recent N |
 | `baseline_salience` | `0.05` | Default event salience |
 | `alert_salience` | `0.7` | Salience on drift alert |
 | `[eidolon.self_inference].enabled` | `false` | Opt-in; must be `true` to activate self-inference |
@@ -90,7 +90,7 @@ On first boot, if `SelfModel.name` is empty, `generate_launch_name()` picks `"Ka
 - A `deque[Counter[str]]` of recent workspace batches (window = 100 by default).
 - A single all-time `Counter[str]` (cumulative).
 
-Each `on_workspace` call passes the list of event sources to `observe()`. The symmetric KL divergence between the recent and cumulative distributions is computed with additive smoothing (ε = 1e-3). When the score exceeds `drift_threshold`, `eidolon.drift` is published and the timestamp + score is appended to `SelfModel.identity_history`.
+Each `on_workspace` call passes the list of event sources to `observe()`. The symmetric KL divergence between the recent and cumulative distributions is computed with additive smoothing (ε = 1e-3). When the score reaches `drift_threshold`, `eidolon.drift` is published and the alert is recorded in the current drift episode in `SelfModel.identity_history`. An episode is one contiguous run of alerting broadcasts: its entry holds `onset`, `end`, `peak_score`, `count` (alerts in the run), `sources` (how often each source was among the top drifted sources) and `top_sources`, plus `timestamp` (= onset) and `score` (= peak) for older readers. The first broadcast below the threshold closes the episode. A sustained shift therefore adds one entry rather than one per broadcast, and nothing is lost. Self-models saved with the older per-alert entries load unchanged. The self-model is saved as compact JSON.
 
 ```mermaid
 flowchart TD
@@ -98,7 +98,8 @@ flowchart TD
     OBS --> KL[compute symmetric-KL\nrecent vs cumulative]
     KL -- score < threshold --> SKIP[no publication]
     KL -- score >= threshold --> DRIFT[publish eidolon.drift\nalert_salience]
-    DRIFT --> HIST[append to identity_history\ncapped at 256]
+    DRIFT --> HIST[extend the open drift episode\nor start one in identity_history]
+    KL -- score < threshold --> CLOSE[close the open episode]
 ```
 
 ### Self-inference engine (`SelfInferenceEngine`)
