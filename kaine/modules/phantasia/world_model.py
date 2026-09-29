@@ -83,23 +83,18 @@ class WorldModel(Protocol):
 
     def observe(self, obs: list[float]) -> float:
         """Fold one observation in; return world-prediction error in [0, 1]."""
-        ...
 
     def imagine(self, horizon: int) -> list[list[float]]:
         """Roll out `horizon` imagined observation vectors from current state."""
-        ...
 
     def train(self, trajectory: list[list[float]]) -> TrainOutcome:
         """In-memory training pass over a single observation sequence."""
-        ...
 
     def reset_state(self) -> None:
         """Reset the recurrent state (e.g. before seeding an imagined rollout)."""
-        ...
 
     def parameter_names(self) -> list[str]:
         """Top-level parameter-group names (for actor/critic-absence checks)."""
-        ...
 
 
 # ---------------------------------------------------------------------------
