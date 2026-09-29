@@ -7,4 +7,4 @@
 ## 2. Verification
 
 - [x] 2.1 Tests: the perturbation scale is the configured fraction, never 1.0 by default; the validation bounds; due times vary within `±j` of the period and are identical for the same seed and different for another; `j = 0` gives the fixed schedule; the settle, spacing and fairness rules still hold under jitter.
-- [ ] 2.2 Offline suite green; `openspec validate womb-probe-gentle-jitter --strict` passes.
+- [x] 2.2 Offline suite green; `openspec validate womb-probe-gentle-jitter --strict` passes.

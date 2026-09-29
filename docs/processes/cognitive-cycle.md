@@ -230,10 +230,11 @@ After a successful broadcast the cycle calls `Volition.select(snapshot)`.
 Volition applies the inhibition gate first (inhibited snapshots return `[]`),
 then delegates to the action-selection policy. Each returned `Intent` is
 published to `volition.out` with event type `intent.speak`, `intent.think`,
-or `intent.act`.
+`intent.act`, or `intent.rest`.
 
-The cycle never invokes effectors directly. Lingua, Praxis, and Vox subscribe
-to `volition.out` and realize intents independently.
+The cycle never invokes effectors directly. Lingua, Praxis, Vox, and Hypnos
+subscribe to `volition.out` and realize intents independently (Hypnos accepts
+`intent.rest` as a request to rest).
 
 ### Step 8: Latency telemetry
 
