@@ -98,7 +98,11 @@ class AsyncBus:
         client: Optional[aioredis.Redis] = None,
     ) -> None:
         self._config = config
-        self._client = client or aioredis.from_url(config.url, decode_responses=True)
+        self._client = client or aioredis.from_url(
+            config.url,
+            decode_responses=True,
+            max_connections=config.max_connections,
+        )
         self._audited = False
 
     @property

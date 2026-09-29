@@ -56,7 +56,11 @@ from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryp
 @pytest.fixture
 async def bus() -> AsyncBus:
     fakeredis = pytest.importorskip("fakeredis.aioredis")
-    client = fakeredis.FakeRedis(decode_responses=True)
+    # Same pool size as the production bus client (redis-py 8 caps an unset
+    # pool at 100).
+    client = fakeredis.FakeRedis(
+        decode_responses=True, max_connections=BusConfig().max_connections
+    )
     b = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     yield b
     await b.close()

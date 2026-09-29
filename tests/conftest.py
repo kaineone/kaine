@@ -34,7 +34,11 @@ def bus_config_with_password() -> BusConfig:
 @pytest.fixture
 async def fake_async_bus(bus_config_with_password):
     fakeredis = pytest.importorskip("fakeredis.aioredis")
-    client = fakeredis.FakeRedis(decode_responses=True)
+    # Same pool size as the production bus client (redis-py 8 caps an unset
+    # pool at 100).
+    client = fakeredis.FakeRedis(
+        decode_responses=True, max_connections=BusConfig().max_connections
+    )
     from kaine.bus.client import AsyncBus
     bus = AsyncBus(bus_config_with_password, client=client)
     yield bus

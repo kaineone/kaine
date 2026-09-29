@@ -21,6 +21,10 @@ default_maxlen = 100000
 # externally-bound Redis.
 audit_required = true
 
+# every module's blocking stream reads and publishes share this pool;
+# redis-py 8 caps an unset pool at 100.
+max_connections = 1024
+
 # Per-stream overrides. The key is the full stream name
 # (`<module>.out` or `workspace.broadcast`). Latent-vector streams (topos,
 # audition) are capped low — each entry is ~40 KB.
