@@ -342,7 +342,7 @@ def _runner(study_dir: Path, script: Path, *, flush_log: list[str] | None = None
         "control_command": [sys.executable, str(script), "control"],
         "poll_seconds": 0.05,
         "preserve_wait_seconds": 2.0,
-        "birth_bloom_fallback_seconds": 0.0,
+        "birth_bloom_margin_seconds": 0.0,
         "flush_db": lambda url: flush_log.append(url),
     }
     defaults.update(kwargs)
@@ -933,7 +933,7 @@ def test_birth_preservation_waits_for_the_bloom_end(tmp_path: Path, known_module
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_BLOOM_SECONDS", "0.8")
     # A long fallback: only the stage file's bloom end can release the request.
-    assert _run(_runner(study_dir, script, birth_bloom_fallback_seconds=60.0)) == "complete"
+    assert _run(_runner(study_dir, script, birth_bloom_margin_seconds=60.0)) == "complete"
 
     stage = json.loads(
         (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
@@ -950,14 +950,17 @@ def test_birth_preservation_waits_the_fallback_without_a_bloom_end(
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_BLOOM_SECONDS", "none")
-    assert _run(_runner(study_dir, script, birth_bloom_fallback_seconds=0.6)) == "complete"
+    # The child's own configured bloom length, plus the margin.
+    with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
+        fh.write("[perception_feed.womb]\nbirth_transition_seconds = 0.4\n")
+    assert _run(_runner(study_dir, script, birth_bloom_margin_seconds=0.3)) == "complete"
 
     stage = json.loads(
         (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
     )
     assert "birth_bloom_ends_at" not in stage
     embodied_at = float((study_dir / "embodied_at.txt").read_text())
-    assert _birth_request_time(study_dir) - embodied_at >= 0.6
+    assert _birth_request_time(study_dir) - embodied_at >= 0.4 + 0.3
 
 
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
@@ -1006,3 +1009,445 @@ def test_flush_failure_stops_before_the_step(tmp_path: Path, known_modules, monk
     assert password not in str(exc_info.value)
     assert not (study_dir / "env_log.jsonl").exists()
     assert not (study_dir / "steps.jsonl").exists()
+
+
+# --------------------------------------------------------------------------- #
+# The operator's bus database, as the bus itself resolves it
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "files, env_url",
+    [
+        # secrets.toml [redis].url, which load_bus_config uses as the bus URL.
+        ({"secrets.toml": '[redis]\nurl = "redis://:sekrit@127.0.0.1:6479/11"\n'}, None),
+        # A string [redis].db, which load_bus_config int()s.
+        ({"kaine.operator.toml": '[redis]\ndb = "12"\n'}, None),
+        # ?db= in the URL, which redis-py honours over the path.
+        ({}, "redis://:sekrit@127.0.0.1:6479/0?db=13"),
+    ],
+)
+def test_runner_refuses_the_operator_database_as_the_bus_resolves_it(
+    tmp_path: Path, known_modules, monkeypatch, files, env_url
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    cfg = tmp_path / "repo" / "config"
+    for name, text in files.items():
+        (cfg / name).write_text(text)
+        (cfg / name).chmod(0o600)
+    if env_url:
+        monkeypatch.setenv("KAINE_REDIS_URL", env_url)
+    with pytest.raises(StudyError, match="operator") as exc_info:
+        _runner(study_dir, script)
+    assert "sekrit" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "files, env_url",
+    [
+        ({"kaine.operator.toml": "[redis\ndb = 3\n"}, None),
+        ({"kaine.operator.toml": '[redis]\ndb = "eleven"\n'}, None),
+        ({"secrets.toml": '[redis]\nurl = "http://:sekrit@127.0.0.1:6479/11"\n'}, None),
+        ({}, "redis://:sekrit@127.0.0.1:6479/0?db=twelve"),
+    ],
+)
+def test_runner_refuses_when_the_operator_database_is_unknown(
+    tmp_path: Path, known_modules, monkeypatch, files, env_url
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    cfg = tmp_path / "repo" / "config"
+    for name, text in files.items():
+        (cfg / name).write_text(text)
+        (cfg / name).chmod(0o600)
+    if env_url:
+        monkeypatch.setenv("KAINE_REDIS_URL", env_url)
+    with pytest.raises(StudyError, match="cannot determine the operator's bus database") as exc_info:
+        _runner(study_dir, script)
+    assert "sekrit" not in str(exc_info.value)
+
+
+def test_operator_database_is_checked_again_before_every_flush(
+    tmp_path: Path, known_modules
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    operator = tmp_path / "repo" / "config" / "kaine.operator.toml"
+    flush_log: list[str] = []
+
+    def flush(url: str) -> None:
+        flush_log.append(url)
+        # While the seed gestates, the operator moves their bus to database 11.
+        operator.write_text("[redis]\ndb = 11\n")
+
+    with pytest.raises(StudyError, match="operator"):
+        _runner(study_dir, script, flush_db=flush).run()
+    # The seed ran on database 10; branch 0 (database 11) never flushed or ran.
+    assert [urlsplit(u).path for u in flush_log] == ["/10"]
+    assert [(e["line"], e["k"]) for e in _load_jsonl(study_dir / "env_log.jsonl")] == [
+        ("gestation", None)
+    ]
+    assert [(s["line"], s["outcome"]) for s in _load_steps(study_dir)] == [
+        ("gestation", "complete")
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# A cycle left running is never flushed under or doubled
+# --------------------------------------------------------------------------- #
+
+
+def test_failed_timeout_preservation_records_a_critical_step(
+    tmp_path: Path, known_modules
+):
+    import subprocess
+
+    from kaine.research.ignition_study.runner import CHILD_FILE, StudyCritical
+
+    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=0.5)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    procs: list[subprocess.Popen] = []
+
+    def popen(*args, **kwargs):
+        proc = subprocess.Popen(*args, **kwargs)
+        procs.append(proc)
+        return proc
+
+    def alive(pid: int) -> bool:
+        return any(p.pid == pid and p.poll() is None for p in procs)
+
+    # The control CLI fails, so neither the birth nor the timeout preservation
+    # succeeds and the stand-in seed keeps running.
+    failing_control = [sys.executable, "-c", "raise SystemExit(3)"]
+    try:
+        with pytest.raises(StudyCritical, match="still running"):
+            _runner(
+                study_dir,
+                script,
+                control_command=failing_control,
+                popen=popen,
+                cycle_alive=alive,
+            ).run()
+        assert len(procs) == 1 and procs[0].poll() is None
+        steps = _load_steps(study_dir)
+        assert len(steps) == 1
+        assert steps[0]["line"] == "gestation" and steps[0]["step"] == 0
+        assert steps[0]["outcome"] == "failed:critical"
+        assert steps[0]["pid"] == procs[0].pid
+        marker = json.loads((study_dir / "gestation" / CHILD_FILE).read_text())
+        assert marker["pid"] == procs[0].pid
+
+        # The study halts on the critical step...
+        flush_log: list[str] = []
+        halted = _run(_runner(study_dir, script, flush_log=flush_log, cycle_alive=alive))
+        assert halted["outcome"] == "failed:critical"
+        # ...and a retry refuses while the seed is still running: nothing is
+        # flushed and no second cycle starts in the same state directory.
+        with pytest.raises(StudyError, match=f"pid {procs[0].pid}"):
+            _runner(
+                study_dir, script, flush_log=flush_log, popen=popen, cycle_alive=alive
+            ).run(retry_failed=True)
+        assert flush_log == []
+        assert len(procs) == 1
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                p.kill()
+            p.wait()
+
+    # Once the operator has stopped it, the retry runs.
+    assert _run(_runner(study_dir, script, cycle_alive=alive), retry=True) == "complete"
+    assert [s["outcome"] for s in _load_steps(study_dir)] == [
+        "failed:critical", "complete", "complete", "complete", "complete", "complete",
+    ]
+
+
+@pytest.mark.parametrize("where", ["gestation", "branch/0"])
+@pytest.mark.parametrize("record", ["child", "runtime"])
+def test_resume_refuses_while_a_started_cycle_is_alive(
+    tmp_path: Path, known_modules, where: str, record: str
+):
+    from kaine.research.ignition_study.runner import CHILD_FILE
+
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    # A killed runner left its child running: the runner's own record of the
+    # child, or the cycle's runtime.json, names its pid.
+    step_dir = study_dir / where
+    if record == "child":
+        path = step_dir / CHILD_FILE
+    else:
+        path = step_dir / "state" / "cycle" / "runtime.json"
+        path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"pid": 4242}))
+    checked: list[int] = []
+
+    def alive(pid: int) -> bool:
+        checked.append(pid)
+        return pid == 4242
+
+    flush_log: list[str] = []
+    with pytest.raises(StudyError, match="pid 4242"):
+        _runner(study_dir, script, flush_log=flush_log, cycle_alive=alive).run()
+    assert 4242 in checked
+    assert flush_log == []
+    assert not (study_dir / "env_log.jsonl").exists()
+    assert not (study_dir / "steps.jsonl").exists()
+
+    # The same pid, no longer a cycle, does not block the study.
+    assert _run(_runner(study_dir, script, cycle_alive=lambda pid: False)) == "complete"
+
+
+def test_cycle_process_alive_checks_the_command_line():
+    import subprocess
+
+    from kaine.research.ignition_study.runner import _cycle_process_alive
+
+    sleeper = [sys.executable, "-c", "import time; time.sleep(60)"]
+    cycle = subprocess.Popen([*sleeper, "kaine.cycle"])
+    other = subprocess.Popen(sleeper)
+    try:
+        assert _cycle_process_alive(cycle.pid) is True
+        # A live pid that is not a cycle is not one.
+        assert _cycle_process_alive(other.pid) is False
+    finally:
+        for p in (cycle, other):
+            p.kill()
+            p.wait()
+    assert _cycle_process_alive(cycle.pid) is False
+
+
+# --------------------------------------------------------------------------- #
+# The birth bloom fallback follows the child's configuration
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "womb_toml, expected",
+    [
+        (None, "default"),
+        ("birth_transition_seconds = 12.5\n", 12.5),
+        ("birth_transition_seconds = 99.0\n", "max"),
+        ('birth_transition_seconds = "soon"\n', "max"),
+    ],
+)
+def test_birth_bloom_fallback_follows_the_child_configuration(
+    tmp_path: Path, known_modules, womb_toml, expected
+):
+    import os
+
+    from kaine.modules.womb_signal import WombParams
+    from kaine.research.ignition_study.runner import BIRTH_BLOOM_MAX_SECONDS
+
+    study_dir = _create_study(tmp_path, viewings=1)
+    if womb_toml is not None:
+        with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
+            fh.write("[perception_feed.womb]\n" + womb_toml)
+    runner = _runner(study_dir, tmp_path / "unused.py", birth_bloom_margin_seconds=1.5)
+    got = runner._birth_bloom_fallback_seconds(study_dir / "gestation", dict(os.environ))
+    if expected == "default":
+        assert got == WombParams().birth_transition_seconds + 1.5
+    elif expected == "max":
+        assert got == BIRTH_BLOOM_MAX_SECONDS + 1.5
+    else:
+        assert got == expected + 1.5
+
+
+# --------------------------------------------------------------------------- #
+# A study claims each database it flushes
+# --------------------------------------------------------------------------- #
+
+
+class _FakePipeline:
+    def __init__(self, client: "_FakeRedis") -> None:
+        self.client = client
+        self.queued: list[tuple] = []
+        self.in_multi = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def watch(self, key: str) -> None:
+        self.client.ops.append(("watch", key))
+
+    def get(self, key: str):
+        assert not self.in_multi
+        self.client.ops.append(("get", key))
+        value = self.client.data.get(key)
+        return value.encode() if isinstance(value, str) else value
+
+    def multi(self) -> None:
+        self.in_multi = True
+
+    def flushdb(self) -> None:
+        assert self.in_multi
+        self.queued.append(("flushdb",))
+
+    def set(self, key: str, value: str) -> None:
+        assert self.in_multi
+        self.queued.append(("set", key, value))
+
+    def execute(self) -> None:
+        if self.client.watch_error:
+            import redis
+
+            raise redis.WatchError("watched key changed")
+        for op in self.queued:
+            self.client.ops.append(op)
+            if op[0] == "flushdb":
+                self.client.data.clear()
+            else:
+                self.client.data[op[1]] = op[2]
+
+
+class _FakeRedis:
+    def __init__(self, data: dict | None = None, watch_error: bool = False) -> None:
+        self.data = dict(data or {})
+        self.ops: list[tuple] = []
+        self.closed = False
+        self.watch_error = watch_error
+
+    def pipeline(self, transaction: bool = True) -> _FakePipeline:
+        assert transaction
+        return _FakePipeline(self)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_default_flush_claims_each_study_database(tmp_path: Path, known_modules):
+    from kaine.research.ignition_study.runner import STUDY_OWNER_KEY
+
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    servers = {
+        "/10": _FakeRedis({"leftover": "x"}),
+        # This study's own claim from an earlier run: flushed again.
+        "/11": _FakeRedis({STUDY_OWNER_KEY: "runner-test", "leftover": "y"}),
+        "/12": _FakeRedis(),
+        "/13": _FakeRedis(),
+    }
+    assert (
+        _run(
+            _runner(
+                study_dir,
+                script,
+                flush_db=None,
+                redis_client_factory=lambda url: servers[urlsplit(url).path],
+            )
+        )
+        == "complete"
+    )
+    for fake in servers.values():
+        assert fake.data == {STUDY_OWNER_KEY: "runner-test"}
+        assert fake.closed
+        # Checked, then flushed and re-claimed in one transaction.
+        kinds = [op[0] for op in fake.ops]
+        assert kinds[:4] == ["watch", "get", "flushdb", "set"]
+
+
+def test_default_flush_refuses_another_studys_database(tmp_path: Path, known_modules):
+    from kaine.research.ignition_study.runner import STUDY_OWNER_KEY, StudyDatabaseClaimed
+
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    other = _FakeRedis({STUDY_OWNER_KEY: "other-study", "their-stream": "data"})
+    with pytest.raises(StudyDatabaseClaimed, match="other-study"):
+        _runner(
+            study_dir,
+            script,
+            flush_db=None,
+            redis_client_factory=lambda url: other,
+        ).run()
+    assert other.data == {STUDY_OWNER_KEY: "other-study", "their-stream": "data"}
+    assert all(op[0] != "flushdb" for op in other.ops)
+    assert other.closed
+    assert not (study_dir / "env_log.jsonl").exists()
+    assert not (study_dir / "steps.jsonl").exists()
+
+
+def test_default_flush_refuses_a_concurrent_claim():
+    from kaine.research.ignition_study.runner import (
+        StudyDatabaseClaimed,
+        _claim_and_flush_redis_db,
+    )
+
+    fake = _FakeRedis({"k": "v"}, watch_error=True)
+    with pytest.raises(StudyDatabaseClaimed):
+        _claim_and_flush_redis_db("redis://:pw@h:1/10", "s", lambda url: fake)
+    assert fake.data == {"k": "v"}
+    assert fake.closed
+
+
+# --------------------------------------------------------------------------- #
+# A seed preserved but never recorded is adopted, not gestated again
+# --------------------------------------------------------------------------- #
+
+
+def _write_pair(line_dir: Path, reason: str, bundle: Path) -> None:
+    state = line_dir / "state" / "cycle"
+    state.mkdir(parents=True, exist_ok=True)
+    rid = "b" * 32
+    (state / "preserve_request.json").write_text(
+        json.dumps({"request_id": rid, "reason": reason, "stop": True, "requested_at": "t0"})
+    )
+    (state / "preserve_result.json").write_text(
+        json.dumps(
+            {
+                "request_id": rid,
+                "ok": True,
+                "preservation_id": "p-born",
+                "bundle": str(bundle),
+                "error": None,
+                "finished_at": "t1",
+            }
+        )
+    )
+
+
+def test_resume_adopts_an_unrecorded_birth_preservation(tmp_path: Path, known_modules):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    seed = study_dir / "backups" / "seed"
+    seed.mkdir(parents=True)
+    _write_pair(study_dir / "gestation", "birth", seed)
+
+    flush_log: list[str] = []
+    assert _run(_runner(study_dir, script, flush_log=flush_log)) == "complete"
+    steps = _load_steps(study_dir)
+    assert steps[0]["line"] == "gestation" and steps[0]["outcome"] == "complete"
+    assert steps[0]["bundle"] == str(seed)
+    assert steps[0]["preservation_id"] == "p-born"
+    assert steps[0]["adopted"] is True
+    # No second gestation: the first child is branch 0, revived from the seed.
+    env_logs = _load_jsonl(study_dir / "env_log.jsonl")
+    assert env_logs[0]["line"] == "branch"
+    assert "/10" not in [urlsplit(u).path for u in flush_log]
+    assert all(s["revived_from"] == str(seed) for s in steps[1:4])
+
+
+def test_resume_gestates_when_the_pair_is_not_a_birth(tmp_path: Path, known_modules):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    old = study_dir / "backups" / "old"
+    old.mkdir(parents=True)
+    _write_pair(study_dir / "gestation", "timeout", old)
+
+    assert _run(_runner(study_dir, script)) == "complete"
+    steps = _load_steps(study_dir)
+    assert "adopted" not in steps[0]
+    assert steps[0]["bundle"] != str(old)
+    assert _load_jsonl(study_dir / "env_log.jsonl")[0]["line"] == "gestation"

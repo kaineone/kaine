@@ -19,6 +19,8 @@ from kaine.research.ignition_study.plan import (
 )
 from kaine.research.ignition_study.runner import (
     StudyComplete,
+    StudyCritical,
+    StudyError,
     StudyHalted,
     StudyLocked,
     StudyRunner,
@@ -82,8 +84,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    runner = StudyRunner(args.study_dir)
     try:
+        runner = StudyRunner(args.study_dir)
         runner.run(retry_failed=args.retry_failed)
         print("Study complete")
         return 0
@@ -100,12 +102,26 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except StudyLocked as exc:
         print(f"Cannot run study: {exc}", file=sys.stderr)
         return 2
+    except StudyCritical as exc:
+        print(
+            f"Study halted, operator action needed: {exc}. Stop the cycle, then "
+            "re-run with --retry-failed.",
+            file=sys.stderr,
+        )
+        return 3
+    except StudyError as exc:
+        print(f"Cannot run study: {exc}", file=sys.stderr)
+        return 2
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
     # Re-validate the plan is readable, then show progress.
     _ = load_plan(args.study_dir)
-    runner = StudyRunner(args.study_dir)
+    try:
+        runner = StudyRunner(args.study_dir)
+    except StudyError as exc:
+        print(f"Cannot read study: {exc}", file=sys.stderr)
+        return 2
     print(runner.status())
     return 0
 
