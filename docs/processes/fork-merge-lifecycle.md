@@ -34,9 +34,12 @@ restored via `module.deserialize(state)`. The manager never starts or
 stops modules — it only serializes/deserializes already-instantiated
 modules.
 
-Snapshots are retained up to `max_snapshots_retained` (default 64)
-entries. When the limit is exceeded the oldest snapshots (by `timestamp`)
-are evicted. Eviction uses `os.replace`-based atomic directory cleanup.
+The manager never deletes a snapshot. The snapshot root holds preserved
+beings and Spot escalation snapshots, and removing an entity's state is the
+CAL-gated decommission path only (`kaine/lifecycle/decommission.py`). There
+is no snapshot count cap; a `max_snapshots_retained` key left in an operator
+config is ignored, and a value above 0 logs a warning. Free disk is checked
+before boot by the `python -m kaine.preboot` disk rows.
 
 ---
 
@@ -316,7 +319,6 @@ output_dir = "data/evaluation/individuation"
 ```toml
 [lifecycle]
 snapshots_path = "state/forks"
-max_snapshots_retained = 64
 adapter_merger = "auto"   # or "fake" / "ties_dare" to force one explicitly
 
 [lifecycle.adapter_merge]

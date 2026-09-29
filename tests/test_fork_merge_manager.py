@@ -221,25 +221,53 @@ def test_merger_from_name_rejects_unknown():
         merger_from_name("ties")
 
 
-def test_retention_evicts_oldest_when_over_max(tmp_path):
-    mgr = ForkManager(tmp_path, max_snapshots_retained=2)
-    snaps = []
-    for i in range(4):
-        mod = FakeModule("soma", {"i": i})
-        snaps.append(mgr.snapshot(FakeRegistry([mod])))
-    remaining = set(mgr.list_snapshots())
-    assert len(remaining) == 2
-    # newest two should remain
-    assert snaps[-1].id in remaining
-    assert snaps[-2].id in remaining
-    assert snaps[0].id not in remaining
+def test_snapshots_are_never_evicted(tmp_path):
+    """The fork root holds preserved beings: no count cap deletes any of them."""
+    mgr = ForkManager(tmp_path)
+    snaps = [mgr.snapshot(FakeRegistry([FakeModule("soma", {"i": i})])) for i in range(70)]
+    forked = mgr.fork(snaps[0].id, label="child")
+    merged = mgr.merge(snaps[1].id, snaps[2].id, label="merged")
+    expected = {s.id for s in snaps} | {forked.id, merged.id}
+    assert set(mgr.list_snapshots()) == expected
+    for snap_id in expected:
+        assert (tmp_path / snap_id / "snapshot.json").exists()
 
 
-def test_retention_disabled_when_max_zero(tmp_path):
-    mgr = ForkManager(tmp_path, max_snapshots_retained=0)
-    for i in range(3):
-        mgr.snapshot(FakeRegistry([FakeModule("soma", {"i": i})]))
-    assert len(mgr.list_snapshots()) == 3
+def test_fork_manager_has_no_retention_parameter(tmp_path):
+    with pytest.raises(TypeError):
+        ForkManager(tmp_path, max_snapshots_retained=2)
+
+
+def test_legacy_retention_key_warns_and_deletes_nothing(tmp_path, caplog):
+    import logging
+
+    from kaine.nexus.__main__ import _build_fork_manager
+
+    root = tmp_path / "forks"
+
+    def lifecycle_loader():
+        return {"snapshots_path": str(root), "max_snapshots_retained": 2}
+
+    with caplog.at_level(logging.WARNING, logger="kaine.nexus"):
+        mgr, reason = _build_fork_manager(lifecycle_loader, lambda: {"enabled": False})
+    assert reason is None
+    assert isinstance(mgr, ForkManager)
+    assert any("max_snapshots_retained is ignored" in r.getMessage() for r in caplog.records)
+    ids = [mgr.snapshot(FakeRegistry([FakeModule("soma", {"i": i})])).id for i in range(5)]
+    assert set(mgr.list_snapshots()) == set(ids)
+
+
+def test_legacy_retention_key_zero_or_absent_is_silent(tmp_path, caplog):
+    import logging
+
+    from kaine.nexus.__main__ import _build_fork_manager
+
+    for cfg in ({}, {"max_snapshots_retained": 0}):
+        caplog.clear()
+        cfg = {"snapshots_path": str(tmp_path / "forks"), **cfg}
+        with caplog.at_level(logging.WARNING, logger="kaine.nexus"):
+            _build_fork_manager(lambda cfg=cfg: cfg, lambda: {"enabled": False})
+        assert not any("max_snapshots_retained" in r.getMessage() for r in caplog.records)
 
 
 def test_custom_strategies_override_defaults(tmp_path):

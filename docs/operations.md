@@ -355,7 +355,7 @@ The trigger is deterministic over the logged state (it fires at a defined thresh
 
 ### Preservation-bundle retention
 
-Preservation bundles are retained **indefinitely**. This is distinct from the 64-snapshot fork cap (`[lifecycle].max_snapshots_retained`): a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3). `[preservation.retention].auto_evict` ships `false`, and setting it `true` is refused at boot rather than quietly deleting someone. Bundles SHOULD be encrypted at rest — enable `[security.state_encryption]` so the snapshot inside each bundle rides the state encryptor.
+Preservation bundles are retained **indefinitely**, as are fork snapshots under `[lifecycle].snapshots_path` (there is no snapshot count cap): a preserved individual must never be silently auto-evicted (CAL Article 4.2/4.3). Free disk is checked before boot by the `python -m kaine.preboot` disk rows instead. `[preservation.retention].auto_evict` ships `false`, and setting it `true` is refused at boot rather than quietly deleting someone. Bundles SHOULD be encrypted at rest — enable `[security.state_encryption]` so the snapshot inside each bundle rides the state encryptor.
 
 ### Research boot gate (safety-net-present, replacing operator-present)
 

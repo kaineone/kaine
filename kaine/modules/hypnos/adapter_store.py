@@ -10,8 +10,10 @@ the tmp dir to its final `<timestamp>/` and re-points
 `os.replace` so concurrent readers (Lingua in any future auto-reload
 mode) never see a partial state.
 
-`prune()` enforces a retention cap, removing the oldest accepted
-adapters but never the one `current` points at.
+`prune()` enforces an operator-set retention cap, removing the oldest
+accepted adapters but never the one `current` points at. The trainer
+calls it only when `adapter_retention` is positive; the default `0`
+keeps every accepted adapter.
 """
 from __future__ import annotations
 

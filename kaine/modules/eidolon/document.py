@@ -13,7 +13,7 @@ import json
 import os
 import random
 import tempfile
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -67,7 +67,15 @@ class SelfModel:
     voice_observations: list[dict[str, Any]] = field(default_factory=list)
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self), indent=2, sort_keys=True)
+        """Serialize to compact JSON.
+
+        Uses the C encoder (``indent=None``) over the fields as they are,
+        without the recursive Python copy ``dataclasses.asdict`` makes, so a
+        long-lived self-model saves quickly. Every field already holds plain
+        JSON types. Files written earlier with ``indent=2`` load unchanged.
+        """
+        plain = {f.name: getattr(self, f.name) for f in fields(self)}
+        return json.dumps(plain, sort_keys=True, separators=(",", ":"))
 
     @classmethod
     def from_json(cls, text: str) -> "SelfModel":

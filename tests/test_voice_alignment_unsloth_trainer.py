@@ -102,7 +102,7 @@ def _config(tmp_path: Path, **overrides) -> VoiceAlignmentConfig:
         enabled=True,
         base_model_path=str(tmp_path / "fake-base-model"),
         capability_loss_threshold=overrides.pop("threshold", 0.05),
-        adapter_retention=overrides.pop("retention", 5),
+        adapter_retention=overrides.pop("retention", 0),
         **overrides,
     )
 
@@ -218,6 +218,47 @@ async def test_dpo_failure_removes_tmp_dir(tmp_path: Path):
     if adapter_dir.exists():
         for p in adapter_dir.iterdir():
             assert not p.name.endswith(".tmp"), f"leftover tmp: {p}"
+
+
+@pytest.mark.asyncio
+async def test_default_retention_keeps_every_adapter(tmp_path: Path):
+    """adapter_retention = 0 (the default) never deletes an accepted adapter."""
+    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
+
+    cfg = _config(tmp_path)
+    assert cfg.adapter_retention == 0
+    trainer = UnslothDPOTrainer(
+        capability_eval=NoopCapabilityEval(),
+        abliteration_scorer=NoopAbliterationScorer(),
+        backend=FakeBackend(),
+    )
+    out = tmp_path / "adapters"
+    out.mkdir(parents=True)
+    import time as _time
+
+    stamps = [f"20260530T12{m:02d}00" for m in range(8)]
+    for stamp in stamps:
+        (out / stamp).mkdir()
+        _time.sleep(0.01)
+
+    result = await trainer.train(_pairs(), cfg)
+    assert result.accepted is True
+    remaining = {p.name for p in out.iterdir() if p.is_dir() and p.name != "current"}
+    assert set(stamps) <= remaining
+    assert result.adapter_path.name in remaining
+    assert len(remaining) == len(stamps) + 1
+
+
+def test_negative_adapter_retention_rejected(tmp_path: Path):
+    with pytest.raises(ValueError):
+        _config(tmp_path, retention=-1)
+
+
+def test_voice_alignment_config_default_keeps_adapters(tmp_path: Path):
+    cfg = VoiceAlignmentConfig(
+        intent_log_path=tmp_path / "i.jsonl", adapter_output_dir=tmp_path / "a"
+    )
+    assert cfg.adapter_retention == 0
 
 
 @pytest.mark.asyncio

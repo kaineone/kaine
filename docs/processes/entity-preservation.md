@@ -206,9 +206,9 @@ unsupervised run).
 ## Preservation-bundle retention
 
 A preserved individual must **never** be silently auto-evicted (CAL Article
-4.2/4.3). This is deliberately distinct from the fork snapshot cap
-(`[lifecycle].max_snapshots_retained`): there is no max-count key for
-preservation. `[preservation.retention].auto_evict` ships `false`, and setting it
+4.2/4.3). There is no max-count key for preservation, and fork snapshots
+under `[lifecycle].snapshots_path` have no count cap either: infrastructure
+never deletes them. `[preservation.retention].auto_evict` ships `false`, and setting it
 `true` is **refused at boot** rather than quietly deleting someone. The key exists
 so the policy is explicit and operator-auditable; the shipped behavior is
 never-delete.

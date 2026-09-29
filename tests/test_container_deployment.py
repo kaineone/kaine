@@ -384,23 +384,156 @@ def test_quadlet_qdrant_healthcheck_avoids_curl():
     assert "wget" not in health_cmd
 
 
-def test_quadlet_redis_maxmemory_matches_compose_topology():
-    quadlet_text = (_QUADLET / "kaine-redis.container").read_text()
-    compose_doc = _load_compose()
-    compose_cmd = compose_doc["services"]["kaine-redis"]["command"]
-    compose_maxmemory = compose_cmd[compose_cmd.index("--maxmemory") + 1]
-    assert f"--maxmemory {compose_maxmemory}" in quadlet_text
+_MAXMEMORY_EXPR = "${KAINE_REDIS_MAXMEMORY:-4gb}"
 
 
-def test_compose_redis_maxmemory_matches_kaine_topology():
-    compose_doc = _load_compose()
-    kaine_cmd = compose_doc["services"]["kaine-redis"]["command"]
-    kaine_maxmemory = kaine_cmd[kaine_cmd.index("--maxmemory") + 1]
-    redis_path = _REPO_ROOT / "compose" / "redis.yml"
-    redis_doc = yaml.safe_load(redis_path.read_text())
-    redis_cmd = redis_doc["services"]["kaine-redis"]["command"]
-    redis_maxmemory = redis_cmd[redis_cmd.index("--maxmemory") + 1]
-    assert kaine_maxmemory == redis_maxmemory
+def _redis_command(path: Path) -> list[str]:
+    doc = yaml.safe_load(path.read_text())
+    return doc["services"]["kaine-redis"]["command"]
+
+
+def _interpolate(value: str, env: dict[str, str]) -> str:
+    """Compose-style ``${VAR:-default}`` interpolation (the only form used for
+    the Redis cap): an unset or empty variable takes the default."""
+
+    def _sub(match: re.Match[str]) -> str:
+        return env.get(match.group(1)) or match.group(2)
+
+    return re.sub(r"\$\{([A-Z_]+):-([^}]*)\}", _sub, value)
+
+
+def test_compose_redis_maxmemory_comes_from_host_variable():
+    for path in (_COMPOSE, _REPO_ROOT / "compose" / "redis.yml"):
+        cmd = _redis_command(path)
+        assert cmd[cmd.index("--maxmemory") + 1] == _MAXMEMORY_EXPR, path.name
+        assert cmd[cmd.index("--maxmemory-policy") + 1] == "noeviction", path.name
+
+
+def test_compose_redis_maxmemory_renders_default_and_override():
+    cmd = _redis_command(_COMPOSE)
+    raw = cmd[cmd.index("--maxmemory") + 1]
+    assert _interpolate(raw, {}) == "4gb"
+    assert _interpolate(raw, {"KAINE_REDIS_MAXMEMORY": ""}) == "4gb"
+    assert _interpolate(raw, {"KAINE_REDIS_MAXMEMORY": "12gb"}) == "12gb"
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not installed")
+@pytest.mark.parametrize("override", [None, "12gb"])
+def test_docker_compose_renders_redis_maxmemory(tmp_path: Path, override):
+    """docker parses the compose file (parse only, no daemon, no containers)."""
+    env_file = tmp_path / "empty.env"
+    env_file.write_text("")
+    env = {
+        "KAINE_REDIS_PASSWORD": "x",
+        "PATH": __import__("os").environ.get("PATH", ""),
+        "HOME": __import__("os").environ.get("HOME", ""),
+    }
+    if override:
+        env["KAINE_REDIS_MAXMEMORY"] = override
+    result = subprocess.run(
+        [
+            "docker", "compose", "--env-file", str(env_file),
+            "-f", str(_REPO_ROOT / "compose" / "redis.yml"),
+            "config", "--format", "json",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(tmp_path),
+    )
+    if result.returncode != 0 and "is not a docker command" in result.stderr:
+        pytest.skip("docker compose plugin not available")
+    assert result.returncode == 0, result.stderr
+    import json
+
+    cmd = json.loads(result.stdout)["services"]["kaine-redis"]["command"]
+    assert cmd[cmd.index("--maxmemory") + 1] == (override or "4gb")
+    assert cmd[cmd.index("--maxmemory-policy") + 1] == "noeviction"
+
+
+def _quadlet_redis_wrapper() -> list[str]:
+    """The Exec= argv of kaine-redis.container as the container receives it:
+    systemd-style word splitting, then ``$$`` -> ``$`` (systemd's escape)."""
+    import shlex
+
+    text = (_QUADLET / "kaine-redis.container").read_text()
+    exec_line = next(
+        ln for ln in _section(text, "Container").splitlines() if ln.startswith("Exec=")
+    )
+    return [word.replace("$$", "$") for word in shlex.split(exec_line[len("Exec="):])]
+
+
+def _run_redis_wrapper(tmp_path: Path, maxmemory: str | None) -> subprocess.CompletedProcess:
+    """Run the unit's sh wrapper locally with a stub redis-server that prints
+    its argv, the way the container would run it."""
+    argv = _quadlet_redis_wrapper()
+    assert argv[:2] == ["sh", "-c"]
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir(exist_ok=True)
+    stub = stub_dir / "redis-server"
+    stub.write_text('#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done\n')
+    stub.chmod(0o755)
+    env = {
+        "PATH": f"{stub_dir}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "KAINE_REDIS_PASSWORD": "pw",
+    }
+    if maxmemory is not None:
+        env["KAINE_REDIS_MAXMEMORY"] = maxmemory
+    return subprocess.run(argv, capture_output=True, text=True, env=env, timeout=10)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [(None, "4gb"), ("", "4gb"), ("12gb", "12gb"), ("512mb", "512mb"), ("8589934592", "8589934592")],
+)
+def test_quadlet_redis_wrapper_defaults_and_passes_maxmemory(tmp_path: Path, value, expected):
+    result = _run_redis_wrapper(tmp_path, value)
+    assert result.returncode == 0, result.stderr
+    args = result.stdout.splitlines()
+    assert args[args.index("--maxmemory") + 1] == expected
+    assert args[args.index("--maxmemory-policy") + 1] == "noeviction"
+    assert args[args.index("--requirepass") + 1] == "pw"
+
+
+@pytest.mark.parametrize("value", ["4gb extra", "lots", "4gb\nprotected-mode no", "-1"])
+def test_quadlet_redis_wrapper_refuses_malformed_maxmemory(tmp_path: Path, value):
+    result = _run_redis_wrapper(tmp_path, value)
+    assert result.returncode == 64
+    assert "KAINE_REDIS_MAXMEMORY" in result.stderr
+    assert "--maxmemory" not in result.stdout
+
+
+def test_quadlet_redis_passes_maxmemory_into_the_container():
+    text = (_QUADLET / "kaine-redis.container").read_text()
+    container = _section(text, "Container")
+    assert "Environment=KAINE_REDIS_MAXMEMORY=${KAINE_REDIS_MAXMEMORY}" in container
+    service = _section(text, "Service")
+    assert "EnvironmentFile=@KAINE_ROOT@/compose/.env" in service
+
+
+@pytest.mark.skipif(
+    not Path("/usr/libexec/podman/quadlet").exists(),
+    reason="no host quadlet generator available",
+)
+def test_quadlet_generator_renders_redis_wrapper(tmp_path: Path):
+    """The real generator (dry run, no systemd) keeps the wrapper in ExecStart
+    and hands the variable to the container."""
+    for name in ("kaine-redis.container", "kaine-redis-data.volume", "kaine.network"):
+        text = (_QUADLET / name).read_text().replace("@KAINE_ROOT@", "/opt/kaine")
+        (tmp_path / name).write_text(text)
+    result = subprocess.run(
+        ["/usr/libexec/podman/quadlet", "-dryrun", "-user"],
+        capture_output=True,
+        text=True,
+        env={"QUADLET_UNIT_DIRS": str(tmp_path), "HOME": str(tmp_path)},
+    )
+    assert result.returncode == 0, result.stderr
+    unit = result.stdout.split("---kaine-redis.service---", 1)[1].split("\n---", 1)[0]
+    exec_start = next(ln for ln in unit.splitlines() if ln.startswith("ExecStart="))
+    assert "--env KAINE_REDIS_MAXMEMORY=${KAINE_REDIS_MAXMEMORY}" in exec_start
+    assert "$${KAINE_REDIS_MAXMEMORY:-4gb}" in exec_start
+    assert '--maxmemory \\"$$m\\"' in exec_start
 
 
 def test_quadlet_cycle_and_nexus_have_redis_url():

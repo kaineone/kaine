@@ -527,8 +527,9 @@ written to `data/evaluation/<observer>_<YYYY-MM-DD>.jsonl`. The sink is
 async, thread-safe within the event loop, and tolerates write failures
 gracefully (logs, does not crash).
 
-Retention: files older than `[evaluation.paths].retention_days` (default 30)
-are pruned automatically.
+Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every
+file (research records are never deleted automatically). A positive value
+prunes files older than that many days.
 
 ---
 
@@ -556,7 +557,7 @@ chat_timeout_s = 60.0
 [evaluation.paths]
 trajectory_dir = "data/workspace_trajectory"
 evaluation_logs = "data/evaluation"
-retention_days = 30
+retention_days = 0   # 0 = keep every file
 
 [evaluation.observers]
 coherence = true

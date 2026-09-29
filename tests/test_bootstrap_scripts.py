@@ -616,6 +616,78 @@ def test_native_redis_config_and_password_reuse(fake_repo):
     assert secrets["redis"]["password"] == pw
 
 
+def test_native_redis_maxmemory_from_environment(fake_repo):
+    r = _run(
+        fake_repo,
+        "redis-bootstrap.sh",
+        "--native",
+        extra_env={"KAINE_REDIS_MAXMEMORY": "12gb"},
+    )
+    assert r.returncode == 0, r.stderr
+    conf = (fake_repo / "state" / "services" / "redis" / "redis.conf").read_text()
+    assert "maxmemory 12gb" in conf.splitlines()
+    assert "maxmemory 4gb" not in conf
+    assert "maxmemory-policy noeviction" in conf
+
+
+def test_native_redis_maxmemory_from_compose_env_file(fake_repo):
+    env_file = fake_repo / "compose" / ".env"
+    env_file.write_text("KAINE_REDIS_MAXMEMORY=6gb\n")
+    env_file.chmod(0o600)
+    r = _run(fake_repo, "redis-bootstrap.sh", "--native")
+    assert r.returncode == 0, r.stderr
+    conf = (fake_repo / "state" / "services" / "redis" / "redis.conf").read_text()
+    assert "maxmemory 6gb" in conf.splitlines()
+    # The bootstrap upserts the password without dropping the operator's line.
+    assert _parse_env(env_file)["KAINE_REDIS_MAXMEMORY"] == "6gb"
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        ("KAINE_REDIS_MAXMEMORY=6gb", "6gb"),
+        ("  KAINE_REDIS_MAXMEMORY=7gb", "7gb"),
+        ("export KAINE_REDIS_MAXMEMORY=8gb", "8gb"),
+        ('KAINE_REDIS_MAXMEMORY="9gb"', "9gb"),
+        ("KAINE_REDIS_MAXMEMORY='10gb'", "10gb"),
+        ("KAINE_REDIS_MAXMEMORY=11gb  # a full study", "11gb"),
+        ("KAINE_REDIS_MAXMEMORY=12gb\r", "12gb"),
+        ("KAINE_REDIS_MAXMEMORY=", "4gb"),
+        ('KAINE_REDIS_MAXMEMORY=""', "4gb"),
+    ],
+)
+def test_native_redis_maxmemory_env_file_forms(fake_repo, line, expected):
+    env_file = fake_repo / "compose" / ".env"
+    env_file.write_text(line + "\n")
+    env_file.chmod(0o600)
+    r = _run(fake_repo, "redis-bootstrap.sh", "--native")
+    assert r.returncode == 0, r.stderr
+    conf = (fake_repo / "state" / "services" / "redis" / "redis.conf").read_text()
+    assert f"maxmemory {expected}" in conf.splitlines()
+
+
+def test_native_redis_env_file_rejects_malformed_value(fake_repo):
+    env_file = fake_repo / "compose" / ".env"
+    env_file.write_text('KAINE_REDIS_MAXMEMORY="4gb extra"\n')
+    env_file.chmod(0o600)
+    r = _run(fake_repo, "redis-bootstrap.sh", "--native")
+    assert r.returncode != 0
+    assert "KAINE_REDIS_MAXMEMORY" in r.stderr
+    assert not (fake_repo / "state" / "services" / "redis" / "redis.conf").exists()
+
+
+def test_native_redis_rejects_malformed_maxmemory(fake_repo):
+    r = _run(
+        fake_repo,
+        "redis-bootstrap.sh",
+        "--native",
+        extra_env={"KAINE_REDIS_MAXMEMORY": "4gb\nprotected-mode no"},
+    )
+    assert r.returncode != 0
+    assert "KAINE_REDIS_MAXMEMORY" in r.stderr
+    assert not (fake_repo / "state" / "services" / "redis" / "redis.conf").exists()
+
+
 def test_native_redis_rotate_updates_config_and_files(fake_repo):
     _run(fake_repo, "redis-bootstrap.sh", "--native")
     conf1 = (fake_repo / "state" / "services" / "redis" / "redis.conf").read_text()

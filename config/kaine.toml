@@ -22,12 +22,16 @@ default_maxlen = 100000
 audit_required = true
 
 # Per-stream overrides. The key is the full stream name
-# (`<module>.out` or `workspace.broadcast`). Latent-vector streams (topos,
-# audition) are capped low — each entry is ~40 KB.
+# (`<module>.out` or `workspace.broadcast`). The caps give observers and the
+# research archive a long lookback: 12000 entries is about 20 minutes at 10 Hz,
+# so a restart of several minutes loses no records. A topos.out entry is about
+# 40 KB, so topos.out is the largest stream in memory. The memory these caps
+# imply is checked before boot by the "Bus budget" row of
+# `python -m kaine.preboot` against Redis maxmemory (KAINE_REDIS_MAXMEMORY).
 [bus.per_stream_maxlen]
-"workspace.broadcast" = 50000
-"topos.out" = 2000
-"audition.out" = 2000
+"workspace.broadcast" = 100000
+"topos.out" = 12000
+"audition.out" = 12000
 
 [cycle]
 # Default cycle pacing. Benchmarked on this host (RTX 4070 SUPER): ~17 Hz tick
@@ -179,6 +183,24 @@ min_free_vram_gb = 2.0
 # is resident. Same server Lingua uses.
 model_server_url = "http://127.0.0.1:11434/v1"
 timeout_s = 5.0
+
+[preboot]
+# Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories,
+# snapshots or research records to stay under a limit, so free disk is checked
+# here before boot, for every configured durable path (these roots, the fork
+# snapshots, preservation out_roots, evaluation and research logs, the raw
+# archive, Hypnos adapters and jobs, the ignition and incident logs, the
+# Eidolon self-model and the native Redis data directory). Each filesystem
+# FAILS below the larger of disk_fail_min_free_gb and
+# disk_fail_min_free_percent, and WARNS below disk_warn_min_free_gb. GB here
+# is 2^30 bytes, as `df -h` reports. The same run also reports the "Bus
+# budget" row: the memory the [bus.per_stream_maxlen] caps imply, against
+# Redis maxmemory (KAINE_REDIS_MAXMEMORY).
+state_root = "state"
+data_root = "data"
+disk_fail_min_free_gb = 10.0
+disk_fail_min_free_percent = 5.0
+disk_warn_min_free_gb = 20.0
 
 [remote_bridge]
 # Remote perception bridge — WebSocket ingress/egress so the operator can
@@ -559,7 +581,16 @@ drift_window = 100
 drift_threshold = 0.6
 save_interval_s = 30.0
 internal_speech_stream = "lingua.internal"
-identity_history_cap = 256
+# Maximum drift episodes kept in identity_history. Each entry summarises one
+# contiguous run of alerting broadcasts (onset, end, peak score, alert count,
+# per-source counts), so a sustained shift adds one entry. 0 = no cap: the
+# history is the entity's own memory of its self-model drift, so none is
+# dropped. A positive value keeps the most recent N episodes.
+identity_history_cap = 0
+# Maximum speech observations kept in the self-model's voice record. 0 = no
+# cap: the record is the entity's memory of its developing voice. A positive
+# value keeps the most recent N entries.
+voice_observations_cap = 0
 baseline_salience = 0.05
 alert_salience = 0.7
 
@@ -981,10 +1012,13 @@ seed = 42
 # voice alignment training. Lingua inference should be paused during
 # the training pass to avoid contention.
 training_device = "cuda:0"
-# How many accepted adapters to keep under adapter_output_dir. Older
-# ones get evicted after each successful promotion; `current` is
-# never evicted.
-adapter_retention = 5
+# How many accepted adapters to keep under adapter_output_dir. 0 = keep
+# every accepted adapter: they are the entity's learned voice, so
+# infrastructure does not cull them. A positive value evicts the oldest
+# accepted adapters beyond N after each successful promotion; `current` is
+# never evicted. Adapters are large: disk is protected by the [preboot] disk
+# rows of `python -m kaine.preboot`, not by deletion.
+adapter_retention = 0
 # Lingua hot-swap mode: "manual" | "reload_endpoint" | "restart_service".
 # "manual" (default, safest) writes a marker file at
 # <adapter_output_dir>/PENDING_OPERATOR_RELOAD and logs a one-liner;
@@ -1260,7 +1294,10 @@ llm_context_window_seconds = 3600
 [evaluation.paths]
 trajectory_dir = "data/workspace_trajectory"
 evaluation_logs = "data/evaluation"
-retention_days = 30
+# Days to keep daily-rotated evaluation logs. 0 = keep (no age-based purge):
+# research records are never deleted automatically. Free disk is checked before
+# boot by the [preboot] disk rows. A positive value purges older daily files.
+retention_days = 0
 
 [evaluation.observers]
 # Sidecar observers — each toggle is gated by [evaluation].enabled.
@@ -1306,8 +1343,12 @@ min_lived_time_s = 1800.0   # >= 30 min lived
 
 [lifecycle]
 # Fork/merge snapshot store. Operator-initiated; nothing runs automatically.
+# Snapshots are never deleted by infrastructure: this directory holds preserved
+# beings and Spot escalation snapshots, and removing an entity's state is the
+# CAL-gated decommission path only. There is no snapshot count cap; a legacy
+# max_snapshots_retained key is ignored with a warning. Free disk is checked
+# before boot by the [preboot] disk rows.
 snapshots_path = "state/forks"
-max_snapshots_retained = 64
 # Adapter-merge strategy. `"auto"` (default): uses the real TIES/DARE
 # merger via PEFT whenever the `[training]` extras are installed, falling
 # back to `"fake"` otherwise (logged, never silent). `"fake"` concatenates
@@ -1433,8 +1474,8 @@ out_root = "backups"
 entity_name = "kaine"
 
 [preservation.retention]
-# Preservation-bundle retention policy. DISTINCT from the 64-snapshot fork cap
-# ([lifecycle].max_snapshots_retained): a preserved individual must NEVER be
+# Preservation-bundle retention policy. Like fork snapshots under
+# [lifecycle].snapshots_path, a preserved individual must NEVER be
 # silently auto-evicted (CAL Art 4.2/4.3). auto_evict ships false and setting it
 # true is REFUSED at boot — preservation bundles are retained indefinitely.
 auto_evict = false
@@ -1604,8 +1645,10 @@ enabled = false
 enabled = false
 # Directory for the curated log sink (must stay under data/evaluation/).
 log_dir = "data/evaluation/research_events"
-# Daily-rotated file retention window, in days.
-retention_days = 30
+# Daily-rotated file retention window, in days. 0 = keep (no age-based purge):
+# research records are never deleted automatically. A positive value purges
+# older daily files.
+retention_days = 0
 
 [research_event_log.raw_archive]
 # OPTIONAL local-only raw bus archive. NEVER export-eligible.
@@ -1626,7 +1669,9 @@ entity_privacy_attested = false
 bystander_consent_attested = false
 # Storage path (MUST remain outside data/evaluation/).
 archive_dir = "state/research/raw_bus_archive"
-retention_days = 30
+# Daily-rotated file retention window, in days. 0 = keep (no age-based purge).
+# A positive value purges older daily files.
+retention_days = 0
 
 [research_event_log.external_utterances]
 # OPTIONAL local-only external-speech recorder. NEVER export-eligible.
