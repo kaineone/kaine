@@ -1711,7 +1711,7 @@ def make_hypnos(
             ),
             seed=int(voice_cfg_section.get("seed", 42)),
             training_device=str(voice_cfg_section.get("training_device", "cuda:0")),
-            adapter_retention=int(voice_cfg_section.get("adapter_retention", 5)),
+            adapter_retention=int(voice_cfg_section.get("adapter_retention", 0)),
             hot_swap_mode=str(voice_cfg_section.get("hot_swap_mode", "manual")),
             reload_endpoint_url=reload_endpoint_url,
             restart_service_unit=restart_service_unit,

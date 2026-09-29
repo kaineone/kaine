@@ -306,7 +306,31 @@ async def test_voice_observations_capped(bus: AsyncBus, tmp_path: Path):
 @pytest.mark.asyncio
 async def test_voice_cap_invalid_construction(bus: AsyncBus, tmp_path: Path):
     with pytest.raises(ValueError):
-        Eidolon(bus, persistence_path=tmp_path / "m.json", voice_observations_cap=0)
+        Eidolon(bus, persistence_path=tmp_path / "m.json", voice_observations_cap=-1)
+
+
+@pytest.mark.asyncio
+async def test_voice_observations_uncapped_by_default(bus: AsyncBus, tmp_path: Path):
+    """Cap 0 (the default) keeps every voice observation."""
+    eidolon = Eidolon(bus, persistence_path=tmp_path / "m.json", save_interval_s=60)
+    assert eidolon._voice_observations_cap == 0
+    await eidolon.initialize()
+    try:
+        # Wait until the speech loop is live (its "$" cursor resolved) so no
+        # utterance published below is missed.
+        while eidolon.model.internal_speech_count == 0:
+            await _publish_speech(bus, "lingua.internal", "warm up")
+            await _wait_until(lambda: eidolon.model.internal_speech_count >= 1)
+        start = eidolon.model.internal_speech_count
+        for i in range(300):
+            await _publish_speech(bus, "lingua.internal", f"utterance number {i}")
+        await _wait_until(
+            lambda: eidolon.model.internal_speech_count >= start + 300, attempts=1000
+        )
+        assert eidolon.model.internal_speech_count == start + 300
+        assert len(eidolon.model.voice_observations) == start + 300
+    finally:
+        await eidolon.shutdown()
 
 
 @pytest.mark.asyncio
@@ -356,11 +380,11 @@ async def test_identity_history_cap_keeps_most_recent(bus: AsyncBus, tmp_path: P
     )
     await eidolon.initialize()
     try:
+        recorded = []
         for i in range(10):
             await eidolon.on_workspace(_snapshot([f"src{i}"]))
-        stamps = [h["timestamp"] for h in eidolon.model.identity_history]
-        assert stamps == sorted(stamps)
-        assert "src9" in eidolon.model.identity_history[-1]["top_sources"]
+            recorded.append(eidolon.model.identity_history[-1])
+        assert list(eidolon.model.identity_history) == recorded[-4:]
     finally:
         await eidolon.shutdown()
 

@@ -10,6 +10,12 @@
 - [x] 2.2 Ship `identity_history_cap = 0` in `config/kaine.toml` with a comment.
 - [x] 2.3 Tests: cap 0 keeps more than 256 entries; cap 4 keeps the last 4; -1 is rejected.
 
+## 2b. Learned voice state
+
+- [x] 2b.1 `voice_observations_cap`: default 0 (no cap) in `kaine/modules/eidolon/module.py` and `config/kaine.toml`; a positive value keeps the newest N; negative raises.
+- [x] 2b.2 `adapter_retention`: default 0 (keep every accepted adapter) in `VoiceAlignmentConfig`, `kaine/boot.py` and `config/kaine.toml`; the trainer prunes only when it is positive; negative raises.
+- [x] 2b.3 Tests and a mutation check for each; docs updated.
+
 ## 3. Research record retention
 
 - [x] 3.1 Set `retention_days = 0` in `[evaluation.paths]`, `[research_event_log]` and `[research_event_log.raw_archive]` with comments.

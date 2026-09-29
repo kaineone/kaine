@@ -583,6 +583,10 @@ internal_speech_stream = "lingua.internal"
 # history is the entity's own memory of its self-model drift and each entry is
 # small, so none is dropped. A positive value keeps the most recent N entries.
 identity_history_cap = 0
+# Maximum speech observations kept in the self-model's voice record. 0 = no
+# cap: the record is the entity's memory of its developing voice. A positive
+# value keeps the most recent N entries.
+voice_observations_cap = 0
 baseline_salience = 0.05
 alert_salience = 0.7
 
@@ -999,10 +1003,13 @@ seed = 42
 # voice alignment training. Lingua inference should be paused during
 # the training pass to avoid contention.
 training_device = "cuda:0"
-# How many accepted adapters to keep under adapter_output_dir. Older
-# ones get evicted after each successful promotion; `current` is
-# never evicted.
-adapter_retention = 5
+# How many accepted adapters to keep under adapter_output_dir. 0 = keep
+# every accepted adapter: they are the entity's learned voice, so
+# infrastructure does not cull them. A positive value evicts the oldest
+# accepted adapters beyond N after each successful promotion; `current` is
+# never evicted. Adapters are large: disk is protected by the [preboot] disk
+# rows of `python -m kaine.preboot`, not by deletion.
+adapter_retention = 0
 # Lingua hot-swap mode: "manual" | "reload_endpoint" | "restart_service".
 # "manual" (default, safest) writes a marker file at
 # <adapter_output_dir>/PENDING_OPERATOR_RELOAD and logs a one-liner;

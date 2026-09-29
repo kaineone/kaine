@@ -493,6 +493,7 @@ Self-model: a persisted JSON document (values, behavioral norms, personality bas
 | `save_interval_s` | float | `30.0` | How often the self-model is written to disk (seconds). |
 | `internal_speech_stream` | string | `"lingua.internal"` | Bus stream Eidolon subscribes to for observing internal speech. |
 | `identity_history_cap` | integer | `0` | Maximum number of identity-observation entries kept in the history. `0` keeps every entry (the history is the entity's own memory of its self-model drift, and entries are small); a positive value keeps the most recent N. Negative values are rejected. |
+| `voice_observations_cap` | integer | `0` | Maximum speech observations kept in `voice_observations`. `0` keeps every observation (the entity's memory of its developing voice); a positive value keeps the most recent N. Negative values are rejected. |
 | `baseline_salience` | float | `0.05` | Salience of routine self-model update events. |
 | `alert_salience` | float | `0.7` | Salience on drift detection. |
 
@@ -825,7 +826,7 @@ DPO+QLoRA fine-tuning of the language organ during the Hypnos sleep cycle. Requi
 | `capability_loss_threshold` | float | `0.05` | Capability-probe veto: an adapter is rejected if capability score falls more than this below the baseline. |
 | `seed` | integer | `42` | Random seed for training reproducibility. |
 | `training_device` | string | `"cuda:0"` | GPU for training. Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles both LLM inference and voice alignment; Lingua inference should be paused during the training pass to avoid contention. |
-| `adapter_retention` | integer | `5` | Number of accepted adapters to retain under `adapter_output_dir`. Older adapters are evicted after each successful promotion; `current` is never evicted. |
+| `adapter_retention` | integer | `0` | Number of accepted adapters to keep under `adapter_output_dir`. `0` keeps every accepted adapter: they are the entity's learned voice, so infrastructure does not cull them, and disk is protected by the [`[preboot]`](#preboot) disk rows instead. A positive value evicts the oldest adapters beyond N after each successful promotion; `current` is never evicted. Negative values are rejected. |
 | `hot_swap_mode` | string | `"manual"` | How Hypnos signals Lingua to load the new adapter after a successful promotion. `"manual"` (safest, default): writes a marker file at `<adapter_output_dir>/PENDING_OPERATOR_RELOAD` and logs a message; the operator triggers the reload. `"reload_endpoint"`: POSTs to `reload_endpoint_url`. `"restart_service"`: restarts the systemd unit named in `restart_service_unit`. |
 | `reload_endpoint_url` | string | `""` | URL for hot-swap POSTs. Only used when `hot_swap_mode = "reload_endpoint"`. |
 | `restart_service_unit` | string | `""` | Systemd `--user` unit name. Only used when `hot_swap_mode = "restart_service"`. |

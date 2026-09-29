@@ -46,7 +46,7 @@ class Eidolon(BaseModule):
         internal_speech_stream: str = "lingua.internal",
         external_speech_stream: str = "lingua.external",
         identity_history_cap: int = 0,
-        voice_observations_cap: int = 256,
+        voice_observations_cap: int = 0,
         baseline_salience: float = 0.05,
         alert_salience: float = 0.7,
         # Self-inference engine (eidolon-self-inference change).
@@ -64,8 +64,8 @@ class Eidolon(BaseModule):
             raise ValueError("save_interval_s must be positive")
         if identity_history_cap < 0:
             raise ValueError("identity_history_cap must be >= 0 (0 = no cap)")
-        if voice_observations_cap <= 0:
-            raise ValueError("voice_observations_cap must be positive")
+        if voice_observations_cap < 0:
+            raise ValueError("voice_observations_cap must be >= 0 (0 = no cap)")
         self._persistence_path = Path(persistence_path)
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
@@ -289,8 +289,12 @@ class Eidolon(BaseModule):
         }
         observations = list(self._model.voice_observations)
         observations.append(observation)
-        if len(observations) > self._voice_observations_cap:
-            observations = observations[-self._voice_observations_cap :]
+        # voice_observations is the entity's memory of its developing voice:
+        # 0 (the default) keeps every entry; a positive cap keeps the most
+        # recent N entries.
+        voice_cap = self._voice_observations_cap
+        if voice_cap > 0 and len(observations) > voice_cap:
+            observations = observations[-voice_cap:]
         if channel == "internal":
             new_count = self._model.internal_speech_count + 1
             self._model = self._model.with_updates(

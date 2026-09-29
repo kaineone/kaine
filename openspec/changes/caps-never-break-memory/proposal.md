@@ -31,6 +31,12 @@ instead of being enforced by deleting data during a run.
 - **Unbounded identity history by default.** `[eidolon].identity_history_cap`
   ships as `0`, meaning no cap. A positive value still keeps the most recent N
   entries. A negative value is rejected.
+- **Learned voice state is kept.** `[eidolon].voice_observations_cap` ships
+  as `0` (no cap) with the same rules as `identity_history_cap`.
+  `[hypnos.voice_alignment].adapter_retention` ships as `0`, keeping every
+  accepted adapter; a positive value still evicts the oldest beyond N and a
+  negative value is rejected. Adapters are large: disk is protected by the
+  pre-boot disk rows, not by deletion.
 - **Research records are kept.** `retention_days` ships as `0` (keep) in
   `[evaluation.paths]`, `[research_event_log]` and
   `[research_event_log.raw_archive]`, and the matching dataclass defaults are 0.
@@ -63,7 +69,8 @@ instead of being enforced by deleting data during a run.
 
 ### Modified Capabilities
 - `entity-preservation`: infrastructure never deletes fork snapshots.
-- `eidolon`: identity history is unbounded by default.
+- `eidolon`: identity history and voice observations are unbounded by default.
+- `voice-alignment-training`: accepted adapters are kept by default.
 - `research-event-log`: research records are kept by default.
 - `event-bus`: longer per-stream lookback and typical event sizes for budgeting.
 - `distributed-deployment`: the Redis memory cap is set by one host variable.
@@ -73,6 +80,7 @@ instead of being enforced by deleting data during a run.
 
 - `kaine/lifecycle/manager.py`, `kaine/nexus/__main__.py`
 - `kaine/modules/eidolon/module.py`
+- `kaine/modules/hypnos/voice_alignment.py`, `kaine/modules/hypnos/unsloth_trainer.py`, `kaine/boot.py`
 - `kaine/evaluation/config.py`
 - `kaine/bus/config.py`, `kaine/bus/client.py`
 - `kaine/preboot.py`
