@@ -23,10 +23,10 @@
 ## 3. Hardware leg (portability program phases 1–4)
 
 - [x] 3.1 Phase 1: slim base dependencies into extras; native Redis and Qdrant install paths; one installer for x86-64 and aarch64 that detects the target.
-- [ ] 3.2 Phase 2: torch-free core backends and slip-driven automatic time dilation.
+- [x] 3.2 Phase 2: torch-free core backends and slip-driven automatic time dilation.
   - [x] 3.2.1 A NumPy CfC for Soma and Chronos with a persisted reservoir seed (`numpy-cfc`).
   - [x] 3.2.2 One shared NumPy text embedder for Mnemos, Empatheia and Hypnos (`numpy-text-embedder`).
-  - [ ] 3.2.3 sherpa-onnx speech backends.
+  - [x] 3.2.3 sherpa-onnx speech backends.
   - [x] 3.2.4 Slip-driven automatic time dilation (`entity-clock-injection`, `slip-driven-time-dilation`).
 - [ ] 3.3 Phase 3: JAX-free Nous and Phantasia; the Termux (Android arm64) install path; a Pixel 6a profile.
 - [ ] 3.4 Phase 4: memory residency and swap for the Orin Nano Super; arm64 images.

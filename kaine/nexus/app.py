@@ -84,6 +84,7 @@ def create_app(
     history_loader: Callable[[int], Awaitable[list[tuple[str, Event]]]],
     metrics_snapshot: Callable[[], dict[str, Any]],
     fork_manager: ForkManager | None = None,
+    fork_manager_reason: str | None = None,
     adapters_lister: Callable[[], list[dict[str, Any]]] | None = None,
     conversation_state: ConversationState | None = None,
     health_prober: HealthProber | None = None,
@@ -180,6 +181,7 @@ def create_app(
             build_diagnostics_router(
                 bridge,
                 fork_manager=fork_manager,
+                fork_manager_reason=fork_manager_reason,
                 metrics_snapshot=metrics_snapshot,
                 adapters_lister=adapters_lister,
                 dev_content_override=config.dev_content_override,

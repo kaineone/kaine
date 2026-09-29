@@ -161,3 +161,40 @@ def test_operator_encoder_dir_wins_and_is_made_absolute(tmp_path):
     operator = {"topos": {"encoder_local_dir": "models/mine"}}
     got = _absolute_encoder_dir(tmp_path, deep_merge(base, operator))
     assert got == str((tmp_path / "models" / "mine").resolve())
+
+
+def test_overlay_self_rhythm_enabled_gestation(repo, plan):
+    overlay, _, _ = build_overlay(
+        plan, "gestation", "gestation", 0, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert overlay["soma"]["self_rhythm_enabled"] is True
+
+
+def test_overlay_self_rhythm_enabled_main_viewing(repo, plan):
+    overlay, _, _ = build_overlay(
+        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert overlay["soma"]["self_rhythm_enabled"] is True
+
+
+def test_overlay_self_rhythm_enabled_control_viewing(repo, plan):
+    overlay, _, _ = build_overlay(
+        plan, "control", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert overlay["soma"]["self_rhythm_enabled"] is True
+
+
+def test_overlay_self_rhythm_overrides_operator_false(repo, plan):
+    op = repo / "config" / "kaine.operator.toml"
+    op.write_text(
+        "[soma]\n"
+        "self_rhythm_enabled = false\n"
+    )
+    overlay, _, _ = build_overlay(
+        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        op,
+    )
+    assert overlay["soma"]["self_rhythm_enabled"] is True

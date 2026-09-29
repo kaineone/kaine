@@ -52,6 +52,12 @@ def build_overlay(
 
     study_overlay: dict[str, Any] = {
         "modules": modules,
+        "soma": {
+            # Gestation uses local womb mode, which requires Soma's self-rhythm.
+            # A being gestated with the self-rhythm also keeps it for all later
+            # viewings, because the interoceptive feature slots must remain filled.
+            "self_rhythm_enabled": True,
+        },
         "perception_feed": perception,
         "developmental_stage": {"enabled": True},
         "mnemos": {"collection_prefix": plan["collections"][line]},
