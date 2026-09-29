@@ -164,7 +164,27 @@ def test_overlay_phantasia_and_preservation(repo, plan):
     assert overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
 
 
-def test_overlay_absolute_encoder_dir(repo, plan):
+def test_models_dir_honours_exported_environment(repo, plan, monkeypatch, tmp_path):
+    shared = tmp_path / "shared-models"
+    monkeypatch.setenv("KAINE_MODELS_DIR", str(shared))
+    _, _, models_dir = build_overlay(
+        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert models_dir == str(shared.resolve())
+
+
+def test_models_dir_blank_environment_falls_back_to_repo(repo, plan, monkeypatch):
+    monkeypatch.setenv("KAINE_MODELS_DIR", "  ")
+    _, _, models_dir = build_overlay(
+        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        repo / "config" / "kaine.operator.toml",
+    )
+    assert models_dir == str((repo / "state" / "models").resolve())
+
+
+def test_overlay_absolute_encoder_dir(repo, plan, monkeypatch):
+    monkeypatch.delenv("KAINE_MODELS_DIR", raising=False)
     overlay, _, models_dir = build_overlay(
         plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",

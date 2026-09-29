@@ -724,6 +724,45 @@ Because research-mode boots run unattended, the autonomous safety net must be
 active before any run.  The runner will not send `SIGKILL` and will not stop a
 being it cannot preserve.
 
+### Running the study in the container
+
+The compose topology carries a `kaine-study` service (`profiles: [study]`, so a
+plain `up` never starts it). It runs the runner inside the cycle image with the
+cycle's configuration, secrets, and model mounts, the
+same environment block as `kaine-cycle` (no boot gate defaults permissive), no
+published ports, and no restart policy. It never mounts the entity-state, evaluation, or trajectory volumes: every step runs inside its study directory, which lives on the durable
+`kaine-studies` volume mounted at `/app/studies`, so it survives `down`/`up`.
+Inside it the models are at `/models` (the runner honours an exported
+`KAINE_MODELS_DIR` over `state/models`, and the child cycles inherit it) and the
+bus is `redis://kaine-redis:6379`, authenticated by `KAINE_REDIS_PASSWORD`.
+
+```bash
+docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
+    init --study-id <id> --repo-root /app \
+    --programme-manifest <absolute path of the manifest inside the container> \
+    --redis-base-url redis://kaine-redis:6379
+
+docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
+    run --study-dir studies/<id>
+```
+
+`status` and `analyse` are invoked the same way. A halted study is resumed by
+running `run` again.
+
+The programme manifest and the films it names are the operator's own media and
+are not part of the image. Add them to the `kaine-study` service in the local
+compose overlay as read-only bind mounts. The manifest records film paths as it
+was built, so mount every path at the same absolute path inside the container
+that the manifest uses, exactly as for `kaine-cycle`:
+
+```yaml
+services:
+  kaine-study:
+    volumes:
+      - /absolute/host/path/to/films:/absolute/host/path/to/films:ro
+      - /absolute/host/path/to/programme.toml:/absolute/host/path/to/programme.toml:ro
+```
+
 ### Reading the study's report
 
 After the completed viewings have been recorded, analyse them with:

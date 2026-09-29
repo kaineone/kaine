@@ -22,8 +22,11 @@ captures raw audio or video — perception is processed in memory and released.
 | `kaine-chatterbox` | text-to-speech | `127.0.0.1:8883` | card 1 |
 | `kaine-nexus` | web UI (uvicorn) | `127.0.0.1:8088` | no |
 | `kaine-cycle` | the cognitive runtime (the entity) | none | card 1 |
+| `kaine-study` | the module-ignition study runner (`--profile study`) | none | card 1 |
 
-`kaine-nexus` and `kaine-cycle` are the **same image**, different command.
+`kaine-nexus`, `kaine-cycle`, and `kaine-study` are the **same image**, different command.
+`kaine-study` keeps its study directories on the `kaine-studies` volume; see
+[operations.md](operations.md#running-the-study-in-the-container).
 Speaches runs on CPU by design — running it on GPU triggers a cuDNN crash when
 the secondary GPU also serves TTS.
 

@@ -27,7 +27,7 @@
   - a working directory and collection prefixes per branch step, per repeat, and per accumulate line;
   - every step on an empty, study-owned bus database, flushed by the runner. The runner refuses a plan whose database numbers include the operator's.
 - [x] 2.7 The seed step's birth is automatic. The runner waits for the birth bloom to complete before preserving, and the preservation records the womb's time at birth.
-- [ ] 2.8 A `kaine-study` compose service built from the cycle image, with the cycle's configuration, secrets and media mounts and a durable study volume. The runner resolves `/models` and the bus by service name inside it. Operator docs.
+- [x] 2.8 A `kaine-study` compose service built from the cycle image, with the cycle's configuration, secrets and media mounts and a durable study volume. The runner resolves `/models` and the bus by service name inside it. Operator docs.
 - [x] 2.9 The analysis compares branch k against branch 0, branch 0 against the repeat, and accumulate k against branch k, and states the revised limits.
 - [x] 2.10 A dry run of the revised runner end to end with the stand-in cycle, before the real run.
 

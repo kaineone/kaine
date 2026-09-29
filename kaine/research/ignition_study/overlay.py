@@ -4,6 +4,7 @@
 """Per-line, per-step operator overlay generation."""
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -54,7 +55,14 @@ def build_overlay(
 
     # The operator's own value wins over the shipped one, as it does at boot.
     encoder_dir = _absolute_encoder_dir(repo_root, deep_merge(base_config, operator_config))
-    models_dir = str((repo_root / "state" / "models").resolve())
+    # A models directory already exported to the runner (the cycle image mounts
+    # the shared weights volume at /models) wins over the repository default.
+    env_models_dir = os.environ.get("KAINE_MODELS_DIR", "").strip()
+    models_dir = (
+        str(Path(env_models_dir).resolve())
+        if env_models_dir
+        else str((repo_root / "state" / "models").resolve())
+    )
 
     # Every branch step is its own being, so each gets its own collections;
     # the repeat and the accumulate line use their line prefix as-is.
