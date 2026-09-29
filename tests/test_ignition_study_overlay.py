@@ -168,7 +168,7 @@ def test_models_dir_honours_exported_environment(repo, plan, monkeypatch, tmp_pa
     shared = tmp_path / "shared-models"
     monkeypatch.setenv("KAINE_MODELS_DIR", str(shared))
     _, _, models_dir = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert models_dir == str(shared.resolve())
@@ -177,7 +177,7 @@ def test_models_dir_honours_exported_environment(repo, plan, monkeypatch, tmp_pa
 def test_models_dir_blank_environment_falls_back_to_repo(repo, plan, monkeypatch):
     monkeypatch.setenv("KAINE_MODELS_DIR", "  ")
     _, _, models_dir = build_overlay(
-        plan, "main", "viewing", 0, repo, repo / "config" / "kaine.toml",
+        plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert models_dir == str((repo / "state" / "models").resolve())
