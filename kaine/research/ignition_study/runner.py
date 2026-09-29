@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import time
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -18,12 +19,14 @@ from urllib.parse import quote, urlsplit
 
 from kaine.bus.config import resolve_redis_auth
 from kaine.cycle.preserve_watch import read_request, read_result
-from kaine.research.ignition_study.overlay import build_overlay
+from kaine.research.ignition_study.overlay import IGNITION_LOG_DIR, build_overlay
 from kaine.research.ignition_study.plan import (
     LOCK_FILE,
     STEPS_FILE,
+    ensure_line_dir,
     load_plan,
     validate_redis_base_url,
+    validate_redis_dbs,
 )
 from kaine.research.ignition_study.toml_writer import dumps
 
@@ -64,15 +67,23 @@ class StudyRunner:
         control_command: list[str] | None = None,
         poll_seconds: float = 5.0,
         preserve_wait_seconds: float = 600.0,
+        birth_bloom_fallback_seconds: float = 7.0,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         popen: Any = subprocess.Popen,
         run: Any = subprocess.run,
+        flush_db: Callable[[str], None] | None = None,
     ) -> None:
         self.study_dir = Path(study_dir).resolve()
         self.plan = load_plan(self.study_dir)
+        # The runner flushes every study database, so a plan (even a
+        # hand-edited study.json) naming the operator's bus is refused before
+        # anything runs.
+        operator_dbs = _operator_bus_dbs(Path(self.plan["repo_root"]), os.environ)
         try:
             validate_redis_base_url(self.plan["redis"]["base_url"])
+            validate_redis_dbs(self.plan["redis"]["db"], operator_dbs)
         except ValueError as exc:
             raise StudyError(f"study.json: {exc}") from None
         self.steps_path = self.study_dir / STEPS_FILE
@@ -82,10 +93,13 @@ class StudyRunner:
         )
         self.poll_seconds = poll_seconds
         self.preserve_wait_seconds = preserve_wait_seconds
+        self.birth_bloom_fallback_seconds = birth_bloom_fallback_seconds
         self.clock = clock
+        self.wall_clock = wall_clock
         self.sleep = sleep
         self.popen = popen
         self._subprocess_run = run
+        self.flush_db = flush_db or _flush_redis_db
         self._lock_fd: Any | None = None
         self._load_state()
 
@@ -105,7 +119,7 @@ class StudyRunner:
                 except json.JSONDecodeError:
                     log.warning("Ignoring malformed steps.jsonl line: %s", line)
 
-        self.line_bundles: dict[str, str | None] = {}
+        self.line_bundles: dict[tuple[str, int], str | None] = {}
         self.completed_steps: set[tuple[str, int]] = set()
         self.last_failed: dict[str, Any] | None = None
 
@@ -114,7 +128,7 @@ class StudyRunner:
             step = rec.get("step")
             outcome = rec.get("outcome", "")
             if outcome == "complete":
-                self.line_bundles[line] = rec.get("bundle")
+                self.line_bundles[(line, step)] = rec.get("bundle")
                 self.completed_steps.add((line, step))
             elif isinstance(outcome, str) and outcome.startswith("failed"):
                 self.last_failed = rec
@@ -128,10 +142,11 @@ class StudyRunner:
             self.last_failed = None
 
     def _step_sequence(self) -> list[tuple[str, int]]:
-        seq: list[tuple[str, int]] = [("gestation", 0)]
-        for k in range(self.plan["viewings_per_line"]):
-            seq.append(("main", k))
-            seq.append(("control", k))
+        k = len(self.plan["order"])
+        seq: list[tuple[str, int]] = [("gestation", 0), ("branch", 0), ("repeat", 0)]
+        for i in range(1, k + 1):
+            seq.append(("branch", i))
+            seq.append(("accumulate", i))
         return seq
 
     def _next_step(self, retry_failed: bool = False) -> dict[str, Any]:
@@ -149,24 +164,31 @@ class StudyRunner:
         if self.last_failed:
             raise StudyHalted(self.last_failed)
 
+        seed = self.line_bundles.get(("gestation", 0))
         for line, k in sequence:
             if (line, k) in self.completed_steps:
                 continue
 
             if line == "gestation":
                 revived_from: str | None = None
-            elif k == 0:
-                p0 = self.line_bundles.get("gestation")
-                if p0 is None:
+            elif line in ("branch", "repeat"):
+                if seed is None:
                     raise StudyError("gestation has not completed")
-                revived_from = p0
-            else:
-                prior = self.line_bundles.get(line)
-                if prior is None:
-                    raise StudyError(f"{line} has no prior bundle")
+                revived_from = seed
+            elif line == "accumulate":
+                if k == 1:
+                    prior = self.line_bundles.get(("branch", 0))
+                    if prior is None:
+                        raise StudyError("branch 0 has not completed")
+                else:
+                    prior = self.line_bundles.get(("accumulate", k - 1))
+                    if prior is None:
+                        raise StudyError(f"accumulate {k - 1} has not completed")
                 revived_from = prior
+            else:
+                raise StudyError(f"unknown line: {line}")
 
-            return {"line": line, "k": k, "revived_from": revived_from}
+            return {"line": line, "k": k, "revived_from": revived_from, "is_retry": False}
 
         raise StudyComplete()
 
@@ -216,10 +238,55 @@ class StudyRunner:
         finally:
             self._release_lock()
 
+    def _line_dir(self, line: str, k: int) -> Path:
+        if line == "branch":
+            return self.study_dir / "branch" / str(k)
+        return self.study_dir / line
+
+    def _ensure_step_dir(self, line: str, k: int) -> Path:
+        return ensure_line_dir(
+            self.study_dir, line, k, Path(self.plan["repo_root"])
+        )
+
+    def _read_birth_bloom_deadline(self, line_dir: Path) -> float | None:
+        """``birth_bloom_ends_at`` from the step's stage file, as a wall-clock
+        timestamp, or ``None`` when the file or the field is absent or bad."""
+        path = line_dir / "state" / "lifecycle" / "stage.json"
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        ends_at = data.get("birth_bloom_ends_at")
+        if not isinstance(ends_at, str):
+            return None
+        try:
+            # ISO-8601 UTC, with or without a trailing 'Z'.
+            if ends_at.endswith("Z"):
+                ends_at = ends_at[:-1] + "+00:00"
+            dt = datetime.fromisoformat(ends_at)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+
+    def _birth_bloom_over(self, line_dir: Path, first_embodied_wall: float) -> bool:
+        """Whether the birth bloom has ended: at the stage file's
+        ``birth_bloom_ends_at`` when it has one, else
+        ``birth_bloom_fallback_seconds`` after the runner first saw the
+        embodied stage."""
+        now = self.wall_clock()
+        deadline = self._read_birth_bloom_deadline(line_dir)
+        if deadline is not None:
+            return now >= deadline
+        return now - first_embodied_wall >= self.birth_bloom_fallback_seconds
+
     def _run_step(self, step: dict[str, Any]) -> dict[str, Any]:
         line = step["line"]
         k = step["k"]
-        line_dir = self.study_dir / line
+        line_dir = self._ensure_step_dir(line, k)
         step_kind = "gestation" if line == "gestation" else "viewing"
         repo_root = Path(self.plan["repo_root"])
 
@@ -255,12 +322,24 @@ class StudyRunner:
             auth = f"{quote(username, safe='')}:{quoted_password}@"
         else:
             auth = f":{quoted_password}@"
-        env["KAINE_REDIS_URL"] = (
+        redis_url = (
             f"{parsed.scheme}://{auth}{parsed.netloc}/"
             f"{self.plan['redis']['db'][line]}"
         )
-
+        env["KAINE_REDIS_URL"] = redis_url
         env["KAINE_MODELS_DIR"] = models_dir
+
+        # Every step starts on an empty bus: flush the step's own study
+        # database (never the operator's; see validate_redis_dbs).
+        db = self.plan["redis"]["db"][line]
+        try:
+            self.flush_db(redis_url)
+        except Exception as exc:
+            # The URL carries the password: name the database, not the URL.
+            raise StudyError(
+                f"could not flush bus database {db} before {line} step {k}: "
+                f"{type(exc).__name__}"
+            ) from None
 
         argv = list(self.cycle_command)
         if step_kind == "viewing":
@@ -278,7 +357,8 @@ class StudyRunner:
         run_id: str | None = None
         exit_code: int | None = None
         timeout_requested = False
-        birth_preserved = False
+        birth_requested = False
+        first_embodied_wall: float | None = None
 
         start_clock = self.clock()
         budget = (
@@ -288,62 +368,63 @@ class StudyRunner:
         )
         last_check = start_clock - self.poll_seconds
 
-        try:
-            while True:
-                ret = proc.poll()
-                if ret is not None:
-                    exit_code = ret
-                    break
+        # The runner never sends SIGKILL.  A process that is still running
+        # after a failed timeout preservation is left for the operator.
+        while True:
+            ret = proc.poll()
+            if ret is not None:
+                exit_code = ret
+                break
 
-                now = self.clock()
-                if now - last_check >= self.poll_seconds:
-                    last_check = now
-                    runtime = self._read_runtime(line_dir)
-                    if runtime:
-                        run_id = runtime.get("run_id") or run_id
-                        if step_kind == "gestation":
-                            stage = (
-                                runtime.get("developmental_stage") or {}
-                            ).get("stage")
-                            if stage == "embodied" and not birth_preserved:
-                                birth_preserved = True
-                                _, _, _, ok = self._request_preserve(
-                                    line_dir,
-                                    "birth",
-                                    stop=True,
-                                    wait=self.preserve_wait_seconds,
+            now = self.clock()
+            if now - last_check >= self.poll_seconds:
+                last_check = now
+                runtime = self._read_runtime(line_dir)
+                if runtime:
+                    run_id = runtime.get("run_id") or run_id
+                    stage = (runtime.get("developmental_stage") or {}).get("stage")
+                    if (
+                        step_kind == "gestation"
+                        and stage == "embodied"
+                        and not birth_requested
+                    ):
+                        if first_embodied_wall is None:
+                            first_embodied_wall = self.wall_clock()
+                        # The seed is the being once its birth bloom is over.
+                        if self._birth_bloom_over(line_dir, first_embodied_wall):
+                            birth_requested = True
+                            _, _, _, ok = self._request_preserve(
+                                line_dir,
+                                "birth",
+                                stop=True,
+                                wait=self.preserve_wait_seconds,
+                            )
+                            if not ok:
+                                log.error(
+                                    "Birth preservation request did not succeed for %s",
+                                    line,
                                 )
-                                if not ok:
-                                    log.error(
-                                        "Birth preservation request did not succeed for %s",
-                                        line,
-                                    )
 
-                    elapsed = now - start_clock
-                    if elapsed > budget and not timeout_requested:
-                        timeout_requested = True
-                        _, _, _, ok = self._request_preserve(
-                            line_dir,
-                            "timeout",
-                            stop=True,
-                            wait=self.preserve_wait_seconds,
+                elapsed = now - start_clock
+                if elapsed > budget and not timeout_requested:
+                    timeout_requested = True
+                    _, _, _, ok = self._request_preserve(
+                        line_dir,
+                        "timeout",
+                        stop=True,
+                        wait=self.preserve_wait_seconds,
+                    )
+                    if not ok:
+                        log.critical(
+                            "Timeout preservation failed for %s; the process is still "
+                            "running and the operator must decide what to do.",
+                            line,
                         )
-                        if not ok:
-                            log.critical(
-                                "Timeout preservation failed for %s; the process is still "
-                                "running and the operator must decide what to do.",
-                                line,
-                            )
-                            raise StudyCritical(
-                                f"timeout preservation failed for {line}"
-                            )
+                        raise StudyCritical(
+                            f"timeout preservation failed for {line}"
+                        )
 
-                self.sleep(self.poll_seconds)
-
-        finally:
-            # The runner never sends SIGKILL.  A process that is still running
-            # after a failed timeout preservation is left for the operator.
-            pass
+            self.sleep(self.poll_seconds)
 
         ended_at = _utc_iso()
         request, result = self._read_preserve_pair(
@@ -383,7 +464,7 @@ class StudyRunner:
             "preservation_id": preservation_id,
             "bundle": bundle,
             "run_id": run_id,
-            "ignition_log_dir": str(line_dir / "data" / "ignition"),
+            "ignition_log_dir": str(line_dir / IGNITION_LOG_DIR),
             "overlay_sha256": overlay_hash,
             "outcome": outcome,
         }
@@ -391,7 +472,7 @@ class StudyRunner:
         self._append_step(record)
 
         if outcome == "complete":
-            self.line_bundles[line] = bundle
+            self.line_bundles[(line, k)] = bundle
             self.completed_steps.add((line, k))
             if (
                 self.last_failed
@@ -530,7 +611,8 @@ class StudyRunner:
 
     def status(self) -> str:
         """Return a human-readable progress summary."""
-        total = 1 + 2 * self.plan["viewings_per_line"]
+        k = len(self.plan["order"])
+        total = 3 + 2 * k
         completed = sum(
             1 for s in self.steps if s.get("outcome") == "complete"
         )
@@ -555,6 +637,48 @@ class StudyRunner:
                 f"({self.last_failed['line']} step {self.last_failed['step']})"
             )
         return "\n".join(lines)
+
+
+def _flush_redis_db(url: str) -> None:
+    """FLUSHDB on the one database ``url`` names.  The URL carries the
+    password, so it is never logged."""
+    import redis
+
+    client = redis.Redis.from_url(url)
+    try:
+        client.flushdb()
+    finally:
+        client.close()
+
+
+def _db_from_url(url: str) -> int | None:
+    path = urlsplit(url).path.strip("/")
+    if not path:
+        return 0
+    return int(path) if path.isdigit() else None
+
+
+def _operator_bus_dbs(repo_root: Path, env: Any) -> set[int]:
+    """The database numbers the operator's own bus uses: 0, the configured
+    ``[redis].db`` (the operator file wins over the shipped one) and the
+    database in the runner's own ``KAINE_REDIS_URL``, when set."""
+    dbs = {0}
+    db: Any = 0
+    for name in ("kaine.toml", "kaine.operator.toml"):
+        path = repo_root / "config" / name
+        if not path.is_file():
+            continue
+        with open(path, "rb") as fh:
+            redis_doc = tomllib.load(fh).get("redis") or {}
+        db = redis_doc.get("db", db)
+    if isinstance(db, int) and not isinstance(db, bool):
+        dbs.add(db)
+    url = env.get("KAINE_REDIS_URL")
+    if url:
+        url_db = _db_from_url(url)
+        if url_db is not None:
+            dbs.add(url_db)
+    return dbs
 
 
 def _utc_iso() -> str:

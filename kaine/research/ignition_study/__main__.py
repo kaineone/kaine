@@ -27,9 +27,7 @@ from kaine.research.ignition_study.runner import (
 
 def _default_order() -> list[str]:
     return [
-        "thymos",
         "mnemos",
-        "hypnos",
         "phantasia",
         "nous",
         "eidolon",
@@ -57,16 +55,17 @@ def _cmd_init(args: argparse.Namespace) -> int:
             "base_url": args.redis_base_url,
             "db": {
                 "gestation": args.db_gestation,
-                "main": args.db_main,
-                "control": args.db_control,
+                "branch": args.db_branch,
+                "repeat": args.db_repeat,
+                "accumulate": args.db_accumulate,
             },
         },
         "collections": {
             "gestation": f"study_{args.study_id}_g_",
-            "main": f"study_{args.study_id}_m_",
-            "control": f"study_{args.study_id}_c_",
+            "branch": f"study_{args.study_id}_b_",
+            "repeat": f"study_{args.study_id}_r_",
+            "accumulate": f"study_{args.study_id}_a_",
         },
-        "viewings_per_line": args.viewings_per_line,
         "viewing_budget_seconds": args.viewing_budget_seconds,
         "gestation_budget_seconds": args.gestation_budget_seconds,
     }
@@ -130,15 +129,15 @@ def main(argv: list[str] | None = None) -> int:
     init_p.add_argument(
         "--base-modules",
         nargs="+",
-        default=["soma", "chronos", "topos", "audition", "lingua"],
+        default=["soma", "chronos", "topos", "audition", "lingua", "thymos", "hypnos"],
     )
     init_p.add_argument("--order", nargs="+", default=_default_order())
     init_p.add_argument("--programme-manifest", required=True)
     init_p.add_argument("--redis-base-url", default="redis://127.0.0.1:6479")
     init_p.add_argument("--db-gestation", type=int, default=10)
-    init_p.add_argument("--db-main", type=int, default=11)
-    init_p.add_argument("--db-control", type=int, default=12)
-    init_p.add_argument("--viewings-per-line", type=int, default=12)
+    init_p.add_argument("--db-branch", type=int, default=11)
+    init_p.add_argument("--db-repeat", type=int, default=12)
+    init_p.add_argument("--db-accumulate", type=int, default=13)
     init_p.add_argument(
         "--viewing-budget-seconds",
         type=float,

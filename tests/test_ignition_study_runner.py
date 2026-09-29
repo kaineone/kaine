@@ -7,20 +7,33 @@ import hashlib
 import json
 import sys
 import textwrap
+import tomllib
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
 from kaine.research.ignition_study.plan import init_study, validate_plan
 from kaine.research.ignition_study.runner import (
     StudyComplete,
+    StudyError,
     StudyHalted,
     StudyLocked,
     StudyRunner,
 )
 
-BASE_MODULES = ["soma", "chronos", "topos", "audition", "lingua"]
-ORDER = ["thymos", "mnemos", "hypnos"]
+BASE_MODULES = ["soma", "chronos", "topos", "audition", "lingua", "thymos", "hypnos"]
+ORDER = [
+    "mnemos",
+    "phantasia",
+    "nous",
+    "eidolon",
+    "empatheia",
+    "vox",
+    "praxis",
+    "perception",
+    "mundus",
+]
 
 STANDIN_SCRIPT = textwrap.dedent(
     '''\
@@ -65,8 +78,9 @@ STANDIN_SCRIPT = textwrap.dedent(
         sys.exit(1)
 
     def maybe_write_manifest(bundle_dir):
-        manifest = os.environ.get("IGNITION_STANDIN_MANIFEST")
-        if not manifest or manifest == "missing":
+        # Unset: a successful preservation's manifest (world model captured).
+        manifest = os.environ.get("IGNITION_STANDIN_MANIFEST", "true")
+        if manifest == "missing":
             return
         if manifest == "true":
             data = {"world_model_captured": True}
@@ -81,10 +95,14 @@ STANDIN_SCRIPT = textwrap.dedent(
 
     def cycle(args):
         cwd = Path.cwd()
-        line = cwd.name
+        if cwd.parent.name == "branch":
+            line = "branch"
+            study_dir = cwd.parent.parent
+        else:
+            line = cwd.name
+            study_dir = cwd.parent
         state_dir = cwd / "state" / "cycle"
         state_dir.mkdir(parents=True, exist_ok=True)
-        study_dir = cwd.parent
         backups_dir = study_dir / "backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
         bundle_dir = backups_dir / secrets.token_hex(8)
@@ -95,6 +113,7 @@ STANDIN_SCRIPT = textwrap.dedent(
         with open(env_log, "a") as f:
             print(json.dumps({
                 "line": line,
+                "k": int(cwd.name) if line == "branch" else None,
                 "research_mode": os.environ.get("KAINE_RESEARCH_MODE"),
                 "redis_url": os.environ.get("KAINE_REDIS_URL"),
                 "models_dir": os.environ.get("KAINE_MODELS_DIR"),
@@ -114,7 +133,7 @@ STANDIN_SCRIPT = textwrap.dedent(
 
         active_scenario = None
         if is_viewing and scenario:
-            if scenario == "missing_preservation" and line == "main" and view_n == 3:
+            if scenario == "missing_preservation" and view_n == 3:
                 active_scenario = scenario
             elif scenario != "missing_preservation" and view_n == 1:
                 active_scenario = scenario
@@ -123,18 +142,26 @@ STANDIN_SCRIPT = textwrap.dedent(
             sys.exit(7)
 
         run_id = secrets.token_hex(8)
-        stage = "embodied" if is_viewing else "gestation"
         runtime = {
             "pid": os.getpid(),
             "run_id": run_id,
-            "developmental_stage": {"stage": stage},
+            "developmental_stage": {"stage": "embodied"},
         }
         (state_dir / "runtime.json").write_text(json.dumps(runtime))
 
         if not is_viewing:
-            time.sleep(0.05)
-            runtime["developmental_stage"]["stage"] = "embodied"
-            (state_dir / "runtime.json").write_text(json.dumps(runtime))
+            # Born: the stage file names when the birth bloom ends (already
+            # over unless IGNITION_STANDIN_BLOOM_SECONDS puts it ahead), or
+            # omits the field when IGNITION_STANDIN_BLOOM_SECONDS is "none".
+            (study_dir / "embodied_at.txt").write_text(str(time.time()))
+            lifecycle_dir = cwd / "state" / "lifecycle"
+            lifecycle_dir.mkdir(parents=True, exist_ok=True)
+            stage = {"stage": "embodied"}
+            bloom = os.environ.get("IGNITION_STANDIN_BLOOM_SECONDS", "0")
+            if bloom != "none":
+                ends = datetime.fromtimestamp(time.time() + float(bloom), timezone.utc)
+                stage["birth_bloom_ends_at"] = ends.isoformat()
+            (lifecycle_dir / "stage.json").write_text(json.dumps(stage))
             wait_for_request(state_dir, "birth", True, bundle_dir)
             return
 
@@ -166,6 +193,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             with open(study_dir / "revived_from_log.jsonl", "a") as f:
                 print(json.dumps({
                     "line": line,
+                    "k": int(cwd.name) if line == "branch" else None,
                     "revived_from": args.revive,
                     "bundle": str(bundle_dir),
                 }), file=f)
@@ -251,6 +279,13 @@ def known_modules(monkeypatch):
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
     monkeypatch.delenv("KAINE_REDIS_USERNAME", raising=False)
+    monkeypatch.delenv("KAINE_REDIS_URL", raising=False)
+    for name in (
+        "IGNITION_STANDIN_SCENARIO",
+        "IGNITION_STANDIN_MANIFEST",
+        "IGNITION_STANDIN_BLOOM_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
     return names
 
 
@@ -284,14 +319,13 @@ def _create_study(
         "study_id": "runner-test",
         "repo_root": str(repo_root),
         "base_modules": BASE_MODULES,
-        "order": order,
+        "order": order[:viewings],
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "main": 11, "control": 12},
+            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
-        "collections": {"gestation": "r_g_", "main": "r_m_", "control": "r_c_"},
-        "viewings_per_line": viewings,
+        "collections": {"gestation": "r_g_", "branch": "r_b_", "repeat": "r_r_", "accumulate": "r_a_"},
         "viewing_budget_seconds": viewing_budget_seconds,
         "gestation_budget_seconds": gestation_budget_seconds,
     }
@@ -300,12 +334,16 @@ def _create_study(
     return study_dir
 
 
-def _runner(study_dir: Path, script: Path, **kwargs) -> StudyRunner:
+def _runner(study_dir: Path, script: Path, *, flush_log: list[str] | None = None, **kwargs) -> StudyRunner:
+    if flush_log is None:
+        flush_log = []
     defaults = {
         "cycle_command": [sys.executable, str(script), "cycle"],
         "control_command": [sys.executable, str(script), "control"],
         "poll_seconds": 0.05,
         "preserve_wait_seconds": 2.0,
+        "birth_bloom_fallback_seconds": 0.0,
+        "flush_db": lambda url: flush_log.append(url),
     }
     defaults.update(kwargs)
     return StudyRunner(study_dir, **defaults)
@@ -332,36 +370,75 @@ def _all_bundles_exist(steps: list[dict]) -> None:
             assert Path(rec["bundle"]).exists()
 
 
+def _load_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def _expected_line_dir(study_dir: Path, line: str, k: int) -> Path:
+    if line == "branch":
+        return study_dir / "branch" / str(k)
+    return study_dir / line
+
+
+def _read_overlay(line_dir: Path) -> dict:
+    with open(line_dir / "config" / "kaine.operator.toml", "rb") as f:
+        return tomllib.load(f)
+
+
 def test_dry_run_e2e(tmp_path: Path, known_modules):
     study_dir = _create_study(tmp_path, viewings=2)
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
-    result = _run(_runner(study_dir, script))
+    flush_log: list[str] = []
+    started_before_flush: list[int] = []
+    env_log_path = study_dir / "env_log.jsonl"
+
+    def flush(url: str) -> None:
+        # How many children had started when this step's bus was flushed.
+        started_before_flush.append(
+            len(_load_jsonl(env_log_path)) if env_log_path.exists() else 0
+        )
+        flush_log.append(url)
+
+    result = _run(_runner(study_dir, script, flush_db=flush))
 
     steps = _load_steps(study_dir)
-    assert len(steps) == 5
+    assert len(steps) == 7
     assert result == "complete"
 
-    assert steps[0]["line"] == "gestation"
-    for i, (expected_line, expected_step) in enumerate(
-        [("gestation", 0), ("main", 0), ("control", 0), ("main", 1), ("control", 1)]
-    ):
+    expected_order = [
+        ("gestation", 0),
+        ("branch", 0),
+        ("repeat", 0),
+        ("branch", 1),
+        ("accumulate", 1),
+        ("branch", 2),
+        ("accumulate", 2),
+    ]
+    for i, (expected_line, expected_step) in enumerate(expected_order):
         assert steps[i]["line"] == expected_line
         assert steps[i]["step"] == expected_step
         assert steps[i]["outcome"] == "complete"
 
     p0 = steps[0]["bundle"]
+    b0 = steps[1]["bundle"]
+    a1 = steps[4]["bundle"]
+
     assert steps[1]["revived_from"] == p0
     assert steps[2]["revived_from"] == p0
-    assert steps[3]["revived_from"] == steps[1]["bundle"]
-    assert steps[4]["revived_from"] == steps[2]["bundle"]
+    assert steps[3]["revived_from"] == p0
+    assert steps[4]["revived_from"] == b0
+    assert steps[5]["revived_from"] == p0
+    assert steps[6]["revived_from"] == a1
 
     base = set(BASE_MODULES)
     assert set(steps[0]["modules"]) == base
     assert set(steps[1]["modules"]) == base
     assert set(steps[2]["modules"]) == base
     assert set(steps[3]["modules"]) == base | {ORDER[0]}
-    assert set(steps[4]["modules"]) == base
+    assert set(steps[4]["modules"]) == base | {ORDER[0]}
+    assert set(steps[5]["modules"]) == base | {ORDER[0], ORDER[1]}
+    assert set(steps[6]["modules"]) == base | {ORDER[0], ORDER[1]}
 
     env_logs = [
         json.loads(line)
@@ -371,26 +448,81 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     assert all(e["research_mode"] == "1" for e in env_logs)
     by_line = {e["line"]: e for e in env_logs}
     assert by_line["gestation"]["redis_url"].endswith("/10")
-    assert by_line["main"]["redis_url"].endswith("/11")
-    assert by_line["control"]["redis_url"].endswith("/12")
-    assert by_line["main"]["models_dir"] == str(
+    assert by_line["branch"]["redis_url"].endswith("/11")
+    assert by_line["repeat"]["redis_url"].endswith("/12")
+    assert by_line["accumulate"]["redis_url"].endswith("/13")
+    assert by_line["branch"]["models_dir"] == str(
         (tmp_path / "repo" / "state" / "models").resolve()
     )
 
     assert all("overlay_sha256" in s and "run_id" in s for s in steps)
-    assert all(
-        s["ignition_log_dir"] == str(study_dir / s["line"] / "data" / "ignition")
-        for s in steps
-    )
+    repo_config = tmp_path / "repo" / "config"
+    for s in steps:
+        expected_dir = _expected_line_dir(study_dir, s["line"], s["step"])
+        assert s["ignition_log_dir"] == str(expected_dir / "data" / "ignition")
+        overlay = _read_overlay(expected_dir)
+        assert overlay["ignition_log"]["directory"] == "data/ignition"
+        assert (expected_dir / "config" / "kaine.toml").resolve() == (
+            repo_config / "kaine.toml"
+        ).resolve()
+        assert (expected_dir / "config" / "profiles").is_symlink()
+    # Every child ran in its step's own working directory.
+    assert [(e["line"], e["k"]) for e in env_logs] == [
+        ("gestation", None),
+        ("branch", 0),
+        ("repeat", None),
+        ("branch", 1),
+        ("accumulate", None),
+        ("branch", 2),
+        ("accumulate", None),
+    ]
+    # The seed is born automatically; the being in the seed never waits on
+    # an operator acknowledgement.
+    seed_overlay = _read_overlay(study_dir / "gestation")
+    assert seed_overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
+    # Phantasia's world model is checked wherever it is enabled.
+    for s in steps:
+        if "phantasia" in s["modules"]:
+            assert s["world_model_captured"] is True
+        else:
+            assert s["world_model_captured"] is None
+
+    expected_prefixes = [
+        ("gestation", 0, "r_g_"),
+        ("branch", 0, "r_b_0_"),
+        ("repeat", 0, "r_r_"),
+        ("branch", 1, "r_b_1_"),
+        ("accumulate", 1, "r_a_"),
+        ("branch", 2, "r_b_2_"),
+        ("accumulate", 2, "r_a_"),
+    ]
+    for line, k, expected_prefix in expected_prefixes:
+        ld = _expected_line_dir(study_dir, line, k)
+        overlay = _read_overlay(ld)
+        assert overlay["mnemos"]["collection_prefix"] == expected_prefix
+        assert overlay["empatheia"]["collection"] == expected_prefix
+
+    # One flush per step, on that step's own database, before its child
+    # started, with the same authenticated URL the child was given.
+    assert len(flush_log) == 7
+    assert [urlsplit(url).path for url in flush_log] == [
+        "/10", "/11", "/12", "/11", "/13", "/11", "/13",
+    ]
+    assert flush_log == [e["redis_url"] for e in env_logs]
+    assert started_before_flush == list(range(7))
 
     revived = [
         json.loads(line)
         for line in (study_dir / "revived_from_log.jsonl").read_text().splitlines()
         if line.strip()
     ]
-    assert len(revived) == 4
-    assert revived[0] == {"line": "main", "revived_from": p0, "bundle": steps[1]["bundle"]}
-    assert revived[1] == {"line": "control", "revived_from": p0, "bundle": steps[2]["bundle"]}
+    assert len(revived) == 6
+    assert revived[0] == {"line": "branch", "k": 0, "revived_from": p0, "bundle": steps[1]["bundle"]}
+    assert revived[1] == {"line": "repeat", "k": None, "revived_from": p0, "bundle": steps[2]["bundle"]}
+    assert revived[2] == {"line": "branch", "k": 1, "revived_from": p0, "bundle": steps[3]["bundle"]}
+    assert revived[3] == {"line": "accumulate", "k": None, "revived_from": b0, "bundle": steps[4]["bundle"]}
+    assert revived[4] == {"line": "branch", "k": 2, "revived_from": p0, "bundle": steps[5]["bundle"]}
+    assert revived[5] == {"line": "accumulate", "k": None, "revived_from": a1, "bundle": steps[6]["bundle"]}
 
     _all_bundles_exist(steps)
 
@@ -402,8 +534,8 @@ def test_resume_skips_completed_steps(tmp_path: Path, known_modules):
 
     p0_bundle = str(study_dir / "backups" / "p0")
     Path(p0_bundle).mkdir(parents=True)
-    m0_bundle = str(study_dir / "backups" / "m0")
-    Path(m0_bundle).mkdir(parents=True)
+    b0_bundle = str(study_dir / "backups" / "b0")
+    Path(b0_bundle).mkdir(parents=True)
 
     records = [
         {
@@ -417,22 +549,22 @@ def test_resume_skips_completed_steps(tmp_path: Path, known_modules):
             "preservation_id": "p0",
             "bundle": p0_bundle,
             "run_id": "r0",
-            "ignition_log_dir": str(study_dir / "gestation" / "data" / "ignition"),
+            "ignition_log_dir": str(study_dir / "gestation"),
             "overlay_sha256": "x",
             "outcome": "complete",
         },
         {
-            "line": "main",
+            "line": "branch",
             "step": 0,
             "modules": BASE_MODULES,
             "started_at": "t2",
             "ended_at": "t3",
             "exit_code": 0,
             "revived_from": p0_bundle,
-            "preservation_id": "m0",
-            "bundle": m0_bundle,
+            "preservation_id": "b0",
+            "bundle": b0_bundle,
             "run_id": "r1",
-            "ignition_log_dir": str(study_dir / "main" / "data" / "ignition"),
+            "ignition_log_dir": str(study_dir / "branch" / "0"),
             "overlay_sha256": "y",
             "outcome": "complete",
         },
@@ -441,14 +573,29 @@ def test_resume_skips_completed_steps(tmp_path: Path, known_modules):
         for r in records:
             print(json.dumps(r), file=f)
 
-    _run(_runner(study_dir, script))
+    flush_log: list[str] = []
+    assert _run(_runner(study_dir, script, flush_log=flush_log)) == "complete"
     steps = _load_steps(study_dir)
-    assert len(steps) == 5
+    assert len(steps) == 7
+    # The completed seed and branch 0 are not run again; the resume starts at
+    # the repeat, the first incomplete step, and flushes only the steps it runs.
+    env_logs = _load_jsonl(study_dir / "env_log.jsonl")
+    assert [(e["line"], e["k"]) for e in env_logs] == [
+        ("repeat", None),
+        ("branch", 1),
+        ("accumulate", None),
+        ("branch", 2),
+        ("accumulate", None),
+    ]
+    assert [urlsplit(url).path for url in flush_log] == ["/12", "/11", "/13", "/11", "/13"]
     assert steps[0]["line"] == "gestation"
-    assert steps[1]["line"] == "main"
-    assert steps[2]["line"] == "control" and steps[2]["revived_from"] == p0_bundle
-    assert steps[3]["line"] == "main" and steps[3]["revived_from"] == m0_bundle
-    assert steps[4]["line"] == "control"
+    assert steps[1]["line"] == "branch" and steps[1]["step"] == 0
+    assert steps[2]["line"] == "repeat" and steps[2]["revived_from"] == p0_bundle
+    assert steps[3]["line"] == "branch" and steps[3]["step"] == 1 and steps[3]["revived_from"] == p0_bundle
+    assert steps[4]["line"] == "accumulate" and steps[4]["step"] == 1 and steps[4]["revived_from"] == b0_bundle
+    assert steps[5]["line"] == "branch" and steps[5]["step"] == 2 and steps[5]["revived_from"] == p0_bundle
+    assert steps[6]["line"] == "accumulate" and steps[6]["step"] == 2
+    assert steps[6]["revived_from"] == steps[4]["bundle"]
 
     _all_bundles_exist(steps)
 
@@ -464,7 +611,7 @@ def test_halt_revive_refused(tmp_path: Path, known_modules, monkeypatch):
 
     assert len(steps) == 2
     assert steps[0]["outcome"] == "complete"
-    assert steps[1]["line"] == "main" and steps[1]["step"] == 0
+    assert steps[1]["line"] == "branch" and steps[1]["step"] == 0
     assert steps[1]["outcome"] == "failed:exit:7"
     assert result["outcome"] == "failed:exit:7"
 
@@ -482,7 +629,7 @@ def test_halt_preserve_failed(tmp_path: Path, known_modules, monkeypatch):
 
     assert len(steps) == 2
     assert steps[0]["outcome"] == "complete"
-    assert steps[1]["line"] == "main" and steps[1]["step"] == 0
+    assert steps[1]["line"] == "branch" and steps[1]["step"] == 0
     assert steps[1]["outcome"] == "failed:preservation"
     assert result["outcome"] == "failed:preservation"
 
@@ -500,7 +647,7 @@ def test_halt_timeout(tmp_path: Path, known_modules, monkeypatch):
 
     assert len(steps) == 2
     assert steps[0]["outcome"] == "complete"
-    assert steps[1]["line"] == "main" and steps[1]["step"] == 0
+    assert steps[1]["line"] == "branch" and steps[1]["step"] == 0
     assert steps[1]["outcome"] == "failed:timeout"
     assert result["outcome"] == "failed:timeout"
 
@@ -519,21 +666,23 @@ def test_retry_failed_repeats_same_start_bundle(tmp_path: Path, known_modules, m
     result = _run(_runner(study_dir, script), retry=True)
 
     steps = _load_steps(study_dir)
-    assert len(steps) == 6
+    assert len(steps) == 8
 
     assert steps[0]["outcome"] == "complete"
-    assert steps[1]["line"] == "main" and steps[1]["step"] == 0
+    assert steps[1]["line"] == "branch" and steps[1]["step"] == 0
     assert steps[1]["outcome"] == "failed:exit:7"
 
     retry = steps[2]
-    assert retry["line"] == "main" and retry["step"] == 0
+    assert retry["line"] == "branch" and retry["step"] == 0
     assert retry["outcome"] == "complete"
     assert retry["revived_from"] == steps[1]["revived_from"]
     assert retry["bundle"] != steps[1]["bundle"]
 
-    assert steps[3]["line"] == "control"
-    assert steps[4]["line"] == "main"
-    assert steps[5]["line"] == "control"
+    assert steps[3]["line"] == "repeat"
+    assert steps[4]["line"] == "branch" and steps[4]["step"] == 1
+    assert steps[5]["line"] == "accumulate" and steps[5]["step"] == 1
+    assert steps[6]["line"] == "branch" and steps[6]["step"] == 2
+    assert steps[7]["line"] == "accumulate" and steps[7]["step"] == 2
     assert result == "complete"
 
     _all_bundles_exist(steps)
@@ -565,9 +714,9 @@ def test_halt_missing_preservation(tmp_path: Path, known_modules, monkeypatch):
 
     assert len(steps) == 4
     assert steps[0]["outcome"] == "complete" and steps[0]["line"] == "gestation"
-    assert steps[1]["outcome"] == "complete" and steps[1]["line"] == "main" and steps[1]["step"] == 0
-    assert steps[2]["outcome"] == "complete" and steps[2]["line"] == "control" and steps[2]["step"] == 0
-    assert steps[3]["line"] == "main" and steps[3]["step"] == 1
+    assert steps[1]["outcome"] == "complete" and steps[1]["line"] == "branch" and steps[1]["step"] == 0
+    assert steps[2]["outcome"] == "complete" and steps[2]["line"] == "repeat" and steps[2]["step"] == 0
+    assert steps[3]["line"] == "branch" and steps[3]["step"] == 1
     assert steps[3]["outcome"] == "failed:missing_preservation"
     assert result["outcome"] == "failed:missing_preservation"
 
@@ -580,7 +729,7 @@ def test_stale_request_pair_not_complete(tmp_path: Path, known_modules):
     script.write_text(STANDIN_SCRIPT)
     runner = _runner(study_dir, script)
 
-    line_dir = study_dir / "main"
+    line_dir = study_dir / "branch" / "0"
     state_dir = line_dir / "state" / "cycle"
     state_dir.mkdir(parents=True)
     bundle_dir = line_dir / "data" / "backups" / "stale"
@@ -676,11 +825,9 @@ def test_phantasia_world_model_true(tmp_path: Path, known_modules, monkeypatch):
     assert result == "complete"
     assert len(steps) == 5
 
-    phantasia_step = next(s for s in steps if "phantasia" in s["modules"])
-    assert phantasia_step["line"] == "main" and phantasia_step["step"] == 1
-    assert phantasia_step["outcome"] == "complete"
-    assert phantasia_step["world_model_captured"] is True
-
+    phantasia_steps = [s for s in steps if "phantasia" in s["modules"]]
+    assert len(phantasia_steps) == 2
+    assert all(s["world_model_captured"] is True for s in phantasia_steps)
     for s in steps:
         if "phantasia" not in s["modules"]:
             assert s["world_model_captured"] is None
@@ -702,7 +849,7 @@ def test_phantasia_world_model_false(tmp_path: Path, known_modules, monkeypatch)
     assert len(steps) == 4
 
     phantasia_step = steps[3]
-    assert phantasia_step["line"] == "main" and phantasia_step["step"] == 1
+    assert phantasia_step["line"] == "branch" and phantasia_step["step"] == 1
     assert "phantasia" in phantasia_step["modules"]
     assert phantasia_step["outcome"] == "failed:world_model_not_captured"
     assert phantasia_step["world_model_captured"] is False
@@ -724,7 +871,7 @@ def test_phantasia_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
     assert len(steps) == 4
 
     phantasia_step = steps[3]
-    assert phantasia_step["line"] == "main" and phantasia_step["step"] == 1
+    assert phantasia_step["line"] == "branch" and phantasia_step["step"] == 1
     assert "phantasia" in phantasia_step["modules"]
     assert phantasia_step["outcome"] == "failed:manifest_unreadable"
     assert phantasia_step["world_model_captured"] is False
@@ -735,7 +882,7 @@ def test_phantasia_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
 def test_no_phantasia_completes_without_manifest(
     tmp_path: Path, known_modules, monkeypatch
 ):
-    study_dir = _create_study(tmp_path, viewings=2)
+    study_dir = _create_study(tmp_path, viewings=2, order=["mnemos", "nous"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "missing")
@@ -744,7 +891,7 @@ def test_no_phantasia_completes_without_manifest(
     steps = _load_steps(study_dir)
 
     assert result == "complete"
-    assert len(steps) == 5
+    assert len(steps) == 7
     assert all(s["world_model_captured"] is None for s in steps)
 
     _all_bundles_exist(steps)
@@ -766,3 +913,96 @@ def test_check_phantasia_manifest(tmp_path: Path, text: str, expected):
 
     (tmp_path / "manifest.json").write_text(text)
     assert _check_phantasia_manifest(str(tmp_path)) == expected
+
+
+def _birth_request_time(study_dir: Path) -> float:
+    from datetime import datetime
+
+    req = json.loads(
+        (study_dir / "gestation" / "state" / "cycle" / "preserve_request.json").read_text()
+    )
+    assert req["reason"] == "birth"
+    return datetime.fromisoformat(req["requested_at"]).timestamp()
+
+
+def test_birth_preservation_waits_for_the_bloom_end(tmp_path: Path, known_modules, monkeypatch):
+    from datetime import datetime
+
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_BLOOM_SECONDS", "0.8")
+    # A long fallback: only the stage file's bloom end can release the request.
+    assert _run(_runner(study_dir, script, birth_bloom_fallback_seconds=60.0)) == "complete"
+
+    stage = json.loads(
+        (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
+    )
+    bloom_end = datetime.fromisoformat(stage["birth_bloom_ends_at"]).timestamp()
+    assert _birth_request_time(study_dir) >= bloom_end
+    assert _load_steps(study_dir)[0]["outcome"] == "complete"
+
+
+def test_birth_preservation_waits_the_fallback_without_a_bloom_end(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_BLOOM_SECONDS", "none")
+    assert _run(_runner(study_dir, script, birth_bloom_fallback_seconds=0.6)) == "complete"
+
+    stage = json.loads(
+        (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
+    )
+    assert "birth_bloom_ends_at" not in stage
+    embodied_at = float((study_dir / "embodied_at.txt").read_text())
+    assert _birth_request_time(study_dir) - embodied_at >= 0.6
+
+
+def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+
+    # The operator's own configured bus database.
+    operator = tmp_path / "repo" / "config" / "kaine.operator.toml"
+    operator.write_text("[redis]\ndb = 11\n")
+    with pytest.raises(StudyError, match="operator"):
+        _runner(study_dir, script)
+    operator.unlink()
+
+    # The bus the runner's own environment points at.
+    monkeypatch.setenv("KAINE_REDIS_URL", "redis://:pw@127.0.0.1:6479/12")
+    with pytest.raises(StudyError, match="operator") as exc_info:
+        _runner(study_dir, script)
+    assert "pw" not in str(exc_info.value)
+    monkeypatch.delenv("KAINE_REDIS_URL")
+
+    # A hand-edited plan naming database 0, the operator's live bus.
+    study_path = study_dir / "study.json"
+    plan = json.loads(study_path.read_text())
+    plan["redis"]["db"]["repeat"] = 0
+    study_path.write_text(json.dumps(plan))
+    flush_log: list[str] = []
+    with pytest.raises(StudyError, match="1..15"):
+        _runner(study_dir, script, flush_log=flush_log).run()
+    assert flush_log == []
+    assert not (study_dir / "steps.jsonl").exists()
+
+
+def test_flush_failure_stops_before_the_step(tmp_path: Path, known_modules, monkeypatch):
+    password = "flush-secret-pw"
+    monkeypatch.setenv("KAINE_REDIS_PASSWORD", password)
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+
+    def failing_flush(url: str) -> None:
+        raise ConnectionError(f"cannot reach {url}")
+
+    with pytest.raises(StudyError, match="bus database 10") as exc_info:
+        _runner(study_dir, script, flush_db=failing_flush).run()
+    assert password not in str(exc_info.value)
+    assert not (study_dir / "env_log.jsonl").exists()
+    assert not (study_dir / "steps.jsonl").exists()
