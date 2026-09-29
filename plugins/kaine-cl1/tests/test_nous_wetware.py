@@ -103,7 +103,14 @@ def test_drive_mode_records_taken_proposal():
                 types.SimpleNamespace(channel=ch)
                 for ch in territory.channels[:-2][4:6]
             ]
-            return TerritoryObservation(tag=tag, spikes=spikes)
+            return TerritoryObservation(
+                module=module,
+                channels=territory.channels,
+                spikes=spikes,
+                from_timestamp=0,
+                frame_count=1,
+                tag=tag,
+            )
 
     territory = ChannelTerritory(module="nous", channels=tuple(range(10)))
     engine = WetwarePolicyEngine(StubInner(), StubBroker(), territory, mode="drive")
