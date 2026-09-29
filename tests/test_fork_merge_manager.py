@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import pytest
@@ -233,9 +234,11 @@ def test_snapshots_are_never_evicted(tmp_path):
         assert (tmp_path / snap_id / "snapshot.json").exists()
 
 
-def test_fork_manager_has_no_retention_parameter(tmp_path):
-    with pytest.raises(TypeError):
-        ForkManager(tmp_path, max_snapshots_retained=2)
+def test_fork_manager_has_no_retention_parameter():
+    params = inspect.signature(ForkManager.__init__).parameters
+    assert "max_snapshots_retained" not in params
+    # No **kwargs either, so the removed keyword cannot be silently accepted.
+    assert all(p.kind is not inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 def test_legacy_retention_key_warns_and_deletes_nothing(tmp_path, caplog):

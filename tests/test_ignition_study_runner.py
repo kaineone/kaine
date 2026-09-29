@@ -49,10 +49,17 @@ STANDIN_SCRIPT = textwrap.dedent(
     def utc_iso():
         return datetime.now(timezone.utc).isoformat()
 
+    def write_json(path, data):
+        # Atomic, as the real cycle and control CLI write these files: a
+        # reader polling the file never sees it empty or half-written.
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, path)
+
     def write_request(state_dir, reason, stop):
         req_id = secrets.token_hex(16)
         req = {"request_id": req_id, "reason": reason, "stop": stop, "requested_at": utc_iso()}
-        (state_dir / "preserve_request.json").write_text(json.dumps(req))
+        write_json(state_dir / "preserve_request.json", req)
         return req
 
     def wait_for_request(state_dir, reason, stop, bundle_dir, timeout=30):
@@ -70,7 +77,7 @@ STANDIN_SCRIPT = textwrap.dedent(
                         "error": None,
                         "finished_at": utc_iso(),
                     }
-                    (state_dir / "preserve_result.json").write_text(json.dumps(res))
+                    write_json(state_dir / "preserve_result.json", res)
                     (state_dir / "runtime.json").unlink(missing_ok=True)
                     return
             time.sleep(0.05)
@@ -91,7 +98,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             return
         else:
             data = {"world_model_captured": False}
-        (bundle_dir / "manifest.json").write_text(json.dumps(data))
+        write_json(bundle_dir / "manifest.json", data)
 
     def cycle(args):
         cwd = Path.cwd()
@@ -147,7 +154,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             "run_id": run_id,
             "developmental_stage": {"stage": "embodied"},
         }
-        (state_dir / "runtime.json").write_text(json.dumps(runtime))
+        write_json(state_dir / "runtime.json", runtime)
 
         if not is_viewing:
             # Born: the stage file names when the birth bloom ends (already
@@ -161,7 +168,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             if bloom != "none":
                 ends = datetime.fromtimestamp(time.time() + float(bloom), timezone.utc)
                 stage["birth_bloom_ends_at"] = ends.isoformat()
-            (lifecycle_dir / "stage.json").write_text(json.dumps(stage))
+            write_json(lifecycle_dir / "stage.json", stage)
             wait_for_request(state_dir, "birth", True, bundle_dir)
             return
 
@@ -180,7 +187,7 @@ STANDIN_SCRIPT = textwrap.dedent(
                 "error": "fake failure",
                 "finished_at": utc_iso(),
             }
-            (state_dir / "preserve_result.json").write_text(json.dumps(res))
+            write_json(state_dir / "preserve_result.json", res)
             time.sleep(0.1)
             (state_dir / "runtime.json").unlink(missing_ok=True)
             return
@@ -207,7 +214,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             "error": None,
             "finished_at": utc_iso(),
         }
-        (state_dir / "preserve_result.json").write_text(json.dumps(res))
+        write_json(state_dir / "preserve_result.json", res)
         time.sleep(0.1)
         (state_dir / "runtime.json").unlink(missing_ok=True)
 
@@ -1105,13 +1112,34 @@ def test_failed_timeout_preservation_records_a_critical_step(
     tmp_path: Path, known_modules
 ):
     import subprocess
+    import time
 
     from kaine.research.ignition_study.runner import CHILD_FILE, StudyCritical
 
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=0.5)
+    # A budget no real start-up approaches: only the first run's programme
+    # clock (below) exhausts it, so the retry never times out on a slow host.
+    budget = 30.0
+    study_dir = _create_study(
+        tmp_path, viewings=1, gestation_budget_seconds=budget, viewing_budget_seconds=budget
+    )
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     procs: list[subprocess.Popen] = []
+
+    # The first run's programme clock stands still until the stand-in seed is
+    # up (its stage file is its last write before it waits for the birth
+    # request), then jumps past the budget: the timeout fires on a running
+    # seed however long the child took to start.
+    stage_file = study_dir / "gestation" / "state" / "lifecycle" / "stage.json"
+    programme_time = [0.0]
+
+    def first_run_sleep(_seconds: float) -> None:
+        deadline = time.monotonic() + 60.0
+        while not stage_file.exists():
+            if time.monotonic() > deadline:
+                raise AssertionError("the stand-in seed never started")
+            time.sleep(0.01)
+        programme_time[0] = budget + 1.0
 
     def popen(*args, **kwargs):
         proc = subprocess.Popen(*args, **kwargs)
@@ -1132,6 +1160,8 @@ def test_failed_timeout_preservation_records_a_critical_step(
                 control_command=failing_control,
                 popen=popen,
                 cycle_alive=alive,
+                clock=lambda: programme_time[0],
+                sleep=first_run_sleep,
             ).run()
         assert len(procs) == 1 and procs[0].poll() is None
         steps = _load_steps(study_dir)
@@ -1160,8 +1190,10 @@ def test_failed_timeout_preservation_records_a_critical_step(
                 p.kill()
             p.wait()
 
-    # Once the operator has stopped it, the retry runs.
-    assert _run(_runner(study_dir, script, cycle_alive=alive), retry=True) == "complete"
+    # Once the operator has stopped it, the retry runs.  The control CLI waits
+    # long enough for a slowly starting seed to answer the birth request.
+    retry = _runner(study_dir, script, cycle_alive=alive, preserve_wait_seconds=budget)
+    assert _run(retry, retry=True) == "complete"
     assert [s["outcome"] for s in _load_steps(study_dir)] == [
         "failed:critical", "complete", "complete", "complete", "complete", "complete",
     ]

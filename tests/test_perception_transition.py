@@ -214,7 +214,8 @@ def _video(tmp_path: Path, feed: dict, clock: _FakeClock, timers: _TimerFactory)
     manifest = load_playlist_manifest(feed["playlist_manifest"])
     inner = PlaylistSource(manifest, playlist_clock=pclock, cv2_module=_FakeCv2())
     source = TransitionVideoSource(inner, transition)
-    assert source.open()
+    opened = source.open()
+    assert opened
     return source, transition, pclock, manifest
 
 
@@ -425,7 +426,8 @@ def test_first_frame_decode_leaves_the_programme_clock_untouched(tmp_path):
     pclock = PlaylistClock(1, clock=_FakeClock())
     src = PlaylistSource(manifest, playlist_clock=pclock, cv2_module=_FakeCv2())
     assert src.first_frame() is None  # not verified yet
-    assert src.open()
+    opened = src.open()
+    assert opened
     assert np.array_equal(src.first_frame(), _film_frame(0))
     assert not pclock.started
 
@@ -691,8 +693,7 @@ def test_no_frame_or_pcm_writers_in_the_transition_module():
     frame or a sample (the same patterns the feed modules are held to)."""
     import re
 
-    import kaine.modules.perception_transition as module
-
+    module = sys.modules[TransitionController.__module__]
     source = Path(module.__file__).read_text(encoding="utf-8")
     pattern = re.compile(
         r"(\.save\(|\.tofile\(|imwrite\(|imsave\(|np\.save\(|numpy\.save\(|"
