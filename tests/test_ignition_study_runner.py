@@ -249,6 +249,8 @@ def known_modules(monkeypatch):
         "mundus",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
+    monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
+    monkeypatch.delenv("KAINE_REDIS_USERNAME", raising=False)
     return names
 
 
