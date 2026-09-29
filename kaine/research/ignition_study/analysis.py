@@ -4,8 +4,9 @@
 """Ignition-log analysis for the module-ignition study.
 
 Read-only over the study's data. Computes the same content-free measures for
-every completed viewing, compares main against control and step against step,
-and writes ``analysis/report.json`` and ``analysis/report.md`` in the study
+every completed viewing (branch, repeat and accumulate lines), compares the
+branches against the seed, the seed against its repeat and the accumulating
+line against the branches, and writes ``analysis/report.json`` and ``analysis/report.md`` in the study
 directory.
 """
 from __future__ import annotations
@@ -36,11 +37,14 @@ SCHEMA_VERSION = "1.0.0"
 _LOGGER = logging.getLogger(__name__)
 
 LIMITS = [
-    "Modules are added in one fixed order, so each effect is conditional on the earlier ones and on the being's history.",
-    "Control removes familiarity, not order.",
-    "Modules with no input channel on this host (Praxis, Perception, the Mundus stub) are expected nulls and are flagged when their share is zero.",
-    "The design has one being per line; nothing is tested for significance.",
+    "There is one being per condition; nothing is tested for significance.",
+    "The noise floor is a single repeat of branch 0: differences smaller than it are not evidence.",
+    "Modules are added in one fixed order, so each effect is conditional on the earlier ones.",
+    "The accumulate line mixes familiarity with module history; there is no rewatch-only line.",
+    "Praxis, Perception and Mundus have no input channel on this host and are expected nulls; they are flagged when their share is zero.",
 ]
+
+VIEWING_LINES = ("branch", "repeat", "accumulate")
 
 EXPECTED_NULL_MODULES = {"praxis", "perception", "mundus"}
 _INTERNAL_SOURCES = {"syneidesis", "volition"}
@@ -492,42 +496,52 @@ def _correlation_result(
     return {"correlation": r, "shared_bins": shared}
 
 
-def _build_per_step(
+def _compare(
+    label: str,
+    a_key: tuple[str, int],
+    b_key: tuple[str, int],
+    by_line_step: dict[tuple[str, int], ViewingResult],
+) -> dict[str, Any]:
+    """Compare viewing ``a_key`` minus viewing ``b_key``; pending unless both are complete."""
+    a = by_line_step.get(a_key)
+    b = by_line_step.get(b_key)
+    entry: dict[str, Any] = {
+        "comparison": label,
+        "minuend": {"line": a_key[0], "step": a_key[1]},
+        "subtrahend": {"line": b_key[0], "step": b_key[1]},
+    }
+    if a is None or b is None:
+        entry["status"] = "pending"
+        entry["difference"] = None
+        entry["correlation"] = None
+    else:
+        entry["status"] = "complete"
+        entry["difference"] = _diff_measures(a.measures, b.measures)
+        entry["correlation"] = _correlation_result(a.film_minute_bins, b.film_minute_bins)
+    return entry
+
+
+def _build_comparisons(
     viewings: list[ViewingResult],
-    viewings_per_line: int,
-) -> list[dict[str, Any]]:
+    module_count: int,
+) -> dict[str, Any]:
     by_line_step: dict[tuple[str, int], ViewingResult] = {
         (v.line, v.step): v for v in viewings
     }
-    steps: list[dict[str, Any]] = []
-    for k in range(viewings_per_line):
-        main = by_line_step.get(("main", k))
-        ctrl = by_line_step.get(("control", k))
-        entry: dict[str, Any] = {"step": k}
-        if main is not None and ctrl is not None:
-            entry["main_minus_control"] = _diff_measures(main.measures, ctrl.measures)
-            entry["main_vs_control_correlation"] = _correlation_result(
-                main.film_minute_bins, ctrl.film_minute_bins
-            )
-        else:
-            entry["main_minus_control"] = None
-            entry["main_vs_control_correlation"] = None
-
-        for line in ("main", "control"):
-            prev = by_line_step.get((line, k - 1))
-            cur = by_line_step.get((line, k))
-            if cur is None or k == 0 or prev is None:
-                entry[f"{line}_delta_from_previous"] = None
-                entry[f"{line}_to_previous_correlation"] = None
-            else:
-                entry[f"{line}_delta_from_previous"] = _diff_measures(
-                    cur.measures, prev.measures
-                )
-                entry[f"{line}_to_previous_correlation"] = _correlation_result(
-                    cur.film_minute_bins, prev.film_minute_bins
-                )
-        steps.append(entry)
-    return steps
+    ks = range(1, module_count + 1)
+    return {
+        "module_effect_from_seed": [
+            {"k": k, **_compare("branch k minus branch 0", ("branch", k), ("branch", 0), by_line_step)}
+            for k in ks
+        ],
+        "noise_floor": _compare(
+            "branch 0 minus repeat", ("branch", 0), ("repeat", 0), by_line_step
+        ),
+        "familiarity_and_history": [
+            {"k": k, **_compare("accumulate k minus branch k", ("accumulate", k), ("branch", k), by_line_step)}
+            for k in ks
+        ],
+    }
 
 
 def _viewing_to_dict(v: ViewingResult) -> dict[str, Any]:
@@ -658,31 +672,30 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
             )
         lines.append("")
 
-    lines.append("## Per-step comparisons")
-    lines.append("")
-    for entry in report["per_step"]:
-        k = entry["step"]
-        lines.append(f"### Step {k}")
-        if entry["main_minus_control"] is not None:
-            lines.append("**Main − control**")
-            lines.append(f"- Correlation: {_fmt_corr(entry['main_vs_control_correlation'])}")
-            lines.extend(_measures_diff_lines(entry["main_minus_control"]))
+    comparisons = report["comparisons"]
+
+    def _emit(title: str, entry: dict[str, Any]) -> None:
+        lines.append(f"### {title}")
+        if entry["status"] != "complete":
+            lines.append("Pending: one of the two viewings is not complete; not computed.")
         else:
-            lines.append("Main or control viewing missing; no comparison.")
+            lines.append(f"- Correlation: {_fmt_corr(entry['correlation'])}")
+            lines.extend(_measures_diff_lines(entry["difference"]))
         lines.append("")
 
-        for line in ("main", "control"):
-            delta = entry.get(f"{line}_delta_from_previous")
-            corr = entry.get(f"{line}_to_previous_correlation")
-            if delta is not None:
-                lines.append(f"**{line.title()} delta from previous step**")
-                lines.append(f"- Correlation: {_fmt_corr(corr)}")
-                lines.extend(_measures_diff_lines(delta))
-            else:
-                lines.append(
-                    f"**{line.title()} delta from previous step**: no previous step."
-                )
-            lines.append("")
+    lines.append("## Module effect from the seed (branch k − branch 0)")
+    lines.append("")
+    for entry in comparisons["module_effect_from_seed"]:
+        _emit(f"Branch {entry['k']} − branch 0", entry)
+
+    lines.append("## Noise floor (branch 0 − repeat)")
+    lines.append("")
+    _emit("Branch 0 − repeat", comparisons["noise_floor"])
+
+    lines.append("## Familiarity and history (accumulate k − branch k)")
+    lines.append("")
+    for entry in comparisons["familiarity_and_history"]:
+        _emit(f"Accumulate {entry['k']} − branch {entry['k']}", entry)
 
     lines.append("## Limits")
     lines.append("")
@@ -700,7 +713,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
     steps = _load_steps(study_dir)
 
     faculty_modules = list(plan.get("base_modules", [])) + list(plan.get("order", []))
-    viewings_per_line = int(plan.get("viewings_per_line", 12))
+    module_count = len(plan.get("order", []))
 
     _install_encryptor()
 
@@ -709,7 +722,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         if step.get("outcome") != "complete":
             continue
         line = step.get("line")
-        if line not in ("main", "control"):
+        if line not in VIEWING_LINES:
             continue
         if not step.get("run_id"):
             continue
@@ -728,17 +741,17 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         viewings.append(_analyse_viewing(step, faculty_modules))
         step.pop("_study_dir", None)
 
-    per_step = _build_per_step(viewings, viewings_per_line)
+    comparisons = _build_comparisons(viewings, module_count)
 
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "study_id": plan.get("study_id"),
         "plan_hash": plan_hash,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "viewings_per_line": viewings_per_line,
+        "module_count": module_count,
         "faculty_modules": faculty_modules,
         "per_viewing": [_viewing_to_dict(v) for v in viewings],
-        "per_step": per_step,
+        "comparisons": comparisons,
         "limits": LIMITS,
     }
 

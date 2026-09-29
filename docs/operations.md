@@ -695,16 +695,27 @@ Per viewing, the report records:
 - **Data quality**: record count, programme-time gaps longer than 10 s, and
   dropped records inferred from gaps in the sink sequence.
 
-Per step, the report compares the main line against the control line and each
-step against the previous one on the same line, including film-minute profile
-correlations. Correlations are reported as "not computed" when the two profiles
-share fewer than 30 bins, and as undefined when either profile is constant.
+Per-viewing measures are computed for every completed viewing of the `branch`,
+`repeat` and `accumulate` lines; gestation is not a viewing. K is the number of
+modules in the plan's `order`. The report's `comparisons` section holds three
+families, each with the per-measure differences and the film-minute profile
+correlation:
 
-The **limits** section is part of every report: modules are added in one fixed
-order, so each effect is conditional on earlier modules and on the being's
-history; the control line removes familiarity but not order; Praxis, Perception
-and the Mundus stub have no input channel on this host and are expected nulls;
-and there is one being per line, so no significance testing is performed.
+- **Module effect from the seed**: branch k − branch 0, for k = 1..K.
+- **Noise floor**: branch 0 − the repeat of branch 0.
+- **Familiarity and history**: accumulate k − branch k, for k = 1..K.
+
+A comparison whose two viewings are not both complete is reported as `pending`
+and is not computed. Correlations are reported as "not computed" when the two
+profiles share fewer than 30 bins, and as undefined when either profile is
+constant.
+
+The **limits** section is part of every report: there is one being per
+condition and nothing is tested for significance; the noise floor is a single
+repeat, and differences smaller than it are not evidence; modules are added in
+one fixed order; the accumulate line mixes familiarity with module history,
+because there is no rewatch-only line; and Praxis, Perception and Mundus have no
+input channel on this host and are expected nulls.
 
 ## Entity decommission
 
