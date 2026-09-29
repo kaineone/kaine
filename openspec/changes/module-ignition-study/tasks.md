@@ -21,7 +21,7 @@
 - [x] 2.3 The ignition analysis and its report.
 - [x] 2.4 A dry run of the runner end to end with a tiny stand-in programme and no entity (fakes), before the real run.
 - [ ] 2.5 The real run: `init`, then `run` through the seed, branch, repeat and accumulate steps, with state encryption configured, started by the operator.
-- [ ] 2.6 The runner follows the seed and branch protocol (revised 2026-09-28):
+- [x] 2.6 The runner follows the seed and branch protocol (revised 2026-09-28):
   - the step order seed, branch 0, repeat, then branch k and accumulate k;
   - start bundles as specified;
   - a working directory and collection prefixes per branch step, per repeat, and per accumulate line;
