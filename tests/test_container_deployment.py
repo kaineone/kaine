@@ -682,3 +682,42 @@ def test_kaine_cycle_unattended_container_design(tmp_path: Path):
     assert "KAINE_CYCLE_UNATTENDED=1" in generated
 
     # Do NOT run systemd-analyze on quadlet output; it is not a plain unit file.
+
+
+# --------------------------------------------------------------------------
+# module-ignition-study 2.8 — the kaine-study service
+# --------------------------------------------------------------------------
+def test_study_service_is_profile_gated_and_not_in_default_up():
+    doc = _load_compose()
+    study = doc["services"]["kaine-study"]
+    cycle = doc["services"]["kaine-cycle"]
+    assert study.get("profiles") == ["study"]
+    assert study["build"] == cycle["build"]
+    assert study["image"] == cycle["image"]
+
+
+def test_study_service_runs_the_runner_and_publishes_nothing():
+    study = _load_compose()["services"]["kaine-study"]
+    assert "ports" not in study
+    assert "restart" not in study
+    assert study["entrypoint"][-3:] == ["python", "-m", "kaine.research.ignition_study"]
+
+
+def test_study_service_mirrors_cycle_environment_and_mounts():
+    services = _load_compose()["services"]
+    cycle, study = services["kaine-cycle"], services["kaine-study"]
+    assert study["environment"] == cycle["environment"]
+    for gate in ("KAINE_CYCLE_OPERATOR_PRESENT", "KAINE_RESEARCH_MODE"):
+        assert study["environment"][gate].endswith(":-}")
+
+    def norm(vols):
+        return {v if isinstance(v, str) else v["target"] for v in vols}
+
+    assert norm(study["volumes"]) == norm(cycle["volumes"]) | {"kaine-studies:/app/studies"}
+    assert study["depends_on"] == cycle["depends_on"]
+
+
+def test_study_volume_is_a_declared_named_volume():
+    doc = _load_compose()
+    assert "kaine-studies" in doc["volumes"]
+    assert "kaine-studies:/app/studies" in doc["services"]["kaine-study"]["volumes"]
