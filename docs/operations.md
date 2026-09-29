@@ -645,10 +645,10 @@ being it cannot preserve.
 
 The compose topology carries a `kaine-study` service (`profiles: [study]`, so a
 plain `up` never starts it). It runs the runner inside the cycle image with the
-cycle's configuration, secrets, model, evaluation, and trajectory mounts, the
+cycle's configuration, secrets, and model mounts, the
 same environment block as `kaine-cycle` (no boot gate defaults permissive), no
-published ports, and no restart policy. Study directories live on the durable
-`kaine-studies` volume mounted at `/app/studies`, so they survive `down`/`up`.
+published ports, and no restart policy. It never mounts the entity-state, evaluation, or trajectory volumes: every step runs inside its study directory, which lives on the durable
+`kaine-studies` volume mounted at `/app/studies`, so it survives `down`/`up`.
 Inside it the models are at `/models` (the runner honours an exported
 `KAINE_MODELS_DIR` over `state/models`, and the child cycles inherit it) and the
 bus is `redis://kaine-redis:6379`, authenticated by `KAINE_REDIS_PASSWORD`.

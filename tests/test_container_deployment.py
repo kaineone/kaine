@@ -710,11 +710,26 @@ def test_study_service_mirrors_cycle_environment_and_mounts():
     for gate in ("KAINE_CYCLE_OPERATOR_PRESENT", "KAINE_RESEARCH_MODE"):
         assert study["environment"][gate].endswith(":-}")
 
-    def norm(vols):
-        return {v if isinstance(v, str) else v["target"] for v in vols}
-
-    assert norm(study["volumes"]) == norm(cycle["volumes"]) | {"kaine-studies:/app/studies"}
+    shared = {
+        "../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro",
+        "../config/secrets.toml:/app/config/secrets.toml:ro",
+        "kaine-models:/models:ro",
+    }
+    assert shared <= {v for v in cycle["volumes"] if isinstance(v, str)}
+    assert set(study["volumes"]) == shared | {"kaine-studies:/app/studies"}
     assert study["depends_on"] == cycle["depends_on"]
+
+
+def test_study_service_never_mounts_live_entity_state():
+    study = _load_compose()["services"]["kaine-study"]
+    for v in study["volumes"]:
+        if isinstance(v, str):
+            source, target = v.split(":")[:2]
+        else:
+            source, target = v.get("source", ""), v["target"]
+        assert source not in {"kaine-state", "kaine-eval-data", "kaine-trajectory"}
+        assert target != "/app/state"
+        assert not target.startswith("/app/state/")
 
 
 def test_study_volume_is_a_declared_named_volume():
