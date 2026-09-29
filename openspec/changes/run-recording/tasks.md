@@ -4,7 +4,7 @@
 - [ ] 1.3 Config keys in config/kaine.toml, wiring in the cycle, and exclusion from export (the metrics-only allowlist stays unchanged).
 
 ## 2. Study
-- [ ] 2.1 The study overlay enables both logs, `[evaluation].workspace_trajectory` and `[ignition_log]`, and leaves the raw archive off.
+- [x] 2.1 The study overlay enables both logs, `[evaluation].workspace_trajectory` and `[ignition_log]`, and leaves the raw archive off.
 - [ ] 2.2 The container deployment keeps both directories on durable volumes.
 
 ## 3. Verification

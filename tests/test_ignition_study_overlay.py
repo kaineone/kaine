@@ -237,3 +237,34 @@ def test_overlay_self_rhythm_overrides_operator_false(repo, plan):
         # Study settings win over the operator's own file on every step.
         assert overlay["soma"]["self_rhythm_enabled"] is True
         assert overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
+
+
+_RECORDING_STEPS = [
+    ("gestation", "gestation", 0),
+    ("branch", "viewing", 1),
+    ("accumulate", "viewing", 2),
+]
+
+
+def test_overlay_records_nexus_and_external_utterances_every_step(repo, plan):
+    for line, kind, k in _RECORDING_STEPS:
+        overlay, _, _ = build_overlay(
+            plan, line, kind, k, repo, repo / "config" / "kaine.toml",
+            repo / "config" / "kaine.operator.toml",
+        )
+        log = overlay["research_event_log"]
+        assert log["enabled"] is True
+        assert log["external_utterances"]["enabled"] is True
+        assert log["nexus_record"]["enabled"] is True
+        assert overlay["evaluation"]["workspace_trajectory"] is True
+        assert overlay["ignition_log"]["enabled"] is True
+
+
+def test_overlay_never_enables_raw_archive(repo, plan):
+    op = repo / "config" / "kaine.operator.toml"
+    op.write_text("[research_event_log.raw_archive]\nenabled = true\n")
+    for line, kind, k in _RECORDING_STEPS:
+        overlay, _, _ = build_overlay(
+            plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
+        )
+        assert overlay["research_event_log"]["raw_archive"]["enabled"] is False

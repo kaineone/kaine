@@ -76,7 +76,15 @@ def build_overlay(
         "empatheia": {"collection": collection_prefix},
         # Relative to the step's working directory; the runner records it.
         "ignition_log": {"enabled": True, "directory": IGNITION_LOG_DIR},
-        "research_event_log": {"enabled": True},
+        # Every step records what Nexus shows and the external utterances;
+        # the raw A/V archive is never part of a study.
+        "research_event_log": {
+            "enabled": True,
+            "external_utterances": {"enabled": True},
+            "nexus_record": {"enabled": True},
+            "raw_archive": {"enabled": False},
+        },
+        "evaluation": {"workspace_trajectory": True},
         "preservation": {
             "divergence_monitor": {"enabled": True},
             "welfare_response": {"enabled": True},
