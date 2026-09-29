@@ -254,7 +254,8 @@ quadlet/kaine-cycle.container both carry this rationale as comments.
   (default `4gb`, set in `compose/.env`; the native bootstrap reads the same
   variable) and `noeviction` — the bus fails loud rather than silently evicting
   events. The pre-boot "Bus budget" row checks that the configured stream caps
-  fit.
+  fit; a full study needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the
+  RAM.
 - **Log rotation** — the `x-logging` anchor (json-file, `max-size: "50m"`,
   `max-file: "3"`) applies to every service in compose/kaine.yml.
 - **Manifest provenance** — compose passes `GIT_SHA` (e.g. from

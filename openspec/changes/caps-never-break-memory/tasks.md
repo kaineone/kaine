@@ -49,3 +49,12 @@
 - [x] 7.1 Fix the light-consolidation docstring in `kaine/modules/hypnos/phases.py`.
 - [x] 7.2 Update the configuration reference, operations, fork/merge lifecycle, entity preservation, deployment and Eidolon docs.
 - [x] 7.3 Run ruff and the affected tests.
+
+## 8. Second review
+
+- [x] 8.1 Eidolon records drift as episodes (one entry per contiguous alert run, summarising every alert), updates the list in place, and saves compact JSON with the C encoder; older per-alert and indented files still load.
+- [x] 8.2 The bus budget samples per-entry sizes from the live bus, FAILS only on measured sizes, and WARNS naming the streams at the 2 KB estimate; docs and `compose/.env.example` say a full study needs `KAINE_REDIS_MAXMEMORY=12gb` or more.
+- [x] 8.3 Disk rows cover every configured durable path, grouped per filesystem.
+- [x] 8.4 `native-services.sh` parses `compose/.env` the way compose does (spaces, `export`, quotes, inline comment), keeping the anchored validation.
+- [x] 8.5 The Quadlet unit starts Redis through an `sh` wrapper that defaults an unset or empty value to `4gb` and refuses a malformed one.
+- [x] 8.6 Tests and mutation checks for 8.1 and 8.2.

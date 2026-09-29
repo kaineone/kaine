@@ -10,16 +10,18 @@ Network=kaine.network
 PublishPort=127.0.0.1:6479:6379
 Volume=kaine-redis-data.volume:/data
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
-Exec=redis-server --requirepass ${KAINE_REDIS_PASSWORD} --bind 0.0.0.0 --protected-mode yes --appendonly yes --appendfsync everysec --maxmemory ${KAINE_REDIS_MAXMEMORY} --maxmemory-policy noeviction --save ""
+Environment=KAINE_REDIS_MAXMEMORY=${KAINE_REDIS_MAXMEMORY}
+# The memory ceiling is resolved inside the container by a small sh wrapper,
+# because a unit cannot default an EMPTY variable: KAINE_REDIS_MAXMEMORY from
+# compose/.env, 4gb when it is unset or empty, and a refusal to start on
+# anything that is not a Redis memory size. `$$` is a literal `$` for the
+# container shell (systemd would otherwise expand it). noeviction stays.
+Exec=sh -c 'm="$${KAINE_REDIS_MAXMEMORY:-4gb}"; case "$$m" in *[!0-9kKmMgGbB]*) m=invalid;; esac; if ! echo "$$m" | grep -Eqx "[0-9]+([kKmMgG][bB]?)?"; then echo "KAINE_REDIS_MAXMEMORY must be a Redis memory size such as 4gb or 12gb" >&2; exit 64; fi; exec redis-server --requirepass "$$KAINE_REDIS_PASSWORD" --bind 0.0.0.0 --protected-mode yes --appendonly yes --appendfsync everysec --maxmemory "$$m" --maxmemory-policy noeviction --save ""'
 HealthCmd=redis-cli -a "$KAINE_REDIS_PASSWORD" ping
 HealthInterval=10s
 HealthRetries=5
 
 [Service]
-# Default Redis memory ceiling for the Exec= line. A KAINE_REDIS_MAXMEMORY line
-# in compose/.env overrides it: systemd applies EnvironmentFile= after
-# Environment=.
-Environment=KAINE_REDIS_MAXMEMORY=4gb
 # Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).
 EnvironmentFile=@KAINE_ROOT@/compose/.env
 Restart=always

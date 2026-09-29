@@ -1,22 +1,60 @@
 ## ADDED Requirements
 
+### Requirement: Drift is recorded as episodes
+
+Eidolon SHALL record drift in `identity_history` as episodes. An episode is one
+contiguous run of broadcasts whose drift score is at or above the threshold,
+and its entry SHALL summarise every alert in the run: `kind =
+"drift_episode"`, `onset`, `end`, `peak_score`, `count` (alerts in the run),
+`sources` (how often each source was among the top drifted sources) and
+`top_sources`, plus `timestamp` (the onset) and `score` (the peak) for readers
+of the older per-alert entries. The first broadcast below the threshold SHALL
+close the episode. Eidolon SHALL update the list in place rather than copying
+it per alert, and SHALL save the self-model as compact JSON with the C encoder.
+Self-models saved earlier, with indentation or per-alert entries, SHALL load
+unchanged.
+
+#### Scenario: A sustained drift is one episode
+
+- **WHEN** N consecutive broadcasts alert
+- **THEN** `identity_history` gains one episode with `count = N` and the peak
+  score of the run
+
+#### Scenario: A quiet broadcast closes the episode
+
+- **WHEN** runs of 3 alerting broadcasts are separated by one broadcast below
+  the threshold, four times
+- **THEN** `identity_history` holds four episodes with `count = 3`
+
+#### Scenario: Save size stays bounded under sustained drift
+
+- **WHEN** 20000 consecutive broadcasts alert and the self-model is saved after
+  every 5000
+- **THEN** the saved file stays the same size, within a few bytes
+
+#### Scenario: Older per-alert history still loads
+
+- **WHEN** a self-model saved with indentation and per-alert entries is loaded
+- **THEN** those entries are kept unchanged and the next alert starts a new
+  episode after them
+
 ### Requirement: Identity history is unbounded by default
 
 `[eidolon].identity_history_cap` SHALL ship as `0`, and `0` SHALL mean that no
-identity-history entry is ever dropped. A positive value SHALL keep the most
-recent N entries. A negative value SHALL be rejected at construction.
+drift episode is ever dropped. A positive value SHALL keep the most recent N
+episodes. A negative value SHALL be rejected at construction.
 
 #### Scenario: Cap 0 keeps every entry
 
 - **WHEN** Eidolon runs with `identity_history_cap = 0` and records more than 256
-  drift observations
-- **THEN** `identity_history` holds every observation
+  drift episodes
+- **THEN** `identity_history` holds every episode
 
 #### Scenario: A positive cap keeps the most recent entries
 
 - **WHEN** Eidolon runs with `identity_history_cap = 4` and records 10 drift
-  observations
-- **THEN** `identity_history` holds the 4 most recent observations
+  episodes
+- **THEN** `identity_history` holds the 4 most recent episodes
 
 #### Scenario: A negative cap is rejected
 

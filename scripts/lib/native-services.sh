@@ -341,6 +341,34 @@ native_stop_service() {
 # ------------------------------------------------------------------------------
 # Native Redis bootstrap
 # ------------------------------------------------------------------------------
+# Usage: env_file_value <file> <key>
+# Prints the last value of <key> in a compose-style .env file, or nothing.
+# Accepts what docker compose accepts for these lines: leading spaces, an
+# "export " prefix, one pair of surrounding single or double quotes, and an
+# unquoted " # comment" after the value. <key> must be [A-Za-z_][A-Za-z0-9_]*.
+env_file_value() {
+  local file="$1" key="$2" line value="" found=0
+  [[ -f "$file" ]] || return 0
+  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=${line%$'\r'}
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=(.*)$ ]]; then
+      value=${BASH_REMATCH[2]}
+      found=1
+    fi
+  done < "$file"
+  [[ "$found" -eq 1 ]] || return 0
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ ${#value} -ge 2 && ( ( "${value:0:1}" == '"' && "${value: -1}" == '"' ) || ( "${value:0:1}" == "'" && "${value: -1}" == "'" ) ) ]]; then
+    value=${value:1:${#value}-2}
+  else
+    value=${value%%[[:space:]]#*}
+    value="${value%"${value##*[![:space:]]}"}"
+  fi
+  printf '%s' "$value"
+}
+
 native_bootstrap_redis() {
   local root="$1"
   local pw="$2"
@@ -355,8 +383,7 @@ native_bootstrap_redis() {
   # noeviction stays: the bus fails loud rather than dropping events.
   local maxmemory="${KAINE_REDIS_MAXMEMORY:-}"
   if [[ -z "$maxmemory" && -f "$root/compose/.env" ]]; then
-    maxmemory=$(grep -E '^KAINE_REDIS_MAXMEMORY=' "$root/compose/.env" | tail -n1 | cut -d= -f2- || true)
-    maxmemory=${maxmemory%$'\r'}
+    maxmemory=$(env_file_value "$root/compose/.env" KAINE_REDIS_MAXMEMORY)
   fi
   maxmemory="${maxmemory:-4gb}"
   if [[ ! "$maxmemory" =~ ^[0-9]+([kKmMgG][bB]?)?$ ]]; then

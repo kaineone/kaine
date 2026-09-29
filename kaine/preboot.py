@@ -77,7 +77,12 @@ from kaine.boot import (
     _build_perception_feed_audio_factory,
     _build_perception_feed_video_factory,
 )
-from kaine.bus.config import BusConfig, maxlen_for, typical_event_bytes
+from kaine.bus.config import (
+    TYPICAL_EVENT_BYTES,
+    BusConfig,
+    maxlen_for,
+    typical_event_bytes,
+)
 from kaine.bus.schema import module_stream
 from kaine.config import (
     OPERATOR_CONFIG_PATH,
@@ -85,6 +90,7 @@ from kaine.config import (
     load_runtime_config,
     require_known_keys,
 )
+from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
 from kaine.nexus import health
@@ -510,8 +516,16 @@ async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
 BUS_BUDGET_HEADROOM_FACTOR = 2
 # Above this fraction of maxmemory the budget row WARNs.
 BUS_BUDGET_WARN_FRACTION = 0.70
-# Wall-clock ceiling for reading maxmemory from the server.
+# Wall-clock ceiling for the bus probe (maxmemory + per-stream sampling).
 BUS_PROBE_TIMEOUT_S = 5.0
+# A live stream needs at least this many entries before MEMORY USAGE / XLEN
+# counts as a measurement (below it the fixed per-key overhead dominates).
+BUS_SAMPLE_MIN_ENTRIES = 100
+
+# Where a per-entry size in the budget comes from.
+SIZE_LIVE = "live"  # sampled from the running bus
+SIZE_TABLE = "table"  # measured value in kaine.bus.config.TYPICAL_EVENT_BYTES
+SIZE_ESTIMATE = "estimate"  # the 2 KB default for an unmeasured stream
 
 # Streams every run produces, whatever modules are enabled.
 _CORE_BUDGET_STREAMS: tuple[str, ...] = ("workspace.broadcast", "cycle.out")
@@ -536,6 +550,24 @@ def _fmt_gib(n_bytes: float) -> str:
     return f"{n_bytes / _GIB:.2f} GiB"
 
 
+@dataclass(frozen=True)
+class StreamBudget:
+    """One stream's share of the bus budget (before AOF headroom)."""
+
+    stream: str
+    maxlen: int
+    entry_bytes: int
+    source: str  # SIZE_LIVE | SIZE_TABLE | SIZE_ESTIMATE
+
+    @property
+    def bytes(self) -> int:
+        return self.maxlen * self.entry_bytes
+
+    @property
+    def measured(self) -> bool:
+        return self.source != SIZE_ESTIMATE
+
+
 def budget_streams(modules: dict[str, Any]) -> list[str]:
     """The streams a run with ``modules`` enabled produces, in stable order.
 
@@ -551,13 +583,17 @@ def budget_streams(modules: dict[str, Any]) -> list[str]:
     return streams
 
 
-def bus_budget(config: dict[str, Any]) -> tuple[int, list[tuple[str, int]]]:
+def bus_budget(
+    config: dict[str, Any], live_sizes: Optional[dict[str, int]] = None
+) -> tuple[int, list[StreamBudget]]:
     """Estimated Redis memory, in bytes, that the configured caps imply.
 
-    Returns the budget (sum of maxlen x typical event size over
-    :func:`budget_streams`, times :data:`BUS_BUDGET_HEADROOM_FACTOR`) and the
-    per-stream estimates before headroom, largest first. Raises on a malformed
-    ``[bus]`` table.
+    Each stream's per-entry size comes from the live bus when ``live_sizes``
+    has a measurement for it, else from the measured table in
+    ``kaine.bus.config``, else from the 2 KB estimate. Returns the budget (the
+    sum over :func:`budget_streams`, times :data:`BUS_BUDGET_HEADROOM_FACTOR`)
+    and the per-stream shares, largest first. Raises on a malformed ``[bus]``
+    table.
     """
     bus_cfg = config.get("bus") or {}
     if not isinstance(bus_cfg, dict):
@@ -570,17 +606,28 @@ def bus_budget(config: dict[str, Any]) -> tuple[int, list[tuple[str, int]]]:
         per_stream_maxlen={str(k): int(v) for k, v in per_stream.items()},
     )
     modules = config.get("modules") or {}
-    per: list[tuple[str, int]] = [
-        (stream, maxlen_for(caps, stream) * typical_event_bytes(stream))
-        for stream in budget_streams(modules if isinstance(modules, dict) else {})
-    ]
-    per.sort(key=lambda item: item[1], reverse=True)
-    total = sum(n for _, n in per) * BUS_BUDGET_HEADROOM_FACTOR
-    return total, per
+    live = live_sizes or {}
+    shares: list[StreamBudget] = []
+    for stream in budget_streams(modules if isinstance(modules, dict) else {}):
+        if live.get(stream):
+            size, source = int(live[stream]), SIZE_LIVE
+        elif stream in TYPICAL_EVENT_BYTES:
+            size, source = TYPICAL_EVENT_BYTES[stream], SIZE_TABLE
+        else:
+            size, source = typical_event_bytes(stream), SIZE_ESTIMATE
+        shares.append(StreamBudget(stream, maxlen_for(caps, stream), size, source))
+    shares.sort(key=lambda s: s.bytes, reverse=True)
+    total = sum(s.bytes for s in shares) * BUS_BUDGET_HEADROOM_FACTOR
+    return total, shares
 
 
-async def _read_server_maxmemory() -> int:
-    """Read ``maxmemory`` from the configured KAINE Redis through the bus client."""
+async def _probe_bus(streams: list[str]) -> tuple[int, dict[str, int]]:
+    """Read ``maxmemory`` and sample per-entry sizes from the KAINE Redis.
+
+    Per-entry sizes are ``MEMORY USAGE`` / ``XLEN`` of each existing stream
+    with at least :data:`BUS_SAMPLE_MIN_ENTRIES` entries. Raises when
+    ``maxmemory`` cannot be read; a stream that cannot be sampled is left out.
+    """
     import redis.asyncio as aioredis
 
     from kaine.bus.client import AsyncBus
@@ -595,29 +642,47 @@ async def _read_server_maxmemory() -> int:
     )
     bus = AsyncBus(bus_cfg, client=client)
     try:
-        return await bus.server_maxmemory()
+        maxmemory = await bus.server_maxmemory()
+        sizes: dict[str, int] = {}
+        for stream in streams:
+            try:
+                size = await bus.stream_entry_bytes(
+                    stream, min_entries=BUS_SAMPLE_MIN_ENTRIES
+                )
+            except Exception:
+                log.debug("could not sample %s", stream, exc_info=True)
+                continue
+            if size:
+                sizes[stream] = size
+        return maxmemory, sizes
     finally:
         try:
             await bus.close()
         except Exception:
-            log.debug("bus close after maxmemory probe failed", exc_info=True)
+            log.debug("bus close after the budget probe failed", exc_info=True)
 
 
 async def check_bus_budget(
     config: dict[str, Any],
     *,
-    read_maxmemory: Optional[Callable[[], Awaitable[int]]] = None,
+    probe: Optional[Callable[[list[str]], Awaitable[tuple[int, dict[str, int]]]]] = None,
 ) -> list[CheckResult]:
     """Compare the bus memory the stream caps imply with Redis ``maxmemory``.
 
-    FAIL when the budget exceeds ``maxmemory``, WARN above
-    :data:`BUS_BUDGET_WARN_FRACTION` of it, WARN when ``maxmemory`` cannot be
-    read or is 0 (no limit), PASS otherwise. ``read_maxmemory`` is an async
-    callable returning bytes; it defaults to a real ``CONFIG GET maxmemory``.
+    FAIL only when the MEASURED part of the budget (streams sized from the
+    live bus or the measured table) exceeds ``maxmemory``. When the overage
+    depends on the 2 KB estimate for unmeasured streams, WARN and name those
+    streams. WARN above :data:`BUS_BUDGET_WARN_FRACTION` of ``maxmemory``,
+    WARN when ``maxmemory`` cannot be read or is 0 (no limit), PASS otherwise.
+    ``probe`` is an async callable taking the stream list and returning
+    ``(maxmemory, live per-entry sizes)``; it defaults to the real bus.
     """
     name = "Bus budget"
     try:
-        budget, per = bus_budget(config)
+        streams = budget_streams(
+            config.get("modules") if isinstance(config.get("modules"), dict) else {}
+        )
+        bus_budget(config)  # validate [bus] before touching the server
     except Exception as exc:
         return [
             CheckResult(
@@ -627,23 +692,35 @@ async def check_bus_budget(
                 f"could not compute the bus budget from [bus]: {type(exc).__name__}: {exc}",
             )
         ]
-    largest = ", ".join(f"{stream} {_fmt_gib(n)}" for stream, n in per[:3])
-    basis = (
-        f"budget {_fmt_gib(budget)} (maxlen x typical event size over "
-        f"{len(per)} streams, x{BUS_BUDGET_HEADROOM_FACTOR} for AOF rewrite; "
-        f"largest: {largest})"
-    )
-    reader = read_maxmemory or _read_server_maxmemory
+    runner = probe or _probe_bus
+    probe_error: Optional[BaseException] = None
     try:
-        maxmemory = int(await asyncio.wait_for(reader(), BUS_PROBE_TIMEOUT_S))
+        maxmemory, live = await asyncio.wait_for(runner(streams), BUS_PROBE_TIMEOUT_S)
+        maxmemory = int(maxmemory)
     except Exception as exc:
+        probe_error, maxmemory, live = exc, None, {}
+
+    budget, shares = bus_budget(config, live)
+    measured_budget = sum(s.bytes for s in shares if s.measured) * BUS_BUDGET_HEADROOM_FACTOR
+    estimated = [s.stream for s in shares if not s.measured]
+    largest = ", ".join(f"{s.stream} {_fmt_gib(s.bytes)} ({s.source})" for s in shares[:3])
+    n_live = sum(1 for s in shares if s.source == SIZE_LIVE)
+    basis = (
+        f"budget {_fmt_gib(budget)} (maxlen x per-entry size over {len(shares)} "
+        f"streams: {n_live} sampled live, {len(shares) - n_live - len(estimated)} from "
+        f"the measured table, {len(estimated)} estimated at 2 KB; "
+        f"x{BUS_BUDGET_HEADROOM_FACTOR} for AOF rewrite; largest: {largest})"
+    )
+
+    if probe_error is not None:
         return [
             CheckResult(
                 GROUP_RESOURCES,
                 name,
                 WARN,
-                f"could not read Redis maxmemory ({type(exc).__name__}: {exc}); "
-                f"{basis}; make sure KAINE_REDIS_MAXMEMORY is at least the budget",
+                f"could not read Redis maxmemory ({type(probe_error).__name__}: "
+                f"{probe_error}); {basis}; make sure KAINE_REDIS_MAXMEMORY is at "
+                "least the budget",
             )
         ]
     if maxmemory <= 0:
@@ -657,26 +734,36 @@ async def check_bus_budget(
             )
         ]
     vs = f"{basis} vs maxmemory {_fmt_gib(maxmemory)}"
-    if budget > maxmemory:
+    if measured_budget > maxmemory:
         return [
             CheckResult(
                 GROUP_RESOURCES,
                 name,
                 FAIL,
-                f"{vs}: the bus would fill Redis and halt the entity; raise "
-                "KAINE_REDIS_MAXMEMORY (compose/.env) and restart Redis",
+                f"{vs}: the measured streams alone ({_fmt_gib(measured_budget)}) "
+                "would fill Redis and halt the entity; raise KAINE_REDIS_MAXMEMORY "
+                "(compose/.env) and restart Redis",
             )
         ]
-    if budget > BUS_BUDGET_WARN_FRACTION * maxmemory:
+    if budget > maxmemory:
         return [
             CheckResult(
                 GROUP_RESOURCES,
                 name,
                 WARN,
-                f"{vs}: above {BUS_BUDGET_WARN_FRACTION:.0%} of the cap; consider "
-                "raising KAINE_REDIS_MAXMEMORY",
+                f"{vs}: over the cap only through the 2 KB estimate for unmeasured "
+                f"streams ({', '.join(estimated)}); a full study needs "
+                "KAINE_REDIS_MAXMEMORY=12gb or more where the host has the RAM",
             )
         ]
+    if budget > BUS_BUDGET_WARN_FRACTION * maxmemory:
+        detail = (
+            f"{vs}: above {BUS_BUDGET_WARN_FRACTION:.0%} of the cap; consider "
+            "raising KAINE_REDIS_MAXMEMORY"
+        )
+        if estimated:
+            detail += f" (estimated streams: {', '.join(estimated)})"
+        return [CheckResult(GROUP_RESOURCES, name, WARN, detail)]
     return [CheckResult(GROUP_RESOURCES, name, PASS, vs)]
 
 
@@ -711,71 +798,170 @@ def _nearest_existing(path: Path) -> Path:
     return candidate
 
 
+def _table(config: dict[str, Any], *keys: str) -> dict[str, Any]:
+    node: Any = config
+    for key in keys:
+        node = node.get(key) if isinstance(node, dict) else None
+    return node if isinstance(node, dict) else {}
+
+
+def _dir_of(value: Any, default: str, *, is_file: bool = False) -> Path:
+    path = Path(str(value) if isinstance(value, str) and value else default)
+    return path.parent if is_file else path
+
+
+def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
+    """Every configured directory that holds durable entity or research data.
+
+    Resolved the way the modules resolve them: the same config keys and
+    defaults, relative to the working directory the stack runs from.
+    ``kaine.evaluation`` is outside this module's import boundary, so its
+    keys are read here with the defaults of ``kaine.evaluation.config``.
+    """
+    settings = _preboot_settings(config)
+    preservation = PreservationConfig.from_section(config.get("preservation") or {})
+    ignition = IgnitionLogConfig.from_section(config.get("ignition_log"))
+    evaluation_paths = _table(config, "evaluation", "paths")
+    research = _table(config, "research_event_log")
+    raw_archive = _table(config, "research_event_log", "raw_archive")
+    voice = _table(config, "hypnos", "voice_alignment")
+    lifecycle = _table(config, "lifecycle")
+    incident_log = _table(config, "spot", "incident_log")
+    eidolon = _table(config, "eidolon")
+
+    paths: list[tuple[str, Path]] = [
+        ("[preboot].state_root", Path(settings["state_root"])),
+        ("[preboot].data_root", Path(settings["data_root"])),
+        ("[lifecycle].snapshots_path", _dir_of(lifecycle.get("snapshots_path"), "state/forks")),
+        (
+            "[preservation.divergence_monitor].out_root",
+            Path(preservation.divergence_monitor.out_root),
+        ),
+        (
+            "[preservation.welfare_response].out_root",
+            Path(preservation.welfare_response.out_root),
+        ),
+        (
+            "[evaluation.paths].trajectory_dir",
+            _dir_of(evaluation_paths.get("trajectory_dir"), "data/workspace_trajectory"),
+        ),
+        (
+            "[evaluation.paths].evaluation_logs",
+            _dir_of(evaluation_paths.get("evaluation_logs"), "data/evaluation"),
+        ),
+        (
+            "[research_event_log].log_dir",
+            _dir_of(research.get("log_dir"), "data/evaluation/research_events"),
+        ),
+        (
+            "[research_event_log.raw_archive].archive_dir",
+            _dir_of(raw_archive.get("archive_dir"), "state/research/raw_bus_archive"),
+        ),
+        (
+            "[hypnos.voice_alignment].adapter_output_dir",
+            _dir_of(voice.get("adapter_output_dir"), "state/hypnos/adapters"),
+        ),
+        (
+            "[hypnos.voice_alignment].trainer_workdir",
+            _dir_of(
+                str(voice.get("trainer_workdir") or "").strip() or None,
+                "state/hypnos/voice_align_jobs",
+            ),
+        ),
+        ("[ignition_log].directory", Path(ignition.directory)),
+        ("[spot.incident_log].path", _dir_of(incident_log.get("path"), "state/cycle/incidents")),
+        (
+            "[eidolon].persistence_path",
+            _dir_of(
+                eidolon.get("persistence_path"), "state/eidolon/self_model.json", is_file=True
+            ),
+        ),
+    ]
+    return paths
+
+
+def _device_of(path: Path) -> int:
+    return os.stat(path).st_dev
+
+
 def check_disk(
     config: dict[str, Any],
     *,
     disk_usage: Optional[Callable[[Path], Any]] = None,
+    device_of: Optional[Callable[[Path], Any]] = None,
 ) -> list[CheckResult]:
-    """Free-disk rows for the state root, the data root and the Redis data dir.
+    """Free-disk rows, one per filesystem holding a durable path.
 
-    FAIL below max(``disk_fail_min_free_gb``, ``disk_fail_min_free_percent`` of
-    the filesystem), WARN below ``disk_warn_min_free_gb``, PASS otherwise. The
-    Redis row measures the native data directory
-    (``<state_root>/services/redis/data``); a container volume is not
-    resolvable from the host and is reported SKIP.
+    Every path from :func:`durable_paths` is measured at itself or its nearest
+    existing ancestor, and paths on the same filesystem share one row that
+    lists them. A row FAILS below max(``disk_fail_min_free_gb``,
+    ``disk_fail_min_free_percent`` of the filesystem), WARNS below
+    ``disk_warn_min_free_gb``, and PASSES otherwise. The native Redis data
+    directory (``<state_root>/services/redis/data``) is included when it
+    exists; a container volume is not resolvable from the host and is
+    reported SKIP.
     """
     usage_fn = disk_usage or shutil.disk_usage
+    dev_fn = device_of or _device_of
     try:
         settings = _preboot_settings(config)
-    except ValueError as exc:
+        paths = durable_paths(config)
+    except Exception as exc:
         return [CheckResult(GROUP_RESOURCES, "Disk free", FAIL, str(exc))]
 
     fail_gb = float(settings["disk_fail_min_free_gb"])
     fail_pct = float(settings["disk_fail_min_free_percent"])
     warn_gb = float(settings["disk_warn_min_free_gb"])
-    state_root = Path(settings["state_root"])
-    data_root = Path(settings["data_root"])
-    redis_dir = state_root / "services" / "redis" / "data"
-
-    targets: list[tuple[str, Path, bool]] = [
-        ("Disk free (state root)", state_root, True),
-        ("Disk free (data root)", data_root, True),
-        ("Disk free (Redis data)", redis_dir, False),
-    ]
     results: list[CheckResult] = []
-    for name, path, walk_up in targets:
-        if walk_up:
-            measured = _nearest_existing(path)
-        elif path.is_dir():
-            measured = path
-        else:
+
+    redis_dir = Path(settings["state_root"]) / "services" / "redis" / "data"
+    native_redis = redis_dir.is_dir()
+    if native_redis:
+        paths.append(("native Redis data", redis_dir))
+
+    groups: dict[Any, list[tuple[str, Path, Path]]] = {}
+    seen: set[Path] = set()
+    for label, path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        measured = _nearest_existing(path)
+        try:
+            key = dev_fn(measured)
+        except OSError as exc:
             results.append(
                 CheckResult(
                     GROUP_RESOURCES,
-                    name,
-                    SKIP,
-                    f"no native Redis data directory at {path}; a container "
-                    "volume is not measured from the host",
+                    f"Disk free ({label})",
+                    FAIL,
+                    f"{path}: could not stat: {type(exc).__name__}: {exc}",
                 )
             )
             continue
+        groups.setdefault(key, []).append((label, path, measured))
+
+    for members in groups.values():
+        label0, _, measured0 = members[0]
+        name = "Disk free" + (
+            f" ({label0})" if len(members) == 1 else f" ({label0} +{len(members) - 1})"
+        )
+        listed = ", ".join(str(path) for _, path, _ in members)
         try:
-            usage = usage_fn(measured)
+            usage = usage_fn(measured0)
         except OSError as exc:
             results.append(
                 CheckResult(
                     GROUP_RESOURCES,
                     name,
                     FAIL,
-                    f"{path}: could not read disk usage: {type(exc).__name__}: {exc}",
+                    f"{listed}: could not read disk usage: {type(exc).__name__}: {exc}",
                 )
             )
             continue
         total = float(usage.total)
         free = float(usage.free)
         fail_floor = max(fail_gb * _GIB, total * fail_pct / 100.0)
-        where = str(path) if measured == path else f"{path} (measured at {measured})"
-        detail = f"{where}: {_fmt_gib(free)} free of {_fmt_gib(total)}"
+        detail = f"{_fmt_gib(free)} free of {_fmt_gib(total)} for {listed}"
         if free < fail_floor:
             status = FAIL
             detail += (
@@ -788,6 +974,17 @@ def check_disk(
         else:
             status = PASS
         results.append(CheckResult(GROUP_RESOURCES, name, status, detail))
+
+    if not native_redis:
+        results.append(
+            CheckResult(
+                GROUP_RESOURCES,
+                "Disk free (Redis data)",
+                SKIP,
+                f"no native Redis data directory at {redis_dir}; a container "
+                "volume is not measured from the host",
+            )
+        )
     return results
 
 

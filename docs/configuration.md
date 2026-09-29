@@ -78,7 +78,7 @@ Per-stream overrides. The key is the full stream name (`<module>.out` or `worksp
 | `"topos.out"` | integer | `12000` | About 20 minutes at 10 Hz. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
 | `"audition.out"` | integer | `12000` | About 20 minutes at 10 Hz. |
 
-The memory these caps imply must fit in Redis `maxmemory`, which is set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Deployment (containers)](deployment-containers.md)). `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, maxlen × a typical event size (estimates in `kaine/bus/config.py`; 2 KB for streams without a measurement), doubled for AOF-rewrite headroom. The row FAILS when the budget exceeds `maxmemory` and WARNS above 70%. Raise `KAINE_REDIS_MAXMEMORY` rather than lowering the caps.
+The memory these caps imply must fit in Redis `maxmemory`, which is set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Deployment (containers)](deployment-containers.md)). `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, maxlen × a per-entry size, doubled for AOF-rewrite headroom. The per-entry size is sampled from the running bus (`MEMORY USAGE` / `XLEN` of a stream holding at least 100 entries) when possible, else taken from the measured table in `kaine/bus/config.py`, else estimated at 2 KB. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. Raise `KAINE_REDIS_MAXMEMORY` rather than lowering the caps: a full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
 
 ---
 
@@ -124,7 +124,7 @@ Ships `enabled = true`, but the whole block is dormant while `[spot].enabled = f
 
 ## `[preboot]`
 
-Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories, snapshots or research records to stay under a limit, so free disk is checked before boot. The state root, the data root and the native Redis data directory (`<state_root>/services/redis/data`, when it exists; a container volume is reported SKIP) each FAIL below the larger of `disk_fail_min_free_gb` and `disk_fail_min_free_percent` of their filesystem, and WARN below `disk_warn_min_free_gb`. A WARN row does not fail the gate. GB here is 2^30 bytes, as `df -h` reports. An unknown key or a non-numeric threshold is reported as a FAIL row.
+Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories, snapshots or research records to stay under a limit, so free disk is checked before boot. The check covers every configured durable path, resolved from the same keys and defaults the modules use: `state_root`, `data_root`, `[lifecycle].snapshots_path`, both `[preservation.*].out_root`, `[evaluation.paths]`, `[research_event_log].log_dir` and its `raw_archive.archive_dir`, `[hypnos.voice_alignment].adapter_output_dir` and `trainer_workdir`, `[ignition_log].directory`, `[spot.incident_log].path`, the Eidolon self-model directory, and the native Redis data directory (`<state_root>/services/redis/data`, when it exists; a container volume is reported SKIP). A path that does not exist yet is measured at its nearest existing parent. Paths on the same filesystem share one row, which lists them. A row FAILS below the larger of `disk_fail_min_free_gb` and `disk_fail_min_free_percent` of its filesystem, and WARNS below `disk_warn_min_free_gb`. A WARN row does not fail the gate. GB here is 2^30 bytes, as `df -h` reports. An unknown key or a non-numeric threshold is reported as a FAIL row.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -492,7 +492,7 @@ Self-model: a persisted JSON document (values, behavioral norms, personality bas
 | `drift_threshold` | float | `0.6` | KL divergence above which identity drift is flagged as a workspace event. |
 | `save_interval_s` | float | `30.0` | How often the self-model is written to disk (seconds). |
 | `internal_speech_stream` | string | `"lingua.internal"` | Bus stream Eidolon subscribes to for observing internal speech. |
-| `identity_history_cap` | integer | `0` | Maximum number of identity-observation entries kept in the history. `0` keeps every entry (the history is the entity's own memory of its self-model drift, and entries are small); a positive value keeps the most recent N. Negative values are rejected. |
+| `identity_history_cap` | integer | `0` | Maximum number of drift episodes kept in `identity_history`. Each entry is one contiguous run of alerting broadcasts (onset, end, peak score, alert count, per-source counts), so a sustained shift adds one entry, not one per broadcast. `0` keeps every episode; a positive value keeps the most recent N. Negative values are rejected. |
 | `voice_observations_cap` | integer | `0` | Maximum speech observations kept in `voice_observations`. `0` keeps every observation (the entity's memory of its developing voice); a positive value keeps the most recent N. Negative values are rejected. |
 | `baseline_salience` | float | `0.05` | Salience of routine self-model update events. |
 | `alert_salience` | float | `0.7` | Salience on drift detection. |

@@ -187,13 +187,15 @@ timeout_s = 5.0
 [preboot]
 # Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories,
 # snapshots or research records to stay under a limit, so free disk is checked
-# here before boot. Each root (and the native Redis data directory,
-# <state_root>/services/redis/data, when it exists) FAILS below the larger of
-# disk_fail_min_free_gb and disk_fail_min_free_percent of its filesystem, and
-# WARNS below disk_warn_min_free_gb. GB here is 2^30 bytes, as `df -h` reports.
-# The same run also reports the "Bus budget" row: the memory the
-# [bus.per_stream_maxlen] caps imply, against Redis maxmemory
-# (KAINE_REDIS_MAXMEMORY).
+# here before boot, for every configured durable path (these roots, the fork
+# snapshots, preservation out_roots, evaluation and research logs, the raw
+# archive, Hypnos adapters and jobs, the ignition and incident logs, the
+# Eidolon self-model and the native Redis data directory). Each filesystem
+# FAILS below the larger of disk_fail_min_free_gb and
+# disk_fail_min_free_percent, and WARNS below disk_warn_min_free_gb. GB here
+# is 2^30 bytes, as `df -h` reports. The same run also reports the "Bus
+# budget" row: the memory the [bus.per_stream_maxlen] caps imply, against
+# Redis maxmemory (KAINE_REDIS_MAXMEMORY).
 state_root = "state"
 data_root = "data"
 disk_fail_min_free_gb = 10.0
@@ -579,9 +581,11 @@ drift_window = 100
 drift_threshold = 0.6
 save_interval_s = 30.0
 internal_speech_stream = "lingua.internal"
-# Maximum identity-history entries kept in the self-model. 0 = no cap: the
-# history is the entity's own memory of its self-model drift and each entry is
-# small, so none is dropped. A positive value keeps the most recent N entries.
+# Maximum drift episodes kept in identity_history. Each entry summarises one
+# contiguous run of alerting broadcasts (onset, end, peak score, alert count,
+# per-source counts), so a sustained shift adds one entry. 0 = no cap: the
+# history is the entity's own memory of its self-model drift, so none is
+# dropped. A positive value keeps the most recent N episodes.
 identity_history_cap = 0
 # Maximum speech observations kept in the self-model's voice record. 0 = no
 # cap: the record is the entity's memory of its developing voice. A positive

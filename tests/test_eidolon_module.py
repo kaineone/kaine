@@ -351,61 +351,160 @@ async def test_shutdown_persists_final_state(bus: AsyncBus, tmp_path: Path):
     assert len(loaded.identity_history) >= 1
 
 
-@pytest.mark.asyncio
-async def test_identity_history_capped(bus: AsyncBus, tmp_path: Path):
-    eidolon = Eidolon(
+class _ScriptedDrift:
+    """Drift detector returning scripted scores (threshold 0.5 in the tests)."""
+
+    def __init__(self, scores, sources=("topos",)):
+        self._scores = list(scores)
+        self._sources = tuple(sources)
+
+    def observe(self, _sources):
+        from kaine.modules.eidolon.drift import DriftResult
+
+        score = self._scores.pop(0) if self._scores else 0.0
+        return DriftResult(score, 10, 100, self._sources)
+
+    def reset(self):
+        pass
+
+
+def _episodes(scores_per_episode: int, episodes: int) -> list[float]:
+    """``episodes`` runs of alerting scores, each followed by one quiet score."""
+    out: list[float] = []
+    for e in range(episodes):
+        out += [0.6 + 0.01 * (i % 7) for i in range(scores_per_episode)]
+        out.append(0.1)
+    return out
+
+
+def _eidolon_with(bus, tmp_path, scores, **kw):
+    return Eidolon(
         bus,
         persistence_path=tmp_path / "m.json",
-        drift_threshold=0.0,
-        identity_history_cap=4,
+        drift_threshold=0.5,
+        drift_detector=_ScriptedDrift(scores),
         save_interval_s=60,
+        **kw,
     )
+
+
+@pytest.mark.asyncio
+async def test_sustained_drift_is_one_episode(bus: AsyncBus, tmp_path: Path):
+    """N consecutive alerting broadcasts produce ONE episode with count N."""
+    n = 5000
+    scores = [0.6 + 0.01 * (i % 7) for i in range(n)]
+    scores[1234] = 0.95  # the peak
+    eidolon = _eidolon_with(bus, tmp_path, scores)
     await eidolon.initialize()
     try:
-        for i in range(10):
-            await eidolon.on_workspace(_snapshot([f"src{i}"]))
-        assert len(eidolon.model.identity_history) == 4
+        for _ in range(n):
+            await eidolon.on_workspace(_snapshot(["topos"]))
+        history = eidolon.model.identity_history
+        assert len(history) == 1
+        ep = history[0]
+        assert ep["kind"] == "drift_episode"
+        assert ep["count"] == n
+        assert ep["peak_score"] == pytest.approx(0.95)
+        assert ep["score"] == pytest.approx(0.95)
+        assert ep["sources"] == {"topos": n}
+        assert ep["top_sources"] == ["topos"]
+        assert ep["onset"] <= ep["end"]
+        assert ep["timestamp"] == ep["onset"]
+        assert eidolon._drift_count == n
     finally:
         await eidolon.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_identity_history_cap_keeps_most_recent(bus: AsyncBus, tmp_path: Path):
-    eidolon = Eidolon(
-        bus,
-        persistence_path=tmp_path / "m.json",
-        drift_threshold=0.0,
-        identity_history_cap=4,
-        save_interval_s=60,
-    )
+async def test_quiet_broadcast_closes_the_episode(bus: AsyncBus, tmp_path: Path):
+    eidolon = _eidolon_with(bus, tmp_path, _episodes(3, 4))
     await eidolon.initialize()
     try:
-        recorded = []
-        for i in range(10):
-            await eidolon.on_workspace(_snapshot([f"src{i}"]))
-            recorded.append(eidolon.model.identity_history[-1])
-        assert list(eidolon.model.identity_history) == recorded[-4:]
+        for _ in range(16):
+            await eidolon.on_workspace(_snapshot(["topos"]))
+        history = eidolon.model.identity_history
+        assert [ep["count"] for ep in history] == [3, 3, 3, 3]
+    finally:
+        await eidolon.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_save_stays_small_under_sustained_drift(bus: AsyncBus, tmp_path: Path):
+    """The persisted self-model does not grow with the number of alerts."""
+    path = tmp_path / "m.json"
+    sizes = []
+    eidolon = _eidolon_with(bus, tmp_path, [0.7] * 20000)
+    await eidolon.initialize()
+    try:
+        for chunk in range(4):
+            for _ in range(5000):
+                await eidolon.on_workspace(_snapshot(["topos"]))
+            await eidolon._save_to_disk()
+            sizes.append(path.stat().st_size)
+    finally:
+        await eidolon.shutdown()
+    assert max(sizes) - min(sizes) < 64
+    assert max(sizes) < 4096
+
+
+@pytest.mark.asyncio
+async def test_identity_history_cap_keeps_most_recent_episodes(bus: AsyncBus, tmp_path: Path):
+    eidolon = _eidolon_with(bus, tmp_path, _episodes(2, 10), identity_history_cap=4)
+    await eidolon.initialize()
+    try:
+        closed = []
+        for i in range(30):
+            await eidolon.on_workspace(_snapshot(["topos"]))
+            if i % 3 == 2:  # the quiet broadcast after each episode
+                closed.append(eidolon.model.identity_history[-1])
+        assert list(eidolon.model.identity_history) == closed[-4:]
+        assert all(ep["count"] == 2 for ep in eidolon.model.identity_history)
     finally:
         await eidolon.shutdown()
 
 
 @pytest.mark.asyncio
 async def test_identity_history_uncapped_by_default(bus: AsyncBus, tmp_path: Path):
-    """Cap 0 (the shipped default) keeps every identity-history entry."""
-    eidolon = Eidolon(
-        bus,
-        persistence_path=tmp_path / "m.json",
-        drift_threshold=0.0,
-        save_interval_s=60,
-    )
+    """Cap 0 (the shipped default) keeps every episode."""
+    eidolon = _eidolon_with(bus, tmp_path, _episodes(1, 300))
     assert eidolon._identity_history_cap == 0
     await eidolon.initialize()
     try:
-        for i in range(300):
-            await eidolon.on_workspace(_snapshot([f"src{i}"]))
+        for _ in range(600):
+            await eidolon.on_workspace(_snapshot(["topos"]))
         assert len(eidolon.model.identity_history) == 300
     finally:
         await eidolon.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_old_per_alert_history_loads_and_is_kept(bus: AsyncBus, tmp_path: Path):
+    """A self-model saved with indent and per-alert entries loads unchanged;
+    the next alert starts a new episode after them."""
+    import json as _json
+
+    legacy = [
+        {"timestamp": 1.0 + i, "score": 0.7, "top_sources": ["topos"]} for i in range(3)
+    ]
+    path = tmp_path / "m.json"
+    path.write_text(
+        _json.dumps({"name": "Kaine Vale", "identity_history": legacy}, indent=2),
+        encoding="utf-8",
+    )
+    eidolon = _eidolon_with(bus, tmp_path, [0.7, 0.7])
+    await eidolon.initialize()
+    try:
+        assert eidolon.model.identity_history == legacy
+        await eidolon.on_workspace(_snapshot(["topos"]))
+        await eidolon.on_workspace(_snapshot(["topos"]))
+        history = eidolon.model.identity_history
+        assert history[:3] == legacy
+        assert len(history) == 4
+        assert history[3]["count"] == 2
+    finally:
+        await eidolon.shutdown()
+    reloaded = SelfModel.from_json(path.read_text())
+    assert reloaded.identity_history[:3] == legacy
 
 
 @pytest.mark.asyncio
