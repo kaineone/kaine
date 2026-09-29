@@ -1199,6 +1199,122 @@ def test_failed_timeout_preservation_records_a_critical_step(
     ]
 
 
+GESTATING_SCRIPT = textwrap.dedent(
+    '''\
+    import sys
+    import time
+    from pathlib import Path
+
+    # A seed still gestating: it writes nothing and waits to be released.
+    release = Path(sys.argv[1])
+    deadline = time.monotonic() + 60
+    while not release.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    '''
+)
+
+
+@pytest.mark.parametrize("foreign", ["before_spawn", "after_spawn", "reused_pid"])
+def test_an_earlier_childs_runtime_never_triggers_the_birth_preservation(
+    tmp_path: Path, known_modules, foreign: str
+):
+    """runtime.json saying "embodied" that the child this attempt started did
+    not write never preserves that child: not one left by an earlier child
+    (a retry), not one naming another pid that lands while it gestates, and
+    not an earlier child's record whose pid the new child happens to reuse."""
+    import subprocess
+
+    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=3600.0)
+    gestating = tmp_path / "gestating.py"
+    gestating.write_text(GESTATING_SCRIPT)
+    release = tmp_path / "release"
+    control_log = tmp_path / "control_calls.txt"
+    control = [
+        sys.executable,
+        "-c",
+        f"open({str(control_log)!r}, 'a').write('called\\n'); raise SystemExit(3)",
+    ]
+
+    line_dir = study_dir / "gestation"
+    runtime_path = line_dir / "state" / "cycle" / "runtime.json"
+    runtime_path.parent.mkdir(parents=True)
+    stage_path = line_dir / "state" / "lifecycle" / "stage.json"
+    stage_path.parent.mkdir(parents=True)
+    # The earlier child was born and its bloom is long over.
+    stage_path.write_text(
+        json.dumps({"stage": "embodied", "birth_bloom_ends_at": "2000-01-01T00:00:00+00:00"})
+    )
+    earlier_pid = 4_000_000
+    earlier = {
+        "pid": earlier_pid,
+        "run_id": "earlier-run",
+        "developmental_stage": {"stage": "embodied"},
+    }
+    earlier_text = json.dumps(earlier)
+    if foreign in ("before_spawn", "reused_pid"):
+        runtime_path.write_text(earlier_text)
+
+    class _ReusedPid:
+        """The new child, reported under the earlier child's pid."""
+
+        def __init__(self, proc: subprocess.Popen) -> None:
+            self._proc = proc
+            self.pid = earlier_pid
+
+        def poll(self):  # noqa: ANN201
+            return self._proc.poll()
+
+    procs: list[subprocess.Popen] = []
+
+    def popen(*args, **kwargs):
+        proc = subprocess.Popen(*args, **kwargs)
+        procs.append(proc)
+        if foreign == "after_spawn":
+            runtime_path.write_text(earlier_text)
+        if foreign == "reused_pid":
+            return _ReusedPid(proc)
+        return proc
+
+    # Programme time moves one poll per sleep; the seed is released only after
+    # the runner has read runtime.json on several polls while it gestates.
+    programme_time = [0.0]
+    polls = [0]
+
+    def sleep(seconds: float) -> None:
+        programme_time[0] += seconds
+        polls[0] += 1
+        if polls[0] == 5:
+            release.touch()
+
+    try:
+        with pytest.raises(StudyHalted) as exc_info:
+            _runner(
+                study_dir,
+                gestating,
+                cycle_command=[sys.executable, str(gestating), str(release)],
+                control_command=control,
+                popen=popen,
+                cycle_alive=lambda pid: False,
+                clock=lambda: programme_time[0],
+                sleep=sleep,
+            ).run()
+    finally:
+        release.touch()
+        for p in procs:
+            if p.poll() is None:
+                p.kill()
+            p.wait()
+
+    assert polls[0] >= 5
+    assert not control_log.exists(), "a birth preservation was requested"
+    record = exc_info.value.record
+    assert record["line"] == "gestation"
+    assert record["outcome"] == "failed:missing_preservation"
+    assert record["run_id"] is None
+    # The earlier child's runtime metadata is left in place, never deleted.
+    assert runtime_path.read_text() == earlier_text
+
+
 @pytest.mark.parametrize("where", ["gestation", "branch/0"])
 @pytest.mark.parametrize("record", ["child", "runtime"])
 def test_resume_refuses_while_a_started_cycle_is_alive(

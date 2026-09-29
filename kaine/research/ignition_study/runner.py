@@ -547,6 +547,12 @@ class StudyRunner:
         prior_request = read_request(prior_request_path)
         prior_request_id = prior_request.request_id if prior_request else None
 
+        # A runtime.json already on disk belongs to an earlier child (a retry
+        # after a failed timeout preservation, or a killed runner).  It is
+        # metadata, not the being's state: it stays where it is, and the loop
+        # below never acts on it.
+        stale_runtime = self._read_runtime(line_dir)
+
         started_at = _utc_iso()
         proc = self.popen(argv, cwd=str(line_dir), env=env)
         child_pid = getattr(proc, "pid", None)
@@ -582,7 +588,7 @@ class StudyRunner:
             now = self.clock()
             if now - last_check >= self.poll_seconds:
                 last_check = now
-                runtime = self._read_runtime(line_dir)
+                runtime = self._read_child_runtime(line_dir, child_pid, stale_runtime)
                 if runtime:
                     run_id = runtime.get("run_id") or run_id
                     stage = (runtime.get("developmental_stage") or {}).get("stage")
@@ -712,6 +718,29 @@ class StudyRunner:
             return json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
             return None
+
+    def _read_child_runtime(
+        self,
+        line_dir: Path,
+        child_pid: Any,
+        stale: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """runtime.json only when it belongs to the child this attempt started:
+        it names ``child_pid`` (the cycle records its own pid) and is not the
+        record left by an earlier child, which a reused pid could otherwise
+        pass for this one.  Anything else is treated as absent, so an earlier
+        child's stage never triggers a preservation of this one."""
+        if not isinstance(child_pid, int) or isinstance(child_pid, bool):
+            return None
+        runtime = self._read_runtime(line_dir)
+        if not isinstance(runtime, dict):
+            return None
+        pid = runtime.get("pid")
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid != child_pid:
+            return None
+        if stale is not None and runtime == stale:
+            return None
+        return runtime
 
     def _request_preserve(
         self,
