@@ -203,6 +203,13 @@ class WombClock:
             self._birth_start = start
             self._birth_duration = value
 
+    def birth_end_womb_seconds(self) -> float | None:
+        """Return the womb time at which the birth bloom ends, or None before birth."""
+        with self._lock:
+            if self._birth_start is None:
+                return None
+            return self._birth_start + self._birth_duration
+
     def mark_born(self) -> None:
         """Acknowledge that the birth transition is already complete."""
         with self._lock:

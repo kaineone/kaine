@@ -30,7 +30,7 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -98,6 +98,42 @@ if TYPE_CHECKING:
     from kaine.cycle.revive_boot import ReviveSession
 
 log = logging.getLogger("kaine.cycle")
+
+
+def _make_birth_hook(clock, feed, birth_seconds, *, now=lambda: datetime.now(timezone.utc)):
+    """Return a birth hook that begins the womb bloom and then records the
+    womb-state snapshot in the stage file.
+
+    Failures during the recording step are logged as a warning and never block
+    the birth transition.
+    """
+    from kaine.boot import _womb_params
+
+    def _birth_hook():
+        clock.begin_birth(birth_seconds)
+        try:
+            state = lifecycle_stage.read_stage()
+            if state is None or not state.is_embodied:
+                return
+            womb_t = clock.birth_end_womb_seconds()
+            womb_seed = int(feed.get("seed", 0))
+            params_digest = lifecycle_stage.womb_params_digest(_womb_params(feed))
+            bloom_ends_at = (now() + timedelta(seconds=birth_seconds)).isoformat()
+            lifecycle_stage.write_stage(
+                lifecycle_stage.record_birth_womb(
+                    state,
+                    womb_t_at_birth=womb_t,
+                    womb_seed=womb_seed,
+                    womb_params_digest=params_digest,
+                    bloom_ends_at=bloom_ends_at,
+                )
+            )
+        except Exception as exc:
+            log.warning(
+                "birth hook: could not record womb state at birth: %s", exc
+            )
+
+    return _birth_hook
 
 
 RUNTIME_PATH = Path("state/cycle/runtime.json")
@@ -1789,7 +1825,9 @@ async def _boot_and_run(
         from kaine.boot import _womb_params
 
         _birth_seconds = _womb_params(_womb_feed).birth_transition_seconds
-        gate_runner.set_birth_hook(lambda: _birth_clock.begin_birth(_birth_seconds))
+        gate_runner.set_birth_hook(
+            _make_birth_hook(_birth_clock, _womb_feed, _birth_seconds)
+        )
     gate_task = (
         asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
         if staging_enabled and stage_state.is_gestating
