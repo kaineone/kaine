@@ -93,7 +93,7 @@ production. Vox:
 
 | Stream | Event type | Description |
 |---|---|---|
-| `vox.out` | `vox.synthesized` | Synthesis result metadata: `text_length`, `bytes_produced`, `voice`, `backend`, `prosody_applied`, `latency_ms`, `success`. Under Chatterbox `prosody_applied` lists `temperature`, `exaggeration`, `cfg_weight`, `speed_factor`; under Kokoro/sherpa-onnx it lists `["speed_factor"]` only |
+| `vox.out` | `vox.synthesized` | Synthesis result metadata: `text_length`, `bytes_produced`, `voice`, `backend`, `prosody_applied`, `latency_ms`, `success`, and `origin` (present when the utterance carries an origin, for example `nous`). Under Chatterbox `prosody_applied` lists `temperature`, `exaggeration`, `cfg_weight`, `speed_factor`; under Kokoro/sherpa-onnx it lists `["speed_factor"]` only |
 
 Audio is played to the OS audio device and optionally written to the file sink;
 audio bytes are **never** put on the bus.

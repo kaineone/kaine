@@ -107,7 +107,7 @@ graph TD
     OscillatorLayer -->|"phase per module"| Syneidesis
     Syneidesis -->|"workspace.broadcast"| Bus
     Syneidesis --> Volition
-    Volition -->|"intent.speak / intent.act / intent.think\nvia volition.out"| Bus
+    Volition -->|"intent.speak / intent.act / intent.think / intent.rest\nvia volition.out"| Bus
     Bus -->|"workspace.broadcast"| Lingua
     Bus -->|"workspace.broadcast"| Nous
     Bus -->|"workspace.broadcast"| Mnemos
@@ -142,10 +142,10 @@ embodiment**, off regardless of base-thesis status).
 | 2 | **Chronos** | Prediction | Active | `kaine/modules/chronos/` | CfC (~32 units, ncps); event-rhythm forward model |
 | 3 | **Topos** | Prediction | Active | `kaine/modules/topos/` | InternVideo-Next (frozen, temporally-native clip; DINOv2 fallback); online forward model |
 | 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | Speaches distil-Whisper (gated off by default); emotion2vec+; auditory forward model |
-| 5 | **Nous** | Cognition | Gated | `kaine/modules/nous/` | pymdp (JAX); active inference — belief updating + EFE policy selection |
+| 5 | **Nous** | Cognition | Gated | `kaine/modules/nous/` | pymdp (JAX) or NumPy engine (`[nous].backend`); active inference — belief updating + EFE policy selection |
 | 6 | **Mnemos** | Cognition | Gated | `kaine/modules/mnemos/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic / semantic / procedural |
 | 7 | **Eidolon** | Cognition | Gated | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
-| 8 | **Phantasia** | Cognition | Gated | `kaine/modules/phantasia/` | DreamerV3 RSSM (JAX, CPU; ships disabled); fake backend default |
+| 8 | **Phantasia** | Cognition | Gated | `kaine/modules/phantasia/` | DreamerV3 RSSM (JAX or NumPy engine via `[phantasia].engine`; CPU; ships disabled); fake backend default |
 | 9 | **Empatheia** | Cognition | Gated | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
 | 10 | **Thymos** | Motivation | Active | `kaine/modules/thymos/` | Scherer CPM appraisal; drive accumulators with hysteresis; affect coupling consumer |
 | 11 | **Lingua** | Expression | Active | `kaine/modules/lingua/` | Abliterated Qwen 3.x via OpenAI-compatible server; ContextAssembler; self-initiated report policy; A/B baseline |
@@ -354,7 +354,7 @@ Unexpected events produce high-salience prediction errors; expected events
 produce low salience. Raw perceptual data (video frames, audio, sensor
 readings) is processed in memory and released — it never touches disk.
 
-Nous (pymdp/JAX) extends this to the cognition layer: it maintains a
+Nous (pymdp/JAX or NumPy engine) extends this to the cognition layer: it maintains a
 generative model of the entity's environment and selects policies that
 minimize **expected free energy**, including epistemic (information-seeking)
 actions under uncertainty.
@@ -449,8 +449,8 @@ KAINE has no runtime cloud dependencies. All model weights are downloaded
 at setup time. At runtime:
 
 - The LIF oscillator layer runs on CPU (snnTorch).
-- Nous (pymdp/JAX) defaults to CPU-only JAX; GPU is operator-configured.
-- Phantasia (DreamerV3/JAX) defaults to CPU-only JAX.
+- Nous with the pymdp backend defaults to CPU-only JAX; GPU is operator-configured. The NumPy backend uses no JAX.
+- Phantasia with the JAX engine defaults to CPU-only JAX; the NumPy engine uses no JAX.
 - The shared embedding model (all-MiniLM-L6-v2) runs on CPU by default.
 - Voice alignment training (`[training_device]`) targets `cuda:0` by
   default but degrades gracefully to CPU.
@@ -501,15 +501,15 @@ for the preservation core.
 
 ## JAX Stack
 
-Two modules require JAX:
+Two modules use JAX by default, and each has a NumPy engine for hosts without it:
 
-- **Nous** (`kaine/modules/nous/`) — pymdp >= 1.0. Active inference:
+- **Nous** (`kaine/modules/nous/`) — pymdp >= 1.0 under `[nous].backend = "pymdp"`; `"numpy"` selects a pure-NumPy engine. Active inference:
   belief updating (variational inference over hidden states), policy
   selection via expected free energy minimization, epistemic action.
 - **Phantasia** (`kaine/modules/phantasia/`) — DreamerV3 RSSM (danijar/dreamerv3,
-  MIT). World-model latent forward model. Ships disabled (`backend = "fake"`).
+  MIT). World-model latent forward model; `[phantasia].engine` selects `"jax"` or `"numpy"`. Ships disabled (`backend = "fake"`).
 
-Both use CPU-only JAX by default. GPU acceleration is operator-configured.
+Both use CPU-only JAX when JAX is selected. GPU acceleration is operator-configured.
 Neither module introduces a cloud dependency.
 
 ---

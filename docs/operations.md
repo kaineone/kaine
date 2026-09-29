@@ -104,7 +104,7 @@ page. Each external dependency shows a status chip:
 Dependencies covered: **Redis** (bus PING), **Qdrant** (Mnemos `/readyz` with
 API key), **Chat LLM** (Lingua/Hypnos, `/v1/models` + model check),
 **Speaches** (Audition STT, `/v1/models`), **Chatterbox** (Vox TTS), **pymdp +
-JAX** (Nous active inference, import check), **State encryption** (key
+JAX** (Nous active inference under `[nous].backend = "pymdp"`, import check), **State encryption** (key
 resolvability check without reading the key).
 
 Probes run concurrently with a bounded per-probe timeout and are cached for ~5
@@ -604,12 +604,17 @@ research-mode boot (`KAINE_RESEARCH_MODE=1`) and uses the line's own Redis
 database and collection prefixes, so the two beings never share state.  Every
 completed step is appended to `steps.jsonl`.
 
-Nous is added at the fifth viewing. From that point on it chooses among its
-actions and learns what follows each one, and its learned transition model is
-preserved in each viewing's bundle, so later viewings resume from what it has
-learned. No module realizes Nous's intents, so what it learns is how its own
-intent events register in the workspace; its choices are recorded, not acted
-on.
+Modules are added in the study's module order (default: Thymos, Mnemos,
+Hypnos, Phantasia, Nous, and so on), one per viewing: viewing index `k` enables
+the first `k` modules of the order, so `k = 0` adds none and Nous is enabled
+from `k = 5`. With `[nous].drive_actions` on (the shipped default), Nous's
+chosen actions become proposals that the executive realizes as `think`,
+`speak`, or `rest` intents, subject to the same Volition guards as every other
+intent; Hypnos accepts a rest request no more often than
+`requested_rest_min_interval_s`, and Vox marks the origin of speech that
+follows a Nous proposal. Nous learns what follows each action it takes, and
+its learned transition model is preserved in each viewing's bundle, so later
+viewings resume from what it has learned.
 
 If a step ends for any reason other than a successful preservation, the
 runner records it as `failed:<reason>` and stops.  It never retries on its own
@@ -938,8 +943,9 @@ one-line notice at import:
 WARNING: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jax installation was not found.
 ```
 
-This is expected. KAINE uses `jax[cpu]` by design — Nous and Phantasia run
-active inference and world-model rollouts on CPU to leave the GPUs free for
+This is expected. KAINE uses `jax[cpu]` by design — Nous (`backend = "pymdp"`)
+and Phantasia (`engine = "jax"`) run active inference and world-model rollouts
+on CPU (both also offer a NumPy engine that needs no JAX) to leave the GPUs free for
 the model server and Topos. The notice is informational, not an error.
 
 ### Qdrant: TLS or api_key errors

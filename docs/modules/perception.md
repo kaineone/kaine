@@ -17,7 +17,7 @@ Implemented. Ships **disabled** by default — add `perception = true` under `[m
 - The `PerceptionLocus` module has **no config section** in `config/kaine.toml`; all parameters are specified directly under `[modules]`-adjacent keys or use their code defaults.
 - `allow_self_switch` defaults to `false` — the entity cannot change its own locus unless an operator explicitly enables it.
 
-> **Current limitation:** Entity-initiated self-switch (`intent.perception.switch`) has no producer yet. Volition only emits `intent.speak`, `intent.think`, and `intent.act`; nothing in the current build emits `intent.perception.switch`. The `allow_self_switch` flag is therefore reserved for deferred virtual-world embodiment work and has no effect until that work lands. Locus changes are operator-driven only.
+> **Current limitation:** Entity-initiated self-switch (`intent.perception.switch`) has no producer yet. Volition only emits `intent.speak`, `intent.think`, `intent.act`, and `intent.rest`; nothing in the current build emits `intent.perception.switch`. The `allow_self_switch` flag is therefore reserved for deferred virtual-world embodiment work and has no effect until that work lands. Locus changes are operator-driven only.
 
 ---
 
