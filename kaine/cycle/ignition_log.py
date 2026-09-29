@@ -49,7 +49,11 @@ class IgnitionLogConfig:
         return cls(enabled=enabled, directory=directory)
 
 
-PositionProvider = Callable[[], tuple[int, int, str, float, bool] | None]
+# ``(item_idx, order, title, offset_s, paused[, paused_by])``: ``paused_by`` is
+# the sorted names of the clock's pause holders (``transition``, ``freeze``,
+# ``hypnos``, ...), so analysis can tell the womb-to-world crossfade from sleep
+# or a freeze. A provider without it yields a record with ``paused_by: None``.
+PositionProvider = Callable[[], tuple[Any, ...] | None]
 AudioPositionProvider = Callable[[], tuple[int, float] | None]
 
 
@@ -82,13 +86,15 @@ class IgnitionLog:
             )
             pos = None
         if pos is not None:
-            item_idx, order, title, offset_s, paused = pos
+            item_idx, order, title, offset_s, paused = pos[:5]
+            paused_by = list(pos[5]) if len(pos) > 5 and pos[5] is not None else None
             programme = {
                 "item_idx": item_idx,
                 "order": order,
                 "title": title,
                 "offset_s": offset_s,
                 "paused": paused,
+                "paused_by": paused_by,
             }
 
         audio: dict[str, Any] | None = None
@@ -143,16 +149,17 @@ class IgnitionLog:
 
 def playlist_position_provider(
     clock: Any, manifest: Any
-) -> Callable[[], tuple[int, int, str, float, bool] | None]:
+) -> Callable[[], tuple[int, int, str, float, bool, tuple[str, ...] | None] | None]:
     """Return a zero-arg provider for the shared ``PlaylistClock`` + manifest.
 
     ``clock`` is duck-typed: it must expose ``started``, ``locate()`` and
-    ``paused``. ``manifest.items`` must be an iterable of objects with
+    ``paused``, and may expose ``holders`` (the pause holders, reported as
+    ``paused_by``). ``manifest.items`` must be an iterable of objects with
     ``order`` and ``path`` attributes. This module deliberately does not
     import kaine.modules so it stays a cycle-layer primitive.
     """
 
-    def _provide() -> tuple[int, int, str, float, bool] | None:
+    def _provide() -> tuple[int, int, str, float, bool, tuple[str, ...] | None] | None:
         if not clock.started:
             return None
         idx, offset = clock.locate()
@@ -160,6 +167,8 @@ def playlist_position_provider(
         if idx >= len(items):
             return None
         it = items[idx]
-        return (idx, it.order, Path(it.path).name, offset, clock.paused)
+        holders = getattr(clock, "holders", None)
+        paused_by = tuple(sorted(holders)) if holders is not None else None
+        return (idx, it.order, Path(it.path).name, offset, clock.paused, paused_by)
 
     return _provide

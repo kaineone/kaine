@@ -19,12 +19,14 @@ The pieces:
   function of the recorded seed, womb time, lived time and parameters;
 - :class:`TransitionController`: one per boot, shared by both surfaces. It holds
   the shared ``PlaylistClock`` paused under the holder ``transition`` from
-  construction, starts on the first read of either surface, and releases the
-  holder exactly once when ``transition_seconds`` have elapsed. A timer
-  guarantees the release, so a quiet surface never leaves the programme paused.
-  Programme time zero is the release;
+  construction. The crossfade advances only while it is perceived: while no
+  other holder (``freeze``, ``hypnos``) pauses the clock and the primary
+  surface is wanted. The holder is released exactly once, when the perceived
+  crossfade time reaches ``transition_seconds``; a timer guarantees the release
+  even when no surface reads. Programme time zero is the release;
 - :class:`WombWorldTransition`: the per-boot shared state (the womb frame, the
-  programme's opening frame, the controller and the audio fade position);
+  programme's opening frame, the blend buffers, the controller and the audio
+  fade position);
 - :class:`TransitionVideoSource` and :class:`TransitionAudioStream`: wrappers
   around the playlist sources that present the transition.
 
@@ -48,6 +50,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 TRANSITION_HOLDER = "transition"
+# How often the controller re-samples whether the crossfade is perceived while
+# it waits for its end (the desired-perception flags have no change events).
+TICK_SECONDS = 0.25
+
+# Content-free reasons carried by an ``abandoned`` event.
+ABANDON_FIRST_FRAME_UNDECODABLE = "first_frame_undecodable"
+ABANDON_FIRST_FRAME_UNBLENDABLE = "first_frame_unblendable"
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +80,7 @@ def smoothstep(x: float) -> float:
 
 
 def transition_alpha(elapsed: float, transition_seconds: float) -> float:
-    """The film's weight in the crossfade after ``elapsed`` seconds."""
+    """The film's weight in the crossfade after ``elapsed`` perceived seconds."""
     seconds = float(transition_seconds)
     if not seconds > 0.0:
         return 1.0
@@ -79,11 +88,12 @@ def transition_alpha(elapsed: float, transition_seconds: float) -> float:
 
 
 def blend_frames(womb: np.ndarray, film: np.ndarray, alpha: float) -> np.ndarray:
-    """Return ``(1 - alpha) * womb + alpha * film`` as uint8.
+    """Return ``womb + alpha * (film - womb)`` as uint8.
 
     ``alpha`` is clamped to [0, 1]. Both frames must have the same shape. The
     endpoints are exact: alpha 0 returns the womb frame's values and alpha 1 the
-    film frame's.
+    film frame's. :class:`WombWorldTransition` computes the same arithmetic in
+    preallocated buffers.
     """
     import numpy as np
 
@@ -91,11 +101,21 @@ def blend_frames(womb: np.ndarray, film: np.ndarray, alpha: float) -> np.ndarray
         raise ValueError(
             f"blend_frames needs equal shapes, got {womb.shape} and {film.shape}"
         )
-    a = min(1.0, max(0.0, float(alpha)))
-    out = womb.astype(np.float32) * np.float32(1.0 - a) + film.astype(
-        np.float32
-    ) * np.float32(a)
-    return np.clip(np.rint(out), 0.0, 255.0).astype(np.uint8)
+    base = womb.astype(np.float32)
+    delta = film.astype(np.float32) - base
+    return _blend_into(base, delta, np.empty_like(delta), alpha)
+
+
+def _blend_into(base: Any, delta: Any, buf: Any, alpha: float) -> np.ndarray:
+    """``rint(base + alpha * delta)`` in ``buf``; returns a fresh uint8 frame."""
+    import numpy as np
+
+    a = np.float32(min(1.0, max(0.0, float(alpha))))
+    np.multiply(delta, a, out=buf)
+    np.add(buf, base, out=buf)
+    np.rint(buf, out=buf)
+    np.clip(buf, 0.0, 255.0, out=buf)
+    return buf.astype(np.uint8)
 
 
 def resize_bilinear(image: np.ndarray, height: int, width: int) -> np.ndarray:
@@ -224,11 +244,22 @@ class TransitionController:
     """Owns the ``transition`` pause holder on the shared playlist clock.
 
     Construction pauses the clock under ``transition`` (before any read), so the
-    programme is born paused. :meth:`start` (called on the first read or
-    produce of either surface) fixes the transition's start, anchors the
-    programme origin and arms a timer. The holder is released exactly once, by
-    whichever of :meth:`poll` (the video read) or the timer first sees
-    ``transition_seconds`` elapsed; programme time zero is that release.
+    programme is born paused. :meth:`start` begins the transition: the video
+    surface starts it whenever it is present; the audio surface only when it is
+    the only surface.
+
+    The crossfade advances only while it is perceived: while no other holder
+    (``freeze``, ``hypnos``, ...) pauses the clock, and while
+    ``perceiving(video_present)`` is true (the boot wiring checks the desired
+    perception flags and the freeze control). Holder changes are applied the
+    moment they happen; ``perceiving`` is re-sampled on every video read and on
+    every timer tick. The holder is released exactly once, by whichever of
+    :meth:`poll` or the timer first sees ``transition_seconds`` of perceived
+    crossfade; programme time zero is that release.
+
+    ``on_event(phase, payload)`` receives the content-free outcome: ``started``
+    (the crossfade first advanced), ``completed`` and ``abandoned`` (with a
+    ``reason`` code), each with ``transition_seconds``.
     """
 
     def __init__(
@@ -238,6 +269,10 @@ class TransitionController:
         *,
         clock: Callable[[], float] = time.monotonic,
         timer_factory: Callable[[float, Callable[[], None]], Any] = _daemon_timer,
+        perceiving: Callable[[bool], bool] | None = None,
+        video_present: bool = True,
+        on_event: Callable[[str, dict[str, Any]], None] | None = None,
+        tick_seconds: float = TICK_SECONDS,
     ) -> None:
         seconds = float(transition_seconds)
         if not math.isfinite(seconds) or seconds <= 0.0:
@@ -246,11 +281,23 @@ class TransitionController:
         self._seconds = seconds
         self._clock = clock
         self._timer_factory = timer_factory
-        self._lock = threading.Lock()
-        self._started_at: float | None = None
+        self._perceiving = perceiving
+        self._video_present = bool(video_present)
+        self._on_event = on_event
+        self._tick = max(0.001, float(tick_seconds))
+        self._lock = threading.RLock()
+        self._started = False
         self._released = False
+        self._announced = False
+        self._perceived = True
+        self._progress = 0.0
+        self._segment_start: float | None = None
         self._timer: Any = None
+        self._pending: list[tuple[str, dict[str, Any]]] = []
         playlist_clock.pause(TRANSITION_HOLDER)
+        playlist_clock.add_holder_listener(self._on_holders)
+
+    # --- state ------------------------------------------------------------
 
     @property
     def transition_seconds(self) -> float:
@@ -259,91 +306,184 @@ class TransitionController:
     @property
     def started(self) -> bool:
         with self._lock:
-            return self._started_at is not None
+            return self._started
 
     @property
     def released(self) -> bool:
         with self._lock:
             return self._released
 
-    def start(self) -> None:
-        """Begin the transition (idempotent)."""
+    @property
+    def video_present(self) -> bool:
         with self._lock:
-            if self._started_at is not None or self._released:
-                return
-            self._started_at = self._clock()
-            # Fix the programme origin now; the clock is held under
-            # ``transition``, so programme time stays at zero until release.
-            self._pclock.start()
-            self._arm_locked(self._seconds)
-        log.info(
-            "womb-to-world transition started (%.1f s); the programme waits",
-            self._seconds,
-        )
+            return self._video_present
 
-    def elapsed(self) -> float:
-        """Seconds since :meth:`start`, or 0.0 before it."""
+    def set_video_present(self, present: bool) -> None:
+        """Record whether a video surface exists. Without one, the audio
+        surface starts the transition and ``perceiving`` judges audio."""
         with self._lock:
-            if self._started_at is None:
-                return 0.0
-            return max(0.0, self._clock() - self._started_at)
+            self._video_present = bool(present)
+
+    def progress(self) -> float:
+        """Seconds of perceived crossfade so far."""
+        with self._lock:
+            total = self._progress
+            if self._segment_start is not None:
+                total += max(0.0, self._clock() - self._segment_start)
+            return total
 
     def alpha(self) -> float:
         """The film's weight in the crossfade now (1.0 once released)."""
         if self.released:
             return 1.0
-        return transition_alpha(self.elapsed(), self._seconds)
+        return transition_alpha(self.progress(), self._seconds)
+
+    # --- transitions ------------------------------------------------------
+
+    def start(self, surface: str = "video") -> None:
+        """Begin the transition (idempotent). An audio start is ignored while
+        a video surface is present."""
+        with self._lock:
+            if self._started or self._released:
+                return
+            if surface != "video" and self._video_present:
+                return
+        perceived = self._sample()
+        with self._lock:
+            if self._started or self._released:
+                return
+            self._started = True
+            # Fix the programme origin now; the clock is held under
+            # ``transition``, so programme time stays at zero until release.
+            self._pclock.start()
+            self._update_locked(perceived, None)
+            self._arm_locked()
+        log.info(
+            "womb-to-world transition started by the %s surface (%.1f s of "
+            "perceived crossfade); the programme waits",
+            surface,
+            self._seconds,
+        )
+        self._flush()
 
     def poll(self) -> bool:
-        """Release the holder when the transition's time is up.
+        """Account perceived time and release the holder when it is up.
 
         Returns True once the transition has been released.
         """
         with self._lock:
             if self._released:
                 return True
-            if self._started_at is None:
+            if not self._started:
                 return False
-            if self._clock() - self._started_at < self._seconds:
-                return False
-            self._release_locked()
-        log.info("womb-to-world transition complete; programme time starts")
-        return True
+        perceived = self._sample()
+        with self._lock:
+            if self._released:
+                return True
+            self._update_locked(perceived, None)
+            done = self._progress >= self._seconds
+            if done:
+                self._finish_locked("completed", {})
+        if done:
+            self._pclock.resume(TRANSITION_HOLDER)
+            log.info("womb-to-world transition complete; programme time starts")
+        self._flush()
+        return done
 
-    def abort(self, reason: str) -> None:
+    def abort(self, reason: str, detail: str = "") -> None:
         """Release the holder now, so the programme starts as it would without
         a transition. Used when the transition cannot be rendered."""
         with self._lock:
             if self._released:
                 return
-            self._release_locked()
+            if self._segment_start is not None:
+                self._progress += max(0.0, self._clock() - self._segment_start)
+                self._segment_start = None
+            self._finish_locked("abandoned", {"reason": str(reason)})
+        self._pclock.resume(TRANSITION_HOLDER)
         log.warning(
-            "womb-to-world transition abandoned (%s); the programme starts now",
+            "womb-to-world transition abandoned (%s%s); the programme starts now",
             reason,
+            f": {detail}" if detail else "",
         )
+        self._flush()
 
-    def _release_locked(self) -> None:
+    # --- internals --------------------------------------------------------
+
+    def _sample(self) -> bool | None:
+        """Whether the crossfade is perceived now (None keeps the last value)."""
+        if self._perceiving is None:
+            return True
+        try:
+            return bool(self._perceiving(self.video_present))
+        except Exception:
+            log.debug("transition perceiving check raised", exc_info=True)
+            return None
+
+    def _update_locked(
+        self, perceived: bool | None, holders: frozenset[str] | None
+    ) -> None:
+        now = self._clock()
+        if self._segment_start is not None:
+            self._progress += max(0.0, now - self._segment_start)
+            self._segment_start = None
+        if perceived is not None:
+            self._perceived = perceived
+        if holders is None:
+            holders = self._pclock.holders
+        others = holders - {TRANSITION_HOLDER}
+        if self._started and not self._released and self._perceived and not others:
+            self._segment_start = now
+            if not self._announced:
+                self._announced = True
+                self._pending.append(("started", {}))
+
+    def _finish_locked(self, phase: str, extra: dict[str, Any]) -> None:
         self._released = True
+        self._segment_start = None
         timer, self._timer = self._timer, None
         if timer is not None:
             timer.cancel()
-        self._pclock.resume(TRANSITION_HOLDER)
+        self._pending.append((phase, extra))
 
-    def _arm_locked(self, delay: float) -> None:
-        timer = self._timer_factory(max(0.0, float(delay)), self._on_timer)
+    def _arm_locked(self) -> None:
+        if self._released:
+            return
+        delay = self._tick
+        if self._segment_start is not None:
+            remaining = self._seconds - (
+                self._progress + max(0.0, self._clock() - self._segment_start)
+            )
+            delay = min(delay, max(remaining, 0.001))
+        timer = self._timer_factory(delay, self._on_timer)
         self._timer = timer
         timer.start()
 
     def _on_timer(self) -> None:
         if self.poll():
             return
-        # The timer fired before the controller's clock reached the end (timer
-        # and clock can disagree slightly): re-arm for the remainder.
         with self._lock:
-            if self._released or self._started_at is None:
+            if not self._released:
+                self._arm_locked()
+
+    def _on_holders(self, holders: frozenset[str]) -> None:
+        with self._lock:
+            if not self._started or self._released:
                 return
-            remaining = self._seconds - (self._clock() - self._started_at)
-            self._arm_locked(max(remaining, 0.001))
+            self._update_locked(None, holders)
+        self._flush()
+
+    def _flush(self) -> None:
+        with self._lock:
+            pending, self._pending = self._pending, []
+        if self._on_event is None:
+            return
+        for phase, extra in pending:
+            payload = {"phase": phase, "transition_seconds": self._seconds, **extra}
+            try:
+                self._on_event(phase, payload)
+            except Exception:
+                log.warning("transition event handler raised", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -355,9 +495,9 @@ class WombWorldTransition:
     """The per-boot womb-to-world transition shared by both surfaces.
 
     Holds the womb's bloom-peak frame (rendered once, at construction), the
-    programme's opening frame (decoded once, by the video surface), the
-    controller and the number of sample frames heard since programme time
-    started (for the audio fade-in).
+    programme's opening frame (decoded once, by the video surface) with the
+    float32 buffers the per-read blend reuses, the controller and the number of
+    sample frames heard since programme time started (for the audio fade-in).
     """
 
     def __init__(
@@ -374,9 +514,11 @@ class WombWorldTransition:
         self._controller = controller
         self._audio_fade_seconds = fade
         self._lock = threading.Lock()
+        self._blend_lock = threading.Lock()
         self._prepared = False
-        self._womb: Any = None
-        self._film: Any = None
+        self._base: Any = None
+        self._delta: Any = None
+        self._buf: Any = None
         self._audio_frames_heard = 0
 
     @property
@@ -407,51 +549,65 @@ class WombWorldTransition:
 
     def prepare(self, first_frame: Callable[[], Any]) -> bool:
         """Obtain the programme's opening frame once and size the womb frame to
-        it. On failure the transition is abandoned (the programme starts now).
-        Returns True when the transition frames are ready."""
+        it, at the film's native resolution. The frame is decoded before the
+        lock is taken; the lock only publishes the result. On failure the
+        transition is abandoned (the programme starts now). Returns True when
+        the transition frames are ready."""
+        import numpy as np
+
         with self._lock:
             if self._prepared:
-                return self._film is not None
-            self._prepared = True
-            reason = None
-            try:
-                film = first_frame()
-            except Exception as exc:
-                film = None
-                reason = f"the programme's first frame could not be decoded: {exc}"
-            if film is None and reason is None:
-                reason = "the programme's first frame could not be decoded"
-            if film is not None:
-                film_shape = getattr(film, "shape", None)
-                womb_shape = self._womb_source.shape
-                if (
-                    film_shape is None
-                    or len(film_shape) != len(womb_shape)
-                    or tuple(film_shape[2:]) != tuple(womb_shape[2:])
-                    or str(getattr(film, "dtype", "")) != "uint8"
-                ):
-                    reason = (
-                        f"the programme's first frame has shape {film_shape}, "
-                        f"which cannot be blended with the womb's {womb_shape}"
-                    )
-                    film = None
-            if film is not None:
-                self._womb = resize_bilinear(
-                    self._womb_source, int(film.shape[0]), int(film.shape[1])
+                return self._delta is not None
+        reason = detail = None
+        base = delta = None
+        try:
+            film = first_frame()
+        except Exception as exc:
+            film = None
+            reason, detail = ABANDON_FIRST_FRAME_UNDECODABLE, str(exc)
+        if film is None and reason is None:
+            reason = ABANDON_FIRST_FRAME_UNDECODABLE
+        if film is not None:
+            film_shape = getattr(film, "shape", None)
+            womb_shape = self._womb_source.shape
+            if (
+                film_shape is None
+                or len(film_shape) != len(womb_shape)
+                or tuple(film_shape[2:]) != tuple(womb_shape[2:])
+                or str(getattr(film, "dtype", "")) != "uint8"
+            ):
+                reason = ABANDON_FIRST_FRAME_UNBLENDABLE
+                detail = f"shape {film_shape} against the womb's {womb_shape}"
+            else:
+                womb = resize_bilinear(
+                    self._womb_source, int(film_shape[0]), int(film_shape[1])
                 )
-                self._film = film.copy()
-        if reason is not None:
-            self._controller.abort(reason)
+                base = womb.astype(np.float32)
+                delta = film.astype(np.float32)
+                np.subtract(delta, base, out=delta)
+        with self._lock:
+            if self._prepared:  # another surface prepared first
+                return self._delta is not None
+            self._prepared = True
+            if delta is not None:
+                self._base = base
+                self._delta = delta
+                self._buf = np.empty_like(delta)
+        if delta is None:
+            self._controller.abort(reason or ABANDON_FIRST_FRAME_UNDECODABLE, detail or "")
             return False
         return True
 
     def frame_at(self, alpha: float) -> np.ndarray | None:
-        """The crossfade frame at film weight ``alpha`` (None until prepared)."""
+        """The crossfade frame at film weight ``alpha`` (None until prepared).
+
+        Reuses one float32 buffer; the returned uint8 frame is fresh."""
         with self._lock:
-            womb, film = self._womb, self._film
-        if womb is None or film is None:
+            base, delta, buf = self._base, self._delta, self._buf
+        if delta is None:
             return None
-        return blend_frames(womb, film, alpha)
+        with self._blend_lock:
+            return _blend_into(base, delta, buf, alpha)
 
     def fade_block(self, pcm: bytes, *, sample_rate: int, channels: int) -> bytes:
         """Fade one programme PCM block in; silence it before release."""
@@ -511,7 +667,7 @@ class TransitionVideoSource:
     def read(self) -> tuple[bool, Any]:
         if not self._t.released:
             controller = self._t.controller
-            controller.start()
+            controller.start("video")
             if not controller.poll():
                 frame = self._t.frame_at(controller.alpha())
                 if frame is not None:
@@ -527,7 +683,8 @@ class TransitionAudioStream:
 
     Wraps a ``PlaylistAudioStream`` built by ``make_inner(callback)`` around a
     callback that applies the fade. During the crossfade the shared clock is
-    held, so the playlist stream parks and nothing is heard.
+    held, so the playlist stream parks and nothing is heard. The audio surface
+    starts the transition only when there is no video surface.
     """
 
     def __init__(
@@ -573,7 +730,7 @@ class TransitionAudioStream:
 
     def start(self) -> None:
         self._inner.start()
-        self._t.controller.start()
+        self._t.controller.start("audio")
 
     def stop(self) -> None:
         self._inner.stop()
@@ -583,6 +740,9 @@ class TransitionAudioStream:
 
 
 __all__ = [
+    "ABANDON_FIRST_FRAME_UNBLENDABLE",
+    "ABANDON_FIRST_FRAME_UNDECODABLE",
+    "TICK_SECONDS",
     "TRANSITION_HOLDER",
     "TransitionAudioStream",
     "TransitionController",

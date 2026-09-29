@@ -789,6 +789,9 @@ class PlaylistClock:
         # park without deadlocking against pause/resume.
         self._running = threading.Event()
         self._running.set()
+        # Called with the new holder set after every change to it, outside the
+        # lock (the womb-to-world transition counts only unpaused time).
+        self._holder_listeners: list[Callable[[frozenset[str]], None]] = []
 
     def start(self, at: float | None = None) -> None:
         """Set the playback origin ONCE (idempotent). Both feeds call this on
@@ -813,6 +816,32 @@ class PlaylistClock:
         with self._lock:
             return bool(self._holders)
 
+    @property
+    def holders(self) -> frozenset[str]:
+        """The names currently holding the clock paused (empty when running)."""
+        with self._lock:
+            return frozenset(self._holders)
+
+    def add_holder_listener(
+        self, listener: Callable[[frozenset[str]], None]
+    ) -> None:
+        """Call ``listener(holders)`` after every change to the holder set.
+
+        Listeners run in the thread that paused or resumed, outside the
+        clock's lock; one that raises is logged and does not affect the clock.
+        """
+        with self._lock:
+            self._holder_listeners.append(listener)
+
+    def _notify_holders(self, holders: frozenset[str]) -> None:
+        with self._lock:
+            listeners = list(self._holder_listeners)
+        for listener in listeners:
+            try:
+                listener(holders)
+            except Exception:
+                log.warning("playlist clock holder listener raised", exc_info=True)
+
     def pause(self, holder: str = "default") -> None:
         """Freeze elapsed time (idempotent while this holder is already held).
 
@@ -820,15 +849,18 @@ class PlaylistClock:
         is born paused and ``start()`` anchors the pause to the origin it fixes.
         """
         with self._lock:
+            if holder in self._holders:
+                return
             had_any = bool(self._holders)
             self._holders.add(holder)
-            if had_any:
-                return
-            # First active holder: start a new pause span.
-            if self._origin is not None:
-                self._pause_started = self._clock()
-            # else: pending pause; _pause_started stays None until start().
-            self._running.clear()
+            holders = frozenset(self._holders)
+            if not had_any:
+                # First active holder: start a new pause span.
+                if self._origin is not None:
+                    self._pause_started = self._clock()
+                # else: pending pause; _pause_started stays None until start().
+                self._running.clear()
+        self._notify_holders(holders)
 
     def resume(self, holder: str = "default") -> None:
         """Unfreeze elapsed time (idempotent when this holder is not held, or
@@ -839,13 +871,14 @@ class PlaylistClock:
             if holder not in self._holders:
                 return
             self._holders.discard(holder)
-            if self._holders:
-                return
-            # Last holder released: close the pause span.
-            if self._origin is not None and self._pause_started is not None:
-                self._paused_total += self._clock() - self._pause_started
-            self._pause_started = None
-            self._running.set()
+            holders = frozenset(self._holders)
+            if not holders:
+                # Last holder released: close the pause span.
+                if self._origin is not None and self._pause_started is not None:
+                    self._paused_total += self._clock() - self._pause_started
+                self._pause_started = None
+                self._running.set()
+        self._notify_holders(holders)
 
     def wait_if_paused(
         self, stop_check: Callable[[], bool] | None = None

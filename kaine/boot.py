@@ -608,13 +608,17 @@ def _build_womb_world_transition(
     height: int,
     clock: Callable[[], float] | None = None,
     timer_factory: Any | None = None,
+    perceiving: Callable[[bool], bool] | None = None,
+    video_present: bool = True,
+    on_event: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> Any | None:
     """Build this boot's womb-to-world transition, or return None and log why.
 
     The womb's bloom-peak field is rendered once, here, from the stage's
     recorded seed, womb time and lived time and the configured womb parameters.
     Constructing the controller pauses ``playlist_clock`` under ``transition``
-    before any surface reads it.
+    before any surface reads it. ``perceiving``, ``video_present`` and
+    ``on_event`` pass through to the ``TransitionController``.
     """
     from kaine.modules.perception_transition import (
         TransitionController,
@@ -646,7 +650,11 @@ def _build_womb_world_transition(
             exc_info=True,
         )
         return None
-    controller_kwargs: dict[str, Any] = {}
+    controller_kwargs: dict[str, Any] = {
+        "perceiving": perceiving,
+        "video_present": bool(video_present),
+        "on_event": on_event,
+    }
     if clock is not None:
         controller_kwargs["clock"] = clock
     if timer_factory is not None:
@@ -664,6 +672,74 @@ def _build_womb_world_transition(
     )
 
 
+def _transition_perceived(video_present: bool) -> bool:
+    """Whether the being perceives the womb-to-world crossfade right now.
+
+    Not while the cycle is frozen (any freeze source; this also covers a boot
+    that revives a frozen being before the freeze watcher pauses the
+    programme), and only while the primary surface is wanted on the virtual
+    locus: video when a video surface exists, otherwise audio.
+    """
+    from kaine import perception_state as _ps
+    from kaine.cycle.control_state import read_control
+
+    if read_control().frozen:
+        return False
+    if video_present:
+        return _ps.effective_virtual_video_capture()
+    return _ps.effective_virtual_audio_capture()
+
+
+def _transition_event_publisher(bus: Any) -> Callable[[str, dict[str, Any]], None]:
+    """Publish the transition's content-free outcome as ``perception.transition``
+    events on the perception stream (``perception.out``) through the bus.
+
+    The controller reports from perception threads, so each event is handed to
+    the event loop that was running when boot built the transition.
+    """
+    import asyncio
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import validate_event
+
+    try:
+        loop: Any = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    def _done(fut: Any) -> None:
+        if fut.cancelled():
+            return
+        exc = fut.exception()
+        if exc is not None:
+            log.warning("could not publish perception.transition: %s", exc)
+
+    def _emit(phase: str, payload: dict[str, Any]) -> None:
+        target = loop
+        if target is None:
+            try:
+                target = asyncio.get_running_loop()
+            except RuntimeError:
+                target = None
+        if target is None or target.is_closed():
+            log.warning(
+                "could not publish perception.transition (%s): no running event loop",
+                phase,
+            )
+            return
+        event = validate_event(
+            source="perception",
+            type="perception.transition",
+            payload=dict(payload),
+            # Operational provenance, not a percept.
+            salience=0.0,
+            timestamp=datetime.now(timezone.utc),
+        )
+        asyncio.run_coroutine_threadsafe(bus.publish(event), target).add_done_callback(_done)
+
+    return _emit
+
+
 def _install_womb_world_transition(
     perception_feed: dict[str, Any],
     kaine_config: dict[str, Any] | None,
@@ -671,6 +747,8 @@ def _install_womb_world_transition(
     *,
     stage_state: Any | None = None,
     stage_path: Path | None = None,
+    bus: Any | None = None,
+    video_present: bool = True,
 ) -> Any | None:
     """Build the transition for this boot and hand it to both feed surfaces.
 
@@ -678,6 +756,9 @@ def _install_womb_world_transition(
     included); without it the stage file is read. The transition is stashed
     beside the shared playlist clock so the video and audio factories (and
     Spot's restart path) wrap their playlist sources with the same instance.
+    ``video_present`` says whether Topos is enabled (build_registry corrects it
+    once the modules are constructed); ``bus`` receives the
+    ``perception.transition`` outcome events.
     """
     from kaine.lifecycle import stage as _lifecycle_stage
 
@@ -690,6 +771,9 @@ def _install_womb_world_transition(
         stage_state=stage_state,
         width=int(topos.get("capture_width", 640)),
         height=int(topos.get("capture_height", 480)),
+        perceiving=_transition_perceived,
+        video_present=video_present,
+        on_event=_transition_event_publisher(bus) if bus is not None else None,
     )
     if transition is None:
         return None
@@ -1007,9 +1091,10 @@ def gather_perception_feed_descriptor(
     for ``off``/``live`` just the mode; for ``womb`` the parameters plus the
     video/audio schedules and the lived-seconds offset. A ``playlist`` descriptor
     also records ``transition_seconds``, ``transition_audio_fade_seconds`` and
-    whether this boot opens with the womb-to-world transition
-    (``transition_active``, judged from ``stage_state`` — the boot's resolved
-    stage — or else the stage file). Best-effort — a
+    whether this boot plans the womb-to-world transition
+    (``transition_planned``, judged from ``stage_state`` — the boot's resolved
+    stage — or else the stage file; the outcome is published as
+    ``perception.transition`` events). Best-effort — a
     malformed/absent manifest or womb config degrades to ``{"mode": ...}`` and
     never raises, so it can't crash boot. No rendered frames, no PCM, no
     operator paths.
@@ -1109,11 +1194,11 @@ def gather_perception_feed_descriptor(
 
                 stage_state = read_stage()
             active, _reason, _level = _plan_womb_world_transition(feed, stage_state)
-            descriptor["transition_active"] = bool(active)
+            descriptor["transition_planned"] = bool(active)
         except Exception:
             # Invalid settings are refused for real at boot; the covariate
             # must not crash the run.
-            descriptor["transition_active"] = False
+            descriptor["transition_planned"] = False
             descriptor["transition_invalid"] = True
     elif mode == "screen":
         # Content-free provenance: the capture target kind and, for a named
@@ -2496,6 +2581,7 @@ def build_registry(
     # nothing — the "awake but senseless" failure. mode off/live leave the
     # desired-state to the operator (live = real camera/mic, operator-toggled).
     _feed_mode = str(perception_feed.get("mode", "off")).lower()
+    _womb_world_transition = None
     # Playlist real-time A/V sync (playlist-realtime-av-sync): the video and audio
     # playlist feeds must share ONE start-clock so they present the same manifest
     # item at the same wall-clock moment and cross item boundaries together. Build
@@ -2539,11 +2625,13 @@ def build_registry(
         # end of the crossfade. When the conditions do not hold, boot logs why
         # and the programme starts as before.
         if perception_feed.get("_shared_playlist_clock") is not None:
-            _install_womb_world_transition(
+            _womb_world_transition = _install_womb_world_transition(
                 perception_feed,
                 kaine_config,
                 perception_feed["_shared_playlist_clock"],
                 stage_state=boot_stage,
+                bus=bus,
+                video_present=bool(toggles.get("topos", False)),
             )
     # Womb (local-womb-feed): one shared womb clock for both surfaces, offset by
     # the lived gestation time, so the heartbeat is seen and heard together and
@@ -2597,6 +2685,11 @@ def build_registry(
             continue
         registry.register(module)
         log.info("registered module %s", name)
+    if _womb_world_transition is not None:
+        # The video surface starts and judges the crossfade only if Topos is
+        # really there; without it the audio surface does, so a Topos whose
+        # backend could not load never leaves the programme held.
+        _womb_world_transition.controller.set_video_present("topos" in registry)
 
     if bool(toggles.get("hypnos", False)):
         # construct_module hands Hypnos its sibling modules from the registry.

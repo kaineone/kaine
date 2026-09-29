@@ -193,7 +193,7 @@ def _born_stage(feed: dict, **overrides) -> lifecycle_stage.StageState:  # noqa:
     return lifecycle_stage.StageState(**fields)
 
 
-def _build(feed: dict, stage, clock: _FakeClock, timers: _TimerFactory, n_items: int = 1):  # noqa: ANN001, ANN202
+def _build(feed: dict, stage, clock: _FakeClock, timers: _TimerFactory, n_items: int = 1, **kw):  # noqa: ANN001, ANN003, ANN202
     pclock = _CountingClock(n_items, clock=clock)
     transition = _build_womb_world_transition(
         feed,
@@ -203,6 +203,7 @@ def _build(feed: dict, stage, clock: _FakeClock, timers: _TimerFactory, n_items:
         height=WOMB_H,
         clock=clock,
         timer_factory=timers,
+        **kw,
     )
     return transition, pclock
 
@@ -349,7 +350,9 @@ def test_controller_releases_the_holder_once_after_transition_seconds():
     clock, timers = _FakeClock(), _TimerFactory()
     pclock = _CountingClock(1, clock=clock)
     pclock.set_duration(0, 100.0)
-    controller = TransitionController(pclock, 4.0, clock=clock, timer_factory=timers)
+    controller = TransitionController(
+        pclock, 4.0, clock=clock, timer_factory=timers, tick_seconds=100.0
+    )
     # Paused under `transition` before any read; not started, nothing armed.
     assert pclock.paused and not controller.started and timers.timers == []
     clock.t = 10.0
@@ -394,7 +397,7 @@ def test_video_source_crossfades_then_plays_from_programme_zero(tmp_path):
     ok, frame = source.read()  # first read starts the transition
     assert ok and np.array_equal(frame, womb)
     assert source.current_item is None
-    assert position() == (0, 0, "film.mp4", 0.0, True)
+    assert position() == (0, 0, "film.mp4", 0.0, True, ("transition",))
 
     clock.t = 102.0
     ok, frame = source.read()
@@ -406,7 +409,7 @@ def test_video_source_crossfades_then_plays_from_programme_zero(tmp_path):
     assert ok and np.array_equal(frame, film0)
     assert pclock.transition_resumes == 1
     assert pclock.locate() == (0, 0.0)
-    assert position() == (0, 0, "film.mp4", 0.0, False)
+    assert position() == (0, 0, "film.mp4", 0.0, False, ())
     assert source.current_item.offset == 0.0
 
     clock.t = 105.0  # one second of programme time -> media frame 30
@@ -435,7 +438,7 @@ def test_an_undecodable_first_frame_abandons_the_transition(tmp_path, caplog):
     assert transition.prepare(lambda: None) is False
     assert transition.released and not pclock.paused
     assert pclock.transition_resumes == 1
-    assert "first frame could not be decoded" in caplog.text
+    assert "first_frame_undecodable" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +508,8 @@ def test_audio_is_silent_during_the_crossfade_then_fades_in(tmp_path, monkeypatc
     _install_fake_av(monkeypatch)
     feed = _feed(_write_manifest(tmp_path))
     clock, timers = _FakeClock(), _TimerFactory()
-    transition, pclock = _build(feed, _born_stage(feed), clock, timers)
+    # Audio is the only surface, so it starts the crossfade.
+    transition, pclock = _build(feed, _born_stage(feed), clock, timers, video_present=False)
     manifest = load_playlist_manifest(feed["playlist_manifest"])
     heard: list[bytes] = []
     stream = TransitionAudioStream(
@@ -662,11 +666,11 @@ def test_run_manifest_records_the_transition(tmp_path, monkeypatch):
     desc = gather_perception_feed_descriptor(config, stage_state=_born_stage(feed))
     assert desc["transition_seconds"] == 4.0
     assert desc["transition_audio_fade_seconds"] == 1.0
-    assert desc["transition_active"] is True
+    assert desc["transition_planned"] is True
     # Without a stage argument the stage file is read (absent here).
-    assert gather_perception_feed_descriptor(config)["transition_active"] is False
+    assert gather_perception_feed_descriptor(config)["transition_planned"] is False
     lifecycle_stage.write_stage(_born_stage(feed))
-    assert gather_perception_feed_descriptor(config)["transition_active"] is True
+    assert gather_perception_feed_descriptor(config)["transition_planned"] is True
     shipped = gather_perception_feed_descriptor(
         {"perception_feed": {"mode": "playlist", "playlist_manifest": ""}},
         stage_state=None,
@@ -674,7 +678,7 @@ def test_run_manifest_records_the_transition(tmp_path, monkeypatch):
     assert shipped["transition_seconds"] == 20.0
     assert shipped["transition_audio_fade_seconds"] == 3.0
     bad = gather_perception_feed_descriptor({"perception_feed": dict(feed, transition_seconds=-1)})
-    assert bad["transition_active"] is False and bad["transition_invalid"] is True
+    assert bad["transition_planned"] is False and bad["transition_invalid"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -728,3 +732,360 @@ def test_no_file_is_written_during_a_transition(tmp_path, monkeypatch):
         stream.stop()
         source.release()
     assert _snapshot(tmp_path) == before
+
+
+# ---------------------------------------------------------------------------
+# Perceived progress (second review)
+# ---------------------------------------------------------------------------
+
+
+class _Events:
+    def __init__(self) -> None:
+        self.items: list[tuple[str, dict]] = []
+
+    def __call__(self, phase: str, payload: dict) -> None:
+        self.items.append((phase, dict(payload)))
+
+    @property
+    def phases(self) -> list[str]:
+        return [p for p, _ in self.items]
+
+
+def _controller(**kw):  # noqa: ANN003, ANN202
+    clock = _FakeClock()
+    timers = _TimerFactory()
+    pclock = _CountingClock(1, clock=clock)
+    pclock.set_duration(0, 100.0)
+    events = _Events()
+    controller = TransitionController(
+        pclock, 4.0, clock=clock, timer_factory=timers, tick_seconds=100.0,
+        on_event=events, **kw,
+    )
+    return controller, pclock, clock, timers, events
+
+
+@pytest.mark.parametrize("holder", ["freeze", "hypnos"])
+def test_an_overlapping_pause_stops_the_crossfade_and_the_full_length_is_seen(holder):
+    controller, pclock, clock, timers, events = _controller()
+    controller.start("video")
+    clock.t = 1.0
+    assert controller.poll() is False
+    pclock.pause(holder)  # progress stops the moment the holder arrives
+    alpha_at_pause = controller.alpha()
+    clock.t = 30.0
+    assert controller.poll() is False
+    assert controller.progress() == pytest.approx(1.0)
+    assert controller.alpha() == alpha_at_pause
+    timers.fire_last()  # the timer re-arms instead of releasing
+    assert not controller.released
+    pclock.resume(holder)  # progress resumes
+    assert pclock.holders == frozenset({TRANSITION_HOLDER})
+    clock.t = 32.999
+    assert controller.poll() is False
+    clock.t = 33.0  # 1 s before + 3 s after the pause = 4 s perceived
+    assert controller.poll() is True
+    assert controller.progress() == pytest.approx(4.0)
+    assert pclock.transition_resumes == 1 and pclock.locate() == (0, 0.0)
+    assert events.phases == ["started", "completed"]
+    assert events.items[1][1] == {"phase": "completed", "transition_seconds": 4.0}
+
+
+def test_a_pause_held_before_the_start_delays_the_crossfade():
+    controller, pclock, clock, timers, events = _controller()
+    pclock.pause("hypnos")
+    controller.start("video")
+    clock.t = 10.0
+    assert controller.poll() is False and controller.progress() == 0.0
+    assert events.phases == []  # nothing perceived yet: not started
+    pclock.resume("hypnos")
+    assert events.phases == ["started"]
+    clock.t = 14.0
+    assert controller.poll() is True
+
+
+def test_unwanted_perception_stops_the_crossfade():
+    wanted = {"on": True}
+    controller, pclock, clock, timers, events = _controller(
+        perceiving=lambda video_present: wanted["on"]
+    )
+    controller.start("video")
+    clock.t = 2.0
+    assert controller.poll() is False
+    wanted["on"] = False
+    clock.t = 3.0
+    controller.poll()  # sampled here: the second 2..3 still counted
+    clock.t = 50.0
+    timers.fire_last()  # the timer samples too and does not release
+    assert controller.progress() == pytest.approx(3.0) and not controller.released
+    wanted["on"] = True
+    controller.poll()
+    clock.t = 50.999
+    assert controller.poll() is False
+    clock.t = 51.0
+    assert controller.poll() is True
+
+
+def test_a_revive_while_frozen_waits_for_the_unfreeze(tmp_path, monkeypatch):
+    from kaine import perception_state
+    from kaine.boot import _transition_perceived
+    from kaine.cycle import control_state
+
+    monkeypatch.setattr(control_state, "CONTROL_PATH", tmp_path / "control.json")
+    monkeypatch.setattr(perception_state, "DESIRED_PATH", tmp_path / "desired.json")
+    perception_state.select_virtual_feed()
+    control_state.freeze("welfare hold", source="welfare")
+    controller, pclock, clock, timers, events = _controller(
+        perceiving=_transition_perceived
+    )
+    controller.start("video")
+    clock.t = 60.0
+    assert controller.poll() is False and controller.progress() == 0.0
+    assert events.phases == []
+    control_state.unfreeze()
+    assert controller.poll() is False  # sampled: progress begins now
+    assert events.phases == ["started"]
+    clock.t = 64.0
+    assert controller.poll() is True
+    # The desired video flag gates it too.
+    perception_state.write_desired_video(False)
+    assert _transition_perceived(True) is False
+    assert _transition_perceived(False) is True
+
+
+def test_video_starts_the_crossfade_and_audio_only_without_video():
+    controller, pclock, clock, timers, events = _controller(video_present=True)
+    controller.start("audio")
+    assert not controller.started and timers.timers == []
+    controller.start("video")
+    assert controller.started
+    controller2, *_ = _controller(video_present=True)
+    controller2.set_video_present(False)
+    controller2.start("audio")
+    assert controller2.started
+
+
+def test_the_real_timer_releases_a_quiet_transition():
+    pclock = _CountingClock(1)
+    events = _Events()
+    controller = TransitionController(pclock, 0.3, on_event=events, tick_seconds=0.1)
+    t0 = time.monotonic()
+    controller.start("audio")  # default video_present: an audio start is ignored
+    assert not controller.started
+    controller.set_video_present(False)
+    controller.start("audio")
+    assert _wait_for(lambda: controller.released, timeout=5.0)
+    assert time.monotonic() - t0 >= 0.3
+    assert controller.progress() >= 0.3
+    assert pclock.transition_resumes == 1 and not pclock.paused
+    assert events.phases == ["started", "completed"]
+    time.sleep(0.2)  # no stray timer releases again
+    assert pclock.transition_resumes == 1
+
+
+def test_the_real_timer_pauses_with_a_freeze():
+    pclock = _CountingClock(1)
+    controller = TransitionController(pclock, 0.4, tick_seconds=0.05)
+    controller.start("video")
+    time.sleep(0.1)
+    pclock.pause("freeze")
+    time.sleep(0.6)
+    assert not controller.released
+    frozen_progress = controller.progress()
+    assert 0.05 <= frozen_progress < 0.4
+    pclock.resume("freeze")
+    assert _wait_for(lambda: controller.released, timeout=5.0)
+    assert controller.progress() >= 0.4
+
+
+def test_the_blend_reuses_its_buffer_and_matches_the_pure_function(tmp_path):
+    feed = _feed(_write_manifest(tmp_path))
+    clock, timers = _FakeClock(), _TimerFactory()
+    source, transition, _pclock, _m = _video(tmp_path, feed, clock, timers)
+    womb = resize_bilinear(transition.womb_frame, FILM_H, FILM_W)
+    buf = transition._buf
+    for alpha in (0.0, 0.3, 0.77, 1.0):
+        frame = transition.frame_at(alpha)
+        assert np.array_equal(frame, blend_frames(womb, _film_frame(0), alpha))
+        assert frame.shape == (FILM_H, FILM_W, 3)  # native film resolution
+    assert transition._buf is buf
+    first = transition.frame_at(0.5)
+    second = transition.frame_at(0.9)
+    assert not np.shares_memory(first, second)
+
+
+def test_prepare_decodes_outside_the_lock(tmp_path):
+    feed = _feed(_write_manifest(tmp_path))
+    clock, timers = _FakeClock(), _TimerFactory()
+    transition, _pclock = _build(feed, _born_stage(feed), clock, timers)
+    seen = {}
+
+    def _decode():  # noqa: ANN202
+        acquired = transition._lock.acquire(blocking=False)
+        seen["lock_free"] = acquired
+        if acquired:
+            transition._lock.release()
+        return _film_frame(0)
+
+    assert transition.prepare(_decode) is True
+    assert seen["lock_free"] is True
+    assert transition.prepare(lambda: pytest.fail("decoded twice")) is True
+
+
+# ---------------------------------------------------------------------------
+# Outcome events, the manifest, the ignition log and the boot wiring
+# ---------------------------------------------------------------------------
+
+
+def _fake_bus():  # noqa: ANN202
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    from kaine.bus.client import AsyncBus
+    from kaine.bus.config import BusConfig
+
+    return AsyncBus(
+        BusConfig(password="x", audit_required=False),
+        client=fakeredis.FakeRedis(decode_responses=True),
+    )
+
+
+async def test_outcome_events_are_published_on_the_perception_stream(tmp_path):
+    import asyncio
+
+    from kaine.boot import _transition_event_publisher
+
+    bus = _fake_bus()
+    try:
+        publish = _transition_event_publisher(bus)
+        feed = _feed(_write_manifest(tmp_path))
+        clock, timers = _FakeClock(), _TimerFactory()
+        transition, _pclock = _build(
+            feed, _born_stage(feed), clock, timers, on_event=publish
+        )
+        transition.controller.start("video")
+        clock.t = 4.0
+        assert transition.controller.poll()
+        abandoned, _ = _build(
+            feed, _born_stage(feed), _FakeClock(), _TimerFactory(), on_event=publish
+        )
+        assert abandoned.prepare(lambda: None) is False
+        entries = []
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+            entries = await bus.read("perception.out")
+            if len(entries) >= 3:
+                break
+        events = [e for _, e in entries]
+        assert [e.type for e in events] == ["perception.transition"] * 3
+        assert all(e.source == "perception" and e.salience == 0.0 for e in events)
+        assert [e.payload for e in events] == [
+            {"phase": "started", "transition_seconds": 4.0},
+            {"phase": "completed", "transition_seconds": 4.0},
+            {"phase": "abandoned", "transition_seconds": 4.0,
+             "reason": "first_frame_undecodable"},
+        ]
+        desc = gather_perception_feed_descriptor(
+            {"perception_feed": feed}, stage_state=_born_stage(feed)
+        )
+        assert desc["transition_planned"] is True and "transition_active" not in desc
+    finally:
+        await bus.close()
+
+
+async def test_ignition_records_name_the_pause_holders(tmp_path):
+    from unittest.mock import AsyncMock
+
+    from kaine.cycle.ignition_log import IgnitionLog
+
+    feed = _feed(_write_manifest(tmp_path))
+    clock, timers = _FakeClock(), _TimerFactory()
+    source, transition, pclock, manifest = _video(tmp_path, feed, clock, timers)
+    sink = AsyncMock()
+    sink.dropped_count = 0
+    ilog = IgnitionLog(sink, playlist_position_provider(pclock, manifest))
+    payload = {"tick_index": 1, "selected": [], "inhibited": False, "salience_scores": {}}
+    source.read()
+    await ilog.on_broadcast(payload, "e1", None, 1.0)
+    pclock.pause("hypnos")
+    await ilog.on_broadcast(payload, "e2", None, 2.0)
+    pclock.resume("hypnos")
+    clock.t = 4.0
+    source.read()
+    await ilog.on_broadcast(payload, "e3", None, 3.0)
+    records = [call.args[0]["programme"] for call in sink.write.await_args_list]
+    assert records[0]["paused_by"] == ["transition"] and records[0]["paused"] is True
+    assert records[1]["paused_by"] == ["hypnos", "transition"]
+    assert records[2]["paused_by"] == [] and records[2]["paused"] is False
+    assert records[2]["offset_s"] == 0.0
+
+
+@pytest.mark.parametrize("topos_loads", [True, False])
+def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, topos_loads):
+    import asyncio
+
+    from kaine import perception_state
+    from kaine.boot import SIMPLE_FACTORIES, build_registry
+    from kaine.cycle import control_state
+    from kaine.entity_clock import EntityClock
+
+    manifest = _write_manifest(tmp_path)
+    feed = _feed(manifest)
+    monkeypatch.setattr(lifecycle_stage, "STAGE_PATH", tmp_path / "stage.json")
+    lifecycle_stage.write_stage(_born_stage(feed))
+    monkeypatch.setattr(perception_state, "DESIRED_PATH", tmp_path / "desired.json")
+    monkeypatch.setattr(perception_state, "RUNTIME_PATH", tmp_path / "runtime.json")
+    monkeypatch.setattr(control_state, "CONTROL_PATH", tmp_path / "control.json")
+
+    captured: dict[str, dict] = {}
+
+    class _Fake:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    def _recorder(name: str):  # noqa: ANN202
+        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
+            captured[name] = dict(section)
+            if name == "topos" and not topos_loads:
+                return None
+            return _Fake(name)
+
+        return factory
+
+    for name in ("topos", "audition"):
+        monkeypatch.setitem(SIMPLE_FACTORIES, name, _recorder(name))
+    monkeypatch.setattr("kaine.boot.install_state_encryption", lambda cfg: None)
+    monkeypatch.setattr("kaine.boot._wire_self_hearing_gate", lambda reg: None)
+    monkeypatch.setattr("kaine.boot._wire_lingua_self_model", lambda reg: None)
+    monkeypatch.setattr("kaine.boot._wire_eidolon_capabilities", lambda reg: None)
+    monkeypatch.setattr("kaine.boot._log_device_assignments", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot._wire_oscillators", lambda reg, cfg: None)
+
+    kaine_config = {
+        "modules": {"topos": True, "audition": True},
+        "perception_feed": dict(feed),
+        "topos": {"capture_width": 16, "capture_height": 12},
+    }
+    bus = _fake_bus()
+    try:
+        build_registry(bus, kaine_config, entity_clock=EntityClock(scale=1.0))
+    finally:
+        asyncio.run(bus.close())
+
+    section = kaine_config["perception_feed"]
+    transition = section["_womb_world_transition"]
+    pclock = section["_shared_playlist_clock"]
+    assert pclock.holders == frozenset({TRANSITION_HOLDER})
+    assert transition.womb_frame.shape == (12, 16, 3)
+    for name in ("topos", "audition"):
+        assert captured[name]["perception_feed"]["_womb_world_transition"] is transition
+        assert captured[name]["perception_feed"]["_shared_playlist_clock"] is pclock
+    # A Topos that failed to load leaves the audio surface in charge.
+    assert transition.controller.video_present is topos_loads
+    video = _build_perception_feed_video_factory(
+        "playlist", captured["topos"]["perception_feed"], width=16, height=12
+    )(0, width=16, height=12)
+    audio = _build_perception_feed_audio_factory(
+        "playlist", captured["audition"]["perception_feed"],
+        sample_rate=16000, channels=1, frames_per_block=480,
+    )(device=None, sample_rate=16000, channels=1, frames_per_block=480, callback=lambda b: None)
+    assert isinstance(video, TransitionVideoSource)
+    assert isinstance(audio, TransitionAudioStream)
+    assert video.clock is pclock and audio.clock is pclock

@@ -17,7 +17,7 @@ Today:
   - Audio: silence during the crossfade, as the bloom ended in silence. Once programme time starts, the film's sound fades in over `transition_audio_fade_seconds` (3 s by default).
   - The womb side is the womb generator's pure function of seed, time and parameters, and the fade curve is fixed, so the transition is identical in every run.
   - Frames and samples are generated in memory and never written.
-- **Film time starts when the fade ends.** The playlist clock starts paused under the holder `transition` and is released at the end of the fade, so film minute 0 is the end of the transition. The ignition log's film position needs no correction. The run manifest records `transition_seconds`, `transition_audio_fade_seconds` and whether the transition is active.
+- **Film time starts when the fade ends.** The playlist clock starts paused under the holder `transition` and is released at the end of the fade, so film minute 0 is the end of the transition. The ignition log's film position needs no correction. The crossfade advances only while the being perceives it (not during a freeze, a sleep replay or with the primary surface unwanted). The run manifest records `transition_seconds`, `transition_audio_fade_seconds` and `transition_planned`; `perception.transition` events record the outcome, and the ignition log names the programme clock's pause holders.
 - **The birth preservation waits for the bloom.** Once the stage is embodied, the study runner requests the seed's preservation only after the womb reports the bloom complete.
 - **Unchanged:**
   - a womb-mode boot of a born being still delivers nothing and warns;

@@ -302,7 +302,9 @@ async def test_record_shape_has_exact_keys_and_no_payloads(tmp_path: Path) -> No
         "title",
         "offset_s",
         "paused",
+        "paused_by",
     }
+    assert record["programme"]["paused_by"] is None
     assert record["programme"]["item_idx"] == 1
     assert record["programme"]["order"] == 2
     assert record["programme"]["title"] == "film2.mp4"
@@ -429,16 +431,20 @@ def test_playlist_position_provider_with_duck_types() -> None:
     clock.set_duration(0, 10.0)
 
     provider = playlist_position_provider(clock, _DuckManifest())
-    assert provider() == (0, 1, "film1.mp4", 0.0, False)
+    assert provider() == (0, 1, "film1.mp4", 0.0, False, ())
 
     clock._clock.advance(12.5)
-    assert provider() == (1, 2, "film2.mp4", 2.5, False)
+    assert provider() == (1, 2, "film2.mp4", 2.5, False, ())
 
     clock.pause("test")
-    assert provider() == (1, 2, "film2.mp4", 2.5, True)
+    assert provider() == (1, 2, "film2.mp4", 2.5, True, ("test",))
+
+    clock.pause("freeze")
+    assert provider() == (1, 2, "film2.mp4", 2.5, True, ("freeze", "test"))
+    clock.resume("freeze")
 
     clock.resume("test")
-    assert provider() == (1, 2, "film2.mp4", 2.5, False)
+    assert provider() == (1, 2, "film2.mp4", 2.5, False, ())
 
 
 def test_playlist_position_provider_returns_none_before_start_or_after_end() -> None:

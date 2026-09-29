@@ -7,7 +7,7 @@
   - pure crossfade functions: a monotonic alpha curve with fixed endpoints, a video blend, and an audio fade-in;
   - video and audio transition sources wrapping the playlist sources.
 - [x] 2.2 Boot wiring. Build the transition when the conditions hold. Start the playlist clock paused under `transition` and release it at the fade's end. Log the reason when no transition is rendered.
-- [x] 2.3 `[perception_feed].transition_seconds` (default 20) and `transition_audio_fade_seconds` (default 3) in config/kaine.toml. The run manifest records both and whether the transition is active.
+- [x] 2.3 `[perception_feed].transition_seconds` (default 20) and `transition_audio_fade_seconds` (default 3) in config/kaine.toml. The run manifest records both and `transition_planned`; `perception.transition` events record the outcome; ignition-log records carry `paused_by`.
 
 ## 3. Verification
 - [x] 3.1 Tests:

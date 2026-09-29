@@ -1609,7 +1609,7 @@ async def _boot_and_run(
                 manifest = load_playlist_manifest(str(manifest_path))
                 position_provider = playlist_position_provider(clock, manifest)
             else:
-                def position_provider() -> tuple[int, int, str, float, bool] | None:
+                def position_provider() -> tuple[Any, ...] | None:
                     return None
 
             audition_mod = registry.get("audition") if "audition" in registry else None
