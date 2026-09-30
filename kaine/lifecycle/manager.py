@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import logging
+import os
+import shutil
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
@@ -14,10 +17,15 @@ if TYPE_CHECKING:
 
 from kaine.lifecycle._merge_base import AdapterMerger, FakeAdapterMerger
 from kaine.lifecycle.snapshot import (
+    ARTIFACTS_DIRNAME,
     ForkSnapshot,
+    _chmod_quietly,
+    artifacts_dir,
+    copy_artifacts,
     list_snapshots,
     load_snapshot,
     save_snapshot,
+    snapshot_dir,
 )
 from kaine.lifecycle.strategies import (
     MergeStrategy,
@@ -40,6 +48,10 @@ class UnmergedAdaptersError(RuntimeError):
     ``adapter_merger = 'ties_dare'`` plus ``[lifecycle.adapter_merge]`` —
     performs a real weight merge instead.
     """
+
+
+class WorldModelChoiceRequiredError(ValueError):
+    """Both merge parents carry a world model and the caller did not name which continues."""
 
 
 # `AdapterMerger` (Protocol) and `FakeAdapterMerger` live in the leaf module
@@ -131,7 +143,37 @@ class ForkManager:
             adapters=list(adapters or []),
             metadata=dict(metadata or {}),
         )
-        save_snapshot(self._root, snap)
+        records: dict[str, Any] = {}
+        for module in registry.all_modules():
+            hook = getattr(module, "export_snapshot_artifacts", None)
+            if not callable(hook):
+                continue
+            dest = artifacts_dir(self._root, snap.id, module.name)
+            try:
+                dest.mkdir(mode=0o700, parents=True, exist_ok=True)
+                _chmod_quietly(dest, 0o700)
+                _chmod_quietly(snapshot_dir(self._root, snap.id), 0o700)
+                record = hook(dest)
+                if not isinstance(record, dict):
+                    record = {"captured": False, "reason": "hook returned no record"}
+                records[module.name] = record
+                try:
+                    if dest.exists() and not any(dest.iterdir()):
+                        os.rmdir(dest)
+                except OSError:
+                    pass
+            except Exception:
+                shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
+                raise
+        if records:
+            snap = dataclasses.replace(
+                snap, metadata={**snap.metadata, "artifacts": records}
+            )
+        try:
+            save_snapshot(self._root, snap)
+        except Exception:
+            shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
+            raise
         return snap
 
     def restore(self, snapshot_id: str, registry: _RegistryLike) -> ForkSnapshot:
@@ -144,6 +186,10 @@ class ForkManager:
                 module.deserialize(copy.deepcopy(state))
             except Exception as exc:
                 log.warning("module %s deserialize failed: %s", module.name, exc)
+        for module in registry.all_modules():
+            hook = getattr(module, "import_snapshot_artifacts", None)
+            if callable(hook):
+                hook(artifacts_dir(self._root, snapshot_id, module.name))
         return snap
 
     def fork(
@@ -169,6 +215,30 @@ class ForkManager:
             adapters=list(parent.adapters),
             metadata={**parent.metadata, **(metadata or {}), "shed": sorted(shed_set)},
         )
+        parent_artifacts_root = snapshot_dir(self._root, parent.id) / ARTIFACTS_DIRNAME
+        copied_names: list[str] = []
+        if parent_artifacts_root.is_dir():
+            for src in sorted(parent_artifacts_root.iterdir()):
+                if src.is_symlink():
+                    log.warning("skipping symlinked artifact directory: %s", src)
+                    continue
+                if not src.is_dir():
+                    continue
+                name = src.name
+                if name in shed_set:
+                    continue
+                dst = artifacts_dir(self._root, child.id, name)
+                try:
+                    copy_artifacts(src, dst)
+                    copied_names.append(name)
+                except Exception:
+                    shutil.rmtree(snapshot_dir(self._root, child.id), ignore_errors=True)
+                    raise
+        if copied_names:
+            child = dataclasses.replace(
+                child,
+                metadata={**child.metadata, "artifacts_from_parent": sorted(copied_names)},
+            )
         save_snapshot(self._root, child)
         return child
 
@@ -181,9 +251,22 @@ class ForkManager:
         strategies: dict[str, MergeStrategy] | None = None,
         metadata: dict[str, Any] | None = None,
         allow_unmerged_adapters: bool = False,
+        world_model_from: str | None = None,
     ) -> ForkSnapshot:
+        if world_model_from is not None and world_model_from not in ("a", "b"):
+            raise ValueError("world_model_from must be 'a', 'b', or None")
         snap_a = load_snapshot(self._root, snapshot_a_id)
         snap_b = load_snapshot(self._root, snapshot_b_id)
+        a_ph_dir = artifacts_dir(self._root, snap_a.id, "phantasia")
+        b_ph_dir = artifacts_dir(self._root, snap_b.id, "phantasia")
+        a_has = a_ph_dir.is_dir() and not a_ph_dir.is_symlink()
+        b_has = b_ph_dir.is_dir() and not b_ph_dir.is_symlink()
+        if a_has and b_has and world_model_from is None:
+            raise WorldModelChoiceRequiredError(
+                "both parents carry a Phantasia world model; merge cannot average "
+                "two world models — pass world_model_from='a' or 'b' to choose "
+                "which parent's world model continues"
+            )
         all_strategies = dict(self._strategies)
         if strategies:
             all_strategies.update(strategies)
@@ -245,6 +328,38 @@ class ForkManager:
             adapters=merged_adapters,
             metadata=combined_meta,
         )
+        a_root = snapshot_dir(self._root, snap_a.id) / ARTIFACTS_DIRNAME
+        b_root = snapshot_dir(self._root, snap_b.id) / ARTIFACTS_DIRNAME
+        a_names = {p.name for p in a_root.iterdir() if p.is_dir() and not p.is_symlink()} if a_root.is_dir() else set()
+        b_names = {p.name for p in b_root.iterdir() if p.is_dir() and not p.is_symlink()} if b_root.is_dir() else set()
+        sources: dict[str, str] = {}
+        for name in sorted(a_names | b_names):
+            if name == "phantasia" and a_has and b_has:
+                chosen = "a" if world_model_from == "a" else "b"
+                src = a_ph_dir if chosen == "a" else b_ph_dir
+            elif name in a_names:
+                chosen = "a"
+                src = a_root / name
+            else:
+                chosen = "b"
+                src = b_root / name
+            dst = artifacts_dir(self._root, merged.id, name)
+            if src.is_symlink():
+                log.warning("skipping symlinked artifact directory: %s", src)
+                continue
+            if not src.is_dir():
+                continue
+            try:
+                copy_artifacts(src, dst)
+                sources[name] = chosen
+            except Exception:
+                shutil.rmtree(snapshot_dir(self._root, merged.id), ignore_errors=True)
+                raise
+        if sources:
+            merged = dataclasses.replace(
+                merged,
+                metadata={**merged.metadata, "artifact_sources": sources},
+            )
         save_snapshot(self._root, merged)
         return merged
 

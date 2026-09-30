@@ -16,8 +16,8 @@ Related: [../architecture.md](../architecture.md) ·
 
 `kaine/lifecycle/snapshot.py` — `ForkSnapshot`
 
-A `ForkSnapshot` is a JSON document stored at
-`state/forks/<id>/snapshot.json`:
+A `ForkSnapshot` consists of a JSON document stored at
+`state/forks/<id>/snapshot.json` plus an `artifacts/` directory alongside it:
 
 ```
 id              string    UUID4, assigned at creation
@@ -26,13 +26,18 @@ label           string    operator-supplied description
 timestamp       float     Unix epoch (monotonic)
 modules         dict      {module_name: serialized_state_dict}
 adapters        list[str] LoRA adapter paths carried by this fork
-metadata        dict      provenance, shed list, merge notes, etc.
+metadata        dict      provenance, shed list, merge notes, artifact_sources, etc.
 ```
 
 Module state is obtained via `module.serialize()` (deep-copied) and
-restored via `module.deserialize(state)`. The manager never starts or
-stops modules — it only serializes/deserializes already-instantiated
-modules.
+restored via `module.deserialize(state)`. Module artifacts (large binary
+state that `serialize()` references by path) live under
+`<snapshot root>/<id>/artifacts/<module>/`: directories are `0700`, files are
+`0600`; Phantasia's world-model checkpoint is encrypted at rest when
+`[security.state_encryption]` is enabled. Anything that ships a fork snapshot to another host — for example,
+the forked-temporary-being batch job — must ship the whole snapshot directory,
+artifacts included. The manager never starts or stops modules — it only
+serializes/deserializes already-instantiated modules.
 
 The manager never deletes a snapshot. The snapshot root holds preserved
 beings and Spot escalation snapshots, and removing an entity's state is the
@@ -61,14 +66,19 @@ flowchart TD
 
 Iterates `registry.all_modules()` calling `module.serialize()` on each.
 Serialization failures are logged and stored as `{"_serialize_error": str(exc)}`
-so a single broken module doesn't prevent capturing the rest. Deep copies are
-taken to prevent mutation after the call returns.
+so a single broken module doesn't prevent capturing the rest. It then exports
+each module's artifacts into `<snapshot root>/<id>/artifacts/<module>/`. If
+any artifact export fails, the entire snapshot is aborted and no snapshot
+directory is left behind. Deep copies are taken to prevent mutation after the
+call returns.
 
 ### `fork(parent_id, shed=[])`
 
 Loads the parent snapshot and creates a child with the same module states
 (deep-copied) minus any shed modules. The metadata carries a `"shed"` key
 listing the dropped module names. Adapter paths are inherited from the parent.
+The parent's module artifacts are copied into the child's own snapshot directory
+(excluding any shed modules), so every fork owns an independent copy.
 
 **Module shedding** is how KAINE degrades gracefully under resource constraints:
 by forking with `shed=["topos", "audition"]` an operator can create a
@@ -76,15 +86,27 @@ text-only branch without vision or hearing.
 
 ### `restore(snapshot_id, registry)`
 
-Loads a snapshot and calls `module.deserialize(state)` on each module present
-in the snapshot. Modules not present in the snapshot are unchanged. This is
-how post-merge state is applied to a running instance.
+Loads a snapshot, installs each module's artifacts from
+`<snapshot root>/<id>/artifacts/<module>/` into the live instance, and calls
+`module.deserialize(state)` on each module present in the snapshot. Modules not
+present in the snapshot are unchanged. Phantasia writes restored weights to its
+own `checkpoint_path` and logs a warning that a fresh world-model start is
+beginning when the snapshot carries no world-model weights. Symlinked artifact
+directories are never followed. This is how post-merge state is applied to a
+running instance.
 
-### `merge(snapshot_a_id, snapshot_b_id)`
+### `merge(snapshot_a_id, snapshot_b_id, world_model_from=None)`
 
 Loads both snapshots and applies a merge strategy for each module. The
 resulting `ForkSnapshot` is saved with `parent_id = "<a_id>+<b_id>"` and a
-`merged_from` metadata entry.
+`merged_from` metadata entry. It records each module's artifact source in
+`metadata["artifact_sources"]`.
+
+`merge()` refuses to merge two snapshots that both carry a Phantasia world
+model unless `world_model_from="a"` or `world_model_from="b"` names which
+parent's world model continues; two independently trained world models cannot
+be averaged. The chosen parent's Phantasia artifacts are copied into the
+merged snapshot.
 
 If both parents carry trained LoRA adapters and no real adapter merger is
 available (see [Adapter Merging](#adapter-merging) below), `merge()` **fails

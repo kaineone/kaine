@@ -14,7 +14,7 @@ Implemented. Ships **disabled** — `[modules].phantasia = false` in `config/kai
   - `"jax"` (default) — `DreamerV3WorldModel`, which requires the `[worldmodel]` optional extra (`jax[cpu]`, `chex`, `einops`).
   - `"numpy"` — `NumpyDreamerV3WorldModel`, which needs no extra; it imports only NumPy and trains with hand-written backpropagation through time.
 - `"fake"` (`FakeWorldModel`, pure Python, no external dependencies) is the dependency-free development fallback.
-- Training is disabled by default (`training_enabled = false`); even when enabled, all training is **in-memory only** — nothing is written to disk.
+- The shipped `[phantasia]` configuration enables training (`training_enabled = true`) and weight persistence (`persist_weights = true`) once `[modules].phantasia = true`; the learned world model is part of the entity's memory and individuality, so it trains during Hypnos sleep (in memory, on `training_device`) and persists across restarts. Weight persistence with the `"fake"` backend is a configuration error; the trajectory ring buffer is never persisted.
 - **Not an agent**: Phantasia has no actor, critic, reward head, or return head. Policy selection is Nous's responsibility.
 
 ---
@@ -63,7 +63,8 @@ All keys under `[phantasia]` and sub-tables. See also [`../configuration.md`](..
 |---|---|---|
 | `backend` | `"dreamerv3"` | `"dreamerv3"` (real RSSM) or `"fake"` (no deps, dev-only fallback) |
 | `engine` | `"jax"` | `"jax"` (`DreamerV3WorldModel`, requires `[worldmodel]` extra) or `"numpy"` (`NumpyDreamerV3WorldModel`, no extra) |
-| `training_enabled` | `false` | Run in-memory training pass at maintenance start |
+| `training_enabled` | `true` | Run in-memory training pass at maintenance start |
+| `persist_weights` | `true` | Persist learned weights across restarts (configuration error with `"fake"`) |
 | `training_device` | `"cpu"` | JAX device for training when `engine = "jax"` (in-memory only) |
 | `trajectory_buffer_size` | `512` | Ring buffer size (waking observations) |
 | `rollout_horizon` | `8` | Imagined steps per scenario |
@@ -180,10 +181,9 @@ On `mnemos.replay` (while window active):
 ## Enabling and use
 
 1. **Real RSSM backend** (default): set `[modules].phantasia = true`, choose an engine:
-   - **JAX engine** (default): install the worldmodel extra: `.venv/bin/pip install -e '.[worldmodel]'`. Optionally enable training: `training_enabled = true`. Set `engine = "jax"` (or leave it at default).
-   - **NumPy engine** (no extra needed): set `engine = "numpy"` in `[phantasia]`. Optionally enable training and weight persistence as with the JAX engine.
-   - Optionally persist learned weights across restarts: `persist_weights = true` (see the persistence section below).
-2. **Fake backend** (dependency-free development fallback, no extras needed): set `backend = "fake"` in `[phantasia]`.
+   - **JAX engine** (default): install the worldmodel extra: `.venv/bin/pip install -e '.[worldmodel]'`. Training and weight persistence are enabled by default; leave them on unless you explicitly want a non-persistent or development setup. Set `engine = "jax"` (or leave it at default).
+   - **NumPy engine** (no extra needed): set `engine = "numpy"` in `[phantasia]`. Training and weight persistence are enabled by default as with the JAX engine.
+2. **Fake backend** (dependency-free development fallback, no extras needed): set `backend = "fake"` in `[phantasia]`. Do not set `persist_weights = true` with this backend — persistence requires real learned weights, so that combination is rejected at construction.
 3. No external services are required — Phantasia is entirely local.
 
 To force a scenario in tests without a full Hypnos cycle:
@@ -206,12 +206,12 @@ Phantasia enforces zero-persistence of *experience data* at multiple layers:
 
 ---
 
-## Weight persistence (opt-in)
+## Weight persistence
 
 Learned world-model parameters are derived numeric weights, **not sense
 data** — losing them on every restart would erase everything the world model
-learned from the entity's lived experience. With
-`[phantasia].persist_weights = true` (shipped `false`) and
+learned from the entity's lived experience. Weight persistence is on by
+default (`[phantasia].persist_weights = true`) and applies with
 `backend = "dreamerv3"` (real RSSM, either engine):
 
 - **Load** at `initialize()` from `checkpoint_path` (default
@@ -236,7 +236,28 @@ learned from the entity's lived experience. With
   (transferable cognitive state), and `delete_entity_state` removes it.
 - The trajectory buffer is excluded from checkpoints regardless of this flag.
 - The preservation record carries `backend` and `engine` alongside the
-  checkpoint path and encoder version.
+  checkpoint path and encoder version. The preservation bundle carries the
+  pass-count sidecar with the weights; revive restores it. Reviving a bundle
+  without weights into an instance that persists weights logs a warning that
+  a fresh world-model start is beginning.
+
+### Forks
+
+Fork snapshots carry module artifacts in
+`<snapshot root>/<id>/artifacts/<module>/` (directories `0700`, files `0600`;
+the world-model checkpoint is encrypted at rest when state encryption is
+enabled). For Phantasia,
+`snapshot` exports `world_model.ckpt` plus its pass-count sidecar and fails
+atomically — leaving no snapshot directory — if any artifact export fails.
+`fork` copies the parent's Phantasia artifacts (unless Phantasia is shed) into
+the child's own snapshot, so every fork owns an independent copy.
+`restore` installs the artifacts into the live instance: Phantasia writes the
+weights to its own `checkpoint_path` and logs a warning that a fresh start is
+beginning when the snapshot carries no world model. Symlinked artifact
+directories are never followed. `merge` refuses the merge when both parents
+carry a world model unless `world_model_from="a"` or `"b"` names which one
+continues, because two divergent learned models cannot be averaged; it records
+each module's artifact source in `metadata["artifact_sources"]`.
 
 ---
 

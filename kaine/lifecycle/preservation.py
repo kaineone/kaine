@@ -291,6 +291,17 @@ async def preserve_live(
             inventory.append(
                 f"phantasia/{phantasia_checkpoint.name} (world-model weights)"
             )
+            # Pass-count sidecar travels with the weights.
+            passes_sidecar = phantasia_checkpoint.with_suffix(
+                phantasia_checkpoint.suffix + ".passes.json"
+            )
+            if passes_sidecar.is_file():
+                dest_sidecar = bundle_dir / "phantasia" / passes_sidecar.name
+                shutil.copy2(passes_sidecar, dest_sidecar)
+                _chmod_quietly(dest_sidecar, 0o600)
+                inventory.append(
+                    f"phantasia/{passes_sidecar.name} (world-model pass count)"
+                )
 
         # Developmental stage: when present, copy it into the bundle so revive
         # can restore gestation/embodied state before stage resolution runs.
@@ -483,6 +494,28 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
                     f"revive failed restoring {name!r} world-model weights: "
                     f"{type(exc).__name__}: {exc}"
                 ) from exc
+            # Restore the pass count that rode in the bundle next to the weights.
+            ckpt_name = Path(
+                wm_record.get("checkpoint_path", "world_model.ckpt")
+            ).name
+            sidecar_name = f"phantasia/{ckpt_name}.passes.json"
+            if sidecar_name in members:
+                try:
+                    data = json.loads(members[sidecar_name].decode("utf-8"))
+                except Exception as exc:
+                    log.warning(
+                        "revive: corrupt pass-count sidecar for %s: %s", name, exc
+                    )
+                    data = {}
+                if isinstance(data, dict):
+                    passes = data.get("successful_training_passes")
+                    if (
+                        isinstance(passes, int)
+                        and not isinstance(passes, bool)
+                        and passes >= 0
+                        and hasattr(module, "restore_training_pass_count")
+                    ):
+                        module.restore_training_pass_count(passes)
             # Still apply the (metadata-only) deserialize for consistency.
             try:
                 module.deserialize(copy.deepcopy(state))
@@ -495,6 +528,18 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
                     f"world-model weight restore: {type(exc).__name__}: {exc}"
                 ) from exc
             continue
+
+        if (
+            name == "phantasia"
+            and getattr(module, "persists_weights", False)
+            and not (wm_record and wm_record.get("captured"))
+        ):
+            log.warning(
+                "revive: preservation bundle %s carries no world-model weights "
+                "for %s; the revived instance starts from a fresh world model",
+                bundle,
+                name,
+            )
 
         try:
             module.deserialize(copy.deepcopy(state))

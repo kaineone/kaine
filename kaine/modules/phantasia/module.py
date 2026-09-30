@@ -45,6 +45,7 @@ excluded regardless.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import deque
 from pathlib import Path
@@ -181,6 +182,10 @@ class Phantasia(BaseModule):
         sleep-training passes. The gate only reads this value; it never writes it."""
         return self._successful_training_passes
 
+    @property
+    def persists_weights(self) -> bool:
+        return self._persist_weights and self._checkpoint_path is not None
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -223,6 +228,30 @@ class Phantasia(BaseModule):
         if not self._checkpoint_path:
             return None
         return Path(self._checkpoint_path + ".passes.json")
+
+    def restore_training_pass_count(self, n: int) -> None:
+        """Set the successful-training-pass counter to ``n`` and persist the
+        sidecar so ``successful_training_passes`` reports it."""
+        if not isinstance(n, int) or n < 0:
+            raise ValueError(f"pass count must be a non-negative int, got {n!r}")
+        self._successful_training_passes = n
+        sidecar = self._passes_sidecar_path()
+        if sidecar is not None:
+            from kaine.state_io import write_json_atomic
+            try:
+                write_json_atomic(
+                    sidecar,
+                    {"successful_training_passes": n},
+                )
+            except Exception:
+                log.error(
+                    "phantasia: failed to write pass-count sidecar %s after "
+                    "restoring count %d — the counter is updated but will not "
+                    "survive a restart until the next successful weight save",
+                    sidecar,
+                    n,
+                    exc_info=True,
+                )
 
     def _load_weights_if_present(self) -> None:
         if not (self._persist_weights and self._checkpoint_path):
@@ -531,6 +560,86 @@ class Phantasia(BaseModule):
     # ------------------------------------------------------------------
     # Preservation capture / revive (world-model weights into the bundle)
     # ------------------------------------------------------------------
+
+    def export_snapshot_artifacts(self, dest_dir: Path) -> dict[str, Any]:
+        if not (self._persist_weights and self._checkpoint_path):
+            return {
+                "captured": False,
+                "reason": (
+                    "persist_weights is off / non-learning backend "
+                    f"({self._backend!r}); world-model weights are NOT part of "
+                    "this snapshot (nothing learned to capture)"
+                ),
+                "backend": self._backend,
+                "engine": self._engine,
+            }
+        blob = self._wm.export_params(extra={"encoder_version": ENCODER_VERSION})
+        dest = Path(dest_dir) / "world_model.ckpt"
+        save_checkpoint(str(dest), blob)
+        sidecar = dest.with_suffix(dest.suffix + ".passes.json")
+        from kaine.state_io import write_json_atomic
+        try:
+            write_json_atomic(
+                sidecar,
+                {"successful_training_passes": self._successful_training_passes},
+            )
+        except Exception:
+            log.error(
+                "phantasia: failed to write pass-count sidecar %s for snapshot "
+                "artifact — the snapshot carries weights but the pass count is "
+                "stale until the next successful save",
+                sidecar,
+                exc_info=True,
+            )
+            raise
+        return {
+            "captured": True,
+            "file": "world_model.ckpt",
+            "backend": self._backend,
+            "engine": self._engine,
+            "encoder_version": ENCODER_VERSION,
+            "successful_training_passes": self._successful_training_passes,
+        }
+
+    def import_snapshot_artifacts(self, src_dir: Path) -> None:
+        ckpt = Path(src_dir) / "world_model.ckpt"
+        if ckpt.is_file():
+            blob = load_checkpoint(ckpt)
+            self.import_preservation_weights(blob)
+            sidecar = ckpt.with_suffix(ckpt.suffix + ".passes.json")
+            if sidecar.is_file():
+                try:
+                    data = json.loads(sidecar.read_text())
+                except Exception:
+                    log.warning(
+                        "phantasia: corrupt pass-count sidecar in snapshot %s — "
+                        "ignoring",
+                        sidecar,
+                        exc_info=True,
+                    )
+                    return
+                if not isinstance(data, dict):
+                    log.warning(
+                        "phantasia: invalid pass-count sidecar in snapshot %s — "
+                        "ignoring",
+                        sidecar,
+                    )
+                    return
+                passes = data.get("successful_training_passes")
+                if isinstance(passes, bool) or not isinstance(passes, int) or passes < 0:
+                    log.warning(
+                        "phantasia: invalid pass count %r in snapshot sidecar %s — "
+                        "ignoring",
+                        passes,
+                        sidecar,
+                    )
+                    return
+                self.restore_training_pass_count(passes)
+        elif self._persist_weights and self._checkpoint_path:
+            log.warning(
+                "phantasia: the restored snapshot carries no world model; this "
+                "instance starts from a fresh world model"
+            )
 
     def export_preservation_weights(self) -> dict[str, Any]:
         """Force a checkpoint save and report whether weights were captured.

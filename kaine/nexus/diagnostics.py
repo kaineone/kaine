@@ -7,14 +7,18 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from kaine.lifecycle.manager import ForkManager, UnmergedAdaptersError
+from kaine.lifecycle.manager import (
+    ForkManager,
+    UnmergedAdaptersError,
+    WorldModelChoiceRequiredError,
+)
 from kaine.lifecycle.snapshot import is_valid_snapshot_id
 from kaine.lifecycle.timing_profile import (
     InvalidForkTimingProfile,
@@ -70,6 +74,7 @@ class MergeRequestBody(BaseModel):
     snapshot_b_id: str
     label: str = ""
     allow_unmerged_adapters: bool = False
+    world_model_from: Literal["a", "b"] | None = None
 
 
 class RateControlBody(BaseModel):
@@ -394,6 +399,7 @@ def build_diagnostics_router(
                 body.snapshot_b_id,
                 label=body.label,
                 allow_unmerged_adapters=body.allow_unmerged_adapters,
+                world_model_from=body.world_model_from,
             )
         except FileNotFoundError as exc:
             raise HTTPException(404, str(exc))
@@ -401,6 +407,8 @@ def build_diagnostics_router(
             # Both parents have trained adapters but no real merger is
             # configured.  Expose the reason so the operator can take action
             # (install [lifecycle.adapter_merge] or pass allow_unmerged_adapters).
+            raise HTTPException(409, str(exc))
+        except WorldModelChoiceRequiredError as exc:
             raise HTTPException(409, str(exc))
         return {"id": snap.id, "parent_id": snap.parent_id, "label": snap.label}
 
