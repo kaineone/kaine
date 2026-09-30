@@ -22,11 +22,11 @@ In the PP+GWT framing, Soma is the entity's **interoceptive channel**: it report
 
 Beyond passive reporting, Soma implements two predictive-processing additions:
 
-1. **Predictive interoception** — A CPU-only closed-form continuous-time network (`SubstrateForwardModel`, a CfC via the `"numpy"` backend by default, or via `ncps` when `cfc_backend = "torch"`) predicts the next substrate feature vector from the current one and its own recurrent hidden state. Prediction error (the magnitude of expected-minus-actual) drives salience: substrate surprises propagate to Syneidesis with appropriately elevated salience, while a steady, predictable substrate stays near-invisible.
+1. **Predictive interoception** — A CPU-only closed-form continuous-time network (`SubstrateForwardModel`, a CfC via the `"numpy"` backend by default, or via `ncps` when `cfc_backend = "torch"`) predicts the next substrate feature vector from the current one and its own recurrent hidden state. Soma learns, per input channel, the expected absolute prediction error and its spread as running averages over `expected_error_tau_s` of subjective time; the **unexpected error** is the L2 norm of each channel's error beyond `expected + expected_error_band × spread`. The raw `prediction_error` still drives salience and is reported unchanged on `soma.report`, while the unexpected error feeds the fatigue accumulator and regulation detector. A steady, predictable substrate stays near-invisible; genuine surprise still propagates to Syneidesis with elevated salience.
 
 2. **Homeostatic regulation** — Two tightly coupled subsystems ensure maintenance needs are surfaced rather than silently ignored:
-   - **FatigueAccumulator** — integrates prediction error over waking time with continuous decay. When the accumulator crosses `fatigue_maintenance_threshold`, Soma publishes `soma.fatigue`, the emergent sleep-pressure signal that Hypnos monitors to schedule maintenance without reference to a wall-clock timer.
-   - **RegulationDetector** — if prediction error remains above `regulation_threshold` for a sustained window, Soma publishes a `soma.regulation` advisory escalating through `reduce_rate` → `shed_module` → `request_maintenance`. Crucially, **Soma never actuates directly**: it publishes intents only; the cognitive cycle engine and Hypnos act on them.
+   - **FatigueAccumulator** — integrates the unexpected prediction error over waking time with continuous decay. When the accumulator crosses `fatigue_maintenance_threshold`, Soma publishes `soma.fatigue`, the emergent sleep-pressure signal that Hypnos monitors to schedule maintenance without reference to a wall-clock timer.
+   - **RegulationDetector** — if the unexpected prediction error remains above `regulation_threshold` for a sustained window, Soma publishes a `soma.regulation` advisory escalating through `reduce_rate` → `shed_module` → `request_maintenance`. Crucially, **Soma never actuates directly**: it publishes intents only; the cognitive cycle engine and Hypnos act on them.
 
 ---
 
@@ -48,7 +48,7 @@ All events are published to the **`soma.out`** stream.
 
 | Event type | Payload fields | Salience |
 |---|---|---|
-| `soma.report` | `metrics`, `wellness`, `alerts`, `prediction_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `baseline_salience` (default 0.1) when quiet; `alert_salience` (default 0.7) when alerts fire or prediction error is high |
+| `soma.report` | `metrics`, `wellness`, `alerts`, `prediction_error`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `baseline_salience` (default 0.1) when quiet; `alert_salience` (default 0.7) when alerts fire or prediction error is high |
 | `soma.fatigue` | `value`, `threshold`, `crossed: true` | `alert_salience` |
 | `soma.regulation` | `action`, `reason`, `severity` | `alert_salience` |
 | `soma.warmup.started` | `min_samples`, `min_seconds`, `samples_seen`, `lived_seconds` | `baseline_salience` |
@@ -75,8 +75,10 @@ Section `[soma]` in `config/kaine.toml`. See also [../configuration.md](../confi
 | `prediction_error_window` | `32` | Rolling window length (ticks) for normalising prediction error into salience |
 | `fatigue_decay_per_s` | `0.01` | Per-second decay rate for the fatigue accumulator; tripled during Hypnos sleep |
 | `fatigue_maintenance_threshold` | `100.0` | Fatigue value at which `soma.fatigue` fires |
-| `regulation_sustain_window_s` | `30.0` | Seconds of sustained high prediction error before a `soma.regulation` advisory is emitted |
-| `regulation_threshold` | `0.5` | L2 prediction-error level that begins a regulation episode |
+| `regulation_sustain_window_s` | `30.0` | Seconds of sustained high unexpected prediction error before a `soma.regulation` advisory is emitted |
+| `regulation_threshold` | `0.5` | Unexpected prediction-error level that begins a regulation episode |
+| `expected_error_tau_s` | `600.0` | Time constant, in subjective seconds, for the per-channel running average of absolute prediction error and its spread |
+| `expected_error_band` | `2.0` | Spread widths above the expected absolute error that are treated as unsurprising; beyond this band, error contributes to the unexpected-error signal |
 | `regulation_warmup_enabled` | `true` | Enables the developmental warm-up gate on the action path (regulation advisories + fatigue-input dampening) while the forward model learns the host's substrate baseline |
 | `regulation_warmup_min_samples` | `1000` | Minimum forward-model adaptation samples before warm-up can end |
 | `regulation_warmup_min_seconds` | `1200.0` | Minimum subjective seconds since boot (per the injected `EntityClock`) before warm-up can end |
@@ -101,8 +103,9 @@ graph TD
     SomaTick --> WellnessCalc["compute_wellness()\nweighted avg of\nnormalised metrics"]
     SomaTick --> AnomalyDet["ThresholdAnomalyDetector\n(per-metric > threshold)"]
     SomaTick --> FwdModel["SubstrateForwardModel\nfeature → CfC reservoir (frozen, seeded) → hidden\nhidden → linear readout (online) → next_vec"]
-    FwdModel -->|L2 error| FatigueAcc["FatigueAccumulator\nF += e·dt - decay·dt"]
-    FwdModel -->|L2 error| RegDet["RegulationDetector\nsustained error > threshold"]
+    FwdModel -->|per-channel error| ExpBand["ExpectedErrorBand\nlearned expected ± band·spread"]
+    ExpBand -->|unexpected error| FatigueAcc["FatigueAccumulator\nF += e·dt - decay·dt"]
+    ExpBand -->|unexpected error| RegDet["RegulationDetector\nsustained unexpected error > threshold"]
     FatigueAcc -->|threshold crossed| SomaFatigue["soma.fatigue"]
     RegDet -->|window expired| SomaReg["soma.regulation"]
     WellnessCalc --> SomaReport["soma.report\n+ salience"]
@@ -120,15 +123,15 @@ graph TD
 
 ### SubstrateForwardModel (predictive interoception)
 
-A closed-form continuous-time network (Hasani et al. 2022) — the same CfC pattern Chronos uses (`kaine.modules.chronos.network.CfCNetwork` / `ForwardPredictionHead`). `SubstrateForwardModel` uses the backend selected by `[soma].cfc_backend`: `"numpy"` (shipped default, implemented in `kaine/cfc_numpy.py`, needs no `torch` or `ncps`) or `"torch"` (`ncps.torch.CfC`, requires the `core` extra). The two backends compute the same step and match to 1e-5 from the same weights. Architecture: `feature (8-dim) → CfC reservoir (frozen, seeded, units hidden) → hidden state → Linear(units → 8) readout (online)`, all CPU tensors. The CfC reservoir is frozen and is generated in NumPy from a reservoir seed, identically for both backends; only the linear readout adapts online by SGD, with one step per tick. The feature vector is `cpu_percent/100`, `ram_percent/100`, `cycle_latency/2·target`, the hottest GPU's `gpu_*_temp_c/100` (0.0 when no GPU telemetry is available), then zero-padded. A non-finite loss/gradient guard skips weight updates, and a non-finite *input* feature additionally skips committing that tick into the CfC's recurrent state (so one bad sensor read cannot permanently corrupt the hidden state). Adaptation suspended (`suspended = True`) while `_in_hypnos`.
+A closed-form continuous-time network (Hasani et al. 2022) — the same CfC pattern Chronos uses (`kaine.modules.chronos.network.CfCNetwork` / `ForwardPredictionHead`). `SubstrateForwardModel` uses the backend selected by `[soma].cfc_backend`: `"numpy"` (shipped default, implemented in `kaine/cfc_numpy.py`, needs no `torch` or `ncps`) or `"torch"` (`ncps.torch.CfC`, requires the `core` extra). The two backends compute the same step and match to 1e-5 from the same weights. Architecture: `feature (8-dim) → CfC reservoir (frozen, seeded, units hidden) → hidden state → Linear(units → 8) readout (online)`, all CPU tensors. The CfC reservoir is frozen and is generated in NumPy from a reservoir seed, identically for both backends; only the linear readout adapts online by SGD, with one step per tick. The feature vector is `cpu_percent/100`, `ram_percent/100`, `cycle_latency/2·target`, the hottest GPU's `gpu_*_temp_c/100` (0.0 when no GPU telemetry is available), then zero-padded. A non-finite loss/gradient guard skips weight updates, and a non-finite *input* feature additionally skips committing that tick into the CfC's recurrent state (so one bad sensor read cannot permanently corrupt the hidden state). Adaptation is suspended (`suspended = True`) while `_in_hypnos`. Per-channel expected absolute error and spread are learned only while Soma is awake and are serialized with the module.
 
 ### FatigueAccumulator
 
-Scalar integrator: `F(t+dt) = max(0, F(t) + e·dt - decay·dt)`. During Hypnos sleep, decay rate is multiplied by 3.0 (`faster_decay_factor`), so fatigue drops during rest. Resets to 0 on `hypnos.sleep.completed`.
+Scalar integrator whose input is the unexpected prediction error: `F(t+dt) = max(0, F(t) + e·dt - decay·dt)`. During a live hard-threshold breach the raw prediction error feeds the input instead; the warm-up input dampening still applies while warm-up is active. During Hypnos sleep, the decay rate is multiplied by 3.0 (`faster_decay_factor`), so fatigue drops during rest. Resets to 0 on `hypnos.sleep.completed`.
 
 ### RegulationDetector
 
-Tracks how long prediction error has been continuously above `regulation_threshold`. Each completed sustain window emits one escalating advisory. The detector resets the moment error drops below threshold.
+Tracks how long the unexpected prediction error has been continuously above `regulation_threshold`. Each completed sustain window emits one escalating advisory. The detector resets the moment error drops below threshold.
 
 ### Developmental warm-up
 

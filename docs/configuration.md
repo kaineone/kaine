@@ -360,8 +360,10 @@ Predictive interoception module. Reads GPU/CPU/RAM/cycle-latency metrics and pub
 | `prediction_error_window` | integer | `32` | Rolling-window size (ticks) for normalizing the prediction error signal. |
 | `fatigue_decay_per_s` | float | `0.01` | Rate at which the fatigue accumulator decays per second during low load. |
 | `fatigue_maintenance_threshold` | float | `100.0` | Fatigue accumulator value that triggers Hypnos consolidation. |
-| `regulation_sustain_window_s` | float | `30.0` | Minimum window (seconds) of sustained high error before regulation requests are emitted. |
-| `regulation_threshold` | float | `0.5` | Normalized prediction error above which sustained regulation is considered. |
+| `regulation_sustain_window_s` | float | `30.0` | Minimum window (seconds) of sustained high unexpected error before regulation requests are emitted. |
+| `regulation_threshold` | float | `0.5` | Unexpected prediction-error level above which sustained regulation is considered. |
+| `expected_error_tau_s` | float | `600.0` | Time constant, in subjective seconds, for the per-channel running average of absolute prediction error and its spread. |
+| `expected_error_band` | float | `2.0` | Spread widths above the expected absolute error that are treated as unsurprising; beyond this band, error contributes to the unexpected-error signal. |
 
 ### `[soma.thresholds]`
 

@@ -130,6 +130,8 @@ def make_soma(
         "fatigue_maintenance_threshold",
         "regulation_sustain_window_s",
         "regulation_threshold",
+        "expected_error_tau_s",
+        "expected_error_band",
         # Developmental warm-up (soma-coldstart-regulation-warmup)
         "regulation_warmup_enabled",
         "regulation_warmup_min_samples",
