@@ -4,6 +4,7 @@
 """Tests for shared-service detection and integration guards."""
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,7 +17,6 @@ from kaine.shared_services import (
     match_shared_service,
     shared_services,
 )
-from unittest.mock import MagicMock
 
 
 def test_make_hypnos_without_voice_alignment_shared_model_server():
