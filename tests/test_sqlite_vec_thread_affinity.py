@@ -69,7 +69,7 @@ async def test_calls_survive_a_different_default_executor_thread(tmp_path: Path)
 def test_calls_from_another_event_loop_thread(tmp_path: Path):
     storage = SqliteVecStorage(latent_dim=4, db_path=str(tmp_path / "m.db"))
     asyncio.run(storage.initialize())
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def _other_thread() -> None:
         async def _use() -> None:
@@ -80,7 +80,7 @@ def test_calls_from_another_event_loop_thread(tmp_path: Path):
 
         try:
             asyncio.run(_use())
-        except BaseException as exc:  # surfaced to the test thread below
+        except Exception as exc:  # surfaced to the test thread below
             errors.append(exc)
 
     t = threading.Thread(target=_other_thread)

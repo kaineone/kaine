@@ -823,7 +823,6 @@ class QdrantStorage:
     async def initialize(self) -> None:
         if self._client is not None:
             return
-        import asyncio
 
         def _open():
             from qdrant_client import AsyncQdrantClient  # type: ignore[import-untyped]
