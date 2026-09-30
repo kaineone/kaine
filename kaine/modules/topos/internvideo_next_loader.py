@@ -74,6 +74,19 @@ def vendored_code_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "external" / "internvideo_next"
 
 
+def _ensure_repo_root_importable() -> None:
+    """Make the top-level ``external`` package importable from any working directory.
+
+    The vendored source lives at ``<repo>/external/internvideo_next`` and is
+    imported as ``external.internvideo_next``, which resolves only when the
+    repository root is on ``sys.path``. A study child runs with its line
+    directory as the working directory, so the root is appended explicitly
+    (at the end, so it never shadows an installed package)."""
+    root = str(vendored_code_dir().parents[1])
+    if root not in sys.path:
+        sys.path.append(root)
+
+
 def _import_vendored_classes() -> tuple[type, type]:
     """Import the vendored config + model classes DIRECTLY from the in-repo package.
 
@@ -81,6 +94,7 @@ def _import_vendored_classes() -> tuple[type, type]:
     It is lazy (called only at real load time) because importing the modeling
     module pulls in the vendored code's heavy deps (torch, einops, timm,
     flash_attn, easydict)."""
+    _ensure_repo_root_importable()
     from external.internvideo_next.modeling_config import InternVideoNextConfig
     from external.internvideo_next.modeling_internvideo_next import InternVideoNext
 
