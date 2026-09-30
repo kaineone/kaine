@@ -125,6 +125,10 @@ containerized — overlay `compose/kaine.organ-host.yml` and point
 `[lingua].chat_url` at `http://host.docker.internal:11434/v1`
 (`host.containers.internal` on Podman).
 
+The in-container organ unloads after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`
+idle seconds (default 600) and reloads on the next request. If you override
+`KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
+
 ## State, secrets, and the env/gate-var matrix
 
 Persistent named volumes: `kaine-redis-data`, `kaine-qdrant-data`,

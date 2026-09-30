@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from kaine.setup import model_server as ms
 from kaine.setup.model_server import (
     SERVER_BIN_ENV,
@@ -22,6 +24,7 @@ from kaine.setup.model_server import (
     health_check,
     locate_binary,
     render_systemd_unit,
+    sleep_idle_seconds_from_config,
 )
 from kaine.setup.organ import ServedAliasResult
 
@@ -82,6 +85,60 @@ def test_build_launch_cmd_custom_port():
         Path("/bin/srv"), gguf="g", alias="a", chat_url="http://127.0.0.1:9999/v1"
     )
     assert cmd[cmd.index("--port") + 1] == "9999"
+
+
+def test_build_launch_cmd_default_sleep_idle_seconds():
+    cmd = build_launch_cmd(
+        Path("/bin/llama-server"),
+        gguf="g",
+        alias="a",
+        chat_url="http://127.0.0.1:11434/v1",
+    )
+    assert cmd[cmd.index("--sleep-idle-seconds") + 1] == "600"
+
+
+def test_build_launch_cmd_custom_sleep_idle_seconds():
+    for seconds in (120, -1):
+        cmd = build_launch_cmd(
+            Path("/bin/llama-server"),
+            gguf="g",
+            alias="a",
+            chat_url="http://127.0.0.1:11434/v1",
+            sleep_idle_seconds=seconds,
+        )
+        assert cmd[cmd.index("--sleep-idle-seconds") + 1] == str(seconds)
+
+
+def test_build_launch_cmd_sleep_idle_seconds_before_lora():
+    cmd = build_launch_cmd(
+        Path("/bin/llama-server"),
+        gguf="g",
+        alias="a",
+        chat_url="http://127.0.0.1:11434/v1",
+        sleep_idle_seconds=300,
+        lora_adapter="adapter.gguf",
+    )
+    rb = cmd.index("--reasoning-budget")
+    ss = cmd.index("--sleep-idle-seconds")
+    la = cmd.index("--lora")
+    assert rb < ss < la
+    assert cmd[ss + 1] == "300"
+    assert cmd[la + 1] == "adapter.gguf"
+
+
+def test_sleep_idle_seconds_from_config_default():
+    assert sleep_idle_seconds_from_config({}) == 600
+
+
+def test_sleep_idle_seconds_from_config_valid():
+    assert sleep_idle_seconds_from_config({"model_server_sleep_idle_seconds": 120}) == 120
+    assert sleep_idle_seconds_from_config({"model_server_sleep_idle_seconds": -1}) == -1
+
+
+@pytest.mark.parametrize("bad", [-2, True, "600", 1.5])
+def test_sleep_idle_seconds_from_config_invalid(bad):
+    with pytest.raises(ValueError, match="model_server_sleep_idle_seconds must be an integer of -1 or more"):
+        sleep_idle_seconds_from_config({"model_server_sleep_idle_seconds": bad})
 
 
 # --- supervision mode selection ----------------------------------------------

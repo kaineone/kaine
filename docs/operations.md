@@ -45,6 +45,22 @@ Modules' own shutdowns are awaited in order.
 multi-phase pipeline is non-interruptible because partial voice-alignment
 adapter writes are unsafe. Wait for the rest cycle to finish, then stop.
 
+### The organ sleeps when idle
+
+The model server unloads the organ after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`
+idle seconds in container and Quadlet deployments, or after
+`[lingua].model_server_sleep_idle_seconds` when KAINE launches the server
+natively. The default is 600; `-1` keeps the model loaded. While it sleeps the
+server holds neither the model nor its KV cache, so once the cycle stops the
+organ unloads within that timeout with no operator action. The next inference
+request reloads it, which takes a few seconds.
+
+Health polling against `/v1/models` and `/props` does not wake the organ. The
+Nexus health board and the pre-boot Chat LLM row therefore report it as `up`
+and asleep. The pre-boot Organ content row sends a real completion, which wakes
+the server. If you override `KAINE_MODEL_SERVER_CMD`, pass
+`--sleep-idle-seconds` yourself.
+
 ### Service containers
 
 ```bash
@@ -96,7 +112,7 @@ page. Each external dependency shows a status chip:
 
 | Status | Meaning |
 |---|---|
-| `up` | Probe succeeded — service is reachable and (for the LLM) the configured `model_id` is served |
+| `up` | Probe succeeded — service is reachable and (for the LLM) the configured `model_id` is served; a sleeping organ is up, with "asleep" in the detail |
 | `degraded` | Reachable but not fully healthy — e.g. the LLM is up but the model is not in `/v1/models` |
 | `down` | Unreachable, refused, errored, or probe timed out (~2 s) |
 | `not configured` | The owning module is disabled in `[modules]`. Neutral, not an error |

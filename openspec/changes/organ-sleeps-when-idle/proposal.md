@@ -14,6 +14,9 @@ A check on this host (CPU, 20 s sleep, 2026-09-29) confirmed the behaviour KAINE
 - Polling `/v1/models` every 5 s, as Nexus's health probe and the GPU preflight do, neither prevents sleep nor wakes the model, and it keeps answering 200.
 - `/props` reports `is_sleeping`.
 - A real completion wakes the model in about 1.5 s.
+- Polling `/props` and `/v1/models` every 10 s past a 15 s timeout (CPU, the
+  shipped organ GGUF, 2026-09-29) leaves the model asleep; `is_sleeping` stays
+  true until a completion arrives.
 
 ## What Changes
 
