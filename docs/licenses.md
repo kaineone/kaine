@@ -67,7 +67,9 @@ SSPL SaaS clause does not apply to private local use).
 | `peft` | `training` | Apache-2.0 | Yes |
 | `datasets` | `training` | Apache-2.0 | Yes |
 | `chex` | `worldmodel` | Apache-2.0 | Yes |
-| `einops` | `worldmodel` | MIT | Yes |
+| `einops` | `worldmodel`, `internvideo` | MIT | Yes |
+| `timm` | `internvideo` | Apache-2.0 | Yes |
+| `easydict` | `internvideo` | LGPL-3.0 | Yes: used unmodified as a separately installed, replaceable Python package (the vendored InternVideo-Next modeling code imports it) |
 | `snntorch` | `oscillator` | MIT | Yes |
 | `scipy` | `oscillator` | BSD-3-Clause | Yes |
 

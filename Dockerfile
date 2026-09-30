@@ -90,11 +90,15 @@ RUN TORCH_INDEX="$(python /src/scripts/install.py --print-index "${FLAVOR}")" \
  && python -c "import importlib.metadata as md; names=('torch','torchvision','torchaudio'); installed={d.metadata.get('Name','').lower():d.version for d in md.distributions()}; open('/src/kaine-torch-constraints.txt','w').write(''.join(f'{n}=={installed[n]}\n' for n in names if n in installed))"
 
 # Now the rest of the source and the editable install with extras.
-COPY pyproject.toml README.md /src/
-COPY kaine /src/kaine
-COPY config /src/config
-COPY scripts /src/scripts
-WORKDIR /src
+# The editable install records where the package lives, so it is made from
+# /app — the same path the runtime stage copies the source to. Installing from
+# anywhere else leaves the runtime venv pointing at a directory the image does
+# not contain, and `kaine` then imports only when the working directory is /app.
+COPY pyproject.toml README.md /app/
+COPY kaine /app/kaine
+COPY config /app/config
+COPY scripts /app/scripts
+WORKDIR /app
 # PIP_ONLY_BINARY=av forces the prebuilt PyAV wheel (bundles ffmpeg) when the
 # [audio] extra is selected. Its source tarball needs pkg-config + ffmpeg-dev and
 # would leave a runtime .so dependency the slim runtime stage lacks — the wheel is

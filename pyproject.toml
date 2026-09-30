@@ -53,7 +53,7 @@ vision = [
     "Pillow>=12.3.0,<13",
 ]
 full = [
-    "kaine[core,memory,memory-edge,nexus,nvidia,vision,audio,reasoning,worldmodel,oscillator]",
+    "kaine[core,memory,memory-edge,nexus,nvidia,vision,audio,reasoning,worldmodel,oscillator,internvideo]",
 ]
 test = [
     "pytest>=8",
