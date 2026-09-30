@@ -139,7 +139,9 @@ class RawBusArchiveConsumer:
         self._assert_attested()
         # Defence-in-depth: re-validate confinement at start() in case the config
         # was built bypassing from_mapping. Fails closed (RawArchiveConfinementError).
-        assert_raw_archive_outside_export_allowlist(self._config.archive_dir)
+        assert_raw_archive_outside_export_allowlist(
+            self._config.archive_dir, export_roots=self._config.export_roots
+        )
         for archiver in self._archivers:
             await archiver.start()
         log.info(

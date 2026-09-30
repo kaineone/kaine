@@ -58,6 +58,8 @@ Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}
 Environment=KAINE_STATE_KEY=${KAINE_STATE_KEY}
 Environment=KAINE_MODELS_DIR=/models
 Environment=KAINE_CYCLE_UNATTENDED=1
+# Growing data stays under /app, where the volumes are mounted.
+Environment=KAINE_DATA_ROOT=/app
 
 [Service]
 # Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).

@@ -496,6 +496,9 @@ class StudyRunner:
         _write_text_atomic(operator_path, overlay_toml)
 
         env = dict(os.environ)
+        # The child's data root is its line directory via the overlay; never let
+        # an ambient KAINE_DATA_ROOT override that sandbox.
+        env.pop("KAINE_DATA_ROOT", None)
         env["KAINE_RESEARCH_MODE"] = "1"
 
         username, password = resolve_redis_auth(

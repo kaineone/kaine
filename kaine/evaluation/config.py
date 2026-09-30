@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
+from kaine.storage import configured_data_root, resolve_under
 
 # ---------------------------------------------------------------------------
 # Individuation config
@@ -79,43 +80,52 @@ class IndividuationConfig:
 
 
 class RawArchiveConfinementError(ValueError):
-    """Raised when the raw archive ``archive_dir`` is under ``data/evaluation/``.
+    """Raised when a local-only path is under a metrics-export allowlist root.
 
-    The raw archive captures VERBATIM bus content and must never be
-    export-eligible. The metrics bundle builder only ever reads from
-    ``data/evaluation/``; an ``archive_dir`` resolving under that tree would make
-    verbatim content export-eligible. We fail closed rather than trust the path
-    to merely be documented as outside the allowlist.
+    Local-only recorders (raw bus archive, external utterances, Nexus record)
+    must never be export-eligible. The metrics bundle builder only ever reads
+    from configured export-allowlist roots; a local-only path resolving under
+    such a tree would make verbatim content export-eligible. We fail closed
+    rather than trust the path to merely be documented as outside the
+    allowlist.
     """
 
 
-# The metrics-export allowlist root. Anything resolving under this tree is
-# export-eligible, so the local-only raw archive must NEVER live here.
+# The default metrics-export allowlist root. Anything resolving under this
+# tree is export-eligible, so the local-only raw archive must NEVER live here.
 _EXPORT_ALLOWLIST_ROOT = "data/evaluation"
 
 
 def _assert_path_outside_export_allowlist(
-    path: str, config_key: str, details: str
+    path: str, config_key: str, details: str, export_roots: tuple[str, ...] = ()
 ) -> None:
-    """Fail closed when ``path`` resolves under ``data/evaluation/``.
+    """Fail closed when ``path`` resolves under any export-allowlist root.
 
     Uses ``Path.resolve().is_relative_to`` (Python 3.12) against the resolved
-    export-allowlist root so symlink/``..`` games cannot smuggle local-only
-    data into the export tree. Enforced at config-load AND at consumer
-    ``start()``.
+    default root and every configured ``export_roots`` entry so symlink/``..``
+    games cannot smuggle local-only data into an export tree. Enforced at
+    config-load AND at consumer ``start()``.
     """
     resolved = Path(path).resolve()
-    allowlist_root = Path(_EXPORT_ALLOWLIST_ROOT).resolve()
-    if resolved == allowlist_root or resolved.is_relative_to(allowlist_root):
-        raise RawArchiveConfinementError(
-            f"{config_key} ({path!r}) resolves under the "
-            f"metrics-export allowlist root ({_EXPORT_ALLOWLIST_ROOT}/): "
-            f"{resolved}. {details}"
-        )
+    roots = [(_EXPORT_ALLOWLIST_ROOT, Path(_EXPORT_ALLOWLIST_ROOT).resolve())]
+    for r in export_roots:
+        if not r:
+            continue
+        roots.append((r, Path(r).expanduser().resolve()))
+
+    for root_str, root_path in roots:
+        if resolved == root_path or resolved.is_relative_to(root_path):
+            raise RawArchiveConfinementError(
+                f"{config_key} ({path!r}) resolves under the "
+                f"metrics-export allowlist root ({root_str}/): "
+                f"{resolved}. {details}"
+            )
 
 
-def assert_raw_archive_outside_export_allowlist(archive_dir: str) -> None:
-    """Fail closed when ``archive_dir`` resolves under ``data/evaluation/``.
+def assert_raw_archive_outside_export_allowlist(
+    archive_dir: str, export_roots: tuple[str, ...] = ()
+) -> None:
+    """Fail closed when ``archive_dir`` resolves under any export-allowlist root.
 
     Delegates to the shared path guard; retained for call-site compatibility.
     """
@@ -124,7 +134,9 @@ def assert_raw_archive_outside_export_allowlist(archive_dir: str) -> None:
         "raw archive archive_dir",
         "The raw archive captures verbatim conversation content "
         "and is never export-eligible — set archive_dir to a path OUTSIDE "
-        f"{_EXPORT_ALLOWLIST_ROOT}/ (e.g. the default state/research/raw_bus_archive).",
+        f"{_EXPORT_ALLOWLIST_ROOT}/ and any configured evaluation_logs root "
+        "(e.g. the default state/research/raw_bus_archive).",
+        export_roots=export_roots,
     )
 
 
@@ -163,15 +175,21 @@ class RawArchiveConfig:
     bystander_consent_attested: bool = False
     archive_dir: str = "state/research/raw_bus_archive"
     retention_days: int = 0
+    export_roots: tuple[str, ...] = ()
 
     @classmethod
-    def from_mapping(cls, data: dict[str, Any] | None) -> "RawArchiveConfig":
+    def from_mapping(
+        cls,
+        data: dict[str, Any] | None,
+        *,
+        export_roots: tuple[str, ...] = (),
+    ) -> "RawArchiveConfig":
         data = dict(data or {})
         archive_dir = str(data.get("archive_dir", cls.archive_dir))
         # Fail closed at config-load: the raw archive must never resolve under
         # the metrics-export allowlist root, or verbatim content becomes
         # export-eligible (the consumer re-checks at start()).
-        assert_raw_archive_outside_export_allowlist(archive_dir)
+        assert_raw_archive_outside_export_allowlist(archive_dir, export_roots=export_roots)
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
             entity_privacy_attested=bool(
@@ -182,6 +200,7 @@ class RawArchiveConfig:
             ),
             archive_dir=archive_dir,
             retention_days=int(data.get("retention_days", cls.retention_days)),
+            export_roots=export_roots,
         )
 
 
@@ -210,9 +229,15 @@ class ExternalUtterancesConfig:
     enabled: bool = False
     log_dir: str = "state/research/external_utterances"
     retention_days: int = 0
+    export_roots: tuple[str, ...] = ()
 
     @classmethod
-    def from_mapping(cls, data: dict[str, Any] | None) -> "ExternalUtterancesConfig":
+    def from_mapping(
+        cls,
+        data: dict[str, Any] | None,
+        *,
+        export_roots: tuple[str, ...] = (),
+    ) -> "ExternalUtterancesConfig":
         data = dict(data or {})
         log_dir = str(data.get("log_dir", cls.log_dir))
         # Fail closed at config-load: local-only recorders must never resolve
@@ -222,12 +247,14 @@ class ExternalUtterancesConfig:
             "external_utterances log_dir",
             "The external-utterance recorder captures external speech text and "
             "is never export-eligible — set log_dir to a path OUTSIDE "
-            f"{_EXPORT_ALLOWLIST_ROOT}/.",
+            f"{_EXPORT_ALLOWLIST_ROOT}/ and any configured evaluation_logs root.",
+            export_roots=export_roots,
         )
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
             log_dir=log_dir,
             retention_days=int(data.get("retention_days", cls.retention_days)),
+            export_roots=export_roots,
         )
 
 
@@ -256,9 +283,15 @@ class NexusRecordConfig:
     enabled: bool = False
     log_dir: str = "data/nexus_record"
     retention_days: int = 0
+    export_roots: tuple[str, ...] = ()
 
     @classmethod
-    def from_mapping(cls, data: dict[str, Any] | None) -> "NexusRecordConfig":
+    def from_mapping(
+        cls,
+        data: dict[str, Any] | None,
+        *,
+        export_roots: tuple[str, ...] = (),
+    ) -> "NexusRecordConfig":
         data = dict(data or {})
         log_dir = str(data.get("log_dir", cls.log_dir))
         # Fail closed at config-load: local-only recorders must never resolve
@@ -268,12 +301,14 @@ class NexusRecordConfig:
             "nexus_record log_dir",
             "The Nexus diagnostics recorder captures the filtered diagnostics "
             "display and is never export-eligible — set log_dir to a path OUTSIDE "
-            f"{_EXPORT_ALLOWLIST_ROOT}/.",
+            f"{_EXPORT_ALLOWLIST_ROOT}/ and any configured evaluation_logs root.",
+            export_roots=export_roots,
         )
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
             log_dir=log_dir,
             retention_days=int(data.get("retention_days", cls.retention_days)),
+            export_roots=export_roots,
         )
 
 
@@ -316,15 +351,26 @@ class ResearchEventLogConfig:
     nexus_record: NexusRecordConfig = field(default_factory=NexusRecordConfig)
 
     @classmethod
-    def from_mapping(cls, data: dict[str, Any] | None) -> "ResearchEventLogConfig":
+    def from_mapping(
+        cls,
+        data: dict[str, Any] | None,
+        *,
+        export_roots: tuple[str, ...] = (),
+    ) -> "ResearchEventLogConfig":
         data = dict(data or {})
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
             log_dir=str(data.get("log_dir", cls.log_dir)),
             retention_days=int(data.get("retention_days", cls.retention_days)),
-            raw_archive=RawArchiveConfig.from_mapping(data.get("raw_archive")),
-            external_utterances=ExternalUtterancesConfig.from_mapping(data.get("external_utterances")),
-            nexus_record=NexusRecordConfig.from_mapping(data.get("nexus_record")),
+            raw_archive=RawArchiveConfig.from_mapping(
+                data.get("raw_archive"), export_roots=export_roots
+            ),
+            external_utterances=ExternalUtterancesConfig.from_mapping(
+                data.get("external_utterances"), export_roots=export_roots
+            ),
+            nexus_record=NexusRecordConfig.from_mapping(
+                data.get("nexus_record"), export_roots=export_roots
+            ),
         )
 
 
@@ -612,4 +658,18 @@ def load_research_event_log_config(
     # profile threads the SAME tier-profile selection the cycle uses, so a
     # [research_event_log] block in a profile applies identically to the gate.
     merged = load_kaine_config(target, operator_path, profile=profile)
-    return ResearchEventLogConfig.from_mapping(merged.get("research_event_log"))
+    evaluation = merged.get("evaluation")
+    paths = evaluation.get("paths") if isinstance(evaluation, dict) else None
+    eval_logs = paths.get("evaluation_logs") if isinstance(paths, dict) else None
+    export_roots = (
+        (str(eval_logs),)
+        if isinstance(eval_logs, str) and eval_logs
+        else (
+            resolve_under(
+                configured_data_root(merged), EvaluationPaths.evaluation_logs
+            ),
+        )
+    )
+    return ResearchEventLogConfig.from_mapping(
+        merged.get("research_event_log"), export_roots=export_roots
+    )
