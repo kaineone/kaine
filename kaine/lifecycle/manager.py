@@ -50,6 +50,10 @@ class UnmergedAdaptersError(RuntimeError):
     """
 
 
+class WorldModelChoiceRequiredError(ValueError):
+    """Both merge parents carry a world model and the caller did not name which continues."""
+
+
 # `AdapterMerger` (Protocol) and `FakeAdapterMerger` live in the leaf module
 # `kaine.lifecycle._merge_base` so this orchestrator and the PEFT-backed
 # `kaine.lifecycle.adapter_merge` both depend on that common leaf instead of on
@@ -258,7 +262,7 @@ class ForkManager:
         a_has = a_ph_dir.is_dir() and not a_ph_dir.is_symlink()
         b_has = b_ph_dir.is_dir() and not b_ph_dir.is_symlink()
         if a_has and b_has and world_model_from is None:
-            raise ValueError(
+            raise WorldModelChoiceRequiredError(
                 "both parents carry a Phantasia world model; merge cannot average "
                 "two world models — pass world_model_from='a' or 'b' to choose "
                 "which parent's world model continues"

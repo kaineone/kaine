@@ -11,6 +11,7 @@ import pytest
 
 from kaine.bus.schema import Event
 from kaine.lifecycle.manager import ForkManager
+from kaine.lifecycle.snapshot import artifacts_dir
 from kaine.nexus.app import create_app
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import NexusConfig
@@ -313,6 +314,76 @@ async def test_post_merge_accepts_valid_merge_form_ids(tmp_path):
             )
         # Not 422 (validation passed); 404 because the snapshots are absent.
         assert r.status_code == 404, r.text
+
+
+class _SomaOnlyModule:
+    name = "soma"
+
+    def serialize(self):
+        return {"v": 1}
+
+    def deserialize(self, state):
+        pass
+
+
+class _SomaOnlyRegistry:
+    def all_modules(self):
+        return iter([_SomaOnlyModule()])
+
+
+@pytest.mark.asyncio
+async def test_post_merge_two_phantasia_world_models_requires_choice(tmp_path):
+    """When both parents carry a Phantasia world model and no choice is given,
+    the merge endpoint surfaces a 409 pointing at world_model_from."""
+    fm = ForkManager(tmp_path)
+    snap_a = fm.snapshot(_SomaOnlyRegistry(), label="a")
+    snap_b = fm.snapshot(_SomaOnlyRegistry(), label="b")
+    a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "phantasia")
+    b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "phantasia")
+    a_ph_dir.mkdir(parents=True, exist_ok=True)
+    b_ph_dir.mkdir(parents=True, exist_ok=True)
+    (a_ph_dir / "world_model.ckpt").write_bytes(b"a-model")
+    (b_ph_dir / "world_model.ckpt").write_bytes(b"b-model")
+    client, app = await _make_client(fork_manager=fm)
+    async with client:
+        async with app.router.lifespan_context(app):
+            r = await client.post(
+                "/diagnostics/merges",
+                json={"snapshot_a_id": snap_a.id, "snapshot_b_id": snap_b.id},
+                headers={"Authorization": "Bearer test-token"},
+            )
+    assert r.status_code == 409, r.text
+    assert "world_model_from" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_post_merge_two_phantasia_world_models_choice_b(tmp_path):
+    """Passing world_model_from='b' succeeds and carries b's world model."""
+    fm = ForkManager(tmp_path)
+    snap_a = fm.snapshot(_SomaOnlyRegistry(), label="a")
+    snap_b = fm.snapshot(_SomaOnlyRegistry(), label="b")
+    a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "phantasia")
+    b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "phantasia")
+    a_ph_dir.mkdir(parents=True, exist_ok=True)
+    b_ph_dir.mkdir(parents=True, exist_ok=True)
+    (a_ph_dir / "world_model.ckpt").write_bytes(b"a-model")
+    (b_ph_dir / "world_model.ckpt").write_bytes(b"b-model")
+    client, app = await _make_client(fork_manager=fm)
+    async with client:
+        async with app.router.lifespan_context(app):
+            r = await client.post(
+                "/diagnostics/merges",
+                json={
+                    "snapshot_a_id": snap_a.id,
+                    "snapshot_b_id": snap_b.id,
+                    "world_model_from": "b",
+                },
+                headers={"Authorization": "Bearer test-token"},
+            )
+    assert r.status_code == 200, r.text
+    merged_id = r.json()["id"]
+    merged_ph = artifacts_dir(tmp_path, merged_id, "phantasia") / "world_model.ckpt"
+    assert merged_ph.read_bytes() == b"b-model"
 
 
 @pytest.mark.asyncio
