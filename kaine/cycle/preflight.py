@@ -42,6 +42,7 @@ import httpx
 
 from kaine.config import require_known_keys
 from kaine.net import SERVICE_PORTS, port_listening
+from kaine.shared_services import match_shared_service, shared_services
 from kaine.state_io import write_json_atomic
 
 PREFLIGHT_PATH = Path("state/cycle/gpu_preflight.json")
@@ -190,6 +191,13 @@ def _server_resident_models(url: str, timeout_s: float) -> list[str]:
         return []
 
 
+def _device_consumers(timeout_s: float) -> list[dict[str, Any]]:
+    """Per-device memory and compute processes (kaine.hardware.device_consumers); [] if unavailable."""
+    from kaine.hardware import device_consumers
+
+    return device_consumers(timeout_s)
+
+
 def _gpu_consumers(timeout_s: float) -> list[dict[str, Any]]:
     """List GPU compute processes via nvidia-smi (report only; [] if absent)."""
     exe = shutil.which("nvidia-smi")
@@ -244,7 +252,15 @@ def _format_block_message(
     config: GpuPreflightConfig,
     *,
     memory_state: str = "known-discrete",
+    per_device: list[dict[str, Any]] | None = None,
+    shared: dict[str, tuple[str, ...]] | None = None,
+    allowed: list[str] | None = None,
 ) -> str:
+    if shared is None:
+        shared = {}
+    if per_device is None:
+        per_device = []
+
     if memory_state == "known-unified":
         header = (
             f"Available system memory is below the configured minimum "
@@ -261,12 +277,51 @@ def _format_block_message(
             f"  - {d.get('device')} ({d.get('name')}): "
             f"{d.get('free_vram_gb')} GiB free of {d.get('total_vram_gb')} GiB"
         )
-    if consumers:
+
+    short_devices = {d.get("device") for d in short}
+    shared_present = False
+    non_shared_present = False
+
+    if per_device:
+        for row in per_device:
+            device = row.get("device")
+            if device not in short_devices:
+                continue
+            if not row.get("processes_visible", True):
+                lines.append(
+                    f"  - {device}: {row.get('used_mib')} MiB used of "
+                    f"{row.get('total_mib')} MiB; {row.get('note', '')}"
+                )
+                continue
+            for proc in row.get("processes") or []:
+                pid = proc.get("pid")
+                name = proc.get("name")
+                used = proc.get("used_mib")
+                line = f"  - pid {pid} {name} ({used} MiB) on {device}"
+                svc = match_shared_service(name or "", shared)
+                if svc:
+                    line += (
+                        f" — shared service '{svc}', used by your other "
+                        f"applications; KAINE leaves it running"
+                    )
+                    shared_present = True
+                else:
+                    non_shared_present = True
+                lines.append(line)
+            unattributed = row.get("unattributed_mib", 0) or 0
+            if unattributed > 0:
+                lines.append(
+                    f"  - {device}: {unattributed} MiB held by processes "
+                    "nvidia-smi does not list (e.g. a display server)"
+                )
+                non_shared_present = True
+    elif consumers:
         lines.append("GPU memory is held by these processes:")
         for c in consumers:
             lines.append(
                 f"  - pid {c['pid']} {c['process_name']} ({c['used_mib']} MiB)"
             )
+
     if unexpected_models:
         lines.append(
             "Model server holds these resident models beyond the organ "
@@ -279,11 +334,39 @@ def _format_block_message(
             "KAINE services detected (DO NOT close these — they are reused): "
             + ", ".join(sorted(up))
         )
-    lines.append(
-        "Please close other GPU programs to free memory, then retry. To boot "
-        f"anyway, set {config.override_env}=1 (not recommended — the entity may "
+
+    override_line = (
+        f"To boot anyway, set {config.override_env}=1 (not recommended — the entity may "
         "be OOM-killed mid-cycle)."
     )
+
+    if shared_present:
+        devices_str = ", ".join(sorted(short_devices))
+        present = {r.get("device") for r in per_device}
+        candidates = allowed if allowed is not None else sorted(present)
+        alt = [
+            d
+            for d in candidates
+            if d and d != "cpu" and d in present and d not in short_devices
+        ]
+        suggestion = (
+            f"Suggested placement: move KAINE's components off {devices_str} — "
+        )
+        if alt:
+            suggestion += "to " + ", ".join(alt) + ", "
+        suggestion += (
+            "a lighter backend rung, or CPU. Shared services are never closed by KAINE."
+        )
+        lines.append(suggestion)
+        if non_shared_present:
+            lines.append(
+                f"Other GPU programs on {devices_str} may be closed to free memory."
+            )
+    else:
+        lines.append(
+            "Please close other GPU programs to free memory, then retry."
+        )
+    lines.append(override_line)
     return "\n".join(lines)
 
 
@@ -292,6 +375,7 @@ def run_preflight(
     *,
     keep_models: Optional[list[str]] = None,
     state_path: Path | None = None,
+    services_config: dict[str, Any] | None = None,
 ) -> PreflightResult:
     """Check per-device GPU headroom cooperatively and return the verdict.
 
@@ -306,7 +390,13 @@ def run_preflight(
     Memory classification (from ``describe_host()``) splits the gate into three
     states: known-discrete (per-device VRAM), known-unified (system pool), and
     unknown (always passes with annotation).
+
+    ``services_config`` is the operator's ``[services]`` table.  It is used to
+    identify shared external services so the gate can suggest placement instead
+    of asking the operator to close them.
     """
+    from kaine.hardware import allowed_devices
+
     keep = {m for m in (keep_models or []) if m}
 
     if not config.enabled:
@@ -319,6 +409,9 @@ def run_preflight(
     services = _kaine_services_up()
     resident = _server_resident_models(config.model_server_url, config.timeout_s)
     unexpected = [m for m in resident if m not in keep]
+    per_device = _device_consumers(config.timeout_s)
+    shared = shared_services({"services": services_config or {}})
+    allowed = allowed_devices()
 
     def below_min(devs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
@@ -383,6 +476,9 @@ def run_preflight(
     message = _format_block_message(
         short, consumers, services, unexpected, config,
         memory_state=memory_state,
+        per_device=per_device,
+        shared=shared,
+        allowed=allowed,
     )
     overridden = os.environ.get(config.override_env) == "1"
     result = PreflightResult(

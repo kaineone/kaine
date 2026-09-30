@@ -30,6 +30,7 @@ from kaine.config import require_known_keys
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
+from kaine.shared_services import is_shared
 from kaine.text_embedding import (
     Embedder,
     SharedEmbedder,
@@ -1975,6 +1976,21 @@ def make_vox(
     return Vox(bus, entity_clock=entity_clock, **kw)
 
 
+def _effective_hot_swap_mode(voice_mode: str, kaine_config: dict[str, Any] | None) -> str:
+    """Return the hot-swap mode that is safe for the configured services.
+
+    When the model server is a shared external service, KAINE must not unload,
+    restart or reload it, so any automatic hot-swap mode is forced to ``manual``.
+    """
+    if (
+        kaine_config is not None
+        and is_shared(kaine_config, "model_server")
+        and voice_mode != "manual"
+    ):
+        return "manual"
+    return voice_mode
+
+
 def make_hypnos(
     bus: AsyncBus,
     section: dict[str, Any],
@@ -2048,6 +2064,14 @@ def make_hypnos(
             ).strip()
             or "state/hypnos/voice_align_jobs",
         )
+    if voice_config is not None:
+        effective = _effective_hot_swap_mode(voice_config.hot_swap_mode, kaine_config)
+        if effective != voice_config.hot_swap_mode:
+            log.warning(
+                "hot_swap_mode=%s ignored: the model server is a shared service, so KAINE does not unload, restart or reload it; using manual",
+                voice_config.hot_swap_mode,
+            )
+            voice_config = replace(voice_config, hot_swap_mode=effective)
     kwargs: dict[str, Any] = {}
     for k in (
         "interval_seconds",
@@ -2277,7 +2301,13 @@ def _make_organ_window_runner(
             return True
         lingua = config.get("lingua") or {}
         keep = [m for m in [lingua.get("model_id")] if m]
-        return bool(run_preflight(gpu_cfg, keep_models=keep).ok)
+        return bool(
+            run_preflight(
+                gpu_cfg,
+                keep_models=keep,
+                services_config=config.get("services"),
+            ).ok
+        )
 
     controller = OrganServerController(
         config=kaine_config,
@@ -3107,10 +3137,20 @@ def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, An
     if "hypnos" in registry:
         va = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
         rows.append(("hypnos.voice_alignment", str(va.get("training_device", "cuda:0"))))
+        raw_hot_swap = str(va.get("hot_swap_mode", "manual"))
+        effective_hot_swap = _effective_hot_swap_mode(raw_hot_swap, kaine_config)
+        shared_server = (
+            kaine_config is not None and is_shared(kaine_config, "model_server")
+        )
+        display_hot_swap = (
+            f"{effective_hot_swap} (model server is shared)"
+            if shared_server
+            else effective_hot_swap
+        )
         rows.append(
             (
                 "hypnos.voice_alignment.hot_swap",
-                str(va.get("hot_swap_mode", "manual")),
+                display_hot_swap,
             )
         )
     if not rows:
