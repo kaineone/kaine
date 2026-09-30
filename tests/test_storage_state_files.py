@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import kaine.lifecycle.stage as stage_module
 from kaine.cycle.control_state import CONTROL_PATH, CycleControl, read_control, write_control
 from kaine.cycle.escalation_state import (
     ESCALATION_PATH,
@@ -31,7 +32,7 @@ from kaine.lifecycle.birth_ack import (
 from kaine.lifecycle.birth_ack import (
     write_request as write_birth_request,
 )
-from kaine.lifecycle.stage import EMBODIED, STAGE_PATH, StageState, read_stage, write_stage
+from kaine.lifecycle.stage import EMBODIED, StageState, read_stage, write_stage
 from kaine.modules.hypnos.voice_alignment import (
     CONSOLIDATION_DIVERGENCE_STATE,
     ConsolidationDivergence,
@@ -94,8 +95,8 @@ def test_state_files_round_trip_under_data_root(tmp_path):
     # lifecycle stage
     stage = StageState(stage=EMBODIED)
     write_stage(stage)
-    assert (root / STAGE_PATH).is_file()
-    assert not (cwd / STAGE_PATH).exists()
+    assert (root / stage_module.STAGE_PATH).is_file()
+    assert not (cwd / stage_module.STAGE_PATH).exists()
     assert read_stage() == stage
 
     # birth request / ack

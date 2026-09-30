@@ -64,7 +64,6 @@ def main(argv: list[str] | None = None) -> int:
             f"Warning: could not load config; data root not installed: {exc}",
             file=sys.stderr,
         )
-        config = None
     else:
         install_data_root(config)
 

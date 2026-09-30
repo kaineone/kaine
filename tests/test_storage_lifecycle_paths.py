@@ -103,9 +103,8 @@ def test_merger_from_name_output_dir_under_data_root(tmp_path):
     root = tmp_path / "root"
     set_data_root(root)
     merger = merger_from_name("auto")
-    try:
-        output_dir = merger.cfg.output_dir
-    except AttributeError:
+    output_dir = getattr(getattr(merger, "cfg", None), "output_dir", None)
+    if output_dir is None:
         pytest.skip("auto merger selected the no-op fake (PEFT unavailable); cannot inspect output_dir")
     assert output_dir == root / "state" / "forks" / "merged_adapters"
 
