@@ -31,6 +31,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from kaine.storage import normalize_storage_paths
+
 # Canonical paths (relative to the working directory, as the rest of the
 # codebase already assumes for config/kaine.toml).
 SHIPPED_CONFIG_PATH = Path("config/kaine.toml")
@@ -374,6 +376,30 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                     f"hardware.cpu_threads expected integer >= 1, got {type(cpu_threads).__name__}"
                 )
 
+    storage = config.get("storage")
+    if storage is not None:
+        if not isinstance(storage, dict):
+            raise ConfigShapeError(
+                f"storage expected table, got {type(storage).__name__}"
+            )
+        data_root = storage.get("data_root")
+        if data_root is not None:
+            if not isinstance(data_root, str) or data_root == "":
+                raise ConfigShapeError(
+                    f"storage.data_root expected non-empty string, got {type(data_root).__name__}"
+                )
+        min_free_gb = storage.get("min_free_gb")
+        if min_free_gb is not None:
+            if isinstance(min_free_gb, bool) or not isinstance(
+                min_free_gb, (int, float)
+            ):
+                raise ConfigShapeError(
+                    f"storage.min_free_gb expected number >= 0, got {type(min_free_gb).__name__}"
+                )
+            if min_free_gb < 0:
+                raise ConfigShapeError(
+                    f"storage.min_free_gb expected number >= 0, got {type(min_free_gb).__name__}"
+                )
 
 def require_known_keys(
     section: dict[str, Any], allowed: set[str], table_name: str = ""
@@ -395,7 +421,7 @@ def require_known_keys(
         )
 
 
-def load_kaine_config(
+def _load_merged_config(
     path: str | os.PathLike[str] = SHIPPED_CONFIG_PATH,
     operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
     *,
@@ -404,45 +430,7 @@ def load_kaine_config(
     tier: str | None = None,
     strict_operator: bool = False,
 ) -> dict[str, Any]:
-    """Load the layered KAINE config: shipped → profile → tier → operator override.
-
-    Load order (each layer deep-merged over the last, later wins):
-
-    1. the shipped ``config/kaine.toml`` (every module disabled by default);
-    2. an optional selected module profile
-       ``config/profiles/<profile>.toml`` (e.g. the base-thesis
-       ``thesis_test`` profile);
-    3. an optional deployment-tier profile
-       ``config/profiles/<tier>.toml`` (bounds backends and devices; never
-       changes which modules are enabled);
-    4. an optional operator override at ``operator_path`` — the operator's local
-       working config, which STILL WINS so their toggles and private voice are
-       never overridden by a profile or tier.
-
-    ``profile`` is the resolved module profile name (see
-    :func:`resolve_profile_name`). ``tier`` is the resolved deployment tier name
-    (see :func:`resolve_tier_name`). Either may be ``None`` to skip that layer.
-    A selected profile or tier whose file is missing raises :class:`ProfileError`
-    — an explicit selection is honored or reported, never silently ignored.
-
-    A tier file must contain an advisory ``[tier]`` table; otherwise it is not a
-    deployment tier and raises :class:`ProfileError`.
-
-    A tier file that contains a ``[modules]`` table or an
-    ``[oscillator].enabled`` key raises :class:`ProfileError` ("tier <name> may
-    not set module toggles; tiers only bound backends and devices"), because a
-    deployment tier must never silently change the enabled module set.
-
-    A missing operator file is harmless; a malformed one is tolerated by
-    default (falls back with a logged warning). When ``strict_operator`` is true,
-    an existing but unreadable/unparsable operator file raises
-    :class:`ProfileError`. Raises :class:`FileNotFoundError` if the shipped file
-    is absent.
-
-    After merging all layers, the result is validated with
-    :func:`validate_config_shape`; shape violations raise
-    :class:`ConfigShapeError`.
-    """
+    """Load and merge layered KAINE configuration files (internal helper)."""
     if profiles_dir is None:
         profiles_dir = PROFILES_DIR
     shipped_path = Path(path)
@@ -500,6 +488,69 @@ def load_kaine_config(
     merged = deep_merge(merged, override)
     validate_config_shape(merged)
     return merged
+
+
+def load_kaine_config(
+    path: str | os.PathLike[str] = SHIPPED_CONFIG_PATH,
+    operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
+    *,
+    profile: str | None = None,
+    profiles_dir: str | os.PathLike[str] | None = None,
+    tier: str | None = None,
+    strict_operator: bool = False,
+) -> dict[str, Any]:
+    """Load the layered KAINE config: shipped → profile → tier → operator override.
+
+    Load order (each layer deep-merged over the last, later wins):
+
+    1. the shipped ``config/kaine.toml`` (every module disabled by default);
+    2. an optional selected module profile
+       ``config/profiles/<profile>.toml`` (e.g. the base-thesis
+       ``thesis_test`` profile);
+    3. an optional deployment-tier profile
+       ``config/profiles/<tier>.toml`` (bounds backends and devices; never
+       changes which modules are enabled);
+    4. an optional operator override at ``operator_path`` — the operator's local
+       working config, which STILL WINS so their toggles and private voice are
+       never overridden by a profile or tier.
+
+    ``profile`` is the resolved module profile name (see
+    :func:`resolve_profile_name`). ``tier`` is the resolved deployment tier name
+    (see :func:`resolve_tier_name`). Either may be ``None`` to skip that layer.
+    A selected profile or tier whose file is missing raises :class:`ProfileError`
+    — an explicit selection is honored or reported, never silently ignored.
+
+    A tier file must contain an advisory ``[tier]`` table; otherwise it is not a
+    deployment tier and raises :class:`ProfileError`.
+
+    A tier file that contains a ``[modules]`` table or an
+    ``[oscillator].enabled`` key raises :class:`ProfileError` ("tier <name> may
+    not set module toggles; tiers only bound backends and devices"), because a
+    deployment tier must never silently change the enabled module set.
+
+    A missing operator file is harmless; a malformed one is tolerated by
+    default (falls back with a logged warning). When ``strict_operator`` is true,
+    an existing but unreadable/unparsable operator file raises
+    :class:`ProfileError`. Raises :class:`FileNotFoundError` if the shipped file
+    is absent.
+
+    After merging all layers, the result is validated with
+    :func:`validate_config_shape`; shape violations raise
+    :class:`ConfigShapeError`.
+
+    Growing-data paths are then resolved under ``[storage].data_root`` /
+    ``KAINE_DATA_ROOT`` by :func:`kaine.storage.normalize_storage_paths`.
+    """
+    return normalize_storage_paths(
+        _load_merged_config(
+            path=path,
+            operator_path=operator_path,
+            profile=profile,
+            profiles_dir=profiles_dir,
+            tier=tier,
+            strict_operator=strict_operator,
+        )
+    )
 
 
 def load_runtime_config(

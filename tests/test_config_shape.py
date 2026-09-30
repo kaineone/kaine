@@ -34,6 +34,51 @@ def test_hardware_accepts_valid_table(tmp_path: Path):
     load_kaine_config(shipped, op, strict_operator=True)
 
 
+def test_storage_accepts_valid_table(tmp_path: Path):
+    shipped, op = _write_config(
+        tmp_path,
+        "",
+        '[storage]\ndata_root = "/x"\nmin_free_gb = 10\n',
+    )
+    load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_storage_must_be_table(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", 'storage = "x"\n')
+    with pytest.raises(ConfigShapeError, match=r"storage.*expected.*table"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_storage_data_root_must_be_non_empty_string(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[storage]\ndata_root = ""\n')
+    with pytest.raises(ConfigShapeError, match=r"storage\.data_root.*expected.*non-empty string"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_storage_data_root_must_be_string(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[storage]\ndata_root = 123\n')
+    with pytest.raises(ConfigShapeError, match=r"storage\.data_root.*expected.*non-empty string"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_storage_min_free_gb_must_be_number(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[storage]\nmin_free_gb = "10"\n')
+    with pytest.raises(ConfigShapeError, match=r"storage\.min_free_gb.*expected.*number"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_storage_min_free_gb_must_not_be_bool(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[storage]\nmin_free_gb = true\n')
+    with pytest.raises(ConfigShapeError, match=r"storage\.min_free_gb.*expected.*number"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_storage_min_free_gb_must_not_be_negative(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[storage]\nmin_free_gb = -1\n')
+    with pytest.raises(ConfigShapeError, match=r"storage\.min_free_gb.*expected.*number"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
 def test_hardware_must_be_table(tmp_path: Path):
     shipped, op = _write_config(tmp_path, "", 'hardware = "x"\n')
     with pytest.raises(ConfigShapeError, match=r"hardware.*expected.*table"):

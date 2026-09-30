@@ -253,6 +253,7 @@ source_modules = [
     "kaine.preboot",
     "kaine.privacy_filter",
     "kaine.state_io",
+    "kaine.storage",
     "kaine.text_embedding",
     "kaine.wheel_index",
     "kaine.bus",
@@ -346,6 +347,7 @@ source_modules = [
     # registry/probe, the canonical Mnemos collection-kinds list). They must
     # stay dependency-free so any side can reuse them without coupling.
     "kaine.state_io",
+    "kaine.storage",
     "kaine.net",
     "kaine.memory_kinds",
 ]

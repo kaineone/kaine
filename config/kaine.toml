@@ -188,6 +188,14 @@ min_free_vram_gb = 2.0
 model_server_url = "http://127.0.0.1:11434/v1"
 timeout_s = 5.0
 
+# [storage]
+# Root for all growing data (entity state, memories, logs, evaluation and
+# research output, backups, models). Relative data paths resolve under it;
+# absolute paths keep their value. Unset: everything stays relative to the
+# working directory. KAINE_DATA_ROOT overrides it (containers set /app).
+# data_root = "/mnt/data/kaine"
+# min_free_gb = 20
+
 [preboot]
 # Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories,
 # snapshots or research records to stay under a limit, so free disk is checked

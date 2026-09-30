@@ -97,6 +97,7 @@ from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
 from kaine.security.crypto import CryptoConfigError, install_from_section
 from kaine.setup.organ import verify_organ_generates
+from kaine.storage import configured_data_root, storage_min_free_gb
 from kaine.torch_stack import check_torch_stack, describe_torch_stack
 
 log = logging.getLogger(__name__)
@@ -885,6 +886,9 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
             ),
         ),
     ]
+    root = configured_data_root(config)
+    if root is not None:
+        paths.insert(0, ("[storage].data_root", root))
     for extra in settings.get("extra_disk_paths", []):
         paths.append(("[preboot].extra_disk_paths", Path(extra)))
     return paths
@@ -998,9 +1002,56 @@ def check_disk(
     return results
 
 
+def check_storage(config: dict[str, Any], *, disk_usage=None) -> list[CheckResult]:
+    """Check the data root's filesystem has enough free space."""
+    root = configured_data_root(config)
+    if root is None:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                "Storage",
+                SKIP,
+                "no [storage].data_root; growing data is written under the working directory",
+            )
+        ]
+
+    usage_fn = disk_usage or shutil.disk_usage
+    try:
+        total, used, free = usage_fn(_nearest_existing(root))
+    except OSError as exc:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                "Storage",
+                FAIL,
+                f"{root}: could not read disk usage: {type(exc).__name__}: {exc}",
+            )
+        ]
+
+    need = storage_min_free_gb(config)
+    if free >= need * _GIB:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                "Storage",
+                PASS,
+                f"{_fmt_gib(free)} free at {root}; minimum {need:g} GiB",
+            )
+        ]
+    return [
+        CheckResult(
+            GROUP_RESOURCES,
+            "Storage",
+            FAIL,
+            f"{_fmt_gib(free)} free at {root}; minimum {need:g} GiB; free space or choose another data root",
+        )
+    ]
+
+
 async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
     """The RESOURCES group: the bus budget row, then the disk-free rows."""
     results = await check_bus_budget(config)
+    results.extend(check_storage(config))
     results.extend(check_disk(config))
     return results
 
