@@ -36,6 +36,7 @@ def _install_swallowing_xread(client):
             if counter.count == 1:
                 return []
             raise
+        raise AssertionError("the fake never completes on its own; only a cancellation ends it")
 
     client.xread = fake_xread
     return client
@@ -53,6 +54,7 @@ def _install_swallowing_xadd(client):
             if counter.count == 1:
                 return "0-1"
             raise
+        raise AssertionError("the fake never completes on its own; only a cancellation ends it")
 
     client.xadd = fake_xadd
     return client
