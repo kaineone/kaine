@@ -291,7 +291,7 @@ def _tier2_rec() -> TierRecommendation:
 
 
 def test_wizard_accepting_tier_writes_deployment_tier():
-    answers = [ACK_PHRASE, "y", "y"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    answers = [ACK_PHRASE, "", "", "y", "y"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
     result = run_wizard(
@@ -306,7 +306,7 @@ def test_wizard_accepting_tier_writes_deployment_tier():
 
 
 def test_wizard_declining_tier_writes_nothing():
-    answers = [ACK_PHRASE, "y", "n"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    answers = [ACK_PHRASE, "", "", "y", "n"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
     result = run_wizard(

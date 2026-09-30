@@ -62,7 +62,7 @@ default_runtime_mode() {
 # ------------------------------------------------------------------------------
 # KAINE_SERVICES_SUPERVISOR may be:
 #   systemd  - use systemd --user units
-#   pidfile  - use a state/services/<svc>/<svc>.pid file
+#   pidfile  - use a <services dir>/<svc>/<svc>.pid file
 #   auto     - systemd if systemctl --user works, otherwise pidfile (default)
 detect_supervisor() {
   local explicit="${KAINE_SERVICES_SUPERVISOR:-auto}"
@@ -238,6 +238,20 @@ detect_qdrant_arch() {
 }
 
 # ------------------------------------------------------------------------------
+# Native service data directory
+# ------------------------------------------------------------------------------
+# The directory that holds native service data: <data root>/state/services
+# when [storage].data_root (or KAINE_DATA_ROOT) is set, else under the checkout.
+kaine_services_dir() {
+  local py="${PY:-$ROOT/.venv/bin/python}"
+  [[ -x "$py" ]] || py=python3
+  local root
+  root="$(cd "$ROOT" && "$py" -m kaine.setup.data_root root 2>/dev/null || true)"
+  [[ -n "$root" ]] || root="$ROOT"
+  printf '%s/state/services\n' "$root"
+}
+
+# ------------------------------------------------------------------------------
 # Native process identity check
 # ------------------------------------------------------------------------------
 # Verify that a pid actually belongs to the expected KAINE service binary.
@@ -252,7 +266,7 @@ native_pid_is_ours() {
       expected="redis-server"
       ;;
     qdrant)
-      expected="$ROOT/state/services/qdrant/bin/qdrant"
+      expected="$(kaine_services_dir)/qdrant/bin/qdrant"
       ;;
     *)
       return 1
@@ -283,7 +297,7 @@ native_is_running() {
       return 0
     fi
   fi
-  local pidfile="$ROOT/state/services/${svc}/${svc}.pid"
+  local pidfile="$(kaine_services_dir)/${svc}/${svc}.pid"
   if [[ -f "$pidfile" ]]; then
     local pid
     pid=$(cat "$pidfile")
@@ -318,7 +332,7 @@ native_stop_service() {
   if using_systemd; then
     systemctl --user stop "kaine-${svc}.service" >/dev/null 2>&1 || true
   fi
-  local pidfile="$ROOT/state/services/${svc}/${svc}.pid"
+  local pidfile="$(kaine_services_dir)/${svc}/${svc}.pid"
   if [[ -f "$pidfile" ]]; then
     local pid
     pid=$(cat "$pidfile")
@@ -373,7 +387,7 @@ native_bootstrap_redis() {
   local root="$1"
   local pw="$2"
   local rotate="${3:-0}"
-  local svc_dir="$root/state/services/redis"
+  local svc_dir="$(kaine_services_dir)/redis"
   local data_dir="$svc_dir/data"
   local logs_dir="$svc_dir/logs"
   local conf="$svc_dir/redis.conf"
@@ -500,7 +514,7 @@ native_bootstrap_qdrant() {
     sha="${QDRANT_AARCH64_SHA256:-$QDRANT_PINNED_AARCH64_SHA256}"
   fi
 
-  local svc_dir="$root/state/services/qdrant"
+  local svc_dir="$(kaine_services_dir)/qdrant"
   local bin_dir="$svc_dir/bin"
   local tmp="$svc_dir/qdrant.tar.gz"
   local binary="$bin_dir/qdrant"
@@ -558,8 +572,8 @@ QDRANT__SERVICE__HTTP_PORT=6533
 QDRANT__SERVICE__GRPC_PORT=6534
 QDRANT__SERVICE__HOST=127.0.0.1
 QDRANT__SERVICE__API_KEY=$key
-QDRANT__STORAGE__STORAGE_PATH=state/services/qdrant/storage
-QDRANT__STORAGE__SNAPSHOTS_PATH=state/services/qdrant/snapshots
+QDRANT__STORAGE__STORAGE_PATH=${svc_dir}/storage
+QDRANT__STORAGE__SNAPSHOTS_PATH=${svc_dir}/snapshots
 QDRANT__TELEMETRY_DISABLED=true
 EOF
   chmod 600 "$env_file"

@@ -1061,6 +1061,15 @@ async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
 # ---------------------------------------------------------------------------
 
 
+def check_device_map(config: dict[str, Any]) -> list[CheckResult]:
+    """Verify the device map agrees with compose variables and cycle keys."""
+    from kaine.setup.device_map import check_agreement
+
+    status, detail = check_agreement(config, env_path=Path("compose/.env"))
+    code = {"pass": PASS, "fail": FAIL, "skip": SKIP}[status]
+    return [CheckResult(GROUP_CONFIG, "Device map", code, detail)]
+
+
 def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
     """Report the boot mode, the enabled modules, the tier fit, the encryption
     posture, and the torch stack.
@@ -1085,6 +1094,7 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
     else:
         mode_detail = "operator-supervised — requires KAINE_CYCLE_OPERATOR_PRESENT=1 at boot"
     results.append(CheckResult(GROUP_CONFIG, "Boot mode", PASS, mode_detail))
+    results.extend(check_device_map(config))
 
     modules = config.get("modules") or {}
     enabled = sorted(k for k, v in modules.items() if v)
