@@ -1148,12 +1148,17 @@ backend = "dreamerv3"          # shipped default; "fake" = dev-only EMA fallback
 # [worldmodel] extra) or "numpy" (no extra; for hosts without JAX such as
 # Termux). Both run and train the same model and read each other's checkpoints.
 engine = "jax"
-# Sleep-time, in-memory training. Off by default; never writes to disk.
-training_enabled = false
+# Sleep-time, in-memory training. On by default: the learned world model is
+# part of the entity's memory and individuality, so training runs in memory
+# during Hypnos sleep on `training_device`. A training pass itself writes
+# nothing to disk; the trajectory buffer is never serialized.
+training_enabled = true
 training_device = "cpu"        # jax[cpu] default; GPU is opt-in per hardware split
 # Bounded in-memory waking-trajectory ring buffer (never serialized to disk).
 trajectory_buffer_size = 512
-# Persist LEARNED WORLD-MODEL WEIGHTS across restarts. Opt-in; requires
+# Persist LEARNED WORLD-MODEL WEIGHTS across restarts. On by default: the
+# learned world model is part of the entity's memory and individuality, so
+# it persists across restarts and travels with forks. Requires
 # backend = "dreamerv3" (enabling it with the "fake" EMA stub is a
 # configuration error — the stub has no real learned parameters to persist).
 # Weights are derived numeric parameters, NOT sense data: the trajectory
@@ -1162,7 +1167,7 @@ trajectory_buffer_size = 512
 # and on graceful shutdown; loaded at boot; encrypted at rest when
 # [security.state_encryption] is enabled. An incompatible checkpoint fails
 # the boot closed (never silently discards learned weights).
-persist_weights = false
+persist_weights = true
 checkpoint_path = "state/phantasia/world_model.ckpt"
 # Imagined-trajectory length for offline scenario generation.
 rollout_horizon = 8

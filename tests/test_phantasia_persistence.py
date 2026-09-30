@@ -463,10 +463,12 @@ async def test_persistence_off_means_no_writes(bus: AsyncBus, tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_shipped_config_persist_weights_off():
+def test_shipped_config_persists_and_trains_world_model():
     cfg = tomllib.loads((PROJECT_ROOT / "config" / "kaine.toml").read_text())
-    assert cfg["phantasia"]["persist_weights"] is False
+    assert cfg["phantasia"]["persist_weights"] is True
+    assert cfg["phantasia"]["training_enabled"] is True
     assert cfg["phantasia"]["checkpoint_path"] == "state/phantasia/world_model.ckpt"
+    assert cfg["modules"]["phantasia"] is False
 
 
 def test_decommission_backup_includes_phantasia_checkpoint(tmp_path: Path, monkeypatch):

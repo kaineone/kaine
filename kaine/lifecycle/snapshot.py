@@ -7,6 +7,7 @@ import copy
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -110,6 +111,51 @@ def snapshot_dir(root: Path, snapshot_id: str) -> Path:
 
 def snapshot_path(root: Path, snapshot_id: str) -> Path:
     return snapshot_dir(root, snapshot_id) / "snapshot.json"
+
+
+ARTIFACTS_DIRNAME = "artifacts"
+
+
+def artifacts_dir(root: Path, snapshot_id: str, module_name: str) -> Path:
+    """<root>/<snapshot_id>/artifacts/<module_name>, contained by snapshot_dir."""
+    if (
+        not module_name
+        or "/" in module_name
+        or "\\" in module_name
+        or module_name in (".", "..")
+        or module_name.startswith(".")
+    ):
+        raise ValueError(f"invalid module name for artifact directory: {module_name!r}")
+    return snapshot_dir(root, snapshot_id) / ARTIFACTS_DIRNAME / module_name
+
+
+def copy_artifacts(src: Path, dst: Path) -> None:
+    """Copy one module's artifact directory; dirs 0700, files 0600. No symlinks followed."""
+    if Path(src).is_symlink():
+        raise ValueError(f"refusing to copy a symlinked artifact directory: {src}")
+    if dst.exists():
+        raise FileExistsError(f"artifact destination already exists: {dst}")
+    dst.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _chmod_quietly(dst.parent, 0o700)
+    dst.mkdir(mode=0o700, parents=False, exist_ok=False)
+    _chmod_quietly(dst, 0o700)
+    for dirpath, _dirnames, filenames in os.walk(src, followlinks=False):
+        rel_dir = Path(dirpath).relative_to(src)
+        dst_dir = dst / rel_dir
+        for d in _dirnames:
+            src_d = Path(dirpath) / d
+            if src_d.is_symlink():
+                continue
+            dst_d = dst_dir / d
+            dst_d.mkdir(mode=0o700, parents=False, exist_ok=False)
+            _chmod_quietly(dst_d, 0o700)
+        for f in filenames:
+            src_f = Path(dirpath) / f
+            if src_f.is_symlink():
+                continue
+            dst_f = dst_dir / f
+            shutil.copyfile(src_f, dst_f)
+            _chmod_quietly(dst_f, 0o600)
 
 
 def save_snapshot(root: Path, snap: ForkSnapshot) -> Path:
