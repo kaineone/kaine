@@ -36,6 +36,12 @@ def _dev(device: str, free: float, total: float = 12.0) -> dict:
 
 
 @pytest.fixture(autouse=True)
+def _no_live_device_consumers(monkeypatch):
+    """Do not call the real nvidia-smi consumer probe in GPU gate tests."""
+    monkeypatch.setattr(pf, "_device_consumers", lambda *_a, **_k: [])
+
+
+@pytest.fixture(autouse=True)
 def _no_real_probes(monkeypatch):
     # Default: no GPU processes, no KAINE services up, no resident models. Tests
     # override per-case. Keeps real nvidia-smi/torch/network out of the suite.

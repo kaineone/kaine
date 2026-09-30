@@ -32,7 +32,6 @@ from kaine.lifecycle.birth_ack import (
 from kaine.lifecycle.birth_ack import (
     write_request as write_birth_request,
 )
-from kaine.lifecycle.stage import EMBODIED, StageState, read_stage, write_stage
 from kaine.modules.hypnos.voice_alignment import (
     CONSOLIDATION_DIVERGENCE_STATE,
     ConsolidationDivergence,
@@ -93,11 +92,11 @@ def test_state_files_round_trip_under_data_root(tmp_path):
     assert read_request() == preserve_req
 
     # lifecycle stage
-    stage = StageState(stage=EMBODIED)
-    write_stage(stage)
+    stage = stage_module.StageState(stage=stage_module.EMBODIED)
+    stage_module.write_stage(stage)
     assert (root / stage_module.STAGE_PATH).is_file()
     assert not (cwd / stage_module.STAGE_PATH).exists()
-    assert read_stage() == stage
+    assert stage_module.read_stage() == stage
 
     # birth request / ack
     birth_req = new_birth_request(_now_iso())

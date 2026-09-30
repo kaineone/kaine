@@ -11,8 +11,8 @@
 
 ## 3. Shared services
 - [x] 3.1 `[services.<name>].shared`, asked for each detected service; config shape validation.
-- [ ] 3.2 A source-guard test: no code path stops, restarts or evicts a shared service.
-- [ ] 3.3 The GPU gate names shared services and suggests placements, and says when its consumer list is container-only. Tests cover both cases.
+- [x] 3.2 A source-guard test: no code path stops, restarts or evicts a shared service.
+- [x] 3.3 The GPU gate names shared services and suggests placements, and says when its consumer list is container-only. Tests cover both cases.
 
 ## 4. Storage
 - [x] 4.1 A data-root resolver. Relative growing-data paths resolve under `[storage].data_root`; absolute paths keep their value; with no section, nothing changes.
