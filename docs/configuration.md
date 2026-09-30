@@ -122,6 +122,50 @@ Ships `enabled = true`, but the whole block is dormant while `[spot].enabled = f
 
 ---
 
+## `[hardware]`
+
+What KAINE may use on this host. Written by the first-run wizard; absent means no restriction.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `allowed_devices` | list of strings | absent | Devices modules may be placed on (`"cuda:N"`, `"xpu:N"`, `"mps"`, `"cpu"`). A module whose configured device is outside the set runs on the first available allowed accelerator, or the CPU, with a warning. The CPU is always permitted. `KAINE_FORCE_DEVICE` overrides the set and is logged as doing so. |
+| `cpu_threads` | integer ≥ 1 | half the cores | Size of the torch CPU thread pool. |
+
+### `[hardware.devices]`
+
+The device map: which device serves each role. The cycle's device keys, the compose GPU variables (`KAINE_ORGAN_GPU`, `KAINE_VISION_GPU` in `compose/.env`) and the native model server's GPU are all generated from it. The pre-boot "Device map" row fails when `compose/.env` or the cycle's device keys disagree with it.
+
+| Key | Type | Description |
+|---|---|---|
+| `organ` | string | The language organ's GPU. Voice-alignment training time-shares it (`[hypnos.voice_alignment].training_device`). |
+| `vision` | string | The vision encoder's GPU (`[topos].device`); in compose, also the cycle's and Chatterbox's card. |
+
+---
+
+## `[storage]`
+
+Where growing data lives. When `data_root` is set, every relative growing-data path (entity state, memories, forks and preservation bundles, logs, evaluation and research output, backups, models, and the native Redis and Qdrant data) resolves under it; absolute paths keep their value. Absent, everything stays relative to the working directory. `KAINE_DATA_ROOT` overrides the key; the containers set it to `/app`, where their volumes are mounted, so a host data root in the shared operator config never redirects container writes. Study runs keep their own line directories as their root.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `data_root` | string | absent | Root for all growing data. Choose it with the first-run wizard, which verifies free space and can move existing data (copy, verify, then switch; the original is kept). |
+| `min_free_gb` | number ≥ 0 | `20` | The pre-boot "Storage" row fails when the data root's filesystem has less free space than this. |
+
+On a compose install the wizard also writes `compose/kaine.storage.local.yml`, which binds KAINE's growing Docker volumes under the data root. It does so only when those volumes do not exist yet; otherwise it prints the commands that copy each existing volume first, because binding a name over an existing volume would hide its data.
+
+---
+
+## `[services.<name>]`
+
+Supporting services KAINE uses but may not own: `model_server`, `chatterbox`, `speaches`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `shared` | bool | `false` | The service is shared with your other applications. KAINE never stops, restarts or reloads it: `python -m kaine.setup.model_server stop` refuses, voice-alignment hot swap and the organ window run in `manual` mode, and the GPU pre-flight names the service and suggests another placement instead of asking you to close it. |
+| `process_names` | list of strings | per service | Process-name patterns that identify the service in the GPU pre-flight (defaults: `llama-server`, `chatterbox`, `speaches`). |
+
+---
+
 ## `[preboot]`
 
 Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories, snapshots or research records to stay under a limit, so free disk is checked before boot. The check covers every configured durable path, resolved from the same keys and defaults the modules use: `state_root`, `data_root`, `[lifecycle].snapshots_path`, both `[preservation.*].out_root`, `[evaluation.paths]`, `[research_event_log].log_dir` and its `raw_archive.archive_dir`, `[hypnos.voice_alignment].adapter_output_dir` and `trainer_workdir`, `[ignition_log].directory`, `[spot.incident_log].path`, the Eidolon self-model directory, and the native Redis data directory (`<state_root>/services/redis/data`, when it exists; a container volume is reported SKIP). A path that does not exist yet is measured at its nearest existing parent. Paths on the same filesystem share one row, which lists them. A row FAILS below the larger of `disk_fail_min_free_gb` and `disk_fail_min_free_percent` of its filesystem, and WARNS below `disk_warn_min_free_gb`. A WARN row does not fail the gate. GB here is 2^30 bytes, as `df -h` reports. An unknown key or a non-numeric threshold is reported as a FAIL row.

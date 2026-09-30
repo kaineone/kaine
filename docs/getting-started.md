@@ -196,10 +196,23 @@ never boots the entity):
 1. A short orientation.
 2. **CAL welfare acknowledgement** — a summary of the Article 4 care obligations
    and a required typed acknowledgement before any entity is configured.
-3. **Hardware scan** — detects CPU/GPUs and VRAM via `kaine.hardware.describe_host()`
-   and proposes device assignments (primary GPU for the LLM/voice-alignment
-   training, secondary for the vision encoder, CPU for control paths), which you
-   accept or override.
+3. **Hardware** — lists every compute device the host has (CUDA, ROCm, XPU,
+   Apple MPS, unified memory, and the CPU) with total and free memory, the
+   processes already holding each one, the CPU cores and the system memory. You
+   choose which devices KAINE may use and how many CPU threads (`[hardware]`); a
+   GPU you leave out stays free for your other work and KAINE never places a
+   module on it. Device assignments are then proposed from the allowed set only
+   and checked against each device's free memory; one that does not fit says so
+   and offers another allowed device or the CPU. The result is one device map
+   (`[hardware.devices]`: `organ` and `vision`) that also sets the compose GPU
+   variables in `compose/.env` and the GPU the native model server runs on.
+   For each supporting service found running, the wizard asks whether your other
+   applications share it (`[services.<name>].shared`); KAINE never stops,
+   restarts or reloads a shared service.
+   It then lists the mounted filesystems with their free space and asks where
+   growing data lives (`[storage].data_root`), recommending a larger non-system
+   drive when there is one. Moving existing data copies it, verifies every file,
+   and only then switches; the original is left for you to remove.
 4. **Module selection** — choose which modules to enable.
 5. **Model / voice / STT** — discovers served options from the model server,
    Chatterbox, and Speaches when reachable, otherwise accepts manual entry, and
@@ -239,7 +252,10 @@ The `device` field is the highest-priority base device KAINE detected.
 `kaine.hardware.resolve_device` is used by every module that picks a compute
 device. It reads the `device` key from each module's TOML section and falls back
 to `cuda:0` (or `cpu` on a CPU host) with a logged warning if the requested
-device is absent. Nothing crashes from a stale config.
+device is absent. Nothing crashes from a stale config. When
+`[hardware].allowed_devices` is set, a module is never placed outside that set: a
+request for another device falls back to the first available allowed accelerator,
+or to the CPU, with a warning. `KAINE_FORCE_DEVICE` still overrides it.
 
 ### GPU / accelerator support
 
