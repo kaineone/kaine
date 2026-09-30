@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from kaine.research.ignition_study.__main__ import main
 from kaine.research.ignition_study.plan import (
     DEFAULT_GESTATION_BUDGET_SECONDS,
     DEFAULT_VIEWING_BUDGET_SECONDS,
@@ -200,3 +201,138 @@ def test_ensure_line_dir_never_replaces_a_real_file(base_plan, tmp_path):
     assert os.readlink(made / "config" / "kaine.toml") == str(
         repo_root.resolve() / "config" / "kaine.toml"
     )
+
+
+@pytest.fixture
+def nine_module_plan(base_plan):
+    plan = dict(base_plan)
+    plan["order"] = [
+        "mnemos",
+        "phantasia",
+        "nous",
+        "eidolon",
+        "empatheia",
+        "vox",
+        "praxis",
+        "perception",
+        "mundus",
+    ]
+    return plan
+
+
+def test_voice_alignment_default_is_final_accumulate(nine_module_plan):
+    plan = validate_plan(nine_module_plan)
+    assert plan["voice_alignment_steps"] == [{"line": "accumulate", "k": 9}]
+
+
+def test_voice_alignment_explicit_list_kept(nine_module_plan):
+    steps = [{"line": "accumulate", "k": 9}, {"line": "branch", "k": 3}]
+    nine_module_plan["voice_alignment_steps"] = steps
+    plan = validate_plan(nine_module_plan)
+    assert plan["voice_alignment_steps"] == steps
+
+
+def test_voice_alignment_gestation_refused(nine_module_plan):
+    entry = {"line": "gestation", "k": 0}
+    nine_module_plan["voice_alignment_steps"] = [entry]
+    with pytest.raises(ValueError) as exc_info:
+        validate_plan(nine_module_plan)
+    assert str(entry) in str(exc_info.value)
+
+
+def test_voice_alignment_out_of_range_refused(nine_module_plan):
+    bad_entries = [
+        {"line": "accumulate", "k": 0},
+        {"line": "branch", "k": 10},
+        {"line": "repeat", "k": 1},
+    ]
+    for entry in bad_entries:
+        plan = dict(nine_module_plan)
+        plan["voice_alignment_steps"] = [entry]
+        with pytest.raises(ValueError) as exc_info:
+            validate_plan(plan)
+        assert str(entry) in str(exc_info.value)
+
+
+def test_voice_alignment_duplicate_refused(nine_module_plan):
+    entry = {"line": "accumulate", "k": 9}
+    nine_module_plan["voice_alignment_steps"] = [entry, entry]
+    with pytest.raises(ValueError) as exc_info:
+        validate_plan(nine_module_plan)
+    assert str(entry) in str(exc_info.value)
+
+
+def test_voice_alignment_bool_k_refused(nine_module_plan):
+    entry = {"line": "accumulate", "k": True}
+    nine_module_plan["voice_alignment_steps"] = [entry]
+    with pytest.raises(ValueError) as exc_info:
+        validate_plan(nine_module_plan)
+    assert str(entry) in str(exc_info.value)
+
+
+def test_voice_alignment_unknown_key_refused(nine_module_plan):
+    entry = {"line": "accumulate", "k": 9, "extra": 1}
+    nine_module_plan["voice_alignment_steps"] = [entry]
+    with pytest.raises(ValueError) as exc_info:
+        validate_plan(nine_module_plan)
+    assert str(entry) in str(exc_info.value)
+
+
+def _nine_module_argv(nine_module_plan, study_dir):
+    repo_root = Path(nine_module_plan["repo_root"])
+    return [
+        "init",
+        "--study-id",
+        nine_module_plan["study_id"],
+        "--study-dir",
+        str(study_dir),
+        "--repo-root",
+        str(repo_root),
+        "--base-modules",
+        *nine_module_plan["base_modules"],
+        "--order",
+        *nine_module_plan["order"],
+        "--programme-manifest",
+        nine_module_plan["programme"]["manifest"],
+        "--redis-base-url",
+        nine_module_plan["redis"]["base_url"],
+        "--db-gestation",
+        str(nine_module_plan["redis"]["db"]["gestation"]),
+        "--db-branch",
+        str(nine_module_plan["redis"]["db"]["branch"]),
+        "--db-repeat",
+        str(nine_module_plan["redis"]["db"]["repeat"]),
+        "--db-accumulate",
+        str(nine_module_plan["redis"]["db"]["accumulate"]),
+    ]
+
+
+def test_init_cli_records_voice_alignment_steps(nine_module_plan, tmp_path):
+    repo_root = Path(nine_module_plan["repo_root"])
+    _repo_config(repo_root)
+    study_dir = tmp_path / "study"
+    argv = _nine_module_argv(nine_module_plan, study_dir) + [
+        "--voice-alignment-step",
+        "accumulate:9",
+        "--voice-alignment-step",
+        "branch:9",
+    ]
+    assert main(argv) == 0
+    plan = load_plan(study_dir)
+    assert plan["voice_alignment_steps"] == [
+        {"line": "accumulate", "k": 9},
+        {"line": "branch", "k": 9},
+    ]
+
+
+def test_init_cli_malformed_voice_alignment_step_errors(nine_module_plan, tmp_path):
+    repo_root = Path(nine_module_plan["repo_root"])
+    _repo_config(repo_root)
+    study_dir = tmp_path / "study"
+    argv = _nine_module_argv(nine_module_plan, study_dir) + [
+        "--voice-alignment-step",
+        "accumulate",
+    ]
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv)
+    assert exc_info.value.code == 2
