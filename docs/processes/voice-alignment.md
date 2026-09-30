@@ -357,6 +357,51 @@ the same weights the served GGUF derives from. No split-brain.
 
 ---
 
+## In containers
+
+For containerized deployments the trainer can run out of the entity cycle as
+the `kaine-trainer` service. Set `trainer_backend = "job_queue"` and point
+`trainer_jobs_dir` at the shared jobs volume (default `/trainer-jobs`). The
+cycle writes each job spec there — DPO pairs, the base-model path, LoRA/DPO
+settings, and the adapter output directory `out` relative to the job — marks it
+ready, and waits for `result.json` without blocking the sleep cycle, up to
+`trainer_timeout_s` (default 21600). A timeout, a non-zero exit, or a missing
+adapter fails loud.
+
+The `kaine-trainer` service runs under the compose profile `training` (image
+target `trainer`). It has its own venv with the `[training]` stack and
+llama.cpp's LoRA converter pinned to the organ's build b9976. It waits until
+the organ reports it is asleep and the training GPU (`KAINE_TRAINER_GPU`,
+default the organ's GPU) has free VRAM, then runs the external trainer with
+the same capability and abliteration gates, promotes the vetted adapter
+atomically inside the job, converts it to `adapter.gguf`, writes
+`result.json`, and deletes the job's preference pairs (entity language). It
+sees only the jobs volume and the read-only models volume: no entity state, no
+Docker socket, no host ports, and no internet. The cycle then promotes the
+adapter into the entity's own `adapter_output_dir`.
+
+Serving an accepted adapter without restarting the organ is handled by the
+`organ_adapter` hot-swap mode. Hypnos copies `adapter.gguf` into the
+`organ-adapters` volume as `active-<generation>.gguf` and writes a manifest
+(`active.json`: file, sha256, generation, adapter_id), then bumps `generation`.
+The organ's launcher (`docker/organ-launcher.sh`, the organ container's
+entrypoint) verifies the sha256 and restarts `llama-server` with
+`--lora-scaled <file>:0`, loading the adapter at scale 0 so requests without a
+`lora` field get the base organ. The `--lora-init-without-apply` flag is not
+relied on because at llama.cpp b9976 it still applies the adapter.
+
+Lingua sends `lora: [{"id": "<id>", "scale": 1.0}]` and `cache_prompt: false`
+only when the organ's `GET /lora-adapters` lists the manifest's file and the
+manifest's sha256 equals this entity's own promoted adapter; every other
+request — other entities or the evaluation A/B baseline — gets the base organ.
+Hypnos waits for the organ to answer before the sleep completes. A shared
+model server (for example a host-native organ shared with other apps) forces
+`hot_swap_mode = "manual"`, because the cycle cannot orchestrate a foreign
+server's LoRA lifecycle.
+
+`organ_adapters_dir` (default `/organ-adapters`) and `organ_url` (default
+`[lingua].chat_url`) configure this mode.
+
 ## Rollback
 
 1. Stop KAINE (or at least pause Lingua).

@@ -49,4 +49,4 @@
 - [ ] 5.4 Record the results in the PR.
 
 ## 6. Docs
-- [ ] 6.1 `docs/hypnos.md` or VOICE_ALIGNMENT.md, `docs/configuration.md`, the deployment docs, and the study docs.
+- [x] 6.1 `docs/hypnos.md` or VOICE_ALIGNMENT.md, `docs/configuration.md`, the deployment docs, and the study docs.

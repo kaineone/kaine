@@ -210,20 +210,19 @@ RUN apt-get update \
 RUN python3.12 -m venv /opt/trainer
 ENV PATH="/opt/trainer/bin:${PATH}"
 
-# Re-use the same flavor-correct torch that the runtime installs, using the
-# project's constraints file as the single source of truth. The empty-index
-# branch keeps the CPU flavor working when install.py returns an empty string.
+# The trainer venv carries its own torch because the training stack (unsloth)
+# supports an older torch than the runtime. The runtime torch is unaffected.
 RUN TORCH_INDEX="$(python /src/scripts/install.py --print-index "${FLAVOR}")" \
- && TORCH_SPEC="$(python /src/scripts/install.py --print-torch-spec)" \
  && if [ -n "${TORCH_INDEX}" ]; then \
-        /opt/trainer/bin/pip install -c /src/kaine-torch-constraints.txt --index-url "${TORCH_INDEX}" "${TORCH_SPEC}" torchvision; \
+        /opt/trainer/bin/pip install --index-url "${TORCH_INDEX}" "torch>=2.10,<2.13" torchvision; \
     else \
-        /opt/trainer/bin/pip install -c /src/kaine-torch-constraints.txt "${TORCH_SPEC}" torchvision; \
-    fi
+        /opt/trainer/bin/pip install "torch>=2.10,<2.13" torchvision; \
+    fi \
+ && /opt/trainer/bin/python -c "import importlib.metadata as md; names=('torch','torchvision','torchaudio'); installed={d.metadata.get('Name','').lower():d.version for d in md.distributions()}; open('/src/trainer-torch-constraints.txt','w').write(''.join(f'{n}=={installed[n]}\n' for n in names if n in installed))"
 
 # Install only the [training] extra's dependencies, WITHOUT installing kaine
 # itself (the trainer service code lives in the runtime image /app/kaine).
-RUN python3.12 -c "import pathlib, tomllib; print('\n'.join(tomllib.loads(pathlib.Path('/src/pyproject.toml').read_text(encoding='utf-8'))['project']['optional-dependencies']['training']))" > /tmp/training-reqs.txt && /opt/trainer/bin/pip install -c /src/kaine-torch-constraints.txt -r /tmp/training-reqs.txt
+RUN python3.12 -c "import pathlib, tomllib; print('\n'.join(tomllib.loads(pathlib.Path('/src/pyproject.toml').read_text(encoding='utf-8'))['project']['optional-dependencies']['training']))" > /tmp/training-reqs.txt && /opt/trainer/bin/pip install -c /src/trainer-torch-constraints.txt -r /tmp/training-reqs.txt
 
 # Fetch the pinned llama.cpp tag used by the organ image and verify it.
 # Extract the explicit files/packages convert_lora_to_gguf needs: the two
