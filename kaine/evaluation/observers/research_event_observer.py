@@ -116,7 +116,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # started/completed/abandoned; reason is a fixed code on abandon.
     "perception.transition": frozenset({"phase", "transition_seconds", "reason"}),
     # --- Prediction / precision ---
-    "soma.report": frozenset({"prediction_error", "wellness", "fatigue_value", "alerts"}),
+    "soma.report": frozenset({"prediction_error", "unexpected_error", "wellness", "fatigue_value", "alerts"}),
     "topos.report": frozenset(
         {
             "prediction_error",

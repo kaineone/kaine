@@ -168,6 +168,7 @@ class SubstrateForwardModel:
         # trains the readout against the SAME context it predicted from.
         self._last_hidden: Optional[list[float]] = None
         self._last_prediction: Optional[list[float]] = None
+        self._last_residuals: Optional[tuple[float, ...]] = None
 
         self.suspended: bool = False
 
@@ -207,6 +208,14 @@ class SubstrateForwardModel:
     def device(self) -> str:
         return self._device
 
+    @property
+    def last_residuals(self) -> Optional[tuple[float, ...]]:
+        """Signed per-channel residual ``feature - last_prediction`` from the last step.
+
+        ``None`` before the first prediction and after any skipped non-finite tick.
+        """
+        return self._last_residuals
+
     def parameter_count(self) -> int:
         """Total parameter count across the frozen reservoir and the readout."""
         if self._backend == "numpy":
@@ -242,6 +251,7 @@ class SubstrateForwardModel:
         self._hx = None
         self._last_hidden = None
         self._last_prediction = None
+        self._last_residuals = None
 
     # ------------------------------------------------------------------
     # Core per-step interface
@@ -322,14 +332,19 @@ class SubstrateForwardModel:
             log.warning(
                 "SubstrateForwardModel: non-finite feature vector; skipping tick"
             )
+            self._last_residuals = None
             return 0.0
 
         # 1. Prediction error from the previous tick's prediction.
         if self._last_prediction is None:
             prediction_error = 0.0
+            self._last_residuals = None
         else:
             diffs = [(a - b) ** 2 for a, b in zip(feature, self._last_prediction)]
             prediction_error = math.sqrt(sum(diffs))
+            self._last_residuals = tuple(
+                a - b for a, b in zip(feature, self._last_prediction)
+            )
 
         # 2. Adapt the readout toward this feature, using the hidden state
         # that produced the prior prediction (before this tick advances it).

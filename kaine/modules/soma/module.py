@@ -16,6 +16,7 @@ from kaine.modules.soma.detector import (
     AnomalyDetector,
     ThresholdAnomalyDetector,
 )
+from kaine.modules.soma.expected_error import ExpectedErrorModel
 from kaine.modules.soma.fatigue import FatigueAccumulator
 from kaine.modules.soma.forward import (
     DEFAULT_FEATURE_DIM,
@@ -74,6 +75,14 @@ class Soma(BaseModule):
         fatigue_maintenance_threshold: float = 100.0,
         regulation_sustain_window_s: float = 30.0,
         regulation_threshold: float = 0.5,
+        # --- Learned expected prediction error per interoceptive channel ---
+        # Window (seconds of subjective time) over which Soma learns each
+        # channel's typical absolute prediction error and its spread. The
+        # unexpected error is the L2 norm of residual beyond expected + band *
+        # spread (Feldman & Friston 2010; Seth 2013). A channel's own history,
+        # not a hardwired sensitivity, sets its expected precision.
+        expected_error_tau_s: float = 600.0,
+        expected_error_band: float = 2.0,
         # --- Developmental warm-up (soma-coldstart-regulation-warmup) ---
         # While the interoceptive forward model is still learning this host's
         # substrate baseline, WITHHOLD the punitive allostatic actions its
@@ -141,6 +150,12 @@ class Soma(BaseModule):
             maxlen=int(prediction_error_window)
         )
         self._last_prediction_error: float = 0.0
+
+        # --- Learned expected prediction error ---
+        self._expected_error = ExpectedErrorModel(
+            tau_s=float(expected_error_tau_s), band=float(expected_error_band)
+        )
+        self._last_expected_time: float | None = None
 
         # --- Fatigue accumulator ---
         self._fatigue = FatigueAccumulator(
@@ -363,12 +378,31 @@ class Soma(BaseModule):
         # or sensory-starved entity does not age out of warm-up.
         self._samples_seen = int(getattr(self._forward_model, "adaptation_steps", 0))
 
+        # --- Learned unexpected error (computed after now exists) ---
+        dt = (
+            0.0
+            if self._last_expected_time is None
+            else max(0.0, now - self._last_expected_time)
+        )
+        self._last_expected_time = now
+        learn = not bool(getattr(self._forward_model, "suspended", False))
+
+        if not hasattr(self._forward_model, "last_residuals"):
+            residuals = (prediction_error,)
+            unexpected_error = self._expected_error.unexpected(residuals, dt, learn=learn)
+        elif self._forward_model.last_residuals is None:
+            unexpected_error = 0.0
+        else:
+            residuals = self._forward_model.last_residuals
+            unexpected_error = self._expected_error.unexpected(residuals, dt, learn=learn)
+
         # --- Developmental warm-up gate (ACTION PATH ONLY) ---
         # A live hard-threshold breach OVERRIDES the gate unconditionally: the
         # [soma.thresholds] limits are absolute, not learned predictions, so a
         # real substrate problem (e.g. GPU >= 83 C) always actuates and always
         # integrates fatigue at full weight, even during warm-up (design §4).
         hard_breach = alert.is_alert
+        action_error = prediction_error if hard_breach else unexpected_error
         warmup_active = self.warmup_active
         gate = warmup_active and not hard_breach
 
@@ -399,15 +433,15 @@ class Soma(BaseModule):
         # We change what fatigue *is* during warm-up, not what we *report*: the
         # published fatigue_value honestly reflects the dampened accrual. The raw
         # prediction_error — the "cry" — is untouched and published in full below.
-        fatigue_input = prediction_error
+        fatigue_input = action_error
         if gate:
             baseline = self._warming_baseline(prior_errors)
-            fatigue_input = max(0.0, prediction_error - baseline)
-            if fatigue_input < prediction_error:
+            fatigue_input = max(0.0, action_error - baseline)
+            if fatigue_input < action_error:
                 log.debug(
                     "soma warm-up: fatigue input damped %.4f -> %.4f "
                     "(warming baseline=%.4f)",
-                    prediction_error,
+                    action_error,
                     fatigue_input,
                     baseline,
                 )
@@ -424,7 +458,7 @@ class Soma(BaseModule):
             )
 
         # --- Regulation advisory (withheld during warm-up unless overridden) ---
-        advisory = self._regulation.update(prediction_error, now=now)
+        advisory = self._regulation.update(action_error, now=now)
         withheld_advisory = None
         if advisory is not None and gate:
             withheld_advisory = advisory
@@ -436,6 +470,7 @@ class Soma(BaseModule):
             "wellness": wellness,
             "alerts": list(alert.keys),
             "prediction_error": prediction_error,
+            "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,
             "fatigue_threshold": self._fatigue.threshold,
             "warmup_active": warmup_active,
@@ -676,6 +711,7 @@ class Soma(BaseModule):
             "forward_model": self._forward_model.state_dict(),
             "fatigue": self._fatigue.state_dict(),
         }
+        state["expected_error"] = self._expected_error.state_dict()
         seed = getattr(self._forward_model, "reservoir_seed", None)
         if seed is not None:
             state["reservoir_seed"] = seed
@@ -716,6 +752,9 @@ class Soma(BaseModule):
                 self._fatigue.load_state_dict(state["fatigue"])
             except Exception:
                 log.warning("failed to restore fatigue state", exc_info=True)
+        if "expected_error" in state:
+            self._expected_error.load_state_dict(state["expected_error"])
+
         if self._self_rhythm is not None and "self_rhythm" in state:
             try:
                 self._self_rhythm.deserialize(state["self_rhythm"])

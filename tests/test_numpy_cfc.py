@@ -24,6 +24,7 @@ from kaine.cfc_numpy import (
 from kaine.experiment.seeding import set_global_seed
 from kaine.extras import REQUIREMENTS
 from kaine.modules.chronos.network import CfCNetwork, ForwardPredictionHead
+from kaine.modules.soma.expected_error import ExpectedErrorModel
 from kaine.modules.soma.forward import SubstrateForwardModel
 from kaine.modules.soma.module import Soma
 
@@ -556,6 +557,7 @@ def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
     s._cycle_cursor = "0"
     s._read_interval_s = 1.0
     s._fatigue = MagicMock()
+    s._expected_error = ExpectedErrorModel()
     s._self_rhythm = None
 
     state = s.serialize()
@@ -569,6 +571,7 @@ def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
     s2._cycle_cursor = "0"
     s2._read_interval_s = 1.0
     s2._fatigue = MagicMock()
+    s2._expected_error = ExpectedErrorModel()
     s2._self_rhythm = None
 
     with caplog.at_level(logging.WARNING, logger="kaine.modules.soma.module"):

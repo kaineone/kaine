@@ -33,7 +33,7 @@ flowchart TD
 Three trigger conditions can start a maintenance cycle:
 
 **Primary: fatigue crossing.** Soma maintains a fatigue accumulator —
-cumulative prediction error over waking time, decaying by `fatigue_decay_per_s`
+cumulative [unexpected prediction error](../modules/soma.md) over waking time, decaying by `fatigue_decay_per_s`
 per second. When the accumulator crosses `fatigue_maintenance_threshold`, Soma
 publishes a `soma.fatigue` event with `crossed = True`. Hypnos watches the
 `soma.out` stream via a background task (`_soma_consumer_loop`) and fires
@@ -185,8 +185,8 @@ cognitive cycle — there is no special belief-revision phase.
 
 `phases.affective_reset(thymos)`
 
-Calls `thymos.affective_reset()` — gently restores Thymos's dimensional affect
-state (valence/arousal/dominance) toward its baseline values.
+Calls `thymos.affective_reset()` — snaps Thymos's dimensional affect
+(valence/arousal/dominance) to their configured baselines and zeroes every drive.
 
 **Fatigue reset.** Soma's fatigue accumulator is reset separately: Hypnos
 publishes `hypnos.sleep.completed` **after all phases**, and Soma subscribes

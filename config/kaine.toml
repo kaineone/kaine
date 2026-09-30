@@ -335,6 +335,15 @@ fatigue_decay_per_s = 0.01
 fatigue_maintenance_threshold = 100.0
 regulation_sustain_window_s = 30.0
 regulation_threshold = 0.5
+# Learned expected prediction error per interoceptive channel.
+# Soma learns each channel's typical absolute error and spread over
+# expected_error_tau_s of subjective time; fatigue and regulation integrate
+# only the residual beyond expected + expected_error_band * spread. This lets
+# irreducible variability (e.g. the self-rhythm) be ignored without
+# hardwiring channel sensitivities. See Feldman & Friston 2010,
+# Front. Hum. Neurosci. 4:215, and Seth 2013, Trends Cogn. Sci. 17:565.
+expected_error_tau_s = 600.0
+expected_error_band = 2.0
 # Developmental warm-up (soma-coldstart-regulation-warmup). While the
 # interoceptive forward model is still learning THIS host's substrate baseline,
 # a just-booted (untrained) model predicts poorly and its prediction error

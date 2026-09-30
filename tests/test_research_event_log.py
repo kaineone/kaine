@@ -414,6 +414,37 @@ async def test_content_fields_absent_from_every_record():
 
 
 @pytest.mark.asyncio
+async def test_soma_unexpected_error_is_recorded():
+    """soma.report's unexpected_error (the error beyond Soma's learned
+    expected band, which drives sleep pressure) reaches the research log;
+    a non-allowlisted field does not."""
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
+    bus.push(
+        "soma.out",
+        _event(
+            "soma",
+            "soma.report",
+            {
+                "prediction_error": 0.4,
+                "unexpected_error": 0.07,
+                "wellness": 0.9,
+                "fatigue_value": 57.3,
+                "alerts": [],
+                "metrics": {"cpu_percent": 12.0},
+            },
+        ),
+    )
+    await _run(obs)
+    assert len(sink.rows) == 1
+    rec = sink.rows[0]
+    assert rec["unexpected_error"] == pytest.approx(0.07)
+    assert rec["fatigue_value"] == pytest.approx(57.3)
+    assert "metrics" not in rec
+
+
+@pytest.mark.asyncio
 async def test_eidolon_drift_scalar_only_no_self_model():
     """6.15 — eidolon.drift → scalars kept, no self-model doc."""
     bus = FakeBus()

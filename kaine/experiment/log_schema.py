@@ -68,7 +68,9 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     # --- Prediction / precision ---
     # prediction_error is clamped non-negative at the producer (soma.fatigue:
     # max(0.0, e)); topos likewise reports a non-negative error magnitude.
-    "soma.report": {"prediction_error": NONNEG, "wellness": UNIT, "fatigue_value": UNIT},
+    # Soma's fatigue_value accumulates on a scale of 0..threshold, not a unit
+    # interval; unexpected_error is the learned-band residual, also non-negative.
+    "soma.report": {"prediction_error": NONNEG, "wellness": UNIT, "fatigue_value": NONNEG, "unexpected_error": NONNEG},
     "topos.report": {"prediction_error": NONNEG},
     "phantasia.world_error": {"error": NONNEG},
     # nous confidence is 1 - normalised_entropy, clamped to [0, 1]
@@ -115,7 +117,8 @@ FIELD_RANGES: dict[str, tuple[float, float]] = {
     "familiarity_scalar": UNIT,
     "prediction_error": NONNEG,
     "wellness": UNIT,
-    "fatigue_value": UNIT,
+    "fatigue_value": NONNEG,
+    "unexpected_error": NONNEG,
     "error_magnitude": NONNEG,
 }
 
