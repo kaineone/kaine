@@ -321,7 +321,6 @@ def _format_block_message(
             lines.append(
                 f"  - pid {c['pid']} {c['process_name']} ({c['used_mib']} MiB)"
             )
-        non_shared_present = True
 
     if unexpected_models:
         lines.append(
