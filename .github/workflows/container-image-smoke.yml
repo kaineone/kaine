@@ -72,6 +72,13 @@ jobs:
           echo "exit code: $code"
           test "$code" -eq 2
 
+      - name: The package imports from any working directory
+        run: |
+          # Study children run with their line directory as the working
+          # directory, so `kaine` must not depend on the cwd being /app.
+          docker run --rm -w /tmp kaine:${{ matrix.flavor }} \
+            python -c "import kaine; assert kaine.__file__.startswith('/app/kaine/'), kaine.__file__; print(kaine.__file__)"
+
       - name: Offline model guards are set in the image
         run: |
           docker run --rm kaine:${{ matrix.flavor }} \
