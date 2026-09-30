@@ -346,6 +346,34 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                 f"deployment.tier expected string, got {type(tier_name).__name__}"
             )
 
+    hardware = config.get("hardware")
+    if hardware is not None:
+        if not isinstance(hardware, dict):
+            raise ConfigShapeError(
+                f"hardware expected table, got {type(hardware).__name__}"
+            )
+        allowed = hardware.get("allowed_devices")
+        if allowed is not None:
+            if not isinstance(allowed, list) or not allowed:
+                raise ConfigShapeError(
+                    "hardware.allowed_devices expected a non-empty list"
+                )
+            for idx, entry in enumerate(allowed):
+                if not isinstance(entry, str):
+                    raise ConfigShapeError(
+                        f"hardware.allowed_devices[{idx}] expected string, got {type(entry).__name__}"
+                    )
+        cpu_threads = hardware.get("cpu_threads")
+        if cpu_threads is not None:
+            if (
+                not isinstance(cpu_threads, int)
+                or isinstance(cpu_threads, bool)
+                or cpu_threads < 1
+            ):
+                raise ConfigShapeError(
+                    f"hardware.cpu_threads expected integer >= 1, got {type(cpu_threads).__name__}"
+                )
+
 
 def require_known_keys(
     section: dict[str, Any], allowed: set[str], table_name: str = ""
