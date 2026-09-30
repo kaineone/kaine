@@ -59,6 +59,8 @@ Environment=KAINE_MODELS_DIR=/models
 # Forward the operator's systemctl --user set-environment claim. An unset
 # claim reaches the container empty, so the cycle refuses with exit 2.
 Environment=KAINE_CYCLE_OPERATOR_PRESENT=${KAINE_CYCLE_OPERATOR_PRESENT}
+# Growing data stays under /app, where the volumes are mounted.
+Environment=KAINE_DATA_ROOT=/app
 
 [Service]
 # Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).

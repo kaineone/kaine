@@ -229,6 +229,10 @@ services:
     ports:
       - "127.0.0.1:${KAINE_NEXUS_HOST_PORT:-8088}:8088"
     environment:
+      # Growing data stays under the working directory /app, where the
+      # named volumes are mounted; a host [storage].data_root in the shared
+      # operator config must not redirect container writes.
+      KAINE_DATA_ROOT: /app
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
       # Bus by service name on the bridge network (see kaine-cycle). Nexus reaches
       # the bus through load_bus_config, which reads KAINE_REDIS_URL over the toml.
@@ -291,6 +295,10 @@ services:
     container_name: kaine-cycle
     command: ["python", "-m", "kaine.cycle"]
     environment:
+      # Growing data stays under the working directory /app, where the
+      # named volumes are mounted; a host [storage].data_root in the shared
+      # operator config must not redirect container writes.
+      KAINE_DATA_ROOT: /app
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
       # On the compose bridge network the bus is reached by SERVICE NAME, not the
       # host-facing 127.0.0.1:6479 mapping the shipped config/kaine.toml targets.
@@ -380,6 +388,10 @@ services:
       - -m
       - kaine.research.ignition_study
     environment:
+      # Growing data stays under the working directory /app, where the
+      # named volumes are mounted; a host [storage].data_root in the shared
+      # operator config must not redirect container writes.
+      KAINE_DATA_ROOT: /app
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
       # On the compose bridge network the bus is reached by SERVICE NAME, not the
       # host-facing 127.0.0.1:6479 mapping the shipped config/kaine.toml targets.

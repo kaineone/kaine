@@ -72,6 +72,10 @@ def build_overlay(
 
     study_overlay: dict[str, Any] = {
         "modules": modules,
+        # Pin each study child's data root to its line directory so operator
+        # [storage].data_root overrides cannot lift study writes out of the
+        # per-step sandbox.
+        "storage": {"data_root": "."},
         "soma": {
             # Gestation uses local womb mode, which requires Soma's self-rhythm.
             # A being gestated with the self-rhythm also keeps it for all later
