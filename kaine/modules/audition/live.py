@@ -22,6 +22,7 @@ import asyncio
 import io
 import logging
 import threading
+import time
 import wave
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal, Protocol, runtime_checkable
@@ -69,6 +70,9 @@ class LiveMicConfig:
     # speech utterances, so non-speech is heard rather than gated out upstream.
     continuous_capture: bool = False
     window_ms: int = 500
+    # How often (seconds) the live microphone logs an INFO summary of what it
+    # flushed; the per-chunk lines are DEBUG.
+    summary_interval_s: float = 300.0
 
 
 class _RMSVAD:
@@ -200,6 +204,7 @@ class LiveMicrophone:
         on_state_change: OnStateChange | None = None,
         stream_factory: Callable[..., _AudioStream] | None = None,
         vad_factory: Callable[..., _VAD] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._sink = sink
         self._cfg = config or LiveMicConfig()
@@ -208,6 +213,11 @@ class LiveMicrophone:
         self._on_state_change = on_state_change
         self._stream_factory = stream_factory or _default_stream_factory
         self._vad_factory = vad_factory
+        self._clock = clock or time.monotonic
+        self._summary_chunks = 0
+        self._summary_bytes = 0
+        self._summary_below_min = 0
+        self._summary_started_at: float | None = None
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
         self._active = False
@@ -414,7 +424,7 @@ class LiveMicrophone:
                     in_speech = True
                     silent_run = 0
                     buffer = [frame]
-                    log.info("live mic utterance_started")
+                    log.debug("live mic utterance_started")
                     continue
                 # Silent frames between utterances — discard immediately.
                 continue
@@ -456,10 +466,12 @@ class LiveMicrophone:
     async def _flush_utterance(self, frames: list[bytes], min_frames: int) -> None:
         try:
             if len(frames) < min_frames:
-                log.info(
+                log.debug(
                     "live mic utterance_ended duration_frames=%d (below min)",
                     len(frames),
                 )
+                self._summary_below_min += 1
+                self._maybe_log_summary()
                 return
             pcm = b"".join(frames)
             wav_bytes = encode_wav(
@@ -467,12 +479,15 @@ class LiveMicrophone:
                 sample_rate=self._cfg.sample_rate,
                 channels=self._cfg.channels,
             )
-            log.info(
+            log.debug(
                 "live mic utterance_ended frames=%d pcm_bytes=%d wav_bytes=%d",
                 len(frames),
                 len(pcm),
                 len(wav_bytes),
             )
+            self._summary_chunks += 1
+            self._summary_bytes += len(pcm)
+            self._maybe_log_summary()
             # Playlist provenance (playlist-realtime-av-sync): read the item the
             # shared clock says is playing, so Audition can stamp it on
             # audition.perception. None for the real mic and seeded feed.
@@ -507,6 +522,29 @@ class LiveMicrophone:
         finally:
             # Drop every reference so GC can reclaim the buffer eagerly.
             frames.clear()
+
+    def _maybe_log_summary(self) -> None:
+        """Log one INFO line per summary interval with what the microphone
+        flushed, so an operator can see audio is flowing without a line per
+        chunk. Counts only, never content."""
+        now = self._clock()
+        if self._summary_started_at is None:
+            self._summary_started_at = now
+            return
+        elapsed = now - self._summary_started_at
+        if elapsed < self._cfg.summary_interval_s:
+            return
+        log.info(
+            "live mic: %d chunks (%d pcm bytes) flushed, %d below minimum, in the last %.0f s",
+            self._summary_chunks,
+            self._summary_bytes,
+            self._summary_below_min,
+            elapsed,
+        )
+        self._summary_chunks = 0
+        self._summary_bytes = 0
+        self._summary_below_min = 0
+        self._summary_started_at = now
 
     def _set_active(self, active: bool) -> None:
         with self._lock:
