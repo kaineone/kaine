@@ -79,6 +79,13 @@ jobs:
           docker run --rm -w /tmp kaine:${{ matrix.flavor }} \
             python -c "import kaine; assert kaine.__file__.startswith('/app/kaine/'), kaine.__file__; print(kaine.__file__)"
 
+      - name: The default vision encoder's modeling code loads from any directory
+        run: |
+          # The shipped Topos backend is InternVideo-Next: its vendored code
+          # and dependencies must import in the image, from a child's cwd.
+          docker run --rm -w /tmp kaine:${{ matrix.flavor }} python -c \
+            "from kaine.modules.topos.internvideo_next_loader import _ensure_attention_backend, _import_vendored_classes; _ensure_attention_backend(); _import_vendored_classes(); print('vendored encoder imports')"
+
       - name: Offline model guards are set in the image
         run: |
           docker run --rm kaine:${{ matrix.flavor }} \
