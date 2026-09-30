@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 # Per-fork developmental-stage file. Under the per-fork state root, like other
 # per-fork state, so a fork inherits the parent's stage.
@@ -73,7 +74,7 @@ def has_prior_lived_history(
     The stage file itself is excluded: its absence is the signal that lets
     :func:`resolve_boot_stage` apply the preserved-being invariant.
     """
-    root = Path(state_root)
+    root = resolve(state_root)
     if not root.exists():
         return False
 
@@ -90,7 +91,7 @@ def has_prior_lived_history(
         root / "hypnos" / "consolidation_divergence.json",
         root / "perception" / "desired.json",
     ]
-    stage_target = Path(stage_path) if stage_path else STAGE_PATH
+    stage_target = resolve(Path(stage_path) if stage_path else STAGE_PATH)
     excluded = {stage_target.resolve()}
     for indicator in indicators:
         try:
@@ -240,7 +241,7 @@ def read_stage(path: Path | None = None) -> StageState | None:
     apply the preserved-being invariant: the *absence* of a file is the signal,
     and it means different things for a fresh entity versus one with prior lived
     history."""
-    target = path or STAGE_PATH
+    target = resolve(path or STAGE_PATH)
     if not target.exists():
         return None
     try:
@@ -252,7 +253,8 @@ def read_stage(path: Path | None = None) -> StageState | None:
 
 
 def write_stage(state: StageState, path: Path | None = None) -> None:
-    write_json_atomic(path or STAGE_PATH, state.to_dict())
+    target = resolve(path or STAGE_PATH)
+    write_json_atomic(target, state.to_dict())
 
 
 def resolve_boot_stage(

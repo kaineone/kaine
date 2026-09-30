@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 ESCALATION_PATH = Path("state/cycle/escalation.json")
 
@@ -55,7 +56,7 @@ _atomic_write = write_json_atomic
 
 
 def read_escalation(path: Path | None = None) -> EscalationRecord:
-    target = path or ESCALATION_PATH
+    target = resolve(path or ESCALATION_PATH)
     if not target.exists():
         return EscalationRecord()
     try:
@@ -65,7 +66,8 @@ def read_escalation(path: Path | None = None) -> EscalationRecord:
 
 
 def write_escalation(rec: EscalationRecord, path: Path | None = None) -> None:
-    _atomic_write(path or ESCALATION_PATH, rec.to_dict())
+    target = resolve(path or ESCALATION_PATH)
+    _atomic_write(target, rec.to_dict())
 
 
 def clear_escalation(path: Path | None = None) -> EscalationRecord:

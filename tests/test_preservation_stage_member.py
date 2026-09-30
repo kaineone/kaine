@@ -38,6 +38,13 @@ def _plaintext_encryptor():
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
 
+@pytest.fixture(autouse=True)
+def _restore_stage_path(monkeypatch):
+    """These tests assign stage.STAGE_PATH directly; restore it afterwards so
+    the redirect never leaks into later tests."""
+    monkeypatch.setattr(stage, "STAGE_PATH", stage.STAGE_PATH)
+
+
 @pytest_asyncio.fixture
 async def eidolon(tmp_path):
     bus = _FakeBus()

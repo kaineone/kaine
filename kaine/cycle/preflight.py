@@ -43,6 +43,7 @@ import httpx
 from kaine.config import require_known_keys
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 PREFLIGHT_PATH = Path("state/cycle/gpu_preflight.json")
 DEFAULT_OVERRIDE_ENV = "KAINE_GPU_PREFLIGHT_APPROVED"
@@ -227,7 +228,7 @@ def _kaine_services_up() -> dict[str, bool]:
 
 
 def _write_state(result: PreflightResult, path: Path | None = None) -> None:
-    target = path or PREFLIGHT_PATH
+    target = resolve(path or PREFLIGHT_PATH)
     try:
         write_json_atomic(target, result.to_dict())
     except OSError:
@@ -406,7 +407,7 @@ def run_preflight(
 
 def read_preflight_state(path: Path | None = None) -> dict[str, Any] | None:
     """Read the last preflight snapshot for read-only display. None if absent."""
-    target = path or PREFLIGHT_PATH
+    target = resolve(path or PREFLIGHT_PATH)
     if not target.exists():
         return None
     try:

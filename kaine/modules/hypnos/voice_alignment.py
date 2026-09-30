@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from kaine.storage import resolve
+
 log = logging.getLogger(__name__)
 
 
@@ -184,6 +186,7 @@ def write_consolidation_divergence(
     ``assess_divergence``). Mirrors the AES-256-GCM at-rest envelope used by the
     rest of ``state/`` when state encryption is enabled.
     """
+    path = resolve(path)
     payload = metric.as_payload()
     payload["sleep_index"] = None if sleep_index is None else int(sleep_index)
     payload["ts"] = time.time()
@@ -214,6 +217,7 @@ def read_consolidation_divergence(
     ``None`` rather than raising, so the lifecycle assessment never breaks on a
     fresh install. Transparently decrypts via the active state encryptor.
     """
+    path = resolve(path)
     try:
         if not path.is_file():
             return None

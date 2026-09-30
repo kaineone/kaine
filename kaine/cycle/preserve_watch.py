@@ -24,6 +24,7 @@ from typing import Any, Awaitable, Callable
 
 from kaine.cycle.control_state import pop_freeze, push_freeze
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -54,18 +55,19 @@ def new_request(reason: str, stop: bool) -> PreserveRequest:
 
 def write_request(req: PreserveRequest, path: Path | None = None) -> None:
     """Write a preservation request atomically."""
+    target = resolve(path or REQUEST_PATH)
     payload = {
         "request_id": req.request_id,
         "reason": req.reason,
         "stop": req.stop,
         "requested_at": req.requested_at,
     }
-    write_json_atomic(path or REQUEST_PATH, payload)
+    write_json_atomic(target, payload)
 
 
 def read_request(path: Path | None = None) -> PreserveRequest | None:
     """Read a preservation request, or ``None`` if missing or malformed."""
-    target = path or REQUEST_PATH
+    target = resolve(path or REQUEST_PATH)
     if not target.exists():
         return None
     try:
@@ -96,12 +98,13 @@ def read_request(path: Path | None = None) -> PreserveRequest | None:
 
 def write_result(result: dict, path: Path | None = None) -> None:
     """Write a preservation result atomically."""
-    write_json_atomic(path or RESULT_PATH, result)
+    target = resolve(path or RESULT_PATH)
+    write_json_atomic(target, result)
 
 
 def read_result(path: Path | None = None) -> dict | None:
     """Read a preservation result, or ``None`` if missing or malformed."""
-    target = path or RESULT_PATH
+    target = resolve(path or RESULT_PATH)
     if not target.exists():
         return None
     try:

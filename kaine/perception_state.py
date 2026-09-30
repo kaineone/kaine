@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ _atomic_write = write_json_atomic
 
 
 def read_runtime(path: Path | None = None) -> PerceptionState:
-    target = path or RUNTIME_PATH
+    target = resolve(path or RUNTIME_PATH)
     if not target.exists():
         return PerceptionState()
     try:
@@ -131,7 +132,8 @@ def read_runtime(path: Path | None = None) -> PerceptionState:
 
 
 def write_runtime(state: PerceptionState, path: Path | None = None) -> None:
-    _atomic_write(path or RUNTIME_PATH, state.to_dict())
+    target = resolve(path or RUNTIME_PATH)
+    _atomic_write(target, state.to_dict())
 
 
 def update_audio_runtime(
@@ -165,7 +167,7 @@ def update_video_runtime(
 
 
 def read_desired(path: Path | None = None) -> DesiredState:
-    target = path or DESIRED_PATH
+    target = resolve(path or DESIRED_PATH)
     if not target.exists():
         return DesiredState()
     try:
@@ -183,16 +185,18 @@ def read_desired(path: Path | None = None) -> DesiredState:
 
 
 def write_desired_audio(active: bool, path: Path | None = None) -> DesiredState:
+    target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
     updated = replace(cur, audio_live_desired=bool(active))
-    _atomic_write(path or DESIRED_PATH, updated.to_dict())
+    _atomic_write(target, updated.to_dict())
     return updated
 
 
 def write_desired_video(active: bool, path: Path | None = None) -> DesiredState:
+    target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
     updated = replace(cur, video_live_desired=bool(active))
-    _atomic_write(path or DESIRED_PATH, updated.to_dict())
+    _atomic_write(target, updated.to_dict())
     return updated
 
 
@@ -216,6 +220,7 @@ def write_desired_locus(
     ``gestation`` and ``locked_by != "gestation"``, the locus stays ``virtual``
     and the lock and attribution remain unchanged. The gestation holder itself
     (``locked_by="gestation"``) may set anything, including unlocking."""
+    target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
     if cur.locus_locked and cur.locked_by == "gestation" and locked_by != "gestation":
         log.debug("locus held by gestation; ignoring non-gestation write")
@@ -226,7 +231,7 @@ def write_desired_locus(
         locus_locked=cur.locus_locked if locked is None else bool(locked),
         locked_by=cur.locked_by if locked_by is None else _coerce_locked_by(locked_by),
     )
-    _atomic_write(path or DESIRED_PATH, updated.to_dict())
+    _atomic_write(target, updated.to_dict())
     return updated
 
 
@@ -279,6 +284,7 @@ def select_virtual_feed(path: Path | None = None) -> DesiredState:
     Honours the operator lock: if ``locus_locked`` is set, the locus is left
     untouched (the operator's explicit lock wins over the configured feed) and
     the unchanged state is returned so the caller can warn."""
+    target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
     if cur.locus_locked:
         return cur
@@ -288,7 +294,7 @@ def select_virtual_feed(path: Path | None = None) -> DesiredState:
         audio_live_desired=True,
         video_live_desired=True,
     )
-    _atomic_write(path or DESIRED_PATH, updated.to_dict())
+    _atomic_write(target, updated.to_dict())
     return updated
 
 
@@ -328,7 +334,7 @@ def evaluate_locus_switch(
 
 
 def reset_for_tests(path_runtime: Path | None = None, path_desired: Path | None = None) -> None:
-    for target in (path_runtime or RUNTIME_PATH, path_desired or DESIRED_PATH):
+    for target in (resolve(path_runtime or RUNTIME_PATH), resolve(path_desired or DESIRED_PATH)):
         if target.exists():
             try:
                 target.unlink()

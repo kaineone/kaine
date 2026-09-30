@@ -25,6 +25,7 @@ from kaine.cycle.spot import Spot, SpotConfig
 from kaine.lifecycle.manager import ForkManager
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
+from kaine.storage import resolve
 
 if TYPE_CHECKING:
     from kaine.cycle.unattended_gate import Condition
@@ -280,7 +281,7 @@ def check_spot_condition(
     if cfg.max_restart_attempts < 1:
         return Condition(6, CONDITION_NAMES[6], False, "no restart ladder")
 
-    escalation_dir = escalation_state.ESCALATION_PATH.parent
+    escalation_dir = resolve(escalation_state.ESCALATION_PATH).parent
     try:
         escalation_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
@@ -293,7 +294,7 @@ def check_spot_condition(
         )
 
     if cfg.incident_log.enabled:
-        incident_dir = Path(cfg.incident_log.path)
+        incident_dir = resolve(Path(cfg.incident_log.path))
         try:
             incident_dir.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(

@@ -59,13 +59,14 @@ def make_metrics_snapshot(
     """
 
     def metrics_snapshot() -> dict[str, Any]:
-        if not runtime_path.exists():
+        path = resolve(runtime_path)
+        if not path.exists():
             return {
                 "cycle_status": "not running",
                 "hint": "start the cycle with `python -m kaine.cycle`",
             }
         try:
-            raw = json.loads(runtime_path.read_text())
+            raw = json.loads(path.read_text())
         except Exception:
             return {"cycle_status": "runtime.json unreadable"}
         return {

@@ -18,6 +18,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 BIRTH_REQUEST_PATH = Path("state/lifecycle/birth_request.json")
 BIRTH_ACK_PATH = Path("state/lifecycle/birth_ack.json")
@@ -63,7 +64,7 @@ def new_request(gestation_started_at: str | None) -> BirthRequest:
 
 def write_request(req: BirthRequest, path: Path | None = None) -> None:
     """Write the birth request record atomically."""
-    target = path or BIRTH_REQUEST_PATH
+    target = resolve(path or BIRTH_REQUEST_PATH)
     payload = {
         "request_id": req.request_id,
         "requested_at": req.requested_at,
@@ -74,7 +75,7 @@ def write_request(req: BirthRequest, path: Path | None = None) -> None:
 
 def read_request(path: Path | None = None) -> BirthRequest | None:
     """Return the birth request record, or None if missing or malformed."""
-    target = path or BIRTH_REQUEST_PATH
+    target = resolve(path or BIRTH_REQUEST_PATH)
     data = _read_json_object(target)
     if data is None:
         return None
@@ -94,7 +95,7 @@ def read_request(path: Path | None = None) -> BirthRequest | None:
 
 def clear_request(path: Path | None = None) -> None:
     """Remove the birth request file if present."""
-    target = path or BIRTH_REQUEST_PATH
+    target = resolve(path or BIRTH_REQUEST_PATH)
     try:
         target.unlink()
     except FileNotFoundError:
@@ -104,7 +105,7 @@ def clear_request(path: Path | None = None) -> None:
 
 def write_ack(ack: BirthAck, path: Path | None = None) -> None:
     """Write the acknowledgement record atomically."""
-    target = path or BIRTH_ACK_PATH
+    target = resolve(path or BIRTH_ACK_PATH)
     payload = {
         "request_id": ack.request_id,
         "acknowledged_at": ack.acknowledged_at,
@@ -114,7 +115,7 @@ def write_ack(ack: BirthAck, path: Path | None = None) -> None:
 
 def read_ack(path: Path | None = None) -> BirthAck | None:
     """Return the acknowledgement record, or None if missing or malformed."""
-    target = path or BIRTH_ACK_PATH
+    target = resolve(path or BIRTH_ACK_PATH)
     data = _read_json_object(target)
     if data is None:
         return None
@@ -130,7 +131,7 @@ def read_ack(path: Path | None = None) -> BirthAck | None:
 
 def clear_ack(path: Path | None = None) -> None:
     """Remove the acknowledgement file if present."""
-    target = path or BIRTH_ACK_PATH
+    target = resolve(path or BIRTH_ACK_PATH)
     try:
         target.unlink()
     except FileNotFoundError:

@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 CONTROL_PATH = Path("state/cycle/control.json")
 
@@ -106,7 +107,7 @@ _atomic_write = write_json_atomic
 
 
 def read_control(path: Path | None = None) -> CycleControl:
-    target = path or CONTROL_PATH
+    target = resolve(path or CONTROL_PATH)
     if not target.exists():
         return CycleControl()
     try:
@@ -116,7 +117,8 @@ def read_control(path: Path | None = None) -> CycleControl:
 
 
 def write_control(state: CycleControl, path: Path | None = None) -> None:
-    _atomic_write(path or CONTROL_PATH, state.to_dict())
+    target = resolve(path or CONTROL_PATH)
+    _atomic_write(target, state.to_dict())
 
 
 def _from_stack(

@@ -5,6 +5,7 @@
 loaded ``config/kaine.toml`` (+ ``config/secrets.toml``)."""
 from __future__ import annotations
 
+import dataclasses
 import logging
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from kaine.setup import speech_models
+from kaine.storage import resolve
 
 from .prober import DependencySpec, HealthProber
 from .probes import (
@@ -346,12 +348,14 @@ def load_health_prober(
     # autonomous safety-net incident path (for the preservation panel backfill).
     # Both fall back to the canonical defaults when the section is absent.
     eval_paths = (cfg.get("evaluation") or {}).get("paths") or {}
-    evaluation_logs_path = Path(
-        str(eval_paths.get("evaluation_logs", "data/evaluation"))
+    evaluation_logs_path = resolve(
+        Path(str(eval_paths.get("evaluation_logs", "data/evaluation")))
     )
-    preservation_incident_path = Path(
-        str((cfg.get("preservation") or {}).get("incident_path", "state/cycle/preservation"))
+    preservation_incident_path = resolve(
+        Path(str((cfg.get("preservation") or {}).get("incident_path", "state/cycle/preservation")))
     )
+
+    _defaults = {f.name: f.default for f in dataclasses.fields(HealthProber)}
 
     return HealthProber(
         modules_enabled=modules_enabled,
@@ -366,6 +370,9 @@ def load_health_prober(
         cache_ttl_s=cache_ttl_s,
         evaluation_logs_path=evaluation_logs_path,
         preservation_incident_path=preservation_incident_path,
-        # spot_control_path / spot_escalation_path / runs_manifest_root stay at
-        # their dataclass defaults (the canonical paths the cycle writes).
+        cycle_runtime_path=resolve(_defaults["cycle_runtime_path"]),
+        runs_manifest_root=resolve(_defaults["runs_manifest_root"]),
+        spot_control_path=resolve(_defaults["spot_control_path"]),
+        spot_escalation_path=resolve(_defaults["spot_escalation_path"]),
+        gpu_preflight_path=resolve(_defaults["gpu_preflight_path"]),
     )
