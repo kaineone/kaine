@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -24,6 +25,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 # Status vocabulary (kept as plain strings to match the JSON contract).
 UP = "up"
@@ -405,7 +408,7 @@ async def probe_chat_llm(
                 if isinstance(body, dict) and body.get("is_sleeping") is True:
                     return UP, detail + " (asleep; loads on the next request)"
         except (httpx.HTTPError, ValueError):
-            pass
+            log.debug("organ /props unavailable; sleep state unknown", exc_info=True)
         return UP, detail
 
 
