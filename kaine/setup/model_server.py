@@ -239,7 +239,14 @@ def health_check(
 # --------------------------------------------------------------------------
 
 
-def render_systemd_unit(launch_cmd: list[str]) -> str:
+def render_systemd_unit(
+    launch_cmd: list[str],
+    env_extra: dict[str, str] | None = None,
+) -> str:
+    extra = env_extra if env_extra is not None else dict(_ORGAN_ENV)
+    env_lines = "".join(
+        f"Environment={key}={value}\n" for key, value in extra.items()
+    )
     """Render a ``Restart=on-failure`` user unit for durable supervision."""
     exec_start = " ".join(launch_cmd)
     return (
@@ -248,6 +255,7 @@ def render_systemd_unit(launch_cmd: list[str]) -> str:
         "After=network.target\n"
         "\n"
         "[Service]\n"
+        + env_lines +
         "Type=simple\n"
         f"ExecStart={exec_start}\n"
         "Restart=on-failure\n"
@@ -300,6 +308,16 @@ def sleep_idle_seconds_from_config(lingua: dict[str, Any]) -> int:
     return value
 
 
+_ORGAN_ENV: dict[str, str] = {}
+
+
+def _update_organ_env(config: dict[str, Any]) -> None:
+    global _ORGAN_ENV
+    from kaine.setup.device_map import device_map, native_organ_env
+
+    _ORGAN_ENV = native_organ_env(device_map(config))
+
+
 def _resolve_launch(
     config: dict[str, Any], *, override_bin: Optional[str]
 ) -> tuple[Optional[Path], list[str], str, str, Optional[str]]:
@@ -343,6 +361,7 @@ def _resolve_launch(
         lora_adapter=lora_adapter,
         sleep_idle_seconds=sleep_idle_seconds_from_config(lingua),
     )
+    _update_organ_env(config)
     return binary, cmd, chat_url, alias, api_key
 
 
@@ -449,7 +468,12 @@ def _start_systemd(cmd: list[str], *, run: Any, emit: Any) -> bool:
         return False
 
 
-def _start_background(cmd: list[str], *, emit: Any) -> bool:
+def _start_background(
+    cmd: list[str],
+    *,
+    emit: Any,
+    env_extra: dict[str, str] | None = None,
+) -> bool:
     state_dir = resolve(STATE_DIR)
     pidfile = resolve(PIDFILE)
     logfile = resolve(LOGFILE)
@@ -465,12 +489,14 @@ def _start_background(cmd: list[str], *, emit: Any) -> bool:
         # live log fd while the parent's copy is closed as soon as Popen returns
         # (no leaked file handle).
         with open(logfile, "ab") as log:
+            extra = env_extra if env_extra is not None else dict(_ORGAN_ENV)
             proc = subprocess.Popen(
                 cmd,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
+                env={**os.environ, **extra},
             )
         pidfile.write_text(str(proc.pid))
         emit(f"model server started (pid {proc.pid}; log {logfile}).\n")

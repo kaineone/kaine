@@ -500,8 +500,12 @@ def run_wizard(
     device_consumers_fn: Callable[[], list[dict]] | None = None,
     defaults: bool = False,
     recommend_tier_fn: Callable[[], Any] | None = None,
+    services_up_fn: Callable[[], dict[str, bool]] | None = None,
 ) -> WizardResult:
     """Run the wizard's step logic and return the assembled operator-config.
+
+    ``services_up_fn`` detects which external services are already listening so
+    the wizard can ask whether each one is shared with other applications.
 
     ``device_consumers_fn`` returns per-device process consumers used by the
     hardware inventory step.
@@ -592,6 +596,7 @@ def run_wizard(
                     "min_free_vram_gb", 2.0
                 ))
             ),
+            "services_up": (services_up_fn() if services_up_fn else {}),
         },
     )
     run_step(
@@ -608,8 +613,17 @@ def run_wizard(
         out=out,
         defaults=defaults,
     )
+    from kaine.setup.hardware_steps import shared_services_step
+
     run_step(
         device_step(propose_device_assignments),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+    run_step(
+        shared_services_step(),
         ctx,
         input_fn=input_fn,
         out=out,

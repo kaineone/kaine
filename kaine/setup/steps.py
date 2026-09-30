@@ -44,11 +44,16 @@ OWNED_KEYS: frozenset[str] = frozenset(
     {
         "hardware.allowed_devices",
         "hardware.cpu_threads",
+        "hardware.devices.organ",
+        "hardware.devices.vision",
         "hypnos.voice_alignment.training_device",
         "phantasia.training_device",
         "topos.device",
         "embedding.device",
         "audition.emotion_device",
+        "services.model_server.shared",
+        "services.chatterbox.shared",
+        "services.speaches.shared",
     }
 )
 

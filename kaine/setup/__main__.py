@@ -19,7 +19,9 @@ from typing import Any, Callable, TextIO
 
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
 from kaine.hardware import device_consumers, recommend_tier
+from kaine.net import SERVICE_PORTS, port_listening
 from kaine.setup import tomlwriter
+from kaine.setup.device_map import compose_gpu_env, device_map, write_env_values
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
 
@@ -575,6 +577,9 @@ def main(
         probe_trainer=(None if args.defaults else _probe_trainer),
         device_consumers_fn=device_consumers,
         recommend_tier_fn=recommend_tier,
+        services_up_fn=lambda: {
+            name: port_listening(port) for name, port in SERVICE_PORTS.items()
+        },
         defaults=args.defaults,
     )
 
@@ -585,6 +590,17 @@ def main(
     operator_path: Path = args.operator_path
     operator_path.parent.mkdir(parents=True, exist_ok=True)
     operator_path.write_text(tomlwriter.dumps(result.config))
+
+    compose_env_path = Path("compose/.env")
+    devmap = device_map(result.config)
+    if compose_env_path.exists() and devmap:
+        gpu_env = compose_gpu_env(devmap)
+        if gpu_env:
+            write_env_values(compose_env_path, gpu_env)
+            out(
+                "wrote compose GPU variables: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(gpu_env.items()))
+            )
 
     # Offer the implied extras install.
     _install_extras(

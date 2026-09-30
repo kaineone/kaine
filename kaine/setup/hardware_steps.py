@@ -357,11 +357,59 @@ def device_step(
         for address, dev in final.items():
             _apply_address(ctx.config, address, dev)
 
+        hardware = ctx.config.setdefault("hardware", {})
+        hardware["devices"] = {
+            "organ": final["hypnos.voice_alignment.training_device"],
+            "vision": final["topos.device"],
+        }
+
     return Step(
         id="device-assignments",
         title="Device assignments",
         explanation=explanation,
         fields=fields,
         applies=lambda _ctx: True,
+        apply=apply,
+    )
+
+
+def shared_services_step() -> Step:
+    """Return the shared-services confirmation step."""
+
+    def _detected(ctx: StepContext) -> list[str]:
+        services_up = ctx.extra.get("services_up") or {}
+        return sorted(name for name, listening in services_up.items() if listening)
+
+    def explanation(ctx: StepContext) -> list[str]:
+        lines = [f"  {name}" for name in _detected(ctx)]
+        lines.append(
+            "  KAINE never stops, restarts, or evicts a shared service."
+        )
+        return lines
+
+    def fields(ctx: StepContext) -> tuple[Field, ...]:
+        return tuple(
+            Field(
+                name,
+                f"Is {name} shared with other applications on this machine?",
+                "bool",
+                default=False,
+            )
+            for name in _detected(ctx)
+        )
+
+    def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
+        services = ctx.config.setdefault("services", {})
+        for name in _detected(ctx):
+            answer = answers.get(name)
+            if answer is not None:
+                services[name] = {"shared": bool(answer)}
+
+    return Step(
+        id="shared-services",
+        title="Services shared with other applications",
+        explanation=explanation,
+        fields=fields,
+        applies=lambda ctx: bool(_detected(ctx)),
         apply=apply,
     )
