@@ -21,6 +21,7 @@ from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_c
 from kaine.hardware import recommend_tier
 from kaine.setup import tomlwriter
 from kaine.setup.wizard import WizardResult, run_wizard
+from kaine.storage import install_data_root
 
 DEFAULT_OPERATOR_PATH = OPERATOR_CONFIG_PATH
 # Where Nexus reads its operator token (kaine.nexus.config.load_nexus_config).
@@ -553,6 +554,15 @@ def main(
     except FileNotFoundError:
         write(f"shipped config not found at {args.config_path}\n")
         return 2
+
+    # Install the process data root from the shipped+operator overlay before any
+    # provisioning writes.
+    try:
+        install_data_root(load_kaine_config())
+    except Exception as exc:
+        # Without a config the study/setup still runs with paths relative to
+        # the working directory, exactly as before a data root existed.
+        print(f"kaine: could not load config; no data root installed ({exc})", file=sys.stderr)
 
     host = _describe_host_with_cpu()
 

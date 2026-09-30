@@ -48,6 +48,7 @@ from kaine.modules.hypnos.capability_eval import (
     EmptyAbliterationProbeSetError,
     ServedAbliterationProbeScorer,
 )
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -287,7 +288,7 @@ def write_abliteration_verdict(
     marker on failure — never any model output text, matching the zero-content
     policy of the voice-alignment audit trail.
     """
-    p = Path(path)
+    p = resolve(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp": time.time(),

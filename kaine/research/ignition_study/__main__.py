@@ -8,6 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from kaine.config import load_kaine_config
 from kaine.research.ignition_study import analysis
 from kaine.research.ignition_study.plan import (
     DEFAULT_GESTATION_BUDGET_SECONDS,
@@ -25,6 +26,7 @@ from kaine.research.ignition_study.runner import (
     StudyLocked,
     StudyRunner,
 )
+from kaine.storage import install_data_root, resolve
 
 
 def _default_order() -> list[str]:
@@ -74,7 +76,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
     }
     validate_plan(plan)
 
-    study_dir = (
+    study_dir = resolve(
         Path(args.study_dir)
         if args.study_dir
         else Path("studies") / args.study_id
@@ -134,6 +136,13 @@ def _cmd_analyse(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        install_data_root(load_kaine_config())
+    except Exception as exc:
+        # Without a config the study/setup still runs with paths relative to
+        # the working directory, exactly as before a data root existed.
+        print(f"kaine: could not load config; no data root installed ({exc})", file=sys.stderr)
+
     parser = argparse.ArgumentParser(
         prog="python -m kaine.research.ignition_study"
     )

@@ -27,6 +27,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from kaine.storage import resolve
+
 # Historical default: model weights sit beside the entity's state on a local
 # checkout. The container overrides this with KAINE_MODELS_DIR=/models so weights
 # land on the shared read-mostly volume rather than the entity-state volume.
@@ -40,9 +42,10 @@ def models_dir() -> Path:
 
     ``$KAINE_MODELS_DIR`` when set (the container points it at the ``kaine-models``
     volume mount, ``/models``); otherwise the historical ``state/models`` local
-    layout. The value is read on each call so a process that sets the variable
-    before importing the weight-path modules sees it — the container sets it in
-    the service ``environment`` block, before the Python process starts.
+    layout, resolved under the process-wide data root if one is installed. The
+    value is read on each call so a process that sets the variable before
+    importing the weight-path modules sees it — the container sets it in the
+    service ``environment`` block, before the Python process starts.
     """
     override = os.environ.get(MODELS_DIR_ENV_VAR)
-    return Path(override) if override else DEFAULT_MODELS_DIR
+    return Path(override) if override else resolve(DEFAULT_MODELS_DIR)

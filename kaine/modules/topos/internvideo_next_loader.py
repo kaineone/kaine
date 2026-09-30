@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.model_paths import models_dir
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -265,9 +266,9 @@ def load_internvideo_next(
     # the /models volume but the frozen constant still pointed at the local
     # state/models default). models_dir() re-reads the env, so call-time is correct.
     if weights_dir is not None:
-        wdir = Path(weights_dir)
+        wdir = resolve(weights_dir)
     else:
-        wdir = models_dir() / "internvideo_next_base_p14_res224_f16"
+        wdir = resolve(models_dir() / "internvideo_next_base_p14_res224_f16")
     if not wdir.exists():
         raise FileNotFoundError(
             f"InternVideo-Next weights dir not found: {wdir}. Fetch them once at "

@@ -38,6 +38,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from kaine.setup.organ import ORGAN_GGUF_REPO
+from kaine.storage import install_data_root, resolve
 
 # Override env for an explicitly-located server binary (any backend / custom build).
 SERVER_BIN_ENV = "KAINE_MODEL_SERVER_BIN"
@@ -449,18 +450,21 @@ def _start_systemd(cmd: list[str], *, run: Any, emit: Any) -> bool:
 
 
 def _start_background(cmd: list[str], *, emit: Any) -> bool:
-    existing = _read_pidfile(PIDFILE)
+    state_dir = resolve(STATE_DIR)
+    pidfile = resolve(PIDFILE)
+    logfile = resolve(LOGFILE)
+    existing = _read_pidfile(pidfile)
     if existing and _pid_alive(existing):
         emit(f"model server already running (pid {existing}).\n")
         return True
     try:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        state_dir.mkdir(parents=True, exist_ok=True)
         # Popen dup()s this fd into the launched server, which keeps its own
         # copy for the life of the process. The parent only needs it open across
         # the Popen call, so scope it to a context manager: the child inherits a
         # live log fd while the parent's copy is closed as soon as Popen returns
         # (no leaked file handle).
-        with open(LOGFILE, "ab") as log:
+        with open(logfile, "ab") as log:
             proc = subprocess.Popen(
                 cmd,
                 stdout=log,
@@ -468,8 +472,8 @@ def _start_background(cmd: list[str], *, emit: Any) -> bool:
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
             )
-        PIDFILE.write_text(str(proc.pid))
-        emit(f"model server started (pid {proc.pid}; log {LOGFILE}).\n")
+        pidfile.write_text(str(proc.pid))
+        emit(f"model server started (pid {proc.pid}; log {logfile}).\n")
         return True
     except Exception as exc:
         emit(f"background launch failed ({exc}).\n")
@@ -513,6 +517,7 @@ def cmd_stop(
     """Stop the supervised server (systemd unit or the background process)."""
     emit = out if out is not None else sys.stdout.write
     run = runner if runner is not None else subprocess.run
+    pidfile = resolve(PIDFILE)
 
     stopped = False
     # systemd path (best-effort; ignore if the unit is not installed).
@@ -525,7 +530,7 @@ def cmd_stop(
             emit(f"could not stop systemd unit ({exc}).\n")
 
     # Background-process path.
-    pid = _read_pidfile(PIDFILE)
+    pid = _read_pidfile(pidfile)
     if pid is not None and _pid_alive(pid):
         try:
             os.kill(pid, 15)  # SIGTERM
@@ -534,14 +539,14 @@ def cmd_stop(
         except Exception as exc:
             emit(f"could not signal pid {pid} ({exc}).\n")
     try:
-        if PIDFILE.exists():
-            PIDFILE.unlink()
+        if pidfile.exists():
+            pidfile.unlink()
     except OSError as exc:
         # Non-fatal: the pidfile may already be gone (race with another
         # stop) or unremovable (permissions). The server has already been
         # signalled/disabled above; surface it so a stale pidfile doesn't
         # go unexplained on the next `status`/`start`.
-        emit(f"could not remove pidfile {PIDFILE} ({exc}).\n")
+        emit(f"could not remove pidfile {pidfile} ({exc}).\n")
 
     if not stopped:
         emit("no supervised model server found to stop.\n")
@@ -568,6 +573,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         help=f"explicit server binary path (else {SERVER_BIN_ENV} / auto-detect)",
     )
     args = parser.parse_args(argv)
+
+    install_data_root(_load_config())
 
     if args.command == "start":
         return cmd_start(override_bin=args.bin)

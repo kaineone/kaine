@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from kaine.storage import resolve
+
 #: Default evaluation root. Sink files live under this (directly or nested).
 DEFAULT_ROOT = Path("data/evaluation")
 
@@ -138,11 +140,12 @@ def discover_run_ids(root: Path | str = DEFAULT_ROOT) -> RunDiscovery:
     """
     from kaine.security.crypto import get_state_encryptor
 
+    root = resolve(root)
     encryptor = get_state_encryptor()
     seen: set[str] = set()
     unreadable = 0
 
-    for path in _iter_jsonl_files(Path(root)):
+    for path in _iter_jsonl_files(root):
         try:
             with path.open("r", encoding="utf-8") as fh:
                 for line in fh:
@@ -186,11 +189,12 @@ def load_run_records(
     """
     from kaine.security.crypto import get_state_encryptor
 
+    root = resolve(root)
     encryptor = get_state_encryptor()
     out = RunRecords(run_id=run_id)
     target = str(run_id)
 
-    for path in _iter_jsonl_files(Path(root)):
+    for path in _iter_jsonl_files(root):
         stream = _stream_name_for(path)
         try:
             # Stream the file line-by-line rather than reading it whole into RAM

@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.model_paths import models_dir
+from kaine.storage import resolve
 
 # The published organ's repository ids (HF-repo-id-as-served-alias convention).
 ORGAN_GGUF_REPO = "kaineone/Qwen3.5-4B-abliterated-GGUF"
@@ -60,9 +61,19 @@ ORGAN_GGUF_FILE = "KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf"
 ORGAN_GGUF_DIR = models_dir() / "Qwen3.5-4B-abliterated-GGUF"
 
 
+def organ_gguf_dir() -> Path:
+    """Call-time model-weights subdirectory for the organ GGUF.
+
+    The import-time ``ORGAN_GGUF_DIR`` constant is kept for callers that import
+    it, but any code that actually accesses the directory must resolve it at
+    use time so ``KAINE_MODELS_DIR`` and the process data root take effect.
+    """
+    return models_dir() / "Qwen3.5-4B-abliterated-GGUF"
+
+
 def served_gguf_path() -> Path:
     """Deterministic local path of the downloaded GGUF the server serves with ``-m``."""
-    return ORGAN_GGUF_DIR / ORGAN_GGUF_FILE
+    return organ_gguf_dir() / ORGAN_GGUF_FILE
 
 # Rough download sizes (GiB) for the operator-facing "bytes up front" message.
 # The 4B GGUF (q4-ish) is a few GiB; the safetensors base is the full-precision
@@ -194,9 +205,10 @@ def _gguf_download_cmd() -> list[str]:
     dir, so the server can be launched with ``-m <served_gguf_path()>`` (a real file
     path). ``--local-dir`` makes the landing path known and stable, independent of
     the hub-cache snapshot layout."""
+    local_dir = organ_gguf_dir()
     return [
         "hf", "download", ORGAN_GGUF_REPO, ORGAN_GGUF_FILE,
-        "--local-dir", str(ORGAN_GGUF_DIR),
+        "--local-dir", str(local_dir),
     ]
 
 
@@ -563,12 +575,10 @@ def write_revision_state(
 
     Returns the path written, or None if there was nothing to record / the write
     failed. Never raises."""
-    from pathlib import Path
-
     revisions = revisions_from_results(results)
     if not revisions:
         return None
-    target = Path(path or ORGAN_REVISION_STATE_PATH)
+    target = resolve(path or ORGAN_REVISION_STATE_PATH)
     try:
         from kaine.state_io import write_json_atomic
 
@@ -580,9 +590,7 @@ def write_revision_state(
 
 def read_revision_state(path: Optional[str] = None) -> dict[str, str]:
     """Read the resolved organ revision map for provenance. ``{}`` if absent."""
-    from pathlib import Path
-
-    target = Path(path or ORGAN_REVISION_STATE_PATH)
+    target = resolve(path or ORGAN_REVISION_STATE_PATH)
     if not target.exists():
         return {}
     try:

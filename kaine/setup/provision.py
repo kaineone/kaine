@@ -48,6 +48,7 @@ from kaine.setup.organ import (
     plan_organ_download,
     run_organ_download,
 )
+from kaine.storage import install_data_root
 from kaine.text_embedding import resolve_embedding_config
 
 # Shipped-default HF repo ids for the non-organ models. Kept in sync with
@@ -325,6 +326,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     speech_consent = args.speech_models or os.environ.get("KAINE_PROVISION_SPEECH_MODELS") == "1"
 
     config = _load_config()
+    install_data_root(config)
     from kaine.setup import speech_models
     planned_speech = speech_models.required_speech_models(config)
     if planned_speech:
