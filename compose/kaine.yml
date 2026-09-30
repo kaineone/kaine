@@ -144,6 +144,9 @@ services:
   # Unsloth shared inference+training server, use the `organ=host` override
   # (compose/kaine.organ-host.yml) — REQUIRED when the voice-alignment trainer
   # is enabled, since the trainer is not containerized.
+  # The organ unloads after KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS idle
+  # seconds (default 600; -1 keeps it loaded) and reloads on the next request;
+  # a KAINE_MODEL_SERVER_CMD override must pass --sleep-idle-seconds itself.
   kaine-model-server:
     <<: *gpu-card0
     image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
@@ -156,7 +159,7 @@ services:
     # the organ. The env var tolerates empty (= no auth) and a set value (= auth).
     environment:
       LLAMA_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
-    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080}
+    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds ${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}}
     volumes:
       - kaine-models:/models:ro
     restart: unless-stopped

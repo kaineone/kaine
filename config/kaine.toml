@@ -720,6 +720,10 @@ model_id = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 temperature = 0.7
 max_tokens = 512
 request_timeout_s = 60.0
+# The organ server unloads the model after this many idle seconds and reloads it
+# on the next request; -1 keeps it loaded. Applies when KAINE launches the organ
+# natively — compose and Quadlet read KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS.
+model_server_sleep_idle_seconds = 600
 # Bearer token for a KEYED model server (e.g. Unsloth Studio, which mints an
 # sk-... key). Leave unset for a keyless server (llama.cpp llama-server). It is a
 # secret: set it in the gitignored config/kaine.operator.toml as api_key = "...",

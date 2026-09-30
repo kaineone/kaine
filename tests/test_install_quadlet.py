@@ -119,6 +119,7 @@ def test_secret_using_units_load_env_file(tmp_path: Path):
     env_line = f"EnvironmentFile={checkout}/compose/.env"
     for name in (
         "kaine-cycle.container",
+        "kaine-model-server.container",
         "kaine-nexus.container",
         "kaine-redis.container",
         "kaine-qdrant.container",
