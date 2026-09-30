@@ -16,6 +16,9 @@ operator-configured `hot_swap_mode`:
   logged but do not raise — the adapter is already promoted.
 - `"restart_service"`. Invokes `systemctl --user restart <unit>`
   against a configured unit name. Same failure semantics.
+- `"organ_adapter"`. Activates the accepted adapter's GGUF in the
+  organ's read-only adapter volume with a SHA-256 manifest, bumps the
+  generation, and waits until the organ answers again.
 
 Failures are logged but do not raise. The adapter on disk is the
 source of truth; hot-swap is best-effort notification only.
@@ -30,10 +33,12 @@ import subprocess
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from .organ_adapter import activate, organ_root_url, wait_ready
+
 log = logging.getLogger(__name__)
 
 
-VALID_MODES = ("manual", "reload_endpoint", "restart_service")
+VALID_MODES = ("manual", "reload_endpoint", "restart_service", "organ_adapter")
 MANUAL_MARKER = "PENDING_OPERATOR_RELOAD"
 
 # Loopback patterns accepted by default for the reload endpoint.
@@ -61,6 +66,10 @@ async def dispatch(
     adapter_path: Path,
     reload_endpoint_url: Optional[str] = None,
     restart_service_unit: Optional[str] = None,
+    organ_adapters_dir: Optional[Path] = None,
+    organ_url: Optional[str] = None,
+    organ_api_key: Optional[str] = None,
+    organ_wait_s: float = 300.0,
     http_poster: Optional[HttpPoster] = None,
     service_runner: Optional[ServiceRunner] = None,
 ) -> dict:
@@ -69,6 +78,15 @@ async def dispatch(
     `http_poster` and `service_runner` are dependency-injection
     seams for tests; if omitted, real implementations are used.
     """
+    if mode == "organ_adapter":
+        return await _do_organ_adapter(
+            adapter_path=adapter_path,
+            organ_adapters_dir=organ_adapters_dir,
+            organ_url=organ_url,
+            organ_api_key=organ_api_key,
+            organ_wait_s=organ_wait_s,
+        )
+
     if mode not in VALID_MODES:
         log.error(
             "unknown hot_swap_mode=%r; expected one of %s",
@@ -188,6 +206,71 @@ async def _do_restart_service(
             "rc": rc,
         }
     return {"mode": "restart_service", "ok": True, "unit": unit}
+
+
+async def _do_organ_adapter(
+    adapter_path: Path,
+    organ_adapters_dir: Optional[Path],
+    organ_url: Optional[str],
+    organ_api_key: Optional[str],
+    organ_wait_s: float,
+) -> dict:
+    if not organ_adapters_dir:
+        log.error("hot_swap_mode=organ_adapter but organ_adapters_dir is unset")
+        return {
+            "mode": "organ_adapter",
+            "ok": False,
+            "error": "organ_adapters_dir not configured",
+        }
+    if not organ_url:
+        log.error("hot_swap_mode=organ_adapter but organ_url is unset")
+        return {
+            "mode": "organ_adapter",
+            "ok": False,
+            "error": "organ_url not configured",
+        }
+
+    try:
+        manifest = activate(adapter_path, Path(organ_adapters_dir))
+    except Exception as exc:
+        log.exception("organ_adapter activation failed adapter=%s", adapter_path)
+        return {
+            "mode": "organ_adapter",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    try:
+        ready = await wait_ready(
+            organ_root_url(organ_url),
+            manifest["file"],
+            api_key=organ_api_key,
+            timeout_s=float(organ_wait_s),
+        )
+    except Exception as exc:
+        log.exception("organ_adapter wait_ready failed")
+        return {
+            "mode": "organ_adapter",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    result: dict = {
+        "mode": "organ_adapter",
+        "ok": ready,
+        "generation": manifest["generation"],
+        "file": manifest["file"],
+    }
+    if not ready:
+        result["error"] = (
+            f"organ did not load the adapter within {organ_wait_s:.0f} s"
+        )
+        log.error(
+            "organ_adapter: organ did not load %s within %s s",
+            manifest["file"],
+            organ_wait_s,
+        )
+    return result
 
 
 async def _default_http_poster(url: str, body: dict) -> None:

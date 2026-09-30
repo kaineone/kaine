@@ -35,6 +35,7 @@ in-process trainer does, carrying the gate verdict reason.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -69,6 +70,134 @@ class SubprocessTrainerError(RuntimeError):
     """Raised when the external training subprocess fails to produce a valid,
     verifiable adapter. Surfaced to Hypnos as a trainer error — never swallowed
     into a fake success."""
+
+
+def write_job_spec(
+    job_dir: Path,
+    pairs: list[DPOPair],
+    config: VoiceAlignmentConfig,
+    *,
+    base_path: str,
+    adapter_output_dir: str,
+) -> None:
+    """Write the filesystem job spec consumed by the external trainer.
+
+    ``adapter_output_dir`` is written verbatim (the caller decides whether it is
+    an absolute host path or a path relative to the job directory).
+    """
+    lines = [
+        json.dumps({"prompt": p.prompt, "chosen": p.chosen, "rejected": p.rejected})
+        for p in pairs
+    ]
+    (job_dir / "pairs.jsonl").write_text(
+        "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8"
+    )
+
+    # Resolve probe paths to the same defaults the in-process trainer uses so
+    # the external gates score against the identical sets. Imported lazily to
+    # keep this module's import graph light.
+    from kaine.modules.hypnos.capability_eval import (
+        DEFAULT_ABLITERATION_PROBE_PATH,
+        DEFAULT_PROBE_PATH,
+    )
+
+    capability_probe_path = (
+        config.capability_probe_path or str(DEFAULT_PROBE_PATH)
+    )
+    abliteration_probe_path = (
+        config.abliteration_probe_path or str(DEFAULT_ABLITERATION_PROBE_PATH)
+    )
+    job = {
+        "schema_version": SCHEMA_VERSION,
+        "base_model_path": str(base_path),
+        "adapter_output_dir": str(adapter_output_dir),
+        "lora_rank": int(config.lora_rank),
+        "learning_rate": float(config.learning_rate),
+        "dpo_beta": float(config.dpo_beta),
+        "seed": int(config.seed),
+        "max_samples": int(config.max_samples),
+        "training_device": str(config.training_device),
+        "capability_loss_threshold": float(config.capability_loss_threshold),
+        "capability_probe_path": str(Path(capability_probe_path).resolve()),
+        "abliteration_probe_path": str(Path(abliteration_probe_path).resolve()),
+    }
+    (job_dir / "job.json").write_text(
+        json.dumps(job, indent=2), encoding="utf-8"
+    )
+
+
+def _read_result(job_dir: Path) -> dict[str, Any]:
+    """Read and minimally validate result.json from a finished job directory."""
+    result_path = job_dir / "result.json"
+    if not result_path.is_file():
+        raise SubprocessTrainerError(
+            f"external trainer wrote no result.json (job {job_dir})"
+        )
+    try:
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise SubprocessTrainerError(
+            f"external trainer result.json is unreadable: "
+            f"{type(exc).__name__}: {exc} (job {job_dir})"
+        ) from exc
+    if not isinstance(data, dict):
+        raise SubprocessTrainerError(
+            f"external trainer result.json is not an object (job {job_dir})"
+        )
+    return data
+
+
+def result_to_training_result(
+    result: dict[str, Any],
+    *,
+    samples_used: int,
+    adapter_path: Optional[Path],
+    metadata: Optional[dict[str, Any]] = None,
+) -> TrainingResult:
+    """Map a validated result.json object to the canonical TrainingResult.
+
+    Keeps every existing validation message and field-mapping behaviour.
+    """
+    if not isinstance(result, dict):
+        raise SubprocessTrainerError(
+            "external trainer result.json is not an object"
+        )
+
+    accepted = bool(result.get("accepted"))
+    if accepted:
+        if adapter_path is None:
+            raise SubprocessTrainerError(
+                "external trainer reported accepted but no adapter_dir"
+            )
+        if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
+            raise SubprocessTrainerError(
+                f"external trainer reported adapter_dir {adapter_path} but it "
+                f"is missing or empty"
+            )
+
+    def _maybe_float(key: str) -> Optional[float]:
+        val = result.get(key)
+        return None if val is None else float(val)
+
+    cap_loss_raw = result.get("capability_loss")
+    capability_loss = 0.0 if cap_loss_raw is None else float(cap_loss_raw)
+
+    final_metadata: dict[str, Any] = dict(metadata or {})
+    final_metadata.setdefault(
+        "steps", int(result.get("steps", 0))
+    )
+
+    return TrainingResult(
+        accepted=accepted,
+        adapter_path=adapter_path,
+        capability_loss=capability_loss,
+        reason=str(result.get("reason", "")),
+        samples_used=int(result.get("samples_used", samples_used)),
+        dpo_loss=_maybe_float("dpo_loss"),
+        capability_score_before=_maybe_float("capability_score_before"),
+        capability_score_after=_maybe_float("capability_score_after"),
+        metadata=final_metadata,
+    )
 
 
 class SubprocessVoiceTrainer:
@@ -115,11 +244,28 @@ class SubprocessVoiceTrainer:
             )
 
         job_dir = self._make_job_dir()
-        self._write_pairs(job_dir, pairs)
-        self._write_job(job_dir, config, base_path=base_path)
+        write_job_spec(
+            job_dir,
+            pairs,
+            config,
+            base_path=base_path,
+            adapter_output_dir=str(config.adapter_output_dir.resolve()),
+        )
 
-        result = self._run_subprocess(job_dir, samples_used=len(pairs))
-        return self._to_training_result(result, samples_used=len(pairs))
+        result = await self._run_subprocess(job_dir, samples_used=len(pairs))
+
+        adapter_path: Optional[Path] = None
+        if result.get("accepted"):
+            adapter_dir = result.get("adapter_dir")
+            if adapter_dir:
+                adapter_path = Path(adapter_dir)
+
+        return result_to_training_result(
+            result,
+            samples_used=len(pairs),
+            adapter_path=adapter_path,
+            metadata={"backend": "subprocess"},
+        )
 
     # --------------------------------------------------------------------- #
     # job-spec writing
@@ -130,54 +276,12 @@ class SubprocessVoiceTrainer:
         job_dir.mkdir(parents=True, exist_ok=True)
         return job_dir
 
-    def _write_pairs(self, job_dir: Path, pairs: list[DPOPair]) -> None:
-        lines = [
-            json.dumps({"prompt": p.prompt, "chosen": p.chosen, "rejected": p.rejected})
-            for p in pairs
-        ]
-        (job_dir / "pairs.jsonl").write_text(
-            "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8"
-        )
-
-    def _write_job(
-        self, job_dir: Path, config: VoiceAlignmentConfig, *, base_path: str
-    ) -> None:
-        # Resolve probe paths to the same defaults the in-process trainer uses so
-        # the external gates score against the identical sets. Imported lazily to
-        # keep this module's import graph light.
-        from kaine.modules.hypnos.capability_eval import (
-            DEFAULT_ABLITERATION_PROBE_PATH,
-            DEFAULT_PROBE_PATH,
-        )
-
-        capability_probe_path = (
-            config.capability_probe_path or str(DEFAULT_PROBE_PATH)
-        )
-        abliteration_probe_path = (
-            config.abliteration_probe_path or str(DEFAULT_ABLITERATION_PROBE_PATH)
-        )
-        job = {
-            "schema_version": SCHEMA_VERSION,
-            "base_model_path": str(base_path),
-            "adapter_output_dir": str(config.adapter_output_dir.resolve()),
-            "lora_rank": int(config.lora_rank),
-            "learning_rate": float(config.learning_rate),
-            "dpo_beta": float(config.dpo_beta),
-            "seed": int(config.seed),
-            "max_samples": int(config.max_samples),
-            "training_device": str(config.training_device),
-            "capability_loss_threshold": float(config.capability_loss_threshold),
-            "capability_probe_path": str(Path(capability_probe_path).resolve()),
-            "abliteration_probe_path": str(Path(abliteration_probe_path).resolve()),
-        }
-        (job_dir / "job.json").write_text(
-            json.dumps(job, indent=2), encoding="utf-8"
-        )
-
     # --------------------------------------------------------------------- #
     # subprocess invocation + validation
     # --------------------------------------------------------------------- #
-    def _run_subprocess(self, job_dir: Path, *, samples_used: int) -> dict[str, Any]:
+    async def _run_subprocess(
+        self, job_dir: Path, *, samples_used: int
+    ) -> dict[str, Any]:
         if not self._entry_script.is_file():
             raise SubprocessTrainerError(
                 f"external trainer entry script missing: {self._entry_script}"
@@ -189,7 +293,8 @@ class SubprocessVoiceTrainer:
             job_dir,
         )
         try:
-            proc = subprocess.run(
+            proc = await asyncio.to_thread(
+                subprocess.run,
                 argv,
                 cwd=str(job_dir),  # unsloth_compiled_cache/ lands in the job dir
                 capture_output=True,
@@ -215,7 +320,7 @@ class SubprocessVoiceTrainer:
                 f"stderr tail:\n{tail}"
             )
 
-        result = self._read_result(job_dir)
+        result = _read_result(job_dir)
         if not result.get("ok"):
             raise SubprocessTrainerError(
                 f"external trainer reported failure (ok != true): "
@@ -237,55 +342,3 @@ class SubprocessVoiceTrainer:
                     f"is missing or empty (job {job_dir})"
                 )
         return result
-
-    def _read_result(self, job_dir: Path) -> dict[str, Any]:
-        result_path = job_dir / "result.json"
-        if not result_path.is_file():
-            raise SubprocessTrainerError(
-                f"external trainer wrote no result.json (job {job_dir})"
-            )
-        try:
-            data = json.loads(result_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise SubprocessTrainerError(
-                f"external trainer result.json is unreadable: "
-                f"{type(exc).__name__}: {exc} (job {job_dir})"
-            ) from exc
-        if not isinstance(data, dict):
-            raise SubprocessTrainerError(
-                f"external trainer result.json is not an object (job {job_dir})"
-            )
-        return data
-
-    # --------------------------------------------------------------------- #
-    # result mapping
-    # --------------------------------------------------------------------- #
-    def _to_training_result(
-        self, result: dict[str, Any], *, samples_used: int
-    ) -> TrainingResult:
-        accepted = bool(result.get("accepted"))
-        adapter_dir = result.get("adapter_dir")
-        adapter_path: Optional[Path] = (
-            Path(adapter_dir) if (accepted and adapter_dir) else None
-        )
-
-        def _maybe_float(key: str) -> Optional[float]:
-            val = result.get(key)
-            return None if val is None else float(val)
-
-        cap_loss_raw = result.get("capability_loss")
-        capability_loss = 0.0 if cap_loss_raw is None else float(cap_loss_raw)
-        return TrainingResult(
-            accepted=accepted,
-            adapter_path=adapter_path,
-            capability_loss=capability_loss,
-            reason=str(result.get("reason", "")),
-            samples_used=int(result.get("samples_used", samples_used)),
-            dpo_loss=_maybe_float("dpo_loss"),
-            capability_score_before=_maybe_float("capability_score_before"),
-            capability_score_after=_maybe_float("capability_score_after"),
-            metadata={
-                "backend": "subprocess",
-                "steps": int(result.get("steps", 0)),
-            },
-        )

@@ -1,5 +1,5 @@
 ## 1. Cycle side
-- [ ] 1.1 `kaine/modules/hypnos/job_queue_trainer.py`: `JobQueueTrainer`. It writes the job spec (reuse `SubprocessTrainer`'s job writer) to `<trainer_jobs_dir>/<job id>/`, touches `READY` last, awaits `result.json` with `asyncio.sleep` polling up to `trainer_timeout_s`, validates as `SubprocessTrainer` does, and returns the same `TrainingResult`.
+- [ ] 1.1 `kaine/modules/hypnos/job_queue_trainer.py`: `JobQueueTrainer`. It writes the job spec (reuse `SubprocessTrainer`'s job writer) to `<trainer_jobs_dir>/<job id>/`, touches `READY` last, awaits `result.json` with `asyncio.sleep` polling up to `trainer_timeout_s`, validates as `SubprocessTrainer` does, and returns the same `TrainingResult`. The job spec's adapter output directory is `<job>/out`, so the trainer never sees entity state. On success the vetted adapter, with `adapter.gguf`, is copied into the entity's `adapter_output_dir` through `adapter_store.tmp_dir_for`/`final_dir_for`/`promote`. `pairs.jsonl` is deleted when the job ends, whatever the outcome.
 - [ ] 1.2 `kaine/modules/hypnos/subprocess_trainer.py`: run the subprocess in `asyncio.to_thread`.
 - [ ] 1.3 `kaine/boot.py` and `config/kaine.toml`:
   - `trainer_backend = "job_queue"`, `trainer_jobs_dir` (default `state/hypnos/voice_align_jobs`) and `trainer_timeout_s` (default 21600), validated;

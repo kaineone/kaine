@@ -61,5 +61,6 @@ dist/
 tests/
 docs/
 openspec/
-eval_probes/
+# eval_probes/ is intentionally allowed into the build context (shipped read-only
+# in the runtime image for the abliteration probe veto).
 data/

@@ -1046,8 +1046,8 @@ training_device = "cuda:0"
 # never evicted. Adapters are large: disk is protected by the [preboot] disk
 # rows of `python -m kaine.preboot`, not by deletion.
 adapter_retention = 0
-# Lingua hot-swap mode: "manual" | "reload_endpoint" | "restart_service".
-# "manual" (default, safest) writes a marker file at
+# Lingua hot-swap mode: "manual" | "reload_endpoint" | "restart_service" |
+# "organ_adapter". "manual" (default, safest) writes a marker file at
 # <adapter_output_dir>/PENDING_OPERATOR_RELOAD and logs a one-liner;
 # the operator triggers the reload themselves.
 #
@@ -1084,18 +1084,37 @@ abliteration_probe_path = ""
 # entity-runtime venv (needs the [training] extra). "subprocess" runs the real
 # unsloth DPO OUT-OF-PROCESS in an operator-configured external Python env —
 # used on hosts whose runtime venv cannot host unsloth (different Python ABI /
-# torch / CUDA, e.g. the Unsloth Studio env). The external trainer is invoked by
-# path and never imports kaine. See docs/processes/voice-alignment.md.
+# torch / CUDA, e.g. the Unsloth Studio env); this backend now runs the
+# subprocess in a worker thread so it never blocks the cycle event loop.
+# "job_queue" writes the same filesystem job spec and lets the kaine-trainer
+# container service run it asynchronously; used in containerized cycles where
+# the runtime image cannot host unsloth. The external trainer is invoked by path
+# and never imports kaine. See docs/processes/voice-alignment.md.
 trainer_backend = "in_process"
 # Path to the external interpreter for trainer_backend = "subprocess" (e.g. the
 # Unsloth Studio python). Required for that backend; empty + subprocess is a
 # config error at boot (fail closed). Set this in kaine.operator.toml, not here
 # (it is host-specific). NVIDIA hosts use Unsloth Studio; AMD hosts point it at
-# an unsloth-core env instead (per unsloth's docs).
+# an unsloth-core env instead (per unsloth's docs). The subprocess runs in a
+# worker thread so it never blocks the cycle's event loop.
 trainer_python = ""
 # Where the subprocess backend stages job specs (pairs.jsonl + job.json) and
 # unsloth's compiled cache. Operator may redirect to a roomier disk.
 trainer_workdir = "state/hypnos/voice_align_jobs"
+# Where the job-queue backend writes ready job directories for the
+# kaine-trainer service. The service and the cycle container share this
+# volume; each job is a private 0o700 directory.
+trainer_jobs_dir = "state/hypnos/voice_align_jobs"
+# Wall-clock ceiling (seconds) the job-queue backend waits for the
+# kaine-trainer service to write result.json. Default 6 h.
+trainer_timeout_s = 21600.0
+# Directory mounted into the organ container where the "organ_adapter"
+# hot-swap mode publishes the active GGUF LoRA and its manifest.
+organ_adapters_dir = "/organ-adapters"
+# URL of the served organ. Used by the "organ_adapter" hot-swap mode to
+# wait for the organ to report ready after activation. Empty defaults to
+# [lingua].chat_url.
+organ_url = ""
 # Organ-level consolidation-divergence thresholds the welfare-gated
 # decommission's divergence assessment reads (lifecycle/divergence.py). Every
 # voice-alignment sleep Hypnos surfaces a content-free metric — the breadth

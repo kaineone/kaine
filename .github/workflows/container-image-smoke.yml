@@ -53,12 +53,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build ${{ matrix.flavor }} image
+      - name: Build ${{ matrix.flavor }} runtime image
         uses: docker/build-push-action@v7
         with:
           context: .
           load: true
           tags: kaine:${{ matrix.flavor }}
+          target: runtime
           build-args: |
             FLAVOR=${{ matrix.flavor }}
             BUILD_BASE=${{ matrix.build_base }}
@@ -90,6 +91,13 @@ jobs:
         run: |
           docker run --rm kaine:${{ matrix.flavor }} \
             sh -c 'test "$HF_HUB_OFFLINE" = "1" && test "$TRANSFORMERS_OFFLINE" = "1"'
+
+      - name: Abliteration probes are present and trainer service imports from any directory
+        run: |
+          docker run --rm kaine:${{ matrix.flavor }} \
+            test -s /app/eval_probes/abliteration_probes.jsonl
+          docker run --rm -w /tmp kaine:${{ matrix.flavor }} \
+            python -c "import kaine.modules.hypnos.trainer_service; print('trainer_service imports')"
 
       - name: No model weights baked into any layer
         run: |

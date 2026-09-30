@@ -39,6 +39,8 @@ x-kaine-image: &kaine-image
   build:
     context: ..
     dockerfile: Dockerfile
+    # The runtime image (the Dockerfile's default target; named explicitly).
+    target: runtime
     args:
       FLAVOR: ${KAINE_FLAVOR:-cuda}
       # [full] carries every runtime extra (core, memory, nexus, vision, audio,
@@ -68,6 +70,18 @@ x-gpu-card1: &gpu-card1
         devices:
           - driver: nvidia
             device_ids: ["${KAINE_VISION_GPU:-1}"]
+            capabilities: [gpu]
+
+# GPU reservation for the voice-alignment trainer. Defaults to the same card as
+# the organ so a single-GPU host can share contention logic (the trainer waits
+# until the organ is asleep and free VRAM is available).
+x-gpu-trainer: &gpu-trainer
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            device_ids: ["${KAINE_TRAINER_GPU:-${KAINE_ORGAN_GPU:-0}}"]
             capabilities: [gpu]
 
 services:
@@ -142,8 +156,10 @@ services:
   # Default image is a generic OpenAI-compatible GGUF server (llama.cpp). Set
   # KAINE_MODEL_SERVER_IMAGE / _CMD to use vLLM or another server. For the
   # Unsloth shared inference+training server, use the `organ=host` override
-  # (compose/kaine.organ-host.yml) — REQUIRED when the voice-alignment trainer
-  # is enabled, since the trainer is not containerized.
+  # (compose/kaine.organ-host.yml).
+  # The organ loads a per-entity GGUF LoRA from the read-only organ-adapters
+  # volume via docker/organ-launcher.sh and restarts when the cycle promotes a
+  # new adapter. The launcher passes the remaining command line to llama-server.
   # The organ unloads after KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS idle
   # seconds (default 600; -1 keeps it loaded) and reloads on the next request;
   # a KAINE_MODEL_SERVER_CMD override must pass --sleep-idle-seconds itself.
@@ -159,9 +175,12 @@ services:
     # the organ. The env var tolerates empty (= no auth) and a set value (= auth).
     environment:
       LLAMA_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+    entrypoint: ["/bin/sh", "/opt/kaine/organ-launcher.sh"]
     command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds ${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}}
     volumes:
       - kaine-models:/models:ro
+      - ../docker/organ-launcher.sh:/opt/kaine/organ-launcher.sh:ro
+      - kaine-organ-adapters:/organ-adapters:ro
     restart: unless-stopped
     healthcheck:
       test:
@@ -316,6 +335,8 @@ services:
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
       KAINE_RESEARCH_MODE: ${KAINE_RESEARCH_MODE:-}
+      # Two-layer opt-in for Hypnos voice alignment.
+      KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
     volumes:
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
       - ../config/secrets.toml:/app/config/secrets.toml:ro
@@ -324,6 +345,12 @@ services:
       # Provisioned weights (InternVideo-Next encoder, MiniLM embedder, emotion2vec)
       # read-only from the shared model volume; HF_HOME=/models/hf is baked in.
       - kaine-models:/models:ro
+      # Shared organ-adapters volume: the cycle writes promoted GGUF LoRAs here
+      # (organ_adapter mode) for the launcher to load. Read/write here.
+      - kaine-organ-adapters:/organ-adapters
+      # Job-queue backend for voice-alignment training: the cycle writes READY jobs,
+      # kaine-trainer claims and runs them. Kept off the entity state volume.
+      - kaine-trainer-jobs:/app/state/hypnos/voice_align_jobs
       # Evaluation outputs on a SHARED named volume so the Nexus admissibility probe
       # (runs_manifest_root = data/evaluation/runs) sees what the cycle writes —
       # otherwise each container has its own ephemeral /app/data and Nexus reports
@@ -409,11 +436,20 @@ services:
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
       KAINE_RESEARCH_MODE: ${KAINE_RESEARCH_MODE:-}
+      # Two-layer opt-in for Hypnos voice alignment.
+      KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
     volumes:
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
       - ../config/secrets.toml:/app/config/secrets.toml:ro
       # Provisioned weights, read-only from the shared model volume.
       - kaine-models:/models:ro
+      # Shared organ-adapters volume: study writes promoted GGUF LoRAs here
+      # (organ_adapter mode) for the launcher to load. Read/write here.
+      - kaine-organ-adapters:/organ-adapters
+      # Job-queue backend for voice-alignment training. Study steps that enable
+      # voice alignment set [hypnos.voice_alignment].trainer_jobs_dir = "/trainer-jobs"
+      # (the overlay does this); kaine-trainer claims and runs jobs from here.
+      - kaine-trainer-jobs:/trainer-jobs
       # No kaine-state, perception tmpfs, kaine-eval-data or kaine-trajectory: every step runs inside /app/studies/<id>, so a study never touches a live being's volumes.
       # Durable study directories (study.json, steps.jsonl, line directories,
       # analysis). Survives down/up; the runner resumes from it.
@@ -426,6 +462,41 @@ services:
     # DELIBERATELY no restart policy on kaine-study: a study run is an operator
     # decision, and the child cycles it starts are entities that never
     # auto-restart. A halted study is resumed by running it again.
+    logging: *default-logging
+
+  # ---- voice-alignment trainer: profile-gated, isolated from entity state ----
+  # Runs only when the operator explicitly enables the `training` profile.
+  # It sees only the shared job volume and read-only model weights; no Docker
+  # socket, no host ports, and no internet (HF_HUB_OFFLINE=1). The trainer service
+  # waits for the organ to sleep and for free VRAM before starting a job.
+  kaine-trainer:
+    <<: *gpu-trainer
+    profiles: [training]
+    container_name: kaine-trainer
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: trainer
+      args:
+        FLAVOR: ${KAINE_FLAVOR:-cuda}
+        KAINE_EXTRAS: ${KAINE_EXTRAS:-.[test,full,internvideo]}
+        GIT_SHA: "${KAINE_GIT_SHA:-}"
+    image: kaine:trainer-${KAINE_FLAVOR:-cuda}
+    environment:
+      KAINE_MODELS_DIR: /models
+      KAINE_TRAINER_JOBS_DIR: /trainer-jobs
+      KAINE_ORGAN_URL: http://kaine-model-server:8080
+      KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
+      KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - kaine-models:/models:ro
+      - kaine-trainer-jobs:/trainer-jobs
+    restart: unless-stopped
+    depends_on:
+      kaine-model-server:
+        condition: service_started
     logging: *default-logging
 
   # ---- setup one-shot: provision images + ALL model weights (design §6) --
@@ -461,6 +532,13 @@ volumes:
   # NEVER an image layer.
   kaine-models:
     name: kaine-models
+  # Per-entity GGUF LoRAs promoted by Hypnos; read by the organ launcher.
+  kaine-organ-adapters:
+    name: kaine-organ-adapters
+  # Shared job directory for the voice-alignment trainer. The cycle/study write
+  # READY jobs here; kaine-trainer claims and runs them. NEVER entity state.
+  kaine-trainer-jobs:
+    name: kaine-trainer-jobs
   # The entity's life: CAL-gated forks, preservation bundles, individuation,
   # world/self models, control state, audit + incident logs. Owner-only perms
   # preserved inside the container; encrypted at rest when state encryption is

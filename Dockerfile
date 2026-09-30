@@ -140,8 +140,8 @@ RUN if ! command -v python3.12 >/dev/null 2>&1; then \
 # a freshly created named volume to inherit owner-only perms. /app/studies is
 # the module-ignition study volume's mountpoint, kaine-owned for the same reason.
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin kaine \
- && mkdir -p /app/state /app/studies /models \
- && chown -R kaine:kaine /app /models
+ && mkdir -p /app/state /app/studies /models /organ-adapters /trainer-jobs /app/state/hypnos/voice_align_jobs \
+ && chown -R kaine:kaine /app /models /organ-adapters /trainer-jobs
 
 COPY --from=build /opt/venv /opt/venv
 # Source (editable install target) — NO config/secrets.toml, NO state/, NO
@@ -160,6 +160,9 @@ COPY --chown=kaine:kaine config/kaine.toml /app/config/kaine.toml
 COPY --chown=kaine:kaine config/profiles /app/config/profiles
 COPY --chown=kaine:kaine pyproject.toml README.md /app/
 COPY --chown=kaine:kaine scripts /app/scripts
+# Abliteration probe set: shipped read-only in the image so the boot-time
+# voice-alignment veto can find it; no entity state or private data is included.
+COPY --chown=kaine:kaine eval_probes /app/eval_probes
 COPY --chown=kaine:kaine docker/entrypoint.sh /usr/local/bin/kaine-entrypoint
 
 WORKDIR /app
@@ -180,3 +183,81 @@ USER kaine
 # CMD with `-m kaine.nexus`.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/kaine-entrypoint"]
 CMD ["python", "-m", "kaine.cycle"]
+
+# =========================================================================
+# Stage 3 — trainer-build: an isolated venv for the [training] extra and the
+# llama.cpp LoRA -> GGUF converter used by kaine-trainer.
+#
+# The trainer image is built only with --target trainer; the default target is
+# the runtime image (see the runtime-default alias at the end of this file).
+# =========================================================================
+FROM build AS trainer-build
+ARG FLAVOR
+ARG LLAMA_CPP_TAG=b9976
+ARG LLAMA_CPP_SHA256=d54ff9d66fb07b8c295f1d0fd01ce267392409d05cc5c5c89bf83d7d4debd130
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# curl is needed to fetch the pinned llama.cpp source archive; the build base
+# may not ship it (e.g. the CUDA devel image does not).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Separate venv so the [training] stack never touches the runtime venv.
+RUN python3.12 -m venv /opt/trainer
+ENV PATH="/opt/trainer/bin:${PATH}"
+
+# Re-use the same flavor-correct torch that the runtime installs, using the
+# project's constraints file as the single source of truth. The empty-index
+# branch keeps the CPU flavor working when install.py returns an empty string.
+RUN TORCH_INDEX="$(python /src/scripts/install.py --print-index "${FLAVOR}")" \
+ && TORCH_SPEC="$(python /src/scripts/install.py --print-torch-spec)" \
+ && if [ -n "${TORCH_INDEX}" ]; then \
+        /opt/trainer/bin/pip install -c /src/kaine-torch-constraints.txt --index-url "${TORCH_INDEX}" "${TORCH_SPEC}" torchvision; \
+    else \
+        /opt/trainer/bin/pip install -c /src/kaine-torch-constraints.txt "${TORCH_SPEC}" torchvision; \
+    fi
+
+# Install only the [training] extra's dependencies, WITHOUT installing kaine
+# itself (the trainer service code lives in the runtime image /app/kaine).
+RUN python3.12 -c "import pathlib, tomllib; print('\n'.join(tomllib.loads(pathlib.Path('/src/pyproject.toml').read_text(encoding='utf-8'))['project']['optional-dependencies']['training']))" > /tmp/training-reqs.txt && /opt/trainer/bin/pip install -c /src/kaine-torch-constraints.txt -r /tmp/training-reqs.txt
+
+# Fetch the pinned llama.cpp tag used by the organ image and verify it.
+# Extract the explicit files/packages convert_lora_to_gguf needs: the two
+# converters, the conversion package, and gguf-py.
+RUN curl -fsSL -o /tmp/llama.tgz "https://github.com/ggml-org/llama.cpp/archive/refs/tags/${LLAMA_CPP_TAG}.tar.gz" \
+ && echo "${LLAMA_CPP_SHA256}  /tmp/llama.tgz" | sha256sum -c - \
+ && mkdir -p /opt/llama.cpp \
+ && tar -xzf /tmp/llama.tgz -C /opt/llama.cpp --strip-components=1 "llama.cpp-${LLAMA_CPP_TAG}/convert_lora_to_gguf.py" "llama.cpp-${LLAMA_CPP_TAG}/convert_hf_to_gguf.py" "llama.cpp-${LLAMA_CPP_TAG}/conversion" "llama.cpp-${LLAMA_CPP_TAG}/gguf-py" \
+ && rm /tmp/llama.tgz
+
+# Install the gguf-py package into the trainer venv, plus sentencepiece/protobuf
+# which convert_lora_to_gguf needs but which the llama.cpp requirements files
+# would otherwise pin to a different torch.
+RUN /opt/trainer/bin/pip install /opt/llama.cpp/gguf-py sentencepiece protobuf
+
+# =========================================================================
+# Stage 4 — trainer: runtime image + the isolated trainer venv + converter.
+# =========================================================================
+FROM runtime AS trainer
+
+COPY --chown=kaine:kaine --from=trainer-build /opt/trainer /opt/trainer
+COPY --chown=kaine:kaine --from=trainer-build /opt/llama.cpp /opt/llama.cpp
+
+ENV KAINE_TRAINER_PYTHON=/opt/trainer/bin/python \
+    KAINE_LORA_CONVERTER=/opt/llama.cpp/convert_lora_to_gguf.py
+
+USER kaine
+
+# The runtime venv's `python` runs the trainer service; the trainer venv is used
+# only for the subprocess training/conversion calls it spawns.
+CMD ["python", "-m", "kaine.modules.hypnos.trainer_service"]
+
+# =========================================================================
+# Default target: the runtime image. The trainer stage above derives from the
+# runtime stage, so this alias keeps `docker build .` producing the runtime.
+# =========================================================================
+FROM runtime AS runtime-default
