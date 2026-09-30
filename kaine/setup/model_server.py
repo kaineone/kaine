@@ -38,6 +38,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from kaine.setup.organ import ORGAN_GGUF_REPO
+from kaine.shared_services import is_shared
 
 # Override env for an explicitly-located server binary (any backend / custom build).
 SERVER_BIN_ENV = "KAINE_MODEL_SERVER_BIN"
@@ -513,6 +514,13 @@ def cmd_stop(
     """Stop the supervised server (systemd unit or the background process)."""
     emit = out if out is not None else sys.stdout.write
     run = runner if runner is not None else subprocess.run
+
+    cfg = config if config is not None else _load_config()
+    if is_shared(cfg, "model_server"):
+        emit(
+            "the model server is marked shared ([services.model_server].shared = true); KAINE leaves it running.\n"
+        )
+        return 2
 
     stopped = False
     # systemd path (best-effort; ignore if the unit is not installed).

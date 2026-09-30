@@ -254,6 +254,7 @@ source_modules = [
     "kaine.privacy_filter",
     "kaine.state_io",
     "kaine.storage",
+    "kaine.shared_services",
     "kaine.text_embedding",
     "kaine.wheel_index",
     "kaine.bus",
@@ -348,6 +349,7 @@ source_modules = [
     # stay dependency-free so any side can reuse them without coupling.
     "kaine.state_io",
     "kaine.storage",
+    "kaine.shared_services",
     "kaine.net",
     "kaine.memory_kinds",
 ]
