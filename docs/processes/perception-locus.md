@@ -147,8 +147,8 @@ this event type and applies the `evaluate_locus_switch` policy gate below.
 **This path is currently an unreachable producer gap.** The `PerceptionLocus`
 module is a real consumer/handler for `intent.perception.switch`, and the
 gating logic below is real and tested, but nothing in the current codebase
-emits that event: Volition only emits `intent.speak`, `intent.think`, and
-`intent.act`. Until a producer lands (deferred to virtual-world embodiment work),
+emits that event: Volition only emits `intent.speak`, `intent.think`,
+`intent.act`, and `intent.rest`. Until a producer lands (deferred to virtual-world embodiment work),
 the entity cannot self-switch in practice, and `allow_self_switch` should stay
 at its default of `false`. Locus changes are operator-driven (via Nexus) until
 then. The gate:

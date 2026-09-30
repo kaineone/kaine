@@ -10,6 +10,7 @@ exercises the real :class:`PymdpEngine` only when the reasoning extra is present
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import pytest
@@ -125,23 +126,182 @@ pytestmark_real = pytest.mark.skipif(
 )
 
 
+@contextmanager
+def _jax_compile_events():
+    """Record every JAX trace/lower/compile event raised inside the block.
+
+    Uses the public ``jax.monitoring`` duration events rather than a jitted
+    function's private ``_cache_size()``: that reads jax's process-wide C++
+    fast-path cache, which holds a fixed number of entries across all jitted
+    functions and evicts once a long test session has filled it, so it can
+    read 0 for a function that did compile. A compile event is the thing
+    that costs time inside a tick, whatever cache served the call.
+    """
+    import jax.monitoring as monitoring
+
+    events: list[str] = []
+
+    def _listener(event: str, duration_secs: float, **kwargs) -> None:
+        if event.startswith("/jax/core/compile/"):
+            events.append(event)
+
+    monitoring.register_event_duration_secs_listener(_listener)
+    try:
+        yield events
+    finally:
+        monitoring.unregister_event_duration_listener(_listener)
+
+
 @pytestmark_real
-def test_real_pymdp_engine_runs_within_budget():
+def test_real_pymdp_engine_compiles_nothing_after_construction():
+    """Construction compiles every jitted path a live step takes.
+
+    JAX traces and compiles once per argument shape, and a compile costs ~100x
+    a steady-state step (about 100 ms against about 1 ms on a desktop, seconds
+    on a loaded CI runner). A compile left for the first live step lands
+    inside the EFE deadline, so the first learning step overran it. This
+    checks that directly: no JAX trace, lowering or compile happens during the
+    first live steps of a freshly constructed engine, which include the first
+    learning step. Compilations by earlier tests in the same process can only
+    remove compile events here, never add them, so test order cannot fail it.
+    """
     from kaine.modules.nous.engine import PymdpEngine
 
     engine = PymdpEngine(efe_timeout_ms=10_000.0)
     try:
-        # Warm, then measure a single step.
-        engine.step(_snap())
-        start = time.perf_counter()
-        result = engine.step(_snap())
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        assert not result.timed_out
-        assert len(result.posterior) == 4
-        assert len(result.policy_efe) == 4
-        assert result.action in engine.actions
-        # Generous bound — the benchmark asserts the real <=200ms median.
-        assert elapsed_ms < 1000.0
+        with _jax_compile_events() as events:
+            for _ in range(4):
+                result = engine.step(_snap())
+                assert not result.timed_out and not result.error
+        assert events == []
+    finally:
+        engine.close()
+
+
+def _benchmark_task_model():
+    # A model with its own factor layout (not Nous's default salience/affect/
+    # event factors) and no transition learning.
+    from kaine.evaluation.benchmarks.active_inference.aif_agent import (
+        build_model_for_env,
+    )
+    from kaine.evaluation.benchmarks.active_inference.envs import ExploitationPOMDP
+
+    return build_model_for_env(ExploitationPOMDP(n=3, obs_noise=0.02))
+
+
+def _small_learning_model():
+    # Nous's layout with non-default cardinalities; learns its transitions.
+    from kaine.modules.nous.generative_model import build_generative_model
+
+    return build_generative_model(event_clusters=("alpha", "beta"))
+
+
+def _engine_state(engine) -> dict:
+    return {
+        "B": [b.tolist() for b in engine._get_B(engine._agent)],
+        "pB": [pb.tolist() for pb in engine._get_pB(engine._agent)],
+        "prior": engine._prior_lists(engine._prior),
+        "prev_action": engine._prev_action,
+        "prev_qs": None
+        if engine._prev_qs is None
+        else engine._posterior_lists(engine._prev_qs),
+        "last_posterior": engine._last_posterior,
+        "last_efe": engine._last_efe,
+        "generation": engine._generation,
+        "learned": engine.learned_state(),
+    }
+
+
+@pytestmark_real
+@pytest.mark.parametrize(
+    "make_model", [_benchmark_task_model, _small_learning_model],
+    ids=["benchmark-task-model", "non-default-learning-model"],
+)
+def test_real_pymdp_warm_up_has_no_side_effects(make_model, monkeypatch):
+    """A warmed engine behaves exactly like an unwarmed one on the same inputs.
+
+    The warm-up exists only to fill the jit caches. It must work on any model,
+    not only Nous's default layout, and it must not learn, move the carried
+    prior or otherwise change what the engine computes.
+    """
+    from kaine.modules.nous.engine import PymdpEngine
+
+    model = make_model()
+    warmed = PymdpEngine(model, efe_timeout_ms=10_000.0)
+    with monkeypatch.context() as m:
+        m.setattr(PymdpEngine, "_warm_up", lambda self: None)
+        unwarmed = PymdpEngine(model, efe_timeout_ms=10_000.0)
+    try:
+        assert _engine_state(warmed) == _engine_state(unwarmed)
+        observations = [
+            [0] * model.num_modalities,
+            [n - 1 for n in model.num_obs],
+            [min(1, n - 1) for n in model.num_obs],
+            [0] * model.num_modalities,
+        ]
+        for obs in observations:
+            a, b = warmed.infer(obs), unwarmed.infer(obs)
+            assert not a.timed_out and not a.error, a.error_reason
+            assert not b.timed_out and not b.error, b.error_reason
+            assert (a.posterior, a.policy_efe, a.action_index) == (
+                b.posterior, b.policy_efe, b.action_index,
+            )
+            assert _engine_state(warmed) == _engine_state(unwarmed)
+    finally:
+        warmed.close()
+        unwarmed.close()
+
+
+@pytestmark_real
+def test_real_pymdp_engine_runs_within_budget():
+    """The median live step fits inside the engine's own EFE deadline.
+
+    What this protects: a Nous step must fit its per-tick deadline,
+    ``efe_timeout_ms`` (engine default 250 ms, inside the ~300 ms cognitive
+    cycle); a step that overruns it returns the stale posterior. The budget is
+    therefore that documented default, read from the engine, not a number of
+    our own.
+
+    How it measures, and why: the median of several consecutive steps from a
+    freshly constructed engine, so one descheduled step on a shared runner
+    cannot fail the test, while a systematic slowdown of the step (the thing
+    worth catching) still moves the median. One-time JIT compilation is
+    excluded because it belongs to construction; the companion test
+    ``test_real_pymdp_engine_compiles_nothing_after_construction`` proves no
+    compile leaks into these steps, so nothing here has to be warmed first.
+    The first learning step is among the samples.
+
+    CI-noise allowance: a desktop median is about 1-2 ms, so the 250 ms budget
+    leaves a margin of more than 100x for a slow or contended runner. The
+    tighter 200 ms median target on real hardware is asserted by
+    ``scripts/benchmark_nous_efe.py``, not here.
+    """
+    import inspect
+    import statistics
+
+    from kaine.modules.nous.engine import PymdpEngine
+
+    budget_ms = float(
+        inspect.signature(PymdpEngine).parameters["efe_timeout_ms"].default
+    )
+    # Measure raw compute: a generous deadline so the guard never trips here.
+    engine = PymdpEngine(efe_timeout_ms=10_000.0)
+    try:
+        samples_ms: list[float] = []
+        for _ in range(9):
+            start = time.perf_counter()
+            result = engine.step(_snap())
+            samples_ms.append((time.perf_counter() - start) * 1000.0)
+            assert not result.timed_out
+            assert not result.error
+            assert len(result.posterior) == 4
+            assert len(result.policy_efe) == 4
+            assert result.action in engine.actions
+        median_ms = statistics.median(samples_ms)
+        assert median_ms < budget_ms, (
+            f"median step {median_ms:.1f} ms >= EFE deadline {budget_ms:.0f} ms "
+            f"(samples: {[round(x, 1) for x in samples_ms]})"
+        )
     finally:
         engine.close()
 

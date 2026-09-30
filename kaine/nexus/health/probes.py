@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -24,6 +25,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 # Status vocabulary (kept as plain strings to match the JSON contract).
 UP = "up"
@@ -385,19 +388,28 @@ async def probe_chat_llm(
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
     async with httpx.AsyncClient(timeout=1.8, headers=headers) as client:
         resp = await client.get(url)
-    if resp.status_code != 200:
-        return DEGRADED, f"/v1/models returned HTTP {resp.status_code}"
-    try:
-        data = resp.json()
-        served = [m.get("id") for m in (data.get("data") or [])]
-    except Exception:
-        return DEGRADED, "could not parse /v1/models response"
-    if model_id and model_id not in served:
-        return (
-            DEGRADED,
-            f"reachable but model '{model_id}' not served ({len(served)} models present)",
-        )
-    return UP, f"model '{model_id}' served" if model_id else f"{len(served)} models served"
+        if resp.status_code != 200:
+            return DEGRADED, f"/v1/models returned HTTP {resp.status_code}"
+        try:
+            data = resp.json()
+            served = [m.get("id") for m in (data.get("data") or [])]
+        except Exception:
+            return DEGRADED, "could not parse /v1/models response"
+        if model_id and model_id not in served:
+            return (
+                DEGRADED,
+                f"reachable but model '{model_id}' not served ({len(served)} models present)",
+            )
+        detail = f"model '{model_id}' served" if model_id else f"{len(served)} models served"
+        try:
+            props = await client.get(base + "/props")
+            if props.status_code == 200:
+                body = props.json()
+                if isinstance(body, dict) and body.get("is_sleeping") is True:
+                    return UP, detail + " (asleep; loads on the next request)"
+        except (httpx.HTTPError, ValueError):
+            log.debug("organ /props unavailable; sleep state unknown", exc_info=True)
+        return UP, detail
 
 
 async def probe_speaches(*, base_url: str) -> tuple[str, str]:

@@ -34,8 +34,9 @@ services:
       - "yes"
       - --appendfsync
       - everysec
+      # Host-configurable through KAINE_REDIS_MAXMEMORY in compose/.env.
       - --maxmemory
-      - 4gb
+      - ${KAINE_REDIS_MAXMEMORY:-4gb}
       - --maxmemory-policy
       - noeviction
       - --save

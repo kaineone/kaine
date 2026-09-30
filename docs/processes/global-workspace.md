@@ -290,7 +290,7 @@ per-effector command whitelists — it does not replace them.
 |--------|-----------|--------|
 | `<module>.out` | module → bus | All module outputs |
 | `workspace.broadcast` | Syneidesis → bus | `snapshot` JSON field (no Event wrapper) |
-| `volition.out` | Volition → bus | `intent.speak`, `intent.think`, `intent.act` |
+| `volition.out` | Volition → bus | `intent.speak`, `intent.think`, `intent.act`, `intent.rest` |
 | `cycle.control` | operator → bus | `cycle.set_rates` |
 | `cycle.out` | cycle → bus | `cycle.tick`, `cycle.rates` |
 

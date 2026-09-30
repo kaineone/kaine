@@ -19,8 +19,10 @@ operators add commands explicitly.
 Praxis is the **action-execution layer** — the only path through which KAINE
 produces side-effects in the environment beyond speech. In the GWT framing, it
 is intent-driven: it never acts on the raw workspace broadcast. The sole trigger
-is an `act` intent from the executive action-selection step (Nous → Volition),
-which is itself gated by the inhibition flag. An inhibited entity performs no
+is an `act` intent published by Volition on `volition.out`, which is itself
+gated by the inhibition flag. Nous proposes only `think`, `speak`, and `rest`
+intents; no shipped action-selection policy emits `act`, so Praxis executes
+only when an operator-supplied policy or plugin produces `act` intents. An inhibited entity performs no
 effector actions.
 
 Inhibition is a cognitive property of that legitimate path; it is made an
@@ -155,8 +157,9 @@ without automatic pruning.
 1. Set `[modules].praxis = true` in `config/kaine.toml`.
 2. Add any permitted shell commands to `[praxis.shell_whitelist]`. Keep the
    list as narrow as the use-case demands.
-3. Enable Nous / Volition so that `act` intents can be generated; without them
-   Praxis starts but will never execute anything.
+3. Provide an action-selection policy that emits `act` intents through
+   Volition; the shipped policies do not, so without one Praxis starts but
+   never executes anything.
 4. Optionally install `libnotify` / `notify-send` for desktop notifications.
 
 ---

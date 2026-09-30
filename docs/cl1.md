@@ -192,8 +192,11 @@ substrate, so the cognitive cycle never waits for it:
 A module's step queues its stimulation for the next window and reads its
 territory's latest completed window, so the response to a stimulus arrives one
 tick later (about 100 ms). If two steps of the same module queue stimulation
-before a window starts, the later one wins. Outside KAINE, or before the first
-tick, each step runs its own window instead, one at a time (Nous steps from a
+before a window starts, the later one wins. An oscillator records the window that
+answers its own stimulation, which is the response to its module's previous
+publish, so a module that publishes less often than the cycle ticks still
+records its own response rather than background firing. Outside KAINE, or
+before the first tick, each step runs its own window instead, one at a time (Nous steps from a
 worker thread, the other modules from the event loop). If such a window is still
 running at the first tick, the switch to one window per tick finishes in the
 background, so the cycle never waits for it.

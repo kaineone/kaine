@@ -66,8 +66,8 @@ async def eidolon(tmp_path, bus):
     yield eid
     try:
         await eid.shutdown()
-    except Exception:
-        pass
+    except Exception as exc:  # teardown of an already-shut-down fixture
+        print(f"eidolon teardown ignored: {exc!r}")
 
 
 async def _make_bundle(
@@ -100,7 +100,7 @@ def test_main_missing_revive_bundle_returns_seven_no_boot(tmp_path, monkeypatch)
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
 
-    import kaine.cycle.__main__ as cycle_main
+    from kaine.cycle import __main__ as cycle_main
 
     calls = []
 
@@ -136,7 +136,7 @@ def test_main_revive_stage_untouched_on_boot_failure(tmp_path, eidolon, monkeypa
     stage.write_stage(prior, stage_path)
     prior_bytes = stage_path.read_bytes()
 
-    import kaine.cycle.__main__ as cycle_main
+    from kaine.cycle import __main__ as cycle_main
 
     captured: dict[str, object] = {}
 
@@ -179,7 +179,7 @@ def test_main_revive_stage_untouched_when_boot_returns_zero(
     stage.write_stage(prior, stage_path)
     prior_bytes = stage_path.read_bytes()
 
-    import kaine.cycle.__main__ as cycle_main
+    from kaine.cycle import __main__ as cycle_main
 
     async def _fake_boot(**kwargs):
         assert isinstance(kwargs.get("revive"), ReviveSession)
@@ -214,11 +214,11 @@ def test_main_revive_invalid_stage_returns_seven_and_leaves_stage(
     stage.write_stage(prior, stage_path)
     prior_bytes = stage_path.read_bytes()
 
-    import kaine.cycle.revive_boot as revive_boot
+    from kaine.cycle import revive_boot
 
     monkeypatch.setattr(revive_boot, "read_bundle_stage", lambda _bundle: "not-a-stage")
 
-    import kaine.cycle.__main__ as cycle_main
+    from kaine.cycle import __main__ as cycle_main
 
     calls = []
 
@@ -332,7 +332,7 @@ async def test_revive_session_revive_refuses_when_stage_write_fails(
 
     revive = ReviveSession(plan)
 
-    import kaine.cycle.revive_boot as revive_boot
+    from kaine.cycle import revive_boot
 
     def broken_write(state, path=None):
         raise OSError("disk full")

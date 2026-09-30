@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from kaine.boot import known_module_names
 
@@ -16,7 +17,7 @@ PLAN_FILE = "study.json"
 STEPS_FILE = "steps.jsonl"
 LOCK_FILE = ".lock"
 
-LINES = ["gestation", "main", "control"]
+LINES = ["gestation", "branch", "repeat", "accumulate"]
 
 DEFAULT_VIEWING_BUDGET_SECONDS = 6 * 60 * 60  # programme length + 2 h
 DEFAULT_GESTATION_BUDGET_SECONDS = 96 * 60 * 60  # 24 h minimum + 72 h headroom
@@ -39,7 +40,6 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "programme",
         "redis",
         "collections",
-        "viewings_per_line",
     )
     for field in required:
         if field not in plan:
@@ -66,28 +66,30 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if set(base) & set(order):
         raise ValueError("base_modules and order must be disjoint")
 
-    vpl = plan["viewings_per_line"]
-    if not isinstance(vpl, int) or vpl < 1:
-        raise ValueError("viewings_per_line must be a positive integer")
-
     redis = plan["redis"]
     if not isinstance(redis, dict) or "base_url" not in redis or "db" not in redis:
         raise ValueError("redis must contain base_url and db")
-    dbs = redis["db"]
-    if not isinstance(dbs, dict) or set(dbs.keys()) != set(LINES):
-        raise ValueError(f"redis.db must contain exactly {LINES}")
-    db_numbers = [dbs[line] for line in LINES]
-    if any(not isinstance(n, int) for n in db_numbers):
-        raise ValueError("redis.db values must be integers")
-    if len(set(db_numbers)) != len(db_numbers):
-        raise ValueError("redis.db numbers must be distinct")
+
+    validate_redis_base_url(redis["base_url"])
+
+    validate_redis_dbs(redis["db"])
 
     collections = plan["collections"]
     if not isinstance(collections, dict) or set(collections.keys()) != set(LINES):
         raise ValueError(f"collections must contain exactly {LINES}")
     prefixes = [collections[line] for line in LINES]
+    if any(not isinstance(p, str) or not p for p in prefixes):
+        raise ValueError("collection prefixes must be non-empty strings")
     if len(set(prefixes)) != len(prefixes):
         raise ValueError("collection prefixes must be distinct")
+    # A branch step's prefix is the branch prefix plus "<k>_", so a prefix that
+    # starts another line's prefix could name that line's collections.
+    for a in prefixes:
+        for b in prefixes:
+            if a != b and b.startswith(a):
+                raise ValueError(
+                    "collection prefixes must not start with one another"
+                )
 
     programme = plan["programme"]
     manifest = Path(programme.get("manifest", ""))
@@ -108,6 +110,14 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(plan[key], (int, float)) or plan[key] <= 0:
             raise ValueError(f"{key} must be positive")
 
+    plan.setdefault("min_free_gb", 20.0)
+    if (
+        isinstance(plan["min_free_gb"], bool)
+        or not isinstance(plan["min_free_gb"], (int, float))
+        or plan["min_free_gb"] < 0
+    ):
+        raise ValueError("min_free_gb must be a number >= 0")
+
     return plan
 
 
@@ -119,9 +129,10 @@ def init_study(
 ) -> dict[str, Any]:
     """Create a new study directory and its line subdirectories.
 
-    Each line directory receives ``config/kaine.toml`` and ``config/profiles``
-    symlinks pointing into the repository configuration so the operator's base
-    settings are shared but never edited inside the study.
+    Every step working directory (``gestation``, ``branch/<k>`` for k = 0..K,
+    ``repeat`` and ``accumulate``) receives ``config/kaine.toml`` and
+    ``config/profiles`` symlinks pointing into the repository configuration so
+    the operator's base settings are shared but never edited inside the study.
     """
     study_dir = Path(study_dir).resolve()
     plan_path = study_dir / PLAN_FILE
@@ -133,28 +144,105 @@ def init_study(
     plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True))
 
     repo_root = Path(plan["repo_root"])
-    repo_config = repo_root / "config" / "kaine.toml"
-    repo_profiles = repo_root / "config" / "profiles"
-
     for line in LINES:
-        line_dir = study_dir / line
-        line_dir.mkdir(exist_ok=True)
-
-        cfg_dir = line_dir / "config"
-        cfg_dir.mkdir(exist_ok=True)
-
-        config_link = cfg_dir / "kaine.toml"
-        if config_link.exists() or config_link.is_symlink():
-            config_link.unlink()
-        os.symlink(repo_config, config_link)
-
-        profiles_link = cfg_dir / "profiles"
-        if profiles_link.exists() or profiles_link.is_symlink():
-            profiles_link.unlink()
-        is_dir = repo_profiles.exists() and repo_profiles.is_dir()
-        os.symlink(repo_profiles, profiles_link, target_is_directory=is_dir)
+        if line == "branch":
+            for k in range(len(plan["order"]) + 1):
+                ensure_line_dir(study_dir, line, k, repo_root)
+        else:
+            ensure_line_dir(study_dir, line, 0, repo_root)
 
     return plan
+
+
+def ensure_line_dir(
+    study_dir: Path | str,
+    line: str,
+    k: int,
+    repo_root: Path | str,
+) -> Path:
+    """Create a step working directory and its config symlinks on demand.
+
+    ``branch`` steps live under ``<study>/branch/<k>``; all other lines live
+    under ``<study>/<line>``.  The directory receives ``config/kaine.toml``
+    and ``config/profiles`` symlinks into the repository configuration.
+    """
+    study_dir = Path(study_dir).resolve()
+    repo_root = Path(repo_root).resolve()
+
+    if line == "branch":
+        line_dir = study_dir / "branch" / str(k)
+    else:
+        line_dir = study_dir / line
+
+    line_dir.mkdir(parents=True, exist_ok=True)
+
+    cfg_dir = line_dir / "config"
+    cfg_dir.mkdir(exist_ok=True)
+
+    repo_config = repo_root / "config" / "kaine.toml"
+    repo_profiles = repo_root / "config" / "profiles"
+    _link(cfg_dir / "kaine.toml", repo_config, is_dir=False)
+    is_dir = repo_profiles.exists() and repo_profiles.is_dir()
+    _link(cfg_dir / "profiles", repo_profiles, is_dir=is_dir)
+
+    return line_dir
+
+
+def _link(link: Path, target: Path, *, is_dir: bool) -> None:
+    """Point ``link`` at ``target``.  Only a symlink is ever replaced; a real
+    file or directory in its place is refused, never deleted."""
+    if link.is_symlink():
+        if os.readlink(link) == str(target):
+            return
+        link.unlink()
+    elif link.exists():
+        raise ValueError(f"{link} exists and is not a symlink; refusing to replace it")
+    os.symlink(target, link, target_is_directory=is_dir)
+
+
+def validate_redis_base_url(base_url: str) -> None:
+    """Validate that a Redis base URL contains no credentials, path, or bad scheme.
+
+    Raises:
+        ValueError: If the URL is malformed. The message never includes the URL text.
+    """
+    parsed = urlsplit(base_url)
+    if parsed.username or parsed.password:
+        raise ValueError(
+            "redis.base_url must not contain credentials; the password comes from "
+            "KAINE_REDIS_PASSWORD or config/secrets.toml"
+        )
+    if parsed.scheme not in ("redis", "rediss"):
+        raise ValueError("redis.base_url scheme must be redis or rediss")
+    if parsed.path not in ("", "/"):
+        raise ValueError("redis.base_url path must be empty or '/'")
+
+
+def validate_redis_dbs(dbs: Any, operator_dbs: set[int] | None = None) -> None:
+    """Validate the study's per-line bus database numbers.
+
+    Each line has its own database, an integer in 1..15; database 0 is the
+    operator's live bus and is never the study's.  ``operator_dbs`` names any
+    further database numbers the operator's configuration uses; the study may
+    not share one, because the runner flushes every study database.
+    """
+    if not isinstance(dbs, dict) or set(dbs.keys()) != set(LINES):
+        raise ValueError(f"redis.db must contain exactly {LINES}")
+    numbers = [dbs[line] for line in LINES]
+    if any(
+        isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 15
+        for n in numbers
+    ):
+        raise ValueError(
+            "redis.db values must be integers in 1..15 (0 is the operator's bus)"
+        )
+    if len(set(numbers)) != len(numbers):
+        raise ValueError("redis.db numbers must be distinct")
+    shared = set(numbers) & set(operator_dbs or ())
+    if shared:
+        raise ValueError(
+            f"redis.db numbers {sorted(shared)} are the operator's bus database"
+        )
 
 
 def load_plan(study_dir: Path | str) -> dict[str, Any]:

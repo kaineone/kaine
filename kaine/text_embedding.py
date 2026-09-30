@@ -146,7 +146,6 @@ class SentenceTransformerTextEmbedder:
     async def load(self) -> None:
         if self._model is not None:
             return
-        import asyncio
 
         os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
         from kaine.hardware import resolve_device
@@ -172,7 +171,6 @@ class SentenceTransformerTextEmbedder:
     async def encode(self, text: str) -> list[float]:
         if self._model is None:
             await self.load()
-        import asyncio
 
         def _encode_sync() -> list[float]:
             assert self._model is not None
@@ -184,7 +182,6 @@ class SentenceTransformerTextEmbedder:
     async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
         if self._model is None:
             await self.load()
-        import asyncio
 
         items = list(texts)
 

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+import inspect
 import json
 import logging
 from datetime import datetime, timezone
@@ -91,6 +93,62 @@ def _decode_workspace(fields: dict[str, Any]) -> dict[str, Any]:
     return json.loads(raw or "{}")
 
 
+async def _reraise_swallowed_cancel(awaitable):
+    """Re-raise a cancellation swallowed by a Redis client call.
+
+    A Redis client can catch the calling task's CancelledError and return normally
+    (Python 3.11's ``asyncio.wait_for``, which redis-py uses for every command when
+    a socket timeout is set, and redis-py 8 sets one by default); the task's
+    cancellation count still rose, so this re-raises it. It compares against the
+    count before the call, so cleanup running after a task caught its own
+    cancellation, and libraries that ``uncancel()`` their own timeouts, are
+    unaffected.
+    """
+    task = asyncio.current_task()
+    before = task.cancelling() if task is not None else 0
+    result = await awaitable
+    if task is not None and task.cancelling() > before:
+        raise asyncio.CancelledError
+    return result
+
+
+class _CancellationSafeClient:
+    """Adapter that re-raises cancellations swallowed by the wrapped Redis client.
+
+    Calls that return a coroutine (every redis-py command) are guarded; other results,
+    such as a pipeline, and attribute reads and assignments pass through to the
+    underlying client.
+    """
+
+    __slots__ = ("_raw",)
+
+    def __init__(self, raw):
+        object.__setattr__(self, "_raw", raw)
+
+    def __getattr__(self, name):
+        attr = getattr(self._raw, name)
+        if not callable(attr):
+            return attr
+
+        @functools.wraps(attr)
+        def wrapper(*args, **kwargs):
+            result = attr(*args, **kwargs)
+            if inspect.iscoroutine(result):
+                return _reraise_swallowed_cancel(result)
+            return result
+
+        return wrapper
+
+    def __setattr__(self, name, value):
+        setattr(self._raw, name, value)
+
+    def __delattr__(self, name):
+        delattr(self._raw, name)
+
+    def __repr__(self):
+        return f"_CancellationSafeClient({self._raw!r})"
+
+
 class AsyncBus:
     def __init__(
         self,
@@ -98,7 +156,14 @@ class AsyncBus:
         client: Optional[aioredis.Redis] = None,
     ) -> None:
         self._config = config
-        self._client = client or aioredis.from_url(config.url, decode_responses=True)
+        self._client = _CancellationSafeClient(
+            client
+            or aioredis.from_url(
+                config.url,
+                decode_responses=True,
+                max_connections=config.max_connections,
+            )
+        )
         self._audited = False
 
     @property
@@ -155,6 +220,41 @@ class AsyncBus:
                 "same checkout is safe to deploy onto a network-attached host."
             )
         self._audited = True
+
+    async def server_maxmemory(self) -> int:
+        """Return the server's ``maxmemory`` in bytes (0 means no limit).
+
+        Reads ``CONFIG GET maxmemory``. Raises when the command is refused or
+        the reply carries no usable value, so a caller can report that the
+        limit is unknown instead of assuming one.
+        """
+        reply = await self._client.config_get("maxmemory")
+        value = (reply or {}).get("maxmemory")
+        if value is None:
+            value = (reply or {}).get(b"maxmemory")
+        if isinstance(value, bytes):
+            value = value.decode()
+        if value is None or str(value).strip() == "":
+            raise ValueError("CONFIG GET maxmemory returned no value")
+        return int(str(value).strip())
+
+    async def stream_entry_bytes(self, stream: str, *, min_entries: int = 100) -> Optional[int]:
+        """Measured Redis memory per entry of ``stream``, or None.
+
+        ``MEMORY USAGE`` of the stream key divided by ``XLEN``. Returns None
+        when the stream holds fewer than ``min_entries`` entries (the fixed
+        per-key overhead would dominate) or the server refuses the command.
+        """
+        try:
+            length = int(await self._client.xlen(stream))
+            if length < max(1, min_entries):
+                return None
+            usage = await self._client.memory_usage(stream)
+        except ResponseError:
+            return None
+        if not usage:
+            return None
+        return max(1, int(usage) // length)
 
     async def publish(self, event: Event) -> str:
         stream = module_stream(event.source)

@@ -4,12 +4,16 @@
 """Per-line, per-step operator overlay generation."""
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 from typing import Any
 
 import kaine.boot
 from kaine.config import deep_merge
+
+#: The ignition log's directory, relative to a step's working directory.
+IGNITION_LOG_DIR = "data/ignition"
 
 
 def build_overlay(
@@ -26,7 +30,8 @@ def build_overlay(
     The overlay is the deep merge of the operator's own
     ``config/kaine.operator.toml`` (when present) with the study-required
     settings for the line and step.  Study settings always win so every other
-    known module is disabled and every isolation key is line-specific.
+    known module is disabled and every isolation key is step-specific.
+    ``viewing_index`` is the step's k.
     """
     base_config = _load_toml(base_config_path)
     operator_config = (
@@ -34,8 +39,10 @@ def build_overlay(
     )
 
     all_modules = set(kaine.boot.known_module_names())
+    # Branch k and accumulate k gain order[:k]; the seed and the repeat keep
+    # the base set whatever index they are given.
     enabled = set(plan["base_modules"])
-    if step_kind == "viewing" and line == "main":
+    if step_kind == "viewing" and line in ("branch", "accumulate"):
         enabled.update(plan["order"][:viewing_index])
 
     modules = {name: (name in enabled) for name in all_modules}
@@ -48,16 +55,44 @@ def build_overlay(
 
     # The operator's own value wins over the shipped one, as it does at boot.
     encoder_dir = _absolute_encoder_dir(repo_root, deep_merge(base_config, operator_config))
-    models_dir = str((repo_root / "state" / "models").resolve())
+    # A models directory already exported to the runner (the cycle image mounts
+    # the shared weights volume at /models) wins over the repository default.
+    env_models_dir = os.environ.get("KAINE_MODELS_DIR", "").strip()
+    models_dir = (
+        str(Path(env_models_dir).resolve())
+        if env_models_dir
+        else str((repo_root / "state" / "models").resolve())
+    )
+
+    # Every branch step is its own being, so each gets its own collections;
+    # the repeat and the accumulate line use their line prefix as-is.
+    collection_prefix = plan["collections"][line]
+    if line == "branch":
+        collection_prefix = f"{collection_prefix}{viewing_index}_"
 
     study_overlay: dict[str, Any] = {
         "modules": modules,
+        "soma": {
+            # Gestation uses local womb mode, which requires Soma's self-rhythm.
+            # A being gestated with the self-rhythm also keeps it for all later
+            # viewings, because the interoceptive feature slots must remain filled.
+            "self_rhythm_enabled": True,
+        },
         "perception_feed": perception,
-        "developmental_stage": {"enabled": True},
-        "mnemos": {"collection_prefix": plan["collections"][line]},
-        "empatheia": {"collection": plan["collections"][line]},
-        "ignition_log": {"enabled": True},
-        "research_event_log": {"enabled": True},
+        "developmental_stage": {"enabled": True, "require_operator_ack_for_birth": False},
+        "mnemos": {"collection_prefix": collection_prefix},
+        "empatheia": {"collection": collection_prefix},
+        # Relative to the step's working directory; the runner records it.
+        "ignition_log": {"enabled": True, "directory": IGNITION_LOG_DIR},
+        # Every step records what Nexus shows and the external utterances;
+        # the raw A/V archive is never part of a study.
+        "research_event_log": {
+            "enabled": True,
+            "external_utterances": {"enabled": True},
+            "nexus_record": {"enabled": True},
+            "raw_archive": {"enabled": False},
+        },
+        "evaluation": {"workspace_trajectory": True},
         "preservation": {
             "divergence_monitor": {"enabled": True},
             "welfare_response": {"enabled": True},

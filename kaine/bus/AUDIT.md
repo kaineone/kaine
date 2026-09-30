@@ -19,7 +19,7 @@ restricts external reach, not Redis's own `bind`.
 | 4 | `appendonly` | `yes` | not directly checked | `--appendonly yes` in compose | `appendonly yes` in `/etc/redis/redis.conf` |
 | 5 | `appendfsync` | `everysec` | not directly checked | `--appendfsync everysec` in compose | `appendfsync everysec` in `/etc/redis/redis.conf` |
 | 6 | Dangerous commands disabled | recommend renaming `FLUSHALL`, `FLUSHDB`, `CONFIG` for production | not checked; disabling `CONFIG` would cause this audit to fall back to warnings, which is acceptable | not yet enforced in compose; documented for hardening | rename-command lines in `/etc/redis/redis.conf` |
-| 7 | `maxmemory` | sized to host RAM minus other workloads | not checked | `--maxmemory 1gb` in compose | `maxmemory <bytes>` in `/etc/redis/redis.conf` |
+| 7 | `maxmemory` | sized to host RAM minus other workloads, and at least the bus budget | not checked by `audit()`; `python -m kaine.preboot` reads it with `CONFIG GET maxmemory` and compares it with the budget the stream caps imply | `--maxmemory ${KAINE_REDIS_MAXMEMORY:-4gb}` in compose | `maxmemory <bytes>` in `/etc/redis/redis.conf` |
 | 8 | `maxmemory-policy` | `noeviction` (the bus relies on `MAXLEN` trimming, not LRU) | not checked | `--maxmemory-policy noeviction` in compose | `maxmemory-policy noeviction` in `/etc/redis/redis.conf` |
 
 When Redis answers `(error) ERR ...` to `CONFIG GET` (a common production

@@ -137,10 +137,10 @@ class ActiveInferenceEngine(Protocol):
 
     @property
     def actions(self) -> tuple[str, ...]:
-        ...
+        """The ordered action names the engine selects among."""
 
     def step(self, snapshot: Any) -> EngineResult:
-        ...
+        """Run one inference step over ``snapshot`` and return the result."""
 
 
 class _EngineBase(ABC, ActiveInferenceEngine):
@@ -828,38 +828,42 @@ class PymdpEngine(_EngineBase):
             return None
 
     def _warm_up(self) -> None:
-        try:
-            self._infer(encode_snapshot_default(self._model))
-        except Exception:
-            log.debug("pymdp warm-up step failed (non-fatal)", exc_info=True)
+        """Compile every jitted path a live step takes, with the live shapes.
 
-        if self._model.pB is None:
+        JAX compiles once per argument shape/dtype, so the warm-up drives the
+        same helpers a live step uses (``_infer``, then ``_learn`` →
+        action-factor restore → evidence cap → ``_propagate``) on the real
+        posterior ``qs`` rather than hand-built stand-ins; a stand-in of a
+        different shape compiles a variant no live step uses and leaves the
+        first live learning step to compile inside the EFE deadline.
+
+        Model-agnostic: the observation is index 0 in every modality of *this*
+        engine's model (compilation keys on shape and dtype, not value), so it
+        never assumes Nous's default factor layout; benchmark and task models
+        have their own. Pure: every helper returns new values, the results are
+        discarded, and no engine attribute is assigned, so a warmed engine
+        behaves exactly like an unwarmed one apart from the compile caches.
+        """
+        obs = [0] * self._model.num_modalities
+        try:
+            _posterior, _efe, best_idx, qs, _agent, _prior = self._infer(obs)
+        except Exception:
+            log.warning("pymdp warm-up step failed (non-fatal)", exc_info=True)
+            return
+
+        # A live step learns only when the model learns transitions and the
+        # policy array exists (``_infer`` returns early otherwise).
+        if self._model.pB is None or self._policies is None or self._policies.ndim != 3:
             return
 
         try:
-            import equinox as eqx
-            import jax
-            import jax.numpy as jnp
-
-            obs_batched = [jnp.array([o]) for o in encode_snapshot_default(self._model)]
-            qs_dummy = [jnp.full((1, n), 1.0 / n) for n in self._model.num_states]
-            beliefs = [jnp.concatenate([q, q], axis=1) for q in qs_dummy]
-            if self._policies is not None:
-                row = jnp.asarray(self._first_step_row(0))
-            else:
-                row = jnp.zeros((1, len(self._model.num_states)))
-            acts = row[:, None, :]
-            _agent_tmp = self._jit_learn(self._agent, beliefs, obs_batched, acts)
-            if self._orig_pB0_batched is not None and self._orig_B0_batched is not None:
-                _agent_tmp = eqx.tree_at(
-                    lambda ag: (ag.pB[ACTION_FACTOR], ag.B[ACTION_FACTOR]),
-                    _agent_tmp,
-                    (self._orig_pB0_batched, self._orig_B0_batched),
-                )
-            _ = self._jit_propagate(_agent_tmp, row, qs_dummy)
-            jax.block_until_ready(_)
+            row = self._first_step_row(best_idx)
+            agent = self._learn(self._agent, qs, qs, row, obs)
+            agent = self._restore_action_factor(agent)
+            agent = self._cap_perceptual_transitions(agent)
+            self._propagate(agent, row, qs)
         except Exception:
-            log.debug("pymdp learning warm-up failed (non-fatal)", exc_info=True)
+            log.warning("pymdp learning warm-up failed (non-fatal)", exc_info=True)
 
     # ------------------------------------------------------------------ #
     # pymdp-specific helpers

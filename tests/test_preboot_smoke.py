@@ -504,6 +504,11 @@ async def test_dry_run_run_async_checks_survives_a_crashing_check(monkeypatch):
         return [preboot.CheckResult(preboot.GROUP_WELFARE, "x", preboot.PASS)]
 
     monkeypatch.setattr(preboot, "check_welfare", _ok_welfare)
+
+    async def _no_resources(_config):
+        return []
+
+    monkeypatch.setattr(preboot, "check_resources", _no_resources)
     results = await preboot.run_async_checks(config)
     crashed = [r for r in results if r.status == preboot.FAIL and "crashed" in r.name]
     assert crashed, "a crashing check must degrade to one honest FAIL row, not propagate"
@@ -535,6 +540,7 @@ async def test_dry_run_resolves_state_key_before_services_check(monkeypatch, tmp
     monkeypatch.setattr(preboot, "check_organ", _noop)
     monkeypatch.setattr(preboot, "check_perception", _noop)
     monkeypatch.setattr(preboot, "check_welfare", _noop)
+    monkeypatch.setattr(preboot, "check_resources", _noop)
 
     config = _enabled_config()
     await preboot.run_async_checks(config)

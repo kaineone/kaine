@@ -178,7 +178,7 @@ async def test_watcher_run_loops_until_stop_event(tmp_path):
 
     task = asyncio.create_task(watcher.run(stop_event))
     await stop_soon()
-    await task
+    await asyncio.wait_for(task, timeout=5.0)
 
     assert len(calls) >= 1
 
@@ -193,7 +193,7 @@ def write_request_for_test(tmp_path, reason, stop):
 
 @pytest.mark.asyncio
 async def test_a_failed_result_write_still_releases_the_freeze(tmp_path, monkeypatch):
-    import kaine.cycle.preserve_watch as pw
+    from kaine.cycle import preserve_watch as pw
 
     def broken_write(result, path=None):
         raise OSError("disk full")
@@ -210,7 +210,7 @@ async def test_a_failed_result_write_still_releases_the_freeze(tmp_path, monkeyp
 
 @pytest.mark.asyncio
 async def test_watcher_retries_failed_freeze_release(tmp_path, monkeypatch):
-    import kaine.cycle.preserve_watch as pw
+    from kaine.cycle import preserve_watch as pw
 
     real_pop_freeze = pw.pop_freeze
     call_count = 0

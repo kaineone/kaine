@@ -22,8 +22,11 @@ captures raw audio or video — perception is processed in memory and released.
 | `kaine-chatterbox` | text-to-speech | `127.0.0.1:8883` | card 1 |
 | `kaine-nexus` | web UI (uvicorn) | `127.0.0.1:8088` | no |
 | `kaine-cycle` | the cognitive runtime (the entity) | none | card 1 |
+| `kaine-study` | the module-ignition study runner (`--profile study`) | none | card 1 |
 
-`kaine-nexus` and `kaine-cycle` are the **same image**, different command.
+`kaine-nexus`, `kaine-cycle`, and `kaine-study` are the **same image**, different command.
+`kaine-study` keeps its study directories on the `kaine-studies` volume; see
+[operations.md](operations.md#running-the-study-in-the-container).
 Speaches runs on CPU by design — running it on GPU triggers a cuDNN crash when
 the secondary GPU also serves TTS.
 
@@ -122,6 +125,10 @@ containerized — overlay `compose/kaine.organ-host.yml` and point
 `[lingua].chat_url` at `http://host.docker.internal:11434/v1`
 (`host.containers.internal` on Podman).
 
+The in-container organ unloads after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`
+idle seconds (default 600) and reloads on the next request. If you override
+`KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
+
 ## State, secrets, and the env/gate-var matrix
 
 Persistent named volumes: `kaine-redis-data`, `kaine-qdrant-data`,
@@ -129,13 +136,23 @@ Persistent named volumes: `kaine-redis-data`, `kaine-qdrant-data`,
 forks, preservation bundles, individuation, world/self models, control state,
 audit/incident logs), `kaine-eval-data` (`/app/data/evaluation` on both the
 cycle and Nexus — the run manifests under `runs/` plus every evaluation
-observer's output), and `kaine-trajectory` (`/app/data/workspace_trajectory`).
+observer's output), `kaine-backups` (`/app/backups` — preservation bundles
+from the divergence monitor and welfare response), `kaine-ignition`
+(`/app/data/ignition` — the film-aligned ignition log), and
+`kaine-trajectory` (`/app/data/workspace_trajectory`).
 `kaine-state` keeps owner-only (0700/0600) permissions inside the container and
 survives `down`/`up`; research output survives it too — nothing the run
 produces lives on the ephemeral container layer.
 
-Redis runs with a 4 GB `--maxmemory` ceiling and `noeviction` (the bus fails
-loud rather than silently dropping events); every service logs through the
+Redis runs with a `--maxmemory` ceiling set by `KAINE_REDIS_MAXMEMORY` in
+`compose/.env` (default `4gb`) and `noeviction` (the bus fails loud rather than
+silently dropping events, so a full Redis halts the entity). Size it to the
+bus: `python -m kaine.preboot` reports a "Bus budget" row that FAILS when the
+measured stream sizes would not fit, and WARNS when only the estimated sizes
+push it over or it is above 70% of the cap. A full study with every module
+enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM. The
+Quadlet unit reads the same variable from `compose/.env`, and an unset or empty
+value falls back to `4gb`; restart Redis after changing it. Every service logs through the
 shared `json-file` rotation anchor (50 MB × 3 files). `config/profiles/` is
 baked into the image, so `KAINE_PROFILE=thesis_test` resolves in-container
 without a bind mount. The image also bakes `ARG GIT_SHA` into

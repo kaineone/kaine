@@ -116,6 +116,7 @@ def build_launch_cmd(
     alias: str,
     chat_url: str,
     host: str = "127.0.0.1",
+    sleep_idle_seconds: int = 600,
     lora_adapter: Optional[str] = None,
 ) -> list[str]:
     """Build the exact server launch argv.
@@ -130,6 +131,9 @@ def build_launch_cmd(
     per-request, client-side, via ``chat_template_kwargs.enable_thinking=false``
     (kaine.modules.lingua.client) — the organ is a voice, not a reasoner.
 
+    The organ unloads after ``sleep_idle_seconds`` idle seconds and reloads on the
+    next request (``-1`` keeps it loaded).
+
     When ``lora_adapter`` is given (the on-device voice-alignment reload bracket
     passes an accepted adapter via ``LORA_ADAPTER_ENV``), ``--lora <adapter>`` is
     appended so the served organ carries the trained voice — a real serving flag,
@@ -143,6 +147,7 @@ def build_launch_cmd(
         "--port", str(port),
         "--jinja",
         "--reasoning-budget", "0",
+        "--sleep-idle-seconds", str(sleep_idle_seconds),
     ]
     if lora_adapter:
         cmd += ["--lora", str(lora_adapter)]
@@ -279,6 +284,21 @@ def _read_pidfile(pidfile: Path) -> Optional[int]:
         return None
 
 
+def sleep_idle_seconds_from_config(lingua: dict[str, Any]) -> int:
+    """Return the idle-unload timeout from [lingua].model_server_sleep_idle_seconds.
+
+    ``-1`` keeps the organ loaded indefinitely; any non-negative integer releases
+    the model and KV cache after that many seconds with no requests, reloading on
+    the next request. Other types or values are rejected before launch.
+    """
+    value = lingua.get("model_server_sleep_idle_seconds", 600)
+    if isinstance(value, bool) or not isinstance(value, int) or value < -1:
+        raise ValueError(
+            "[lingua].model_server_sleep_idle_seconds must be an integer of -1 or more (-1 keeps the organ loaded)"
+        )
+    return value
+
+
 def _resolve_launch(
     config: dict[str, Any], *, override_bin: Optional[str]
 ) -> tuple[Optional[Path], list[str], str, str, Optional[str]]:
@@ -315,7 +335,12 @@ def _resolve_launch(
     # on-device reload bracket; absent = serve the base organ unchanged.
     lora_adapter = os.environ.get(LORA_ADAPTER_ENV) or None
     cmd = build_launch_cmd(
-        binary, gguf=gguf, alias=alias, chat_url=chat_url, lora_adapter=lora_adapter
+        binary,
+        gguf=gguf,
+        alias=alias,
+        chat_url=chat_url,
+        lora_adapter=lora_adapter,
+        sleep_idle_seconds=sleep_idle_seconds_from_config(lingua),
     )
     return binary, cmd, chat_url, alias, api_key
 

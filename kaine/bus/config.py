@@ -28,6 +28,7 @@ class BusConfig:
     per_stream_maxlen: dict[str, int] = field(default_factory=dict)
     url_override: Optional[str] = None
     audit_required: bool = True
+    max_connections: int = 1024
 
     @property
     def url(self) -> str:
@@ -75,6 +76,38 @@ def load_secrets_doc(secrets_toml: Optional[Path] = None) -> dict:
     return _read_toml(secrets_toml)
 
 
+def resolve_redis_auth(
+    env: Optional[dict[str, str]] = None,
+    secrets_toml: Optional[Path] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve Redis username and password from environment and secrets.
+
+    This function reads only the environment and ``config/secrets.toml``.
+    It never reads ``[redis].password`` or ``[redis].username`` from
+    ``kaine.toml`` or the operator file, because credentials do not belong in
+    configuration files.
+
+    Precedence mirrors :func:`load_bus_config` for env and secrets:
+    ``KAINE_REDIS_USERNAME``/``KAINE_REDIS_PASSWORD`` win over the
+    ``[redis].username``/``[redis].password`` entries in ``config/secrets.toml``.
+    Empty strings are treated as absent.
+    """
+    env = env if env is not None else os.environ
+    redis_secrets = load_secrets_doc(secrets_toml).get("redis") or {}
+
+    username = env.get("KAINE_REDIS_USERNAME") or redis_secrets.get("username")
+    password = env.get("KAINE_REDIS_PASSWORD") or redis_secrets.get("password")
+    return username or None, password or None
+
+
+def _parse_max_connections(raw) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise BusConfigError("[bus].max_connections must be a positive integer")
+    if raw < 1 or raw > 100_000:
+        raise BusConfigError("[bus].max_connections must be between 1 and 100000")
+    return raw
+
+
 def load_bus_config(
     kaine_toml: Optional[Path] = None,
     secrets_toml: Optional[Path] = None,
@@ -117,6 +150,10 @@ def load_bus_config(
     bus_doc = kaine_doc.get("bus") or {}
     redis_secrets = secrets_doc.get("redis") or {}
 
+    max_connections = _parse_max_connections(
+        bus_doc.get("max_connections", 1024)
+    )
+
     url_override = env.get("KAINE_REDIS_URL") or redis_secrets.get("url")
 
     password = (
@@ -142,6 +179,7 @@ def load_bus_config(
         },
         url_override=url_override,
         audit_required=bool(bus_doc.get("audit_required", True)),
+        max_connections=max_connections,
     )
 
     if not url_override and not config.password:
@@ -156,3 +194,26 @@ def load_bus_config(
 
 def maxlen_for(config: BusConfig, stream: str) -> int:
     return config.per_stream_maxlen.get(stream, config.default_maxlen)
+
+
+#: Typical serialized size of one stream entry, in bytes. These are ESTIMATES
+#: measured on a live bus (Redis memory per entry, including stream overhead),
+#: used only by the pre-boot "Bus budget" row to estimate how much Redis memory
+#: the configured maxlen caps imply. They are not limits and nothing enforces
+#: them. A stream that is not listed uses DEFAULT_TYPICAL_EVENT_BYTES.
+TYPICAL_EVENT_BYTES: dict[str, int] = {
+    "topos.out": 40_000,
+    "workspace.broadcast": 6_600,
+    "chronos.out": 1_300,
+    "soma.out": 550,
+    "cycle.out": 250,
+    "audition.out": 400,
+}
+
+#: Estimate for streams without a measured size.
+DEFAULT_TYPICAL_EVENT_BYTES = 2_000
+
+
+def typical_event_bytes(stream: str) -> int:
+    """Estimated bytes one entry of ``stream`` occupies in Redis."""
+    return TYPICAL_EVENT_BYTES.get(stream, DEFAULT_TYPICAL_EVENT_BYTES)

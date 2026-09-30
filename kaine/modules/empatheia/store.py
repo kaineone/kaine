@@ -49,23 +49,32 @@ def _point_id(agent_id: str) -> str:
 
 @runtime_checkable
 class AgentStore(Protocol):
-    async def initialize(self) -> None: ...
+    async def initialize(self) -> None:
+        """Protocol member: initialize."""
 
-    async def shutdown(self) -> None: ...
+    async def shutdown(self) -> None:
+        """Protocol member: shutdown."""
 
-    async def get(self, agent_id: str) -> Optional[AgentModel]: ...
+    async def get(self, agent_id: str) -> Optional[AgentModel]:
+        """Protocol member: get."""
 
-    async def put(self, model: AgentModel) -> None: ...
+    async def put(self, model: AgentModel) -> None:
+        """Protocol member: put."""
 
-    async def all_ids(self) -> list[str]: ...
+    async def all_ids(self) -> list[str]:
+        """Protocol member: all ids."""
 
-    async def all_profiles(self) -> dict[str, AgentModel]: ...
+    async def all_profiles(self) -> dict[str, AgentModel]:
+        """Protocol member: all profiles."""
 
-    async def replace_all(self, models: Sequence[AgentModel]) -> None: ...
+    async def replace_all(self, models: Sequence[AgentModel]) -> None:
+        """Protocol member: replace all."""
 
-    def serialize(self) -> bytes: ...
+    def serialize(self) -> bytes:
+        """Protocol member: serialize."""
 
-    def deserialize(self, data: bytes) -> None: ...
+    def deserialize(self, data: bytes) -> None:
+        """Protocol member: deserialize."""
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +193,6 @@ class QdrantAgentStore:
         self._initialized = True
 
     async def _open_client(self) -> None:
-        import asyncio
-
         def _open():
             from qdrant_client import AsyncQdrantClient  # type: ignore[import-untyped]
 
