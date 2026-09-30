@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from kaine.experiment.run_context import get_run_context
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class AsyncJsonlSink:
         flush_interval_s: float = 0.5,
         queue_maxsize: int = 4096,
     ) -> None:
-        self._dir = Path(dir_path)
+        self._dir = resolve(dir_path)
         self._name = str(name)
         self._retention_days = int(retention_days)
         self._flush_interval_s = float(flush_interval_s)

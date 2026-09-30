@@ -1347,6 +1347,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.parse_args(argv)
 
+    from kaine.storage import install_data_root
+
     try:
         config = load_runtime_config(SHIPPED_CONFIG_PATH, OPERATOR_CONFIG_PATH)
     except FileNotFoundError as exc:
@@ -1355,6 +1357,8 @@ def main(argv: list[str] | None = None) -> int:
     except ProfileError as exc:
         sys.stderr.write(f"pre-boot: configuration error: {exc}\n")
         return 2
+
+    install_data_root(config)
 
     try:
         results = asyncio.run(run_async_checks(config))
