@@ -66,7 +66,7 @@ from kaine.experiment import (
     set_run_context,
     write_manifest,
 )
-from kaine.hardware import tune_cpu_threads
+from kaine.hardware import allowed_devices, apply_hardware_config
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import MaturationGateRunner
 from kaine.lifecycle.manager import ForkManager
@@ -1146,12 +1146,18 @@ async def _boot_and_run(
             log.warning("could not write run manifest", exc_info=True)
     log.info("run_id=%s seed=%d git=%s", run_ctx.run_id, seed, run_ctx.git_sha)
 
-    # Cap torch's CPU thread pool before any module constructs anything
-    # heavy. Default cap = max(1, cpu_count // 2), leaving room for the
-    # other modules' threads to coexist on a many-core host.
-    threads_set = tune_cpu_threads()
+    # Apply [hardware] settings before any module constructs anything
+    # heavy. Cap the torch CPU thread pool to [hardware].cpu_threads when
+    # set, otherwise max(1, cpu_count // 2), and install the operator's
+    # [hardware].allowed_devices set before any module resolves its device.
+    threads_set = apply_hardware_config(kaine_config)
     if threads_set:
         log.info("torch CPU thread pool capped at %d threads", threads_set)
+    if allowed_devices() is not None:
+        log.info(
+            "devices limited to the operator's allowed set: %s",
+            ", ".join(allowed_devices()),
+        )
 
     # Cooperative GPU headroom pre-flight (opt-in via [gpu_preflight].enabled).
     # Runs BEFORE the bus/modules open so a starved host refuses to boot cleanly

@@ -31,6 +31,8 @@ import logging
 import os
 import platform
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,6 +42,40 @@ _CUDA_INDEXED_RE = re.compile(r"^cuda:(\d+)$")
 _XPU_INDEXED_RE = re.compile(r"^xpu:(\d+)$")
 
 log = logging.getLogger(__name__)
+
+_ALLOWED_DEVICES: tuple[str, ...] | None = None
+
+
+def set_allowed_devices(devices: list[str] | tuple[str, ...] | None) -> None:
+    """Install or clear the operator's allowed accelerator set.
+
+    ``None`` removes any restriction. A non-empty sequence of validated
+    device strings is normalised and stored; duplicates collapse to their
+    first-seen order.
+    """
+    global _ALLOWED_DEVICES
+    if devices is None:
+        _ALLOWED_DEVICES = None
+        return
+    if not devices:
+        raise ValueError(
+            '[hardware].allowed_devices must list at least one device; use ["cpu"] for CPU only'
+        )
+    normalised: list[str] = []
+    for dev in devices:
+        _validate_device_string(dev)
+        if dev == "cuda":
+            dev = "cuda:0"
+        elif dev == "xpu":
+            dev = "xpu:0"
+        if dev not in normalised:
+            normalised.append(dev)
+    _ALLOWED_DEVICES = tuple(normalised)
+
+
+def allowed_devices() -> tuple[str, ...] | None:
+    """Return the current operator allowed-device restriction, if any."""
+    return _ALLOWED_DEVICES
 
 
 def _try_torch():
@@ -106,6 +142,18 @@ def available_xpu_devices() -> list[str]:
     is present or torch isn't installed.
     """
     return [f"xpu:{i}" for i in range(_xpu_device_count())]
+
+
+def _mps_available() -> bool:
+    """Return whether Apple MPS is usable, never raising."""
+    torch = _try_torch()
+    if torch is None:
+        return False
+    try:
+        mps = getattr(getattr(torch, "backends", None), "mps", None)
+        return bool(mps is not None and mps.is_available())
+    except Exception:
+        return False
 
 
 def detect_device() -> str:
@@ -206,18 +254,12 @@ def select_device(preferred: str | None = None) -> str:
     return detect_device()
 
 
-def resolve_device(
+def _resolve_unrestricted(
     preferred: str | None = None,
     *,
     fallback: str = "cuda:0",
 ) -> str:
-    """Operator-facing helper. Never raises on a missing CUDA or XPU index;
-    falls back to `fallback` (or `cpu` if even that's unavailable) with
-    a warning.
-
-    Accepts: `None`, `"auto"`, `"cuda"`, `"cuda:N"`, `"xpu"`, `"xpu:N"`,
-    `"mps"`, `"cpu"`.
-    """
+    """Inner device resolution without operator allowed-device restrictions."""
     forced = os.environ.get(_ENV_OVERRIDE)
     if forced:
         try:
@@ -277,12 +319,83 @@ def resolve_device(
         log.warning("xpu requested but no XPU device available; falling back to cpu")
         return "cpu"
     if preferred == "mps":
-        torch = _try_torch()
-        mps = getattr(getattr(torch, "backends", None), "mps", None) if torch else None
-        if mps is not None and mps.is_available():
+        if _mps_available():
             return "mps"
         log.warning("mps requested but unavailable; falling back to cpu")
         return "cpu"
+    return "cpu"
+
+
+def resolve_device(
+    preferred: str | None = None,
+    *,
+    fallback: str = "cuda:0",
+) -> str:
+    """Operator-facing helper. Never raises on a missing CUDA or XPU index;
+    falls back to `fallback` (or `cpu` if even that's unavailable) with
+    a warning.
+
+    Accepts: `None`, `"auto"`, `"cuda"`, `"cuda:N"`, `"xpu"`, `"xpu:N"`,
+    `"mps"`, `"cpu"`.
+
+    When the operator has configured ``[hardware].allowed_devices``, the
+    resolved device is constrained to that set unless ``KAINE_FORCE_DEVICE``
+    overrides it.
+    """
+    forced = os.environ.get(_ENV_OVERRIDE)
+    result = _resolve_unrestricted(preferred, fallback=fallback)
+    if forced:
+        if _ALLOWED_DEVICES is not None and result not in _ALLOWED_DEVICES:
+            log.warning(
+                "KAINE_FORCE_DEVICE=%s overrides the operator's allowed devices %s",
+                result,
+                list(_ALLOWED_DEVICES),
+            )
+        return result
+    return _constrain(result)
+
+
+def _first_available_allowed() -> str | None:
+    """Return the first allowed accelerator that is currently available, or None."""
+    if _ALLOWED_DEVICES is None:
+        return None
+    for allowed in _ALLOWED_DEVICES:
+        if allowed == "cpu":
+            continue
+        m = _CUDA_INDEXED_RE.match(allowed)
+        if m:
+            if int(m.group(1)) < _cuda_device_count():
+                return allowed
+            continue
+        mx = _XPU_INDEXED_RE.match(allowed)
+        if mx:
+            if int(mx.group(1)) < _xpu_device_count():
+                return allowed
+            continue
+        if allowed == "mps" and _mps_available():
+            return allowed
+    return None
+
+
+def _constrain(device: str) -> str:
+    """Enforce the operator's allowed_devices set, if any."""
+    key = "cuda:0" if device == "cuda" else "xpu:0" if device == "xpu" else device
+    if _ALLOWED_DEVICES is None or device == "cpu" or key in _ALLOWED_DEVICES:
+        return device
+    fallback = _first_available_allowed()
+    if fallback is not None:
+        log.warning(
+            "device %s is outside the operator's allowed devices %s; using %s",
+            device,
+            list(_ALLOWED_DEVICES),
+            fallback,
+        )
+        return fallback
+    log.warning(
+        "device %s is outside the operator's allowed devices %s and none of them is available; using cpu",
+        device,
+        list(_ALLOWED_DEVICES),
+    )
     return "cpu"
 
 
@@ -327,6 +440,139 @@ def tune_cpu_threads(*, max_threads: int | None = None) -> int:
         log.warning("torch.set_num_threads(%d) failed", target, exc_info=True)
         return 0
     return target
+
+
+def apply_hardware_config(config: dict[str, Any]) -> int:
+    """Apply the ``[hardware]`` section once at cycle boot.
+
+    Installs the operator's allowed device set before any module resolves
+    its device, and caps the torch CPU thread pool.
+    """
+    hw = config.get("hardware") or {}
+    try:
+        set_allowed_devices(hw.get("allowed_devices"))
+    except ValueError as exc:
+        raise ValueError(f"[hardware].allowed_devices: {exc}") from exc
+    return tune_cpu_threads(max_threads=hw.get("cpu_threads"))
+
+
+def _in_container() -> bool:
+    """Best-effort container detection; never raises."""
+    return os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+
+
+def _run_nvidia_smi(exe: str, flag: str, query: str, timeout_s: float) -> str | None:
+    try:
+        result = subprocess.run(
+            [exe, f"--{flag}={query}", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout
+    except Exception:
+        return None
+
+
+def device_consumers(timeout_s: float = 5.0) -> list[dict[str, Any]]:
+    """Return per-device consumer data from nvidia-smi, never raising.
+
+    The result is a list of GPU rows with memory and process information.
+    When nvidia-smi is absent or any query fails, an empty list is returned
+    instead of raising.
+    """
+    rows: list[dict[str, Any]] = []
+    try:
+        exe = shutil.which("nvidia-smi")
+        if exe is None:
+            return rows
+        gpu_out = _run_nvidia_smi(
+            exe, "query-gpu", "index,uuid,memory.total,memory.used,memory.free", timeout_s
+        )
+        if gpu_out is None:
+            return rows
+        apps_out = _run_nvidia_smi(
+            exe, "query-compute-apps", "pid,process_name,used_memory,gpu_uuid", timeout_s
+        )
+        apps_ok = apps_out is not None
+        app_rows: list[tuple[int, str, int, str]] = []
+        if apps_ok:
+            for line in apps_out.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) != 4:
+                    continue
+                pid_s, name, mem_s, gpu_uuid = parts
+                if "[N/A]" in (pid_s, mem_s):
+                    continue
+                try:
+                    pid = int(pid_s)
+                    mem = int(float(mem_s))
+                except ValueError:
+                    continue
+                app_rows.append((pid, name, mem, gpu_uuid))
+        container = _in_container()
+        for line in gpu_out.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) != 5:
+                continue
+            idx_s, uuid, total_s, used_s, free_s = parts
+            if "[N/A]" in (total_s, used_s, free_s):
+                continue
+            try:
+                idx = int(idx_s)
+                total = int(float(total_s))
+                used = int(float(used_s))
+                free = int(float(free_s))
+            except ValueError:
+                continue
+            processes: list[dict[str, Any]] = []
+            any_invisible = False
+            for pid, name, mem, proc_uuid in app_rows:
+                if proc_uuid != uuid:
+                    continue
+                visible = os.path.exists(f"/proc/{pid}")
+                if not visible:
+                    any_invisible = True
+                processes.append(
+                    {"pid": pid, "name": name, "used_mib": mem, "visible": visible}
+                )
+            unattributed = max(0, used - sum(p["used_mib"] for p in processes))
+            if container:
+                processes_visible = False
+                note = (
+                    "running in a container: processes outside it are not visible; "
+                    "used memory covers the whole device"
+                )
+            elif any_invisible:
+                processes_visible = False
+                note = "some processes belong to another process namespace"
+            else:
+                processes_visible = True
+                note = ""
+            rows.append(
+                {
+                    "device": f"cuda:{idx}",
+                    "index": idx,
+                    "total_mib": total,
+                    "used_mib": used,
+                    "free_mib": free,
+                    "processes": processes,
+                    "processes_visible": processes_visible,
+                    "unattributed_mib": unattributed,
+                    "note": note,
+                }
+            )
+    except Exception:
+        return rows
+    return rows
 
 
 def describe_host() -> dict[str, Any]:

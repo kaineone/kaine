@@ -1,8 +1,8 @@
 ## 1. Hardware inventory and consent
-- [ ] 1.1 A per-device consumer probe in `kaine/hardware.py`: processes and used memory per device where visible, and an explicit "not visible" marker otherwise. It must never raise.
+- [x] 1.1 A per-device consumer probe in `kaine/hardware.py`: processes and used memory per device where visible, and an explicit "not visible" marker otherwise. It must never raise.
 - [ ] 1.2 Wizard inventory step, listing all backends the probe recognises, plus CPU cores and system memory. Written as a step in the shared step model (`browser-first-run`), and rendered by the terminal driver.
 - [ ] 1.3 `[hardware].allowed_devices` and `[hardware].cpu_threads`: config shape validation, and the wizard consent step.
-- [ ] 1.4 `resolve_device` honours the allowed set; `KAINE_FORCE_DEVICE` is logged as an override. Tests: an excluded GPU, no section, the force override.
+- [x] 1.4 `resolve_device` honours the allowed set; `KAINE_FORCE_DEVICE` is logged as an override. Tests: an excluded GPU, no section, the force override.
 - [ ] 1.5 Fit-checked proposals, using free memory and, when present, the residency footprint catalogue. They offer alternatives when a proposal does not fit.
 
 ## 2. One device map

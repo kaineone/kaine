@@ -25,6 +25,64 @@ def test_config_shape_error_is_profile_error():
     assert issubclass(ConfigShapeError, ProfileError)
 
 
+def test_hardware_accepts_valid_table(tmp_path: Path):
+    shipped, op = _write_config(
+        tmp_path,
+        "",
+        '[hardware]\nallowed_devices = ["cuda:0"]\ncpu_threads = 4\n',
+    )
+    load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_hardware_must_be_table(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", 'hardware = "x"\n')
+    with pytest.raises(ConfigShapeError, match=r"hardware.*expected.*table"):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_hardware_allowed_devices_must_be_non_empty_list(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[hardware]\nallowed_devices = []\n')
+    with pytest.raises(
+        ConfigShapeError, match=r"hardware\.allowed_devices expected a non-empty list"
+    ):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_hardware_allowed_devices_entries_must_be_strings(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[hardware]\nallowed_devices = [1]\n')
+    with pytest.raises(
+        ConfigShapeError, match=r"hardware\.allowed_devices\[0\] expected string"
+    ):
+        load_kaine_config(shipped, op, strict_operator=True)
+
+
+def test_hardware_cpu_threads_zero_rejected(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", "[hardware]\ncpu_threads = 0\n")
+    with pytest.raises(
+        ConfigShapeError, match=r"hardware\.cpu_threads expected integer >= 1"
+    ) as exc_info:
+        load_kaine_config(shipped, op, strict_operator=True)
+    assert "0" not in str(exc_info.value)
+
+
+def test_hardware_cpu_threads_bool_rejected(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", "[hardware]\ncpu_threads = true\n")
+    with pytest.raises(
+        ConfigShapeError, match=r"hardware\.cpu_threads expected integer >= 1"
+    ) as exc_info:
+        load_kaine_config(shipped, op, strict_operator=True)
+    assert "True" not in str(exc_info.value)
+
+
+def test_hardware_cpu_threads_string_rejected(tmp_path: Path):
+    shipped, op = _write_config(tmp_path, "", '[hardware]\ncpu_threads = "4"\n')
+    with pytest.raises(
+        ConfigShapeError, match=r"hardware\.cpu_threads expected integer >= 1"
+    ) as exc_info:
+        load_kaine_config(shipped, op, strict_operator=True)
+    assert "4" not in str(exc_info.value)
+
+
 def test_modules_must_be_table(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
