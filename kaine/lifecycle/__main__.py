@@ -49,9 +49,6 @@ from kaine.lifecycle.decommission import (
     update_manifest_continuity_note,
 )
 from kaine.lifecycle.divergence import assess_divergence
-from kaine.lifecycle.liveness import (
-    argv_is_cycle as _argv_is_cycle,  # noqa: F401 - re-exported for tests
-)
 from kaine.lifecycle.liveness import cycle_process_running as _cycle_process_running
 from kaine.storage import data_root, install_data_root, resolve
 from kaine.transfer.email_request import (

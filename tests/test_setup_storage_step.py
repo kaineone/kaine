@@ -239,7 +239,8 @@ def test_existing_volumes_parses_output(monkeypatch):
 
 
 def test_lifecycle_imports_still_work():
-    from kaine.lifecycle.__main__ import _argv_is_cycle, _cycle_process_running
+    from kaine.lifecycle.__main__ import _cycle_process_running
+    from kaine.lifecycle.liveness import argv_is_cycle as _argv_is_cycle
 
     assert callable(_cycle_process_running)
     assert _argv_is_cycle([b"kaine.cycle"]) is True
@@ -247,13 +248,11 @@ def test_lifecycle_imports_still_work():
 
 
 def test_relocate_refuses_new_root_inside_old_data(tmp_path, monkeypatch):
-    import kaine.setup.storage_step as ss
-
-    monkeypatch.setattr(ss, "cycle_process_running", lambda: False)
+    monkeypatch.setattr("kaine.setup.storage_step.cycle_process_running", lambda: False)
     old = tmp_path / "old"
     (old / "state").mkdir(parents=True)
     _write(old / "state" / "f.txt", "x")
-    ok, msg = ss.relocate(old, old / "state" / "nested", out=lambda s: None)
+    ok, msg = relocate(old, old / "state" / "nested", out=lambda s: None)
     assert ok is False
     assert "inside" in msg
     assert not (old / "state" / "nested").exists()

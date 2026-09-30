@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import copy
 import os
-import sys
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -192,23 +191,3 @@ def resolve(path: str | os.PathLike[str]) -> Path:
     relative path therefore stays relative, preserving previous behaviour).
     """
     return Path(resolve_under(_PROCESS_ROOT, os.fspath(path)))
-
-
-def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    if argv == ["root"]:
-        try:
-            from kaine.config import load_kaine_config
-            config = load_kaine_config()
-        except Exception:
-            return 0
-        root = configured_data_root(config)
-        if root is not None:
-            print(root)
-        return 0
-    print("usage: python -m kaine.storage root", file=sys.stderr)
-    return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

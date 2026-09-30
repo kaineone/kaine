@@ -17,10 +17,10 @@ import redis
 from kaine.bus.client import CYCLE_CLIENT_NAME
 from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.__main__ import (
-    _argv_is_cycle,
     _bus_shows_live_entity,
     main,
 )
+from kaine.lifecycle.liveness import argv_is_cycle as _argv_is_cycle
 
 
 class _FakeClient:

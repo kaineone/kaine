@@ -144,6 +144,8 @@ def write_env_values(path: Path, values: dict[str, str]) -> None:
         try:
             os.unlink(tmp_path_str)
         except OSError:
+            # Best-effort cleanup of the temporary file; the original error
+            # is re-raised below.
             pass
         raise
 

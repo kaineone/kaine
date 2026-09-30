@@ -246,7 +246,7 @@ kaine_services_dir() {
   local py="${PY:-$ROOT/.venv/bin/python}"
   [[ -x "$py" ]] || py=python3
   local root
-  root="$(cd "$ROOT" && "$py" -m kaine.storage root 2>/dev/null || true)"
+  root="$(cd "$ROOT" && "$py" -m kaine.setup.data_root root 2>/dev/null || true)"
   [[ -n "$root" ]] || root="$ROOT"
   printf '%s/state/services\n' "$root"
 }

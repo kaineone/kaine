@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.storage import main
+from kaine.setup.data_root import main
 
 
 def test_main_root_prints_configured_data_root(tmp_path, monkeypatch, capsys):
@@ -31,7 +31,7 @@ def test_main_bogus_argv_prints_usage_and_returns_2(capsys):
     assert main(["bogus"]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "usage: python -m kaine.storage root" in captured.err
+    assert "usage: python -m kaine.setup.data_root root" in captured.err
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
@@ -40,7 +40,7 @@ def test_kaine_services_dir_uses_configured_root(tmp_path):
     fake_py = tmp_path / "fake-python"
     fake_py.write_text(
         "#!/bin/sh\n"
-        'if [ "$1" = "-m" ] && [ "$2" = "kaine.storage" ] && [ "$3" = "root" ]; then\n'
+        'if [ "$1" = "-m" ] && [ "$2" = "kaine.setup.data_root" ] && [ "$3" = "root" ]; then\n'
         '    echo /data/root\n'
         "fi\n"
     )
