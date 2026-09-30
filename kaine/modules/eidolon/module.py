@@ -24,6 +24,7 @@ from kaine.modules.eidolon.drift import (
     SourceDistributionDrift,
 )
 from kaine.modules.eidolon.self_inference import SelfInferenceEngine
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class Eidolon(BaseModule):
             raise ValueError("identity_history_cap must be >= 0 (0 = no cap)")
         if voice_observations_cap < 0:
             raise ValueError("voice_observations_cap must be >= 0 (0 = no cap)")
-        self._persistence_path = Path(persistence_path)
+        self._persistence_path = resolve(persistence_path)
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
         self._save_interval_s = float(save_interval_s)

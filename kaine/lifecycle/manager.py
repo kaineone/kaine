@@ -24,6 +24,7 @@ from kaine.lifecycle.strategies import (
     UnionMergeStrategy,
     default_strategies,
 )
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -271,7 +272,7 @@ class ForkManager:
         return await _preserve_live(
             registry,
             fork_root=self._root,
-            out_root=Path(out_root),
+            out_root=resolve(out_root),
             entity_name=entity_name,
             reason=reason,
             label=label,
@@ -338,7 +339,7 @@ def merger_from_name(
         section = config_section or {}
         weights = section.get("weights") or []
         cfg = TiesDareMergeConfig(
-            output_dir=Path(
+            output_dir=resolve(
                 section.get("output_dir", "state/forks/merged_adapters")
             ),
             combination_type=str(section.get("combination_type", "dare_ties")),

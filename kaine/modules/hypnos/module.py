@@ -32,6 +32,7 @@ from kaine.modules.hypnos.voice_alignment import (
     operator_approved,
     write_consolidation_divergence,
 )
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -120,8 +121,8 @@ class Hypnos(BaseModule):
         self._trainer: Trainer = trainer or FakeTrainer()
         self._organ_window_runner = organ_window_runner
         self._voice_config: VoiceAlignmentConfig = voice_alignment_config or VoiceAlignmentConfig(
-            intent_log_path=Path("state/lingua/intent_expression.jsonl"),
-            adapter_output_dir=Path("state/hypnos/adapters"),
+            intent_log_path=resolve("state/lingua/intent_expression.jsonl"),
+            adapter_output_dir=resolve("state/hypnos/adapters"),
         )
         self._clock = entity_clock or EntityClock()
         self._scheduler = scheduler or RestScheduler(

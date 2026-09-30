@@ -21,6 +21,7 @@ from kaine.modules.lingua.client import (
 )
 from kaine.modules.lingua.context import ContextAssembler
 from kaine.modules.lingua.intent_log import IntentExpressionLog
+from kaine.storage import resolve
 from kaine.workspace.volition import SPEAK, THINK, VOLITION_STREAM
 
 log = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ class Lingua(BaseModule):
         self._chat_client: ChatClient = chat_client or OpenAIChatClient(
             base_url=chat_url, timeout_s=request_timeout_s, api_key=api_key
         )
-        self._intent_log = intent_log or IntentExpressionLog(intent_log_path)
+        self._intent_log = intent_log or IntentExpressionLog(resolve(intent_log_path))
         self._model_id = model_id
         self._think = think
         self._temperature = float(temperature)

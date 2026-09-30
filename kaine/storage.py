@@ -162,7 +162,7 @@ _PROCESS_ROOT: Path | None = None
 def set_data_root(root: Path | None) -> None:
     """Install *root* as the process-wide data root."""
     global _PROCESS_ROOT
-    _PROCESS_ROOT = root
+    _PROCESS_ROOT = root.expanduser().resolve() if root is not None else root
 
 
 def data_root() -> Path | None:

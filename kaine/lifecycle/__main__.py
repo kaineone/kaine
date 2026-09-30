@@ -26,6 +26,7 @@ Exit codes
 5  operator declined a required continuity / transfer step (diverged path)
 6  configuration error (missing/unreadable/unparsable config, malformed shape,
    or state-encryption posture could not be installed)
+7  no entity state found at the resolved state root (nothing backed up or deleted)
 """
 from __future__ import annotations
 
@@ -39,11 +40,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from kaine.lifecycle.decommission import (
+    _STATE_SUBTREES,
     capture_backup,
     delete_entity_state,
     update_manifest_continuity_note,
 )
 from kaine.lifecycle.divergence import assess_divergence
+from kaine.storage import data_root, install_data_root, resolve
 from kaine.transfer.email_request import (
     DEFAULT_RECIPIENT,
     SmtpConfig,
@@ -60,6 +63,8 @@ RUNTIME_FRESH_SECONDS = 5.0
 # ---------------------------------------------------------------------------
 # Gate helpers
 # ---------------------------------------------------------------------------
+
+
 
 
 def _cycle_appears_running(runtime_path: Path) -> bool:
@@ -100,6 +105,84 @@ def _cycle_appears_running(runtime_path: Path) -> bool:
         # transient race as fatal.
         log.debug("runtime.json mtime check failed", exc_info=True)
     return False
+
+
+def _cycle_process_running() -> bool:
+    """True if another process on this host is running ``kaine.cycle``.
+
+    Scans ``/proc/*/cmdline`` and treats any argv element equal to
+    ``"kaine.cycle"`` as a live cycle.  All reads are guarded; never raises.
+    """
+    if not os.path.isdir("/proc"):
+        return False
+    self_pid = os.getpid()
+    try:
+        proc_entries = os.listdir("/proc")
+    except Exception:
+        return False
+    for name in proc_entries:
+        if not name.isdigit():
+            continue
+        try:
+            pid = int(name)
+            if pid == self_pid:
+                continue
+        except ValueError:
+            continue
+        try:
+            raw = (Path("/proc") / name / "cmdline").read_bytes()
+        except Exception:
+            continue
+        if not raw:
+            continue
+        for arg in raw.split(b"\0"):
+            if arg == b"kaine.cycle":
+                return True
+    return False
+
+
+def _bus_shows_live_entity(config: dict[str, Any]) -> tuple[bool | None, str]:
+    """Probe the shared bus for a recent workspace broadcast.
+
+    Returns ``(True, detail)`` if the newest entry on the workspace stream is
+    fresh, ``(False, detail)`` if the stream is empty or stale, and
+    ``(None, detail)`` if the bus could not be reached.  The URL and password
+    are never included in the returned text.
+    """
+    client = None
+    try:
+        import redis
+
+        from kaine.bus.config import load_bus_config
+        from kaine.bus.schema import WORKSPACE_STREAM
+
+        bus_cfg = load_bus_config()
+        client = redis.Redis.from_url(
+            bus_cfg.url,
+            socket_connect_timeout=2.0,
+            socket_timeout=2.0,
+        )
+        entries = client.xrevrange(WORKSPACE_STREAM, count=1)
+        if not entries:
+            return (False, f"{WORKSPACE_STREAM} has no broadcast")
+        entry_id, _fields = entries[0]
+        id_str = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
+        ms = int(id_str.split("-")[0])
+        age_s = time.time() - ms / 1000.0
+        if age_s < RUNTIME_FRESH_SECONDS:
+            return (True, f"{WORKSPACE_STREAM} last broadcast {age_s:.0f} s ago")
+        return (
+            False,
+            f"{WORKSPACE_STREAM} has no recent broadcast (last {age_s:.0f} s ago)",
+        )
+    except Exception as exc:
+        return (None, f"bus unreachable ({type(exc).__name__})")
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                log.debug("bus client close failed", exc_info=True)
 
 
 def _load_kaine_config(path: Path) -> dict[str, Any]:
@@ -221,10 +304,6 @@ def main(
     )
     args = parser.parse_args(argv)
 
-    state_root: Path = args.state_root
-    fork_root: Path = args.fork_root or (state_root / "forks")
-    runtime_path = state_root / "cycle" / "runtime.json"
-
     # --- Gate 1: operator present --------------------------------------
     if os.environ.get(OPERATOR_PRESENT_ENV) != "1":
         err.write(
@@ -236,27 +315,61 @@ def main(
         )
         return 2
 
-    # --- Gate 2: cycle not running -------------------------------------
-    if _cycle_appears_running(runtime_path):
-        err.write(
-            "Refusing to decommission: the cognitive cycle appears to be running.\n"
-            "\n"
-            "Stop the entity first (SIGINT/SIGTERM the cycle), then re-run. A live\n"
-            "entity must not be deleted out from under itself.\n"
-        )
-        return 3
-
-    # --- Load config and install state encryption BEFORE any destructive work
+    # --- Load config (needed to install the process data root) ----------
     import tomllib
 
     from kaine.config import ConfigShapeError, ProfileError
-    from kaine.security.crypto import get_state_encryptor, install_from_section
 
     try:
         config = _load_kaine_config(args.config)
     except (ProfileError, ConfigShapeError, FileNotFoundError, OSError, tomllib.TOMLDecodeError) as exc:
         err.write(f"decommission: configuration error: {type(exc).__name__}: {exc}\n")
         return 6
+
+    install_data_root(config)
+
+    state_root = resolve(args.state_root)
+    fork_root = resolve(args.fork_root) if args.fork_root is not None else state_root / "forks"
+    eval_root = resolve(args.eval_root)
+    out_root = resolve(args.out_root)
+    runtime_path = state_root / "cycle" / "runtime.json"
+
+    out.write(
+        f"state root: {state_root}\n"
+        f"evaluation root: {eval_root}\n"
+        f"backup root: {out_root}\n"
+        f"data root: {data_root() or 'none (working directory)'}\n"
+    )
+
+    # --- Gate 2: cycle not running -------------------------------------
+    live_runtime = _cycle_appears_running(runtime_path)
+    live_process = _cycle_process_running()
+    bus_live, bus_detail = _bus_shows_live_entity(config)
+    if live_runtime or live_process or bus_live is True or bus_live is None:
+        if bus_live is None:
+            err.write(
+                f"Refusing to decommission: cannot confirm the entity is stopped — {bus_detail}. "
+                "Start the bus (Redis) and re-run.\n"
+            )
+        else:
+            signals = []
+            if live_runtime:
+                signals.append("runtime.json indicates a live cycle")
+            if live_process:
+                signals.append("a kaine.cycle process is running")
+            if bus_live is True:
+                signals.append(bus_detail)
+            err.write(
+                "Refusing to decommission: the cognitive cycle appears to be running "
+                f"({'; '.join(signals)}).\n"
+                "\n"
+                "Stop the entity first (SIGINT/SIGTERM the cycle), then re-run. A live\n"
+                "entity must not be deleted out from under itself.\n"
+            )
+        return 3
+
+    # --- Load config and install state encryption BEFORE any destructive work
+    from kaine.security.crypto import get_state_encryptor, install_from_section
 
     try:
         install_from_section((config.get("security") or {}).get("state_encryption") or {})
@@ -271,13 +384,13 @@ def main(
     if not encryptor.enabled:
         encrypted_path = _encrypted_state_without_key(state_root)
         if encrypted_path is None:
-            encrypted_path = _encrypted_state_without_key(Path(args.eval_root))
+            encrypted_path = _encrypted_state_without_key(eval_root)
         if encrypted_path is not None:
             try:
                 rel = encrypted_path.relative_to(state_root)
             except ValueError:
                 try:
-                    rel = encrypted_path.relative_to(Path(args.eval_root))
+                    rel = encrypted_path.relative_to(eval_root)
                 except ValueError:
                     rel = encrypted_path
             err.write(
@@ -287,13 +400,25 @@ def main(
 
     entity_name = _resolve_entity_name(state_root, config)
 
+    # --- Gate 2.5: entity state must actually be present ----------------
+    if not state_root.exists() or (
+        not any((state_root / sub).exists() for sub in _STATE_SUBTREES)
+        and not (state_root / "cycle").exists()
+    ):
+        err.write(
+            f"Refusing to decommission: no entity state found under {state_root}. "
+            "Check --state-root and [storage].data_root / KAINE_DATA_ROOT; "
+            "nothing was backed up or deleted.\n"
+        )
+        return 7
+
     # --- Assess divergence (pure reads) --------------------------------
     from kaine.lifecycle.divergence import consolidation_thresholds_from_config
 
     cons_rate, cons_mag = consolidation_thresholds_from_config(config)
     assessment = assess_divergence(
         state_root=state_root,
-        eval_root=args.eval_root,
+        eval_root=eval_root,
         consolidation_rate_threshold=cons_rate,
         consolidation_magnitude_threshold=cons_mag,
     )
@@ -304,7 +429,7 @@ def main(
         state_root=state_root,
         fork_root=fork_root,
         qdrant_cfg=config,
-        out_root=args.out_root,
+        out_root=out_root,
         entity_name=entity_name,
         assessment=assessment,
         continuity_note=None,

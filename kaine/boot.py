@@ -30,6 +30,7 @@ from kaine.config import require_known_keys
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
+from kaine.storage import resolve
 from kaine.text_embedding import (
     Embedder,
     SharedEmbedder,
@@ -2016,10 +2017,10 @@ def make_hypnos(
         abliteration_probe_path_raw = voice_cfg_section.get("abliteration_probe_path", "")
         abliteration_probe_path: Optional[str] = str(abliteration_probe_path_raw).strip() or None
         voice_config = VoiceAlignmentConfig(
-            intent_log_path=Path(
+            intent_log_path=resolve(
                 voice_cfg_section.get("intent_log_path", "state/lingua/intent_expression.jsonl")
             ),
-            adapter_output_dir=Path(
+            adapter_output_dir=resolve(
                 voice_cfg_section.get("adapter_output_dir", "state/hypnos/adapters")
             ),
             enabled=bool(voice_cfg_section.get("enabled", False)),
@@ -2044,9 +2045,13 @@ def make_hypnos(
             or "in_process",
             trainer_python=str(voice_cfg_section.get("trainer_python", "")).strip(),
             trainer_workdir=str(
-                voice_cfg_section.get("trainer_workdir", "state/hypnos/voice_align_jobs")
-            ).strip()
-            or "state/hypnos/voice_align_jobs",
+                resolve(
+                    str(
+                        voice_cfg_section.get("trainer_workdir", "state/hypnos/voice_align_jobs")
+                    ).strip()
+                    or "state/hypnos/voice_align_jobs"
+                )
+            ),
         )
     kwargs: dict[str, Any] = {}
     for k in (

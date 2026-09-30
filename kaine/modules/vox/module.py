@@ -56,6 +56,7 @@ from kaine.modules.vox.playback import (
     build_player,
     wav_duration_s,
 )
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ class Vox(BaseModule):
         self._voice_mode = voice_mode
         self._voice_id = predefined_voice_id
         self._output_format = output_format
-        self._sink_path = Path(sink_path)
+        self._sink_path = resolve(sink_path)
         self._sink_enabled = bool(sink_enabled)
         self._retain_count = int(retain_count)
         self._suppress_self_hearing = bool(suppress_self_hearing)

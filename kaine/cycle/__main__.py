@@ -941,13 +941,16 @@ def _start_preserve_watcher(
     """Start the operator-requested live-preservation watcher task."""
     from kaine.cycle.preserve_watch import PreserveRequestWatcher
     from kaine.lifecycle.preservation import bundle_dir_for
+    from kaine.storage import resolve
+
+    out_root = resolve(preservation_cfg.divergence_monitor.out_root)
 
     async def _preserve(reason):
         return await fork_manager.preserve_live(
             registry,
             reason=reason,
             label="operator",
-            out_root=Path(preservation_cfg.divergence_monitor.out_root),
+            out_root=out_root,
             entity_name=preservation_cfg.divergence_monitor.entity_name,
             require_encryption=preservation_cfg.require_encryption,
         )
@@ -955,7 +958,7 @@ def _start_preserve_watcher(
     def _bundle_for(result):
         return str(
             bundle_dir_for(
-                preservation_cfg.divergence_monitor.out_root,
+                out_root,
                 result.preservation_id,
                 preservation_cfg.divergence_monitor.entity_name,
             )

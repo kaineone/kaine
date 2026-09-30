@@ -68,6 +68,7 @@ from kaine.modules.phantasia.world_model import (
     WorldModel,
     load_world_model,
 )
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class Phantasia(BaseModule):
         # World-model checkpoint metadata. Set when weight persistence is
         # enabled; only metadata (never the weights/buffer) is serialized.
         self._checkpoint_path: Optional[str] = (
-            str(checkpoint_path) if self._persist_weights else None
+            str(resolve(checkpoint_path)) if self._persist_weights else None
         )
 
         # Successful sleep-training passes. Read-only seam for the maturation
