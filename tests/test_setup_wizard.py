@@ -4,6 +4,7 @@
 """Tests for the first-run wizard (kaine.setup)."""
 from __future__ import annotations
 
+import copy
 import io
 import subprocess
 import sys
@@ -73,6 +74,36 @@ def _collect_out() -> tuple[list[str], callable]:
 # ----------------------------------------------------------------------------
 # Pure helpers
 # ----------------------------------------------------------------------------
+
+
+def test_voice_id_prompt_is_bounded():
+    shipped = copy.deepcopy(_shipped())
+    shipped.setdefault("vox", {})["predefined_voice_id"] = ""
+    if shipped.get("vox", {}).get("backend", "chatterbox").lower() != "chatterbox":
+        shipped["vox"]["backend"] = "chatterbox"
+
+    calls: list[str] = []
+
+    def input_fn(prompt: str) -> str:
+        calls.append(prompt)
+        # Fail fast instead of looping forever if a re-ask loop is unbounded.
+        assert len(calls) < 200, "the wizard kept re-asking"
+        if ACK_PHRASE in prompt:
+            return ACK_PHRASE
+        if "enable vox" in prompt.lower():
+            return "y"
+        return ""
+
+    out, line = _collect_out()
+    result = run_wizard(
+        input_fn=input_fn,
+        out=line,
+        probe_services=lambda: {"voices": []},
+        host=_host(cuda=0),
+        shipped_config=shipped,
+    )
+    assert result.config["modules"]["vox"] is False
+    assert len(calls) < 200
 
 
 def test_propose_devices_multi_gpu():
@@ -171,7 +202,7 @@ def test_full_run_multi_gpu_produces_config():
     #  research opt-in? -> n
     #  encryption? -> n
 
-    answers = [ACK_PHRASE, "y"]
+    answers = [ACK_PHRASE, "", "", "y"]
     # enable only soma + lingua, the rest off
     for m in MODULE_ORDER:
         answers.append("y" if m in ("soma", "lingua") else "n")
@@ -203,7 +234,7 @@ def test_full_run_multi_gpu_produces_config():
 
 
 def test_vox_enabled_requires_voice_id():
-    answers = [ACK_PHRASE, "y"]
+    answers = [ACK_PHRASE, "", "", "y"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
     answers.append("the-model")  # lingua model id
@@ -227,7 +258,7 @@ def test_vox_enabled_requires_voice_id():
 
 
 def test_metrics_only_when_opted_in():
-    answers = [ACK_PHRASE, "y"]
+    answers = [ACK_PHRASE, "", "", "y"]
     for m in MODULE_ORDER:
         answers.append("n")
     # no lingua/vox/audition -> no model prompts
@@ -274,7 +305,7 @@ def _tier2_residency_rec():
 
 
 def test_wizard_tier_recommendation_applied_on_yes():
-    answers = [ACK_PHRASE, "y", "y"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    answers = [ACK_PHRASE, "", "", "y", "y"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
     result = run_wizard(
@@ -288,7 +319,7 @@ def test_wizard_tier_recommendation_applied_on_yes():
 
 
 def test_wizard_tier_recommendation_not_applied_on_no():
-    answers = [ACK_PHRASE, "y", "n"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    answers = [ACK_PHRASE, "", "", "y", "n"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
     result = run_wizard(
@@ -582,7 +613,7 @@ def test_mismatch_detected_and_accepted():
         called.append(url)
         return True
 
-    answers = _Answers([ACK_PHRASE, "", "y"] + [""] * 25)
+    answers = _Answers([ACK_PHRASE, "", "", "", "y"] + [""] * 25)
     _, out_fn = _collect_out()
     result = run_wizard(
         input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
@@ -606,7 +637,7 @@ def test_mismatch_detected_and_declined():
     }
     probes = {"torch_cuda_version": "12.8",
               "arch_list": ["sm_90", "sm_100", "compute_90"]}
-    answers = _Answers([ACK_PHRASE, "", ""] + [""] * 25)
+    answers = _Answers([ACK_PHRASE, "", "", "", ""] + [""] * 25)
     _, out_fn = _collect_out()
     result = run_wizard(
         input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
@@ -628,7 +659,7 @@ def test_ptx_compatible_no_mismatch():
     }
     probes = {"torch_cuda_version": "13.2",
               "arch_list": ["sm_90", "sm_100", "compute_90"]}
-    answers = _Answers([ACK_PHRASE, ""] + [""] * 25)
+    answers = _Answers([ACK_PHRASE, "", "", ""] + [""] * 25)
     _, out_fn = _collect_out()
     result = run_wizard(
         input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
@@ -648,7 +679,7 @@ def test_x86_compatible_no_mismatch():
     }
     probes = {"torch_cuda_version": "13.2",
               "arch_list": ["sm_89", "compute_90"]}
-    answers = _Answers([ACK_PHRASE, ""] + [""] * 25)
+    answers = _Answers([ACK_PHRASE, "", "", ""] + [""] * 25)
     _, out_fn = _collect_out()
     result = run_wizard(
         input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),
@@ -663,7 +694,7 @@ def test_cpu_only_skips_mismatch():
         "backend": "cpu", "device": "cpu", "gpu_count": 0, "cpu_count": 8,
         "cuda_devices": [],
     }
-    answers = _Answers([ACK_PHRASE, ""] + [""] * 25)
+    answers = _Answers([ACK_PHRASE, "", "", ""] + [""] * 25)
     _, out_fn = _collect_out()
     result = run_wizard(
         input_fn=answers, out=out_fn, host=host, shipped_config=_shipped(),

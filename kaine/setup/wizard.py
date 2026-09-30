@@ -18,6 +18,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
+from kaine.setup.hardware_steps import (
+    consent_step,
+    device_step,
+    inventory_step,
+    load_footprint_catalogue,
+)
+from kaine.setup.steps import StepContext, run_step
 
 # The required CAL welfare acknowledgement phrase (mirrors kaine.lifecycle).
 ACK_PHRASE = "I acknowledge the CAL welfare terms"
@@ -111,28 +118,51 @@ def _set_nested(cfg: dict[str, Any], parent: str, child: str, key: str, value: A
     cfg.setdefault(parent, {}).setdefault(child, {})[key] = value
 
 
-def propose_device_assignments(host: dict[str, Any]) -> dict[str, str]:
+def propose_device_assignments(
+    host: dict[str, Any], allowed: list[str] | None = None
+) -> dict[str, str]:
     """Propose device strings for the heavy config keys from a host scan.
 
     Multi-GPU: primary GPU (cuda:0) drives the LLM + voice-alignment training;
     the secondary (cuda:1) drives the vision encoder; control paths stay on CPU.
     Single-GPU: every heavy workload lands on cuda:0. CPU-only: all cpu.
 
+    When ``allowed`` is provided, only devices in that list are used, in the
+    operator's order.
+
     Returns a flat map of config "address" -> device string, where the address
     is ``"<table>.<key>"`` or ``"<parent>.<child>.<key>"``.
     """
-    cuda_devices = host.get("cuda_devices") or []
-    gpu_count = len(cuda_devices) or int(host.get("gpu_count") or 0)
+    if allowed is None:
+        cuda_devices = host.get("cuda_devices") or []
+        gpu_count = len(cuda_devices) or int(host.get("gpu_count") or 0)
 
-    if gpu_count >= 2:
-        primary = "cuda:0"
-        secondary = "cuda:1"
-    elif gpu_count == 1:
-        primary = "cuda:0"
-        secondary = "cuda:0"
+        if gpu_count >= 2:
+            primary = "cuda:0"
+            secondary = "cuda:1"
+        elif gpu_count == 1:
+            primary = "cuda:0"
+            secondary = "cuda:0"
+        else:
+            primary = "cpu"
+            secondary = "cpu"
     else:
-        primary = "cpu"
-        secondary = "cpu"
+        accelerators: list[str] = []
+        cuda_devices = host.get("cuda_devices") or []
+        xpu_devices = host.get("xpu_devices") or []
+        cuda_set = {d.get("device") for d in cuda_devices}
+        xpu_set = {d.get("device") for d in xpu_devices}
+
+        for dev in allowed:
+            if dev in cuda_set:
+                accelerators.append(dev)
+            elif dev in xpu_set:
+                accelerators.append(dev)
+            elif dev == "mps" and host.get("mps_available"):
+                accelerators.append(dev)
+
+        primary = accelerators[0] if accelerators else "cpu"
+        secondary = accelerators[1] if len(accelerators) > 1 else primary
 
     return {
         # Heavy training / vision encoders.
@@ -467,10 +497,14 @@ def run_wizard(
     torch_cuda_probes: dict[str, Any] | None = None,
     corrective_install_fn: Callable[[str], bool] | None = None,
     wheel_index_url: str | None = None,
+    device_consumers_fn: Callable[[], list[dict]] | None = None,
     defaults: bool = False,
     recommend_tier_fn: Callable[[], Any] | None = None,
 ) -> WizardResult:
     """Run the wizard's step logic and return the assembled operator-config.
+
+    ``device_consumers_fn`` returns per-device process consumers used by the
+    hardware inventory step.
 
     Parameters
     ----------
@@ -547,42 +581,40 @@ def run_wizard(
             return WizardResult(acknowledged=False)
 
     # --- Step 3: hardware scan + device assignments -------------------------
-    line()
-    line("-" * 70)
-    line("Hardware scan")
-    line("-" * 70)
-    line(f"  backend: {host.get('backend')}   device: {host.get('device')}")
-    cpu_count = host.get("cpu_count")
-    if cpu_count:
-        line(f"  CPU cores: {cpu_count}")
-    cuda_devices = host.get("cuda_devices") or []
-    if cuda_devices:
-        for d in cuda_devices:
-            line(
-                f"  {d.get('device')}: {d.get('name')} "
-                f"({d.get('total_vram_gb')} GB total, {d.get('free_vram_gb')} GB free)"
-            )
-    else:
-        line("  no CUDA GPUs detected — heavy workloads will run on CPU")
-
-    proposed = propose_device_assignments(host)
-    line("\nProposed device assignments:")
-    for address, dev in proposed.items():
-        line(f"  {address} = {dev}")
-
-    if not defaults and not _ask_yes_no(
-        input_fn, "\nAccept these device assignments?", default=True
-    ):
-        for address in proposed:
-            current = proposed[address]
-            answer = _ask(
-                input_fn,
-                f"  device for {address} [{current}]: ",
-                default=current,
-            )
-            proposed[address] = answer
-    for address, dev in proposed.items():
-        _apply_device_address(cfg, address, dev)
+    ctx = StepContext(
+        config=cfg,
+        host=host,
+        extra={
+            "consumers": device_consumers_fn() if device_consumers_fn else None,
+            "catalogue": load_footprint_catalogue(),
+            "floor_gb": float(
+                ((shipped_config.get("gpu_preflight") or {}).get(
+                    "min_free_vram_gb", 2.0
+                ))
+            ),
+        },
+    )
+    run_step(
+        inventory_step,
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+    run_step(
+        consent_step,
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+    run_step(
+        device_step(propose_device_assignments),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
 
     # --- Step 3a: deployment tier recommendation -----------------------------
     if not defaults and recommend_tier_fn is not None:
@@ -690,15 +722,16 @@ def run_wizard(
                 voice_id = default_voice
             else:
                 voice_id = ""
-                while not voice_id:
+                for _ in range(3):
                     voice_id = _ask(
                         input_fn,
                         f"  [vox].predefined_voice_id (REQUIRED when vox is on) "
                         f"[{default_voice}]: ",
                         default=default_voice,
                     )
-                    if not voice_id:
-                        line("    a voice id is required when vox is enabled.")
+                    if voice_id:
+                        break
+                    line("    a voice id is required when vox is enabled.")
             # vox enabled REQUIRES a voice id; if defaults left it blank, disable vox
             # rather than write an unusable config.
             if voice_id:

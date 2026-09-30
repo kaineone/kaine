@@ -149,6 +149,8 @@ def test_cl1_step_runs_nothing(monkeypatch):
 def _full_run_answers(cl1_answer: str) -> list[str]:
     return [
         ACK_PHRASE,
+        "",  # allowed devices (default: all)
+        "",  # CPU threads (default)
         "y",
         *(("y" if m in {"chronos", "soma"} else "n") for m in MODULE_ORDER),
         "n",
