@@ -243,6 +243,17 @@ RUN /opt/trainer/bin/pip install /opt/llama.cpp/gguf-py sentencepiece protobuf
 # =========================================================================
 FROM runtime AS trainer
 
+# Triton (used by unsloth) compiles small kernels at runtime and needs a C
+# compiler and the Python headers. The runtime image stays without a compiler;
+# only the trainer image carries one.
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gcc libc6-dev \
+ && if apt-cache show python3.12-dev >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends python3.12-dev; \
+    fi \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --chown=kaine:kaine --from=trainer-build /opt/trainer /opt/trainer
 COPY --chown=kaine:kaine --from=trainer-build /opt/llama.cpp /opt/llama.cpp
 
