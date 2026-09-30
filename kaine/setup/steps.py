@@ -54,6 +54,7 @@ OWNED_KEYS: frozenset[str] = frozenset(
         "services.model_server.shared",
         "services.chatterbox.shared",
         "services.speaches.shared",
+        "storage.data_root",
     }
 )
 

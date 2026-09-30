@@ -49,6 +49,10 @@ from kaine.lifecycle.decommission import (
     update_manifest_continuity_note,
 )
 from kaine.lifecycle.divergence import assess_divergence
+from kaine.lifecycle.liveness import (
+    argv_is_cycle as _argv_is_cycle,  # noqa: F401 - re-exported for tests
+)
+from kaine.lifecycle.liveness import cycle_process_running as _cycle_process_running
 from kaine.storage import data_root, install_data_root, resolve
 from kaine.transfer.email_request import (
     DEFAULT_RECIPIENT,
@@ -113,51 +117,8 @@ def _cycle_appears_running(runtime_path: Path) -> bool:
     return False
 
 
-def _argv_is_cycle(args: list[bytes]) -> bool:
-    """Return True if any argv element identifies a KAINE cognitive cycle."""
-    for arg in args:
-        if arg == b"kaine.cycle" or arg.startswith(b"kaine.cycle."):
-            return True
-        if arg == b"-mkaine.cycle" or arg.startswith(b"-mkaine.cycle."):
-            return True
-        if arg.endswith(b"kaine/cycle/__main__.py"):
-            return True
-    return False
 
 
-def _cycle_process_running() -> bool:
-    """True if another process on this host is running ``kaine.cycle``.
-
-    Scans ``/proc/*/cmdline`` and uses :func:`_argv_is_cycle` to recognise a
-    cycle by its argv.  This only sees processes on this host (and, from the
-    host, in its containers); the bus client check covers other containers.
-    All reads are guarded; never raises.
-    """
-    if not os.path.isdir("/proc"):
-        return False
-    self_pid = os.getpid()
-    try:
-        proc_entries = os.listdir("/proc")
-    except Exception:
-        return False
-    for name in proc_entries:
-        if not name.isdigit():
-            continue
-        try:
-            pid = int(name)
-            if pid == self_pid:
-                continue
-        except ValueError:
-            continue
-        try:
-            raw = (Path("/proc") / name / "cmdline").read_bytes()
-        except Exception:
-            continue
-        if not raw:
-            continue
-        if _argv_is_cycle(raw.split(b"\0")):
-            return True
-    return False
 
 
 def _state_subtree_has_content(state_root: Path, sub: str) -> bool:

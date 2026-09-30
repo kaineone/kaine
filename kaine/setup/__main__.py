@@ -22,6 +22,7 @@ from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.setup import tomlwriter
 from kaine.setup.device_map import compose_gpu_env, device_map, write_env_values
+from kaine.setup.storage_step import existing_volumes, write_volume_override
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
 
@@ -568,6 +569,13 @@ def main(
 
     host = _describe_host_with_cpu()
 
+    try:
+        existing_operator = load_kaine_config(args.operator_path)
+        configured_data_root = (existing_operator.get("storage") or {}).get("data_root")
+        storage_old_root = Path(configured_data_root) if configured_data_root else Path.cwd()
+    except Exception:
+        storage_old_root = Path.cwd()
+
     result: WizardResult = run_wizard(
         input_fn=_input,
         out=write,
@@ -581,6 +589,7 @@ def main(
             name: port_listening(port) for name, port in SERVICE_PORTS.items()
         },
         defaults=args.defaults,
+        storage_old_root=storage_old_root,
     )
 
     if not result.acknowledged:
@@ -601,6 +610,13 @@ def main(
                 "wrote compose GPU variables: "
                 + ", ".join(f"{k}={v}" for k, v in sorted(gpu_env.items()))
             )
+
+    data_root = result.config.get("storage", {}).get("data_root")
+    if data_root and Path("compose/kaine.yml").exists():
+        _, msg = write_volume_override(
+            Path(data_root), Path("compose"), existing=existing_volumes()
+        )
+        out(msg)
 
     # Offer the implied extras install.
     _install_extras(

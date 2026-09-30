@@ -15,6 +15,7 @@ the operator-config write.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
@@ -501,10 +502,15 @@ def run_wizard(
     defaults: bool = False,
     recommend_tier_fn: Callable[[], Any] | None = None,
     services_up_fn: Callable[[], dict[str, bool]] | None = None,
+    storage_old_root: Path | None = None,
 ) -> WizardResult:
     """Run the wizard's step logic and return the assembled operator-config.
 
     ``services_up_fn`` detects which external services are already listening so
+    the wizard can skip shared-service prompts for things that are already up.
+
+    ``storage_old_root`` is the current data root, or the working directory, whose
+    data may be relocated.
     the wizard can ask whether each one is shared with other applications.
 
     ``device_consumers_fn`` returns per-device process consumers used by the
@@ -629,6 +635,35 @@ def run_wizard(
         out=out,
         defaults=defaults,
     )
+
+    from kaine.setup.storage_step import relocation_step, storage_step
+
+    ctx.extra["min_free_gb"] = float(
+        ((shipped_config.get("storage") or {}).get("min_free_gb", 20.0))
+    )
+    ctx.extra["old_root"] = storage_old_root
+    ctx.extra["out"] = out
+    # The storage and relocation steps run when setup knows the current data
+    # root (the CLI always passes it); callers that do not keep their prompts.
+    if storage_old_root is not None:
+        run_step(
+            storage_step,
+            ctx,
+            input_fn=input_fn,
+            out=out,
+            defaults=defaults,
+        )
+        run_step(
+            relocation_step,
+            ctx,
+            input_fn=input_fn,
+            out=out,
+            defaults=defaults,
+        )
+    if "relocation_error" in ctx.extra:
+        out(ctx.extra["relocation_error"] + "\n")
+    if "relocation_note" in ctx.extra:
+        out(ctx.extra["relocation_note"] + "\n")
 
     # --- Step 3a: deployment tier recommendation -----------------------------
     if not defaults and recommend_tier_fn is not None:
