@@ -908,17 +908,17 @@ Social cognition / theory-of-mind module. Builds agent models (emotional pattern
 
 ## `[phantasia]`
 
-World-model / imagination module. Implements a DreamerV3-style RSSM core. It ships disabled (`[modules].phantasia = false`). When enabled, `backend = "dreamerv3"` is the default and runs on either the JAX engine (`engine = "jax"`, requires the `[worldmodel]` extra) or the NumPy engine (`engine = "numpy"`, no extra). The `"fake"` backend is a dev-only non-learning EMA stub. World model only — no actor or critic; action selection remains in Nous. See [modules/phantasia.md](modules/phantasia.md).
+World-model / imagination module. Implements a DreamerV3-style RSSM core. It ships disabled (`[modules].phantasia = false`). When enabled, the default `[phantasia]` configuration turns on both sleep-time training and weight persistence. `backend = "dreamerv3"` is the default and runs on either the JAX engine (`engine = "jax"`, requires the `[worldmodel]` extra) or the NumPy engine (`engine = "numpy"`, no extra). The `"fake"` backend is a dev-only non-learning EMA stub; pairing it with `persist_weights = true` is a configuration error. World model only — no actor or critic; action selection remains in Nous. See [modules/phantasia.md](modules/phantasia.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `backend` | string | `"dreamerv3"` | World-model backend: `"dreamerv3"` (real RSSM; either engine) or `"fake"` (dev-only non-learning EMA stub, no dependencies). |
 | `engine` | string | `"jax"` | Compute engine for the `"dreamerv3"` backend: `"jax"` (`DreamerV3WorldModel`; requires the `[worldmodel]` extra) or `"numpy"` (`NumpyDreamerV3WorldModel`; no extra). An unknown value raises `ConfigurationError` at boot. |
-| `training_enabled` | boolean | `false` | Enable sleep-time in-memory world-model training. When enabled, training runs during Hypnos consolidation and never writes trajectory data to disk. |
+| `training_enabled` | boolean | `true` | Enable sleep-time in-memory world-model training. Training runs during Hypnos consolidation on `training_device` and never writes trajectory data to disk. |
 | `training_device` | string | `"cpu"` | JAX compute device for training; only applies when `engine = "jax"`. GPU is opt-in per the hardware split. |
 | `trajectory_buffer_size` | integer | `512` | Bounded in-memory waking-trajectory ring buffer size (events). Never serialized to disk. |
 | `rollout_horizon` | integer | `8` | Imagined-trajectory length for offline scenario generation. |
-| `persist_weights` | boolean | `false` | Persist learned world-model weights across restarts. Requires `backend = "dreamerv3"` (a configuration error with the `"fake"` stub). Applies to both the JAX and NumPy engines. Saved atomically after each successful sleep-training pass and on graceful shutdown; loaded at boot; encrypted at rest when `[security.state_encryption]` is enabled. An incompatible checkpoint fails the boot closed. The trajectory buffer is never persisted regardless. |
+| `persist_weights` | boolean | `true` | Persist learned world-model weights across restarts. Requires `backend = "dreamerv3"` (a configuration error with the `"fake"` stub). Applies to both the JAX and NumPy engines. Saved atomically after each successful sleep-training pass and on graceful shutdown; loaded at boot; encrypted at rest when `[security.state_encryption]` is enabled. An incompatible checkpoint fails the boot closed. The trajectory buffer is never persisted regardless. |
 | `checkpoint_path` | string | `"state/phantasia/world_model.ckpt"` | Where the weight checkpoint lives. Included in the decommission backup bundle (CAL 4.2(b)) and removed by entity-state deletion. |
 
 ### `[phantasia.salience]`

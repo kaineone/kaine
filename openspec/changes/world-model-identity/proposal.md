@@ -16,7 +16,7 @@ The code does not meet that rule:
   - Training stays in memory, CPU by default, with the existing NaN guard.
   - Phantasia itself stays off in the shipped `[modules]`, so the committed config still boots no module.
   - The `fake` backend with persistence remains a configuration error.
-- **Module artifacts in snapshots.** `ForkManager` supports two optional module hooks, `export_snapshot_artifacts(dest_dir)` and `import_snapshot_artifacts(src_dir)`. A snapshot keeps each module's artifacts in `<snapshot>/artifacts/<module>/`, next to `snapshot.json`, with the same 0700/0600 permissions and encryption at rest.
+- **Module artifacts in snapshots.** `ForkManager` supports two optional module hooks, `export_snapshot_artifacts(dest_dir)` and `import_snapshot_artifacts(src_dir)`. A snapshot keeps each module's artifacts in `<snapshot>/artifacts/<module>/`, next to `snapshot.json`, with the same 0700/0600 permissions; the world-model checkpoint is encrypted at rest.
   - **snapshot:** exports every module's artifacts. An export that fails fails the snapshot, and nothing is saved. A snapshot never claims completeness while omitting part of the individual.
   - **fork:** copies the parent's artifacts, except for shed modules, into the child's own snapshot directory. Each fork owns its own copy, never a shared file.
   - **restore:** imports each module's artifacts into that instance. Phantasia installs the weights and saves them to its own configured checkpoint path. A missing world model is logged as a warning naming the fresh start.
