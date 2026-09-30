@@ -122,4 +122,7 @@ jobs:
         run: python -c "import torch; print(torch.__version__)"
 
       - name: Run the offline test suite
-        run: python -m pytest -q
+        # A test that runs longer than 10 minutes dumps every thread's stack to
+        # the log (pytest's built-in faulthandler), so a hang names itself
+        # instead of ending as a silent job timeout.
+        run: python -m pytest -q -o faulthandler_timeout=600

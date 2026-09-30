@@ -28,6 +28,7 @@ class BusConfig:
     per_stream_maxlen: dict[str, int] = field(default_factory=dict)
     url_override: Optional[str] = None
     audit_required: bool = True
+    max_connections: int = 1024
 
     @property
     def url(self) -> str:
@@ -99,6 +100,14 @@ def resolve_redis_auth(
     return username or None, password or None
 
 
+def _parse_max_connections(raw) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise BusConfigError("[bus].max_connections must be a positive integer")
+    if raw < 1 or raw > 100_000:
+        raise BusConfigError("[bus].max_connections must be between 1 and 100000")
+    return raw
+
+
 def load_bus_config(
     kaine_toml: Optional[Path] = None,
     secrets_toml: Optional[Path] = None,
@@ -141,6 +150,10 @@ def load_bus_config(
     bus_doc = kaine_doc.get("bus") or {}
     redis_secrets = secrets_doc.get("redis") or {}
 
+    max_connections = _parse_max_connections(
+        bus_doc.get("max_connections", 1024)
+    )
+
     url_override = env.get("KAINE_REDIS_URL") or redis_secrets.get("url")
 
     password = (
@@ -166,6 +179,7 @@ def load_bus_config(
         },
         url_override=url_override,
         audit_required=bool(bus_doc.get("audit_required", True)),
+        max_connections=max_connections,
     )
 
     if not url_override and not config.password:

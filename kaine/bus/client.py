@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+import inspect
 import json
 import logging
 from datetime import datetime, timezone
@@ -91,6 +93,62 @@ def _decode_workspace(fields: dict[str, Any]) -> dict[str, Any]:
     return json.loads(raw or "{}")
 
 
+async def _reraise_swallowed_cancel(awaitable):
+    """Re-raise a cancellation swallowed by a Redis client call.
+
+    A Redis client can catch the calling task's CancelledError and return normally
+    (Python 3.11's ``asyncio.wait_for``, which redis-py uses for every command when
+    a socket timeout is set, and redis-py 8 sets one by default); the task's
+    cancellation count still rose, so this re-raises it. It compares against the
+    count before the call, so cleanup running after a task caught its own
+    cancellation, and libraries that ``uncancel()`` their own timeouts, are
+    unaffected.
+    """
+    task = asyncio.current_task()
+    before = task.cancelling() if task is not None else 0
+    result = await awaitable
+    if task is not None and task.cancelling() > before:
+        raise asyncio.CancelledError
+    return result
+
+
+class _CancellationSafeClient:
+    """Adapter that re-raises cancellations swallowed by the wrapped Redis client.
+
+    Calls that return a coroutine (every redis-py command) are guarded; other results,
+    such as a pipeline, and attribute reads and assignments pass through to the
+    underlying client.
+    """
+
+    __slots__ = ("_raw",)
+
+    def __init__(self, raw):
+        object.__setattr__(self, "_raw", raw)
+
+    def __getattr__(self, name):
+        attr = getattr(self._raw, name)
+        if not callable(attr):
+            return attr
+
+        @functools.wraps(attr)
+        def wrapper(*args, **kwargs):
+            result = attr(*args, **kwargs)
+            if inspect.iscoroutine(result):
+                return _reraise_swallowed_cancel(result)
+            return result
+
+        return wrapper
+
+    def __setattr__(self, name, value):
+        setattr(self._raw, name, value)
+
+    def __delattr__(self, name):
+        delattr(self._raw, name)
+
+    def __repr__(self):
+        return f"_CancellationSafeClient({self._raw!r})"
+
+
 class AsyncBus:
     def __init__(
         self,
@@ -98,7 +156,14 @@ class AsyncBus:
         client: Optional[aioredis.Redis] = None,
     ) -> None:
         self._config = config
-        self._client = client or aioredis.from_url(config.url, decode_responses=True)
+        self._client = _CancellationSafeClient(
+            client
+            or aioredis.from_url(
+                config.url,
+                decode_responses=True,
+                max_connections=config.max_connections,
+            )
+        )
         self._audited = False
 
     @property
