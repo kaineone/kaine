@@ -46,6 +46,7 @@ from kaine.memory_kinds import (
     stamp_key,
     stamp_point_id,
 )
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -312,8 +313,9 @@ def capture_backup(
     with ``ok=False`` (and populated ``errors``) when the bundle could not be
     assembled — the CLI then aborts without deleting anything.
     """
-    state_root = Path(state_root)
-    out_root = Path(out_root)
+    state_root = resolve(state_root)
+    out_root = resolve(out_root)
+    fork_root = resolve(fork_root)
     inventory: list[str] = []
     errors: list[str] = []
 
@@ -651,7 +653,7 @@ def delete_entity_state(
     removed; the result reports what *would* be removed. Each step is guarded so
     a failure on one target does not abort the others.
     """
-    state_root = Path(state_root)
+    state_root = resolve(state_root)
     result = DeleteResult(dry_run=dry_run)
 
     # --- On-disk subtrees ----------------------------------------------

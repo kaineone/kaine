@@ -43,6 +43,7 @@ import numpy as np
 
 from kaine.bus.schema import Event
 from kaine.modules.perception_prng import keyed_u64, unit_float
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -241,7 +242,7 @@ class GestationOwner:
         self._config = config
         self._clock = clock
         self._seed = int(seed)
-        self._state_path = (
+        self._state_path = resolve(
             state_path if state_path is not None else Path("state/lifecycle/gestation_readout.json")
         )
 

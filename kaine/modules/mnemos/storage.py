@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, Sequence, TypeVar, runtime_checkable
 
 from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION, stamp_point_id
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -352,7 +353,7 @@ class SqliteVecStorage:
         if latent_dim <= 0:
             raise ValueError("latent_dim must be positive")
         self._latent_dim = int(latent_dim)
-        self._db_path = str(db_path)
+        self._db_path = str(resolve(db_path))
         self._distance = distance
         self._db: Any = None
         # The one thread that owns ``self._db``; set and cleared with it.

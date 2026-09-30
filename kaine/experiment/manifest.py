@@ -17,6 +17,7 @@ from pathlib import Path
 
 from kaine.experiment.run_context import RunContext
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 
 def write_manifest(ctx: RunContext, root: str | os.PathLike[str] = "data/evaluation/runs") -> Path:
@@ -24,7 +25,7 @@ def write_manifest(ctx: RunContext, root: str | os.PathLike[str] = "data/evaluat
 
     Returns the path to the manifest. The per-run directory is created if needed.
     """
-    run_dir = Path(root) / ctx.run_id
+    run_dir = resolve(root) / ctx.run_id
     target = run_dir / "manifest.json"
     write_json_atomic(target, ctx.to_dict())
     return target

@@ -37,6 +37,7 @@ from kaine.modules.topos.internvideo_next_loader import (
     PINNED_REVISION,
     WEIGHTS_FILENAME,
 )
+from kaine.storage import resolve
 
 # The published HF model repo (MIT, OpenGVLab InternVideo-Next base).
 INTERNVIDEO_NEXT_REPO = "revliter/internvideo_next_base_p14_res224_f16"
@@ -62,7 +63,7 @@ def internvideo_next_download_cmd(
     return [
         "hf", "download", repo, filename,
         "--revision", revision,
-        "--local-dir", str(local_dir),
+        "--local-dir", str(resolve(local_dir)),
     ]
 
 
@@ -128,7 +129,7 @@ def run_internvideo_next_download(
     return InternVideoNextFetchResult(
         ok=True,
         detail=f"downloaded {WEIGHTS_FILENAME} (revision {revision})",
-        path=Path(local_dir) / WEIGHTS_FILENAME,
+        path=resolve(local_dir) / WEIGHTS_FILENAME,
     )
 
 

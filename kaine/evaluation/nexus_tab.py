@@ -25,6 +25,7 @@ from kaine.evaluation.config import EvaluationConfig
 from kaine.experiment.welfare_counts import (  # re-export: moved to a boundary-neutral home
     welfare_counts_from_jsonl,
 )
+from kaine.storage import resolve
 
 __all__ = [
     "welfare_counts_from_jsonl",
@@ -278,7 +279,7 @@ def _aggregate_nous_policy(logs_root: Path) -> dict[str, Any]:
 def _aggregate_individuation(config: EvaluationConfig) -> dict[str, Any] | None:
     """Return the most recent individuation-boundary result, or None."""
     try:
-        output_dir = Path(config.individuation.output_dir)
+        output_dir = resolve(config.individuation.output_dir)
     except AttributeError:
         return None
     if not output_dir.exists():
@@ -353,7 +354,7 @@ def _aggregate(
     attribution: AttributionRecorder | None,
     registry: "SidecarRegistry | None" = None,
 ) -> dict[str, Any]:
-    logs_root = Path(config.paths.evaluation_logs)
+    logs_root = resolve(config.paths.evaluation_logs)
 
     ab_dir = logs_root / "ab_divergence"
     ab_entries = _latest_lines(ab_dir, name="ab_divergence", limit=500)

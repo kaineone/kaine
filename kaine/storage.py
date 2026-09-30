@@ -154,3 +154,40 @@ def storage_min_free_gb(config: dict[str, Any]) -> float:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
     return DEFAULT_MIN_FREE_GB
+
+
+_PROCESS_ROOT: Path | None = None
+
+
+def set_data_root(root: Path | None) -> None:
+    """Install *root* as the process-wide data root."""
+    global _PROCESS_ROOT
+    _PROCESS_ROOT = root.expanduser().resolve() if root is not None else root
+
+
+def data_root() -> Path | None:
+    """Return the currently installed process-wide data root, if any."""
+    return _PROCESS_ROOT
+
+
+def install_data_root(
+    config: dict[str, Any], env: Mapping[str, str] | None = None
+) -> Path | None:
+    """Install the configured data root for this process.
+
+    Call once at a process entry point after loading the config and before
+    any file is read or written; never from a config loader.
+    """
+    root = configured_data_root(config, env)
+    set_data_root(root)
+    return root
+
+
+def resolve(path: str | os.PathLike[str]) -> Path:
+    """Resolve *path* under the installed process-wide data root.
+
+    Relative paths resolve under the installed root; absolute paths are
+    unchanged. When no root is installed the path is returned as given (a
+    relative path therefore stays relative, preserving previous behaviour).
+    """
+    return Path(resolve_under(_PROCESS_ROOT, os.fspath(path)))

@@ -28,6 +28,8 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from kaine.storage import resolve
+
 log = logging.getLogger(__name__)
 
 #: Where the bracket publishes the window phase; consumers read it.
@@ -56,7 +58,7 @@ def write_window_state(
     Guarded — a write failure logs and is swallowed (the bracket always writes
     RESTING before it unloads, so a missing file safely means "organ available").
     """
-    path = path if path is not None else ORGAN_WINDOW_STATE
+    path = resolve(path if path is not None else ORGAN_WINDOW_STATE)
     payload: dict[str, Any] = {
         "phase": str(phase),
         "detail": str(detail),
@@ -79,7 +81,7 @@ def read_window_state(path: Optional[Path] = None) -> Optional[dict[str, Any]]:
     Pure + guarded — any error yields None (treated as "no window / organ
     available").
     """
-    path = path if path is not None else ORGAN_WINDOW_STATE
+    path = resolve(path if path is not None else ORGAN_WINDOW_STATE)
     try:
         if not path.is_file():
             return None

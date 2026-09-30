@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from kaine.state_io import write_json_atomic
+from kaine.storage import resolve
 
 START_PATH = Path("state/cycle/caretaker_start.json")
 ACK_PATH = Path("state/cycle/caretaker_ack.json")
@@ -50,14 +51,14 @@ def _read_json_object(path: Path) -> dict | None:
 
 def write_start(start: CaretakerStart, path: Path | None = None) -> None:
     """Write the start record atomically."""
-    target = path or START_PATH
+    target = resolve(path or START_PATH)
     payload = {"start_id": start.start_id, "started_at": start.started_at}
     write_json_atomic(target, payload)
 
 
 def read_start(path: Path | None = None) -> CaretakerStart | None:
     """Return the start record, or None if missing or malformed."""
-    target = path or START_PATH
+    target = resolve(path or START_PATH)
     data = _read_json_object(target)
     if data is None:
         return None
@@ -70,14 +71,14 @@ def read_start(path: Path | None = None) -> CaretakerStart | None:
 
 def write_ack(ack: CaretakerAck, path: Path | None = None) -> None:
     """Write the acknowledgement record atomically."""
-    target = path or ACK_PATH
+    target = resolve(path or ACK_PATH)
     payload = {"start_id": ack.start_id, "acknowledged_at": ack.acknowledged_at}
     write_json_atomic(target, payload)
 
 
 def read_ack(path: Path | None = None) -> CaretakerAck | None:
     """Return the acknowledgement record, or None if missing or malformed."""
-    target = path or ACK_PATH
+    target = resolve(path or ACK_PATH)
     data = _read_json_object(target)
     if data is None:
         return None
@@ -90,7 +91,7 @@ def read_ack(path: Path | None = None) -> CaretakerAck | None:
 
 def clear_start(path: Path | None = None) -> None:
     """Remove the start record if present."""
-    target = path or START_PATH
+    target = resolve(path or START_PATH)
     try:
         target.unlink()
     except FileNotFoundError:

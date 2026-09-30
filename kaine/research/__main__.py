@@ -38,6 +38,8 @@ import sys
 from pathlib import Path
 from typing import IO, Callable
 
+from kaine.storage import install_data_root, resolve
+
 log = logging.getLogger(__name__)
 
 
@@ -282,6 +284,8 @@ def main(
         err.write(f"research: configuration error: {type(exc).__name__}: {exc}\n")
         return 6
 
+    install_data_root(cfg)
+
     rs_cfg = cfg.get("research_submission") or {}
     enabled = bool(rs_cfg.get("enabled", False))
     recipient = str(rs_cfg.get("recipient") or "").strip()
@@ -324,7 +328,7 @@ def main(
         preview,
     )
 
-    eval_root = Path(args.eval_root)
+    eval_root = resolve(args.eval_root)
     out_dir = Path(args.out_root)
 
     override = args.admissibility_override_reason is not None

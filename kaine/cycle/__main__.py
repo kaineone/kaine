@@ -43,7 +43,7 @@ from kaine.boot import (
     make_salience_factors,
     plugin_injections,
 )
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
 from kaine.cycle.affect_state import AffectStateProvider
@@ -85,6 +85,7 @@ from kaine.perception_state import (
 from kaine.persistence.jsonl_sink import AsyncJsonlSink
 from kaine.security.intent_signing import IntentSigner, generate_intent_secret
 from kaine.state_io import write_json_atomic
+from kaine.storage import install_data_root, resolve
 from kaine.workspace import (
     DriveRelevanceGoalScorer,
     NoveltyTracker,
@@ -562,7 +563,8 @@ async def _write_runtime_state(
     gate_status: dict | None = None,
     revived_from: str | None = None,
 ) -> None:
-    RUNTIME_PATH.parent.mkdir(parents=True, exist_ok=True)
+    runtime_path = resolve(RUNTIME_PATH)
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
     control = read_control()
     # Spot supervisor state (cheap, guarded): critical when escalated, recovery
     # while Spot holds the freeze, otherwise ok.
@@ -643,15 +645,16 @@ async def _write_runtime_state(
         log.debug("could not read run context for runtime.json", exc_info=True)
     # The atomic write+replace is blocking disk I/O on a once-a-second loop;
     # run it off the event loop so it never stalls the cognitive cycle.
-    await asyncio.to_thread(write_json_atomic, RUNTIME_PATH, payload)
+    await asyncio.to_thread(write_json_atomic, runtime_path, payload)
 
 
 def _clear_runtime_state() -> None:
-    if RUNTIME_PATH.exists():
+    runtime_path = resolve(RUNTIME_PATH)
+    if runtime_path.exists():
         try:
-            RUNTIME_PATH.unlink()
+            runtime_path.unlink()
         except OSError:
-            log.warning("could not remove %s", RUNTIME_PATH, exc_info=True)
+            log.warning("could not remove %s", runtime_path, exc_info=True)
 
 
 def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None) -> dict[str, str]:
@@ -938,13 +941,16 @@ def _start_preserve_watcher(
     """Start the operator-requested live-preservation watcher task."""
     from kaine.cycle.preserve_watch import PreserveRequestWatcher
     from kaine.lifecycle.preservation import bundle_dir_for
+    from kaine.storage import resolve
+
+    out_root = resolve(preservation_cfg.divergence_monitor.out_root)
 
     async def _preserve(reason):
         return await fork_manager.preserve_live(
             registry,
             reason=reason,
             label="operator",
-            out_root=Path(preservation_cfg.divergence_monitor.out_root),
+            out_root=out_root,
             entity_name=preservation_cfg.divergence_monitor.entity_name,
             require_encryption=preservation_cfg.require_encryption,
         )
@@ -952,7 +958,7 @@ def _start_preserve_watcher(
     def _bundle_for(result):
         return str(
             bundle_dir_for(
-                preservation_cfg.divergence_monitor.out_root,
+                out_root,
                 result.preservation_id,
                 preservation_cfg.divergence_monitor.entity_name,
             )
@@ -1217,7 +1223,7 @@ async def _boot_and_run(
                     return 5
 
     bus_config = load_bus_config()
-    bus = AsyncBus(bus_config)
+    bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)
     await bus.audit()
 
     # Emit the first-gestation event now that the bus exists. This is the only
@@ -1554,7 +1560,10 @@ async def _boot_and_run(
 
     # Spot module supervisor (cycle-layer component, not a registry module).
     spot_cfg = SpotConfig.from_section(kaine_config.get("spot") or {})
-    fork_manager = ForkManager(Path("state/forks"))
+    lifecycle_cfg = kaine_config.get("lifecycle") or {}
+    fork_manager = ForkManager(
+        resolve(lifecycle_cfg.get("snapshots_path", "state/forks"))
+    )
 
     rebuild_module = _make_rebuild_module(bus, kaine_config, registry, intent_secret)
 
@@ -2146,7 +2155,9 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     return evaluate_unattended_gate(net, built={6: spot, 7: seven, 8: eight})
 
 
-def _record_unattended_gate(result: Any) -> None:
+def _record_unattended_gate(
+    result: Any, config: dict[str, Any] | None = None
+) -> None:
     """Durably append one JSON record of the unattended gate evaluation.
 
     Best-effort: a write failure is logged and MUST NOT change the boot outcome.
@@ -2171,9 +2182,15 @@ def _record_unattended_gate(result: Any) -> None:
             "conditions": conditions,
         }
 
+        spot_cfg = (config or {}).get("spot") or {}
+        incident_log_cfg = spot_cfg.get("incident_log") or {}
+        incident_path = str(
+            resolve(incident_log_cfg.get("path", "state/cycle/incidents"))
+        )
+
         async def _write() -> None:
             log = IncidentLog(
-                enabled=True, path="state/cycle/incidents", name="unattended_gate"
+                enabled=True, path=incident_path, name="unattended_gate"
             )
             await log.start()
             try:
@@ -2226,6 +2243,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
         return 1
 
+    root = install_data_root(config)
+    if root is not None:
+        log.info("growing data under %s", root)
+
     # Validate the automatic time-dilation settings before any resource opens;
     # _boot_and_run builds the controller itself from the same [cycle] table.
     try:
@@ -2253,7 +2274,7 @@ def main(argv: list[str] | None = None) -> int:
             status = "pass" if c.ok else f"FAIL — {c.reason}"
             log.info("unattended gate %d: %s: %s", c.number, c.name, status)
         # Durably record the gate outcome before the allow/refuse branch.
-        _record_unattended_gate(result)
+        _record_unattended_gate(result, config)
         if not result.ok:
             sys.stderr.write(result.message() + "\n")
             # Best-effort caretaker notice about the refusal; an error here must

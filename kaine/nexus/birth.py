@@ -32,6 +32,7 @@ from kaine.lifecycle.birth_ack import (
     write_ack,
 )
 from kaine.nexus.auth import require_operator_token
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ _DEVELOPMENT_KEYS = {
 def read_development(runtime_path: Path | None = None) -> dict | None:
     if runtime_path is None:
         runtime_path = RUNTIME_PATH
+    runtime_path = resolve(runtime_path)
     try:
         raw = json.loads(runtime_path.read_text(encoding="utf-8"))
     except Exception:

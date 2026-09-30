@@ -29,6 +29,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import load_bus_config
 from kaine.bus.errors import BusConfigError
 from kaine.bus.schema import Event
+from kaine.config import load_kaine_config
 from kaine.evaluation.stream_registry import diagnostics_streams
 from kaine.lifecycle.manager import ForkManager, merger_from_name
 from kaine.nexus.app import create_app, make_default_privacy_filter
@@ -36,6 +37,7 @@ from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import NexusConfigError, load_nexus_config
 from kaine.nexus.conversation import LINGUA_EXTERNAL_STREAM
 from kaine.nexus.health import load_health_prober
+from kaine.storage import install_data_root, resolve
 
 log = logging.getLogger(__name__)
 
@@ -57,13 +59,14 @@ def make_metrics_snapshot(
     """
 
     def metrics_snapshot() -> dict[str, Any]:
-        if not runtime_path.exists():
+        path = resolve(runtime_path)
+        if not path.exists():
             return {
                 "cycle_status": "not running",
                 "hint": "start the cycle with `python -m kaine.cycle`",
             }
         try:
-            raw = json.loads(runtime_path.read_text())
+            raw = json.loads(path.read_text())
         except Exception:
             return {"cycle_status": "runtime.json unreadable"}
         return {
@@ -166,7 +169,7 @@ def _build_fork_manager(
         adapter_merger = merger_from_name(
             adapter_merger_name, config_section=adapter_merge_section
         )
-        snapshots_path = str(lifecycle_cfg.get("snapshots_path", "state/forks"))
+        snapshots_path = str(resolve(lifecycle_cfg.get("snapshots_path", "state/forks")))
         _warn_ignored_snapshot_retention(lifecycle_cfg)
         return (
             ForkManager(snapshots_path, adapter_merger=adapter_merger),
@@ -195,6 +198,15 @@ def _load_security_state_encryption_config() -> dict[str, Any]:
 
 
 async def _build():
+    # Install the process-wide data root for this Nexus process.
+    try:
+        kaine_config = load_kaine_config()
+    except Exception as exc:
+        logging.warning("could not load KAINE config; data root not installed: %s", exc)
+        kaine_config = None
+    if kaine_config is not None:
+        install_data_root(kaine_config)
+
     bus_config = load_bus_config()
     bus = AsyncBus(bus_config)
     nexus_config = load_nexus_config()
@@ -269,7 +281,6 @@ async def _build():
             # Attribution is threaded through the same call. Both are optional;
             # when None the surface degrades gracefully.
             try:
-                from kaine.config import load_kaine_config
                 from kaine.evaluation.registry import SidecarRegistry
                 from kaine.text_embedding import make_text_embedder
 

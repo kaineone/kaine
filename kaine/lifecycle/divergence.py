@@ -57,6 +57,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from kaine.storage import resolve
+
 log = logging.getLogger(__name__)
 
 #: Conservative shipped thresholds for the graded consolidation-divergence
@@ -239,8 +241,8 @@ def assess_divergence(
         (non-null) ``divergence_magnitude`` >= the magnitude threshold. Shipped
         conservative; operator-calibrated.
     """
-    state_root = Path(state_root)
-    eval_root = Path(eval_root)
+    state_root = resolve(state_root)
+    eval_root = resolve(eval_root)
 
     # --- Primary: individuation permutation test --------------------------
     # The report shares ONE warmed-up, birth-state-referenced signal with the

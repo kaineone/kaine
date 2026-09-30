@@ -50,6 +50,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from kaine.storage import resolve
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -309,7 +311,7 @@ def build_research_bundle(
         matches zero records, or logs are present but unreadable. Auto-discovery
         means NO ``admissibility_run_id`` need be supplied for this to fire.
     """
-    eval_root = Path(eval_root)
+    eval_root = resolve(eval_root)
     out_dir = Path(out_dir)
 
     if admissibility_override and not admissibility_override_reason.strip():

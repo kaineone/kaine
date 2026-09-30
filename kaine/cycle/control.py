@@ -8,15 +8,20 @@ Currently supports requesting a live preservation and waiting for the result.
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 from typing import Callable
 
+from kaine.config import load_kaine_config
 from kaine.cycle.preserve_watch import (
+    REQUEST_PATH,
+    RESULT_PATH,
     new_request,
     read_result,
     write_request,
 )
+from kaine.storage import install_data_root, resolve
 
 
 def run_preserve(
@@ -52,6 +57,16 @@ def run_preserve(
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        config = load_kaine_config()
+    except Exception as exc:
+        print(
+            f"Warning: could not load config; data root not installed: {exc}",
+            file=sys.stderr,
+        )
+    else:
+        install_data_root(config)
+
     parser = argparse.ArgumentParser(prog="python -m kaine.cycle.control")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -71,7 +86,13 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "preserve":
-        return run_preserve(args.reason, args.stop, args.wait)
+        return run_preserve(
+            args.reason,
+            args.stop,
+            args.wait,
+            request_path=resolve(REQUEST_PATH),
+            result_path=resolve(RESULT_PATH),
+        )
     return 2
 
 

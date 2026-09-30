@@ -51,6 +51,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.sleep_snapshots import SleepSnapshotRecorder
 from kaine.evaluation.trajectory import TrajectoryRecorder
 from kaine.evaluation.voice_tracking import VoiceTrackingObserver
+from kaine.storage import resolve
 from kaine.text_embedding import make_text_embedder
 
 log = logging.getLogger(__name__)
@@ -332,7 +333,7 @@ class SidecarRegistry:
                 EidolonAccuracyRunner(
                     sink,
                     cognitive_client=self._cognitive_client,
-                    evaluation_logs_dir=Path(config.paths.evaluation_logs),
+                    evaluation_logs_dir=resolve(config.paths.evaluation_logs),
                     interval_seconds=config.eidolon_accuracy_interval_hours * 3600.0,
                 )
             )

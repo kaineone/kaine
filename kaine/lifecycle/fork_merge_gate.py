@@ -35,6 +35,7 @@ from typing import Any, Callable, Optional
 
 from kaine.lifecycle.divergence import DivergenceAssessment, assess_divergence
 from kaine.lifecycle.manager import ForkManager
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -98,8 +99,9 @@ def assess_fork(
     birth-state-referenced signal that drives the live preservation trigger and
     the decommission gate decides whether a fork has individuated. Pure + guarded.
     """
+    eval_root = resolve(eval_root)
     return assess_divergence(
-        state_root=Path(fork_state_root), eval_root=Path(eval_root)
+        state_root=Path(fork_state_root), eval_root=eval_root
     )
 
 

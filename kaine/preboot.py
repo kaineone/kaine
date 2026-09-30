@@ -97,7 +97,7 @@ from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
 from kaine.security.crypto import CryptoConfigError, install_from_section
 from kaine.setup.organ import verify_organ_generates
-from kaine.storage import configured_data_root, storage_min_free_gb
+from kaine.storage import configured_data_root, resolve, storage_min_free_gb
 from kaine.torch_stack import check_torch_stack, describe_torch_stack
 
 log = logging.getLogger(__name__)
@@ -839,58 +839,58 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
     eidolon = _table(config, "eidolon")
 
     paths: list[tuple[str, Path]] = [
-        ("[preboot].state_root", Path(settings["state_root"])),
-        ("[preboot].data_root", Path(settings["data_root"])),
-        ("[lifecycle].snapshots_path", _dir_of(lifecycle.get("snapshots_path"), "state/forks")),
+        ("[preboot].state_root", resolve(Path(settings["state_root"]))),
+        ("[preboot].data_root", resolve(Path(settings["data_root"]))),
+        ("[lifecycle].snapshots_path", resolve(_dir_of(lifecycle.get("snapshots_path"), "state/forks"))),
         (
             "[preservation.divergence_monitor].out_root",
-            Path(preservation.divergence_monitor.out_root),
+            resolve(Path(preservation.divergence_monitor.out_root)),
         ),
         (
             "[preservation.welfare_response].out_root",
-            Path(preservation.welfare_response.out_root),
+            resolve(Path(preservation.welfare_response.out_root)),
         ),
         (
             "[evaluation.paths].trajectory_dir",
-            _dir_of(evaluation_paths.get("trajectory_dir"), "data/workspace_trajectory"),
+            resolve(_dir_of(evaluation_paths.get("trajectory_dir"), "data/workspace_trajectory")),
         ),
         (
             "[evaluation.paths].evaluation_logs",
-            _dir_of(evaluation_paths.get("evaluation_logs"), "data/evaluation"),
+            resolve(_dir_of(evaluation_paths.get("evaluation_logs"), "data/evaluation")),
         ),
         (
             "[research_event_log].log_dir",
-            _dir_of(research.get("log_dir"), "data/evaluation/research_events"),
+            resolve(_dir_of(research.get("log_dir"), "data/evaluation/research_events")),
         ),
         (
             "[research_event_log.raw_archive].archive_dir",
-            _dir_of(raw_archive.get("archive_dir"), "state/research/raw_bus_archive"),
+            resolve(_dir_of(raw_archive.get("archive_dir"), "state/research/raw_bus_archive")),
         ),
         (
             "[hypnos.voice_alignment].adapter_output_dir",
-            _dir_of(voice.get("adapter_output_dir"), "state/hypnos/adapters"),
+            resolve(_dir_of(voice.get("adapter_output_dir"), "state/hypnos/adapters")),
         ),
         (
             "[hypnos.voice_alignment].trainer_workdir",
-            _dir_of(
+            resolve(_dir_of(
                 str(voice.get("trainer_workdir") or "").strip() or None,
                 "state/hypnos/voice_align_jobs",
-            ),
+            )),
         ),
-        ("[ignition_log].directory", Path(ignition.directory)),
-        ("[spot.incident_log].path", _dir_of(incident_log.get("path"), "state/cycle/incidents")),
+        ("[ignition_log].directory", resolve(Path(ignition.directory))),
+        ("[spot.incident_log].path", resolve(_dir_of(incident_log.get("path"), "state/cycle/incidents"))),
         (
             "[eidolon].persistence_path",
-            _dir_of(
+            resolve(_dir_of(
                 eidolon.get("persistence_path"), "state/eidolon/self_model.json", is_file=True
-            ),
+            )),
         ),
     ]
     root = configured_data_root(config)
     if root is not None:
-        paths.insert(0, ("[storage].data_root", root))
+        paths.insert(0, ("[storage].data_root", resolve(root)))
     for extra in settings.get("extra_disk_paths", []):
-        paths.append(("[preboot].extra_disk_paths", Path(extra)))
+        paths.append(("[preboot].extra_disk_paths", resolve(Path(extra))))
     return paths
 
 
@@ -928,7 +928,7 @@ def check_disk(
     warn_gb = float(settings["disk_warn_min_free_gb"])
     results: list[CheckResult] = []
 
-    redis_dir = Path(settings["state_root"]) / "services" / "redis" / "data"
+    redis_dir = resolve(settings["state_root"]) / "services" / "redis" / "data"
     native_redis = redis_dir.is_dir()
     if native_redis:
         paths.append(("native Redis data", redis_dir))
@@ -1347,6 +1347,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.parse_args(argv)
 
+    from kaine.storage import install_data_root
+
     try:
         config = load_runtime_config(SHIPPED_CONFIG_PATH, OPERATOR_CONFIG_PATH)
     except FileNotFoundError as exc:
@@ -1355,6 +1357,8 @@ def main(argv: list[str] | None = None) -> int:
     except ProfileError as exc:
         sys.stderr.write(f"pre-boot: configuration error: {exc}\n")
         return 2
+
+    install_data_root(config)
 
     try:
         results = asyncio.run(run_async_checks(config))

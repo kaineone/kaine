@@ -44,7 +44,6 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from kaine.bus.schema import validate_event
@@ -56,6 +55,7 @@ from kaine.lifecycle.divergence import assess_divergence
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.welfare_signal import SustainedThresholdTracker, WindowedEventCounter
 from kaine.modules.registry import ModuleRegistry
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -538,8 +538,8 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         # the cycle.
         assessment = await asyncio.to_thread(
             assess_divergence,
-            state_root=Path(self._config.state_root),
-            eval_root=Path(self._config.eval_root),
+            state_root=resolve(self._config.state_root),
+            eval_root=resolve(self._config.eval_root),
         )
         # Warm-up / minimum-lived-experience gate (Defect B). Before the entity
         # has accumulated the configured lived experience, NO crossing counts —
@@ -599,7 +599,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                 self._registry,
                 reason="individuation",
                 label=label,
-                out_root=Path(self._config.out_root),
+                out_root=resolve(self._config.out_root),
                 entity_name=self._config.entity_name,
                 require_encryption=self._require_encryption,
             )
@@ -915,7 +915,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 self._registry,
                 reason="welfare",
                 label=f"welfare:{incident_id}",
-                out_root=Path(self._config.out_root),
+                out_root=resolve(self._config.out_root),
                 entity_name=self._config.entity_name,
                 require_encryption=self._require_encryption,
             )

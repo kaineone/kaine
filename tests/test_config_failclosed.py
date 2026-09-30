@@ -63,6 +63,16 @@ def test_research_main_rejects_malformed_operator_overlay(tmp_path, monkeypatch)
     assert "research: configuration error:" in err.getvalue()
 
 
+@pytest.fixture(autouse=True)
+def _no_live_entity_probes(monkeypatch):
+    """Decommission's bus and process liveness probes are hermetic here: these
+    tests exercise the configuration gates, not a live cycle."""
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._bus_shows_live_entity", lambda config: (False, "test: no bus")
+    )
+    monkeypatch.setattr("kaine.lifecycle.__main__._cycle_process_running", lambda: False)
+
+
 def test_decommission_main_rejects_malformed_overlay(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _write_configs(
