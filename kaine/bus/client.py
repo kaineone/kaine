@@ -149,20 +149,26 @@ class _CancellationSafeClient:
         return f"_CancellationSafeClient({self._raw!r})"
 
 
+CYCLE_CLIENT_NAME = "kaine-cycle"  # the cognitive cycle names its bus connections so tools such as decommission can tell whether a cycle is connected
+
+
 class AsyncBus:
     def __init__(
         self,
         config: BusConfig,
         client: Optional[aioredis.Redis] = None,
+        *,
+        client_name: Optional[str] = None,
     ) -> None:
         self._config = config
+        redis_kwargs: dict[str, Any] = {
+            "decode_responses": True,
+            "max_connections": config.max_connections,
+        }
+        if client_name is not None:
+            redis_kwargs["client_name"] = client_name
         self._client = _CancellationSafeClient(
-            client
-            or aioredis.from_url(
-                config.url,
-                decode_responses=True,
-                max_connections=config.max_connections,
-            )
+            client or aioredis.from_url(config.url, **redis_kwargs)
         )
         self._audited = False
 

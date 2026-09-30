@@ -12,13 +12,40 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from kaine.lifecycle.__main__ import _bus_shows_live_entity, main
+import redis
+
+from kaine.bus.client import CYCLE_CLIENT_NAME
+from kaine.bus.errors import BusConfigError
+from kaine.lifecycle.__main__ import (
+    _argv_is_cycle,
+    _bus_shows_live_entity,
+    main,
+)
 
 
 class _FakeClient:
-    def __init__(self, entries, exc=None):
-        self.entries = entries
+    def __init__(
+        self,
+        entries=None,
+        clients=None,
+        exc=None,
+        ping_exc=None,
+        list_exc=None,
+    ):
+        self.entries = entries or []
+        self.clients = clients or []
         self.exc = exc
+        self.ping_exc = ping_exc
+        self.list_exc = list_exc
+
+    def ping(self):
+        if self.ping_exc:
+            raise self.ping_exc
+
+    def client_list(self):
+        if self.list_exc:
+            raise self.list_exc
+        return self.clients
 
     def xrevrange(self, name, count=1):
         if self.exc:
@@ -383,7 +410,7 @@ def test_bus_probe_stale_broadcast_reports_not_live(monkeypatch):
 def test_bus_probe_unreachable_reports_unknown(monkeypatch):
     monkeypatch.setattr(
         "redis.Redis.from_url",
-        lambda url, **kwargs: _FakeClient([], exc=ConnectionError("boom")),
+        lambda url, **kwargs: _FakeClient(ping_exc=ConnectionError("boom")),
     )
     monkeypatch.setattr(
         "kaine.bus.config.load_bus_config",
@@ -392,3 +419,127 @@ def test_bus_probe_unreachable_reports_unknown(monkeypatch):
     live, detail = _bus_shows_live_entity({})
     assert live is None
     assert "bus unreachable (ConnectionError)" in detail
+
+
+def test_bus_probe_named_client_reports_live(monkeypatch):
+    monkeypatch.setattr(
+        "redis.Redis.from_url",
+        lambda url, **kwargs: _FakeClient(
+            entries=[(f"{int(time.time() * 1000) - 120000}-0", {})],
+            clients=[{"name": CYCLE_CLIENT_NAME}],
+        ),
+    )
+    monkeypatch.setattr(
+        "kaine.bus.config.load_bus_config",
+        lambda **kw: SimpleNamespace(url="redis://fake"),
+    )
+    live, detail = _bus_shows_live_entity({})
+    assert live is True
+    assert "connected to the bus" in detail
+
+
+def test_bus_probe_connection_refused_reports_not_running(monkeypatch):
+    refused = ConnectionRefusedError()
+    err = redis.exceptions.ConnectionError("refused")
+    err.__cause__ = refused
+    monkeypatch.setattr(
+        "redis.Redis.from_url",
+        lambda url, **kwargs: _FakeClient(ping_exc=err),
+    )
+    monkeypatch.setattr(
+        "kaine.bus.config.load_bus_config",
+        lambda **kw: SimpleNamespace(url="redis://fake"),
+    )
+    live, detail = _bus_shows_live_entity({})
+    assert live is False
+    assert "not running (connection refused)" in detail
+
+
+def test_bus_probe_timeout_reports_unknown(monkeypatch):
+    monkeypatch.setattr(
+        "redis.Redis.from_url",
+        lambda url, **kwargs: _FakeClient(
+            ping_exc=redis.exceptions.TimeoutError("timeout")
+        ),
+    )
+    monkeypatch.setattr(
+        "kaine.bus.config.load_bus_config",
+        lambda **kw: SimpleNamespace(url="redis://fake"),
+    )
+    live, detail = _bus_shows_live_entity({})
+    assert live is None
+    assert "bus unreachable (TimeoutError)" in detail
+
+
+def test_bus_probe_missing_config_reports_unknown(monkeypatch):
+    def _bad_load(**kw):
+        raise BusConfigError("no Redis password found")
+
+    monkeypatch.setattr("kaine.bus.config.load_bus_config", _bad_load)
+    live, detail = _bus_shows_live_entity({})
+    assert live is None
+    assert "no Redis password found" in detail
+
+
+def test_bus_probe_list_clients_error_reports_unknown(monkeypatch):
+    monkeypatch.setattr(
+        "redis.Redis.from_url",
+        lambda url, **kwargs: _FakeClient(
+            list_exc=redis.exceptions.ResponseError("NOPERM")
+        ),
+    )
+    monkeypatch.setattr(
+        "kaine.bus.config.load_bus_config",
+        lambda **kw: SimpleNamespace(url="redis://fake"),
+    )
+    live, detail = _bus_shows_live_entity({})
+    assert live is None
+    assert "cannot list bus clients (ResponseError)" in detail
+
+
+@pytest.mark.parametrize(
+    "args,expected",
+    [
+        ([b"python", b"-m", b"kaine.cycle"], True),
+        ([b"python", b"-m", b"kaine.cycle.__main__"], True),
+        ([b"python", b"-mkaine.cycle"], True),
+        ([b"python", b"-mkaine.cycle.x"], True),
+        ([b"python", b"/app/kaine/cycle/__main__.py"], True),
+        ([b"python", b"-m", b"kaine.cyclefoo"], False),
+        ([b"python", b"-m", b"kaine.lifecycle"], False),
+    ],
+)
+def test_argv_is_cycle(args, expected):
+    assert _argv_is_cycle(args) is expected
+
+
+def test_empty_subtree_dirs_only_refuses_decommission(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    state_root = tmp_path / "state"
+    for sub in ("eidolon", "forks", "cycle"):
+        (state_root / sub).mkdir(parents=True, exist_ok=True)
+    out_root = tmp_path / "backups"
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = cfg_dir / "kaine.toml"
+    cfg_path.write_text(
+        "# minimal config\n[research_submission]\nenabled = false\n",
+        encoding="utf-8",
+    )
+    args = [
+        "--state-root",
+        str(state_root),
+        "--fork-root",
+        str(tmp_path / "forks"),
+        "--eval-root",
+        str(tmp_path / "data" / "evaluation"),
+        "--out-root",
+        str(out_root),
+        "--config",
+        str(cfg_path),
+    ]
+    err = io.StringIO()
+    rc = main(args, input_fn=_scripted_input([]), out=io.StringIO(), err=err)
+    assert rc == 7
+    assert "no entity state found" in err.getvalue().lower()
+    assert not out_root.exists() or not any(out_root.iterdir())

@@ -43,7 +43,7 @@ from kaine.boot import (
     make_salience_factors,
     plugin_injections,
 )
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
 from kaine.cycle.affect_state import AffectStateProvider
@@ -1219,7 +1219,7 @@ async def _boot_and_run(
                     return 5
 
     bus_config = load_bus_config()
-    bus = AsyncBus(bus_config)
+    bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)
     await bus.audit()
 
     # Emit the first-gestation event now that the bus exists. This is the only

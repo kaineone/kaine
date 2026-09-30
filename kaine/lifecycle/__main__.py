@@ -31,6 +31,7 @@ Exit codes
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import logging
 import os
@@ -39,6 +40,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from kaine.bus.client import CYCLE_CLIENT_NAME
+from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.decommission import (
     _STATE_SUBTREES,
     capture_backup,
@@ -58,6 +61,9 @@ log = logging.getLogger("kaine.lifecycle.decommission")
 
 OPERATOR_PRESENT_ENV = "KAINE_DECOMMISSION_OPERATOR_PRESENT"
 RUNTIME_FRESH_SECONDS = 5.0
+# A broadcast this recent means a cycle ran moments ago; wider than the
+# runtime-file window because a sleeping or dilated cycle broadcasts less often.
+BUS_FRESH_SECONDS = 60.0
 
 
 # ---------------------------------------------------------------------------
@@ -107,11 +113,25 @@ def _cycle_appears_running(runtime_path: Path) -> bool:
     return False
 
 
+def _argv_is_cycle(args: list[bytes]) -> bool:
+    """Return True if any argv element identifies a KAINE cognitive cycle."""
+    for arg in args:
+        if arg == b"kaine.cycle" or arg.startswith(b"kaine.cycle."):
+            return True
+        if arg == b"-mkaine.cycle" or arg.startswith(b"-mkaine.cycle."):
+            return True
+        if arg.endswith(b"kaine/cycle/__main__.py"):
+            return True
+    return False
+
+
 def _cycle_process_running() -> bool:
     """True if another process on this host is running ``kaine.cycle``.
 
-    Scans ``/proc/*/cmdline`` and treats any argv element equal to
-    ``"kaine.cycle"`` as a live cycle.  All reads are guarded; never raises.
+    Scans ``/proc/*/cmdline`` and uses :func:`_argv_is_cycle` to recognise a
+    cycle by its argv.  This only sees processes on this host (and, from the
+    host, in its containers); the bus client check covers other containers.
+    All reads are guarded; never raises.
     """
     if not os.path.isdir("/proc"):
         return False
@@ -135,33 +155,100 @@ def _cycle_process_running() -> bool:
             continue
         if not raw:
             continue
-        for arg in raw.split(b"\0"):
-            if arg == b"kaine.cycle":
+        if _argv_is_cycle(raw.split(b"\0")):
+            return True
+    return False
+
+
+def _state_subtree_has_content(state_root: Path, sub: str) -> bool:
+    """Return True if *state_root / sub* contains at least one regular file.
+
+    A permission error is treated as "has content" so a failed read never
+    lets a delete proceed silently.
+    """
+    p = state_root / sub
+    if not p.exists():
+        return False
+    try:
+        for child in p.rglob("*"):
+            if child.is_file():
                 return True
+        return False
+    except OSError:
+        return True
+
+
+def _is_connection_refused(exc: Exception) -> bool:
+    """Walk an exception chain looking for ECONNREFUSED."""
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, ConnectionRefusedError):
+            return True
+        if isinstance(exc, OSError) and exc.errno == errno.ECONNREFUSED:
+            return True
+        # Some Redis clients wrap the underlying OSError in ``args``.
+        for arg in getattr(exc, "args", ()):
+            if isinstance(arg, ConnectionRefusedError):
+                return True
+            if isinstance(arg, OSError) and arg.errno == errno.ECONNREFUSED:
+                return True
+        exc = exc.__cause__ or exc.__context__
     return False
 
 
 def _bus_shows_live_entity(config: dict[str, Any]) -> tuple[bool | None, str]:
-    """Probe the shared bus for a recent workspace broadcast.
+    """Probe the shared bus for a live cycle.
 
-    Returns ``(True, detail)`` if the newest entry on the workspace stream is
-    fresh, ``(False, detail)`` if the stream is empty or stale, and
-    ``(None, detail)`` if the bus could not be reached.  The URL and password
-    are never included in the returned text.
+    First asks the Redis server for connected clients named by a KAINE cycle
+    (activity-independent).  If no named client is connected, falls back to the
+    newest workspace broadcast on the configured db.  Returns ``(True,
+    detail)`` if a cycle is connected or a recent entry exists, ``(False,
+    detail)`` if the bus is known down or the stream is empty/stale, and
+    ``(None, detail)`` if the bus configuration is missing or the server could
+    not be queried.  The URL and password are never included in the returned
+    text.
     """
+    try:
+        from kaine.bus.config import load_bus_config
+
+        bus_cfg = load_bus_config()
+    except BusConfigError as exc:
+        return (
+            None,
+            f"bus configuration is not available in this environment ({exc})",
+        )
+    except Exception as exc:
+        return (None, f"bus configuration load failed ({type(exc).__name__})")
+
     client = None
     try:
         import redis
 
-        from kaine.bus.config import load_bus_config
         from kaine.bus.schema import WORKSPACE_STREAM
 
-        bus_cfg = load_bus_config()
         client = redis.Redis.from_url(
             bus_cfg.url,
             socket_connect_timeout=2.0,
             socket_timeout=2.0,
         )
+        try:
+            client.ping()
+        except Exception as exc:
+            if _is_connection_refused(exc):
+                return (
+                    False,
+                    "the bus is not running (connection refused); no cycle can be connected to it",
+                )
+            return (None, f"bus unreachable ({type(exc).__name__})")
+
+        try:
+            for c in client.client_list():
+                if c.get("name") == CYCLE_CLIENT_NAME:
+                    return (True, "a KAINE cycle is connected to the bus")
+        except Exception as exc:
+            return (None, f"cannot list bus clients ({type(exc).__name__})")
+
         entries = client.xrevrange(WORKSPACE_STREAM, count=1)
         if not entries:
             return (False, f"{WORKSPACE_STREAM} has no broadcast")
@@ -169,7 +256,7 @@ def _bus_shows_live_entity(config: dict[str, Any]) -> tuple[bool | None, str]:
         id_str = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
         ms = int(id_str.split("-")[0])
         age_s = time.time() - ms / 1000.0
-        if age_s < RUNTIME_FRESH_SECONDS:
+        if age_s < BUS_FRESH_SECONDS:
             return (True, f"{WORKSPACE_STREAM} last broadcast {age_s:.0f} s ago")
         return (
             False,
@@ -401,9 +488,8 @@ def main(
     entity_name = _resolve_entity_name(state_root, config)
 
     # --- Gate 2.5: entity state must actually be present ----------------
-    if not state_root.exists() or (
-        not any((state_root / sub).exists() for sub in _STATE_SUBTREES)
-        and not (state_root / "cycle").exists()
+    if not state_root.exists() or not any(
+        _state_subtree_has_content(state_root, sub) for sub in _STATE_SUBTREES
     ):
         err.write(
             f"Refusing to decommission: no entity state found under {state_root}. "
