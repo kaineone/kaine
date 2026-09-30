@@ -45,6 +45,11 @@ build_extra_args() {
     sha=$(sed -n 's/.*"sha256":[[:space:]]*"\([0-9a-fA-F]\{64\}\)".*/\1/p' "$ADAPTERS_DIR/active.json")
 
     case "$file" in
+        */*|*..*)
+            # A shell case '*' also matches '/': refuse any name that could
+            # leave the adapters directory.
+            log "not loading adapter: invalid active.json file name '$file'"
+            ;;
         active-[0-9]*.gguf)
             path="$ADAPTERS_DIR/$file"
             if [ -f "$path" ] && printf '%s  %s\n' "$sha" "$path" | sha256sum -c - >/dev/null 2>&1; then

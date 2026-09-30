@@ -147,6 +147,21 @@ def test_sha_mismatch_launches_without_lora(tmp_path: Path):
 
 
 @NEEDS_UNIX_TOOLS
+def test_traversal_filename_launches_without_lora(tmp_path: Path):
+    """A shell case '*' matches '/', so a name that starts like a generation
+    file but walks out of the directory must still be refused."""
+    outside = tmp_path / "evil.gguf"
+    outside.write_text("not an adapter")
+    _write_manifest(tmp_path / "adapters", "active-1/../../evil.gguf", _sha256(outside))
+    (tmp_path / "adapters" / "active-1").mkdir()
+    (tmp_path / "adapters" / "generation").write_text("1")
+
+    with LauncherSession(tmp_path):
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+
+
+@NEEDS_UNIX_TOOLS
 def test_bad_filename_launches_without_lora(tmp_path: Path):
     _write_manifest(tmp_path / "adapters", "../evil.gguf", "0" * 64)
     (tmp_path / "adapters" / "generation").write_text("1")
