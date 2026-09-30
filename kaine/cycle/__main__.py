@@ -1173,7 +1173,11 @@ async def _boot_and_run(
     if gpu_cfg.enabled:
         organ_model = (kaine_config.get("lingua") or {}).get("model_id")
         keep = [organ_model] if organ_model else []
-        pf = run_preflight(gpu_cfg, keep_models=keep)
+        pf = run_preflight(
+            gpu_cfg,
+            keep_models=keep,
+            services_config=kaine_config.get("services"),
+        )
         for line in pf.message.splitlines():
             log.info("gpu-preflight: %s", line)
         if not pf.ok:

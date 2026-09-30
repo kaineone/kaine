@@ -86,6 +86,7 @@ def test_preflight_gate_decision(fixture, monkeypatch, tmp_path):
     monkeypatch.setattr(pf, "_probe_memory_state", lambda *args, **kwargs: memory_state)
     monkeypatch.setattr(pf, "_device_free_vram", lambda *args, **kwargs: cuda_devices)
     monkeypatch.setattr(pf, "_gpu_consumers", lambda *args, **kwargs: [])
+    monkeypatch.setattr(pf, "_device_consumers", lambda *args, **kwargs: [])
     monkeypatch.setattr(pf, "_kaine_services_up", lambda *args, **kwargs: {})
     monkeypatch.setattr(pf, "_server_resident_models", lambda *args, **kwargs: [])
 

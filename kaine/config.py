@@ -401,6 +401,34 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                     f"storage.min_free_gb expected number >= 0, got {type(min_free_gb).__name__}"
                 )
 
+    services = config.get("services")
+    if services is not None:
+        if not isinstance(services, dict):
+            raise ConfigShapeError(
+                f"services expected table, got {type(services).__name__}"
+            )
+        for name, table in services.items():
+            if not isinstance(table, dict):
+                raise ConfigShapeError(
+                    f"services.{name} expected table, got {type(table).__name__}"
+                )
+            shared = table.get("shared")
+            if shared is not None and not isinstance(shared, bool):
+                raise ConfigShapeError(
+                    f"services.{name}.shared expected bool, got {type(shared).__name__}"
+                )
+            process_names = table.get("process_names")
+            if process_names is not None:
+                if not isinstance(process_names, list):
+                    raise ConfigShapeError(
+                        f"services.{name}.process_names expected list, got {type(process_names).__name__}"
+                    )
+                for idx, pn in enumerate(process_names):
+                    if not isinstance(pn, str):
+                        raise ConfigShapeError(
+                            f"services.{name}.process_names[{idx}] expected string"
+                        )
+
 def require_known_keys(
     section: dict[str, Any], allowed: set[str], table_name: str = ""
 ) -> None:
