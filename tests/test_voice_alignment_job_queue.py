@@ -478,4 +478,4 @@ async def test_early_result_without_done_is_not_consumed(tmp_path: Path) -> None
     task = asyncio.create_task(early_script_only())
     with pytest.raises(SubprocessTrainerError, match="did not finish"):
         await trainer.train(_pairs(), cfg)
-    await task
+    assert (await task) is None
