@@ -325,6 +325,18 @@ def test_init_cli_records_voice_alignment_steps(nine_module_plan, tmp_path):
     ]
 
 
+def test_init_cli_records_the_default_voice_alignment_step(nine_module_plan, tmp_path):
+    """Without --voice-alignment-step, study.json still records the default
+    registration (the final accumulate step), so the pre-registered design is
+    visible in the study's own record."""
+    repo_root = Path(nine_module_plan["repo_root"])
+    _repo_config(repo_root)
+    study_dir = tmp_path / "study"
+    assert main(_nine_module_argv(nine_module_plan, study_dir)) == 0
+    plan = load_plan(study_dir)
+    assert plan["voice_alignment_steps"] == [{"line": "accumulate", "k": 9}]
+
+
 def test_init_cli_malformed_voice_alignment_step_errors(nine_module_plan, tmp_path):
     repo_root = Path(nine_module_plan["repo_root"])
     _repo_config(repo_root)

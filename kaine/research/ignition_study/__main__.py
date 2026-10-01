@@ -93,7 +93,9 @@ def _cmd_init(args: argparse.Namespace) -> int:
     }
     if args.voice_alignment_step:
         plan["voice_alignment_steps"] = list(args.voice_alignment_step)
-    validate_plan(plan)
+    # validate_plan returns the normalised plan (its defaults filled in); that
+    # is what the study records, so study.json shows every setting it runs with.
+    plan = validate_plan(plan)
 
     study_dir = resolve(
         Path(args.study_dir)
