@@ -142,6 +142,12 @@ def run_job(
         out = job_dir / "result.json"
         tmp.write_text(json.dumps(result, indent=2), encoding="utf-8")
         os.replace(tmp, out)
+        # The external script writes its own result.json as soon as training
+        # ends, before conversion; DONE (written last) is the only signal that
+        # this service's final result is in place.
+        done_tmp = job_dir / "DONE.tmp"
+        done_tmp.write_text("", encoding="utf-8")
+        os.replace(done_tmp, job_dir / "DONE")
         return result
 
     try:

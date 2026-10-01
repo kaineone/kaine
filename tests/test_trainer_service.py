@@ -213,6 +213,8 @@ def test_run_job_success(tmp_path: Path) -> None:
     assert not (job / "result.json.tmp").exists()
     assert len([c for c in calls if "hypnos_external_train.py" in c[1]]) == 1
     assert len([c for c in calls if "convert_lora_to_gguf.py" in c[1]]) == 1
+    # The service's completion marker is written last, after the final result.
+    assert (job / "DONE").is_file()
 
 
 def test_run_job_converter_failure(tmp_path: Path) -> None:

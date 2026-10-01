@@ -183,10 +183,13 @@ class JobQueueVoiceTrainer:
     async def _poll_for_result(
         self, job_dir: Path, job_name: str
     ) -> dict[str, Any]:
-        result_path = job_dir / "result.json"
+        # Wait for the service's DONE marker, never for result.json alone: the
+        # external script writes an early result.json before the service has
+        # converted the adapter and written its final result.
+        done_path = job_dir / "DONE"
         deadline = time.monotonic() + self._timeout_s
         while True:
-            if result_path.exists():
+            if done_path.exists():
                 return _read_result(job_dir)
             if time.monotonic() >= deadline:
                 self._write_cancelled(job_dir)

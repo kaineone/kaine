@@ -38,16 +38,12 @@ ARG RUNTIME_BASE=nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
 ARG KAINE_EXTRAS=".[test,full]"
 
 # =========================================================================
-# Stage 1 — build: create the venv, install the flavor-correct torch, then
-# install KAINE (editable) with the requested extras.
+# Stage 1 — build-base: install the apt build toolchain and python3.12.
+# This stage is shared by the runtime and trainer build stages.
 # =========================================================================
-FROM ${BUILD_BASE} AS build
-ARG FLAVOR
-ARG KAINE_EXTRAS
+FROM ${BUILD_BASE} AS build-base
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Build toolchain — CUDA/HIP extensions may compile during pip; git lets pip
 # resolve any VCS deps; ca-certificates/gnupg back the deadsnakes PPA fetch below.
@@ -69,6 +65,18 @@ RUN if ! command -v python3.12 >/dev/null 2>&1; then \
             python3.12 python3.12-venv python3.12-dev \
      && rm -rf /var/lib/apt/lists/*; \
     fi
+
+# =========================================================================
+# Stage 2 — build: create the venv, install the flavor-correct torch, then
+# install KAINE (editable) with the requested extras.
+# =========================================================================
+FROM build-base AS build
+
+ARG FLAVOR
+ARG KAINE_EXTRAS
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
@@ -107,7 +115,7 @@ WORKDIR /app
 RUN PIP_ONLY_BINARY=av pip install -c /src/kaine-torch-constraints.txt -e "${KAINE_EXTRAS}"
 
 # =========================================================================
-# Stage 2 — runtime: slim base, non-root user, venv + source copied in, offline
+# Stage 3 — runtime: slim base, non-root user, venv + source copied in, offline
 # model guards, /app/state + /models as volumes. No model weights in any layer.
 # =========================================================================
 FROM ${RUNTIME_BASE} AS runtime
@@ -185,13 +193,15 @@ ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/kaine-entrypoint"]
 CMD ["python", "-m", "kaine.cycle"]
 
 # =========================================================================
-# Stage 3 — trainer-build: an isolated venv for the [training] extra and the
+# Stage 4 — trainer-build: an isolated venv for the [training] extra and the
 # llama.cpp LoRA -> GGUF converter used by kaine-trainer.
 #
 # The trainer image is built only with --target trainer; the default target is
 # the runtime image (see the runtime-default alias at the end of this file).
+# This stage starts from build-base so a source change does not rebuild the
+# trainer torch/unsloth layers.
 # =========================================================================
-FROM build AS trainer-build
+FROM build-base AS trainer-build
 ARG FLAVOR
 ARG LLAMA_CPP_TAG=b9976
 ARG LLAMA_CPP_SHA256=d54ff9d66fb07b8c295f1d0fd01ce267392409d05cc5c5c89bf83d7d4debd130
@@ -206,13 +216,18 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
+# The index lookup uses only the standard library, so the system python3.12 is
+# sufficient before the trainer venv exists.
+COPY scripts/install.py /src/scripts/install.py
+COPY pyproject.toml /src/pyproject.toml
+
 # Separate venv so the [training] stack never touches the runtime venv.
 RUN python3.12 -m venv /opt/trainer
 ENV PATH="/opt/trainer/bin:${PATH}"
 
 # The trainer venv carries its own torch because the training stack (unsloth)
 # supports an older torch than the runtime. The runtime torch is unaffected.
-RUN TORCH_INDEX="$(python /src/scripts/install.py --print-index "${FLAVOR}")" \
+RUN TORCH_INDEX="$(python3.12 /src/scripts/install.py --print-index "${FLAVOR}")" \
  && if [ -n "${TORCH_INDEX}" ]; then \
         /opt/trainer/bin/pip install --index-url "${TORCH_INDEX}" "torch>=2.10,<2.13" torchvision; \
     else \
@@ -239,7 +254,7 @@ RUN curl -fsSL -o /tmp/llama.tgz "https://github.com/ggml-org/llama.cpp/archive/
 RUN /opt/trainer/bin/pip install /opt/llama.cpp/gguf-py sentencepiece protobuf
 
 # =========================================================================
-# Stage 4 — trainer: runtime image + the isolated trainer venv + converter.
+# Stage 5 — trainer: runtime image + the isolated trainer venv + converter.
 # =========================================================================
 FROM runtime AS trainer
 

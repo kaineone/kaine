@@ -172,6 +172,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
                         (job_dir / "result.json").write_text(
                             json.dumps(result), encoding="utf-8"
                         )
+                        (job_dir / "DONE").write_text("")
                         return
             await asyncio.sleep(0.05)
         raise TimeoutError("fake service never saw READY")
@@ -253,6 +254,7 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
                             ),
                             encoding="utf-8",
                         )
+                        (job_dir / "DONE").write_text("")
                         return
             await asyncio.sleep(0.05)
         raise TimeoutError("fake service never saw READY")
@@ -297,6 +299,7 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
                             ),
                             encoding="utf-8",
                         )
+                        (job_dir / "DONE").write_text("")
                         return
             await asyncio.sleep(0.05)
         raise TimeoutError("fake service never saw READY")
@@ -344,6 +347,7 @@ async def test_gguf_sha_mismatch_raises(tmp_path):
                         (job_dir / "result.json").write_text(
                             json.dumps(result), encoding="utf-8"
                         )
+                        (job_dir / "DONE").write_text("")
                         return
             await asyncio.sleep(0.05)
         raise TimeoutError("fake service never saw READY")
@@ -403,6 +407,7 @@ async def test_subprocess_backend_does_not_block_event_loop(tmp_path):
             'samples_used': len(pairs),
         }
         (job_dir / 'result.json').write_text(json.dumps(result))
+        (job_dir / "DONE").write_text("")
         """,
     )
     trainer = SubprocessVoiceTrainer(
@@ -450,3 +455,27 @@ def test_organ_adapter_hot_swap_mode_accepted_in_effective_mode():
 
 def test_organ_adapter_mode_is_valid():
     assert "organ_adapter" in VALID_MODES
+
+
+@pytest.mark.asyncio
+async def test_early_result_without_done_is_not_consumed(tmp_path: Path) -> None:
+    """The external script writes result.json before the service converts the
+    adapter; the trainer must wait for DONE and time out rather than read it."""
+    jobs = tmp_path / "jobs"
+    trainer = JobQueueVoiceTrainer(jobs_dir=jobs, timeout_s=0.4, poll_interval_s=0.05)
+    cfg = _cfg(tmp_path)
+
+    async def early_script_only() -> None:
+        for _ in range(100):
+            ready = list(jobs.glob("*/READY"))
+            if ready:
+                (ready[0].parent / "result.json").write_text(
+                    json.dumps({"ok": True, "accepted": True, "adapter_dir": "out/x"})
+                )
+                return
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(early_script_only())
+    with pytest.raises(SubprocessTrainerError, match="did not finish"):
+        await trainer.train(_pairs(), cfg)
+    await task
