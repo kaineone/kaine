@@ -78,6 +78,7 @@ class OpenAIChatClient:
         *,
         api_key: Optional[str] = None,
         timeout_s: float = 60.0,
+        lora_resolver: Optional[Any] = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
@@ -86,10 +87,15 @@ class OpenAIChatClient:
         # not dilate with the entity's time_scale.
         self._timeout_s = float(timeout_s)
         self._client: Any = None
+        self._lora_resolver = lora_resolver
 
     @property
     def base_url(self) -> str:
         return self._base_url
+
+    def set_lora_resolver(self, resolver) -> None:
+        """Attach (or replace) the per-request LoRA resolver."""
+        self._lora_resolver = resolver
 
     def _ensure_client(self) -> Any:
         if self._client is None:
@@ -125,6 +131,21 @@ class OpenAIChatClient:
             body["reasoning_effort"] = "high" if think else "none"
         return body
 
+    async def _maybe_add_lora(self, body: dict[str, Any]) -> None:
+        if self._lora_resolver is None:
+            return
+        try:
+            field = await self._lora_resolver.lora_field()
+        except Exception:
+            log.warning(
+                "lingua: lora resolver failed, sending request without lora",
+                exc_info=True,
+            )
+            return
+        if field:
+            body["lora"] = field
+            body["cache_prompt"] = False
+
     @staticmethod
     def _kwarg_rejected(resp: Any) -> bool:
         # A server/model that doesn't understand the thinking kwarg 400s on it;
@@ -155,13 +176,13 @@ class OpenAIChatClient:
 
         client = self._ensure_client()
         start = _time.monotonic()
-        resp = await client.post(
-            "/chat/completions", json=self._body(request, think=request.think)
-        )
+        body = self._body(request, think=request.think)
+        await self._maybe_add_lora(body)
+        resp = await client.post("/chat/completions", json=body)
         if request.think is not None and self._kwarg_rejected(resp):
-            resp = await client.post(
-                "/chat/completions", json=self._body(request, think=None)
-            )
+            body = self._body(request, think=None)
+            await self._maybe_add_lora(body)
+            resp = await client.post("/chat/completions", json=body)
         resp.raise_for_status()
         data = resp.json()
         elapsed_ms = (_time.monotonic() - start) * 1000.0

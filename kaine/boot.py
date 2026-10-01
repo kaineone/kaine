@@ -2070,6 +2070,23 @@ def make_hypnos(
                     or "state/hypnos/voice_align_jobs"
                 )
             ),
+            trainer_jobs_dir=str(
+                resolve(
+                    str(
+                        voice_cfg_section.get("trainer_jobs_dir", "state/hypnos/voice_align_jobs")
+                    ).strip()
+                    or "state/hypnos/voice_align_jobs"
+                )
+            ),
+            trainer_timeout_s=float(voice_cfg_section.get("trainer_timeout_s", 21600.0)),
+            organ_adapters_dir=str(voice_cfg_section.get("organ_adapters_dir", "/organ-adapters")),
+            organ_url=str(
+                str(voice_cfg_section.get("organ_url", "")).strip()
+                or (
+                    ((kaine_config or {}).get("lingua") or {}).get("chat_url", "")
+                    or ""
+                )
+            ),
         )
     if voice_config is not None:
         effective = _effective_hot_swap_mode(voice_config.hot_swap_mode, kaine_config)
@@ -2180,14 +2197,16 @@ def _resolve_trainer(
         return None
 
     backend = (voice_config.trainer_backend or "in_process").strip()
-    if backend not in ("in_process", "subprocess"):
+    if backend not in ("in_process", "subprocess", "job_queue"):
         raise VoiceAlignmentConfigError(
-            f"[hypnos.voice_alignment].trainer_backend must be 'in_process' or "
-            f"'subprocess', got {backend!r}."
+            f"[hypnos.voice_alignment].trainer_backend must be 'in_process', "
+            f"'subprocess' or 'job_queue', got {backend!r}."
         )
 
     if backend == "subprocess":
         return _resolve_subprocess_trainer(voice_config)
+    if backend == "job_queue":
+        return _resolve_job_queue_trainer(voice_config)
 
     try:
         import datasets  # noqa: F401  # type: ignore[import-untyped]
@@ -2270,6 +2289,52 @@ def _resolve_subprocess_trainer(
     return SubprocessVoiceTrainer(
         trainer_python=trainer_python,
         trainer_workdir=voice_config.trainer_workdir,
+    )
+
+
+def _resolve_job_queue_trainer(
+    voice_config: "VoiceAlignmentConfig",
+) -> Any:
+    """Construct the job-queue trainer for the "job_queue" backend.
+
+    The real training happens in the kaine-trainer container service, which
+    watches a shared jobs volume. The runtime venv does not need the [training]
+    extra, but it still needs the same non-empty abliteration probe set, and a
+    positive trainer_timeout_s.
+    """
+    import os
+    from pathlib import Path
+
+    from kaine.modules.hypnos.job_queue_trainer import JobQueueVoiceTrainer
+    from kaine.modules.hypnos.organ_adapter import organ_root_url
+
+    _require_non_empty_abliteration_probes(voice_config)
+
+    timeout_s = voice_config.trainer_timeout_s
+    if timeout_s <= 0:
+        raise VoiceAlignmentConfigError(
+            f"[hypnos.voice_alignment].trainer_timeout_s must be > 0, got "
+            f"{timeout_s!r}."
+        )
+
+    try:
+        lingua = kaine_config.get("lingua", {})  # type: ignore[name-defined]
+    except NameError:
+        lingua = {}
+    if isinstance(lingua, dict):
+        chat_url = lingua.get("chat_url", "")
+        api_key = lingua.get("api_key", "")
+    else:
+        chat_url = getattr(lingua, "chat_url", "")
+        api_key = getattr(lingua, "api_key", "")
+    api_key = api_key or os.environ.get("KAINE_MODEL_SERVER_API_KEY", "")
+
+    return JobQueueVoiceTrainer(
+        jobs_dir=voice_config.trainer_jobs_dir,
+        timeout_s=timeout_s,
+        organ_adapters_dir=Path(voice_config.organ_adapters_dir),
+        organ_url=organ_root_url(voice_config.organ_url or chat_url),
+        organ_api_key=api_key,
     )
 
 
@@ -2747,6 +2812,7 @@ def build_registry(
         log.info("registered module hypnos")
     _wire_self_hearing_gate(registry)
     _wire_lingua_self_model(registry)
+    _wire_lingua_organ_adapter(registry, kaine_config)
     _wire_eidolon_capabilities(registry)
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
@@ -2836,6 +2902,7 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
     """
     _wire_self_hearing_gate(registry)
     _wire_lingua_self_model(registry)
+    _wire_lingua_organ_adapter(registry, kaine_config)
     _wire_eidolon_capabilities(registry)
 
 
@@ -3058,6 +3125,61 @@ def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
     if "lingua" not in registry or "eidolon" not in registry:
         return
     log.info("lingua persona seeded from bus-mediated eidolon.self_model snapshot")
+
+
+def _wire_lingua_organ_adapter(
+    registry: ModuleRegistry,
+    kaine_config: dict[str, Any] | None,
+) -> None:
+    """Wire Lingua's per-request organ adapter resolver when voice alignment
+    uses the organ_adapter hot-swap mode and the organ is a KAINE-managed
+    llama-server container.
+    """
+    if kaine_config is None:
+        return
+    if "lingua" not in registry or "hypnos" not in registry:
+        return
+
+    hypnos_cfg = kaine_config.get("hypnos", {})
+    voice_cfg = hypnos_cfg.get("voice_alignment", {}) if hypnos_cfg else {}
+    if not voice_cfg.get("enabled"):
+        return
+
+    mode = voice_cfg.get("hot_swap_mode", "manual")
+    if _effective_hot_swap_mode(mode, kaine_config) != "organ_adapter":
+        return
+
+    lingua_cfg = kaine_config.get("lingua", {})
+    organ_url = voice_cfg.get("organ_url") or lingua_cfg.get("chat_url")
+    if not organ_url:
+        log.warning(
+            "organ_adapter hot-swap configured but neither organ_url nor "
+            "lingua.chat_url is set; skipping per-request LoRA wiring"
+        )
+        return
+
+    adapter_output_dir = resolve(
+        voice_cfg.get("adapter_output_dir", "state/hypnos/adapters")
+    )
+    organ_adapters_dir = Path(
+        voice_cfg.get("organ_adapters_dir", "/organ-adapters")
+    )
+    api_key = lingua_cfg.get("api_key") or os.environ.get(
+        "KAINE_MODEL_SERVER_API_KEY"
+    )
+
+    from kaine.modules.hypnos.organ_adapter import OrganAdapterResolver, organ_root_url
+
+    resolver = OrganAdapterResolver(
+        adapter_output_dir=adapter_output_dir,
+        volume=organ_adapters_dir,
+        organ_url=organ_root_url(organ_url),
+        api_key=api_key,
+    )
+    registry.get("lingua").set_lora_resolver(resolver)
+    log.info(
+        "lingua applies its own voice-alignment adapter when the organ has it loaded"
+    )
 
 
 def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:

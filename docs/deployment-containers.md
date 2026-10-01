@@ -23,6 +23,7 @@ captures raw audio or video — perception is processed in memory and released.
 | `kaine-nexus` | web UI (uvicorn) | `127.0.0.1:8088` | no |
 | `kaine-cycle` | the cognitive runtime (the entity) | none | card 1 |
 | `kaine-study` | the module-ignition study runner (`--profile study`) | none | card 1 |
+| `kaine-trainer` | voice-alignment trainer service (DPO+QLoRA → GGUF) | none | the organ's GPU |
 
 `kaine-nexus`, `kaine-cycle`, and `kaine-study` are the **same image**, different command.
 `kaine-study` keeps its study directories on the `kaine-studies` volume; see
@@ -118,16 +119,44 @@ nvidia-ctk cdi generate --output=$HOME/.config/cdi/nvidia.yaml
 ## Organ in-container vs on-host
 
 By default the organ runs in `kaine-model-server` (a generic OpenAI-compatible
-GGUF server) for true one-command bring-up. To use a **host-native** Unsloth
-server that shares one process for inference and training — **required whenever
-the voice-alignment trainer is enabled**, since the trainer is not
-containerized — overlay `compose/kaine.organ-host.yml` and point
+GGUF server) for true one-command bring-up. Voice alignment can still run in
+the `kaine-trainer` service (compose profile `training`), so an in-container
+organ and a containerized trainer work together without a host-native server.
+
+To use a **host-native** Unsloth server that shares one process for inference
+and training, overlay `compose/kaine.organ-host.yml` and point
 `[lingua].chat_url` at `http://host.docker.internal:11434/v1`
-(`host.containers.internal` on Podman).
+(`host.containers.internal` on Podman). A host-native or otherwise shared
+organ forces `hot_swap_mode = "manual"`, because the cycle cannot orchestrate
+a foreign server's LoRA lifecycle.
 
 The in-container organ unloads after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`
 idle seconds (default 600) and reloads on the next request. If you override
 `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
+
+## Voice alignment
+
+Voice alignment uses the `kaine-trainer` service, which is gated behind the
+compose profile `training`. The trainer container sees only the shared jobs
+volume and the read-only models volume; it has no access to entity state, the
+Docker socket, host ports, or the internet.
+
+Provision the abliterated organ's HuggingFace safetensors into the models
+volume before training with `scripts/provision_organ_base.sh <safetensors
+dir>`; that copies the weights to `/models/Qwen3.5-4B-abliterated` inside the
+models volume and verifies every file's sha256.
+
+The two-layer opt-in is unchanged: compose passes
+`KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` to `kaine-cycle`, `kaine-study`,
+and `kaine-trainer`. Voice alignment runs only when the config gate
+`[hypnos.voice_alignment].enabled = true` is also set.
+
+Start the trainer service with
+`docker compose -f compose/kaine.yml --profile training up -d kaine-trainer`.
+Mount `kaine-models` read-only and `kaine-trainer-jobs` read-write at the
+paths configured by `trainer_jobs_dir` (default `/trainer-jobs`) and the base
+model path. For `hot_swap_mode = "organ_adapter"` also mount
+`kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`).
 
 ## State, secrets, and the env/gate-var matrix
 

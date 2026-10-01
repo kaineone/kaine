@@ -68,6 +68,17 @@ class Lingua(BaseModule):
     def holds_external_resources(self) -> bool:
         return True
 
+    def set_lora_resolver(self, resolver) -> None:
+        """Attach a per-request LoRA resolver if the chat client supports it."""
+        client = self._chat_client
+        if hasattr(client, "set_lora_resolver"):
+            client.set_lora_resolver(resolver)
+        else:
+            log.info(
+                "lingua backend %r does not support per-request adapters",
+                type(client).__name__,
+            )
+
     def __init__(
         self,
         bus: AsyncBus,

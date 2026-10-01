@@ -161,7 +161,7 @@ class ForkManager:
                     if dest.exists() and not any(dest.iterdir()):
                         os.rmdir(dest)
                 except OSError:
-                    pass
+                    log.debug("could not remove empty artifact dir %s", dest, exc_info=True)
             except Exception:
                 shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
                 raise

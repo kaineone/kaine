@@ -849,7 +849,13 @@ def test_study_service_mirrors_cycle_environment_and_mounts():
         "kaine-models:/models:ro",
     }
     assert shared <= {v for v in cycle["volumes"] if isinstance(v, str)}
-    assert set(study["volumes"]) == shared | {"kaine-studies:/app/studies"}
+    assert set(study["volumes"]) == shared | {
+        "kaine-studies:/app/studies",
+        # Voice alignment: the organ adapters it activates and the trainer
+        # service's shared jobs directory.
+        "kaine-organ-adapters:/organ-adapters",
+        "kaine-trainer-jobs:/trainer-jobs",
+    }
     assert study["depends_on"] == cycle["depends_on"]
 
 

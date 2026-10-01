@@ -11,6 +11,7 @@ from typing import Any
 
 import kaine.boot
 from kaine.config import deep_merge
+from kaine.research.ignition_study.plan import voice_alignment_steps
 
 #: The ignition log's directory, relative to a step's working directory.
 IGNITION_LOG_DIR = "data/ignition"
@@ -104,6 +105,17 @@ def build_overlay(
         "phantasia": {"training_enabled": True, "persist_weights": True},
         "topos": {"encoder_local_dir": encoder_dir},
     }
+
+    registered_steps = plan.get("voice_alignment_steps", voice_alignment_steps(plan))
+    current_step = {"line": line, "k": viewing_index}
+    voice_alignment_enabled = current_step in registered_steps
+    voice_alignment: dict[str, Any] = {"enabled": voice_alignment_enabled}
+    if voice_alignment_enabled:
+        voice_alignment["trainer_backend"] = "job_queue"
+        voice_alignment["hot_swap_mode"] = "organ_adapter"
+        # The kaine-study service mounts the shared trainer jobs volume here.
+        voice_alignment["trainer_jobs_dir"] = "/trainer-jobs"
+    study_overlay["hypnos"] = {"voice_alignment": voice_alignment}
 
     overlay = deep_merge(operator_config, study_overlay)
     return overlay, enabled, models_dir

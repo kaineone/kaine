@@ -96,9 +96,11 @@ Full reference: [`../configuration.md`](../configuration.md). Key `[hypnos]` key
 | `adapter_output_dir` | `"state/hypnos/adapters"` | Where promoted adapters land |
 | `base_model_path` | `""` | Path to HF-format base model weights (required when enabled) |
 | `model_id` | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only |
-| `trainer_backend` | `"in_process"` | `"in_process"` (in-runtime `UnslothDPOTrainer`, requires the `[training]` extras in this venv) or `"subprocess"` (out-of-process `SubprocessVoiceTrainer`, the production path — see below) |
+| `trainer_backend` | `"in_process"` | `"in_process"` (in-runtime `UnslothDPOTrainer`, requires the `[training]` extras in this venv), `"subprocess"` (out-of-process `SubprocessVoiceTrainer`), or `"job_queue"` (containerized trainer service — see below) |
 | `trainer_python` | `""` | Path to the external interpreter (e.g. Unsloth Studio's Python) running the heavy training stack; required when `trainer_backend = "subprocess"` |
 | `trainer_workdir` | `"state/hypnos/voice_align_jobs"` | Job directory root for the subprocess trainer's handoff files (`pairs.jsonl`, result, logs) |
+| `trainer_jobs_dir` | `"/trainer-jobs"` | Shared jobs volume for the `job_queue` trainer; the cycle writes each job here and the trainer service consumes it (required when `trainer_backend = "job_queue"`) |
+| `trainer_timeout_s` | `21600` | Seconds to wait for a `job_queue` trainer job before failing loud (default 6 hours) |
 | `max_samples` | `200` | Maximum DPO pairs per training run |
 | `lora_rank` | `8` | LoRA rank |
 | `learning_rate` | `5e-5` | DPO learning rate |
@@ -106,7 +108,9 @@ Full reference: [`../configuration.md`](../configuration.md). Key `[hypnos]` key
 | `capability_loss_threshold` | `0.05` | Max acceptable capability regression |
 | `training_device` | `"cuda:0"` | Device for Unsloth training |
 | `adapter_retention` | `0` | Number of accepted adapters to keep; `0` keeps every adapter (the entity's learned voice), a positive value evicts the oldest beyond N |
-| `hot_swap_mode` | `"manual"` | `"manual"` / `"reload_endpoint"` / `"restart_service"` |
+| `hot_swap_mode` | `"manual"` | `"manual"` / `"reload_endpoint"` / `"restart_service"` / `"organ_adapter"` |
+| `organ_adapters_dir` | `"/organ-adapters"` | Mount point of the shared organ-adapters volume; used when `hot_swap_mode = "organ_adapter"` |
+| `organ_url` | `[lingua].chat_url` | Organ base URL that the `organ_adapter` hot-swap logic polls; defaults to the same URL Lingua uses for chat |
 | `reload_endpoint_url` | `""` | URL Hypnos POSTs `{"adapter_path": "<path>"}` to when `hot_swap_mode = "reload_endpoint"` |
 | `restart_service_unit` | `""` | Systemd `--user` unit name restarted when `hot_swap_mode = "restart_service"` |
 | `capability_probe_path` | `""` | Path to a capability-probe JSONL used for the capability-regression check; empty = bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl` |
@@ -238,14 +242,32 @@ sleep cycle continues normally.
 - `"in_process"` (default) — `UnslothDPOTrainer` runs inside the KAINE runtime
   venv itself; requires the `[training]` extras (`unsloth`, `trl`, `peft`,
   `datasets`) installed in-process.
-- `"subprocess"` — **the production path.** `SubprocessVoiceTrainer` writes a
-  job directory under `trainer_workdir` (DPO pairs + config), invokes
+- `"subprocess"` — **the production path for host-native trainers.**
+  `SubprocessVoiceTrainer` writes a job directory under `trainer_workdir` (DPO
+  pairs + config), invokes
   `trainer_python scripts/hypnos_external_train.py <job_dir>` as an external
   process, and reads back the result. This is how voice alignment runs against
   Unsloth Studio (Python 3.13/CUDA 13.0), which is incompatible with the
   runtime venv (Python 3.12/CUDA 12.8) — the heavy training stack lives
   entirely in the external interpreter, out of process. `trainer_python` must
-  be set and exist on disk, or boot refuses (fail-closed).
+  be set and exist on disk, or boot refuses (fail-closed). The subprocess runs
+  in a worker thread so it never blocks the cycle.
+- `"job_queue"` — **the containerized trainer path.** The cycle writes a job
+  spec (DPO pairs, base-model path, LoRA/DPO settings, and an `out` directory
+  relative to the job) into `trainer_jobs_dir`, marks the job ready, and waits
+  for `result.json` without blocking the sleep cycle, up to
+  `trainer_timeout_s`. The `kaine-trainer` service (compose profile
+  `training`, image target `trainer`, its own venv with the `[training]` stack
+  and llama.cpp's LoRA converter pinned to the organ's build b9976) waits
+  until the organ reports it is asleep and the training GPU
+  (`KAINE_TRAINER_GPU`, default the organ's GPU) has free VRAM, then runs the
+  external trainer (the same capability and abliteration gates, atomic adapter
+  promotion inside the job), converts the vetted adapter to `adapter.gguf`,
+  writes the result, and deletes the job's preference pairs (entity language).
+  It sees only the jobs volume and read-only models: no entity state, no
+  Docker socket, no host ports, and no internet. The cycle then promotes the
+  adapter into the entity's own `adapter_output_dir`. A timeout, a non-zero
+  exit, or a missing adapter fails loud.
 
 While an on-device training window is active (single-GPU hosts), `organ_window`
 brackets the trainer call — quiesce consumers, unload the served language
@@ -298,11 +320,14 @@ defer maintenance during active interaction.
 | `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, `operator_approved()` |
 | `kaine/modules/hypnos/unsloth_trainer.py` | `UnslothDPOTrainer`; real in-process DPO loop; abliteration veto; capability eval; adapter promotion |
 | `kaine/modules/hypnos/subprocess_trainer.py` | `SubprocessVoiceTrainer`; out-of-process DPO training via an external Python interpreter (the production path to Unsloth Studio) |
+| `kaine/modules/hypnos/job_queue_trainer.py` | `JobQueueVoiceTrainer`; cycle-side writer/monitor that hands jobs to the containerized trainer service |
+| `kaine/modules/hypnos/trainer_service.py` | `kaine-trainer` service entrypoint; consumes jobs, trains, runs gates, converts to GGUF, writes `result.json` |
+| `kaine/modules/hypnos/organ_adapter.py` | `OrganAdapterHotSwap`; copies `adapter.gguf` into the organ-adapters volume and writes the `active.json` manifest |
 | `kaine/modules/hypnos/organ_window.py` | On-device GPU window: unload the served language organ → train → gpu-preflight → reload; boundary-neutral state file for organ-dependent consumers |
 | `kaine/modules/hypnos/capability_eval.py` | `LocalProbeSetCapabilityEval`; `AbliterationProbeScorer`; `AbliterationVerdict` |
 | `kaine/modules/hypnos/scheduler.py` | `RestScheduler`; interval + deferral logic |
 | `kaine/modules/hypnos/adapter_store.py` | Adapter tmp/final directory management; `promote`, `reject`, `prune` |
-| `kaine/modules/hypnos/hot_swap.py` | `dispatch()` for manual / reload_endpoint / restart_service modes |
+| `kaine/modules/hypnos/hot_swap.py` | `dispatch()` for manual / reload_endpoint / restart_service / organ_adapter modes |
 | `kaine/modules/hypnos/voice_audit.py` | Abliteration-veto JSONL audit trail |
 
 ---

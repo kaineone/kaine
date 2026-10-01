@@ -746,6 +746,12 @@ being it cannot preserve.
 
 ### Running the study in the container
 
+Studies pre-register voice-alignment steps with
+`init --voice-alignment-step LINE:K` (repeatable). The default is the final
+accumulate step only. Each step's overlay enables voice alignment exactly there
+— `trainer_backend = "job_queue"`, `hot_swap_mode = "organ_adapter"`,
+`trainer_jobs_dir = "/trainer-jobs"` — and disables it elsewhere.
+
 The compose topology carries a `kaine-study` service (`profiles: [study]`, so a
 plain `up` never starts it). It runs the runner inside the cycle image with the
 cycle's configuration, secrets, and model mounts, the

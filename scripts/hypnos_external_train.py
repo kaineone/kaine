@@ -58,6 +58,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
+import inspect
 from typing import Any, Optional
 
 SCHEMA_VERSION = 1
@@ -239,10 +240,13 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
         load_in_4bit=True,
         device_map={"": training_device},
     )
+    # Vision-language processors wrap an underlying text tokenizer; use that
+    # for all text-only tokenization and decoding operations in this script.
+    text_tokenizer = getattr(tokenizer, "tokenizer", None) or tokenizer
     model = FastLanguageModel.get_peft_model(model, r=lora_rank)
 
     # 2. Capability score BEFORE training.
-    cap_before = _capability_score(model, tokenizer, capability_probes)
+    cap_before = _capability_score(model, text_tokenizer, capability_probes)
 
     # 3. DPO training step into a tmp dir.
     adapter_output_dir.mkdir(parents=True, exist_ok=True)
@@ -266,8 +270,20 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
         num_train_epochs=1,
         seed=seed,
         report_to="none",
+        save_strategy="no",
     )
-    trainer = DPOTrainer(model, args=args, train_dataset=ds, tokenizer=tokenizer)
+    dpo_kwargs: dict[str, Any] = {
+        "model": model,
+        "args": args,
+        "train_dataset": ds,
+    }
+    if "processing_class" in inspect.signature(DPOTrainer.__init__).parameters:
+        # Pass what from_pretrained returned: for a vision-language base that is
+        # the processor, which TRL's vision-aware DPO row processing requires.
+        dpo_kwargs["processing_class"] = tokenizer
+    else:
+        dpo_kwargs["tokenizer"] = text_tokenizer
+    trainer = DPOTrainer(**dpo_kwargs)
     train_output = trainer.train()
     dpo_loss = float(getattr(train_output, "training_loss", 0.0))
     steps = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
@@ -276,7 +292,7 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     tmp_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(tmp_dir))
     try:
-        tokenizer.save_pretrained(str(tmp_dir))
+        text_tokenizer.save_pretrained(str(tmp_dir))
     except Exception:
         # Optional metadata only: the promoted LoRA adapter loads against the
         # base model's own tokenizer at inference time, so a failure here
@@ -286,7 +302,7 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
 
     # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability).
     passed, failed_probe, matched, ablit_scored = _abliteration_verdict(
-        model, tokenizer, abliteration_probes
+        model, text_tokenizer, abliteration_probes
     )
     if not passed:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -309,7 +325,7 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
         }
 
     # 6. Capability score AFTER training.
-    cap_after = _capability_score(model, tokenizer, capability_probes)
+    cap_after = _capability_score(model, text_tokenizer, capability_probes)
     cap_loss = float(cap_before - cap_after)
 
     # 7. Capability-loss veto.

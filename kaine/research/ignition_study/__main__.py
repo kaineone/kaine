@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from kaine.config import load_kaine_config
 from kaine.research.ignition_study import analysis
@@ -43,6 +44,22 @@ def _default_order() -> list[str]:
     ]
 
 
+def _parse_voice_alignment_step(value: str) -> dict[str, Any]:
+    """Parse a ``LINE:K`` voice-alignment step for argparse."""
+    if ":" not in value:
+        raise argparse.ArgumentTypeError(
+            f"Invalid voice alignment step: {value!r}; expected LINE:K"
+        )
+    line, k_str = value.split(":", 1)
+    try:
+        k = int(k_str)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid voice alignment step: {value!r}; expected LINE:K ({exc})"
+        ) from exc
+    return {"line": line, "k": k}
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     manifest = Path(args.programme_manifest).resolve()
@@ -74,6 +91,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
         "gestation_budget_seconds": args.gestation_budget_seconds,
         "min_free_gb": args.min_free_gb,
     }
+    if args.voice_alignment_step:
+        plan["voice_alignment_steps"] = list(args.voice_alignment_step)
     validate_plan(plan)
 
     study_dir = resolve(
@@ -178,6 +197,13 @@ def main(argv: list[str] | None = None) -> int:
         "--min-free-gb",
         type=float,
         default=20.0,
+    )
+    init_p.add_argument(
+        "--voice-alignment-step",
+        action="append",
+        default=None,
+        type=_parse_voice_alignment_step,
+        help="pre-register a voice-alignment step as LINE:K (repeatable)",
     )
 
     run_p = sub.add_parser("run", help="run or resume the study")

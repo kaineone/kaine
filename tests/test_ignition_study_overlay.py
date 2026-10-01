@@ -288,3 +288,72 @@ def test_overlay_never_enables_raw_archive(repo, plan):
             plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
         )
         assert overlay["research_event_log"]["raw_archive"]["enabled"] is False
+
+
+@pytest.fixture
+def nine_plan(repo):
+    order = [
+        "mnemos",
+        "phantasia",
+        "nous",
+        "eidolon",
+        "empatheia",
+        "vox",
+        "praxis",
+        "perception",
+        "mundus",
+    ]
+    return {
+        "study_id": "overlay-nine",
+        "repo_root": str(repo),
+        "base_modules": ["soma", "chronos", "topos"],
+        "order": order,
+        "programme": {"manifest": str(repo / "programme.toml"), "sha256": "a" * 64},
+        "redis": {
+            "base_url": "redis://127.0.0.1:6479",
+            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+        },
+        "collections": {
+            "gestation": "g_",
+            "branch": "b_",
+            "repeat": "r_",
+            "accumulate": "a_",
+        },
+    }
+
+
+def test_overlay_voice_alignment_only_registered_step(nine_plan, repo):
+    op = repo / "config" / "kaine.operator.voice.toml"
+    op.write_text(
+        "[hypnos.voice_alignment]\n"
+        "enabled = true\n"
+        'trainer_backend = "operator_backend"\n'
+    )
+    k_max = len(nine_plan["order"])
+    sequence = [
+        ("gestation", "gestation", 0),
+        ("branch", "viewing", 0),
+        ("repeat", "viewing", 0),
+    ]
+    for i in range(1, k_max + 1):
+        sequence.append(("branch", "viewing", i))
+        sequence.append(("accumulate", "viewing", i))
+
+    for line, kind, k in sequence:
+        overlay, _, _ = build_overlay(
+            nine_plan,
+            line,
+            kind,
+            k,
+            repo,
+            repo / "config" / "kaine.toml",
+            op,
+        )
+        va = overlay["hypnos"]["voice_alignment"]
+        if line == "accumulate" and k == k_max:
+            assert va["enabled"] is True
+            assert va["trainer_backend"] == "job_queue"
+            assert va["hot_swap_mode"] == "organ_adapter"
+        else:
+            assert va["enabled"] is False
+            assert va["trainer_backend"] == "operator_backend"

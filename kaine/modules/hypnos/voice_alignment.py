@@ -143,6 +143,20 @@ class VoiceAlignmentConfig:
     # Where the subprocess backend stages job specs + the unsloth compiled
     # cache. Operators may redirect to a roomier disk.
     trainer_workdir: str = "state/hypnos/voice_align_jobs"
+    # Where the job-queue backend writes ready job directories for the
+    # kaine-trainer service. The service and the cycle container share this
+    # volume; each job is a private 0o700 directory.
+    trainer_jobs_dir: str = "state/hypnos/voice_align_jobs"
+    # Wall-clock ceiling (seconds) the job-queue backend waits for the
+    # kaine-trainer service to write result.json. Default 6 h.
+    trainer_timeout_s: float = 21600.0
+    # Directory mounted into the organ container where the "organ_adapter"
+    # hot-swap mode publishes the active GGUF LoRA and its manifest.
+    organ_adapters_dir: str = "/organ-adapters"
+    # URL of the served organ. Used by the "organ_adapter" hot-swap mode to
+    # wait for the organ to report ready after activation. Empty defaults to
+    # [lingua].chat_url from kaine_config.
+    organ_url: str = ""
 
     def __post_init__(self) -> None:
         if int(self.adapter_retention) < 0:

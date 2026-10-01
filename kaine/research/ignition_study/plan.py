@@ -23,6 +23,11 @@ DEFAULT_VIEWING_BUDGET_SECONDS = 6 * 60 * 60  # programme length + 2 h
 DEFAULT_GESTATION_BUDGET_SECONDS = 96 * 60 * 60  # 24 h minimum + 72 h headroom
 
 
+def voice_alignment_steps(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Default pre-registered voice-alignment steps for a study plan."""
+    return [{"line": "accumulate", "k": len(plan["order"])}]
+
+
 def programme_sha256(manifest_path: Path | str) -> str:
     """SHA-256 of the programme manifest file."""
     return hashlib.sha256(Path(manifest_path).read_bytes()).hexdigest()
@@ -118,7 +123,41 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("min_free_gb must be a number >= 0")
 
+    plan.setdefault("voice_alignment_steps", voice_alignment_steps(plan))
+    _validate_voice_alignment_steps(plan["voice_alignment_steps"], len(order))
+
     return plan
+
+
+def _validate_voice_alignment_steps(steps: Any, order_len: int) -> None:
+    """Validate a list of pre-registered voice-alignment steps.
+
+    Raises:
+        ValueError: If any entry is malformed, out of range, duplicated,
+        or names the gestation line.
+    """
+    seen: set[tuple[str, int]] = set()
+    for entry in steps:
+        if not isinstance(entry, dict) or set(entry.keys()) != {"line", "k"}:
+            raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
+        line = entry["line"]
+        k = entry["k"]
+        if line not in LINES:
+            raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
+        if line == "gestation":
+            raise ValueError(f"gestation never trains the voice: {entry!r}")
+        if isinstance(k, bool) or not isinstance(k, int):
+            raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
+        if line == "branch" and not 0 <= k <= order_len:
+            raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
+        if line == "repeat" and k != 0:
+            raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
+        if line == "accumulate" and not 1 <= k <= order_len:
+            raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
+        key = (line, k)
+        if key in seen:
+            raise ValueError(f"Duplicate voice_alignment_steps entry: {entry!r}")
+        seen.add(key)
 
 
 def init_study(
