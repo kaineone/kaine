@@ -12,6 +12,9 @@ set -eu
 
 ADAPTERS_DIR="${KAINE_ORGAN_ADAPTERS_DIR:-/organ-adapters}"
 POLL_S="${KAINE_ORGAN_POLL_S:-5}"
+# Seconds llama-server gets to exit after SIGTERM before it is killed. Some
+# builds ignore SIGTERM while idle-asleep, so a bounded stop is required.
+STOP_TIMEOUT_S="${KAINE_ORGAN_STOP_TIMEOUT_S:-30}"
 
 # Resolve the llama-server binary. The default is the image's /app/llama-server
 # when present, otherwise whatever is on PATH.
@@ -26,6 +29,22 @@ fi
 
 log() {
     echo "organ-launcher: $*" >&2
+}
+
+# Stop the running llama-server: SIGTERM, then SIGKILL after STOP_TIMEOUT_S.
+stop_server() {
+    [ -n "$pid" ] || return 0
+    kill -TERM "$pid" 2>/dev/null || true
+    waited=0
+    while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$STOP_TIMEOUT_S" ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        log "llama-server did not exit within ${STOP_TIMEOUT_S}s of SIGTERM; killing it"
+        kill -KILL "$pid" 2>/dev/null || true
+    fi
+    wait "$pid" 2>/dev/null || status=$?
 }
 
 # Read the generation counter; missing/absent means "no adapter".
@@ -53,7 +72,10 @@ build_extra_args() {
         active-[0-9]*.gguf)
             path="$ADAPTERS_DIR/$file"
             if [ -f "$path" ] && printf '%s  %s\n' "$sha" "$path" | sha256sum -c - >/dev/null 2>&1; then
-                printf '%s\n' "--lora-scaled $path:0"
+                # --no-cache-prompt: a request must never reuse KV that another
+                # request computed with a different adapter setting (measured at
+                # build 9976: base requests after an adapted one were contaminated).
+                printf '%s\n' "--lora-scaled $path:0 --no-cache-prompt"
             else
                 log "not loading adapter: SHA mismatch or missing file for $file"
             fi
@@ -68,10 +90,7 @@ pid=""
 status=0
 
 cleanup() {
-    if [ -n "$pid" ]; then
-        kill -TERM "$pid" 2>/dev/null || true
-        wait "$pid" 2>/dev/null || status=$?
-    fi
+    stop_server
     exit "${status:-0}"
 }
 trap 'cleanup' TERM INT
@@ -97,8 +116,7 @@ while true; do
         current_generation=$(read_gen)
         if [ "$current_generation" != "$last_generation" ]; then
             log "generation changed ($last_generation -> $current_generation), restarting llama-server"
-            kill -TERM "$pid" 2>/dev/null || true
-            wait "$pid" 2>/dev/null || status=$?
+            stop_server
             break
         fi
     done

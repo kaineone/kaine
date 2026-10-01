@@ -386,9 +386,9 @@ Serving an accepted adapter without restarting the organ is handled by the
 (`active.json`: file, sha256, generation, adapter_id), then bumps `generation`.
 The organ's launcher (`docker/organ-launcher.sh`, the organ container's
 entrypoint) verifies the sha256 and restarts `llama-server` with
-`--lora-scaled <file>:0`, loading the adapter at scale 0 so requests without a
+`--lora-scaled <file>:0 --no-cache-prompt`, loading the adapter at scale 0 so requests without a
 `lora` field get the base organ. The `--lora-init-without-apply` flag is not
-relied on because at llama.cpp b9976 it still applies the adapter.
+relied on because at llama.cpp b9976 it still applies the adapter. Prompt caching is off while an adapter is loaded, so no request reuses KV computed under a different adapter setting; and the launcher stops llama-server with SIGTERM, then SIGKILL after `KAINE_ORGAN_STOP_TIMEOUT_S` (default 30) seconds, because an idle-asleep server can ignore SIGTERM.
 
 Lingua sends `lora: [{"id": "<id>", "scale": 1.0}]` and `cache_prompt: false`
 only when the organ's `GET /lora-adapters` lists the manifest's file and the

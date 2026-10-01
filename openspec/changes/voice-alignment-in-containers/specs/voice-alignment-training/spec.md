@@ -38,7 +38,7 @@ When `hot_swap_mode = "organ_adapter"`, Lingua SHALL send the per-request `lora`
 - the organ's `GET /lora-adapters` lists an adapter whose path is the active adapter in the organ adapter volume;
 - the volume's manifest names the SHA-256 of this entity's own promoted adapter.
 
-In every other case Lingua SHALL send no `lora` field, and SHALL log once per change that its adapter is not active. The organ SHALL load an active adapter at scale 0 (`--lora-scaled <file>:0`), so that a request without the field is served by the base organ. `--lora-init-without-apply` is not relied on: at llama.cpp build 9976 it still applies the adapter to requests without a `lora` field. Every request that applies the adapter SHALL also set `cache_prompt: false`, so KV computed under the adapter is never cached for reuse by another request. The evaluation A/B baseline SHALL never send the field.
+In every other case Lingua SHALL send no `lora` field, and SHALL log once per change that its adapter is not active. The organ SHALL load an active adapter at scale 0 (`--lora-scaled <file>:0`), so that a request without the field is served by the base organ. `--lora-init-without-apply` is not relied on: at llama.cpp build 9976 it still applies the adapter to requests without a `lora` field. Every request that applies the adapter SHALL also set `cache_prompt: false`, and the organ SHALL run with prompt caching disabled (`--no-cache-prompt`) whenever an adapter is loaded. Measured at build 9976, a base request after an adapted one otherwise reused the adapted request's KV and returned contaminated output. The evaluation A/B baseline SHALL never send the field.
 
 #### Scenario: The owning entity gets its adapter
 - **WHEN** the organ reports the active adapter loaded and the manifest's SHA-256 matches the entity's promoted adapter
@@ -54,7 +54,8 @@ In every other case Lingua SHALL send no `lora` field, and SHALL log once per ch
 
 ### Requirement: The organ launcher loads the active adapter
 The organ container SHALL start `llama-server` through a launcher that ships with KAINE. The launcher:
-- SHALL add `--lora-scaled <volume>/<manifest file>:0` when an active adapter exists and its SHA-256 matches the manifest;
+- SHALL add `--lora-scaled <volume>/<manifest file>:0 --no-cache-prompt` when an active adapter exists and its SHA-256 matches the manifest;
+- SHALL stop llama-server with SIGTERM and, if it has not exited within `KAINE_ORGAN_STOP_TIMEOUT_S` (default 30), SIGKILL;
 - SHALL start without an adapter when none is active or the check fails, and log why;
 - SHALL restart `llama-server` when the generation file changes, keeping every other argument unchanged.
 

@@ -49,8 +49,9 @@ def _wait_for_log(log: Path, timeout: float = 2.0) -> str:
 
 
 class LauncherSession:
-    def __init__(self, tmp_path: Path, args=(), extra_env=None):
+    def __init__(self, tmp_path: Path, args=(), extra_env=None, ignore_term=False):
         self.tmp_path = tmp_path
+        self.ignore_term = ignore_term
         self.args = list(args)
         self.extra_env = extra_env or {}
         self.proc = None
@@ -62,7 +63,12 @@ class LauncherSession:
 
         log = self.tmp_path / "llama.log"
         fake = self.tmp_path / "fake-llama-server"
-        fake.write_text(f'#!/bin/sh\necho "$*" >> "{log}"\nsleep 3600\n')
+        # ignore_term models a llama-server that does not exit on SIGTERM
+        # (seen at build 9976 while idle-asleep).
+        trap_line = "trap '' TERM\n" if self.ignore_term else ""
+        fake.write_text(
+            f'#!/bin/sh\n{trap_line}echo "$*" >> "{log}"\nwhile :; do sleep 1; done\n'
+        )
         fake.chmod(0o755)
 
         env = os.environ.copy()
@@ -129,6 +135,8 @@ def test_valid_manifest_loads_adapter(tmp_path: Path):
         last = _wait_for_log(tmp_path / "llama.log")
         assert "--lora-scaled" in last
         assert f"{adapter}:0" in last
+        # A request must never reuse KV computed under another adapter setting.
+        assert "--no-cache-prompt" in last
 
 
 @NEEDS_UNIX_TOOLS
@@ -198,6 +206,31 @@ def test_generation_bump_restarts_with_new_adapter(tmp_path: Path):
             time.sleep(0.05)
 
         assert "active-2.gguf" in last
+
+
+@NEEDS_UNIX_TOOLS
+def test_restart_kills_a_server_that_ignores_sigterm(tmp_path: Path):
+    """A llama-server that ignores SIGTERM must not block the adapter swap:
+    after the stop timeout the launcher kills it and restarts."""
+    adapter_dir = tmp_path / "adapters"
+    adapter_dir.mkdir(parents=True, exist_ok=True)
+    with LauncherSession(
+        tmp_path, extra_env={"KAINE_ORGAN_STOP_TIMEOUT_S": "1"}, ignore_term=True
+    ):
+        _wait_for_log(tmp_path / "llama.log")
+        a1 = adapter_dir / "active-1.gguf"
+        a1.write_text("adapter-one")
+        _write_manifest(adapter_dir, "active-1.gguf", _sha256(a1))
+        (adapter_dir / "generation").write_text("1")
+
+        deadline = time.monotonic() + 6.0
+        last = ""
+        while time.monotonic() < deadline:
+            last = (tmp_path / "llama.log").read_text().splitlines()[-1]
+            if "active-1.gguf" in last:
+                break
+            time.sleep(0.05)
+        assert "active-1.gguf" in last
 
 
 @NEEDS_UNIX_TOOLS
