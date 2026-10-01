@@ -184,7 +184,7 @@ def test_run_job_success(tmp_path: Path) -> None:
                     {
                         "ok": True,
                         "accepted": True,
-                        "adapter_dir": str(adapter_dir),
+                        "adapter_dir": str(adapter_dir.relative_to(job)),
                         "reason": "accepted",
                     }
                 )
@@ -239,7 +239,7 @@ def test_run_job_converter_failure(tmp_path: Path) -> None:
                     {
                         "ok": True,
                         "accepted": True,
-                        "adapter_dir": str(adapter_dir),
+                        "adapter_dir": str(adapter_dir.relative_to(job)),
                         "reason": "accepted",
                     }
                 )

@@ -217,7 +217,9 @@ def run_job(
 
         # Optional GGUF conversion for a promoted, in-job adapter.
         if result.get("ok") and result.get("adapter_dir"):
-            adapter_dir = Path(result["adapter_dir"]).resolve()
+            # The external script reports adapter_dir relative to the job dir
+            # (it runs with cwd=job_dir); resolve it there, never against our cwd.
+            adapter_dir = (job_dir / result["adapter_dir"]).resolve()
             if not _is_inside(adapter_dir, job_dir.resolve()):
                 result["ok"] = False
                 result["reason"] = "adapter_dir outside the job directory"
@@ -255,7 +257,9 @@ def run_job(
         # different absolute paths. Report adapter_dir relative to the job dir so
         # the cycle resolves it against its own mount.
         if result.get("adapter_dir"):
-            adapter_dir = Path(result["adapter_dir"]).resolve()
+            # The external script reports adapter_dir relative to the job dir
+            # (it runs with cwd=job_dir); resolve it there, never against our cwd.
+            adapter_dir = (job_dir / result["adapter_dir"]).resolve()
             if _is_inside(adapter_dir, job_dir.resolve()):
                 result["adapter_dir"] = str(adapter_dir.relative_to(job_dir.resolve()))
         return _finalize(result)
