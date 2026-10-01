@@ -103,7 +103,7 @@ def activate(adapter_path: Path, volume: Path) -> dict:
 
     shutil.copyfile(source, tmp)
     os.replace(str(tmp), str(target))
-    os.chmod(target, 0o644)
+    os.chmod(target, 0o600)
 
     sha = sha256_file(target)
     manifest = {
@@ -117,12 +117,12 @@ def activate(adapter_path: Path, volume: Path) -> dict:
     manifest_tmp = volume / "active.json.tmp"
     manifest_tmp.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
     os.replace(str(manifest_tmp), str(volume / MANIFEST))
-    os.chmod(volume / MANIFEST, 0o644)
+    os.chmod(volume / MANIFEST, 0o600)
 
     gen_tmp = volume / f"{GENERATION}.tmp"
     gen_tmp.write_text(str(gen), encoding="utf-8")
     os.replace(str(gen_tmp), str(volume / GENERATION))
-    os.chmod(volume / GENERATION, 0o644)
+    os.chmod(volume / GENERATION, 0o600)
 
     _prune_old_adapters(volume, gen)
     return manifest

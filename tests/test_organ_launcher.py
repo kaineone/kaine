@@ -3,6 +3,7 @@
 
 """Real-shell tests for docker/organ-launcher.sh and compose/kaine.yml."""
 
+import contextlib
 import hashlib
 import json
 import os
@@ -95,10 +96,8 @@ class LauncherSession:
                 try:
                     self.proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
                     self.proc.kill()
                     self.proc.wait(timeout=2)
         finally:

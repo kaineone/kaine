@@ -72,7 +72,7 @@ def test_activate_writes_first_generation(tmp_path):
     assert "activated_at" in manifest
     assert json.loads((volume / MANIFEST).read_text(encoding="utf-8")) == manifest
     assert (volume / GENERATION).read_text(encoding="utf-8") == "1"
-    assert (volume / "active-1.gguf").stat().st_mode & 0o777 == 0o644
+    assert (volume / "active-1.gguf").stat().st_mode & 0o777 == 0o600
 
 
 def test_activate_bumps_generation_and_prunes(tmp_path):

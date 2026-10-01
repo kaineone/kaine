@@ -83,34 +83,31 @@ def wait_for_device(
     and the last observed values.
     """
     start = clock()
-    last_organ_reason = "awake"
-    last_vram = 0
 
     while True:
         try:
             organ_ok = organ_probe()
-            if not organ_ok:
-                last_organ_reason = "awake"
+            organ_reason = "awake" if not organ_ok else "asleep"
         except Exception as exc:  # noqa: BLE001 - collapse probe errors to status
             organ_ok = False
-            last_organ_reason = type(exc).__name__
+            organ_reason = type(exc).__name__
 
         try:
-            last_vram = vram_probe()
+            vram = vram_probe()
         except Exception:  # noqa: BLE001
-            last_vram = 0
+            vram = 0
 
-        if organ_ok and last_vram >= min_free_mib:
-            return (True, f"organ asleep, {last_vram} MiB free")
+        if organ_ok and vram >= min_free_mib:
+            return (True, f"organ asleep, {vram} MiB free")
 
         elapsed = clock() - start
         if elapsed >= wait_s:
             parts: list[str] = []
             if not organ_ok:
-                parts.append(f"organ awake ({last_organ_reason})")
-            if last_vram < min_free_mib:
+                parts.append(f"organ awake ({organ_reason})")
+            if vram < min_free_mib:
                 parts.append(
-                    f"insufficient VRAM: {last_vram} MiB free (need {min_free_mib})"
+                    f"insufficient VRAM: {vram} MiB free (need {min_free_mib})"
                 )
             return (False, "; ".join(parts))
 
@@ -140,7 +137,7 @@ def run_job(
             try:
                 pairs.unlink()
             except OSError:
-                pass
+                LOGGER.error("could not delete preference pairs %s; delete it by hand — it holds entity language", pairs, exc_info=True)
         tmp = job_dir / "result.json.tmp"
         out = job_dir / "result.json"
         tmp.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -434,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
             runner=runner,
         )
     except KeyboardInterrupt:
-        pass
+        LOGGER.info("trainer service stopped")
     return 0
 
 

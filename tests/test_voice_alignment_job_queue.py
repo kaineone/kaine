@@ -178,7 +178,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
 
     service_task = asyncio.create_task(fake_service())
     result = await trainer.train(_pairs(), cfg)
-    await service_task
+    assert (await service_task) is None
 
     assert result.accepted is True
     assert result.adapter_path is not None
@@ -260,7 +260,7 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
     service_task = asyncio.create_task(fake_service())
     with pytest.raises(SubprocessTrainerError, match="ok != true"):
         await trainer.train(_pairs(), cfg)
-    await service_task
+    assert (await service_task) is None
 
     job_dirs = list((tmp_path / "jobs").iterdir())
     assert len(job_dirs) == 1
@@ -304,7 +304,7 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
     service_task = asyncio.create_task(fake_service())
     with pytest.raises(SubprocessTrainerError, match="outside"):
         await trainer.train(_pairs(), cfg)
-    await service_task
+    assert (await service_task) is None
 
     job_dirs = list((tmp_path / "jobs").iterdir())
     assert not (job_dirs[0] / "pairs.jsonl").exists()
@@ -351,7 +351,7 @@ async def test_gguf_sha_mismatch_raises(tmp_path):
     service_task = asyncio.create_task(fake_service())
     with pytest.raises(SubprocessTrainerError, match="sha256 mismatch"):
         await trainer.train(_pairs(), cfg)
-    await service_task
+    assert (await service_task) is None
 
     job_dirs = list((tmp_path / "jobs").iterdir())
     assert not (job_dirs[0] / "pairs.jsonl").exists()

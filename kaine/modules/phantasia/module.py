@@ -281,8 +281,6 @@ class Phantasia(BaseModule):
 
         sidecar = self._passes_sidecar_path()
         if sidecar and sidecar.is_file():
-            import json
-
             try:
                 data = json.loads(sidecar.read_text())
             except Exception:
