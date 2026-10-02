@@ -167,6 +167,12 @@
         <input type="text" id="merge-a" placeholder="snapshot A id" style="width:12rem">
         <input type="text" id="merge-b" placeholder="snapshot B id" style="width:12rem">
         <input type="text" id="merge-label" placeholder="label" style="width:8rem">
+        <label for="merge-world-model">world model from</label>
+        <select id="merge-world-model">
+          <option value="">none</option>
+          <option value="a">A</option>
+          <option value="b">B</option>
+        </select>
         <button type="submit" id="merge-submit">merge</button>
         <span id="merge-status" class="muted"></span>
       </form>
