@@ -359,7 +359,8 @@ async def test_empatheia_observer_noop_when_streams_absent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_voice_alignment_divergence_observer_records_cycle(tmp_path):
-    """task 5.1 — hypnos.sleep.completed with voice_alignment → logged."""
+    """A real Hypnos-shaped summary produces a record with metrics from the
+    top level and the gate outcome from the ``voice_alignment`` sub-dict."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
     obs = VoiceAlignmentDivergenceObserver(bus, sink)
@@ -369,16 +370,28 @@ async def test_voice_alignment_divergence_observer_records_cycle(tmp_path):
             "hypnos",
             "hypnos.sleep.completed",
             {
+                "pairs_processed": 8,
+                "pairs_above_threshold": 3,
+                "dpo_loss": 0.25,
+                "capability_score_before": 0.90,
+                "capability_score_after": 0.92,
+                "mean_intent_expression_similarity_before": 0.55,
+                "mean_intent_expression_similarity_after": 0.70,
                 "voice_alignment": {
-                    "pairs_processed": 8,
-                    "pairs_above_threshold": 3,
-                    "dpo_loss": 0.25,
-                    "adapter_accepted": True,
-                    "capability_score_before": 0.90,
-                    "capability_score_after": 0.92,
-                    "mean_intent_expression_similarity_before": 0.55,
-                    "mean_intent_expression_similarity_after": 0.70,
-                }
+                    "accepted": True,
+                    "adapter_path": "/tmp/fake-adapter",
+                    "capability_loss": 0.0,
+                    "reason": "accepted",
+                    "samples_used": 8,
+                },
+                "phases": [
+                    {
+                        "phase": "voice_alignment",
+                        "success": True,
+                        "elapsed_ms": 1.0,
+                        "metadata": {"pairs": 8},
+                    }
+                ],
             },
         ),
     )
@@ -389,8 +402,104 @@ async def test_voice_alignment_divergence_observer_records_cycle(tmp_path):
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
     assert line["pairs_processed"] == 8
-    assert line["adapter_accepted"] is True
     assert line["dpo_loss"] == pytest.approx(0.25)
+    assert line["adapter_accepted"] is True
+    assert line["capability_loss"] == pytest.approx(0.0)
+    assert line["outcome"] == "accepted"
+    assert line["samples_used"] == 8
+    assert line["capability_score_before"] == pytest.approx(0.90)
+    assert bus.published == []
+
+
+@pytest.mark.asyncio
+async def test_voice_alignment_divergence_skips_gated_sleep(tmp_path):
+    """A gate-skipped voice-alignment phase produces no record."""
+    bus = FakeBus()
+    sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
+    obs = VoiceAlignmentDivergenceObserver(bus, sink)
+    bus.push(
+        "hypnos.out",
+        _event(
+            "hypnos",
+            "hypnos.sleep.completed",
+            {
+                "pairs_processed": 0,
+                "pairs_above_threshold": 0,
+                "dpo_loss": 0.0,
+                "capability_score_before": 0.90,
+                "capability_score_after": 0.90,
+                "mean_intent_expression_similarity_before": 0.55,
+                "mean_intent_expression_similarity_after": 0.55,
+                "voice_alignment": {
+                    "accepted": False,
+                    "adapter_path": None,
+                    "capability_loss": 0.0,
+                    "reason": "skipped: config disabled",
+                    "samples_used": 0,
+                },
+                "phases": [
+                    {
+                        "phase": "voice_alignment",
+                        "success": False,
+                        "elapsed_ms": 0.0,
+                        "metadata": {"skipped": "config disabled", "training_skipped": True},
+                    }
+                ],
+            },
+        ),
+    )
+    await sink.start()
+    await _run_observer(obs, bus)
+    await sink.stop()
+    assert list(tmp_path.glob("vad-*.jsonl")) == []
+    assert bus.published == []
+
+
+@pytest.mark.asyncio
+async def test_voice_alignment_divergence_records_no_pairs_sleep(tmp_path):
+    """A voice-alignment phase that ran and found no pairs still yields a record."""
+    bus = FakeBus()
+    sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
+    obs = VoiceAlignmentDivergenceObserver(bus, sink)
+    bus.push(
+        "hypnos.out",
+        _event(
+            "hypnos",
+            "hypnos.sleep.completed",
+            {
+                "pairs_processed": 0,
+                "pairs_above_threshold": 0,
+                "dpo_loss": 0.0,
+                "capability_score_before": 0.90,
+                "capability_score_after": 0.90,
+                "mean_intent_expression_similarity_before": 0.55,
+                "mean_intent_expression_similarity_after": 0.55,
+                "voice_alignment": {
+                    "accepted": False,
+                    "adapter_path": None,
+                    "capability_loss": 0.0,
+                    "reason": "no usable DPO pairs in intent-expression log",
+                    "samples_used": 0,
+                },
+                "phases": [
+                    {
+                        "phase": "voice_alignment",
+                        "success": False,
+                        "elapsed_ms": 0.0,
+                        "metadata": {"pairs": 0, "training_skipped": True},
+                    }
+                ],
+            },
+        ),
+    )
+    await sink.start()
+    await _run_observer(obs, bus)
+    await sink.stop()
+    files = list(tmp_path.glob("vad-*.jsonl"))
+    assert files
+    line = json.loads(files[0].read_text().splitlines()[0])
+    assert line["outcome"] == "no_pairs"
+    assert line["samples_used"] == 0
     assert bus.published == []
 
 

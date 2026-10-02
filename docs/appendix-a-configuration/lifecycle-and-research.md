@@ -8,7 +8,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Master switch. When `false`, the entity runs un-staged: no gestation, no birth gate. |
+| `enabled` | boolean | `true` | Runs the evaluation sidecar, the read-only observers that record the research instruments. |
 | `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir`. Off by default for privacy; enable only after reviewing the privacy implications. Records are filtered through `PrivacyFilter` before persistence. |
 | `ab_divergence` | boolean | `true` | Run the A/B divergence test (conditioned vs. unconditioned generation) to measure the architecture's contribution. |
 | `ab_sample_rate` | float | `1.0` | Fraction of workspace broadcasts sampled for A/B comparison. `1.0` = every broadcast. |
@@ -28,6 +28,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | `chat_think` | boolean | `false` | Whether the baseline chat request may use chain-of-thought reasoning. |
 | `chat_api_key` | string | *(unset)* | API key for the baseline chat endpoint. If unset, it derives from `[lingua].api_key` at cycle startup. |
 | `require_semantic_embedder` | boolean | `false` | Fail closed if the semantic-embedder dependency is missing. |
+| `oscillatory_ablation` | boolean | `false` | Record the live oscillatory ablation: each experiential tick is scored a second time with the coherence layer forced off, and the content-free difference is written to `data/evaluation/ablation/`. The entity's own selection is unchanged. |
 
 ### `[evaluation.paths]`
 
@@ -47,7 +48,7 @@ Each toggle below is gated by `[evaluation].enabled`. All default to `true` so t
 | `replay` | boolean | `true` | Log Hypnos replay selections (memory IDs and association metadata). |
 | `replay_redact_content` | boolean | `true` | Privacy default: log memory IDs only, not trace text. Set to `false` only with explicit operator/Guardian consent. |
 | `empatheia` | boolean | `true` | Log Empatheia agent-model accuracy and social-prediction errors. |
-| `voice_alignment_divergence` | boolean | `true` | Log comparison of operator-seeded vs. self-generated preference pairs. |
+| `voice_alignment_divergence` | boolean | `true` | Record each sleep's voice-alignment outcome category and training metrics. |
 | `fatigue` | boolean | `true` | Log Soma fatigue-accumulator trajectory. |
 | `prediction_error` | boolean | `true` | Log per-module prediction-error statistics over sliding windows. |
 | `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). |
