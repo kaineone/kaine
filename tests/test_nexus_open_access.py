@@ -201,10 +201,10 @@ def test_extra_hosts_extend_allowlist_and_origins(monkeypatch, tmp_path):
     )
 
     cfg = load_nexus_config(path=p)
-    assert "kaine-box.tail1234.ts.net" in cfg.host_allowlist
-    assert "100.64.0.7" in cfg.host_allowlist
-    assert "https://kaine-box.tail1234.ts.net" in cfg.allowed_origins
-    assert "http://100.64.0.7:8088" in cfg.allowed_origins
+    assert any(entry == "kaine-box.tail1234.ts.net" for entry in cfg.host_allowlist)
+    assert any(entry == "100.64.0.7" for entry in cfg.host_allowlist)
+    assert any(entry == "https://kaine-box.tail1234.ts.net" for entry in cfg.allowed_origins)
+    assert any(entry == "http://100.64.0.7:8088" for entry in cfg.allowed_origins)
 
 
 def test_invalid_extra_host_raises(monkeypatch, tmp_path):
@@ -225,7 +225,7 @@ def test_published_port_added_to_extra_origins(monkeypatch, tmp_path):
     monkeypatch.setenv("KAINE_NEXUS_PUBLISHED_PORT", "9099")
 
     cfg = load_nexus_config(path=p)
-    assert "http://kaine-box.tail1234.ts.net:9099" in cfg.allowed_origins
+    assert any(entry == "http://kaine-box.tail1234.ts.net:9099" for entry in cfg.allowed_origins)
 
 
 def test_committed_config_ships_open_access():
