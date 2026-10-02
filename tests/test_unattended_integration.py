@@ -67,7 +67,9 @@ def _patch_config(monkeypatch: pytest.MonkeyPatch, config: dict[str, Any]) -> No
 
 
 def _async_recorder(calls: list[dict[str, Any]]) -> Any:
-    async def recorder(*, supervision_mode: str, gate_checks: dict[str, bool]) -> int:
+    async def recorder(
+        *, supervision_mode: str, gate_checks: dict[str, bool], kaine_config: dict[str, Any] | None = None
+    ) -> int:
         calls.append({"supervision_mode": supervision_mode, "gate_checks": gate_checks})
         return 0
 

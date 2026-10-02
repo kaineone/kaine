@@ -1039,8 +1039,10 @@ async def _boot_and_run(
     supervision_mode: str = "operator",
     gate_checks: dict[str, bool] | None = None,
     revive: "ReviveSession | None" = None,
+    kaine_config: dict[str, Any] | None = None,
 ) -> int:
-    kaine_config = _load_kaine_config()
+    if kaine_config is None:
+        kaine_config = _load_kaine_config()
 
     # Developmental stage resolution. Done early so gestation can gate locus and
     # embodiment before any module opens. Ship-inert by default: a normal boot
@@ -2333,6 +2335,7 @@ def main(argv: list[str] | None = None) -> int:
     kwargs = {
         "supervision_mode": supervision_mode,
         "gate_checks": gate_checks,
+        "kaine_config": config,
     }
     if revive is not None:
         kwargs["revive"] = revive
