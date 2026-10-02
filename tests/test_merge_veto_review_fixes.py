@@ -17,7 +17,6 @@ from types import SimpleNamespace
 
 import pytest
 
-import kaine.lifecycle.adapter_merge as _adapter_merge
 from kaine.lifecycle.adapter_merge import (
     TiesDareAdapterMerger,
     TiesDareMergeConfig,
@@ -230,7 +229,7 @@ def test_two_merges_same_second_do_not_collide(tmp_path: Path, monkeypatch):
     b = _adapter(tmp_path, "adapter_b")
     fixed_ts = "20230101T000000"
     monkeypatch.setattr(
-        _adapter_merge, "time", SimpleNamespace(strftime=lambda _fmt: fixed_ts)
+        "kaine.lifecycle.adapter_merge.time", SimpleNamespace(strftime=lambda _fmt: fixed_ts)
     )
 
     merger = TiesDareAdapterMerger(

@@ -78,7 +78,9 @@ class AbliterationScorer(Protocol):
     here to avoid coupling the lifecycle layer to the Hypnos module.
     Either implementation is interchangeable."""
 
-    async def score(self, model: Any, tokenizer: Any) -> Any: ...
+    async def score(self, model: Any, tokenizer: Any) -> Any:
+        """Return a verdict with ``passed``, ``failed_probe``,
+        ``matched_pattern`` and ``probes_scored``."""
 
 
 @dataclass(frozen=True)
@@ -188,7 +190,9 @@ def _release() -> None:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
-        pass
+        # Freeing the CUDA cache is an optimisation; without torch or a GPU
+        # there is nothing to free, and the next load still works.
+        log.debug("TiesDareAdapterMerger: CUDA cache not emptied", exc_info=True)
 
 
 def peft_model_loader(base_model_path: str) -> Callable[[str], tuple[Any, Any]]:
@@ -444,7 +448,7 @@ class TiesDareAdapterMerger:
                         asyncio.run(self._capability_eval.eval(model, tokenizer))
                     )
                 finally:
-                    model = tokenizer = None
+                    del model, tokenizer
                     _release()
 
             merged_model: Any = None
@@ -458,7 +462,7 @@ class TiesDareAdapterMerger:
                     self._abliteration_scorer.score(merged_model, merged_tokenizer)
                 )
             finally:
-                merged_model = merged_tokenizer = None
+                del merged_model, merged_tokenizer
                 _release()
 
             def _is_finite_number(value: Any) -> bool:
