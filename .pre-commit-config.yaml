@@ -9,7 +9,7 @@
 # Install once per clone:  .venv/bin/pre-commit install
 # Run on all files ad hoc: .venv/bin/pre-commit run --all-files
 #
-# See docs/architecture-boundaries.md for the contracts and rationale.
+# See docs/02-architecture/boundaries.md for the contracts and rationale.
 repos:
   - repo: local
     hooks:

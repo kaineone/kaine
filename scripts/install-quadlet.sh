@@ -74,7 +74,7 @@ fi
 
 missing=()
 if [[ ! -f "$ROOT_RESOLVED/config/kaine.operator.toml" ]]; then
-  missing+=("config/kaine.operator.toml: copy config/kaine.toml and edit it, see docs/getting-started.md")
+  missing+=("config/kaine.operator.toml: copy config/kaine.toml and edit it, see docs/04-getting-started/README.md")
 fi
 if [[ ! -f "$ROOT_RESOLVED/config/secrets.toml" ]]; then
   missing+=("config/secrets.toml: run bash scripts/redis-bootstrap.sh to create it")

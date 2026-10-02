@@ -113,7 +113,7 @@
 - **Tier 1 profile.** It selects `"sherpa_onnx"` for both organs and removes `vox` from `unsupported_modules`. It sets no speaker id and no voice. Tier 0 is unchanged.
 
 ### Docs honesty
-`docs/deployment-tiers.md`, `config/profiles/tier0.toml` and `tier1.toml` stop describing whisper.cpp, Piper, ONNX vision and ONNX embeddings as selectable "staged seams". The sherpa-onnx speech path is described as shipped; those others are described as not built.
+`docs/07-deployment/README.md`, `config/profiles/tier0.toml` and `tier1.toml` stop describing whisper.cpp, Piper, ONNX vision and ONNX embeddings as selectable "staged seams". The sherpa-onnx speech path is described as shipped; those others are described as not built.
 
 ## Risks
 - **Termux wheel resolution** is only a few weeks old upstream. The implementation is verified on the desktop, where the package and models are installed and real inference is exercised. On-device installation on the Pixel 6a is a separate operator step, recorded in the tasks as not done until it is done.

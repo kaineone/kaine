@@ -33,9 +33,9 @@
 
 ## 6. Documentation and validation
 
-- [x] 6.1 Update `docs/operations.md` with the new Nexus token setup, Origin allowlist, and non-loopback opt-in flag.
-- [x] 6.2 Update `docs/security-and-privacy.md` to describe the new encryption default, trajectory opt-in, and remote-bridge token posture.
-- [x] 6.3 Update `docs/configuration.md` with the new `[nexus]` auth fields and `[security.state_encryption]` default semantics.
+- [x] 6.1 Update `docs/05-nexus.md` with the new Nexus token setup, Origin allowlist, and non-loopback opt-in flag.
+- [x] 6.2 Update `docs/13-security-and-privacy.md` to describe the new encryption default, trajectory opt-in, and remote-bridge token posture.
+- [x] 6.3 Update `docs/appendix-a-configuration/README.md` with the new `[nexus]` auth fields and `[security.state_encryption]` default semantics.
 - [x] 6.4 Run `openspec validate nexus-privacy-hardening --strict` and resolve all reported issues.
 - [x] 6.5 Run the affected test suites (`tests/test_nexus_*.py`, `tests/test_state_encryptor.py`, `tests/test_evaluation_config.py`, `tests/test_remote_bridge.py`) and ensure they pass or are updated to match the new behavior.
 
@@ -55,7 +55,7 @@ The review also found that the dashboard JavaScript and the SSE stream cannot se
 - [x] 7.4 Validate the Host header on every method with correct IPv6 parsing; keep the Origin check for state-changing methods.
 - [x] 7.5 Set `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` and `KAINE_NEXUS_TOKEN` in the compose and Quadlet Nexus definitions, keeping publishing loopback-only.
 - [x] 7.6 Tests: session login/logout/expiry/rate limit, cookie-authenticated fetch and SSE, HTML redirect, secrets.toml token, kaine.toml refusal, Host check on GET, IPv6 host, derived origins, container env start.
-- [x] 7.7 Document the login flow and token placement in `docs/security-and-privacy.md` (present tense).
+- [x] 7.7 Document the login flow and token placement in `docs/13-security-and-privacy.md` (present tense).
 - [x] 7.8 Session key for state changes: return a per-session key once at login, require `X-Nexus-Session-Key` with the cookie on state-changing gated requests, add `static/nexus_auth.js` (fetch wrapper and login form handler) loaded from `_base.html`, absolute session lifetime, compare the token before the rate-limit check.
 - [x] 7.9 Keep `/diagnostics/health.json` unauthenticated; gate the evaluation tab with the same read dependencies as the other surfaces.
 - [x] 7.10 Refuse tokens under 32 characters, strip the env token, refuse malformed overlay/secrets files; remove the explicit `allowed_origins`/`host_allowlist` from the shipped `kaine.toml` so derived defaults apply, and correct its comments; document proxy/tailnet `host_allowlist` entries and the residual cookie read exposure.

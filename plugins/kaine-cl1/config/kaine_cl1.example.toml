@@ -11,7 +11,7 @@ enabled = ["cl1"]
 [plugins.cl1.substrate]
 # "simulator": Cortical Labs' simulator (cl-sdk, installed by you).
 # "hardware": a real CL1, only through the welfare gate ([plugins.cl1.hardware]);
-# see "Running on a CL1" in docs/cl1.md. "cloud" is refused (no public remote API).
+# see "Running on a CL1" in docs/19-plugins-and-cl1.md. "cloud" is refused (no public remote API).
 target = "simulator"
 # true: the simulator runs one window per KAINE tick as fast as it can.
 # false: real time (what real tissue needs); a background thread runs the loop
@@ -20,7 +20,7 @@ accelerated_time = true
 ticks_per_second = 100        # substrate closed-loop rate
 cognitive_rate = 3.333        # KAINE cognitive-cycle rate (Hz); ticks_per_second must nest in it
 random_seed = 42              # deterministic synthetic spikes when no replay is set
-# Which simulated data the substrate produces (docs/cl1.md):
+# Which simulated data the substrate produces (docs/19-plugins-and-cl1.md):
 #   "reference_culture": this plugin's synthetic culture, responds to stimulation (default)
 #   "sdk":               cl-sdk's own data, ignores stimulation (a baseline control)
 #   "replay":            the recording at replay_path
@@ -50,7 +50,7 @@ chronos = 12
 soma = 12
 # nous = 10                   # two per action (four by default) plus two feedback channels
 
-# Nous on the substrate (docs/cl1.md): "shadow" logs the tissue's policy proposal
+# Nous on the substrate (docs/19-plugins-and-cl1.md): "shadow" logs the tissue's policy proposal
 # and leaves Nous unchanged; "drive" acts on it. Only read when nous = "cl1".
 # [plugins.cl1.nous]
 # mode = "shadow"

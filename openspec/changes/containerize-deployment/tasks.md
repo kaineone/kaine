@@ -40,14 +40,14 @@
       → images parameterized with pinned-tag defaults (matching the redis/qdrant
         tag convention); digest-pinning is an operator/registry-access hardening
         step noted in docs. Speaches is CPU-only by design (cuDNN crash on GPU —
-        docs/getting-started.md#speaches), so it carries no GPU reservation.
+        docs/04-getting-started/services.md#speaches-stt), so it carries no GPU reservation.
 - [x] 2.2 NVIDIA passthrough via `deploy.resources.reservations.devices`; wire the
       two-GPU split (organ→`device_ids: ["0"]`, vision/TTS→`["1"]`); single-GPU
       fallback (share card 0) → `compose/kaine.single-gpu.yml`.
 - [x] 2.3 Document + template the `organ=host` override
       (`host.docker.internal` / `host.containers.internal:11434`); make it the
       documented required topology when the voice-alignment trainer is enabled.
-      → `compose/kaine.organ-host.yml` + docs/deployment-containers.md.
+      → `compose/kaine.organ-host.yml` + docs/07-deployment/containers.md.
 - [x] 2.4 ROCm device-mount variant (`/dev/kfd` + `/dev/dri`, video/render groups)
       → `compose/kaine.rocm.yml`.
 
@@ -73,10 +73,10 @@
         `test_no_durable_bind_or_volume_mounts_a_raw_sense_path`.
 - [x] 3.4 Bind-mount `config/kaine.operator.toml` + `config/secrets.toml`
       read-only; document the env/gate-var matrix (none defaulted permissive on the
-      cycle service). → `:ro` binds; matrix in docs/deployment-containers.md;
+      cycle service). → `:ro` binds; matrix in docs/07-deployment/containers.md;
       `test_cycle_defaults_no_gate_var_permissive`.
 - [x] 3.5 Document one-command bring-up (`up` minus cycle) + GPU host prerequisites
-      per runtime. → docs/deployment-containers.md.
+      per runtime. → docs/07-deployment/containers.md.
 
 ## D4 — Podman, multi-vendor, CI, docs
 - [x] 4.1 Podman parity: validate `podman compose` on the same file (CDI GPU,
@@ -103,7 +103,7 @@
         layer). The build runs in CI, not in this environment.
 - [x] 4.5 Present-tense operator docs for the containerized deployment path (Docker
       + Podman, GPU/CPU, setup phase, supervised cycle boot, dev/research profiles).
-      → docs/deployment-containers.md.
+      → docs/07-deployment/containers.md.
 
 ## Out of scope (explicit)
 - The Unsloth Studio voice-alignment trainer (separate Py3.13/cu130 env — stays out

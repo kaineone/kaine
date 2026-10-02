@@ -9,7 +9,7 @@ point in the `kaine.plugins` group, and only when `[plugins].enabled` names it.
 Each converted module keeps its `name`, bus subscriptions and published event
 shapes; only the object behind a declared seam (`chronos.network`,
 `soma.forward_model`) changes. See `plugins/kaine-cl1/README.md` and
-`docs/cl1.md`.
+`docs/19-plugins-and-cl1.md`.
 """
 
 __version__ = "0.0.1"

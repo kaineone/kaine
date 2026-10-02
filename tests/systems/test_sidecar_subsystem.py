@@ -62,7 +62,7 @@ def test_boundary_no_core_module_imports_evaluation():
     job, and tests/test_import_boundary_contracts.py — it catches
     ``import kaine.evaluation as ...`` and indirect imports too. This grep is
     kept so the guarantee survives even if the linter config is removed.
-    See docs/architecture-boundaries.md.
+    See docs/02-architecture/boundaries.md.
     """
     proc = subprocess.run(
         ["git", "grep", "-l", "from kaine.evaluation", "--", "kaine/"],

@@ -9,4 +9,4 @@
 ## 3. Verification
 - [x] 3.1 Tests: every launch path renders the flag and default; config validation; the probe reports asleep from a fake `/props`; the preboot row.
 - [ ] 3.2 On the GPU at the next launch, confirm with `nvidia-smi` that the organ's VRAM is released while it sleeps, and record the result in the docs.
-- [ ] 3.3 Docs (docs/operations.md, deployment docs). The full offline suite is green.
+- [ ] 3.3 Docs (docs/05-nexus.md, deployment docs). The full offline suite is green.

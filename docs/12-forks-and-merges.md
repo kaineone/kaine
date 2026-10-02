@@ -1,0 +1,266 @@
+# Forks and merges
+
+The fork/merge lifecycle captures a running KAINE entity's state, creates an independent copy (a fork), lets that copy run on its own, and later merges its state back. This page explains the snapshot format, the four lifecycle operations, how each module resolves state conflicts during a merge, and how voice-alignment LoRA adapters are combined. Read it if you need to branch an entity, run an isolated experiment, or merge trained adapters.
+
+Related: [Architecture](02-architecture/README.md) · [Sleep and maintenance](10-sleep/README.md) · [Voice alignment](10-sleep/voice-alignment.md)
+
+## Snapshot model
+
+`kaine/lifecycle/snapshot.py` defines a `ForkSnapshot` as a JSON document at `state/forks/<id>/snapshot.json` plus an `artifacts/` directory alongside it:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | string | First 16 hex characters of a UUID4; IDs (including merge IDs) must match `^[0-9a-f]{16}(\+[0-9a-f]{16})?$` |
+| `parent_id` | string | Parent snapshot ID, or `"<a>+<b>"` for a merge |
+| `label` | string | Operator-supplied description |
+| `timestamp` | float | `time.time()` Unix epoch (not monotonic) |
+| `modules` | dict | `{module_name: serialized_state_dict}` |
+| `adapters` | list[str] | LoRA adapter paths carried by the fork |
+| `metadata` | dict | Provenance, caller info, adapter-merge metadata, artifact sources, timing, shed list, etc. |
+
+Module state comes from `module.serialize()` (deep-copied). Large binary artifacts that `serialize()` references by path live under `<snapshot root>/<id>/artifacts/<module>/` with directories at mode `0700` and files at `0600`. The JSON file itself is encrypted when `[security.state_encryption]` is enabled, and Phantasia's world-model checkpoint is also encrypted at rest.
+
+Anything that ships a fork to another host must ship the whole snapshot directory, artifacts included. The manager never starts or stops modules; it only serializes or deserializes modules that are already instantiated.
+
+The manager never deletes a snapshot. Removing an entity's state follows the CAL-gated decommission path in [`kaine/lifecycle/decommission.py`](../kaine/lifecycle/decommission.py). There is no snapshot count cap; a `max_snapshots_retained` key in operator config is ignored, and any value above 0 logs a warning. Free disk is checked before boot by `python -m kaine.preboot`.
+
+## Lifecycle operations
+
+```mermaid
+flowchart TD
+    A[Running KAINE] --> B["ForkManager.snapshot(registry)<br>Capture current state<br>→ ForkSnapshot"]
+    B --> C{Operator intent?}
+    C --> D["ForkManager.fork(parent_id, shed=[])<br>Copy parent modules<br>(optionally drop some)<br>→ child ForkSnapshot"]
+    C --> E["ForkManager.restore(snapshot_id, registry)<br>Deserialize into live modules<br>← resume from snapshot"]
+    D --> F["Run fork branch independently<br>(separate process / host)"]
+    F --> G["Capture fork's final state<br>ForkManager.snapshot(fork_registry)"]
+    G --> H["ForkManager.merge(snap_a_id, snap_b_id)<br>Per-module strategy resolution<br>+ adapter merge<br>→ merged ForkSnapshot"]
+    H --> I["ForkManager.restore(merged_id, registry)<br>Apply merged state to live modules"]
+```
+
+### snapshot(registry)
+
+`ForkManager.snapshot(registry)` iterates `registry.all_modules()`, calls `module.serialize()` on each, and deep-copies the results. If a module fails serialization, the failure is logged and stored as `{"_serialize_error": str(exc)}` so one broken module does not prevent capturing the rest. The manager then exports every module's artifacts into `<snapshot root>/<id>/artifacts/<module>/`. If any artifact export fails, the entire snapshot is aborted and no snapshot directory is left behind.
+
+### fork(parent_id, shed=[])
+
+`ForkManager.fork(parent_id, shed=[])` loads the parent snapshot and creates a child with the parent's module states (deep-copied), minus any modules named in `shed`. The metadata carries a `"shed"` key listing the dropped module names. Adapter paths are inherited from the parent, and the parent's module artifacts are copied into the child's own snapshot directory (excluding shed modules), so every fork owns an independent copy.
+
+Module shedding lets KAINE degrade gracefully under resource constraints: forking with `shed=["topos", "audition"]` creates a text-only branch without vision or hearing.
+
+### restore(snapshot_id, registry)
+
+`ForkManager.restore(snapshot_id, registry)` loads a snapshot, calls `module.deserialize(state)` on each module present in the snapshot, and then installs each module's artifacts from `<snapshot root>/<id>/artifacts/<module>/` into the live instance. Modules not present in the snapshot are unchanged. Phantasia writes restored weights to its own `checkpoint_path` and logs a warning that a fresh world-model start is beginning when the snapshot carries no world-model weights. Symlinked artifact directories are never followed.
+
+### merge(snapshot_a_id, snapshot_b_id, world_model_from=None)
+
+`ForkManager.merge(snapshot_a_id, snapshot_b_id, world_model_from=None)` loads both snapshots, applies a per-module merge strategy, merges any adapters, and saves a new `ForkSnapshot` with `parent_id = "<a_id>+<b_id>"`. It records each module's artifact source in `metadata["artifact_sources"]`. For non-Phantasia modules, when both parents have artifacts, the merged snapshot always takes parent A's copy.
+
+If both parents carry a Phantasia world model, `merge()` requires `world_model_from="a"` or `world_model_from="b"` to name which parent's world model continues; two independently trained world models cannot be averaged. If the parameter is missing, `merge()` raises `WorldModelChoiceRequiredError` (a `ValueError`). The Nexus `POST …/merges` endpoint validates `world_model_from` as `Literal["a", "b"] | None`, so an invalid value returns HTTP 422 before `merge()` runs. Nexus returns HTTP 409 only for `WorldModelChoiceRequiredError` and `UnmergedAdaptersError`. If only one parent has a world model, that parent's copy is used automatically.
+
+If a module's merge strategy raises, the merge falls back to keeping state A for that module.
+
+If both parents carry trained LoRA adapters and no real adapter merger is available, `merge()` raises `UnmergedAdaptersError` rather than saving a snapshot that claims to be merged while its adapter weights were never combined. Callers who deliberately want the union-of-paths fallback must pass `allow_unmerged_adapters=True` explicitly.
+
+## Per-module merge strategies
+
+`kaine/lifecycle/strategies.py` holds the merge strategies. Each module may register a custom `MergeStrategy`; unregistered modules use `UnionMergeStrategy`.
+
+### UnionMergeStrategy (default)
+
+Last-write-wins for scalar keys; recursive union for dicts; deduplication by `repr()` for lists (first occurrence wins). State B is applied on top of state A.
+
+### MnemosMergeStrategy
+
+| Field | Resolution |
+|-------|-----------|
+| `short_term_size` | Sum of both parents |
+| `collection_prefix` | A's prefix if it is non-empty; otherwise B's (the code uses `prefix_a or prefix_b`). A prefix mismatch is flagged in the merged Mnemos module state. |
+| `embedding_space` | A's; an embedding-space mismatch is flagged in the merged Mnemos module state. |
+| `pending_source_tag` | `["fork-a", "fork-b"]` — Mnemos tags recalled memories by origin on next retrieval |
+
+When the defaulted prefixes or embedding spaces differ, the merged Mnemos module state records `metadata.parent_prefixes`, `metadata.prefix_mismatch`, and `metadata.embedding_space_mismatch`.
+
+### NousMergeStrategy
+
+Nous holds posterior probability distributions over hidden-state factors. Merging distributions has no principled field-level union, so the strategy keeps the fork whose posterior is more certain:
+
+```
+mean_posterior_entropy = mean(normalised_entropy(factor_posterior))
+                         over all hidden-state factors
+```
+
+Lower entropy wins. Ties go to state A. The merged Nous module state records:
+- `selected_fork_entropy` — entropy of the kept state
+- `discarded_fork_entropy` — entropy of the dropped state
+- `nous.merge_warning = True` when `|discarded - kept| > warning_threshold` (default 0.2)
+
+### EidolonMergeStrategy
+
+| Field | Resolution |
+|-------|-----------|
+| `values`, `behavioral_norms` | Deduplicated union (repr-based) |
+| `internal_speech_count` | Sum |
+| `identity_history` | Concatenated; each entry tagged `"source": "fork-a"` or `"fork-b"` |
+| `personality_baseline` | Per-trait average across both parents |
+| `drift_count` | Sum |
+
+### ThymosMergeStrategy
+
+| Field | Resolution |
+|-------|-----------|
+| `dimensional` (VAD baseline) | Per-dimension average |
+| `drives` | Per-drive maximum (most activated state wins) |
+| `goals` | Deduplicated union by goal ID; tagged by source fork |
+| `emotional_history` | Concatenated; tagged by source fork |
+
+## Adapter merging
+
+When both forks carry trained LoRA adapters, the `AdapterMerger` protocol resolves them. The implementation is selected by `[lifecycle].adapter_merger`.
+
+### "auto" (default)
+
+`merger_from_name("auto")` checks whether the PEFT extra (`kaine[training]`) is importable and picks `TiesDareAdapterMerger` when it is, `FakeAdapterMerger` otherwise. Set `adapter_merger = "fake"` or `"ties_dare"` explicitly to force one regardless of installed extras.
+
+### FakeAdapterMerger ("fake")
+
+Concatenates both adapter path lists, deduplicating by path string, and adds `{"adapter_merge_skipped": "no merger configured"}` to metadata. This fallback is used when fewer than two distinct adapter paths exist, fewer than two paths exist on disk, the `[training]` extras are missing, `base_model_path` is unset, or `add_weighted_adapter` raises.
+
+### TiesDareAdapterMerger ("ties_dare")
+
+`kaine/lifecycle/adapter_merge.py` performs real PEFT-backed TIES/DARE merging. Three algorithms are available:
+
+| `combination_type` | Algorithm |
+|-------------------|-----------|
+| `"ties"` | TIES: trim, elect, merge (Yadav et al. 2024) |
+| `"dare_ties"` | DARE drop+rescale, then TIES (default; Yu et al. 2024) |
+| `"dare_linear"` | DARE drop+rescale, then linear combination |
+
+The merged output is a PEFT adapter directory containing `adapter_config.json` and `adapter_model.safetensors`. It is **not** a GGUF file, so it cannot be activated through the organ-adapter hot-swap path that Hypnos uses for `adapter.gguf`.
+
+### Fallback and fail-loud guard
+
+When both parents carry trained adapters and the resolved merger falls back to `FakeAdapterMerger` (extras missing, `base_model_path` unset, etc.), `ForkManager.merge()` raises `UnmergedAdaptersError` instead of silently saving a "merged" snapshot with unmerged weights. The error message names the extra to install (`pip install -e .[training]`) and the config keys to set. Pass `allow_unmerged_adapters=True` to `merge()` if you deliberately want the union-of-paths behavior.
+
+### Capability-loss veto
+
+`TiesDareAdapterMerger` accepts a `capability_loss_threshold`, but the shipped wiring in `merger_from_name` does not pass a `CapabilityEval` collaborator or a `model_loader` callable to the merger. In current KAINE wiring the veto is therefore skipped and `capability_loss_threshold` has no effect. The key is still read when `adapter_merger = "auto"` or `"ties_dare"`.
+
+### Output layout
+
+```
+<output_dir>/
+  <merge_timestamp>/        ← single merge output
+    adapter_config.json
+    adapter_model.safetensors
+    ...
+```
+
+Two merges at different times do not collide. Parent adapter directories are never modified.
+
+### Rollback
+
+If a merged adapter misbehaves:
+
+1. Stop KAINE.
+2. `rm -rf <output_dir>/<bad-timestamp>/`.
+3. Re-point Lingua at one of the parent adapters or at the previous `current` adapter from voice-alignment training.
+4. Restart KAINE.
+
+Because the merged output is safetensors and not a GGUF, re-pointing through the organ-adapter path requires a separate GGUF conversion step; the rollback above assumes the standard Lingua adapter path.
+
+## Per-fork timing profile
+
+`kaine/lifecycle/timing_profile.py` defines `ForkTimingProfile`. A fork may carry its own subjective pacing inside `ForkSnapshot.metadata["timing"]`:
+
+```json
+"metadata": {
+  "timing": {
+    "time_scale": 2.0,
+    "processing_rate_hz": 10.0,
+    "experiential_rate_hz": 3.333,
+    "vision_sample_hz": 10.0
+  }
+}
+```
+
+`time_scale` is required when the `"timing"` key is present and must be `> 0`. Rate overrides are optional; when absent, the fork inherits the prevailing cycle and perception rates at spawn. Malformed values fail loudly at parse time. A fork with no `"timing"` key parses to `None` and keeps its parent's pacing.
+
+The lifecycle module only parses and validates the profile. The runtime seam that applies it — setting `EntityClock.scale` and the cycle's rates — lives in `kaine/cycle/fork_timing.py`.
+
+## Metadata carried by snapshots
+
+Fork/merge is offline and does not publish bus events, but `ForkSnapshot.metadata` records provenance:
+
+| Metadata key | Set by | Content |
+|-------------|--------|---------|
+| `merged_from` | `merge()` | `[snap_a_id, snap_b_id]` |
+| `artifact_sources` | `merge()` | Map of which parent each module's artifacts came from |
+| `artifacts` | `snapshot()` / `fork()` | Export records for `snapshot()`; inherited from `parent.metadata` by `fork()` |
+| `artifacts_from_parent` | `fork()` | Sorted list of module names whose artifacts were copied from the parent |
+| `adapter_merge_skipped` | `FakeAdapterMerger` | Reason string |
+| `shed` | `fork(shed=...)` | Sorted list of shed module names |
+| `timing` | operator / API caller | Optional per-fork `time_scale` and rate overrides |
+
+Module-specific merge notes — Nous entropy values and `nous.merge_warning`, Mnemos prefix and embedding-space mismatch flags — are written into the merged module state, not into snapshot metadata.
+
+## Individuation test
+
+`kaine/evaluation/individuation.py` provides `IndividuationTest`. Before merging, a Guardian may test whether a fork has developed a preference profile distinguishable from the entity's own birth-state transcript. The instrument runs a permutation test:
+
+1. Sample the entity's birth-state transcript `null_samples` times on the preference battery under varied random seeds to build a null distribution of transcript-against-transcript divergence.
+2. Compute the fork-vs-birth-state divergence on the same battery.
+3. Report the divergence value, p-value (fraction of null samples ≥ fork divergence), and `significant`.
+
+`significant` starts as `false` and only becomes `true` when the fork divergence exceeds `significance_percentile` and the fork passes the fail-closed warm-up floor: at least `min_observations` observations and at least `min_lived_time_s` seconds of lived time. Missing either floor forces `significant` to `false`.
+
+The instrument produces JSONL evidence only; it does not decide sovereignty.
+
+Configuration under `[evaluation.individuation]`:
+
+```toml
+[evaluation.individuation]
+enabled = false           # Guardian-only; never called from the cycle
+null_samples = 50
+significance_percentile = 95.0
+metric = "cosine_divergence"
+battery_path = ""         # "" = bundled default battery
+output_dir = "data/evaluation/individuation"
+min_observations = 200
+min_lived_time_s = 1800
+```
+
+## Configuration reference
+
+```toml
+[lifecycle]
+snapshots_path = "state/forks"
+adapter_merger = "auto"   # "auto" | "fake" | "ties_dare"
+
+[lifecycle.adapter_merge]
+combination_type = "dare_ties"
+density = 0.5
+weights = []              # empty = uniform
+output_dir = "state/forks/merged_adapters"
+capability_loss_threshold = 0.05
+base_model_path = ""      # local HuggingFace-format weights directory
+```
+
+`base_model_path` must point to a directory containing `config.json` and `model.safetensors` in HuggingFace format. It is not a model-server model ID and not a GGUF file. When it is empty, `TiesDareAdapterMerger` logs a warning and falls back to `FakeAdapterMerger`.
+
+For the full config schema, see [Lifecycle, evaluation and research](appendix-a-configuration/lifecycle-and-research.md).
+
+## Key files
+
+| File | Role |
+|------|------|
+| [`kaine/lifecycle/manager.py`](../kaine/lifecycle/manager.py) | `ForkManager`: snapshot, restore, fork, merge |
+| [`kaine/lifecycle/snapshot.py`](../kaine/lifecycle/snapshot.py) | `ForkSnapshot` dataclass and JSON persistence |
+| [`kaine/lifecycle/strategies.py`](../kaine/lifecycle/strategies.py) | Merge strategies and `default_strategies()` |
+| [`kaine/lifecycle/adapter_merge.py`](../kaine/lifecycle/adapter_merge.py) | `TiesDareAdapterMerger` and `TiesDareMergeConfig` |
+| [`kaine/lifecycle/timing_profile.py`](../kaine/lifecycle/timing_profile.py) | Parse and validate `metadata["timing"]` |
+| [`kaine/cycle/fork_timing.py`](../kaine/cycle/fork_timing.py) | Apply a parsed timing profile to the clock/cycle |
+| [`kaine/lifecycle/decommission.py`](../kaine/lifecycle/decommission.py) | CAL-gated entity removal |
+| [`kaine/evaluation/individuation.py`](../kaine/evaluation/individuation.py) | Individuation permutation test |
+| [`kaine/nexus/diagnostics.py`](../kaine/nexus/diagnostics.py) | Nexus `POST …/merges` endpoint |
+| `state/forks/` | Snapshot storage root |

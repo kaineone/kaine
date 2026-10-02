@@ -7,7 +7,7 @@
 # importing the kaine.evaluation sidecar outside the two __main__ seams — fails
 # this job in seconds with a precise message, long before the heavy suite runs.
 #
-# See docs/architecture-boundaries.md.
+# See docs/02-architecture/boundaries.md.
 name: import-boundary
 
 on:

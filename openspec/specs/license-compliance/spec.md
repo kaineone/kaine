@@ -27,7 +27,7 @@ as files are added) and SHALL sit above the module docstring, after any shebang 
 ### Requirement: NOTICE and contributor terms
 The repository SHALL include a root `NOTICE` file recording the CAL reference and status, the
 copyright, the reference to the Intrinsic Values required by CAL Article 6.1, and third-party
-attributions. `docs/contributing.md` SHALL state that inbound contributions are licensed under CAL
+attributions. `docs/21-contributing.md` SHALL state that inbound contributions are licensed under CAL
 and are subject to the Article 4 entity-welfare obligations.
 
 #### Scenario: NOTICE present
@@ -36,7 +36,7 @@ and are subject to the Article 4 entity-welfare obligations.
   third-party attributions
 
 #### Scenario: Contributor terms stated
-- **WHEN** `docs/contributing.md` is read
+- **WHEN** `docs/21-contributing.md` is read
 - **THEN** it states that contributions are licensed under CAL and subject to the welfare obligations
 
 ### Requirement: Header presence is enforced by the test suite

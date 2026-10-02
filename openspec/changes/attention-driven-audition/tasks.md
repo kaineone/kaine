@@ -103,8 +103,8 @@ still-unbuilt foveation Phase 3–4._
 
 ## 4. Docs / paper
 
-- [x] 4.1 Update `docs/modules/audition.md` with the general-perception path once
-      implemented. — `docs/modules/audition.md` now documents the shipped Phase-1
+- [x] 4.1 Update `docs/09-modules/audition.md` with the general-perception path once
+      implemented. — `docs/09-modules/audition.md` now documents the shipped Phase-1
       general path: the `general_audition` toggle + arousal-window/change-threshold
       config, the `audition.perception` content-free event, the encode → salience →
       arousal-window → speech-gate flow and the arousal seam

@@ -51,18 +51,14 @@ and gated off** until a positive base result. It is held, never removed.
 
 ## 📚 Documentation
 
-The full documentation lives in **[`docs/`](docs/README.md)** — start there.
+The documentation is one book in [`docs/`](docs/README.md), read in order or by chapter. It reads as plain Markdown on GitHub; for a sidebar and search, run `mdbook serve docs`.
 
-- **[For Researchers](docs/for-researchers.md)** — start here if you cloned this to study it: the offline test path and the observed live run, ethics-first
-- **[Reproducing Results](docs/reproducing-results.md)** — the offline mechanism-validation path: the workspace-mediation ablation + the suite (no entity boot)
-- **[Hardware](docs/hardware.md)** — requirements, GPU/VRAM, CPU-only fallback, service footprint
-- **[Architecture](docs/architecture.md)** — the whole system at a glance
-- **[Getting Started](docs/getting-started.md)** — install + supervised first boot of the base-thesis form
-- **[Operations](docs/operations.md)** — running it, the Nexus dashboard, troubleshooting
-- **[Opening Nexus](docs/operations.md#opening-nexus)** — the dashboard's address, sign-in, and tailnet access
-- **[Configuration](docs/configuration.md)** — every `config/kaine.toml` key
-- **[Modules](docs/README.md#modules)** — per-organ reference
-- **[Tech Choices](docs/tech-choices.md)** · **[Security & Privacy](docs/security-and-privacy.md)** · **[Glossary](docs/glossary.md)** · **[Contributing](docs/contributing.md)**
+- **Understanding KAINE:** [What KAINE is](docs/01-what-kaine-is.md) · [Architecture](docs/02-architecture/README.md)
+- **Installing and running:** [Hardware](docs/03-hardware/README.md) · [Getting started](docs/04-getting-started/README.md) · [Nexus, the dashboard](docs/05-nexus.md) · [Day-to-day operation](docs/06-operation/README.md) · [Deployment](docs/07-deployment/README.md)
+- **The mind:** [The cognitive cycle](docs/08-cognitive-cycle/README.md) · [Modules](docs/09-modules/README.md) · [Sleep](docs/10-sleep/README.md)
+- **Welfare and security:** [Preservation](docs/11-preservation.md) · [Forks and merges](docs/12-forks-and-merges.md) · [Security and privacy](docs/13-security-and-privacy.md)
+- **Research:** [For researchers](docs/14-for-researchers.md) · [Running experiments](docs/15-experiments/README.md) · [Verification](docs/18-verification.md)
+- **Reference:** [Configuration](docs/appendix-a-configuration/README.md) · [Glossary](docs/appendix-b-glossary.md) · [Licences](docs/appendix-c-licences.md) · [Contributing](docs/21-contributing.md)
 
 ## Status
 
@@ -81,8 +77,8 @@ continuous-input check (`KAINE_CYCLE_UNATTENDED=1`) — never none of these. The
 selecting a configuration never births an entity on its own. Booting with no
 profile gives the base-thesis form; the full-entity and deployment-tier
 configurations remain available. Researchers cloning this to study it should start
-at [For Researchers](docs/for-researchers.md); see
-[Getting Started](docs/getting-started.md) for the supervised first boot.
+at [For Researchers](docs/14-for-researchers.md); see
+[Getting Started](docs/04-getting-started/README.md) for the supervised first boot.
 
 The reproducible **live** perceptual run is driven not by conversation (there is no
 conversational path) and not by random noise (predictive processors need structure
@@ -98,12 +94,12 @@ seed-reproducibility.
 - **Observed, not conversed with.** No chatbot interface; the entity's speech is a
   self-initiated report of its own state, recorded and observed.
 - **Reuse over rewrite.** Maintained open-source projects are used wherever they
-  fit; custom code is justified. See [Tech Choices](docs/tech-choices.md).
+  fit; custom code is justified. See [Tech Choices](docs/02-architecture/tech-choices.md).
 - **Zero raw-sense-data persistence.** Live audio/video is perception, not
   recording — processed in memory and released.
 - **Sovereignty & privacy.** Internal state is private by default; diagnostics
   never expose internal speech, beliefs, memories, or affect reasons. See
-  [Security & Privacy](docs/security-and-privacy.md).
+  [Security & Privacy](docs/13-security-and-privacy.md).
 - **Welfare-first safety.** Two-layer gates on all outward action; safety lives in
   the action boundary, not in model-weight compliance; decommission is
   operator-supervised, backup-first, and divergence-gated (CAL Article 4.2); the

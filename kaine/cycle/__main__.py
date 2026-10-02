@@ -2306,7 +2306,7 @@ def main(argv: list[str] | None = None) -> int:
             "Refusing to boot KAINE cycle: operator must be present.\n"
             "\n"
             "Export KAINE_CYCLE_OPERATOR_PRESENT=1 and re-run. The cycle is the\n"
-            "entity; do not start it unattended. See FIRST_BOOT.md.\n"
+            "entity; do not start it unattended. See docs/04-getting-started/first-boot.md.\n"
             "\n"
             "For an unsupervised research run, enable the autonomous safety net\n"
             "and set KAINE_RESEARCH_MODE=1 (or [research].enabled) instead.\n"

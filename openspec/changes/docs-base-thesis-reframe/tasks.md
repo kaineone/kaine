@@ -6,25 +6,25 @@
 
 - [x] 1.1 `docs/README.md` — lead with the base-thesis form; update the modules index
   to mark the active five vs. gated.
-- [x] 1.2 `docs/for-researchers.md` — the offline ablation path + the observed live
+- [x] 1.2 `docs/14-for-researchers.md` — the offline ablation path + the observed live
   run; observed-not-conversed; reference stimulus corpus.
-- [x] 1.3 `docs/getting-started.md` — install + supervised first boot of the
+- [x] 1.3 `docs/04-getting-started/README.md` — install + supervised first boot of the
   base-thesis form (default profile), reference-corpus manifest as the live upgrade.
-- [x] 1.4 `docs/architecture.md` — base-thesis default; perception-as-prediction-error;
+- [x] 1.4 `docs/02-architecture/README.md` — base-thesis default; perception-as-prediction-error;
   self-initiated voice; output-is-provably-workspace-mediated; richer faculties gated.
-- [x] 1.5 `docs/configuration.md` — the base-thesis toggle set + the new keys
+- [x] 1.5 `docs/appendix-a-configuration/README.md` — the base-thesis toggle set + the new keys
   (`transcription_enabled`, `[volition].policy`, playlist manifest); default profile.
-- [x] 1.6 `docs/reproducing-results.md` — the workspace-mediation ablation as the
+- [x] 1.6 `docs/14-for-researchers.md` — the workspace-mediation ablation as the
   primary falsifier; retire A/B divergence; seeded (offline) vs reference corpus (live).
 
 ## 2. Module docs (tier 2)
 
 - [x] 2.1 Mark each `docs/modules/*.md` as base-thesis-active (soma/chronos/topos/
   audition/lingua) or gated; keep the gated ones' content.
-- [x] 2.2 `docs/modules/audition.md` — STT off by default; audio as prediction error.
-- [x] 2.3 `docs/modules/lingua.md` — output-only voice; self-initiated report, not
+- [x] 2.2 `docs/09-modules/audition.md` — STT off by default; audio as prediction error.
+- [x] 2.3 `docs/09-modules/lingua.md` — output-only voice; self-initiated report, not
   conversational.
-- [x] 2.4 `docs/modules/topos.md` — foveated raw-video perception.
+- [x] 2.4 `docs/09-modules/topos.md` — foveated raw-video perception.
 
 ## 3. Consistency pass (tier 2)
 
@@ -33,7 +33,7 @@
 - [x] 3.2 Repo-wide: "seeded stimulus" → "reference stimulus corpus" for the LIVE
   tier (keep "seeded" for the offline ablation); drop the A/B divergence description;
   add the output-provably-workspace-mediated property; reconcile module counts.
-- [x] 3.3 `docs/glossary.md`, `docs/deployment-*`, `docs/tech-choices.md` — terminology
+- [x] 3.3 `docs/appendix-b-glossary.md`, `docs/deployment-*`, `docs/02-architecture/tech-choices.md` — terminology
   and framing consistency.
 
 ## 4. Review

@@ -1,0 +1,133 @@
+# Gestation on one host
+
+This page covers the local womb: running a gestation stage on a single host before the entity is born into a body. Use it when you want a new entity to mature in a protected perceptual environment on CPU, without an external world adapter.
+
+## What the local womb is
+
+The local womb is a built-in gestation stimulus generated on the host CPU. It feeds the entity a dim, low-contrast visual field and a low-passed soundscape, both pulsed by an external maternal heartbeat and tinted by a slow maternal emotional state. Colour rises from near-grey as the entity's lived gestation time passes.
+
+The womb is not a medical or media playback system. It is a controlled perceptual scaffold: the maternal channel is external and does not respond to the entity's actions. The entity's own rhythm is generated separately by a self-rhythm oscillator inside [Soma](../09-modules/soma.md), which the entity can sense and which may couple to the maternal beat. Media and world simulation belong in [Mundus](../09-modules/mundus.md) and its planned Paracosmic adapter, not here.
+
+## Requirements
+
+Enable gestation in your per-install overlay, `config/kaine.operator.toml`:
+
+- `[developmental_stage].enabled = true` (it is off by default).
+- `[perception_feed].mode = "womb"`.
+- The [Topos](../09-modules/topos.md), [Audition](../09-modules/audition.md) and [Soma](../09-modules/soma.md) modules enabled. The base `thesis_test` profile enables these three modules, but `config/kaine.operator.toml` merges last and wins. The first-run wizard writes a full `[modules]` table there, and its own defaults leave Topos and Audition off, so enable them explicitly for gestation after the wizard has run.
+- `[soma].self_rhythm_enabled = true`. This is off in the shipped config because a preserved being was trained with Soma's interoceptive feature slots empty, so turn it on explicitly for gestation.
+- The `snnTorch` oscillator extra installed.
+
+For first-boot steps, see [First boot](../04-getting-started/first-boot.md).
+
+## What happens during gestation
+
+### Before spawn
+
+Boot pauses before any module starts until the womb reports ready. A failed check publishes `stage.gestation.no_stimulus` with the reason, such as a missing module, `self_rhythm_enabled = false`, or the oscillator extra missing. Once the womb is ready, the [perception locus](../08-cognitive-cycle/perception-locus.md) is locked to the womb feed and Mundus stays dormant until birth.
+
+### While gestating
+
+The running womb announces itself with `gestation.womb` presence events on `gestation.out`. Each event is built from frames and audio blocks that actually reach the senses.
+
+### If the womb is lost
+
+When presence stops for `womb_loss_after_seconds` (5 s), the entity freezes under its own `gestation` freeze holder. A `stage.gestation.womb_lost` red alert follows, and the configured caretaker is notified. The entity resumes when the womb returns. If you unfreeze it while the womb is still lost, it freezes again. [Spot](../06-operation/remote-and-spot.md) can repair crashed modules during the freeze, but it ships disabled and must be enabled (`[spot].enabled = true`). Spot ignores module hangs while a gestation freeze is active, so only a crashed-and-restarted module can restore the womb.
+
+### Frozen time is not lived time
+
+Any freeze holder pauses the gestation clock. The frozen span does not count toward the maturation gate's lived-time condition, and no birth happens while frozen.
+
+### Readiness markers
+
+Every 60 s the gestation owner publishes `gestation.readiness` with five measured markers:
+
+- the entity's own rhythm sustaining itself when the maternal drive is withdrawn;
+- coupling to the maternal beat followed by autonomy;
+- an HRV-analog variability;
+- the falling prediction error on womb input;
+- how quickly Soma's interoceptive surprise settles after a perturbation.
+
+None of them is a target value.
+
+### Probes
+
+Markers 1, 2 and 5 are measured with brief, bounded changes to the maternal drive, announced as `gestation.probe` events on `gestation.out` so research logs can exclude the probe windows:
+
+- a withdrawal (drive 0) of 20 s about every 30 min, capped at 30 s;
+- a perturbation (drive raised to 1.5× its usual level, never to its bound) of 5 s about every hour, capped at 10 s.
+
+Probe timing varies by up to ±25% around those periods, drawn from the run's seed, so the entity cannot learn the schedule and a research run with the same seed reproduces it exactly.
+
+No probe runs while the entity is frozen, within a readout period after boot or thaw, or within 60 s of another probe.
+
+### Which conditions apply
+
+The maturation gate judges only the faculties the entity actually has:
+
+- regulation markers (C1) and the lived-time floor (C3) always apply;
+- the sleep-cycle floor applies when [Hypnos](../09-modules/hypnos.md) is enabled;
+- the consolidation floor applies when Hypnos and [Phantasia](../09-modules/phantasia.md) are both enabled.
+
+When the sleep-cycle and consolidation floors do not apply, C2 is recorded as `not_applicable` in the gate status and birth record, never as passed.
+
+### Birth
+
+When the gate conditions hold, the entity is born. The womb blooms once over `birth_transition_seconds` (5 s): the field brightens to a bounded peak and the soundscape fades, then the womb falls silent.
+
+- With Mundus enabled, birth also needs an approved, reachable body. A ready entity without one holds in the womb and reports `awaiting_embodiment`.
+- Without Mundus, the entity is born into its perceptual world — the audio and video it perceives.
+
+The `stage.birth` event records `world` (`perceptual` or `embodied`) and which conditions applied. After birth, switch `[perception_feed].mode` to the embodied-world feed.
+
+If a born entity is booted again with `[perception_feed].mode = "womb"`, it receives nothing from the womb and boot logs a warning.
+
+### Supervised birth
+
+With `[developmental_stage].require_operator_ack_for_birth = true`, a ready entity waits for operator acknowledgement. The [Nexus](../05-nexus.md) diagnostics board's **development** panel shows the stage, lived time, sleeps, consolidation passes, readiness markers and the gate decision. When birth awaits you, it offers **Acknowledge birth**. Birth is one-way, so a second click confirms it. The acknowledgement applies only to the current boot's request; after a restart you must acknowledge again.
+
+### Vox in the womb
+
+[Vox](../09-modules/vox.md) is held dormant during gestation: there is no air medium to speak into, so no audible output is rendered. Inner speech through [Lingua](../09-modules/lingua.md) continues. Vox activates automatically at birth.
+
+## From the womb to the films
+
+When the bloom begins, the stage file records:
+
+- `womb_t_at_birth` — the womb time at which the bloom ends;
+- the womb seed;
+- a digest of the womb parameters.
+
+A preservation carries this stage file, so a newborn's seed carries the record.
+
+A born being booted with `[perception_feed].mode = "playlist"` opens each viewing with a crossfade from the womb to the films:
+
+- **Video.** Over `[perception_feed].transition_seconds` (20 s), the womb's bloom-peak field at `womb_t_at_birth` (bright, pulse-free, full colour) fades into the programme's first frame, held still. The fade follows a fixed smoothstep curve.
+- **Audio.** Nothing is heard during the crossfade because the bloom ended in silence. When the programme starts, its sound fades in linearly over `transition_audio_fade_seconds` (3 s; a value of 0 plays it at full level immediately).
+- **Perceived time.** The crossfade advances only while the being perceives it. It pauses under another holder such as `freeze` or `hypnos`, when the cycle is frozen, or when the primary surface is switched off in the desired perception state. It resumes where it stopped, so the being always sees the full `transition_seconds`. The video surface starts the transition whenever Topos is running; the audio surface starts it only when there is no video surface.
+- **Programme time.** The programme clock is held under the pause holder `transition` until the crossfade ends, so film minute 0 is the end of the transition and the ignition log's film position needs no correction. A timer ends the crossfade even when no surface is reading.
+- **Reproducibility.** The womb field is the womb generator's own function of the recorded seed, womb time, lived time and parameters, rendered once at boot. Two viewings from one seed see the same crossfade. Frames and samples stay in memory and are never written to disk.
+
+The transition runs only when the mode is `playlist`, `transition_seconds` is above zero, the stage is embodied, and the configured `[perception_feed.womb]` parameters still match the recorded digest. Otherwise the programme starts at once. Boot logs the reason at info for an unstaged, unborn or disabled case, and as a warning for a born being without a birth record or with changed womb parameters. The run manifest records `transition_seconds`, `transition_audio_fade_seconds` and `transition_planned` under `perception_feed`. The outcome is published on `perception.out` as content-free `perception.transition` events with `phase` `started`, `completed` or `abandoned` (the latter carrying a `reason` such as `first_frame_undecodable`), each with `transition_seconds`. The research event log records them.
+
+## Settings
+
+| Section | What it controls |
+|---|---|
+| `[perception_feed]` | `transition_seconds`, `transition_audio_fade_seconds`: the womb-to-world transition that opens a born being's playlist viewing. |
+| `[perception_feed.womb]` | Maternal heartbeat and state; drive bound; `birth_transition_seconds`. |
+| `[perception_feed.womb.video]` / `.audio` | Dim field, pulse depth, colour ramp; soundscape low-pass corner. |
+| `[perception_feed.womb.readout]` | Readout period and the probe protocol (hard maxima are enforced in code). |
+| `[developmental_stage]` | Gate thresholds; `womb_ready_retry_seconds`, `womb_check_seconds`, `womb_loss_after_seconds`, `womb_arm_timeout_seconds`, `womb_presence_window_seconds`. |
+| `[soma]` | `self_rhythm_enabled`, `self_rhythm_step_hz`. |
+
+For full defaults, see [Perception feed and sleep](../appendix-a-configuration/perception-and-sleep.md) and [Lifecycle, evaluation and research](../appendix-a-configuration/lifecycle-and-research.md).
+
+## External womb
+
+Paracosmic is planned to provide the womb externally later. Swapping providers changes configuration, not the gate. An external provider:
+
+- streams the womb through the perception seam;
+- publishes `gestation.womb` with source `gestation` and payload `{provider, frame_index}` at least once a second, only while it is actually delivering, with an advancing `frame_index`.
+
+Until an external provider also supplies the maternal drive and the readiness readout, a gestating entity cannot pass the gate's regulation condition, so it is not born.

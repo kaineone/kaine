@@ -45,8 +45,8 @@ Run the suite (fakes stand in for external services):
 ```
 
 The safe offline path (test suite + experiment/benchmark runners, no entity) is
-described in [docs/reproducing-results.md](docs/reproducing-results.md); start at
-[docs/for-researchers.md](docs/for-researchers.md).
+described in [docs/15-experiments/README.md](docs/15-experiments/README.md); start at
+[docs/14-for-researchers.md](docs/14-for-researchers.md).
 
 ## Pull request process
 

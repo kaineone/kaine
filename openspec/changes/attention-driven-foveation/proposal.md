@@ -95,7 +95,7 @@ implement it. The lead reviews this design before any code lands.
   `kaine/modules/topos/module.py` and the salience/forward-model path (spatial
   map + fovea selection + dual-view encode), the perception feed builders in
   `kaine/boot.py` (moderate-res grab + optional native region capture), config
-  `[perception_feed]`/`[topos]`, and `docs/modules/topos.md`. No entity is booted
+  `[perception_feed]`/`[topos]`, and `docs/09-modules/topos.md`. No entity is booted
   by this change.
 - **Encoder cost:** two small encodes (a downsampled peripheral + a native-size
   foveal patch) replace one large uniform encode — comparable or cheaper — but this

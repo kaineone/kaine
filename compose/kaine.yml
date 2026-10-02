@@ -15,7 +15,7 @@
 #
 #   Boot the cognitive cycle — a DELIBERATE, operator-supervised step. The cycle
 #   still refuses to start without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the
-#   research safety net); see FIRST_BOOT.md:
+#   research safety net); see docs/04-getting-started/first-boot.md:
 #     KAINE_CYCLE_OPERATOR_PRESENT=1 \
 #       docker compose -f compose/kaine.yml --profile cycle run --rm kaine-cycle
 #
@@ -193,7 +193,7 @@ services:
 
   # ---- speech-to-text: Speaches / faster-distil-Whisper ------------------
   # Runs on CPU with medium.en — running Speaches on GPU triggers a cuDNN crash
-  # when the secondary GPU also serves TTS (docs/getting-started.md#speaches).
+  # when the secondary GPU also serves TTS (docs/04-getting-started/services.md#speaches-stt).
   # No GPU reservation by design.
   kaine-speaches:
     image: ${KAINE_SPEACHES_IMAGE:-ghcr.io/speaches-ai/speaches:latest-cpu}

@@ -5,7 +5,7 @@ Description=KAINE speech-to-text (Speaches / faster-distil-Whisper)
 
 [Container]
 # CPU-only by design: Speaches on GPU triggers a cuDNN crash when the secondary
-# GPU also serves TTS (docs/getting-started.md#speaches). No AddDevice line.
+# GPU also serves TTS (docs/04-getting-started/services.md#speaches-stt). No AddDevice line.
 ContainerName=kaine-speaches
 Image=ghcr.io/speaches-ai/speaches:latest-cpu
 Network=kaine.network

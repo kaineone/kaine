@@ -121,7 +121,7 @@ def test_cl1_step_states_requirements():
         line=lambda text="": sink(text),
     )
     joined = "\n".join(out)
-    for phrase in ("cl-sdk", "CC BY-NC 4.0", "non-learning", "Cortical Cloud", "docs/cl1.md"):
+    for phrase in ("cl-sdk", "CC BY-NC 4.0", "non-learning", "Cortical Cloud", "docs/19-plugins-and-cl1.md"):
         assert phrase in joined
 
 

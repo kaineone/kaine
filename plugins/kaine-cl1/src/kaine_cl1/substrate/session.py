@@ -27,7 +27,7 @@ class SubstrateConfig:
     """Resolved configuration for a substrate session (mirrors the SDK env knobs)."""
 
     #: "simulator" (default; what we build/validate on) or "hardware" (deliberate,
-    #: reviewed opt-in through the plugin's welfare gate; see docs/cl1.md). The
+    #: reviewed opt-in through the plugin's welfare gate; see docs/19-plugins-and-cl1.md). The
     #: session refuses "hardware" when the SDK reports the simulator.
     target: str = "simulator"
     #: Simulator only. Decouples the loop from wall-clock for fast offline

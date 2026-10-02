@@ -27,7 +27,7 @@ The operator wants the full entity running on this desktop, on a Jetson Orin Nan
   5. run the native or container service bootstrap (`native-services`);
   6. offer the setup wizard.
   - It never starts the entity.
-- **Docs.** A "one command on any host" section in `docs/getting-started.md`, with the per-target table.
+- **Docs.** A "one command on any host" section in `docs/04-getting-started/README.md`, with the per-target table.
 
 ## Depends on
 

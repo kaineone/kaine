@@ -775,7 +775,7 @@ _ARM32_ARCHES = ("armv6", "armv7", "armv6l", "armv7l")
 
 #: The honest capability matrix, per tier. ``present`` / ``degraded`` / ``absent``
 #: name what each tier can and cannot do (openspec deployment-tiers). Rendered by
-#: ``scripts/probe-host`` and mirrored in ``docs/deployment-tiers.md``.
+#: ``scripts/probe-host`` and mirrored in ``docs/07-deployment/README.md``.
 TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
     0: {
         "name": "edge / sensor node",

@@ -1,152 +1,93 @@
-# KAINE Documentation
+# About this book
 
-KAINE is a composite cognitive architecture built on **Predictive Processing**
-and **Global Workspace Theory**: sixteen modules — fourteen predictive cognitive
-modules plus a two-module embodiment layer (**Perception** and **Mundus**) that
-ships inactive — communicate over a Redis-Streams event bus, compete for
-attention in a shared workspace
-(**Syneidesis**), and act through a two-layer safety gate — running ~3.3 times a
-second, entirely on local hardware, persisting no raw sense data.
+This is the documentation for KAINE, written as one book. Read it in order to learn the system from the claim it tests to how to extend it, or jump to the chapter you need. The reference appendices at the end list every configuration key, define the terms, and record licences and the roadmap.
 
-**The project's default, canonical configuration is the base-thesis form**: the
-smallest set of *diverse* predictive processors that can genuinely exercise the
-competition — **Soma**, **Chronos**, **Topos**, and **Audition** — plus the
-affective precision core, **Thymos** (arousal sets the gain on the workspace
-competition and is itself moved by perceptual surprise), and the output-only
-voice, **Lingua** — with Syneidesis and Volition as always-on scaffolding. This
-is not a chatbot; the system is **observed, not conversed with**. Perception
-enters only as prediction error (no transcript path), and Lingua is an
-output-only, self-initiated voice. The remaining ten modules (including the
-two-module embodiment layer) are built, tested, and **gated off** until a
-positive result from the primary experiment, the **workspace-mediation
-ablation** — see [Architecture](architecture.md) for the full picture.
+The chapters are plain Markdown and read fine on GitHub. To read them as a book with a sidebar, search and next/previous pages, install [mdBook](https://rust-lang.github.io/mdBook/) and run `mdbook serve docs` from the repository root; the built book is written to `book/` and is not committed.
 
-This is the entry point to the full documentation. Everything here is reference
-material for operators and contributors; nothing in these pages starts or enables
-the entity (all modules ship disabled). A run is **either** operator-supervised
-**or**, in the unsupervised research phase, verified to have a live autonomous
-safety net before it starts — never neither.
+## Contents
 
-> **New here?** Read [Architecture](architecture.md) for the big picture, then
-> [Getting Started](getting-started.md) to install and bring up a supervised
-> first boot.
+**Understanding KAINE**
 
-## Start here
+- [What KAINE is](01-what-kaine-is.md)
+- [Architecture](02-architecture/README.md)
+  - [Code boundaries](02-architecture/boundaries.md)
+  - [Technology choices](02-architecture/tech-choices.md)
 
-| Doc | What it covers |
-|---|---|
-| [For Researchers](for-researchers.md) | The ethics-first landing page for anyone cloning KAINE to study it: the two paths (offline reproduction vs live entity), the welfare gate, and where to go next |
-| [Reproducing Results](reproducing-results.md) | Path A — the safe offline run: the test suite, the controlled experiment runners, and the benchmarks, none of which boots an entity |
-| [Hardware](hardware.md) | Requirements per path, GPU/VRAM guidance for the 4B organ, the CPU-only fallback, dynamic device selection, and the supporting-service footprint |
-| [Architecture](architecture.md) | The whole system: PP + GWT, the cognitive cycle, the bus, Syneidesis, the safety model, the JAX stack, the module roster |
-| [Getting Started](getting-started.md) | Prerequisites, install, optional extras, supporting services, supervised first boot |
-| [Operations](operations.md) | Running it day-2: the Nexus dashboard, [Spot supervisor](operations.md#module-supervisor-spot), [entity decommission](operations.md#entity-decommission), [research participation](operations.md#research-participation), enabling modules, monitoring predictive signals, troubleshooting |
-| [Dedicated headless host](deployment-headless-host.md) | Turning a Linux machine into a 24/7 appliance: persistent performance profile, verified SSH before the headless switch, swap + Podman + linger reboot survival, and tailnet dashboard reachability without widening binds |
-| [Configuration Reference](configuration.md) | Every `config/kaine.toml` section and key, defaults, and the dependency extras |
-| [Tech Choices](tech-choices.md) | Every major dependency/decision and why (pymdp, DreamerV3, snnTorch, Qdrant, abliterated Qwen, …) and the licensing stance |
-| [Security & Privacy](security-and-privacy.md) | Zero-raw-persistence, encryption at rest, the safety gates, the abliteration welfare veto |
-| [Glossary](glossary.md) | Definitions of KAINE-specific terms and the cognitive-science concepts behind them |
-| [Contributing](contributing.md) | OpenSpec rigor, the dev/test workflow, conventions, and how to add a module |
-| [Licenses](licenses.md) | Dependency license manifest and CAL compatibility |
-| [Research Participation](research-participation.md) | Opt-in numeric-metrics-only research submission: privacy guarantees, bundle contents, and send procedure |
+**Installing and running**
 
-## Modules
+- [Hardware](03-hardware/README.md)
+  - [Accelerators and PyTorch wheels](03-hardware/accelerators.md)
+- [Getting started](04-getting-started/README.md)
+  - [Supporting services](04-getting-started/services.md)
+  - [First boot](04-getting-started/first-boot.md)
+- [Nexus, the dashboard](05-nexus.md)
+- [Day-to-day operation](06-operation/README.md)
+  - [Gestation on one host](06-operation/gestation.md)
+  - [Remote operation and the Spot supervisor](06-operation/remote-and-spot.md)
+  - [Troubleshooting](06-operation/troubleshooting.md)
+- [Choosing a deployment](07-deployment/README.md)
+  - [Containers](07-deployment/containers.md)
+  - [A dedicated headless host](07-deployment/headless-host.md)
 
-Sixteen modules — fourteen predictive cognitive modules plus the two-module
-embodiment layer, **Perception** and **Mundus**, which ships inactive. Each doc
-covers responsibility, inputs/outputs (exact event types and streams),
-configuration, mechanisms, key files, how to enable, and zero-persistence notes.
+**The mind**
 
-**Base-thesis active** (enabled by the `thesis_test` profile, `config/profiles/thesis_test.toml`):
-[Soma](modules/soma.md) ·
-[Chronos](modules/chronos.md) ·
-[Topos](modules/topos.md) ·
-[Audition](modules/audition.md) ·
-[Thymos](modules/thymos.md) ·
-[Lingua](modules/lingua.md)
+- [The cognitive cycle](08-cognitive-cycle/README.md)
+  - [The global workspace](08-cognitive-cycle/global-workspace.md)
+  - [Where perception comes from](08-cognitive-cycle/perception-locus.md)
+- [The modules](09-modules/README.md)
+  - [Audition](09-modules/audition.md)
+  - [Chronos](09-modules/chronos.md)
+  - [Echo](09-modules/echo.md)
+  - [Eidolon](09-modules/eidolon.md)
+  - [Empatheia](09-modules/empatheia.md)
+  - [Hypnos](09-modules/hypnos.md)
+  - [Lingua](09-modules/lingua.md)
+  - [Mnemos](09-modules/mnemos.md)
+  - [Mundus](09-modules/mundus.md)
+  - [Nous](09-modules/nous.md)
+  - [Perception](09-modules/perception.md)
+  - [Phantasia](09-modules/phantasia.md)
+  - [Praxis](09-modules/praxis.md)
+  - [Soma](09-modules/soma.md)
+  - [Thymos](09-modules/thymos.md)
+  - [Topos](09-modules/topos.md)
+  - [Vox](09-modules/vox.md)
+- [Sleep and maintenance](10-sleep/README.md)
+  - [Voice alignment](10-sleep/voice-alignment.md)
 
-Everything else below is **gated** — built and tested, shipped disabled, held
-behind a positive base-thesis result (Perception and Mundus ship inactive
-regardless, as the always-off embodiment layer).
+**Lifecycle, welfare and security**
 
-**Perception & substrate**
-[Soma](modules/soma.md) ·
-[Chronos](modules/chronos.md) ·
-[Topos](modules/topos.md) ·
-[Audition](modules/audition.md) ·
-[Perception (locus)](modules/perception.md)
+- [Preservation and the safety net](11-preservation.md)
+- [Forks and merges](12-forks-and-merges.md)
+- [Security and privacy](13-security-and-privacy.md)
 
-**Cognitive core**
-[Nous](modules/nous.md) ·
-[Mnemos](modules/mnemos.md) ·
-[Eidolon](modules/eidolon.md) ·
-[Phantasia](modules/phantasia.md) ·
-[Empatheia](modules/empatheia.md)
+**Research**
 
-**Affect, expression & regulation**
-[Thymos](modules/thymos.md) ·
-[Lingua](modules/lingua.md) ·
-[Vox](modules/vox.md) ·
-[Praxis](modules/praxis.md) ·
-[Hypnos](modules/hypnos.md)
+- [For researchers](14-for-researchers.md)
+- [Running experiments](15-experiments/README.md)
+  - [The module-ignition study](15-experiments/ignition-study.md)
+- [Run identity and admissibility](16-run-identity.md)
+- [The evaluation sidecar](17-research-data/README.md)
+  - [Research event streams](17-research-data/event-streams.md)
+  - [Research participation](17-research-data/participation.md)
+- [Verification](18-verification.md)
 
-**Embodiment & test**
-[Mundus](modules/mundus.md) ·
-[Echo](modules/echo.md)
+**Extending KAINE**
 
-## Guides
+- [Plugins and CL1](19-plugins-and-cl1.md)
+- [Embodiment adapters](20-embodiment-adapters.md)
+- [Contributing](21-contributing.md)
 
-Developer how-tos for extending KAINE:
+**Reference**
 
-- [Building embodiment adapters for Mundus](guides/embodiment-adapters.md) — give a
-  KAINE entity a new body (a physical robot, a VR/game avatar, a simulator, a custom
-  effector) by implementing the `EmbodimentAdapter` contract; the core never changes.
-- [Module plugins](plugins.md): substitute the model behind a declared module seam
-  from an out-of-tree package, loaded only when the configuration names it.
-- [The optional substrate plugin](cl1.md): run selected modules' forward models on
-  a biological-substrate simulator through `plugins/kaine-cl1`; off by default.
+- [Configuration reference](appendix-a-configuration/README.md)
+  - [Core, cycle and host](appendix-a-configuration/core.md)
+  - [Modules](appendix-a-configuration/modules.md)
+  - [Perception feed and sleep](appendix-a-configuration/perception-and-sleep.md)
+  - [Lifecycle, evaluation and research](appendix-a-configuration/lifecycle-and-research.md)
+  - [Security and Nexus](appendix-a-configuration/security-and-nexus.md)
+- [Glossary](appendix-b-glossary.md)
+- [Licences](appendix-c-licences.md)
+- [Roadmap](appendix-d-roadmap.md)
 
-## Processes
-
-How the modules combine into system-level behavior:
-
-- [Cognitive Cycle](processes/cognitive-cycle.md) — the ~3.3 Hz tick, rates, regulation, freeze
-- [Global Workspace](processes/global-workspace.md) — salience, coalition selection, PLV coherence, volition/intents
-- [Fork / Merge Lifecycle](processes/fork-merge-lifecycle.md) — snapshots, adapter merge, one-sided Nous selection
-- [Sleep & Maintenance](processes/sleep-maintenance.md) — the five-phase fatigue-triggered Hypnos cycle
-- [Perception Locus](processes/perception-locus.md) — physical XOR virtual gating of camera/mic
-- [Voice Alignment](processes/voice-alignment.md) — QLoRA sleep training with the capability-loss + abliteration vetoes
-
-**Research operation & testing**
-
-- [Research Operation](processes/research-operation.md) — an unsupervised research run end to end: mode selection, the safety-net boot gate, the seven experiments, admissibility, the autonomous safety net
-- [Testing Framework](processes/testing-framework.md) — the three validation layers (instrument controls, experiment determinism/isolation, data integrity) and how they map to the seven experiments
-- [Run Identity](processes/run-identity.md) — per-run seed, run id, manifest, deterministic mode, shared verdict schema
-- [Run Admissibility](processes/run-admissibility.md) — completeness gating + log range validation
-- [Evaluation Sidecar](processes/evaluation-sidecar.md) — the read-only observers, the content-free welfare emitter, and instruments
-- [Research Event Streams](research-event-streams.md) — the canonical module-stream registry and the curated, content-free research-log taxonomy
-- [Controlled Experiment Runners](processes/controlled-experiment-runners.md) — A/B divergence, memory coherence, self-model accuracy as seeded offline runners
-- [Oscillatory Ablation](processes/oscillatory-ablation.md) — coherence layer on vs off, controlled
-- [Active-Inference Benchmark](processes/active-inference-benchmark.md) — Nous AIF vs an RL baseline
-- [Multi-Seed Stability](processes/longitudinal-stability.md) — the live/longitudinal nondeterministic control
-- [Enforcement Red-Team](enforcement-red-team.md) — the abliterated-organ action-gate protocol
-
-**Welfare & preservation**
-
-- [Entity Preservation & Revival](processes/entity-preservation.md) — what is preserved, divergence-triggered live preservation, the encrypted bundle, the verified revive path
-
-## Background & design
-
-- KAINE Paper — the architecture's conceptual basis and rationale (maintained in its own repository)
-- [Vision Document](kaine-vision-document.md) — project intent
-- [Architecture Roadmap](history/architecture-roadmap.md) — the (completed) build plan (historical)
-
-## Conventions used in these docs
-
-- Modules ship **disabled** (`[modules].<name> = false`); enabling one is a
-  **local** `config/kaine.toml` edit and is never committed.
-- Event types and stream names in these docs match the code exactly; a module's
-  output stream is `<module>.out`.
-- Diagrams are GitHub-rendered Mermaid; links are relative.
-- Specifications of record live under [`openspec/specs/`](../openspec/specs); when
-  a doc and a spec disagree, the spec wins.
+Dated records (audits, history and shakedown reports) are kept as written in [records](records/README.md).

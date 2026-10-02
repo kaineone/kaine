@@ -1474,7 +1474,7 @@ def main() -> None:
     # voice-alignment GPU trainer (Unsloth Studio on NVIDIA, unsloth-core on AMD)
     # is a SEPARATE environment — never install it into the KAINE runtime venv.
     # For Qwen3.5 support the trainer env also requires transformers v5 (Unsloth
-    # Studio ships 4.x by default). See docs/hardware.md#qwen35-trainer-prerequisites
+    # Studio ships 4.x by default). See docs/03-hardware/README.md#qwen35-trainer-prerequisites
     # for the upgrade command and the mainline-GGUF conversion requirement.
 
     # First-run wizard hand-off. Offer it only interactively (a TTY) and when

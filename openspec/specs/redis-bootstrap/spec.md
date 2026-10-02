@@ -68,7 +68,7 @@ answers `PING` with `PONG`.
 - **THEN** the script leaves that field unchanged
 
 #### Scenario: compose/.env.example does not trip a duplicate-key trap
-- **WHEN** an operator follows the manual SETUP.md steps
+- **WHEN** an operator follows the manual steps in docs/04-getting-started/services.md
 - **AND** they copy `compose/.env.example` to `compose/.env` before appending a real password line
 - **THEN** the resulting file has exactly one active `KAINE_REDIS_PASSWORD=` line, because the example's placeholder is commented out
 

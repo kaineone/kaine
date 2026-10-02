@@ -153,3 +153,6 @@ external/jlens/**/__pycache__/
 # Operator-local compose overlays — host-specific mounts (e.g. a reference-corpus
 # media bind at its absolute host path), never committed.
 compose/*.local.yml
+
+# mdBook output (built locally with `mdbook build docs`)
+/book/

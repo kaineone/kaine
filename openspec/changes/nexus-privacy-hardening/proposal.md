@@ -33,4 +33,4 @@ A read-only security and privacy review of the current `main` branch found that 
 - `kaine/remote/bridge.py`.
 - `config/kaine.toml` defaults for `[evaluation] workspace_trajectory`, `[security.state_encryption] enabled`, and `[nexus]` auth fields.
 - `secrets/state_key` replaced by `secrets/state_key.example` or removed.
-- Operator-facing docs (`docs/operations.md`, `docs/security-and-privacy.md`, `docs/configuration.md`) updated to describe the new auth setup and key provisioning.
+- Operator-facing docs (`docs/05-nexus.md`, `docs/13-security-and-privacy.md`, `docs/appendix-a-configuration/README.md`) updated to describe the new auth setup and key provisioning.

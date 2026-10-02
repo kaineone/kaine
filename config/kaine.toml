@@ -457,7 +457,7 @@ device = "cuda:1"
 # embedding scale instead of an absolute constant tuned to one. MIGRATION NOTE:
 # operators who previously set this as "the change threshold" should re-read it as a
 # small noise floor. Background: the 2026-07-10 GPU shakedown (RTX 4070 SUPER, real
-# 91M weights; docs/shakedowns/internvideo-next-gpu-shakedown.md) measured, on the
+# 91M weights; docs/records/shakedowns/internvideo-next-gpu-shakedown.md) measured, on the
 # seeded feed, routine change <= 0.0004 and genuine scene cuts ~0.008-0.043 — but on
 # the real reference corpus the first base-thesis run stayed FLAT (Topos never
 # alerted on 3830/3830 reports): an absolute threshold mis-scales across content, so
@@ -1089,7 +1089,7 @@ abliteration_probe_path = ""
 # "job_queue" writes the same filesystem job spec and lets the kaine-trainer
 # container service run it asynchronously; used in containerized cycles where
 # the runtime image cannot host unsloth. The external trainer is invoked by path
-# and never imports kaine. See docs/processes/voice-alignment.md.
+# and never imports kaine. See docs/10-sleep/voice-alignment.md.
 trainer_backend = "in_process"
 # Path to the external interpreter for trainer_backend = "subprocess" (e.g. the
 # Unsloth Studio python). Required for that backend; empty + subprocess is a
