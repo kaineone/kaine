@@ -56,11 +56,13 @@
       </main>
     </div>
     {# Right sidebar: Health & services, opposite the left nav rail. Glanceable
-       and scroll-free — compact rows that reveal detail on hover. Empty on pages
-       that don't fill it (collapses so no bare strip shows). #}
+       and scroll-free compact rows. Rendered only
+       when a page actually fills it, so an empty block never leaves a bare strip. #}
+    {% if self.sidebar_right() | trim %}
     <aside class="rail rail--right">
       {% block sidebar_right %}{% endblock %}
     </aside>
+    {% endif %}
   </div>
   {% block scripts %}{% endblock %}
 </body>

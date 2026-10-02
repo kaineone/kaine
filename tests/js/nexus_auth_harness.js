@@ -43,9 +43,9 @@ function makeFakeEventSource() {
     this._listeners = {};
     instances.push(this);
   }
-  FakeES.CONNECTING = 0;
-  FakeES.OPEN = 1;
-  FakeES.CLOSED = 2;
+  Object.defineProperty(FakeES, "CONNECTING", { value: 0, writable: false, enumerable: true, configurable: false });
+  Object.defineProperty(FakeES, "OPEN", { value: 1, writable: false, enumerable: true, configurable: false });
+  Object.defineProperty(FakeES, "CLOSED", { value: 2, writable: false, enumerable: true, configurable: false });
   FakeES.instances = instances;
   FakeES.prototype.addEventListener = function (type, fn) {
     var list = this._listeners[type] || (this._listeners[type] = []);
