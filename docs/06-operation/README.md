@@ -145,6 +145,6 @@ POST /diagnostics/forks   {"parent_id": "<id>", "label": "..."}
 POST /diagnostics/merges  {"snapshot_a_id": "<id>", "snapshot_b_id": "<id>"}
 ```
 
-Optionally add `"world_model_from": "a"|"b"` to choose which parent supplies the Phantasia world model, and the `allow_unmerged_adapters` flag to permit adapters that cannot be merged. If both snapshots carry a Phantasia world model and you do not pass `world_model_from`, the API returns 409. The dashboard merge form has no world-model field, so merges that need that choice only work through the API.
+Optionally add `"world_model_from": "a"|"b"` to choose which parent supplies the Phantasia world model, and the `allow_unmerged_adapters` flag to permit adapters that cannot be merged. If both snapshots carry a Phantasia world model and you do not pass `world_model_from`, the API returns 409. The dashboard merge form's "world model from" choice sets the same field.
 
 **Sleep cycle operationally:** Hypnos consolidation runs in a non-interruptible multi-phase pipeline. During consolidation the cycle continues running, but the Hypnos phase gate blocks other experiential ticks until consolidation completes. On the diagnostics page you will see the tick rate stall briefly while the phases run. Do not stop the cycle during this window.
