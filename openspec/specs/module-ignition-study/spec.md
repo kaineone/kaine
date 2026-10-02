@@ -79,3 +79,10 @@ The ignition analysis SHALL report, for each step, the range of `time_scale` in 
 #### Scenario: An invalid registration is refused
 - **WHEN** `voice_alignment_steps` names an unknown line or a step outside that line's range
 - **THEN** `init` refuses with an error naming the entry
+
+### Requirement: Every study command resolves the study directory the same way
+`init`, `run`, `status` and `analyse` SHALL resolve `--study-dir` under the installed data root in the same way, so a study created by `init` is found by the other commands from any working directory.
+
+#### Scenario: A study is found from another directory
+- **WHEN** a data root is installed, `init` creates `studies/s1`, and `status --study-dir studies/s1` runs from a different working directory
+- **THEN** `status` reads the study `init` created
