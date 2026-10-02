@@ -258,6 +258,7 @@ async def run_with_organ_window(
     controller: Optional[OrganServerController] = None,
     host_describer: Optional[Callable[[], dict[str, Any]]] = None,
     state_path: Path = ORGAN_WINDOW_STATE,
+    trainer_backend: str = "in_process",
 ) -> tuple[Any, OrganWindowResult]:
     """Run ``train`` inside the on-device GPU window and return its result.
 
@@ -285,6 +286,17 @@ async def run_with_organ_window(
             bracketed=False,
             organ_restored=True,
             skipped_reason="multi-GPU host: second device serves the train step",
+        )
+
+    # Job-queue training runs in the trainer service's own container, which
+    # waits until the organ reports it is asleep and the GPU has room; the
+    # cycle has no server of its own to stop.
+    if (trainer_backend or "").strip() == "job_queue":
+        result = await train()
+        return result, OrganWindowResult(
+            bracketed=False,
+            organ_restored=True,
+            skipped_reason="job_queue: the trainer service coordinates with the organ's own sleep",
         )
 
     # Manual mode: the operator performs the reload, so the system must not stop
