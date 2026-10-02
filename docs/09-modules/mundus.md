@@ -114,9 +114,7 @@ The `[mundus]` section is read by `make_mundus` in `kaine/boot.py`. Adapter-spec
 | `min_samples` | `32` | Minimum observed ticks before competence is judged |
 | `window` | `64` | Rolling window of prediction errors; must be at least `min_samples` |
 
-Per-body exposure defaults come from the adapter's descriptor. A transport-backed body defaults world-mutating or consent-sensitive families to off; the operator opts in with `expose_<family>` under `[mundus.<adapter>]`. Continuous channels are also off by default and would be opted in with `expose_<channel>`.
-
-`make_mundus` in `kaine/boot.py` does not pass `continuous_expose`, so an `expose_<channel>` key is treated as a symbolic-family exposure flag. Continuous channels therefore cannot be turned on from configuration and stay off.
+Per-body exposure defaults come from the adapter's descriptor. A transport-backed body defaults world-mutating or consent-sensitive families to off; the operator opts in with `expose_<family>` under `[mundus.<adapter>]`. Continuous channels are also off by default and are opted in with `expose_<channel>`. `make_mundus` routes each `expose_<name>` key by the body's declared channels and families, and refuses any other name.
 
 ## The stub reference body
 

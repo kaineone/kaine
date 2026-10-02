@@ -15,6 +15,7 @@ in a second pass after the others are in the registry.
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -315,9 +316,16 @@ def make_topos(
         kwargs["encoder_pooling"] = str(section["pooling"])
     if "clip_stride" in section:
         kwargs["clip_stride"] = int(section["clip_stride"])
-    # encoder_revision is pinned in the loader (PINNED_REVISION); the config key
-    # is accepted for operator visibility/override but the shipped default relies
-    # on the pinned value, so it is not forwarded as a Topos kwarg here.
+    if "encoder_revision" in section:
+        from kaine.modules.topos.internvideo_next_loader import PINNED_REVISION
+
+        configured = str(section["encoder_revision"]).strip()
+        if configured != PINNED_REVISION:
+            raise ValueError(
+                f"[topos].encoder_revision {configured!r} does not match the pinned "
+                f"InternVideo-Next revision {PINNED_REVISION!r}; the pin decides which "
+                f"vendored code and weights load, so it cannot be changed from configuration"
+            )
     if "device" in section:
         kwargs["device_preference"] = section["device"]
     for k in (
@@ -328,6 +336,15 @@ def make_topos(
     ):
         if k in section:
             kwargs[k] = section[k]
+    if "habituation_window" in section:
+        from kaine.modules.topos.habituation import RollingMeanHabituator
+
+        window = section["habituation_window"]
+        if not isinstance(window, int) or isinstance(window, bool) or window < 2:
+            raise ValueError(
+                "[topos].habituation_window must be an integer of at least 2"
+            )
+        kwargs["habituator"] = RollingMeanHabituator(window=window)
     # Forward prediction knobs
     for k in (
         "forward_prediction",
@@ -2107,6 +2124,18 @@ def make_hypnos(
     ):
         if k in section:
             kwargs[k] = section[k]
+    if "requested_rest_min_interval_s" in section:
+        raw_interval = section["requested_rest_min_interval_s"]
+        if (
+            isinstance(raw_interval, bool)
+            or not isinstance(raw_interval, (int, float))
+            or not math.isfinite(raw_interval)
+            or raw_interval <= 0
+        ):
+            raise ValueError(
+                "[hypnos].requested_rest_min_interval_s must be a number greater than 0"
+            )
+        kwargs["requested_rest_min_interval_s"] = float(raw_interval)
     # [hypnos.consolidation] sub-table: fatigue_triggered, downscale_factor,
     # replay_window_s.  interval_seconds remains the max-interval safety net.
     consolidation = section.get("consolidation") or {}
@@ -2139,7 +2168,7 @@ def make_hypnos(
     # When the operator has opted in (config + env var) AND the
     # `[training]` extras importable, wire the real Unsloth-backed
     # trainer. Otherwise FakeTrainer ships the "no backend" reason.
-    trainer = _resolve_trainer(voice_config)
+    trainer = _resolve_trainer(voice_config, kaine_config)
     if trainer is not None:
         kwargs["trainer"] = trainer
         # On-device GPU window: when a real trainer is wired (voice-alignment
@@ -2172,6 +2201,7 @@ def make_hypnos(
 
 def _resolve_trainer(
     voice_config: Optional["VoiceAlignmentConfig"],
+    kaine_config: dict[str, Any] | None = None,
 ) -> Optional[Any]:
     """Pick a Trainer based on operator opt-in + the configured backend.
 
@@ -2206,7 +2236,7 @@ def _resolve_trainer(
     if backend == "subprocess":
         return _resolve_subprocess_trainer(voice_config)
     if backend == "job_queue":
-        return _resolve_job_queue_trainer(voice_config)
+        return _resolve_job_queue_trainer(voice_config, kaine_config)
 
     try:
         import datasets  # noqa: F401  # type: ignore[import-untyped]
@@ -2294,6 +2324,7 @@ def _resolve_subprocess_trainer(
 
 def _resolve_job_queue_trainer(
     voice_config: "VoiceAlignmentConfig",
+    kaine_config: dict[str, Any] | None = None,
 ) -> Any:
     """Construct the job-queue trainer for the "job_queue" backend.
 
@@ -2317,17 +2348,9 @@ def _resolve_job_queue_trainer(
             f"{timeout_s!r}."
         )
 
-    try:
-        lingua = kaine_config.get("lingua", {})  # type: ignore[name-defined]
-    except NameError:
-        lingua = {}
-    if isinstance(lingua, dict):
-        chat_url = lingua.get("chat_url", "")
-        api_key = lingua.get("api_key", "")
-    else:
-        chat_url = getattr(lingua, "chat_url", "")
-        api_key = getattr(lingua, "api_key", "")
-    api_key = api_key or os.environ.get("KAINE_MODEL_SERVER_API_KEY", "")
+    lingua = (kaine_config or {}).get("lingua") or {}
+    chat_url = str(lingua.get("chat_url", "") or "")
+    api_key = str(lingua.get("api_key", "") or "") or os.environ.get("KAINE_MODEL_SERVER_API_KEY", "")
 
     return JobQueueVoiceTrainer(
         jobs_dir=voice_config.trainer_jobs_dir,
@@ -2408,14 +2431,6 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     adapter_name = str(section.get("adapter", "stub"))
     adapter_section = dict(section.get(adapter_name, {}) or {})
 
-    # `expose_<family>`/`expose_<channel>` keys under the adapter table →
-    # operator exposure overrides on top of the descriptor defaults.
-    expose = {
-        key[len("expose_") :]: bool(value)
-        for key, value in adapter_section.items()
-        if key.startswith("expose_")
-    }
-
     if adapter_name == "stub":
         from kaine.modules.mundus.adapters.stub import StubAdapter
 
@@ -2425,6 +2440,28 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             f"mundus: unknown adapter {adapter_name!r}; no embodiment constructed "
             "(fail-closed). Set [mundus].adapter to a known adapter."
         )
+
+    # `expose_<family>`/`expose_<channel>` keys under the adapter table →
+    # operator exposure overrides on top of the descriptor defaults, routed by the
+    # adapter's declared capabilities.
+    caps = adapter.capabilities()
+    expose: dict[str, bool] = {}
+    continuous_expose: dict[str, bool] = {}
+    for key, value in adapter_section.items():
+        if not key.startswith("expose_"):
+            continue
+        name = key[len("expose_") :]
+        if name in caps.continuous_channels:
+            continuous_expose[name] = bool(value)
+        elif name in caps.action_families:
+            expose[name] = bool(value)
+        else:
+            raise ValueError(
+                f"[mundus.{adapter_name}].{key}: {name!r} is neither a continuous "
+                f"channel nor an action family of the {adapter_name!r} body "
+                f"(channels: {', '.join(caps.continuous_channels) or 'none'}; "
+                f"families: {', '.join(sorted(caps.action_families)) or 'none'})"
+            )
 
     kwargs: dict[str, Any] = {}
     for key in ("mirror_speech", "speech_stream"):
@@ -2461,6 +2498,7 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         adapter=adapter,
         enabled=bool(section.get("enabled", True)),
         expose=expose or None,
+        continuous_expose=continuous_expose or None,
         **kwargs,
     )
 

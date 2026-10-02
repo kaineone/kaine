@@ -245,6 +245,14 @@ Per-run identity, seeding, and manifest for research reproducibility.
 
 Determinism holds for the seeded procedural feed. Under `[perception_feed].mode = "playlist"` the stimulus is paced by the real wall clock, so playlist runs are reproducible by per-item sha256, not bit-for-bit.
 
+## Logging
+
+`[logging]` sets the cycle's log level.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `level` | string | `"INFO"` | Root log level for `python -m kaine.cycle`: `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` (case-insensitive). Any other value refuses boot. |
+
 ## Remote operation
 
 ### Remote bridge

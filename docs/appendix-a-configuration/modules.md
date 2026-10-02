@@ -90,7 +90,7 @@ Topos is the vision module. It embeds short video clips into a motion-aware late
 |---|---|---|---|
 | `encoder_backend` | string | `"internvideo_next"` | Encoder selector: `"internvideo_next"` (default, temporally-native clip) or `"dinov2"` (per-frame Apache-2.0 fallback). |
 | `encoder_model_id` | string | `"revliter/internvideo_next_base_p14_res224_f16"` | Model ID for the active backend. |
-| `encoder_revision` | string | `ff2659b9be360a6b1e94b1eb381778a960da6019` | Accepted by the config loader but ignored at runtime; the loader uses its own pinned revision. A mismatch between that pin and the local weights is a load-time error. |
+| `encoder_revision` | string | `ff2659b9be360a6b1e94b1eb381778a960da6019` | The pinned InternVideo-Next revision. Any other value refuses boot, because the pin decides which vendored code and weights load. |
 | `encoder_local_dir` | string | `"state/models/internvideo_next_base_p14_res224_f16"` | Git-ignored local directory that holds the weights. Runtime loads only from here. |
 | `device` | string | `"cuda:1"` | Compute device for the encoder. Accepts `"auto"`, `"cpu"`, `"cuda"`, or `"cuda:N"`. `resolve_device()` falls back to `cuda:0` on single-GPU hosts, then to `cpu` with a logged warning. |
 
@@ -112,7 +112,7 @@ The real encoder needs the `[internvideo]` extra (`einops`, `timm`, `easydict`).
 | `pooling` | string | `"attention"` | Token pooling: `"attention"` (native pool head) or `"mean"`. |
 | `change_alert_threshold` | float | `1e-4` | Small absolute noise floor for the change alert. The primary criterion is `change_alert_factor` times the rolling mean. |
 | `change_alert_factor` | float | `2.0` | Relative multiplier: a change alerts when it reaches this factor times the rolling-window mean of change scores. |
-| `habituation_window` | integer | `16` | Accepted by the config loader but not forwarded to the habituator; it is silently ignored. |
+| `habituation_window` | integer | `16` | Number of recent embeddings the habituator averages over. At least 2. |
 | `baseline_salience` | float | `0.2` | Salience during expected visual state. |
 | `alert_salience` | float | `0.7` | Salience on unexpected visual change. |
 
@@ -613,7 +613,7 @@ Mundus is the body-agnostic embodiment control plane. It routes perception and a
 
 Three gates must all be true before any action reaches a body: the module toggle `[modules].mundus = true`, the config flag `[mundus].enabled = true`, and the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1`.
 
-When a transport-backed adapter ships, per-family and per-channel exposure flags are read from its `[mundus.<adapter>]` table as `expose_<family>` and `expose_<channel>` booleans.
+Exposure flags are read from the selected adapter's `[mundus.<adapter>]` table as `expose_<name>` booleans. A name the body declares as a continuous channel sets that channel's exposure; a name it declares as an action family sets that family's exposure; any other name refuses boot. With the `stub` body, for example, `expose_drive = true` exposes the `drive` channel.
 
 ### Control surface
 

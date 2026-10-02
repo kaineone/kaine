@@ -206,7 +206,7 @@ port = 5599
 expose_move = true      # symbolic-family exposure override (merged over descriptor defaults)
 ```
 
-The boot code mentions `expose_<channel>` keys, but only the symbolic `expose_<family>` overrides from the adapter table are wired into the core. The continuous per-channel exposure (`continuous_expose`) is a `Mundus` constructor argument and defaults every declared channel to off. To expose continuous channels today, pass `continuous_expose=` where the module is constructed, as the control-surface tests do. Keep the default-off posture: continuous channels are as consequential as world-mutating verbs.
+`make_mundus` routes each `expose_<name>` key by your descriptor: a declared continuous channel goes to continuous exposure, a declared action family to symbolic exposure, and any other name refuses boot with the body's declared names in the error. Every continuous channel defaults to off. Keep that posture: continuous channels are as consequential as world-mutating verbs.
 
 ## Testing a new adapter
 
