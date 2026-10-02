@@ -236,6 +236,9 @@ def require_operator_token(request: Request) -> None:
         log.warning("nexus auth: missing NexusConfig in app.state")
         raise NexusAuthError()
 
+    if config.access == "open":
+        return
+
     expected = config.operator_token
     if not expected:
         # No token configured: every privileged request is rejected.
@@ -297,7 +300,14 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
         return response
 
     @router.get("/login", response_class=HTMLResponse, response_model=None)
-    async def login_page(request: Request) -> HTMLResponse:
+    async def login_page(request: Request) -> HTMLResponse | RedirectResponse:
+        if config.access == "open":
+            return _set_no_store(
+                RedirectResponse(
+                    landing_path(config), status_code=status.HTTP_303_SEE_OTHER
+                )
+            )
+
         error = request.query_params.get("error")
         message = ""
         if error == "1":
@@ -328,6 +338,21 @@ def build_auth_router(config: NexusConfig) -> APIRouter:
             "frame-ancestors 'none'; form-action 'self'"
         )
         return response
+
+    @router.post("/login", response_model=None)
+    async def login_page_post(request: Request) -> RedirectResponse | JSONResponse:
+        if config.access == "open":
+            return _set_no_store(
+                RedirectResponse(
+                    landing_path(config), status_code=status.HTTP_303_SEE_OTHER
+                )
+            )
+        return _set_no_store(
+            JSONResponse(
+                {"detail": "method not allowed"},
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
+        )
 
     @router.post("/auth/login", response_model=None)
     async def login(request: Request) -> RedirectResponse | JSONResponse:

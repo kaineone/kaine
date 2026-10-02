@@ -25,6 +25,12 @@ captures raw audio or video — perception is processed in memory and released.
 | `kaine-study` | the module-ignition study runner (`--profile study`) | none | card 1 |
 | `kaine-trainer` | voice-alignment trainer service (DPO+QLoRA → GGUF) | none | the organ's GPU |
 
+Open `http://127.0.0.1:8088/diagnostics/` on the host to reach `kaine-nexus`.
+By default `[nexus].access` is `"open"`, so no sign-in is required. To require a
+token, add a tailnet host, or change other Nexus settings, use the variables
+`KAINE_NEXUS_ACCESS`, `KAINE_NEXUS_TOKEN`, and `KAINE_NEXUS_EXTRA_HOSTS` in
+`compose/.env`; see [Opening Nexus](operations.md#opening-nexus).
+
 `kaine-nexus`, `kaine-cycle`, and `kaine-study` are the **same image**, different command.
 `kaine-study` keeps its study directories on the `kaine-studies` volume; see
 [operations.md](operations.md#running-the-study-in-the-container).

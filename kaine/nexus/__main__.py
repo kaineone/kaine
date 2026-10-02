@@ -384,7 +384,7 @@ def main() -> int:
                 config.host,
             )
             return 1
-        if not config.operator_token:
+        if config.access == "token" and not config.operator_token:
             log.error(
                 "nexus: refusing to bind non-loopback host %s without a "
                 "configured operator_token (KAINE_NEXUS_TOKEN or "
@@ -392,6 +392,16 @@ def main() -> int:
                 config.host,
             )
             return 1
+
+    if config.access == "open":
+        log.info(
+            "nexus: open access — no sign-in; anyone who can reach this address "
+            "can view and control the entity. Accepted hosts: %s",
+            ", ".join(config.host_allowlist),
+        )
+
+    if config.read_only:
+        log.info("nexus: read-only mode — every control is refused")
 
     uvicorn.run(app, host=config.host, port=config.port)
     return 0

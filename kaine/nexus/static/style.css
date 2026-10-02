@@ -879,24 +879,22 @@ details.board { margin-bottom: 0.2rem; }
 /* ---- Health board ------------------------------------------------------- */
 
 #health .health-list { list-style: none; margin: 0; padding: 0; }
-/* Glanceable compact rows: ONE line each — name+role on the left, status chip on
-   the right. The detail and checked-at collapse to zero height and reveal on
-   hover (smooth grid-row expand), so the board fits the sidebar with no scroll
-   yet every detail is a hover away. */
+/* Health rows: name+role on the left and status chip on the right of the first
+   line; the detail and checked-at time are always shown beneath, so details
+   stay readable and rows still fit the sidebar. */
 #health .health-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-rows: auto 0fr 0fr;    /* rows 2-3 (detail, checked-at) collapsed */
+  grid-template-rows: auto auto auto;
   column-gap: 0.6rem;
   align-items: baseline;
   padding: 0.28rem 0.3rem;
   border-radius: 0 0 0 0.3rem;
   min-width: 0;
-  transition: grid-template-rows 0.18s ease, background 0.12s ease;
+  transition: background 0.12s ease;
 }
 #health .health-row:hover {
   background: var(--panel-2);
-  grid-template-rows: auto 1fr 1fr;    /* reveal detail + checked-at on hover */
 }
 #health .health-row > span:first-child {
   grid-row: 1; grid-column: 1;
@@ -905,19 +903,15 @@ details.board { margin-bottom: 0.2rem; }
 #health .health-row .chip { grid-row: 1; grid-column: 2; justify-self: end; }
 #health .dep-name { font-weight: 600; }
 #health .dep-role { color: var(--fg-dim); font-size: var(--fs-xs); }
-/* Detail + checked-at occupy the collapsing rows below the name line. */
 #health .dep-detail, #health .checked-at {
   grid-column: 1 / -1;
   overflow: hidden;
   min-height: 0;
-  opacity: 0;
+  opacity: 1;
   font-size: var(--fs-xs);
-  transition: opacity 0.18s ease;
 }
 #health .dep-detail { grid-row: 2; color: var(--fg-muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
 #health .checked-at { grid-row: 3; color: var(--fg-dim); }
-#health .health-row:hover .dep-detail,
-#health .health-row:hover .checked-at { opacity: 1; }
 
 .module-grid {
   display: grid;
@@ -950,6 +944,15 @@ details.board { margin-bottom: 0.2rem; }
   border-radius: var(--radius-pill);
   border: 1px solid #5a2a20;
   font-size: var(--fs-sm);
+}
+.readonly-banner {
+  background: var(--bg-2, #3a3a42);
+  color: var(--text-muted, #b0b0b0);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border, #4a4a52);
+  font-size: var(--fs-sm);
+  margin-bottom: 1rem;
 }
 .live-perception-banner {
   background: var(--accent);

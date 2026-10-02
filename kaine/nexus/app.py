@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
+from starlette.responses import JSONResponse, RedirectResponse
 
 from kaine.bus.schema import Event
 from kaine.lifecycle.manager import ForkManager
@@ -21,6 +22,7 @@ from kaine.nexus.auth import (
     SessionStore,
     auth_error_handler,
     build_auth_router,
+    landing_path,
     require_operator_token,
 )
 from kaine.nexus.birth import build_birth_router
@@ -148,6 +150,19 @@ def create_app(
     # are unaffected).
     app.add_middleware(FrameOptionsMiddleware)
 
+    # Read-only mode: refuse any non-safe HTTP method before it reaches a route
+    # handler. This covers every present and future control endpoint.
+    if config.read_only:
+
+        @app.middleware("http")
+        async def read_only_middleware(request, call_next):
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
+                return JSONResponse(
+                    {"detail": "Nexus is in read-only mode: controls are off"},
+                    status_code=403,
+                )
+            return await call_next(request)
+
     # Auth surface: login/logout and the login form. No auth dependencies.
     app.include_router(build_auth_router(config))
 
@@ -199,6 +214,12 @@ def create_app(
         app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
         app.include_router(build_caretaker_router(), dependencies=state_change_dep)
         app.include_router(build_birth_router(), dependencies=state_change_dep)
+
+    if not config.conversation_enabled:
+        @app.get("/", include_in_schema=False)
+        async def root_redirect() -> RedirectResponse:
+            return RedirectResponse(landing_path(config), status_code=307)
+
     return app
 
 

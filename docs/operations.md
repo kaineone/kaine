@@ -11,7 +11,6 @@ have read [Getting Started](getting-started.md) and [Security and Privacy](secur
 
 ```bash
 # Terminal 1 — Nexus dashboard
-export KAINE_NEXUS_TOKEN="$(cat ~/.kaine/nexus-token)"  # or config/secrets.toml
 python -m kaine.nexus
 
 # Terminal 2 — cognitive cycle (operator must be present)
@@ -19,10 +18,8 @@ export KAINE_CYCLE_OPERATOR_PRESENT=1
 python -m kaine.cycle
 ```
 
-Nexus ships bound to loopback and requires `Authorization: Bearer <token>` for
-state-changing endpoints and privileged read surfaces. Set `KAINE_NEXUS_TOKEN`
-before starting, or place the token in `config/secrets.toml` under
-`[nexus] operator_token`.
+Nexus binds to loopback by default. How to reach it, switch to token mode, and
+serve it over your tailnet is covered in [Opening Nexus](#opening-nexus).
 
 A fresh launch always clears any stale freeze left by a previous run; the
 entity always starts running.
@@ -85,11 +82,76 @@ Podman + linger reboot survival, and tailnet dashboard reachability without
 widening binds — see [Dedicated headless host](deployment-headless-host.md).
 The procedure is host-generic; a Jetson Orin Nano Super worked example is included.
 
+
 ---
+
+## Opening Nexus
+
+### Address
+
+Open `http://127.0.0.1:8088/diagnostics/` on the machine running KAINE. The root
+`http://127.0.0.1:8088/` redirects there when the conversation console is off,
+which it is for observed runs and studies. The evaluation tab is at
+`/diagnostics/evaluation/`.
+
+### Access
+
+`[nexus].access` controls who can use the dashboard:
+
+- `"open"` (default): no sign-in. Anyone who can reach the address can view and
+  control the entity (freeze/unfreeze, rates, perception, forks/merges,
+  preservation). Nexus only listens on this computer by default (containers
+  publish it on `127.0.0.1` only), so "anyone" means programs and people on this
+  computer — plus the operator's tailnet if they choose to serve it there. The
+  Host allowlist and Origin checks still block web pages from other sites
+  (including DNS-rebinding attempts) in both modes.
+- `"token"`: an operator token is required (sign-in page, or
+  `Authorization: Bearer <token>` for scripts). Use it whenever Nexus is reachable
+  by anyone you don't fully trust. Override per launch with
+  `KAINE_NEXUS_ACCESS=token`.
+
+### Read-only view
+
+Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make Nexus a
+viewer only: every control request is refused, and a banner says so. Use it
+whenever Nexus watches a research run, because some controls (the cycle rate)
+act on the running entity through its event bus, and any change to a running
+study makes it inadmissible. The study-view overlay sets it.
+
+### Token
+
+In token mode, container launches read `KAINE_NEXUS_TOKEN` from `compose/.env`;
+native launches read `KAINE_NEXUS_TOKEN` from the environment, or
+`[nexus] operator_token` in `config/secrets.toml` (written by
+`python -m kaine.setup`). Print it with:
+
+```bash
+# container
+grep '^KAINE_NEXUS_TOKEN=' compose/.env | cut -d= -f2-
+
+# native
+python -c "import tomllib;print(tomllib.load(open('config/secrets.toml','rb'))['nexus']['operator_token'])"
+```
+
+Lost it? Generate a new one with
+`python -c "import secrets; print(secrets.token_urlsafe(32))"`, put it in the
+same place, and restart Nexus. The browser keeps a sign-in session
+(12 h idle / 24 h max).
+
+### Over your tailnet
+
+On the KAINE machine run `tailscale serve --bg 8088` (tailnet-only, HTTPS
+included, forwards to the local port), then add the machine's tailnet name
+(e.g. `my-machine.tail1234.ts.net`) to `KAINE_NEXUS_EXTRA_HOSTS` — in
+`compose/.env` for containers, or the environment for native launches — and
+restart Nexus. Open `https://<that name>/diagnostics/` from any tailnet device.
+Keep machine names and addresses out of the repository (they belong in
+`compose/.env`, which is never committed). Stop with
+`tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
 
 ## Nexus dashboard tour
 
-Nexus runs at `http://127.0.0.1:8088`. The look is a retro-futurist console evocation —
+Nexus runs at `http://127.0.0.1:8088/diagnostics/`. The look is a retro-futurist console evocation —
 near-black field, slate panels, red reserved for attention.
 
 | Surface | URL | Content policy |

@@ -169,13 +169,14 @@ async def test_diagnostics_returns_404_when_disabled():
 
 
 @pytest.mark.asyncio
-async def test_conversation_returns_404_when_disabled():
+async def test_root_redirects_to_diagnostics_when_conversation_disabled():
     config = NexusConfig(conversation_enabled=False)
     client, app = await _make_client(config=config)
     async with client:
         async with app.router.lifespan_context(app):
             r = await client.get("/", headers={"Authorization": "Bearer test-token"})
-        assert r.status_code == 404
+        assert r.status_code == 307
+        assert r.headers["location"].endswith("/diagnostics/")
 
 
 @pytest.mark.asyncio
