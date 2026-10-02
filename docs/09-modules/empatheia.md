@@ -112,11 +112,11 @@ flowchart TD
     SRC -- no --> MED_ID[agent_id = media:source_label]
     OP_ID --> GET
     MED_ID --> GET
-    GET[store.get(agent_id)] --> NEW{model exists?}
-    NEW -- no --> CREATE[AgentModel(id, label)]
+    GET["store.get(agent_id)"] --> NEW{model exists?}
+    NEW -- no --> CREATE["AgentModel(id, label)"]
     NEW -- yes --> UPD
     CREATE --> UPD[update_from_emotion compute deviation]
-    UPD --> PUT[store.put(model)]
+    UPD --> PUT["store.put(model)"]
     PUT --> AM[publish empatheia.agent_model]
     UPD --> DEV{deviation > threshold?}
     DEV -- yes --> SE[publish empatheia.social_error]
@@ -127,7 +127,7 @@ flowchart TD
     SRC2 -- no --> MED_ID2[agent_id = media:source_label]
     OP_ID2 --> HT
     MED_ID2 --> HT
-    HT[_handle_transcription] --> NEUTRAL[update_from_emotion neutral, conf=0, α=0.2]
+    HT[_handle_transcription] --> NEUTRAL["update_from_emotion neutral, conf=0, α=0.2"]
     NEUTRAL --> PUT
 ```
 
