@@ -219,4 +219,4 @@ def test_thymos_averages_dim_max_drives_unions_goals():
 
 def test_default_strategies_present():
     strats = default_strategies()
-    assert set(strats) == {"mnemos", "nous", "eidolon", "thymos"}
+    assert set(strats) == {"mnemos", "nous", "eidolon", "thymos", "empatheia"}

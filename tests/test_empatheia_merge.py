@@ -6,12 +6,8 @@ from __future__ import annotations
 
 import pytest
 
+from kaine.lifecycle.strategies import EmpatheiaMergeStrategy
 from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.store import (
-    EmpatheiaMergeStrategy,
-    InMemoryAgentStore,
-    apply_merged_state,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -137,45 +133,3 @@ def test_merge_one_none_returns_other():
     assert "profiles" in merged_a
     merged_b = strategy.merge(None, state)
     assert "profiles" in merged_b
-
-
-# ---------------------------------------------------------------------------
-# Persist merged profiles to store
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_merged_profile_persisted_to_store():
-    strategy = EmpatheiaMergeStrategy()
-    model_a = _make_model("henry", ["happy"], n=3)
-    model_b = _make_model("henry", ["sad"], n=7)
-    merged_state = strategy.merge(_store_snapshot(model_a), _store_snapshot(model_b))
-
-    store = InMemoryAgentStore()
-    await store.initialize()
-    await apply_merged_state(store, merged_state)
-
-    recovered = await store.get("henry")
-    assert recovered is not None
-    assert recovered.interaction_count == 10  # 3 + 7
-
-
-@pytest.mark.asyncio
-async def test_all_agents_persisted_after_merge():
-    strategy = EmpatheiaMergeStrategy()
-    # Fork A has "alice"; fork B has "bob"; both have "carol".
-    carol_a = _make_model("carol", ["happy"], n=2)
-    carol_b = _make_model("carol", ["sad"], n=3)
-    state_a = _store_snapshot(_make_model("alice", ["happy"], n=4), carol_a)
-    state_b = _store_snapshot(_make_model("bob", ["sad"], n=6), carol_b)
-    merged_state = strategy.merge(state_a, state_b)
-
-    store = InMemoryAgentStore()
-    await store.initialize()
-    await apply_merged_state(store, merged_state)
-
-    ids = await store.all_ids()
-    assert set(ids) == {"alice", "bob", "carol"}
-    carol = await store.get("carol")
-    assert carol is not None
-    assert carol.interaction_count == 5  # 2 + 3

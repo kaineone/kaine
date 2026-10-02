@@ -5,19 +5,15 @@ from kaine.modules.empatheia.agent import EMOTION_CATEGORIES, AgentModel
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import (
     AgentStore,
-    EmpatheiaMergeStrategy,
     InMemoryAgentStore,
     QdrantAgentStore,
-    apply_merged_state,
 )
 
 __all__ = [
     "AgentModel",
     "AgentStore",
     "Empatheia",
-    "EmpatheiaMergeStrategy",
     "EMOTION_CATEGORIES",
     "InMemoryAgentStore",
     "QdrantAgentStore",
-    "apply_merged_state",
 ]
