@@ -300,7 +300,7 @@ Eight sidecar observers run as async tasks alongside the cycle:
 | `coherence_observer` | `workspace.broadcast` | PLV time series (daily JSONL) |
 | `replay_observer` | `mnemos.out`, `phantasia.out` | Memory IDs (content redacted by default) |
 | `empatheia_observer` | `empatheia.out`, `audition.out` | Agent-model accuracy |
-| `voice_alignment_divergence_observer` | `hypnos.out` | Cosine similarity of DPO pair-divergence trajectory |
+| `voice_alignment_divergence_observer` | `hypnos.out` | Per-sleep voice-alignment outcome and training metrics |
 | `fatigue_observer` | `soma.out` | Fatigue level history |
 | `prediction_error_observer` | `soma.out`, `chronos.out`, `topos.out`, `audition.out`, `phantasia.out` | Sliding-window mean/p95/p99 |
 | `welfare_observer` | `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out` | Gray-zone event counts (also emits content-free `welfare.gray_zone` on `welfare.out`) |

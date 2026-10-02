@@ -568,6 +568,7 @@ class EvaluationConfig:
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
             workspace_trajectory=bool(data.get("workspace_trajectory", cls.workspace_trajectory)),
+            oscillatory_ablation=bool(data.get("oscillatory_ablation", cls.oscillatory_ablation)),
             ab_divergence=bool(data.get("ab_divergence", cls.ab_divergence)),
             ab_sample_rate=float(data.get("ab_sample_rate", cls.ab_sample_rate)),
             voice_tracking=bool(data.get("voice_tracking", cls.voice_tracking)),
