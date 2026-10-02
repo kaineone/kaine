@@ -96,7 +96,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `2` | Operator-present gate: neither `KAINE_CYCLE_OPERATOR_PRESENT=1` nor research mode |
 | `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
-| `5` | Research safety net not live and verified, or the organ content gate refused boot |
+| `5` | Research safety net not live and verified (one or more of the five conditions failed), or the organ content gate refused boot |
 | `6` | Unattended gate: one or more of its eight conditions failed |
 | `7` | Revive refused |
 
