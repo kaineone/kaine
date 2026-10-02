@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from kaine.cycle.__main__ import _load_kaine_config
+import kaine.cycle.__main__ as cycle_main
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SHIPPED_CONFIG = _REPO_ROOT / "config" / "kaine.toml"
@@ -86,7 +86,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
     event loop — and its result is threaded into _boot_and_run, never recomputed
     inside the running loop (where the self-check's asyncio.run() would nest).
     """
-    import kaine.cycle.__main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
 
     calls = {"eval": 0}
@@ -104,7 +104,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         captured["supervision_mode"] = supervision_mode
         captured["gate_checks"] = gate_checks
         return 0
@@ -194,7 +194,7 @@ def test_unattended_conflicts_with_operator_present(tmp_path):
 def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
     """A passing unattended gate threads supervision_mode and all eight
     gate_checks into _boot_and_run."""
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         CONDITION_NAMES,
@@ -225,7 +225,7 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         captured["supervision_mode"] = supervision_mode
         captured["gate_checks"] = gate_checks
         return 0
@@ -245,7 +245,7 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
 
 def test_unattended_refusal_ignores_overrides(monkeypatch):
     """No override switch lets a failing unattended gate proceed."""
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         UNATTENDED_GATE_EXIT_CODE,
@@ -274,7 +274,7 @@ def test_unattended_refusal_ignores_overrides(monkeypatch):
 
     boot_called = {"n": 0}
 
-    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         boot_called["n"] += 1
         return 0
 
@@ -314,7 +314,7 @@ def _write(path: Path, text: str) -> Path:
 def test_qdrant_key_from_secrets_file_is_merged(tmp_path: Path):
     kaine = _write(tmp_path / "kaine.toml", _KAINE_TOML_QDRANT)
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
-    cfg = _load_kaine_config(path=kaine, secrets_path=secrets, env={})
+    cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     # Both qdrant-backed consumers receive the shared key.
     assert cfg["mnemos"]["qdrant"]["api_key"] == "from-secrets"
     assert cfg["empatheia"]["qdrant"]["api_key"] == "from-secrets"
@@ -323,7 +323,7 @@ def test_qdrant_key_from_secrets_file_is_merged(tmp_path: Path):
 def test_qdrant_env_overrides_secrets_file(tmp_path: Path):
     kaine = _write(tmp_path / "kaine.toml", _KAINE_TOML_QDRANT)
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
-    cfg = _load_kaine_config(
+    cfg = cycle_main._load_kaine_config(
         path=kaine, secrets_path=secrets, env={"KAINE_QDRANT_API_KEY": "from-env"}
     )
     assert cfg["mnemos"]["qdrant"]["api_key"] == "from-env"
@@ -333,7 +333,7 @@ def test_qdrant_env_overrides_secrets_file(tmp_path: Path):
 def test_qdrant_key_from_env_when_secrets_file_missing(tmp_path: Path):
     kaine = _write(tmp_path / "kaine.toml", _KAINE_TOML_QDRANT)
     missing = tmp_path / "absent.toml"
-    cfg = _load_kaine_config(
+    cfg = cycle_main._load_kaine_config(
         path=kaine, secrets_path=missing, env={"KAINE_QDRANT_API_KEY": "env-only"}
     )
     assert cfg["mnemos"]["qdrant"]["api_key"] == "env-only"
@@ -343,7 +343,7 @@ def test_qdrant_key_from_env_when_secrets_file_missing(tmp_path: Path):
 def test_qdrant_key_absent_everywhere_injects_nothing(tmp_path: Path):
     kaine = _write(tmp_path / "kaine.toml", _KAINE_TOML_QDRANT)
     secrets = _write(tmp_path / "secrets.toml", "[redis]\npassword = \"x\"\n")
-    cfg = _load_kaine_config(path=kaine, secrets_path=secrets, env={})
+    cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     # No empty key injected -> each module surfaces its own explicit error
     # (covered by tests/test_mnemos_module.py / test_empatheia_module.py).
     assert "api_key" not in cfg["mnemos"]["qdrant"]
@@ -359,7 +359,7 @@ def test_existing_kaine_toml_qdrant_key_left_intact(tmp_path: Path):
     )
     kaine = _write(tmp_path / "kaine.toml", toml)
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
-    cfg = _load_kaine_config(
+    cfg = cycle_main._load_kaine_config(
         path=kaine, secrets_path=secrets, env={"KAINE_QDRANT_API_KEY": "from-env"}
     )
     assert cfg["mnemos"]["qdrant"]["api_key"] == "in-file"
@@ -373,7 +373,7 @@ def test_empatheia_only_qdrant_consumer_still_gets_key(tmp_path: Path):
         '[empatheia]\nbackend = "qdrant"\n\n[empatheia.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',
     )
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
-    cfg = _load_kaine_config(path=kaine, secrets_path=secrets, env={})
+    cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     assert cfg["empatheia"]["qdrant"]["api_key"] == "from-secrets"
 
 
@@ -394,10 +394,8 @@ class _FakeMnemos:
 
 
 def test_eval_provider_factories_none_without_mnemos():
-    from kaine.cycle.__main__ import (
-        _cognitive_query_client_factory,
-        _memory_source_factory,
-    )
+    _cognitive_query_client_factory = cycle_main._cognitive_query_client_factory
+    _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
 
     reg = _FakeRegistry({})
@@ -406,10 +404,8 @@ def test_eval_provider_factories_none_without_mnemos():
 
 
 def test_eval_provider_factories_present_with_mnemos():
-    from kaine.cycle.__main__ import (
-        _cognitive_query_client_factory,
-        _memory_source_factory,
-    )
+    _cognitive_query_client_factory = cycle_main._cognitive_query_client_factory
+    _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
 
     reg = _FakeRegistry({"mnemos": _FakeMnemos()})
@@ -427,7 +423,7 @@ def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
     """
     import logging
 
-    from kaine.cycle.__main__ import main
+    main = cycle_main.main
 
     # Keep this test hermetic: do not inherit mode selectors from the environment.
     for key in (
@@ -472,7 +468,7 @@ def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
 
 
 def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypatch):
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         CONDITION_NAMES,
@@ -509,7 +505,7 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
     ):
         calls.append((section, event))
 
-    async def fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         raise PluginError("plugin load failed")
 
     monkeypatch.setattr(
@@ -532,7 +528,7 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
 
 
 def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.plugins import PluginError
 
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
@@ -546,7 +542,7 @@ def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
     ):
         calls.append((section, event))
 
-    async def fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         raise PluginError("plugin load failed")
 
     monkeypatch.setattr(
@@ -562,3 +558,63 @@ def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
     rc = m.main([])
     assert rc == 1
     assert calls == []
+
+
+def test_cli_profile_config_is_the_one_booted(monkeypatch):
+    """CLI --profile reaches _boot_and_run as the same object the gates saw."""
+    m = cycle_main
+    from kaine.cycle.research_gate import evaluate_research_gate
+
+    monkeypatch.delenv("KAINE_PROFILE", raising=False)
+
+    loader_calls = {"n": 0, "profile": None}
+    loaded: dict[str, object] = {}
+
+    def _loader(profile=None):
+        loader_calls["n"] += 1
+        loader_calls["profile"] = profile
+        cfg = {"research": {"enabled": True}, "_marker": profile}
+        loaded["obj"] = cfg
+        return cfg
+
+    captured: dict[str, object] = {}
+
+    async def _fake_boot(
+        *, supervision_mode="operator", gate_checks=None, revive=None, kaine_config=None
+    ):
+        captured["kaine_config"] = kaine_config
+        return 0
+
+    ok_result = evaluate_research_gate(
+        preservation_enabled=True,
+        welfare_response_wired=True,
+        logging_active=True,
+        self_check_passed=True,
+        encryption_satisfied=True,
+    )
+
+    def _counting_eval(config):
+        return ok_result
+
+    monkeypatch.setattr(m, "_load_kaine_config", _loader)
+    monkeypatch.setattr(m, "_evaluate_research_safety_net", _counting_eval)
+    monkeypatch.setattr(m, "_boot_and_run", _fake_boot)
+
+    rc = m.main(["--profile", "tier1"])
+
+    assert rc == 0
+    assert loader_calls["n"] == 1, "config loader must run exactly once"
+    assert loader_calls["profile"] == "tier1"
+    assert captured["kaine_config"] is loaded["obj"]
+    assert captured["kaine_config"]["_marker"] == "tier1"
+
+
+def test_boot_and_run_loads_config_when_none_given():
+    import inspect
+
+    m = cycle_main
+
+    sig = inspect.signature(m._boot_and_run)
+    param = sig.parameters["kaine_config"]
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY
+    assert param.default is None
