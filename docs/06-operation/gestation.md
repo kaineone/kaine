@@ -14,7 +14,7 @@ Enable gestation in your per-install overlay, `config/kaine.operator.toml`:
 
 - `[developmental_stage].enabled = true` (it is off by default).
 - `[perception_feed].mode = "womb"`.
-- The [Topos](../09-modules/topos.md), [Audition](../09-modules/audition.md) and [Soma](../09-modules/soma.md) modules enabled. The base `thesis_test` profile enables these three modules, but `config/kaine.operator.toml` merges last and wins. The first-run wizard writes a full `[modules]` table there, and its own defaults leave Topos and Audition off, so enable them explicitly for gestation after the wizard has run.
+- The [Topos](../09-modules/topos.md), [Audition](../09-modules/audition.md) and [Soma](../09-modules/soma.md) modules enabled. The base `thesis_test` profile enables these three modules, but `config/kaine.operator.toml` merges last and wins. The first-run wizard writes a full `[modules]` table there; both of its presets enable Topos, Audition and Soma, but a custom module set may not, so check them after the wizard has run.
 - `[soma].self_rhythm_enabled = true`. This is off in the shipped config because a preserved being was trained with Soma's interoceptive feature slots empty, so turn it on explicitly for gestation.
 - The `snnTorch` oscillator extra installed.
 

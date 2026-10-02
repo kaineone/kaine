@@ -312,7 +312,7 @@ def _base_answers(*, want_trainer: str) -> list[str]:
 
     Enables only soma (no lingua/vox/audition prompts), accepts devices.
     """
-    answers = [ACK_PHRASE, "", "", "y"]  # ack, accept device assignments
+    answers = [ACK_PHRASE, "", "", "y", "c"]  # ack, accept device assignments, custom preset
     for m in MODULE_ORDER:
         answers.append("y" if m == "soma" else "n")
     answers.append(want_trainer)  # "set up trainer now?"

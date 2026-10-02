@@ -140,7 +140,11 @@ def test_implied_extras(
 def test_vox_sherpa_onnx_skips_chatterbox_voice_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(wizard, "DEFAULT_MODULE_SET", {"vox": True})
+    monkeypatch.setattr(
+        wizard,
+        "base_thesis_modules",
+        lambda profiles_dir=None: {m: m == "vox" for m in wizard.MODULE_ORDER},
+    )
     shipped = _shipped()
     shipped.setdefault("vox", {})["backend"] = "sherpa_onnx"
     shipped["vox"].pop("predefined_voice_id", None)
@@ -160,7 +164,11 @@ def test_vox_sherpa_onnx_skips_chatterbox_voice_prompt(
 def test_audition_sherpa_onnx_skips_speaches_stt_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(wizard, "DEFAULT_MODULE_SET", {"audition": True})
+    monkeypatch.setattr(
+        wizard,
+        "base_thesis_modules",
+        lambda profiles_dir=None: {m: m == "audition" for m in wizard.MODULE_ORDER},
+    )
     shipped = _shipped()
     shipped.setdefault("audition", {})["backend"] = "sherpa_onnx"
 
