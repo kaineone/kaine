@@ -586,9 +586,9 @@ can find under its `voices/` directory before enabling Vox.
 ### Step 1 — Read the security posture
 
 Read `SECURITY.md` end-to-end, specifically the operator-responsibility items:
-state encryption is off by default, and Nexus relies on its loopback bind plus
-an operator token (the default diagnostics page is readable without signing in;
-every control and the live stream require the token). Decide whether those
+state encryption is off by default. With the default `[nexus].access = "open"`,
+anyone who can reach Nexus can view and control the entity without signing in;
+with `access = "token"`, an operator token is required. Decide whether those
 defaults are appropriate for your deployment before proceeding.
 
 ### Step 2 — Verify preconditions
@@ -681,15 +681,15 @@ In a dedicated terminal:
 python -m kaine.nexus
 ```
 
-The dashboard starts on `http://127.0.0.1:8088`. Leave it running. With the
-cycle not yet up, the diagnostics page reports `cycle_status: not running`.
+The dashboard starts on `http://127.0.0.1:8088/diagnostics/`. Leave it running.
+With the cycle not yet up, the page reports `cycle_status: not running`.
 
-To sign in, use the operator token that `python -m kaine.setup` generated: it is
-the `operator_token` value under `[nexus]` in `config/secrets.toml` (or the
-`KAINE_NEXUS_TOKEN` environment variable, which takes precedence). After signing
-in you land on the conversation console when it is enabled, otherwise on
-diagnostics. If no Redis password is configured yet, Nexus exits with a message
-naming `bash scripts/redis-bootstrap.sh` instead of starting.
+The default `[nexus].access` is `"open"`, so no sign-in is needed. To require an
+operator token or to serve Nexus over your tailnet, see
+[Opening Nexus](operations.md#opening-nexus).
+
+If no Redis password is configured yet, Nexus exits with a message naming
+`bash scripts/redis-bootstrap.sh` instead of starting.
 
 ### Step 5 — Launch the cycle
 

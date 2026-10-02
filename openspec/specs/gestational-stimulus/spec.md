@@ -219,3 +219,10 @@ A perturbation probe SHALL raise the maternal drive only to a configured fractio
 #### Scenario: Jitter never relaxes a bound
 - **WHEN** a jittered probe falls due while the entity is frozen, settling or near another probe
 - **THEN** the probe waits exactly as an unjittered probe would
+
+### Requirement: The womb's state at birth is recorded
+When the birth bloom completes, the stage file SHALL record the womb time at which the bloom ended (`womb_t_at_birth`), the womb seed and a digest of the womb parameters. The womb SHALL report that the bloom is complete, so a preservation taken after that report carries the record.
+
+#### Scenario: A preserved newborn carries its birth state
+- **WHEN** a being is preserved after its birth bloom completed
+- **THEN** the preservation's stage file holds `womb_t_at_birth`, the womb seed and the parameter digest

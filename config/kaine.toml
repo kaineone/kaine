@@ -1559,6 +1559,11 @@ conversation_history_lookback = 50
 # bodies, internal speech, affect reasons) and the page banner says "dev
 # mode" so operators know they are seeing privileged content.
 dev_content_override = false
+# Access mode. "open" = no sign-in, for a Nexus reachable only from this
+# computer (loopback) or the operator's tailnet; "token" = operator token
+# required (use for any wider exposure); the Host allowlist and Origin checks
+# apply in both.
+access = "open"
 # Operator authentication. The token lives ONLY in KAINE_NEXUS_TOKEN or in
 # config/secrets.toml [nexus] operator_token (at least 32 characters); Nexus
 # refuses to start if operator_token appears in this file or in

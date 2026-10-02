@@ -3,7 +3,6 @@
    Statuses/counts/timestamps are non-content and shown regardless of
    dev_content_override. #}
 <section id="health" class="panel span-2">
-  <h2>service &amp; dependency health</h2>
   {% if health and health.dependencies %}
   <ul class="health-list">
     {% for dep in health.dependencies %}

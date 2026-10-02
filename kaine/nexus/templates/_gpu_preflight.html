@@ -4,7 +4,7 @@
    signal — per-device free/total VRAM, any shortfall, what holds the GPU.
    Non-content operational data only. Defensive: missing block → unknown. #}
 <section id="gpu-preflight" class="panel" data-readonly="true">
-  <h2>GPU pre-flight (headroom)</h2>
+  <h3>GPU pre-flight (headroom)</h3>
   {% if gpu_preflight %}
     {% set gp = gpu_preflight %}
     {% set chip = "up" if gp.state == "ok" else ("degraded" if gp.state == "warning" else ("down" if gp.state == "critical" else "unknown")) %}

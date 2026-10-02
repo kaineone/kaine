@@ -59,6 +59,7 @@ The full documentation lives in **[`docs/`](docs/README.md)** — start there.
 - **[Architecture](docs/architecture.md)** — the whole system at a glance
 - **[Getting Started](docs/getting-started.md)** — install + supervised first boot of the base-thesis form
 - **[Operations](docs/operations.md)** — running it, the Nexus dashboard, troubleshooting
+- **[Opening Nexus](docs/operations.md#opening-nexus)** — the dashboard's address, sign-in, and tailnet access
 - **[Configuration](docs/configuration.md)** — every `config/kaine.toml` key
 - **[Modules](docs/README.md#modules)** — per-organ reference
 - **[Tech Choices](docs/tech-choices.md)** · **[Security & Privacy](docs/security-and-privacy.md)** · **[Glossary](docs/glossary.md)** · **[Contributing](docs/contributing.md)**

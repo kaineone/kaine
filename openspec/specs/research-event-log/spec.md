@@ -2,7 +2,9 @@
 
 ## Purpose
 The curated, content-free longitudinal record of a research run — the only stream export-eligible as a metrics bundle.
+
 ## Requirements
+
 ### Requirement: Opt-in durable research event log
 
 The system SHALL provide a `ResearchEventObserver` that subscribes to a
@@ -198,3 +200,51 @@ module docstring of `raw_bus_archive_consumer.py`.
 - **THEN** NO file from `state/research/raw_bus_archive/` SHALL appear in the
   bundle (the metrics-tier loop only reads from `data/evaluation/`)
 
+### Requirement: Research records are kept by default
+
+`retention_days` SHALL ship as `0` in `[evaluation.paths]`,
+`[research_event_log]` and `[research_event_log.raw_archive]`, and the matching
+configuration dataclasses SHALL default to `0` when the key is absent. A value of
+`0` or less SHALL disable the age-based purge, so no daily file is deleted
+automatically. A positive value SHALL still purge daily files older than that
+many days. Disk space is checked before boot by the pre-boot disk-free rows
+instead of by deleting records.
+
+#### Scenario: Shipped config keeps records
+
+- **WHEN** the committed `config/kaine.toml` is loaded
+- **THEN** all three `retention_days` values are `0`
+
+#### Scenario: Absent key keeps records
+
+- **WHEN** the evaluation paths, research event log and raw archive configs are
+  built from empty tables
+- **THEN** each `retention_days` is `0`
+
+#### Scenario: An old research file survives a sink start
+
+- **WHEN** a sink built with `retention_days = 0` starts in a directory holding a
+  daily file older than 30 days
+- **THEN** that file remains on disk
+
+### Requirement: External utterances are recorded locally, and inner speech never
+When `[research_event_log.external_utterances].enabled` is true, the cycle SHALL record each `external_speech` event from `lingua.external`, with its text and timestamps, through the encrypted JSONL sink under `state/research/external_utterances/`. It SHALL NOT subscribe to `lingua.internal`, SHALL NOT record any `internal_speech` event, and SHALL NOT record `user_input`. The log SHALL NOT be export-eligible.
+
+#### Scenario: An inner thought is not recorded
+- **WHEN** Lingua publishes an `internal_speech` event while the log is enabled
+- **THEN** nothing about it is written to the external-utterance log
+
+#### Scenario: An utterance is recorded
+- **WHEN** Lingua publishes an `external_speech` event while the log is enabled
+- **THEN** its text and timestamps are written to the external-utterance log
+
+### Requirement: What Nexus displays is recorded for each run
+When `[research_event_log.nexus_record].enabled` is true, the cycle SHALL record every event on the streams Nexus displays, after the same privacy filter Nexus applies, through the encrypted JSONL sink under `data/nexus_record/`. The record SHALL contain nothing that Nexus's filtered feed does not contain. It SHALL NOT be export-eligible.
+
+#### Scenario: The record matches the display
+- **WHEN** an event on a displayed stream is published during a run with the record enabled
+- **THEN** the record holds the same filtered payload the Nexus bridge sends
+
+#### Scenario: Filtered content stays out
+- **WHEN** an event carries a field the privacy filter removes
+- **THEN** that field does not appear in the record
