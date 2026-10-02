@@ -214,5 +214,5 @@ Every voice-alignment sleep, Hypnos surfaces a content-free metric of how the en
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `consolidation_divergence_rate_threshold` | float | `0.5` | Breadth threshold. |
-| `consolidation_divergence_magnitude_threshold` | float | `0.25` | Depth threshold. |
+| `consolidation_divergence_rate_threshold` | float | `0.5` | Breadth threshold for organ-level divergence, used by the live preservation monitor and the decommission check. |
+| `consolidation_divergence_magnitude_threshold` | float | `0.25` | Depth threshold for organ-level divergence, used by the live preservation monitor and the decommission check. |

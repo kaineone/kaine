@@ -1746,8 +1746,10 @@ async def _boot_and_run(
         PreservationConfig,
         WelfareProtectiveMonitor,
     )
+    from kaine.lifecycle.divergence import consolidation_thresholds_from_config
 
     preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
+    cons_rate, cons_mag = consolidation_thresholds_from_config(kaine_config)
     divergence_monitor = None
     welfare_monitor = None
     if preservation_cfg.divergence_monitor.enabled:
@@ -1767,6 +1769,8 @@ async def _boot_and_run(
             # no individuation crossing counts — fail-closed.
             observations_provider=lambda: cycle.tick_index,
             require_encryption=preservation_cfg.require_encryption,
+            consolidation_rate_threshold=cons_rate,
+            consolidation_magnitude_threshold=cons_mag,
         )
     if supervision_mode == "unattended":
         from kaine.cycle.caretaker import CaretakerConfig

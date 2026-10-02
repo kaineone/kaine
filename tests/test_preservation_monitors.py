@@ -186,7 +186,7 @@ def _div_monitor(bus, registry, fm, cfg, monkeypatch, *, assessments, warmed=Tru
     seq = iter(assessments)
     last = {"v": assessments[-1]}
 
-    def _fake_assess(*, state_root, eval_root):
+    def _fake_assess(*, state_root, eval_root, **_thresholds):
         try:
             last["v"] = next(seq)
         except StopIteration:
