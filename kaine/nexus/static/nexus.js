@@ -727,9 +727,29 @@
         const a = document.getElementById("merge-a").value.trim();
         const b = document.getElementById("merge-b").value.trim();
         const label = document.getElementById("merge-label").value.trim();
+        const worldModelSelect = document.getElementById("merge-world-model");
+        const worldModelFrom = worldModelSelect ? worldModelSelect.value : "";
         if (!a || !b) { setStatus("merge-status", "both snapshot ids required", false); return; }
-        if (!confirm("Merge snapshots " + a + " + " + b + "?")) return;
-        const res = await postJson("/diagnostics/merges", { snapshot_a_id: a, snapshot_b_id: b, label: label });
+        let confirmText = "Merge snapshots " + a + " + " + b + "?";
+        if (worldModelFrom === "a" || worldModelFrom === "b") {
+          confirmText += " (world model from " + worldModelFrom.toUpperCase() + ")";
+        }
+        if (!confirm(confirmText)) return;
+        function mergeErrorDetail(data) {
+          if (!data || data.detail === undefined || data.detail === null) return "";
+          const detail = data.detail;
+          if (typeof detail === "string") return " — " + detail;
+          if (Array.isArray(detail)) {
+            const msgs = detail.map(function (item) { return item && item.msg; }).filter(function (m) { return !!m; }).join("; ");
+            return msgs ? " — " + msgs : "";
+          }
+          return "";
+        }
+        const body = { snapshot_a_id: a, snapshot_b_id: b, label: label };
+        if (worldModelFrom === "a" || worldModelFrom === "b") {
+          body.world_model_from = worldModelFrom;
+        }
+        const res = await postJson("/diagnostics/merges", body);
         if (res.ok) {
           setStatus("merge-status", "merged → " + (res.data && res.data.id), true);
           // The merge response only carries one parent_id; show both source
@@ -738,8 +758,9 @@
           document.getElementById("merge-a").value = "";
           document.getElementById("merge-b").value = "";
           document.getElementById("merge-label").value = "";
+          if (worldModelSelect) worldModelSelect.value = "";
         } else {
-          setStatus("merge-status", "failed: " + res.status, false);
+          setStatus("merge-status", "failed: " + res.status + mergeErrorDetail(res.data), false);
         }
       });
     }
