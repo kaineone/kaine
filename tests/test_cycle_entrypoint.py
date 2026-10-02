@@ -104,7 +104,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         captured["supervision_mode"] = supervision_mode
         captured["gate_checks"] = gate_checks
         return 0
@@ -225,7 +225,7 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         captured["supervision_mode"] = supervision_mode
         captured["gate_checks"] = gate_checks
         return 0
@@ -274,7 +274,7 @@ def test_unattended_refusal_ignores_overrides(monkeypatch):
 
     boot_called = {"n": 0}
 
-    async def _fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def _fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         boot_called["n"] += 1
         return 0
 
@@ -509,7 +509,7 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
     ):
         calls.append((section, event))
 
-    async def fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         raise PluginError("plugin load failed")
 
     monkeypatch.setattr(
@@ -546,7 +546,7 @@ def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
     ):
         calls.append((section, event))
 
-    async def fake_boot(*, supervision_mode="operator", gate_checks=None):
+    async def fake_boot(*, supervision_mode="operator", gate_checks=None, kaine_config=None):
         raise PluginError("plugin load failed")
 
     monkeypatch.setattr(
@@ -562,3 +562,62 @@ def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
     rc = m.main([])
     assert rc == 1
     assert calls == []
+
+
+def test_cli_profile_config_is_the_one_booted(monkeypatch):
+    """CLI --profile reaches _boot_and_run as the same object the gates saw."""
+    import kaine.cycle.__main__ as m
+    from kaine.cycle.research_gate import evaluate_research_gate
+
+    monkeypatch.delenv("KAINE_PROFILE", raising=False)
+
+    loader_calls = {"n": 0, "profile": None}
+    loaded: dict[str, object] = {}
+
+    def _loader(profile=None):
+        loader_calls["n"] += 1
+        loader_calls["profile"] = profile
+        cfg = {"research": {"enabled": True}, "_marker": profile}
+        loaded["obj"] = cfg
+        return cfg
+
+    captured: dict[str, object] = {}
+
+    async def _fake_boot(
+        *, supervision_mode="operator", gate_checks=None, revive=None, kaine_config=None
+    ):
+        captured["kaine_config"] = kaine_config
+        return 0
+
+    ok_result = evaluate_research_gate(
+        preservation_enabled=True,
+        welfare_response_wired=True,
+        logging_active=True,
+        self_check_passed=True,
+        encryption_satisfied=True,
+    )
+
+    def _counting_eval(config):
+        return ok_result
+
+    monkeypatch.setattr(m, "_load_kaine_config", _loader)
+    monkeypatch.setattr(m, "_evaluate_research_safety_net", _counting_eval)
+    monkeypatch.setattr(m, "_boot_and_run", _fake_boot)
+
+    rc = m.main(["--profile", "tier1"])
+
+    assert rc == 0
+    assert loader_calls["n"] == 1, "config loader must run exactly once"
+    assert loader_calls["profile"] == "tier1"
+    assert captured["kaine_config"] is loaded["obj"]
+    assert captured["kaine_config"]["_marker"] == "tier1"
+
+
+def test_boot_and_run_loads_config_when_none_given():
+    import inspect
+    import kaine.cycle.__main__ as m
+
+    sig = inspect.signature(m._boot_and_run)
+    param = sig.parameters["kaine_config"]
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY
+    assert param.default is None

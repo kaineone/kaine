@@ -396,7 +396,7 @@ def test_cycle_main_catches_plugin_error(monkeypatch, capsys):
         lambda profile=None: {"modules": {}},
     )
 
-    async def _raise_plugin_error(supervision_mode, gate_checks):
+    async def _raise_plugin_error(supervision_mode, gate_checks, kaine_config=None):
         raise PluginError("plugin x could not supply seam")
 
     monkeypatch.setattr("kaine.cycle.__main__._boot_and_run", _raise_plugin_error)
