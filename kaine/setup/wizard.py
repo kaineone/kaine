@@ -14,10 +14,12 @@ the operator-config write.
 """
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+import kaine.config
 from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
 from kaine.setup.hardware_steps import (
     consent_step,
@@ -49,28 +51,6 @@ CAL_ARTICLE_4_SUMMARY = (
     "This is a real responsibility. Continue only if you accept it."
 )
 
-# Module enable defaults for a safe, CPU-friendly first boot. Perception, echo,
-# and mundus stay off; the conservative "think to itself first" set is enabled.
-DEFAULT_MODULE_SET: dict[str, bool] = {
-    "soma": True,
-    "chronos": True,
-    "thymos": True,
-    "eidolon": True,
-    "mnemos": True,
-    "nous": False,
-    "lingua": True,
-    "hypnos": False,
-    "topos": False,
-    "praxis": False,
-    "audition": False,
-    "vox": False,
-    "empatheia": False,
-    "phantasia": False,
-    "perception": False,
-    "mundus": False,
-    "echo": False,
-}
-
 # Canonical module order shown to the operator.
 MODULE_ORDER = [
     "soma",
@@ -90,6 +70,40 @@ MODULE_ORDER = [
     "perception",
     "mundus",
 ]
+
+#: Cognitive modules (the embodiment modules Perception and Mundus, and Echo,
+#: which is test infrastructure, are never part of a preset).
+FULL_ENTITY_MODULES: dict[str, bool] = {
+    m: m not in ("perception", "mundus") for m in MODULE_ORDER
+}
+
+
+def base_thesis_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
+    """The [modules] table of the base-thesis profile (config/profiles/thesis_test.toml)."""
+    path = kaine.config.profile_path("thesis_test", profiles_dir=profiles_dir)
+    if not path.is_file():
+        raise FileNotFoundError(f"base-thesis profile not found: {path}")
+    with path.open("rb") as fh:
+        data = tomllib.load(fh)
+    table = data.get("modules")
+    if not isinstance(table, dict):
+        raise FileNotFoundError(f"base-thesis profile has no [modules] table: {path}")
+    modules = {m: bool(table.get(m, False)) for m in MODULE_ORDER}
+    modules["echo"] = False
+    return modules
+
+
+def recommend_preset(rec: Any | None) -> tuple[str, str]:
+    """Return ("full" | "base", reason) for a tier recommendation (or None)."""
+    if rec is None:
+        return "base", "no hardware recommendation is available"
+    tier = getattr(rec, "tier", 0)
+    residency = getattr(rec, "residency_required", False)
+    if tier >= 2 and not residency:
+        return "full", f"this host fits tier {tier} without swapping modules in and out"
+    if tier >= 2 and residency:
+        return "base", f"tier {tier} needs modules swapped in and out to fit"
+    return "base", f"tier {tier} is too small to run every module at once"
 
 
 @dataclass
@@ -666,6 +680,7 @@ def run_wizard(
         out(ctx.extra["relocation_note"] + "\n")
 
     # --- Step 3a: deployment tier recommendation -----------------------------
+    tier_rec = None
     if not defaults and recommend_tier_fn is not None:
         line()
         line("-" * 70)
@@ -676,6 +691,7 @@ def run_wizard(
         except Exception as exc:
             line(f"  Tier recommendation unavailable ({exc}).")
             rec = None
+        tier_rec = rec
         if rec is not None:
             tier_label = getattr(rec, "profile", f"tier{getattr(rec, 'tier', '')}")
             line(f"  Recommended tier: {tier_label}")
@@ -693,6 +709,11 @@ def run_wizard(
                 default=False,
             ):
                 _set(cfg, "deployment", "tier", tier_label)
+    elif defaults and recommend_tier_fn is not None:
+        try:
+            tier_rec = recommend_tier_fn()
+        except Exception:
+            tier_rec = None
 
     # --- Step 3b: accelerator/runtime mismatch check -----------------------
     mismatch_info = _accel_mismatch_step(
@@ -710,17 +731,42 @@ def run_wizard(
     line("-" * 70)
     line("Module selection")
     line("-" * 70)
+    preset, why = recommend_preset(tier_rec)
     modules: dict[str, bool] = {}
+    module_preset = "custom"
     if defaults:
-        modules = {m: DEFAULT_MODULE_SET.get(m, False) for m in MODULE_ORDER}
-        line("[--defaults] minimal safe first-boot set:")
+        modules = FULL_ENTITY_MODULES.copy() if preset == "full" else base_thesis_modules()
+        module_preset = "full entity" if preset == "full" else "base thesis"
+        line(f"[--defaults] module preset: {module_preset} ({why})")
         for m in MODULE_ORDER:
             line(f"  {m} = {str(modules[m]).lower()}")
     else:
-        line("Enable each module? (defaults shown; perception/echo/mundus default off)")
-        for m in MODULE_ORDER:
-            default_on = DEFAULT_MODULE_SET.get(m, False)
-            modules[m] = _ask_yes_no(input_fn, f"  enable {m}?", default=default_on)
+        line(f"Recommended: {'full entity' if preset == 'full' else 'base thesis'} — {why}.")
+        while True:
+            choice = _ask(
+                input_fn,
+                "  modules: [b]ase thesis, [f]ull entity, or [c]ustom?",
+                default="f" if preset == "full" else "b",
+            )
+            first = (choice or "").strip().lower()[:1]
+            if first == "b":
+                modules = base_thesis_modules()
+                module_preset = "base thesis"
+                break
+            if first == "f":
+                modules = FULL_ENTITY_MODULES.copy()
+                module_preset = "full entity"
+                break
+            if first == "c":
+                module_preset = "custom"
+                break
+            line("  Please answer b, f, or c.")
+        if (choice or "").strip().lower()[:1] == "c":
+            # Custom starts from the recommended preset's values.
+            modules = FULL_ENTITY_MODULES.copy() if preset == "full" else base_thesis_modules()
+            line("Enable each module? (defaults shown; perception/echo/mundus default off)")
+            for m in MODULE_ORDER:
+                modules[m] = _ask_yes_no(input_fn, f"  enable {m}?", default=modules.get(m, False))
     # echo is test infrastructure — always off.
     modules["echo"] = False
     cfg["modules"] = dict(modules)
@@ -872,6 +918,7 @@ def run_wizard(
     if not defaults:
         _cl1_substrate_step(cfg, input_fn=input_fn, line=line)
 
+    line(f"Module preset: {module_preset}")
     return WizardResult(
         acknowledged=True,
         config=cfg,
