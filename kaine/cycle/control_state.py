@@ -18,22 +18,28 @@ C2 — stacked freeze sources. The freeze is represented as a stack of entries
 single-slot view (top of stack) exposed via ``frozen``/``frozen_at``/
 ``reason``/``source`` for existing readers, so the on-disk file stays
 backward-compatible. A recovery (e.g. Spot's) may pop only its own entry
-(:func:`pop_freeze`) and never lifts a welfare or operator freeze; a welfare
-freeze is liftable only by an operator stand-down (:func:`unfreeze`) or an
-explicit welfare stand-down (:func:`stand_down` with ``source="welfare"``).
+(:func:`pop_freeze`) and never lifts a welfare or operator freeze. The
+operator's own resume lifts only operator entries via :func:`stand_down` with
+``source="operator"``; welfare, gestation and programme_end entries are lifted
+only by :func:`override` naming them (or an explicit stand-down with the matching
+source). :func:`unfreeze` is reserved for the cycle's own clean boot.
 """
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 CONTROL_PATH = Path("state/cycle/control.json")
+OVERRIDABLE_SOURCES = ("welfare", "gestation", "programme_end")
+SELF_RELEASING_SOURCES = ("spot", "preserve")
+OVERRIDE_AUDIT_PATH = Path("state/cycle/override_audit.jsonl")
 
 
 def _now_iso() -> str:
@@ -71,6 +77,14 @@ class CycleControl:
     # C2: the authoritative stacked freeze sources (oldest first). The legacy
     # single-slot fields above always mirror the top of this stack.
     stack: tuple[dict[str, Any], ...] = ()
+
+    @property
+    def holders(self) -> list[dict[str, Any]]:
+        """Active freeze holders as a content-free list for readers."""
+        return [
+            {"source": e.get("source", "operator"), "frozen_at": e.get("frozen_at")}
+            for e in self.stack
+        ]
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -161,7 +175,8 @@ def pop_freeze(
     A recovery (e.g. Spot's) lifts only its own freeze; a welfare or operator
     freeze lower in the stack remains in force, and the cycle stays frozen
     until the stack empties. Welfare entries are never removed here — only
-    :func:`unfreeze` (operator stand-down) or :func:`stand_down` may lift them.
+    :func:`override`, :func:`stand_down` with the matching source, or
+    :func:`unfreeze` (clean boot) may lift them.
     """
     current = read_control(path)
     stack = [dict(e) for e in current.stack]
@@ -179,13 +194,53 @@ def pop_freeze(
 def stand_down(path: Path | None = None, *, source: str) -> CycleControl:
     """Explicitly lift every freeze entry commanded by ``source``.
 
-    The only paths that may lift a welfare freeze are an operator stand-down
-    (``source="operator"``) and an explicit welfare stand-down
-    (``source="welfare"``).
+    A welfare, gestation or programme_end entry may also be lifted by
+    :func:`override` naming it. An operator stand-down with
+    ``source="operator"`` leaves welfare, gestation and programme_end entries
+    in place.
     """
     current = read_control(path)
     stack = [dict(e) for e in current.stack if e.get("source") != source]
     return _from_stack(stack, path)
+
+
+def override(
+    sources: Sequence[str],
+    path: Path | None = None,
+    *,
+    audit_path: Path | None = None,
+) -> CycleControl:
+    """Lift named overridable freeze entries and append an audit record.
+
+    Only sources in ``OVERRIDABLE_SOURCES`` may be lifted this way. Each named
+    source must have an active entry. The audit record is content-free: it
+    records when the override happened, which sources were lifted, and which
+    holders remained.
+    """
+    sources = list(sources)
+    if not sources:
+        raise ValueError("sources must not be empty")
+    for s in sources:
+        if s not in OVERRIDABLE_SOURCES:
+            raise ValueError(f"source {s!r} is not overridable")
+    current = read_control(path)
+    active_sources = {e.get("source", "operator") for e in current.stack}
+    for s in sources:
+        if s not in active_sources:
+            raise LookupError(f"no active entry for source {s!r}")
+    stack = [dict(e) for e in current.stack if e.get("source") not in sources]
+    new_state = _from_stack(stack, path)
+    record = {
+        "at": _now_iso(),
+        "sources": sorted(sources),
+        "remaining": [h["source"] for h in new_state.holders],
+    }
+    target = resolve(audit_path or OVERRIDE_AUDIT_PATH)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a") as f:
+        f.write(json.dumps(record) + "\n")
+    return new_state
 
 
 def freeze(
@@ -198,7 +253,11 @@ def freeze(
 
 
 def unfreeze(path: Path | None = None) -> CycleControl:
-    """Operator stand-down: lift every active freeze, whatever its source."""
+    """Clean boot: lift every active freeze, whatever its source.
+
+    This is intended for the cycle's own fresh start; Nexus operator resume
+    uses :func:`stand_down` with ``source="operator"`` instead.
+    """
     state = CycleControl()
     write_control(state, path)
     return state

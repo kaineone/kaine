@@ -904,14 +904,83 @@
 
   function attach() {
     var btn = document.getElementById("freeze-toggle");
+    var overrideBtn = document.getElementById("freeze-override");
+    var holdersEl = document.getElementById("freeze-holders");
+    var msg = document.getElementById("freeze-msg");
+    var currentOverridable = [];
     if (!btn) return;
     // Seed the global frame from the server-rendered initial freeze state.
     if (window.NexusRedAlert) NexusRedAlert.set("frozen", btn.dataset.frozen === "true");
+
+    function updateHolders(holders) {
+      holders = holders || [];
+      var sources = holders.map(function (h) { return h.source || h; });
+      if (holdersEl) {
+        holdersEl.textContent = sources.length ? ("held by: " + sources.join(", ")) : "";
+      }
+      currentOverridable = sources.filter(function (s) {
+        return ["welfare", "gestation", "programme_end"].indexOf(s) !== -1;
+      });
+      if (overrideBtn) {
+        if (currentOverridable.length) {
+          overrideBtn.removeAttribute("hidden");
+          overrideBtn.dataset.armed = "false";
+          overrideBtn.textContent = "override " + currentOverridable.join(" + ") + " freeze";
+        } else {
+          overrideBtn.setAttribute("hidden", "");
+        }
+      }
+    }
+
+    // Show the current holders (and the override for protective freezes) on load,
+    // not only after a resume.
+    fetch("/diagnostics/cycle/control")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) updateHolders(d.holders); })
+      .catch(function () { /* the panel still works without it */ });
+
+    if (overrideBtn) {
+      overrideBtn.addEventListener("click", async function () {
+        if (!currentOverridable.length) return;
+        if (overrideBtn.dataset.armed !== "true") {
+          overrideBtn.dataset.armed = "true";
+          overrideBtn.textContent = "confirm: lift " + currentOverridable.join(" + ") + " freeze";
+          return;
+        }
+        overrideBtn.disabled = true; if (msg) msg.textContent = "…";
+        try {
+          var r = await fetch("/diagnostics/cycle/override", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sources: currentOverridable,
+              confirm: currentOverridable.join(","),
+            }),
+          });
+          if (r.ok) {
+            var data = null;
+            try { data = await r.json(); } catch (e) { /* ignore */ }
+            var nowFrozen = data ? !!data.frozen : false;
+            applyFrozen(nowFrozen, data ? data.reason : null);
+            updateHolders(data ? data.holders : []);
+            if (msg) msg.textContent = nowFrozen ? "frozen" : "running";
+          } else {
+            var err = null;
+            try { err = await r.json(); } catch (e) { /* ignore */ }
+            if (msg) msg.textContent = (err && err.detail) ? err.detail : "override failed";
+            overrideBtn.disabled = false;
+          }
+        } catch (e) {
+          if (msg) msg.textContent = "override error";
+          overrideBtn.disabled = false;
+        }
+      });
+    }
+
     btn.addEventListener("click", async function () {
       var frozen = btn.dataset.frozen === "true";
       var reasonEl = document.getElementById("freeze-reason");
       var reason = frozen ? null : ((reasonEl && reasonEl.value) || null);
-      var msg = document.getElementById("freeze-msg");
       // Initiating a freeze (currently running): light the frame optimistically
       // so the operator gets instant feedback before the POST round-trips.
       if (!frozen && window.NexusRedAlert) NexusRedAlert.set("frozen", true);
@@ -927,6 +996,7 @@
           try { data = await r.json(); } catch (e) { /* ignore */ }
           var nowFrozen = data ? !!data.frozen : !frozen;
           applyFrozen(nowFrozen, data ? data.reason : reason);
+          updateHolders(data ? data.holders : []);
           if (msg) msg.textContent = nowFrozen ? "frozen" : "running";
         } else {
           // POST failed — revert the optimistic frame to the real prior state.

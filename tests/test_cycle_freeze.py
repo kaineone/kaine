@@ -112,8 +112,9 @@ async def test_cycle_control_router(tmp_path):
         assert r.status_code == 200 and r.json()["frozen"] is True
         snap = (await client.get("/diagnostics/cycle/control.json")).json()
         assert snap["reason"] == "gpu work"
-        # carries only operational fields — no sensory content keys
-        assert set(snap.keys()) <= {"frozen", "frozen_at", "reason"}
+        # carries only operational fields — no sensory content keys; holders are source-only
+        assert set(snap.keys()) <= {"frozen", "frozen_at", "reason", "holders"}
+        assert "holders" in snap
         r = await client.post(
             "/diagnostics/cycle/freeze",
             json={"frozen": False},
