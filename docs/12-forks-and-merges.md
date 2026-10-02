@@ -64,7 +64,7 @@ If both parents carry trained LoRA adapters and no real adapter merger is availa
 
 ## Per-module merge strategies
 
-`kaine/lifecycle/strategies.py` holds the merge strategies. Each module may register a custom `MergeStrategy`; unregistered modules use `UnionMergeStrategy`.
+`kaine/lifecycle/strategies.py` holds the merge strategies. `default_strategies()` maps Mnemos, Nous, Eidolon, Thymos and Empatheia to their own strategies; `ForkManager(strategies=...)` and `merge(strategies=...)` can override them. Every other module uses `UnionMergeStrategy`.
 
 ### UnionMergeStrategy (default)
 
@@ -113,6 +113,18 @@ Lower entropy wins. Ties go to state A. The merged Nous module state records:
 | `drives` | Per-drive maximum (most activated state wins) |
 | `goals` | Deduplicated union by goal ID; tagged by source fork |
 | `emotional_history` | Concatenated; tagged by source fork |
+
+### EmpatheiaMergeStrategy
+
+Empatheia's state is a set of agent profiles keyed by agent id. A profile present in only one parent is kept as it is. For an agent both parents know:
+
+| Field | Resolution |
+|-------|-----------|
+| `interaction_count` | Sum (both branches saw real interactions) |
+| `emotion_histogram`, `behavioral_summary`, `reliability` | Average weighted by each parent's interaction count |
+| `first_seen` / `last_seen` | Earlier / later of the two |
+
+The merged profiles travel in the merged snapshot. Restoring it loads them into Empatheia's store cache, which `get` and `all_profiles` read before Qdrant; each profile is written to Qdrant on its next update.
 
 ## Adapter merging
 
