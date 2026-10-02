@@ -63,7 +63,7 @@ The full `[lingua]` reference is in the [modules configuration page](../appendix
 |---|---|---|
 | `chat_url` | `"http://127.0.0.1:11434/v1"` | OpenAI-compatible server base URL. Must end in `/v1`; the client posts to `/v1/chat/completions`. |
 | `model_id` | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Served alias of the published KAINE organ. Must be the abliterated variant. |
-| `api_key` | unset | API key sent with requests. Read from the `KAINE_MODEL_SERVER_API_KEY` environment variable. |
+| `api_key` | unset | API key sent with requests. When empty, `KAINE_MODEL_SERVER_API_KEY` is used. The job-queue voice-alignment trainer uses the same key. |
 | `backend` | unset | Optional in-process backend, for example `llama_cpp`. When unset, Lingua talks to the remote server at `chat_url`. |
 | `gguf_path` | unset | Directory containing the local GGUF for an in-process backend. |
 | `gguf_filename` | unset | Filename of the local GGUF for an in-process backend. |

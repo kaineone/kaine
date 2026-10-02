@@ -154,7 +154,7 @@ For containerized deployments, set `trainer_backend = "job_queue"` and point `tr
 
 The `kaine-trainer` service runs under the compose profile `training` (image target `trainer`). It has its own venv with the `[training]` stack and llama.cpp's LoRA converter pinned to the organ's build b9976. It waits until the organ reports it is asleep and the training GPU (`KAINE_TRAINER_GPU`, default the organ's GPU) has free VRAM, then runs the external trainer with the same gates, promotes the vetted adapter atomically inside the job, converts it to `adapter.gguf`, computes `gguf_sha256`, writes `result.json` and `DONE`, and deletes the job's `pairs.jsonl`. The cycle-side `JobQueueVoiceTrainer` verifies the hash on pickup. The service sees only the jobs volume and the read-only models volume: no entity state, no Docker socket, no host ports, and no internet. The cycle then promotes the adapter into the entity's own `adapter_output_dir`.
 
-On the job-queue path the organ's API key comes from `KAINE_MODEL_SERVER_API_KEY`; `[lingua].api_key` is not read there.
+On the job-queue path the trainer authenticates to the organ with Lingua's key: `[lingua].api_key`, or `KAINE_MODEL_SERVER_API_KEY` when that is empty.
 
 #### Module-ignition study integration
 

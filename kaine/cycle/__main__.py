@@ -2205,6 +2205,20 @@ def _record_unattended_gate(
         logger.warning("failed to record unattended gate evaluation", exc_info=True)
 
 
+_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+
+def _apply_log_level(config: dict[str, Any]) -> None:
+    """Set the root log level from [logging].level (default INFO)."""
+    raw = (config.get("logging") or {}).get("level", "INFO")
+    level = str(raw).strip().upper()
+    if level not in _LOG_LEVELS:
+        raise ValueError(
+            f"[logging].level must be one of {', '.join(_LOG_LEVELS)}; got {raw!r}"
+        )
+    logging.getLogger().setLevel(getattr(logging, level))
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -2243,6 +2257,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except Exception as exc:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
+        return 1
+
+    try:
+        _apply_log_level(config)
+    except ValueError as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         return 1
 
     root = install_data_root(config)

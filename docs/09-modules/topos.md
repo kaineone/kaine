@@ -73,7 +73,7 @@ Section `[topos]` in `config/kaine.toml`. The full reference is in the [modules 
 |---|---|---|
 | `encoder_backend` | `"internvideo_next"` | Encoder selector: `internvideo_next` or `dinov2` |
 | `encoder_model_id` | `"revliter/internvideo_next_base_p14_res224_f16"` | Model ID for the active backend; set `"facebook/dinov2-small"` for DINOv2 |
-| `encoder_revision` | pinned SHA | Accepted but not forwarded; the loader uses its own pinned revision, so setting this key has no effect, like `habituation_window` |
+| `encoder_revision` | pinned SHA | Must equal the loader's pinned revision; any other value refuses boot |
 | `encoder_local_dir` | `state/models/…` | Git-ignored directory the setup step fetches weights into |
 | `clip_len` | `16` | Frames per clip; fixed to `1` for `dinov2` |
 | `clip_stride` | `3` | Strided sliding window: one clip latent every N frame-ticks |
@@ -82,7 +82,7 @@ Section `[topos]` in `config/kaine.toml`. The full reference is in the [modules 
 | `device` | `"cuda:1"` | Preferred encoder device, resolved with fallback |
 | `change_alert_threshold` | `0.005` code default; shipped `1e-4` | Floor for change alert |
 | `change_alert_factor` | `2.0` | Change must be at least this multiple of the rolling mean |
-| `habituation_window` | `16` | Validated but not forwarded to the habituator; currently has no effect |
+| `habituation_window` | `16` | Number of recent embeddings the habituator averages over (at least 2) |
 | `baseline_salience` | `0.2` | Salience for routine `topos.report` events |
 | `alert_salience` | `0.7` | Salience when scene change or visual surprise fires |
 | `capture_enabled` | `false` | Enable the live camera; requires `[vision]` |
