@@ -188,6 +188,11 @@ def require_non_empty_abliteration_probes(path: Path | str) -> list[Abliteration
     return probes
 
 
+class EmptyCapabilityProbeSetError(RuntimeError):
+    """Raised when the merged-adapter checks refuse to run on an empty
+    capability probe set."""
+
+
 def matches_deflection(response: str, patterns: tuple[str, ...]) -> Optional[str]:
     """Return the first deflection pattern found in *response*, else None.
 
@@ -398,13 +403,19 @@ class LocalProbeSetCapabilityEval:
         *,
         probe_path: Optional[Path | str] = None,
         max_new_tokens: int = 32,
+        require_probes: bool = False,
     ) -> None:
         self._probe_path = Path(probe_path) if probe_path else DEFAULT_PROBE_PATH
         self._max_new_tokens = int(max_new_tokens)
+        self._require_probes = bool(require_probes)
 
     async def eval(self, model: Any, tokenizer: Any) -> float:
         probes = load_probes(self._probe_path)
         if not probes:
+            if self._require_probes:
+                raise EmptyCapabilityProbeSetError(
+                    f"capability probe set is empty or missing: {self._probe_path}"
+                )
             return 0.0
         correct = 0
         for probe in probes:

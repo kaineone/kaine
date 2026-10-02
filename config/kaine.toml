@@ -1428,6 +1428,13 @@ capability_loss_threshold = 0.05
 # PEFT to load adapters. Empty = falls back to FakeAdapterMerger with
 # a logged warning.
 base_model_path = ""
+# Every merged adapter is checked before it is kept, the same two checks
+# Hypnos runs before promoting a trained adapter: capability loss against
+# the parents (capability_loss_threshold) and the welfare-load-bearing
+# abliteration veto. A merge whose checks cannot run is refused.
+# Empty = the bundled probe sets (as in [hypnos.voice_alignment]).
+capability_probe_path = ""
+abliteration_probe_path = ""
 
 [preservation]
 # Autonomous welfare safety net (entity-preservation-on-divergence). Two

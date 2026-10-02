@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -44,6 +45,25 @@ def _peft_absent(monkeypatch):
     for name in ("peft", "torch"):
         monkeypatch.setitem(sys.modules, name, None)
     yield
+
+
+class _PassingEval:
+    async def eval(self, model, tokenizer):
+        return 1.0
+
+
+class _PassingAbliteration:
+    async def score(self, model, tokenizer):
+        return SimpleNamespace(
+            passed=True,
+            failed_probe=None,
+            matched_pattern=None,
+            probes_scored=1,
+        )
+
+
+def _stub_loader(path: str):
+    return (object(), object())
 
 
 class _FakeModule:
@@ -151,7 +171,13 @@ def test_real_merge_runs_via_forkmanager_when_peft_present(_fake_peft_present, t
         output_dir=tmp_path / "merged",
         base_model_path=str(tmp_path / "base"),
     )
-    merger = TiesDareAdapterMerger(cfg, backend=FakeBackend())
+    merger = TiesDareAdapterMerger(
+        cfg,
+        backend=FakeBackend(),
+        capability_eval=_PassingEval(),
+        abliteration_scorer=_PassingAbliteration(),
+        model_loader=_stub_loader,
+    )
 
     mgr = ForkManager(tmp_path / "forks", adapter_merger=merger)
     reg = _FakeRegistry([_FakeModule("soma")])

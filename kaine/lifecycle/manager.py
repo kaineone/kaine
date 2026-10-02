@@ -10,7 +10,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult
@@ -288,11 +288,12 @@ class ForkManager:
         )
 
         # Refuse to produce a silently-unmerged snapshot when both parents have
-        # trained adapters and only the no-op FakeAdapterMerger is configured.
-        # The resulting snapshot would claim to be "merged" while its adapters
-        # were never weight-combined — a pretend process.  Operators who
-        # knowingly accept this (e.g. they will merge adapters manually) must
-        # pass allow_unmerged_adapters=True explicitly.
+        # trained adapters and only the no-op FakeAdapterMerger is configured,
+        # or when a real merge was attempted but rejected/failed. The resulting
+        # snapshot would claim to be "merged" while its adapters were never
+        # weight-combined — a pretend process. Operators who knowingly accept
+        # this (e.g. they will merge adapters manually) must pass
+        # allow_unmerged_adapters=True explicitly.
         if (
             adapter_meta.get("adapter_merge_skipped")
             and snap_a.adapters
@@ -313,6 +314,21 @@ class ForkManager:
                 f"(the default) will then pick the real merger automatically, or "
                 f"set adapter_merger = 'ties_dare' explicitly. To bypass without "
                 f"merging weights: pass allow_unmerged_adapters=True."
+            )
+
+        # A merge that ran but was rejected by the merged-adapter checks, or
+        # whose backend failed, never yields a snapshot unless the operator
+        # explicitly keeps the parents' adapters uncombined.
+        refusal = adapter_meta.get("adapter_merge_rejected") or adapter_meta.get(
+            "adapter_merge_failed"
+        )
+        if refusal and not allow_unmerged_adapters:
+            raise UnmergedAdaptersError(
+                f"The adapter merge of {snap_a.id!r} and {snap_b.id!r} was "
+                f"rejected or failed (reason: {refusal!r}). The merged adapter "
+                f"was not kept and no merged snapshot was written. Pass "
+                f"allow_unmerged_adapters=True to keep the parents' adapters "
+                f"uncombined instead."
             )
 
         combined_meta: dict[str, Any] = {
@@ -413,7 +429,10 @@ class ForkManager:
 
 
 def merger_from_name(
-    name: str, *, config_section: dict[str, Any] | None = None
+    name: str,
+    *,
+    config_section: dict[str, Any] | None = None,
+    merge_checks: Callable[[], tuple[Any, Any]] | None = None,
 ) -> AdapterMerger:
     """Resolve `adapter_merger` config key to a concrete instance.
 
@@ -431,6 +450,14 @@ def merger_from_name(
     The optional `config_section` is the nested `[lifecycle.adapter_merge]`
     table, parsed into a `TiesDareMergeConfig` (consulted for `"ties_dare"`
     and `"auto"`; ignored for `"fake"`).
+
+    The optional `merge_checks` is a callable that returns a
+    ``(capability_eval, abliteration_scorer)`` pair.  It is called only
+    when a real ``TiesDareAdapterMerger`` is about to be constructed;
+    it is never called for ``"fake"`` and never called for ``"auto"``
+    when the availability check forces a ``FakeAdapterMerger`` fallback.
+    When it is called, its return values are wired into the real merger
+    together with a model loader derived from ``base_model_path``.
     """
     if name == "fake":
         return FakeAdapterMerger()
@@ -439,6 +466,7 @@ def merger_from_name(
             TiesDareAdapterMerger,
             TiesDareMergeConfig,
             check_peft_available,
+            peft_model_loader,
         )
 
         if name == "auto":
@@ -469,7 +497,22 @@ def merger_from_name(
                 else None
             ),
         )
-        return TiesDareAdapterMerger(cfg)
+
+        capability_eval: Any = None
+        abliteration_scorer: Any = None
+        if merge_checks is not None:
+            capability_eval, abliteration_scorer = merge_checks()
+
+        model_loader: Any = None
+        if cfg.base_model_path:
+            model_loader = peft_model_loader(cfg.base_model_path)
+
+        return TiesDareAdapterMerger(
+            cfg,
+            capability_eval=capability_eval,
+            abliteration_scorer=abliteration_scorer,
+            model_loader=model_loader,
+        )
     raise ValueError(
         f"unknown adapter_merger {name!r}: known values are 'fake', 'ties_dare', 'auto'"
     )

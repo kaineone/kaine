@@ -394,7 +394,8 @@ def build_diagnostics_router(
             if not is_valid_snapshot_id(snapshot_id):
                 raise HTTPException(422, f"invalid {name}: {snapshot_id!r}")
         try:
-            snap = fork_manager.merge(
+            snap = await asyncio.to_thread(
+                fork_manager.merge,
                 body.snapshot_a_id,
                 body.snapshot_b_id,
                 label=body.label,

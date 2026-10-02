@@ -166,8 +166,24 @@ def _build_fork_manager(
         lifecycle_cfg = lifecycle_cfg_loader()
         adapter_merger_name = str(lifecycle_cfg.get("adapter_merger", "auto"))
         adapter_merge_section = lifecycle_cfg.get("adapter_merge") or {}
+
+        def _merge_checks_factory():
+            from kaine.modules.hypnos.capability_eval import (
+                AbliterationProbeScorer,
+                LocalProbeSetCapabilityEval,
+            )
+
+            p = str(adapter_merge_section.get("capability_probe_path", "")).strip()
+            q = str(adapter_merge_section.get("abliteration_probe_path", "")).strip()
+            return (
+                LocalProbeSetCapabilityEval(probe_path=p or None, require_probes=True),
+                AbliterationProbeScorer(probe_path=q or None),
+            )
+
         adapter_merger = merger_from_name(
-            adapter_merger_name, config_section=adapter_merge_section
+            adapter_merger_name,
+            config_section=adapter_merge_section,
+            merge_checks=_merge_checks_factory,
         )
         snapshots_path = str(resolve(lifecycle_cfg.get("snapshots_path", "state/forks")))
         _warn_ignored_snapshot_retention(lifecycle_cfg)

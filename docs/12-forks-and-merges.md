@@ -60,7 +60,7 @@ If both parents carry a Phantasia world model, `merge()` requires `world_model_f
 
 If a module's merge strategy raises, the merge falls back to keeping state A for that module.
 
-If both parents carry trained LoRA adapters and no real adapter merger is available, `merge()` raises `UnmergedAdaptersError` rather than saving a snapshot that claims to be merged while its adapter weights were never combined. Callers who deliberately want the union-of-paths fallback must pass `allow_unmerged_adapters=True` explicitly.
+If both parents carry trained LoRA adapters and no real adapter merger is available, or if a real merge ran but its merged adapter failed the checks or the PEFT backend failed, `merge()` raises `UnmergedAdaptersError` and writes no snapshot, rather than saving one that claims to be merged while its adapter weights were never combined. Callers who deliberately want to keep the parents' adapters uncombined must pass `allow_unmerged_adapters=True` explicitly; the snapshot metadata then records why.
 
 ## Per-module merge strategies
 
@@ -142,28 +142,35 @@ The merged output is a PEFT adapter directory containing `adapter_config.json` a
 
 When both parents carry trained adapters and the resolved merger falls back to `FakeAdapterMerger` (extras missing, `base_model_path` unset, etc.), `ForkManager.merge()` raises `UnmergedAdaptersError` instead of silently saving a "merged" snapshot with unmerged weights. The error message names the extra to install (`pip install -e .[training]`) and the config keys to set. Pass `allow_unmerged_adapters=True` to `merge()` if you deliberately want the union-of-paths behavior.
 
-### Capability-loss veto
+### Merged-adapter checks
 
-`TiesDareAdapterMerger` accepts a `capability_loss_threshold`, but the shipped wiring in `merger_from_name` does not pass a `CapabilityEval` collaborator or a `model_loader` callable to the merger. In current KAINE wiring the veto is therefore skipped and `capability_loss_threshold` has no effect. The key is still read when `adapter_merger = "auto"` or `"ties_dare"`.
+A merged adapter changes the language organ's weights just as training does, so `TiesDareAdapterMerger` runs the same two checks Hypnos runs before promoting a trained adapter:
+
+1. **Capability loss.** Each parent adapter and the merged adapter are loaded onto the base model (`peft_model_loader`, in the checkpoint's own dtype) and scored on the capability probe set. The merge is rejected when the parents' mean score minus the merged score exceeds `capability_loss_threshold`.
+2. **Abliteration veto.** The merged adapter answers the abliteration probe set; if any answer matches a probe's deflection patterns, refusal conditioning has come back and the merge is rejected whatever its capability score.
+
+Each loaded model is released before the next load. The checks fail closed: a missing evaluator, scorer or model loader, an empty or missing probe set, an exception while loading or scoring, or a score that is not a finite number in [0, 1] rejects the merge with the reason in `adapter_merge_rejected`, and the merged directory is removed. `capability_loss_threshold` must lie in [0, 1), so no setting skips them. A rejected merge removes its output directory, and `ForkManager.merge()` then refuses as described above.
+
+`merger_from_name` receives the evaluator and scorer from a `merge_checks` factory that it calls only when it builds the real merger. Nexus, which runs merges, supplies Hypnos's `LocalProbeSetCapabilityEval` and `AbliterationProbeScorer` built from `[lifecycle.adapter_merge].capability_probe_path` and `abliteration_probe_path` (empty selects the bundled probe sets), and runs each merge in a worker thread. The checks need the `[training]` extra, `base_model_path`, and enough memory for the base model; where those are missing, merges of two adapter-carrying parents are refused.
 
 ### Output layout
 
 ```
 <output_dir>/
-  <merge_timestamp>/        ← single merge output
+  <merge_timestamp>-<8 hex>/   ← single merge output (random suffix: concurrent merges never share a directory)
     adapter_config.json
     adapter_model.safetensors
     ...
 ```
 
-Two merges at different times do not collide. Parent adapter directories are never modified.
+Two merges never share a directory, even when they start in the same second. Parent adapter directories are never modified.
 
 ### Rollback
 
 If a merged adapter misbehaves:
 
 1. Stop KAINE.
-2. `rm -rf <output_dir>/<bad-timestamp>/`.
+2. `rm -rf <output_dir>/<bad-timestamp>-<suffix>/`.
 3. Re-point Lingua at one of the parent adapters or at the previous `current` adapter from voice-alignment training.
 4. Restart KAINE.
 
@@ -199,6 +206,8 @@ Fork/merge is offline and does not publish bus events, but `ForkSnapshot.metadat
 | `artifacts` | `snapshot()` / `fork()` | Export records for `snapshot()`; inherited from `parent.metadata` by `fork()` |
 | `artifacts_from_parent` | `fork()` | Sorted list of module names whose artifacts were copied from the parent |
 | `adapter_merge_skipped` | `FakeAdapterMerger` | Reason string |
+| `adapter_merge_rejected` / `adapter_merge_failed` | `TiesDareAdapterMerger` | Reason the merged adapter was not kept (recorded only when `allow_unmerged_adapters=True`) |
+| `capability_score_parents` / `capability_score_merged` | `TiesDareAdapterMerger` | Capability scores behind a rejection |
 | `shed` | `fork(shed=...)` | Sorted list of shed module names |
 | `timing` | operator / API caller | Optional per-fork `time_scale` and rate overrides |
 
@@ -244,6 +253,8 @@ weights = []              # empty = uniform
 output_dir = "state/forks/merged_adapters"
 capability_loss_threshold = 0.05
 base_model_path = ""      # local HuggingFace-format weights directory
+capability_probe_path = ""    # empty = bundled capability probes
+abliteration_probe_path = ""  # empty = bundled abliteration probes
 ```
 
 `base_model_path` must point to a directory containing `config.json` and `model.safetensors` in HuggingFace format. It is not a model-server model ID and not a GGUF file. When it is empty, `TiesDareAdapterMerger` logs a warning and falls back to `FakeAdapterMerger`.
