@@ -86,7 +86,7 @@ Enabling `self_rhythm_enabled` requires the `oscillator` extra (`snnTorch`). In 
 
 ```mermaid
 graph TD
-    SysMetrics["SystemMetricsReader\n(psutil + pynvml)"] -->|read_metrics()| SomaTick["Soma.tick_once()"]
+    SysMetrics["SystemMetricsReader\n(psutil + pynvml)"] -->|"read_metrics()"| SomaTick["Soma.tick_once()"]
     CycleOut["cycle.out / cycle.tick\n(wall_duration_ms)"] -->|rolling avg| SysMetrics
     HypnosOut["hypnos.out"] -->|sleep.started / completed| SomaTick
 

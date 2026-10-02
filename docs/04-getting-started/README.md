@@ -48,8 +48,6 @@ Every runtime service is local. Model weights download from public repositories 
 | Speaches | STT for Audition (`medium.en`) | `127.0.0.1:8000` |
 | Chatterbox TTS | Voice synthesis for Vox | `127.0.0.1:8883` |
 
-Redis 7.2 (the `redis:7.2-alpine` image KAINE uses) is BSD-3-Clause. RSALv2/SSPL applies only from Redis 7.4.
-
 If no profile is selected, the loader applies the `thesis_test` profile automatically. That profile turns Soma, Chronos, Topos, Audition, Lingua, and Thymos on and disables every other module. It also sets `[perception_feed]` to `seeded` with seed 0, `[topos].foveation = true`, `[audition].transcription_enabled = false` with `general_audition = true`, and `[volition] policy="self_initiated_report"`, `drive_initiative=false`, `sig_expiry_s=300.0`. Every other value comes from the shipped `config/kaine.toml`.
 
 `config/kaine.operator.toml` merges last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's.

@@ -10,12 +10,12 @@ Both gates must be open before any training fires. Missing either gate returns a
 
 ```mermaid
 flowchart TD
-    A[Hypnos Phase 5 begins] --> B{Config gate:\n[hypnos.voice_alignment]\nenabled = true?}
-    B -- no --> C[Skip — log reason\nReturn clean PhaseResult\ntraining_skipped=true]
-    B -- yes --> D{Env gate:\nKAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1?}
+    A[Hypnos Phase 5 begins] --> B{"Config gate:\n[hypnos.voice_alignment]\nenabled = true?"}
+    B -- no --> C["Skip — log reason\nReturn clean PhaseResult\ntraining_skipped=true"]
+    B -- yes --> D{"Env gate:\nKAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1?"}
     D -- no --> C
-    D -- yes --> E{base_model_path\nset and valid?}
-    E -- no --> F[Return clean PhaseResult\nreporting the failure]
+    D -- yes --> E{"base_model_path\nset and valid?"}
+    E -- no --> F["Return clean PhaseResult\nreporting the failure"]
     E -- yes --> G[Proceed to DPO pair building]
 ```
 
