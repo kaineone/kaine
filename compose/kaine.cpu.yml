@@ -40,3 +40,19 @@ services:
       resources:
         reservations:
           devices: []
+  kaine-study:
+    image: ${KAINE_IMAGE:-kaine:cpu}
+    build:
+      args:
+        FLAVOR: cpu
+    deploy:
+      resources:
+        reservations:
+          devices: []
+  # Voice-alignment training needs a GPU; on a CPU host the trainer service's own
+  # device check refuses to train. The reservation is dropped so the stack renders.
+  kaine-trainer:
+    deploy:
+      resources:
+        reservations:
+          devices: []

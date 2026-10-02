@@ -246,10 +246,10 @@ async def preserve_live(
     # individual incl. memories — plus phantasia learned weights) is tarred and,
     # when state encryption is enabled, the tar is encrypted via StateEncryptor;
     # the plaintext originals are removed on success. Only the NON-sensitive
-    # manifest stays loose. When encryption is DISABLED (the shipped default) the
-    # tar is plaintext (bundle.tar) — the same disabled-default at-rest risk the
-    # rest of the state tree carries; operators enable [security.state_encryption]
-    # to encrypt at rest. S8: the operator-supplied label is sanitised before it
+    # manifest stays loose. The shipped configuration enables encryption (and
+    # refuses to boot without a key); when an operator disables it the tar is
+    # plaintext (bundle.tar), the same at-rest risk the rest of the state tree
+    # then carries. S8: the operator-supplied label is sanitised before it
     # is written into the manifest.
     safe_label = _safe(label) if label else ""
     bundle_dir = bundle_dir_for(out_root, preservation_id, entity_name)

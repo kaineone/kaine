@@ -108,8 +108,9 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    study_dir = resolve(Path(args.study_dir))
     try:
-        runner = StudyRunner(args.study_dir)
+        runner = StudyRunner(study_dir)
         runner.run(retry_failed=args.retry_failed)
         print("Study complete")
         return 0
@@ -139,10 +140,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
+    study_dir = resolve(Path(args.study_dir))
     # Re-validate the plan is readable, then show progress.
-    _ = load_plan(args.study_dir)
+    _ = load_plan(study_dir)
     try:
-        runner = StudyRunner(args.study_dir)
+        runner = StudyRunner(study_dir)
     except StudyError as exc:
         print(f"Cannot read study: {exc}", file=sys.stderr)
         return 2
@@ -151,7 +153,8 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_analyse(args: argparse.Namespace) -> int:
-    json_path, md_path = analysis.run_analysis(args.study_dir)
+    study_dir = resolve(Path(args.study_dir))
+    json_path, md_path = analysis.run_analysis(study_dir)
     print(f"Wrote analysis report to {json_path} and {md_path}")
     return 0
 
