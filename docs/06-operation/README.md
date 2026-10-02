@@ -25,7 +25,7 @@ The launch above is the operator-supervised path: a human is the safety net. KAI
 
 The diagnostics page has a "cycle control" panel with "freeze cycle" and "resume cycle" buttons. While frozen, the cycle stops ticking but the process stays up. A frozen state is not persisted across restarts; a fresh launch clears any stale freeze and the cycle starts running.
 
-Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button calls `unfreeze()`, which releases every holder at once. Non-operator holders can also be released individually through their own mechanisms (`pop_freeze` / `stand_down`).
+Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. Spot and preservation release their own entries. A `welfare`, `gestation` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
 
 ### Normal stop
 

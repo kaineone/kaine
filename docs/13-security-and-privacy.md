@@ -225,7 +225,7 @@ Nexus serves the operator web UI and diagnostics surface. By default it binds to
 
 `[nexus].access` controls who can use the dashboard:
 
-- `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/unfreeze, rates, perception, forks/merges, preservation). Nexus only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer—plus the operator's tailnet if they choose to serve it there.
+- `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). Nexus only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer—plus the operator's tailnet if they choose to serve it there.
 - `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever Nexus is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
 
 Host and Origin checks apply in both modes. Every request's `Host` must be in `[nexus].host_allowlist` (default `127.0.0.1`, `localhost`, `::1`); state-changing requests that carry an `Origin` must match `[nexus].allowed_origins` (default: derived from `port`). Setting either option replaces its default, so list the loopback names too when adding a tailnet host or reverse-proxy hostname.

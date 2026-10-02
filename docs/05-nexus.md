@@ -193,16 +193,25 @@ Controls only appear when their backend is wired — for example, the rate contr
 
 Use freeze when the environment breaks: the LLM endpoint is down, a GPU is oversubscribed, or a service is misbehaving. A running being with broken senses or voice is the state most worth avoiding.
 
-On `/diagnostics/`, the cycle-control card shows **freeze cycle** / **resume cycle**. A `FROZEN` banner appears on every page while suspended. Via API:
+On `/diagnostics/`, the cycle-control card shows **freeze cycle** / **resume cycle** and which holders are freezing the cycle. A `FROZEN` banner appears on every page while suspended. Via API:
 
 ```bash
 POST /diagnostics/cycle/freeze
 {"frozen": true, "reason": "..."}
 ```
 
+Resume (`{"frozen": false}`) releases only your own freeze. A welfare, gestation or end-of-programme freeze stays until you override it by name, from the card's override button (a second click confirms) or the API:
+
+```bash
+POST /diagnostics/cycle/override
+{"sources": ["welfare"], "confirm": "welfare"}
+```
+
+`confirm` must repeat the sources. Spot and preservation freezes release themselves and cannot be overridden. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`.
+
 Freeze state lives in `state/cycle/control.json` and is applied by a freeze-watch task in the cycle entrypoint within ~250 ms. A fresh launch clears any stale freeze.
 
-Freeze sources stack: `operator` (dashboard or API), `spot` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `gestation`, and `programme_end`. Each source pushes its own entry and pops only its own entry. A Spot recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack empties. A welfare-protective pause is liftable only by an operator stand-down or an explicit welfare stand-down.
+Freeze sources stack: `operator` (dashboard or API), `spot` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `gestation`, and `programme_end`. Each source pushes its own entry and pops only its own entry. A Spot recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack empties. A welfare-protective pause is liftable only by an operator override that names it or an explicit welfare stand-down; resume does not lift it.
 
 ### Perception locus
 

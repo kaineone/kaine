@@ -165,13 +165,13 @@ The operator can freeze the cycle by writing `state/cycle/control.json`:
 }
 ```
 
-The freeze is a stack of `{source, reason, frozen_at}` entries. The `stack` is authoritative; the top-level `frozen`, `frozen_at`, `reason`, and `source` fields are a legacy view mirroring the top of the stack. Older single-slot files are promoted to a one-entry stack on read. Sources stack independently: a Spot recovery pops only Spot's own entry, so a welfare pause underneath survives supervisor recovery and can be lifted only by an operator stand-down or an explicit welfare stand-down. The cycle resumes only when the stack is empty.
+The freeze is a stack of `{source, reason, frozen_at}` entries. The `stack` is authoritative; the top-level `frozen`, `frozen_at`, `reason`, and `source` fields are a legacy view mirroring the top of the stack. Older single-slot files are promoted to a one-entry stack on read. Sources stack independently: a Spot recovery pops only Spot's own entry, so a welfare pause underneath survives supervisor recovery and can be lifted only by an operator override that names it or an explicit welfare stand-down; the operator's resume does not lift it. The cycle resumes only when the stack is empty.
 
 A freeze-watch task in the cycle entrypoint polls this file and calls `cycle.pause()` and `cycle.resume()` to match the commanded state. `pause()` clears an `asyncio.Event`; `run_forever` blocks on `await self._paused.wait()`, so no ticks fire while the event is clear. On freeze, the watch snapshots the desired perception flags and suspends them for non-gestation freezes; a gestation-only freeze keeps perception on. On resume it writes the snapshot back, so a freeze/resume cycle never leaves the entity deaf or blind.
 
 Freeze suspends the entity's subjective clock while operators repair infrastructure. It is not a shutdown. The file contains only operational fields: freeze entries with ISO timestamps and optional reason strings. It never contains sensory content.
 
-The Nexus `POST /diagnostics/cycle/freeze` endpoint writes this file. The `unfreeze` function atomically replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
+The Nexus `POST /diagnostics/cycle/freeze` endpoint writes this file: freezing pushes an `operator` entry and resuming removes `operator` entries only (`stand_down(source="operator")`). `POST /diagnostics/cycle/override` lifts named `welfare`, `gestation` or `programme_end` entries (`override()`). The `unfreeze` function, used only by the cycle's own clean boot, replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
 
 ```mermaid
 stateDiagram-v2
