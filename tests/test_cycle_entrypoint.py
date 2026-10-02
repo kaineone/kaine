@@ -86,7 +86,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
     event loop — and its result is threaded into _boot_and_run, never recomputed
     inside the running loop (where the self-check's asyncio.run() would nest).
     """
-    import kaine.cycle.__main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
 
     calls = {"eval": 0}
@@ -194,7 +194,7 @@ def test_unattended_conflicts_with_operator_present(tmp_path):
 def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
     """A passing unattended gate threads supervision_mode and all eight
     gate_checks into _boot_and_run."""
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         CONDITION_NAMES,
@@ -245,7 +245,7 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
 
 def test_unattended_refusal_ignores_overrides(monkeypatch):
     """No override switch lets a failing unattended gate proceed."""
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         UNATTENDED_GATE_EXIT_CODE,
@@ -394,10 +394,8 @@ class _FakeMnemos:
 
 
 def test_eval_provider_factories_none_without_mnemos():
-    from kaine.cycle.__main__ import (
-        _cognitive_query_client_factory,
-        _memory_source_factory,
-    )
+    _cognitive_query_client_factory = cycle_main._cognitive_query_client_factory
+    _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
 
     reg = _FakeRegistry({})
@@ -406,10 +404,8 @@ def test_eval_provider_factories_none_without_mnemos():
 
 
 def test_eval_provider_factories_present_with_mnemos():
-    from kaine.cycle.__main__ import (
-        _cognitive_query_client_factory,
-        _memory_source_factory,
-    )
+    _cognitive_query_client_factory = cycle_main._cognitive_query_client_factory
+    _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
 
     reg = _FakeRegistry({"mnemos": _FakeMnemos()})
@@ -427,7 +423,7 @@ def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
     """
     import logging
 
-    from kaine.cycle.__main__ import main
+    main = cycle_main.main
 
     # Keep this test hermetic: do not inherit mode selectors from the environment.
     for key in (
@@ -472,7 +468,7 @@ def test_main_sends_refusal_notice_and_still_returns_6(monkeypatch, capsys):
 
 
 def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypatch):
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
     from kaine.cycle.unattended_gate import (
         CONDITION_NAMES,
@@ -532,7 +528,7 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
 
 
 def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
-    from kaine.cycle import __main__ as m
+    m = cycle_main
     from kaine.plugins import PluginError
 
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
@@ -566,7 +562,7 @@ def test_operator_plugin_error_does_not_send_boot_failed_notice(monkeypatch):
 
 def test_cli_profile_config_is_the_one_booted(monkeypatch):
     """CLI --profile reaches _boot_and_run as the same object the gates saw."""
-    import kaine.cycle.__main__ as m
+    m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
 
     monkeypatch.delenv("KAINE_PROFILE", raising=False)
@@ -616,7 +612,7 @@ def test_cli_profile_config_is_the_one_booted(monkeypatch):
 def test_boot_and_run_loads_config_when_none_given():
     import inspect
 
-    import kaine.cycle.__main__ as m
+    m = cycle_main
 
     sig = inspect.signature(m._boot_and_run)
     param = sig.parameters["kaine_config"]
