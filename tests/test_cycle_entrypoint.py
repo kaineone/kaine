@@ -615,6 +615,7 @@ def test_cli_profile_config_is_the_one_booted(monkeypatch):
 
 def test_boot_and_run_loads_config_when_none_given():
     import inspect
+
     import kaine.cycle.__main__ as m
 
     sig = inspect.signature(m._boot_and_run)
