@@ -199,7 +199,7 @@ After an accepted adapter is promoted, the trainer backend calls `hot_swap.dispa
 | `restart_service` | `systemctl --user restart <restart_service_unit>`. Causes a brief inference outage. |
 | `organ_adapter` | Copy `adapter.gguf` into `organ_adapters_dir` as `active-<generation>.gguf`, write `active.json` (file, sha256, generation, adapter_id), and bump `generation`. The organ launcher verifies the sha256 and restarts `llama-server` with `--lora-scaled <file>:0 --no-cache-prompt`. |
 
-Not every backend dispatches hot-swap. `SubprocessVoiceTrainer` never calls `hot_swap.dispatch()`, so hot-swap modes have no effect on the subprocess backend; the operator must reload the inference server to pick up the `current` adapter. `UnslothDPOTrainer` calls `dispatch()` without `organ_adapters_dir` or `organ_url`, so `organ_adapter` logs that the directory is not configured and does nothing. In practice, `organ_adapter` works only on the job-queue backend; set `organ_adapters_dir` and `organ_url` explicitly for that path.
+Every backend dispatches the configured hot swap after it promotes an accepted adapter; a failed notification is logged and the adapter stays promoted. `organ_adapter` is the exception that needs a particular backend: only the trainer service behind `job_queue` converts the adapter to the GGUF form the organ loads, so boot refuses `organ_adapter` with any other `trainer_backend`.
 
 A shared model server (for example a host-native organ shared with other apps) forces `hot_swap_mode = "manual"`, because the cycle cannot orchestrate a foreign server's LoRA lifecycle.
 
@@ -207,7 +207,7 @@ Hot-swap failures are logged but not raised. The adapter on disk is the source o
 
 ### Organ window on single-GPU hosts
 
-On a host with one usable GPU, `run_with_organ_window()` brackets training for `reload_endpoint`, `restart_service`, and `organ_adapter` modes. It skips the unload bracket only on multi-GPU hosts or when `hot_swap_mode` is `manual`. The served organ (a small GGUF, ~3 GB resident) and the 4B bf16-LoRA training step (~9.8 GB) do not fit at the same time, so those modes time-share the GPU using the model-server lifecycle (`cmd_stop` / `cmd_start`):
+On a host with one usable GPU, `run_with_organ_window()` brackets in-process and subprocess training for `reload_endpoint` and `restart_service`. It does not bracket on multi-GPU hosts, when `hot_swap_mode` is `manual`, or with the `job_queue` backend, whose trainer service runs in its own container and waits until the organ reports it is asleep and the GPU has room. The served organ (a small GGUF, ~3 GB resident) and the 4B bf16-LoRA training step (~9.8 GB) do not fit at the same time, so those modes time-share the GPU using the model-server lifecycle (`cmd_stop` / `cmd_start`):
 
 1. **Quiesce consumers.** Lingua generation defers (a resting no-op), and the A/B-divergence eval arm skips its samples. Consumers read `state/hypnos/organ_window.json` and resume on reload.
 2. **Unload** the served organ and confirm its VRAM is released.

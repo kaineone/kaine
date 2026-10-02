@@ -2089,6 +2089,7 @@ def make_hypnos(
             ),
         )
     if voice_config is not None:
+        _validate_backend_pairing(voice_config)
         effective = _effective_hot_swap_mode(voice_config.hot_swap_mode, kaine_config)
         if effective != voice_config.hot_swap_mode:
             log.warning(
@@ -2168,6 +2169,20 @@ def make_hypnos(
         if _pclock is not None:
             kwargs["playlist_clock"] = _pclock
     return Hypnos(bus, **kwargs)
+
+
+def _validate_backend_pairing(voice_config: "VoiceAlignmentConfig") -> None:
+    """Refuse a hot-swap mode the configured trainer backend cannot serve."""
+    if not voice_config.enabled:
+        return
+    backend = (voice_config.trainer_backend or "in_process").strip()
+    mode = (voice_config.hot_swap_mode or "manual").strip()
+    if mode == "organ_adapter" and backend != "job_queue":
+        raise VoiceAlignmentConfigError(
+            "[hypnos.voice_alignment].hot_swap_mode = \"organ_adapter\" needs "
+            "trainer_backend = \"job_queue\": only the trainer service converts an "
+            f"accepted adapter to the GGUF form the organ loads (got {backend!r})."
+        )
 
 
 def _resolve_trainer(
@@ -2393,6 +2408,7 @@ def _make_organ_window_runner(
             serve_device=serve_device,
             hot_swap_mode=hot_swap_mode,
             controller=controller,
+            trainer_backend=str(voice_config.trainer_backend or "in_process"),
         )
 
     return runner

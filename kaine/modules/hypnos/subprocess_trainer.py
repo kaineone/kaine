@@ -43,6 +43,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from kaine.modules.hypnos.hot_swap import dispatch as dispatch_hot_swap
 from kaine.modules.hypnos.voice_alignment import (
     DPOPair,
     TrainingResult,
@@ -260,11 +261,29 @@ class SubprocessVoiceTrainer:
             if adapter_dir:
                 adapter_path = Path(adapter_dir)
 
+        hot_swap_status: Optional[dict[str, Any]] = None
+        if result.get("accepted") and config.hot_swap_mode != "organ_adapter":
+            # Boot refuses organ_adapter for non-job-queue backends; guard defensively.
+            try:
+                hot_swap_status = await dispatch_hot_swap(
+                    mode=config.hot_swap_mode,
+                    adapter_output_dir=Path(config.adapter_output_dir),
+                    adapter_path=adapter_path,
+                    reload_endpoint_url=config.reload_endpoint_url,
+                    restart_service_unit=config.restart_service_unit,
+                )
+            except Exception:
+                log.exception("hot_swap dispatch raised; adapter remains promoted")
+                hot_swap_status = {"mode": config.hot_swap_mode, "ok": False}
+
+        metadata: dict[str, Any] = {"backend": "subprocess"}
+        if hot_swap_status is not None:
+            metadata["hot_swap"] = hot_swap_status
         return result_to_training_result(
             result,
             samples_used=len(pairs),
             adapter_path=adapter_path,
-            metadata={"backend": "subprocess"},
+            metadata=metadata,
         )
 
     # --------------------------------------------------------------------- #
