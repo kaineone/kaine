@@ -66,8 +66,8 @@ The operator chose on 2026-09-25 to build now. The code ships opt-in and inert; 
 
 ## 8. Documentation
 
-- [x] 8.1 `docs/for-researchers.md`: add the exit-6 row to the refusal table; rows 2 and 5 unchanged.
-- [x] 8.2 `docs/operations.md`: an "Unattended starts" section — when to use it, the eight conditions, setting up a caretaker channel (desktop, self-hosted HTTP), acknowledging in Nexus, enabling the opt-in unit, and what a refusal looks like.
+- [x] 8.1 `docs/14-for-researchers.md`: add the exit-6 row to the refusal table; rows 2 and 5 unchanged.
+- [x] 8.2 `docs/05-nexus.md`: an "Unattended starts" section — when to use it, the eight conditions, setting up a caretaker channel (desktop, self-hosted HTTP), acknowledging in Nexus, enabling the opt-in unit, and what a refusal looks like.
 - [x] 8.3 Every page that lists `KAINE_CYCLE_*` variables or exit codes includes `KAINE_CYCLE_UNATTENDED` and exit 6.
 - [x] 8.4 A docs-consistency test asserts rows 2, 5 and 6 exist in the refusal table and rows 2 and 5 match their previous text.
 

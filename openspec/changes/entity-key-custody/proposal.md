@@ -47,7 +47,7 @@ The existing `kaine/transfer/` holds only a storage-request mailer (`email_reque
 ## Impact
 
 - New `kaine/security/custody/` (key generation, tpm2-tss sealing with signed policy, XOR split, escrow wrapping, attestation verification, pre-update hook)
-- `kaine/security/crypto.py` (per-entity encryptor), `kaine/lifecycle/*` (spawn, fork, merge, preserve, restore; `ForkManager` carries the encryptor), `kaine/distributed/*` (batch forks), `kaine/transfer/*`, `kaine/preboot.py`, `docs/security-and-privacy.md`, `SECURITY.md`
+- `kaine/security/crypto.py` (per-entity encryptor), `kaine/lifecycle/*` (spawn, fork, merge, preserve, restore; `ForkManager` carries the encryptor), `kaine/distributed/*` (batch forks), `kaine/transfer/*`, `kaine/preboot.py`, `docs/13-security-and-privacy.md`, `SECURITY.md`
 - Host dependency: tpm2-tss and tpm2-tools; tests use a software TPM (swtpm)
 - **Operator decisions recorded:** 2-of-2 escrow (kaine.one + an independent guardian); refuse to spawn without a qualifying root of trust.
 - **Open, operator-owned:** the guardian and key ceremony; whether to fuse the Orin.

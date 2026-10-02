@@ -60,5 +60,5 @@
   - An expired or reused token is refused.
   - Reads without a session are refused.
 - [ ] 5.4 Accessibility pass: keyboard navigation, focus order, labels and contrast.
-- [ ] 5.5 `docs/getting-started.md` leads with the browser setup. The terminal wizard is documented as an alternative.
+- [ ] 5.5 `docs/04-getting-started/README.md` leads with the browser setup. The terminal wizard is documented as an alternative.
 - [ ] 5.6 `openspec validate browser-first-run --strict` passes.

@@ -16,7 +16,7 @@
 #
 # A refusal exits 6 and leaves the unit failed; the entity stays down.
 # scripts/install-quadlet.sh NEVER installs this file. Install it deliberately
-# with the command in docs/operations.md ("Unattended starts"), which writes the
+# with the command in docs/11-preservation.md ("Unattended starts"), which writes the
 # checkout path in place of @KAINE_ROOT@. After a power loss no desktop session
 # exists, so a desktop caretaker channel cannot be reached at that boot:
 # configure an `http` channel. Never enable this unit together with kaine-cycle.

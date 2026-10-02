@@ -4,7 +4,7 @@
 """Self-contained batch-offload job descriptors (``batch-offload``).
 
 A KAINE deployment is three workloads, not one (see
-``docs/deployment-topologies.md``). The *detached batch* workload — Hypnos
+``docs/07-deployment/README.md``). The *detached batch* workload — Hypnos
 voice-alignment QLoRA/DPO training, self-abliteration, deep memory
 consolidation, offline evaluation, and bounded forked-being runs — is
 latency-tolerant, runs while the entity is asleep or offline, and produces a

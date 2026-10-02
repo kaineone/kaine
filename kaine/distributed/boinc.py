@@ -23,7 +23,7 @@ testable parts are:
   (reusing run-identity + admissibility) for deterministic job kinds only;
   non-deterministic kinds rely on the trusted-side re-verification gate.
 
-Phasing (see ``docs/deployment-topologies.md``): B0 containerize → B1 BOINC
+Phasing (see ``docs/07-deployment/README.md``): B0 containerize → B1 BOINC
 harness → B2 non-entity research/training units → B3 (gated) entity-bearing
 forked beings. Entity-bearing forks are withheld here (``accepts`` returns
 False) until the volunteer-host welfare-and-security model exists.

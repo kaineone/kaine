@@ -1,6 +1,6 @@
 ## Why
 
-KAINE's goal is that the same mind runs on hardware from refurbished phones and single-board computers up to multi-GPU servers, at lower speed on weak hardware but with all modules present. `docs/deployment-tiers.md` says the mind "can inhabit hardware ranging from a retired phone to a datacenter" and that Tier 0 needs no torch. An audit of the code on 2026-09-22 found that this is not true today:
+KAINE's goal is that the same mind runs on hardware from refurbished phones and single-board computers up to multi-GPU servers, at lower speed on weak hardware but with all modules present. `docs/07-deployment/README.md` says the mind "can inhabit hardware ranging from a retired phone to a datacenter" and that Tier 0 needs no torch. An audit of the code on 2026-09-22 found that this is not true today:
 
 - **Six modules have no backend without torch or JAX.** They are Soma and Chronos (CfC networks), Mnemos, Empatheia and Hypnos (each builds its own MiniLM embedder) and Nous and Phantasia (JAX). Torch, transformers, sentence-transformers, ncps and pynvml are base dependencies, so `pip install` fails outright on 32-bit ARM and Termux.
 - **Tier 0 switches off five modules and still needs torch.** It disables Topos, Audition, Vox, Empatheia and Phantasia, contradicting both "no torch" and "profiles only bound backends".
@@ -18,7 +18,7 @@ This change is the program of record; each phase lands as its own change once it
 - **Phase 0 — honest claims (this change implements it).**
   - Rewrite the tier capability matrix to state what runs today, including torch requirements and the modules each profile disables.
   - Correct `tier0.toml`'s comment about slowing the clock.
-  - Fix the stale 3.33 Hz rate in `docs/deployment-topologies.md`.
+  - Fix the stale 3.33 Hz rate in `docs/07-deployment/README.md`.
   - Make `getting-started`, `hardware` and `deployment-tiers` agree.
   - Make two tests hermetic: the setup wizard test writes to a fixed `/tmp` path, and the import-boundary test falls back to a bare `python`.
 - **Phase 1 — install anywhere Linux runs.**
@@ -46,5 +46,5 @@ This change is the program of record; each phase lands as its own change once it
 
 ## Impact
 
-- **Phase 0:** `docs/deployment-tiers.md`, `docs/getting-started.md`, `docs/hardware.md`, `docs/deployment-topologies.md`, `config/profiles/tier0.toml` (comment), `tests/test_setup_wizard.py`, `tests/test_import_boundary_contracts.py`.
+- **Phase 0:** `docs/07-deployment/README.md`, `docs/04-getting-started/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/README.md`, `config/profiles/tier0.toml` (comment), `tests/test_setup_wizard.py`, `tests/test_import_boundary_contracts.py`.
 - **Later phases:** see each phase's own change.

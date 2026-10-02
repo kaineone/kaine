@@ -4,7 +4,7 @@
 """Live-Redis integration tests for the event bus.
 
 These tests are skipped unless KAINE_REDIS_PASSWORD is set in the environment.
-Run them only after the operator has hardened the system Redis per SETUP.md
+Run them only after the operator has hardened the system Redis per docs/04-getting-started/services.md
 §1.2: bind loopback, requirepass set, appendonly yes, appendfsync everysec.
 """
 from datetime import datetime, timezone

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Cross-checks that ``docs/accelerator-provisioning.md`` stays in sync with
+"""Cross-checks that ``docs/03-hardware/accelerators.md`` stays in sync with
 the implementation in :mod:`kaine.wheel_index`."""
 
 from pathlib import Path
@@ -9,7 +9,7 @@ from pathlib import Path
 from kaine.wheel_index import DECISION_TABLE, INDEX_ARCH_MAP
 
 DOC_PATH = (
-    Path(__file__).resolve().parent.parent / "docs" / "accelerator-provisioning.md"
+    Path(__file__).resolve().parent.parent / "docs" / "03-hardware" / "accelerators.md"
 )
 
 MEMORY_STATES = ("known-discrete", "known-unified", "unknown")

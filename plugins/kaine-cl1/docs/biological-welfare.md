@@ -48,7 +48,7 @@ entity-welfare gates:
 The plugin reaches real tissue only through `target = "hardware"`, and only when
 the operator's configuration carries an exact acknowledgement of this document
 and an institutional approval reference, with accelerated time off and no
-simulated data source (see `docs/cl1.md`, "Running on a CL1"). On hardware,
+simulated data source (see `docs/19-plugins-and-cl1.md`, "Running on a CL1"). On hardware,
 stimulation happens only on KAINE's cycle ticks, so any freeze stops it, and
 stimulation queued before a freeze is discarded. Code enforces the configuration
 and the stimulation limits; it cannot verify the approval, the culture's care or

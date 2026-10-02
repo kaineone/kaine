@@ -30,7 +30,7 @@ Reframe the documentation to the base-thesis form — **content only, no code**:
   update Lingua for output-only, self-initiated report (not conversational); update
   Topos for foveated raw video.
 - **Reference/top-level** (`ARCHITECTURE.md`, `FIRST_BOOT.md`, `SETUP.md`,
-  `docs/deployment-*`, `docs/glossary.md`, etc.): consistency pass — module counts,
+  `docs/deployment-*`, `docs/appendix-b-glossary.md`, etc.): consistency pass — module counts,
   "seeded" → "reference stimulus corpus" for the live tier (keep "seeded" for the
   offline ablation), drop/retire the A/B divergence description, add the
   output-is-provably-workspace-mediated property.

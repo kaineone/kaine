@@ -78,6 +78,6 @@ research precedent to non-research boots and adds a condition for each gap.
 - Config: `[cycle].supervision_mode`, `[caretaker]` (channels, reminder interval,
   install label); HTTP channel tokens live in `config/secrets.toml`.
 - Packaging: a new `quadlet/kaine-cycle-unattended.container`.
-- Docs: supervision modes and exit codes in `docs/for-researchers.md` and the operations
+- Docs: supervision modes and exit codes in `docs/14-for-researchers.md` and the operations
   guide.
 - No change to research boots, operator-present boots or the shipped cycle unit.

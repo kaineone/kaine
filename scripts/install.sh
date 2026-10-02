@@ -7,7 +7,7 @@
 # fallback; JetPack 6 hosts resolve to CPU wheels with a note. --index-url
 # <URL> overrides the resolved CUDA index; it is ignored for --cpu/--rocm/--xpu/--mps.
 # GPU preflight memory states (known-discrete, known-unified, unknown):
-# see docs/accelerator-provisioning.md for details.
+# see docs/03-hardware/accelerators.md for details.
 #
 # KAINE installer: detects host hardware and installs PyTorch from the
 # matching wheel index, then installs the rest of KAINE editable.
@@ -950,7 +950,7 @@ echo "==> install complete"
 # voice-alignment GPU trainer (Unsloth Studio on NVIDIA, unsloth-core on AMD)
 # is a SEPARATE environment — never install it into the KAINE runtime venv.
 # For Qwen3.5 support the trainer env also requires transformers v5 (Unsloth
-# Studio ships 4.x by default). See docs/hardware.md#qwen35-trainer-prerequisites
+# Studio ships 4.x by default). See docs/03-hardware/README.md#qwen35-trainer-prerequisites
 # for the upgrade command and the mainline-GGUF conversion requirement.
 
 # First-run wizard hand-off. Only offer it interactively (a TTY) and when not

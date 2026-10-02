@@ -104,7 +104,7 @@ returning a fixed/centre fovea.
 
 ## 5. Docs / paper
 
-- [x] 5.1 Update `docs/modules/topos.md` with the foveation path once implemented.
+- [x] 5.1 Update `docs/09-modules/topos.md` with the foveation path once implemented.
       (New "Attention-driven foveation (topos-foveation)" section documenting the
       per-tick pipeline, the injected top-down/arousal seams, the attention schema,
       and the report fields; plus `[topos]` config rows, the `foveation.py` key-file

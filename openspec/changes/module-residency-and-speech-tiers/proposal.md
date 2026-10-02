@@ -57,5 +57,5 @@ The limits are stated, not hidden. Some combinations do not fit an 8 GB budget, 
   - `kaine/hardware.py` gets the recommender reason text;
   - `kaine/setup/wizard.py` shows the fit report;
   - `config/kaine.toml` gets an optional `[residency]` section whose defaults preserve today's behaviour.
-- **Docs:** `docs/deployment-tiers.md`, `docs/hardware.md`, `docs/deployment-headless-host.md`, `docs/modules/audition.md`, `docs/modules/vox.md`, a new residency guide, and measured results under `docs/benchmarks/`.
+- **Docs:** `docs/07-deployment/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/headless-host.md`, `docs/09-modules/audition.md`, `docs/09-modules/vox.md`, a new residency guide, and measured results under `docs/benchmarks/`.
 - **Operator steps:** calibration and latency runs on the Orin Nano Super and the Pixel 6a, which need the devices.

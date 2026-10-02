@@ -43,13 +43,13 @@ REQUIREMENTS_MESSAGE = (
     "its data as control data that does not respond to stimulation and must not be "
     "relied upon for experiments. Real neurons need a paid Cortical Cloud account or a "
     "CL1 device; the plugin supports a CL1 device only through its welfare gate, and not "
-    "Cortical Cloud. See docs/cl1.md."
+    "Cortical Cloud. See docs/19-plugins-and-cl1.md."
 )
 
 CLOUD_MESSAGE = (
     "[substrate].target = \"cloud\" is not supported yet: Cortical Cloud runs code on the "
     "CL1 itself and publishes no API for an outside program such as KAINE to drive a "
-    "remote CL1. See docs/cl1.md."
+    "remote CL1. See docs/19-plugins-and-cl1.md."
 )
 
 REQUIRED_ACKNOWLEDGEMENT = (
@@ -124,7 +124,7 @@ class Cl1Plugin:
             if problems:
                 raise ValueError(
                     "the CL1 plugin refuses the hardware target until these are met "
-                    "(see docs/cl1.md, Running on a CL1): " + "; ".join(problems)
+                    "(see docs/19-plugins-and-cl1.md, Running on a CL1): " + "; ".join(problems)
                 )
 
         converted = overlay.cl1_modules()

@@ -3119,7 +3119,7 @@ def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
     single-host default is unchanged and the decoupling is explicit.
 
     Hypnos→Mnemos/Nous/Thymos remains an in-process reference (the next
-    decoupling target — see docs/deployment-topologies.md); only the read-only
+    decoupling target — see docs/07-deployment/README.md); only the read-only
     Lingua→Eidolon accessor is bus-mediated here.
     """
     if "lingua" not in registry or "eidolon" not in registry:

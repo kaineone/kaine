@@ -62,7 +62,7 @@ test = [
     # Structural import-boundary contracts (kaine/evaluation sidecar boundary +
     # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
     # Enforced by `lint-imports` (pre-commit, a dedicated CI job, and
-    # tests/test_import_boundary_contracts.py). See docs/architecture-boundaries.md.
+    # tests/test_import_boundary_contracts.py). See docs/02-architecture/boundaries.md.
     "import-linter>=2.15",
 ]
 # Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
@@ -72,7 +72,7 @@ audio = [
     "webrtcvad>=2.0.10,<3",
     # Vocal-emotion recognition (emotion2vec+ via funasr) for audition. funasr
     # pulls torchaudio, which must MATCH the host torch wheel (CUDA vs CPU) —
-    # install it the same dynamic way as torch (see DEPENDENCIES.md / SETUP.md).
+    # install it the same dynamic way as torch (see docs/02-architecture/tech-choices.md).
     # The emotion2vec_plus_base weights resolve via the HuggingFace hub
     # (audition.emotion pins hub="hf"; the default ModelScope hub 404s).
     "funasr>=1.1,<2",
@@ -212,7 +212,7 @@ testpaths = ["tests"]
 # These encode the architecture's load-bearing boundaries as structural
 # import contracts instead of relying solely on a string grep. They run in
 # seconds via pre-commit, a dedicated CI job, and
-# tests/test_import_boundary_contracts.py. See docs/architecture-boundaries.md
+# tests/test_import_boundary_contracts.py. See docs/02-architecture/boundaries.md
 # for the full rationale and layer map.
 # ---------------------------------------------------------------------------
 [tool.importlinter]

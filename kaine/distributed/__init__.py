@@ -6,7 +6,7 @@
 This package owns the *horizontal* scaling seam — running KAINE's detached batch
 workloads off the live host — and the explicit untrusted-compute boundary that
 keeps the live cognitive loop and the stateful stores on trusted hardware. See
-``docs/deployment-topologies.md`` for the workload/target matrix and the
+``docs/07-deployment/README.md`` for the workload/target matrix and the
 rationale (the three walls).
 
 Nothing here runs the live cognitive loop or a live volunteer client: it is the

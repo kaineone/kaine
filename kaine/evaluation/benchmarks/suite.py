@@ -12,7 +12,7 @@ active-inference benchmark, whose env/RL rng is derived from the master via
 ``BenchmarkConfig.master_seed`` rather than an independent ``default_rng`` — and
 emits one combined report.
 
-The seven experiments (docs/processes/testing-framework.md):
+The seven experiments (docs/18-verification.md):
   1. active-inference (Nous AIF vs tuned RL) — the p-value producer (Mann-Whitney
      per task);
   2. oscillatory ablation (coherence layer on vs off);

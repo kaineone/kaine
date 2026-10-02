@@ -15,7 +15,7 @@ Select it on its own with::
 
 The load-bearing contract is the sidecar boundary — kaine.evaluation is the
 observe-only research subsystem and core runtime must run with it absent (only
-the two ``__main__`` seams may wire it in). See docs/architecture-boundaries.md.
+the two ``__main__`` seams may wire it in). See docs/02-architecture/boundaries.md.
 
 If import-linter is not installed (a minimal install without the ``test``
 extra) this test skips cleanly rather than failing — the contract is still
@@ -71,7 +71,7 @@ def test_import_boundary_contracts_kept():
     output = proc.stdout + proc.stderr
     assert proc.returncode == 0, (
         "import-boundary contracts BROKEN — a structural architecture "
-        "boundary was violated. See docs/architecture-boundaries.md.\n\n"
+        "boundary was violated. See docs/02-architecture/boundaries.md.\n\n"
         f"{output}"
     )
     # Belt-and-suspenders: confirm we actually ran contracts (guards against a

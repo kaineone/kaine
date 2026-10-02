@@ -3,7 +3,7 @@
 # Copyright (c) 2025 KAINE contributors
 #
 # prepare-headless-host.sh - one-shot automation for
-# docs/deployment-headless-host.md (dedicating a Linux host to a 24/7
+# docs/07-deployment/headless-host.md (dedicating a Linux host to a 24/7
 # KAINE instance).
 #
 # Design notes:
@@ -53,7 +53,7 @@ die() {
 
 usage() {
     cat <<'EOF'
-prepare-headless-host.sh - automate docs/deployment-headless-host.md
+prepare-headless-host.sh - automate docs/07-deployment/headless-host.md
 
 Dedicates a Linux host to a 24/7 KAINE instance. Run it as the normal
 user (NOT under sudo); it prompts for sudo once and keeps the credentials
@@ -670,7 +670,7 @@ print_summary() {
     for i in "${!SUMMARY_STEPS[@]}"; do
         printf '%-20s %-8s %s\n' "${SUMMARY_STEPS[$i]}" "${SUMMARY_RESULTS[$i]}" "${SUMMARY_NOTES[$i]}"
     done
-    printf '\nPost-run verification (docs/deployment-headless-host.md checklist):\n'
+    printf '\nPost-run verification (docs/07-deployment/headless-host.md checklist):\n'
     printf '  systemctl is-enabled ssh && systemctl is-active ssh\n'
     printf '  swapon --show --noheadings                      # expect %s\n' "$SWAPFILE"
     printf '  cat /proc/sys/vm/swappiness                     # expect 10\n'

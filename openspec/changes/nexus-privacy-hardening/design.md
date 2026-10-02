@@ -46,7 +46,7 @@ Browser clients that cannot set arbitrary headers must use a small local proxy o
 ## Risks / Trade-offs
 
 - **[Risk]** Adding auth breaks existing operator scripts that hit Nexus endpoints without a token.
-  → **Mitigation:** Document the token setup in `docs/operations.md` and provide a one-time migration note in the changelog. The default empty token keeps existing installs in a safe-but-locked state until configured.
+  → **Mitigation:** Document the token setup in `docs/05-nexus.md` and provide a one-time migration note in the changelog. The default empty token keeps existing installs in a safe-but-locked state until configured.
 - **[Risk]** Origin validation can lock out legitimate reverse-proxy or tailnet-serve setups.
   → **Mitigation:** The Host allowlist is configurable; the default allows `127.0.0.1` and `localhost`, and operators can add their tailnet MagicDNS name.
 - **[Risk]** Filtering trajectory records changes the research data format.
