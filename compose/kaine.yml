@@ -269,6 +269,12 @@ services:
       # The bind is all-interfaces inside the container; publishing stays 127.0.0.1-only.
       # Nexus still refuses to start without a token.
       KAINE_NEXUS_NON_LOOPBACK_ALLOWED: "1"
+      # Open access (no sign-in) is the default: Nexus is published on 127.0.0.1 only.
+      # For the tailnet, run `tailscale serve --bg 8088` and set the machine's ts.net
+      # name in KAINE_NEXUS_EXTRA_HOSTS in compose/.env (never committed).
+      KAINE_NEXUS_ACCESS: ${KAINE_NEXUS_ACCESS:-}
+      KAINE_NEXUS_EXTRA_HOSTS: ${KAINE_NEXUS_EXTRA_HOSTS:-}
+      KAINE_NEXUS_PUBLISHED_PORT: ${KAINE_NEXUS_HOST_PORT:-8088}
       # Token from env first; empty falls through to the read-only mounted config/secrets.toml.
       KAINE_NEXUS_TOKEN: ${KAINE_NEXUS_TOKEN:-}
       # Allowed Origins must reflect the host-published port, not the in-container 8088.

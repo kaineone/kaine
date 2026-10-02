@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -29,6 +31,9 @@ class NexusConfig:
     # Privacy override. Default False. When True, diagnostics surface
     # receives full content payloads. Operators see a "dev mode" banner.
     dev_content_override: bool = False
+    # Read-only mode. Default False. When True, all state-changing HTTP
+    # methods are refused with 403; only GET/HEAD/OPTIONS are allowed.
+    read_only: bool = False
     # Operator authentication. Empty string means no token is configured;
     # state-changing endpoints and privileged read surfaces return 401.
     # Loaded from KAINE_NEXUS_TOKEN env or config/secrets.toml [nexus] operator_token.
@@ -42,6 +47,9 @@ class NexusConfig:
     host_allowlist: tuple[str, ...] = ("127.0.0.1", "localhost", "::1")
     # Explicit opt-in required to bind a non-loopback interface.
     non_loopback_allowed: bool = False
+    # Access mode. The dataclass default is "token" so existing tests keep
+    # their semantics; config/kaine.toml ships "open".
+    access: str = "token"
     # Session / brute-force protection defaults.
     session_idle_minutes: int = 720
     session_max_hours: int = 24
@@ -64,12 +72,14 @@ class NexusConfig:
                 data.get("conversation_history_lookback", cls.conversation_history_lookback)
             ),
             dev_content_override=bool(data.get("dev_content_override", cls.dev_content_override)),
+            read_only=bool(data.get("read_only", cls.read_only)),
             operator_token=str(data.get("operator_token", cls.operator_token)),
             allowed_origins=cls._parse_string_tuple(
                 data.get("allowed_origins", cls.allowed_origins)
             ),
             host_allowlist=cls._parse_string_tuple(data.get("host_allowlist", cls.host_allowlist)),
             non_loopback_allowed=bool(data.get("non_loopback_allowed", cls.non_loopback_allowed)),
+            access=_validate_access(data.get("access", cls.access), "[nexus].access"),
             session_idle_minutes=int(data.get("session_idle_minutes", cls.session_idle_minutes)),
             session_max_hours=int(data.get("session_max_hours", cls.session_max_hours)),
             login_max_failures=int(data.get("login_max_failures", cls.login_max_failures)),
@@ -102,6 +112,65 @@ def _env_flag(name: str) -> bool | None:
     if raw is None:
         return None
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+_ACCESS_MODES = ("open", "token")
+_HOST_LABEL_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
+
+
+def _validate_access(value: Any, source: str) -> str:
+    if value not in _ACCESS_MODES:
+        raise NexusConfigError(
+            f"{source} must be 'open' or 'token', got {value!r}"
+        )
+    return value
+
+
+def _is_valid_host(name: str) -> bool:
+    if not name or len(name) > 253:
+        return False
+    if name.endswith("."):
+        name = name[:-1]
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        pass
+    labels = name.split(".")
+    if not labels or any(len(label) > 63 for label in labels):
+        return False
+    return all(_HOST_LABEL_RE.match(label) for label in labels)
+
+
+def _parse_extra_hosts(raw: str | None) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _extra_host_origins(
+    host: str, port: int, published_port: int | None
+) -> tuple[str, ...]:
+    try:
+        addr = ipaddress.ip_address(host)
+        display = f"[{host}]" if addr.version == 6 else host
+    except ValueError:
+        display = host
+    ports = [port]
+    if published_port is not None and published_port != port:
+        ports.append(published_port)
+    origins: list[str] = []
+    for scheme in ("http", "https"):
+        for p in ports:
+            origins.append(f"{scheme}://{display}")
+            origins.append(f"{scheme}://{display}:{p}")
+    seen: set[str] = set()
+    result: list[str] = []
+    for origin in origins:
+        if origin not in seen:
+            seen.add(origin)
+            result.append(origin)
+    return tuple(result)
 
 
 def _raise_if_config_token(section: Any, file: Path) -> None:
@@ -174,6 +243,17 @@ def load_nexus_config(
     if non_loopback is not None:
         config = replace(config, non_loopback_allowed=non_loopback)
 
+    read_only = _env_flag("KAINE_NEXUS_READ_ONLY")
+    if read_only is not None:
+        config = replace(config, read_only=read_only)
+
+    access_env = os.environ.get("KAINE_NEXUS_ACCESS")
+    if access_env is not None and access_env.strip():
+        access_env = access_env.strip()
+        config = replace(
+            config, access=_validate_access(access_env, "[nexus].access")
+        )
+
     env_token = (os.environ.get("KAINE_NEXUS_TOKEN") or "").strip()
     if env_token:
         config = replace(config, operator_token=env_token)
@@ -211,6 +291,38 @@ def load_nexus_config(
                 f"http://localhost:{config.port}",
                 f"http://[::1]:{config.port}",
             ),
+        )
+
+    extra_hosts_env = os.environ.get("KAINE_NEXUS_EXTRA_HOSTS")
+    extra_hosts = _parse_extra_hosts(extra_hosts_env)
+    published_port_env = os.environ.get("KAINE_NEXUS_PUBLISHED_PORT")
+    published_port = (
+        int(published_port_env.strip())
+        if published_port_env is not None and published_port_env.strip()
+        else None
+    )
+    if extra_hosts:
+        for h in extra_hosts:
+            if not _is_valid_host(h):
+                raise NexusConfigError(
+                    f"KAINE_NEXUS_EXTRA_HOSTS entry {h!r} is not a valid host name or IP literal"
+                )
+
+        hosts_list = list(config.host_allowlist)
+        for h in extra_hosts:
+            if h not in hosts_list:
+                hosts_list.append(h)
+
+        origins_list = list(config.allowed_origins)
+        for h in extra_hosts:
+            for origin in _extra_host_origins(h, config.port, published_port):
+                if origin not in origins_list:
+                    origins_list.append(origin)
+
+        config = replace(
+            config,
+            host_allowlist=tuple(hosts_list),
+            allowed_origins=tuple(origins_list),
         )
 
     return config

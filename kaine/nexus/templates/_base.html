@@ -49,6 +49,9 @@
         {% block header_extra %}{% endblock %}
       </header>
       <main class="nexus-main">
+        {% if request is defined and request and request.app.state.config is defined and request.app.state.config.read_only %}
+        <div class="readonly-banner" role="status">Read-only view — controls are off</div>
+        {% endif %}
         {% block content %}{% endblock %}
       </main>
     </div>

@@ -43,3 +43,14 @@ When the conversation console is not mounted, a request for `/` SHALL redirect t
 #### Scenario: Observed study
 - **WHEN** conversation is disabled and an operator opens `http://127.0.0.1:8088/`
 - **THEN** the response redirects to `/diagnostics/`
+
+### Requirement: Read-only mode refuses every control
+Nexus SHALL support `[nexus].read_only` (default false), overridable by `KAINE_NEXUS_READ_ONLY`. When it is true, Nexus SHALL refuse every request whose method is not GET, HEAD or OPTIONS with HTTP 403, before routing and in every access mode. Pages SHALL show a banner saying controls are off. A study viewer SHALL run Nexus in read-only mode, because some controls (the cycle rate) reach a running entity through its bus.
+
+#### Scenario: A rate change against a watched study is refused
+- **WHEN** `read_only` is true and a client POSTs to `/diagnostics/cycle/rates`
+- **THEN** the response is 403 and nothing is published to `cycle.control`
+
+#### Scenario: Viewing still works
+- **WHEN** `read_only` is true and a browser opens `/diagnostics/`
+- **THEN** the page renders with the read-only banner
