@@ -71,7 +71,7 @@ def test_undriven_rhythm_in_band():
     _run_steps(osc, n, own=0.4, external=None)
     activity = np.asarray(osc.activity_history())
     f_dom = _dominant_freq(activity)
-    # Fetal breathing band (Natale et al. 1988: about 30-70 breaths/min).
+    # Around the mean fetal breathing rate (about 44/min, Natale et al. 1988).
     assert 0.5 <= f_dom <= 1.0
     assert np.std(activity) > 0.05
 

@@ -98,7 +98,7 @@ The entrain-then-autonomy marker SHALL be computed from the self-rhythm's popula
 - **THEN** the marker does not pass
 
 ### Requirement: The self-rhythm has a slow intrinsic rhythm in a physiological band
-The self-rhythm oscillator SHALL produce, undriven, a rhythm in the fetal breathing band (0.5-1.0 Hz; about 30-70 breaths per minute, Natale et al. 1988) from excitatory recurrence and activity-dependent synaptic depression, with its period able to adapt slowly within a clamped physiological band. The mechanism SHALL be cited at the code site.
+The self-rhythm oscillator SHALL produce, undriven, a rhythm in the fetal breathing band (0.5-1.0 Hz, around the mean fetal breathing rate of about 44 breaths per minute reported by Natale et al. 1988) from excitatory recurrence and activity-dependent synaptic depression, with its period able to adapt slowly within a clamped physiological band. The mechanism SHALL be cited at the code site.
 
 #### Scenario: Undriven rhythm lies in band
 - **WHEN** the self-rhythm runs without maternal drive at resting own drive
