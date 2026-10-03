@@ -2271,6 +2271,7 @@ def _resolve_trainer(
             f"or disable voice_alignment in kaine.toml / kaine.operator.toml."
         ) from exc
     _require_non_empty_abliteration_probes(voice_config)
+    _require_non_empty_capability_probes(voice_config)
 
     from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
 
@@ -2295,6 +2296,35 @@ def _require_non_empty_abliteration_probes(
 
     probe_path = voice_config.abliteration_probe_path or DEFAULT_ABLITERATION_PROBE_PATH
     require_non_empty_abliteration_probes(probe_path)
+
+
+def _require_non_empty_capability_probes(
+    voice_config: "VoiceAlignmentConfig",
+) -> None:
+    """Promotion-gate invariant shared by every trainer backend.
+
+    When voice alignment is actually going to run, the capability probe set
+    MUST be non-empty — an empty probe set would score every model 0.0, the
+    capability loss would always be 0.0, and the capability-loss veto would
+    pass every adapter. Raises EmptyCapabilityProbeSetError with a clear
+    remediation message. (The subprocess external script also fails closed on
+    an empty set; this is the boot-time belt-and-suspenders.)
+    """
+    from kaine.modules.hypnos.capability_eval import (
+        DEFAULT_PROBE_PATH,
+        EmptyCapabilityProbeSetError,
+        load_probes,
+    )
+
+    probe_path = voice_config.capability_probe_path or DEFAULT_PROBE_PATH
+    probes = load_probes(probe_path)
+    if not probes:
+        raise EmptyCapabilityProbeSetError(
+            f"[hypnos.voice_alignment].capability_probe_path has no usable "
+            f"capability probe: {probe_path}. The capability-loss veto cannot run "
+            'on an empty probe set; point it at a JSONL file of {"prompt", '
+            '"expected"} lines, or leave it empty for the bundled set.'
+        )
 
 
 def _resolve_subprocess_trainer(
@@ -2330,6 +2360,7 @@ def _resolve_subprocess_trainer(
         )
 
     _require_non_empty_abliteration_probes(voice_config)
+    _require_non_empty_capability_probes(voice_config)
 
     return SubprocessVoiceTrainer(
         trainer_python=trainer_python,
@@ -2355,6 +2386,7 @@ def _resolve_job_queue_trainer(
     from kaine.modules.hypnos.organ_adapter import organ_root_url
 
     _require_non_empty_abliteration_probes(voice_config)
+    _require_non_empty_capability_probes(voice_config)
 
     timeout_s = voice_config.trainer_timeout_s
     if timeout_s <= 0:

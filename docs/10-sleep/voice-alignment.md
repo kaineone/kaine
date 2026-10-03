@@ -86,7 +86,7 @@ The default probe set is `eval_probes/abliteration_probes.jsonl` at the reposito
 
 ### Capability-loss veto
 
-`LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set and substring-match answers. The default probe set is `kaine/modules/hypnos/eval_probes/default.jsonl` — a small "did we break the model" smoke test.
+`LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set and substring-match answers. The default probe set is `kaine/modules/hypnos/eval_probes/default.jsonl` — a small "did we break the model" smoke test. Like the abliteration set, the capability set must not be empty: boot refuses voice alignment when it has no usable probe, the in-process trainer rejects the adapter if it finds the set empty at training time, and the external trainer script rejects before loading the model. An empty set would otherwise score both models 0 and let every adapter through.
 
 If `score_before - score_after > capability_loss_threshold` (default 0.05), the adapter is rejected and removed.
 

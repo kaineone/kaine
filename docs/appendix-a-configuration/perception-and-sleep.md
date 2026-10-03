@@ -170,7 +170,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `adapter_output_dir` | string | `"state/hypnos/adapters"` | Directory for trained LoRA adapters. |
 | `base_model_path` | string | `""` | Path to local HuggingFace-format base weights (safetensors, config, tokenizer). Required when `enabled = true`. Not a model ID and not a `.gguf` file. Point it at the same abliterated Qwen weights used to derive the served organ's GGUF. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only; real weights load from `base_model_path`. |
-| `capability_probe_path` | string | `""` | Path to a capability-probe JSONL. Empty uses the bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl`. |
+| `capability_probe_path` | string | `""` | Path to a capability-probe JSONL. Empty uses the bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl`. The set must hold at least one usable probe (`prompt` and `expected`): boot refuses voice alignment on every trainer backend otherwise (`EmptyCapabilityProbeSetError`), because an empty set would score every model 0 and pass every adapter. |
 | `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
 
 #### Training knobs
