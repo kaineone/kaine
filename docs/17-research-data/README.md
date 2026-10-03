@@ -175,7 +175,7 @@ Logs each policy-selection event: expected free energy (EFE) value, planning hor
 - **Toggle:** `[evaluation].workspace_trajectory` (opt-in; default `false`)
 - **Output:** `data/workspace_trajectory/trajectory-<YYYY-MM-DD>.jsonl`
 
-Writes every Syneidesis broadcast as JSONL, with tick index, salience scores, and Thymos state (when a `thymos_state_provider` is wired) alongside each selected-coalition entry. Before persistence, each selected entry is scrubbed through the shared `PrivacyFilter` so raw message text, memory bodies, and other content-bearing payloads are redacted; only source, type, salience, and causal metadata remain.
+Writes every Syneidesis broadcast as one JSONL row. Each row contains the tick index, `is_experiential`, inhibition, salience scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included.
 
 ### `AttributionRecorder`
 

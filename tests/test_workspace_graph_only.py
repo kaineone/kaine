@@ -168,18 +168,24 @@ def test_filter_removes_vectors_at_arbitrary_depth():
 
 
 def test_filter_dev_override_keeps_content_but_still_strips_vectors():
-    payload = {"text": "hello", "latent": [0.1] * 768}
+    payload = {
+        "text": "hello",
+        "latent": [0.1] * 768,
+        "temporal_context": [0.1, 0.2, 0.3],
+    }
     event = _event("lingua", "lingua.internal_speech", payload)
 
     dev = PrivacyFilter(dev_content_override=True)
     dev_out = dev.filter_for_diagnostics(event)
     assert dev_out.payload.get("text") == "hello"
     assert "latent" not in dev_out.payload
+    assert "temporal_context" not in dev_out.payload
 
     normal = PrivacyFilter()
     normal_out = normal.filter_for_diagnostics(event)
     assert "text" not in normal_out.payload
     assert "latent" not in normal_out.payload
+    assert "temporal_context" not in normal_out.payload
 
 
 @pytest.mark.asyncio
