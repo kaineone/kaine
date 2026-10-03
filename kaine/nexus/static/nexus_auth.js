@@ -337,11 +337,6 @@
       }
     }
 
-    ["CONNECTING", "OPEN", "CLOSED"].forEach(function (name) {
-      if (typeof OriginalEventSource[name] !== "undefined") {
-        NexusEventSource[name] = OriginalEventSource[name];
-      }
-    });
 
     window.EventSource = NexusEventSource;
   }

@@ -51,7 +51,11 @@ from kaine.config import require_known_keys
 from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog, scrub_paths
 from kaine.experiment.run_context import get_run_context
-from kaine.lifecycle.divergence import assess_divergence
+from kaine.lifecycle.divergence import (
+    DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+    DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
+    assess_divergence,
+)
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.welfare_signal import SustainedThresholdTracker, WindowedEventCounter
 from kaine.modules.registry import ModuleRegistry
@@ -413,6 +417,8 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         # When set, preserve_live refuses to write an unencrypted bundle
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
+        consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
+        consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     ) -> None:
         super().__init__(
             bus=bus,
@@ -424,6 +430,8 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         self._fork_manager = fork_manager
         self._config = config
         self._require_encryption = bool(require_encryption)
+        self._consolidation_rate_threshold = consolidation_rate_threshold
+        self._consolidation_magnitude_threshold = consolidation_magnitude_threshold
         # Lived-experience source: a count of logged lived events (the cycle's
         # monotonic tick index in production). When unwired (None), the monitor
         # cannot read lived observations and the observation floor reads as
@@ -540,6 +548,8 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             assess_divergence,
             state_root=resolve(self._config.state_root),
             eval_root=resolve(self._config.eval_root),
+            consolidation_rate_threshold=self._consolidation_rate_threshold,
+            consolidation_magnitude_threshold=self._consolidation_magnitude_threshold,
         )
         # Warm-up / minimum-lived-experience gate (Defect B). Before the entity
         # has accumulated the configured lived experience, NO crossing counts —

@@ -27,7 +27,7 @@ The script checks that Redis answers `PONG`, Qdrant answers `/readyz`, every con
 
 Module toggles belong in the gitignored `config/kaine.operator.toml`. The loader deep-merges that file over the shipped `config/kaine.toml` at boot. The shipped `config/kaine.toml` keeps every module `false`, and a guard test enforces that, so do not edit it.
 
-If you have already run the first-run wizard (`python -m kaine.setup`), it wrote a full `[modules]` table to the operator file; those choices replace any profile defaults. The wizard's own defaults are Soma, Chronos, Thymos, Eidolon, Mnemos and Lingua on, Topos and Audition off.
+If you have already run the first-run wizard (`python -m kaine.setup`), it wrote a full `[modules]` table to the operator file; those choices replace any profile defaults. The wizard offers the base thesis (the `thesis_test` module set) or the full entity (all fourteen cognitive modules, embodiment off), and recommends one from the host's hardware tier; see [First-run wizard](README.md#first-run-wizard).
 
 If no profile is selected and `config/kaine.operator.toml` has no `[modules]` table, the loader applies the base-thesis `thesis_test` profile automatically (`kaine/config.py`). That profile is the effective default entity only in that case. To start the cycle with that choice explicit:
 

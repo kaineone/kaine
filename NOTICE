@@ -48,6 +48,20 @@ DreamerV3 RSSM (clean-room JAX re-implementation)
              upstream architecture but is a clean-room re-implementation to
              avoid non-pip-packaged research infrastructure.
 
+InternVideo-Next (video encoder modeling code, vendored verbatim)
+  Location:  external/internvideo_next/
+  Upstream:  OpenGVLab InternVideo-Next (Hugging Face revliter/internvideo_next_base_p14_res224_f16)
+  License:   MIT — see external/internvideo_next/UPSTREAM.
+  Note:      Byte-identical to the upstream modeling files at the pinned revision
+             ff2659b9be360a6b1e94b1eb381778a960da6019.
+
+Jacobian lens (jlens)
+  Location:  external/jlens/
+  Upstream:  anthropics/jacobian-lens
+  License:   Apache-2.0 — see external/jlens/LICENSE and external/jlens/UPSTREAM.
+  Note:      Used by scripts/abliteration_lens.py for verification only; not
+             imported by the runtime.
+
 OpenNARS-for-Applications (archived, not active)
   Location:  external/archive/ (historical reference only; not imported at runtime)
   Upstream:  opennars/OpenNARS-for-Applications

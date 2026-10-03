@@ -359,6 +359,7 @@ main {
   min-height: 0;       /* allow the horizontal scroller inside to size correctly */
   display: flex;
   flex-direction: column;
+  overflow-y: auto;    /* <main> scrolls vertically; pages inside size naturally */
 }
 
 /* Horizontal "kanban" console: each section (header bar + its cards) is a board.
@@ -396,19 +397,24 @@ h3 {
 /* ---- Layout: labeled board sections + fluid card grid ------------------ */
 
 .page {
-  /* Natural reflow console: boards flow as a CSS multi-column masonry. The
+  /* Natural reflow pages: boards flow as a CSS multi-column masonry. The
      browser fits as many --col-w columns as the viewport allows and stretches
      them to fill the width — so the layout NEVER scrolls sideways; instead the
      columns resize and boards reflow into one another. Boards are kept whole
-     (break-inside: avoid) and a tall board caps to the viewport and scrolls
-     INTERNALLY (see .board) rather than being forced into a fixed-height row. */
+     (break-inside: avoid). Detail pages grow naturally downward and scroll via <main>; the console
+     fills the viewport and scrolls horizontally (see .page--console). */
   columns: var(--col-w, 31rem) auto;
   column-gap: var(--col-gap, 1.4rem);
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;      /* never a horizontal scrollbar — columns resize */
-  overflow-y: auto;        /* detail pages (diagnostics/evaluation) scroll down */
   padding-bottom: 0.5rem;
+}
+
+.page:not(.page--console) {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;       /* detail pages: natural height, let <main> scroll */
 }
 /* The CONSOLE is a single glanceable screen: it never scrolls (either axis).
    Boards fit the viewport — most collapsed to a header bar — and a long open
@@ -416,6 +422,9 @@ h3 {
    scrolling or running off-screen. Scoped to --console so the standalone
    diagnostics/evaluation pages keep their normal vertical scroll. */
 .page--console {
+  /* Fill the viewport and let overflow columns scroll horizontally. */
+  flex: 1 1 auto;
+  min-height: 0;
   column-fill: auto;       /* fill each column to viewport height, then wrap */
   height: 100%;
   /* Never scroll vertically. When more sections are open than fit the width, the
@@ -1056,7 +1065,7 @@ table.mono td { font-family: var(--font-mono); }
 table.mono { table-layout: fixed; }
 table .col-id { min-width: 13rem; white-space: nowrap; }
 
-dl.kv { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.2rem 1rem; }
+dl.kv { margin: 0; display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); gap: 0.2rem 1rem; }
 dl.kv dt { color: var(--fg-muted); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.04em; }
 dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 

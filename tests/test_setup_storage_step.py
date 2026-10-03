@@ -5,6 +5,8 @@ import shutil
 from collections import namedtuple
 from pathlib import Path
 
+import pytest
+
 from kaine.setup.steps import StepContext
 from kaine.setup.storage_step import (
     GROWING_VOLUMES,
@@ -21,6 +23,14 @@ from kaine.setup.storage_step import (
 
 Usage = namedtuple("Usage", ["total", "used", "free"])
 GB = 1024**3
+
+
+@pytest.fixture(autouse=True)
+def _no_real_cycle(monkeypatch):
+    # relocate() refuses while a KAINE cycle runs; these tests must not depend
+    # on what is running on the host.
+    monkeypatch.setattr("kaine.setup.storage_step.cycle_process_running", lambda: False)
+
 
 def _write(path, text):
     """Write *text* to *path*, creating parent directories."""

@@ -197,12 +197,13 @@ def test_full_run_multi_gpu_produces_config():
     # Prompts after ack, in order:
     #  1 ack
     #  2 accept device assignments? -> y
-    #  3..N enable <module>? for each MODULE_ORDER entry
+    #  3 module preset? -> c (custom)
+    #  4..M enable <module>? for each MODULE_ORDER entry
     #  lingua model id
     #  research opt-in? -> n
     #  encryption? -> n
 
-    answers = [ACK_PHRASE, "", "", "y"]
+    answers = [ACK_PHRASE, "", "", "y", "c"]
     # enable only soma + lingua, the rest off
     for m in MODULE_ORDER:
         answers.append("y" if m in ("soma", "lingua") else "n")
@@ -234,7 +235,7 @@ def test_full_run_multi_gpu_produces_config():
 
 
 def test_vox_enabled_requires_voice_id():
-    answers = [ACK_PHRASE, "", "", "y"]
+    answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
     answers.append("the-model")  # lingua model id
@@ -258,7 +259,7 @@ def test_vox_enabled_requires_voice_id():
 
 
 def test_metrics_only_when_opted_in():
-    answers = [ACK_PHRASE, "", "", "y"]
+    answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("n")
     # no lingua/vox/audition -> no model prompts
@@ -305,7 +306,7 @@ def _tier2_residency_rec():
 
 
 def test_wizard_tier_recommendation_applied_on_yes():
-    answers = [ACK_PHRASE, "", "", "y", "y"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    answers = [ACK_PHRASE, "", "", "y", "y", "c"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
     result = run_wizard(
@@ -319,7 +320,7 @@ def test_wizard_tier_recommendation_applied_on_yes():
 
 
 def test_wizard_tier_recommendation_not_applied_on_no():
-    answers = [ACK_PHRASE, "", "", "y", "n"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
+    answers = [ACK_PHRASE, "", "", "y", "n", "c"] + ["n"] * len(MODULE_ORDER) + ["n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
     result = run_wizard(
@@ -340,6 +341,8 @@ def test_wizard_tier_recommendation_default_no_writes_nothing():
             return "y"
         if "Record tier" in prompt:
             return ""  # accept the default No
+        if "modules:" in prompt:
+            return ""  # accept the recommended base-thesis preset
         if "research" in prompt.lower():
             return "n"
         if "encryption" in prompt.lower():

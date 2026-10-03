@@ -193,16 +193,25 @@ Controls only appear when their backend is wired — for example, the rate contr
 
 Use freeze when the environment breaks: the LLM endpoint is down, a GPU is oversubscribed, or a service is misbehaving. A running being with broken senses or voice is the state most worth avoiding.
 
-On `/diagnostics/`, the cycle-control card shows **freeze cycle** / **resume cycle**. A `FROZEN` banner appears on every page while suspended. Via API:
+On `/diagnostics/`, the cycle-control card shows **freeze cycle** / **resume cycle** and which holders are freezing the cycle. A `FROZEN` banner appears on every page while suspended. Via API:
 
 ```bash
 POST /diagnostics/cycle/freeze
 {"frozen": true, "reason": "..."}
 ```
 
+Resume (`{"frozen": false}`) releases only your own freeze. A welfare, gestation or end-of-programme freeze stays until you override it by name, from the card's override button (a second click confirms) or the API:
+
+```bash
+POST /diagnostics/cycle/override
+{"sources": ["welfare"], "confirm": "welfare"}
+```
+
+`confirm` must repeat the sources. Spot and preservation freezes release themselves and cannot be overridden. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`.
+
 Freeze state lives in `state/cycle/control.json` and is applied by a freeze-watch task in the cycle entrypoint within ~250 ms. A fresh launch clears any stale freeze.
 
-Freeze sources stack: `operator` (dashboard or API), `spot` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `gestation`, and `programme_end`. Each source pushes its own entry and pops only its own entry. A Spot recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack empties. A welfare-protective pause is liftable only by an operator stand-down or an explicit welfare stand-down.
+Freeze sources stack: `operator` (dashboard or API), `spot` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `gestation`, and `programme_end`. Each source pushes its own entry and pops only its own entry. A Spot recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack empties. A welfare-protective pause is liftable only by an operator override that names it or an explicit welfare stand-down; resume does not lift it.
 
 ### Perception locus
 
@@ -236,7 +245,7 @@ POST /diagnostics/merges
 }
 ```
 
-If both parents carry a Phantasia world model and no `world_model_from` is given, the API returns `409`. It also returns `409`, with the reason, when the adapter merge is refused: no real merger is available for two adapter-carrying parents, or the merged adapter failed its capability or abliteration checks. Merges run in a worker thread, so a long check does not stall the dashboard. The dashboard merge form has no world-model field, so that kind of merge only works through the API. Fork bodies can carry a timing profile.
+If both parents carry a Phantasia world model and no `world_model_from` is given, the API returns `409`. It also returns `409`, with the reason, when the adapter merge is refused: no real merger is available for two adapter-carrying parents, or the merged adapter failed its capability or abliteration checks. Merges run in a worker thread, so a long check does not stall the dashboard. The dashboard merge form has a "world model from" choice (none, A or B) that sets `world_model_from`, and when a merge is refused it shows the status and the server's reason. `allow_unmerged_adapters` is available only through the API, so keeping uncombined adapter weights is always a deliberate call. Fork bodies can carry a timing profile.
 
 See [Forks and merges](12-forks-and-merges.md) for the lifecycle semantics.
 

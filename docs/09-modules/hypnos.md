@@ -91,8 +91,8 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `restart_service_unit` | `""` | Systemd `--user` unit name restarted when `hot_swap_mode = "restart_service"`. |
 | `capability_probe_path` | `""` | Capability-probe JSONL; empty uses the bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl`. |
 | `abliteration_probe_path` | `""` | Welfare-veto probe JSONL; empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. |
-| `consolidation_divergence_rate_threshold` | `0.5` | Divergence rate threshold read by the welfare-gated decommission check. |
-| `consolidation_divergence_magnitude_threshold` | `0.25` | Divergence magnitude threshold read by the welfare-gated decommission check. |
+| `consolidation_divergence_rate_threshold` | `0.5` | Divergence rate threshold used by the live preservation monitor and the welfare-gated decommission check. |
+| `consolidation_divergence_magnitude_threshold` | `0.25` | Divergence magnitude threshold used by the live preservation monitor and the welfare-gated decommission check. |
 
 The full reference also lists `nous_step_burst` and `seed`.
 

@@ -23,26 +23,28 @@
     {% include "_cycle_pacing.html" %}
 
     {% include "_development_panel.html" %}
-
-    <section id="freeze-control" class="panel{% if cycle_control and cycle_control.frozen %} frozen{% endif %}">
+{% set freeze_frozen = cycle_control and cycle_control.frozen %}
+    <section id="freeze-control" class="panel{% if freeze_frozen %} frozen{% endif %}">
       <h2>cycle control</h2>
       <p class="muted">
         Freezing suspends the experiential loop — the entity's subjective time stops
         while you work on the system. It is a humane pause, not a shutdown; resume
         continues exactly where it left off, and live perception is released while
-        frozen.
+        frozen. Resume releases only your own freeze. Welfare, gestation and end-of-programme freezes stay until you override them by name.
       </p>
       <p>status:
-        <strong id="freeze-status">{{ "frozen" if cycle_control and cycle_control.frozen else "running" }}</strong>
+        <strong id="freeze-status">{{ "frozen" if freeze_frozen else "running" }}</strong>
       </p>
+      <p class="muted" id="freeze-holders">{% if cycle_control and cycle_control.holders %}held by: {{ cycle_control.holders | map(attribute="source") | join(", ") }}{% endif %}</p>
       <div class="control-row">
         <input type="text" id="freeze-reason" placeholder="reason (optional)" style="width:16rem"
                value="{{ (cycle_control.reason or '') if cycle_control else '' }}">
         <button id="freeze-toggle" class="primary"
-                data-frozen="{{ 'true' if cycle_control and cycle_control.frozen else 'false' }}">
-          {{ "resume cycle" if cycle_control and cycle_control.frozen else "freeze cycle" }}
+                data-frozen="{{ 'true' if freeze_frozen else 'false' }}">
+          {{ "resume cycle" if freeze_frozen else "freeze cycle" }}
         </button>
         <span id="freeze-msg" class="muted"></span>
+        <button id="freeze-override" class="danger" hidden></button>
       </div>
     </section>
 
@@ -167,6 +169,12 @@
         <input type="text" id="merge-a" placeholder="snapshot A id" style="width:12rem">
         <input type="text" id="merge-b" placeholder="snapshot B id" style="width:12rem">
         <input type="text" id="merge-label" placeholder="label" style="width:8rem">
+        <label for="merge-world-model">world model from</label>
+        <select id="merge-world-model">
+          <option value="">none</option>
+          <option value="a">A</option>
+          <option value="b">B</option>
+        </select>
         <button type="submit" id="merge-submit">merge</button>
         <span id="merge-status" class="muted"></span>
       </form>

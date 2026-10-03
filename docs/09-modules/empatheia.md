@@ -139,13 +139,13 @@ flowchart TD
 
 ### Fork and merge
 
-`kaine/modules/empatheia/store.py` provides `EmpatheiaMergeStrategy.merge(state_a, state_b)` for combining agent-model state:
+Fork merges combine Empatheia state with `EmpatheiaMergeStrategy` in `kaine/lifecycle/strategies.py`, which `default_strategies()` registers under `empatheia`:
 
 - `interaction_count`: **sum** — both branches saw real interactions.
 - `emotion_histogram`, `behavioral_summary`, `reliability`: **weighted average** by interaction count.
 - `first_seen`: **min**; `last_seen`: **max**.
 
-`apply_merged_state()` writes the merged state back to the store. Nothing in the fork and merge code calls these helpers yet, so a fork merge does not combine Empatheia state through them.
+The merged profiles travel in the merged snapshot. Restoring that snapshot loads them into the store's cache, which `get()` and `all_profiles()` read first; each profile reaches Qdrant on its next update. See [Forks and merges](../12-forks-and-merges.md#empatheiamergestrategy).
 
 ### Thymos coupling
 
@@ -163,7 +163,8 @@ The result is clamped to `[thymos.coupling].coupling_ceiling` (default `0.15`). 
 |---|---|
 | `kaine/modules/empatheia/module.py` | `Empatheia(BaseModule)` — audition consumer, event dispatch, publications |
 | `kaine/modules/empatheia/agent.py` | `AgentModel` — histogram, EMA update, `familiarity()`, deviation |
-| `kaine/modules/empatheia/store.py` | `AgentStore` protocol, `InMemoryAgentStore`, `QdrantAgentStore`, `EmpatheiaMergeStrategy` |
+| `kaine/modules/empatheia/store.py` | `AgentStore` protocol, `InMemoryAgentStore`, `QdrantAgentStore` |
+| `kaine/lifecycle/strategies.py` | `EmpatheiaMergeStrategy` (fork merges) |
 | `kaine/boot.py` | `make_empatheia()` — Qdrant sub-table wiring |
 
 ## Enabling and use
@@ -201,6 +202,7 @@ Empatheia stores no raw sense data:
 | `tests/test_empatheia_agent.py` | `AgentModel` update, deviation, familiarity growth, EMA correctness |
 | `tests/test_empatheia_store.py` | `InMemoryAgentStore` CRUD, `QdrantAgentStore` (mocked) |
 | `tests/test_empatheia_merge.py` | `EmpatheiaMergeStrategy` weighted merge; count sum; edge cases |
+| `tests/test_empatheia_merge_wired.py` | `ForkManager.merge` uses the Empatheia strategy by default |
 | `tests/test_empatheia_module.py` | Full `Empatheia` tick; emotion → agent_model; transcription no-text; social_error threshold |
 
 ## Spec and related

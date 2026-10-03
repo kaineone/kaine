@@ -25,7 +25,7 @@ The launch above is the operator-supervised path: a human is the safety net. KAI
 
 The diagnostics page has a "cycle control" panel with "freeze cycle" and "resume cycle" buttons. While frozen, the cycle stops ticking but the process stays up. A frozen state is not persisted across restarts; a fresh launch clears any stale freeze and the cycle starts running.
 
-Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button calls `unfreeze()`, which releases every holder at once. Non-operator holders can also be released individually through their own mechanisms (`pop_freeze` / `stand_down`).
+Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. Spot and preservation release their own entries. A `welfare`, `gestation` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
 
 ### Normal stop
 
@@ -145,6 +145,6 @@ POST /diagnostics/forks   {"parent_id": "<id>", "label": "..."}
 POST /diagnostics/merges  {"snapshot_a_id": "<id>", "snapshot_b_id": "<id>"}
 ```
 
-Optionally add `"world_model_from": "a"|"b"` to choose which parent supplies the Phantasia world model, and the `allow_unmerged_adapters` flag to keep the parents' adapters uncombined when a merge is refused (no real merger, or a merged adapter that failed its capability or abliteration checks). If both snapshots carry a Phantasia world model and you do not pass `world_model_from`, the API returns 409. The dashboard merge form has no world-model field, so merges that need that choice only work through the API.
+Optionally add `"world_model_from": "a"|"b"` to choose which parent supplies the Phantasia world model, and the `allow_unmerged_adapters` flag to keep the parents' adapters uncombined when a merge is refused (no real merger, or a merged adapter that failed its capability or abliteration checks). If both snapshots carry a Phantasia world model and you do not pass `world_model_from`, the API returns 409. The dashboard merge form's "world model from" choice sets the same field.
 
 **Sleep cycle operationally:** Hypnos consolidation runs in a non-interruptible multi-phase pipeline. During consolidation the cycle continues running, but the Hypnos phase gate blocks other experiential ticks until consolidation completes. On the diagnostics page you will see the tick rate stall briefly while the phases run. Do not stop the cycle during this window.

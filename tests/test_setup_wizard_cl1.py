@@ -152,6 +152,7 @@ def _full_run_answers(cl1_answer: str) -> list[str]:
         "",  # allowed devices (default: all)
         "",  # CPU threads (default)
         "y",
+        "c",  # custom preset so the per-module answers below are used
         *(("y" if m in {"chronos", "soma"} else "n") for m in MODULE_ORDER),
         "n",
         "n",

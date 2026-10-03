@@ -120,7 +120,7 @@ Logs agent-model accuracy events from Empatheia: how well the entity's model of 
 - **Toggle:** `[evaluation.observers].voice_alignment_divergence`
 - **Output:** `data/evaluation/voice_alignment_divergence/voice_alignment_divergence-<YYYY-MM-DD>.jsonl`
 
-Reads the `voice_alignment` sub-dict on each `hypnos.sleep.completed` event. Hypnos always emits this sub-dict, but its keys are `accepted`, `adapter_path`, `capability_loss`, `reason`, and `samples_used`. The observer looks for `pairs_processed`, `pairs_above_threshold`, `dpo_loss`, `adapter_accepted`, `capability_score_before`, `capability_score_after`, and mean intent-expression similarity inside that sub-dict; those DPO statistics are emitted at the top level of the event instead, so the resulting records contain null values for those fields.
+Writes one record per sleep in which the voice-alignment phase ran. The outcome comes from the event's `voice_alignment` sub-dict: `adapter_accepted`, `capability_loss`, `samples_used`, and `outcome`, one of `accepted`, `no_pairs`, `vetoed_abliteration`, `vetoed_capability` or `failed`. The training metrics come from the top level of the event: `pairs_processed`, `pairs_above_threshold`, `dpo_loss`, `capability_score_before`, `capability_score_after`, `mean_similarity_before` and `mean_similarity_after`. A sleep whose voice-alignment phase was skipped by its configuration or approval gate produces no record. The free-text reason is never recorded, because these records can go into the metrics-only research bundle and reasons can contain exception text and local paths.
 
 The cosine-similarity divergence between workspace-conditioned output and the bare-LLM baseline is a separate instrument, `ABDivergenceObserver`.
 
@@ -261,7 +261,7 @@ Measures Eidolon prediction accuracy by replaying stored episodes and scoring wh
 
 `kaine/evaluation/observers/ablation_observer.py`
 
-- **Toggle:** the `oscillatory_ablation` field of the evaluation config. The `[evaluation]` loader does not read this key from TOML yet, so the live recorder stays off in every shipped configuration.
+- **Toggle:** `[evaluation].oscillatory_ablation` (default `false`). When on, the cycle scores each experiential tick a second time with the coherence layer forced off and records the content-free difference; the entity's own selection is unchanged.
 - **Output:** `data/evaluation/ablation/ablation-<YYYY-MM-DD>.jsonl`
 
 Records oscillatory-ablation metrics for the workspace oscillatory layer.
@@ -376,7 +376,7 @@ Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every f
 
 Two additional `[evaluation]` keys are worth noting:
 
-- `oscillatory_ablation` enables the oscillatory-ablation observer. Its default is in `kaine/evaluation/config.py`.
+- `oscillatory_ablation` (default `false`) enables the live oscillatory-ablation recorder.
 - `require_semantic_embedder` is a fail-closed guard: when set, instruments that need a sentence-transformer embedder refuse to run if none is available, rather than degrading to a non-semantic fallback.
 
 ```toml
@@ -439,7 +439,7 @@ output_dir = "data/evaluation/individuation"
 | `kaine/evaluation/observers/coherence_observer.py` | PLV coherence logger |
 | `kaine/evaluation/observers/replay_observer.py` | Mnemos replay logger |
 | `kaine/evaluation/observers/empatheia_observer.py` | Agent-model accuracy logger |
-| `kaine/evaluation/observers/voice_alignment_divergence_observer.py` | Hypnos `voice_alignment` sub-dict logger |
+| `kaine/evaluation/observers/voice_alignment_divergence_observer.py` | Per-sleep voice-alignment outcome and training metrics |
 | `kaine/evaluation/observers/fatigue_observer.py` | Fatigue history logger |
 | `kaine/evaluation/observers/prediction_error_observer.py` | Sliding-window PE statistics |
 | `kaine/evaluation/observers/welfare_observer.py` | Gray-zone event detector |

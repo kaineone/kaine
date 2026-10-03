@@ -65,6 +65,13 @@ test = [
     # tests/test_import_boundary_contracts.py). See docs/02-architecture/boundaries.md.
     "import-linter>=2.15",
 ]
+# Real-browser layout tests for the Nexus dashboard (tests/test_nexus_detail_layout.py).
+# Kept out of `test` because the runtime images install that extra and a browser
+# driver does not belong there. The tests drive the system Google Chrome
+# (Playwright channel "chrome") and skip when no browser is available.
+browser-test = [
+    "playwright>=1.63",
+]
 # Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
 # Required only if [audition].capture_enabled = true. Lazy-imported.
 audio = [

@@ -467,7 +467,8 @@ services:
         condition: service_healthy
     # DELIBERATELY no restart policy on kaine-study: a study run is an operator
     # decision, and the child cycles it starts are entities that never
-    # auto-restart. A halted study is resumed by running it again.
+    # auto-restart. An interrupted study resumes by running it
+    # again; after a failed step, run it with --retry-failed.
     logging: *default-logging
 
   # ---- voice-alignment trainer: profile-gated, isolated from entity state ----

@@ -13,11 +13,10 @@ services required).
 Both backends implement `serialize()` / `deserialize()` losslessly for
 the fork/merge subsystem.
 
-`EmpatheiaMergeStrategy` mirrors `MnemosMergeStrategy` in
-``kaine.lifecycle.strategies``: reconcile two diverged `AgentStore`
-snapshots by summing interaction counts (additive — both branches saw
-real interactions) and merging emotion histograms via weighted average
-(interaction count is the weight).
+Fork merges reconcile these snapshots with `EmpatheiaMergeStrategy` in
+``kaine.lifecycle.strategies`` (interaction counts summed; histograms,
+behavioural summaries and reliability averaged with interaction count as
+the weight).
 """
 from __future__ import annotations
 
@@ -392,125 +391,3 @@ class QdrantAgentStore:
             agent_id: AgentModel.from_dict(d)
             for agent_id, d in payload.items()
         }
-
-
-# ---------------------------------------------------------------------------
-# Merge strategy (for the fork/merge subsystem)
-# ---------------------------------------------------------------------------
-
-
-class EmpatheiaMergeStrategy:
-    """Reconcile two diverged AgentStore snapshots.
-
-    Semantics
-    ---------
-    - interaction_count: SUM — both branches saw real interactions.
-    - emotion_histogram: weighted average by interaction count — each
-      branch's histogram is weighted by how many observations it made.
-    - behavioral_summary: weighted average by interaction count.
-    - reliability: weighted average by interaction count.
-    - first_seen: min (earliest observation).
-    - last_seen: max (most recent observation).
-
-    The merged profile is persisted to the store before completing.
-    """
-
-    def merge(
-        self,
-        state_a: dict[str, Any] | None,
-        state_b: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        if state_a is None and state_b is None:
-            return {}
-        if state_a is None:
-            return dict(state_b or {})
-        if state_b is None:
-            return dict(state_a or {})
-
-        profiles_a: dict[str, Any] = state_a.get("profiles", {})
-        profiles_b: dict[str, Any] = state_b.get("profiles", {})
-        all_ids = set(profiles_a) | set(profiles_b)
-
-        merged_profiles: dict[str, Any] = {}
-        for agent_id in all_ids:
-            pa = profiles_a.get(agent_id)
-            pb = profiles_b.get(agent_id)
-            if pa is None:
-                merged_profiles[agent_id] = dict(pb)
-            elif pb is None:
-                merged_profiles[agent_id] = dict(pa)
-            else:
-                merged_profiles[agent_id] = _merge_profiles(pa, pb)
-
-        return {"profiles": merged_profiles}
-
-
-def _merge_profiles(
-    pa: dict[str, Any], pb: dict[str, Any]
-) -> dict[str, Any]:
-    """Merge two AgentModel dicts by weighted average."""
-    count_a = int(pa.get("interaction_count", 0))
-    count_b = int(pb.get("interaction_count", 0))
-    total = count_a + count_b
-
-    if total == 0:
-        # No observations on either side — take pa as base.
-        return dict(pa)
-
-    w_a = count_a / total
-    w_b = count_b / total
-
-    # Merge emotion histogram (weighted average).
-    hist_a = pa.get("emotion_histogram") or {}
-    hist_b = pb.get("emotion_histogram") or {}
-    all_cats = set(hist_a) | set(hist_b)
-    merged_hist = {
-        cat: w_a * float(hist_a.get(cat, 0.0)) + w_b * float(hist_b.get(cat, 0.0))
-        for cat in all_cats
-    }
-
-    # Merge behavioral_summary (weighted average).
-    bsummary_a = pa.get("behavioral_summary") or {}
-    bsummary_b = pb.get("behavioral_summary") or {}
-    all_bkeys = set(bsummary_a) | set(bsummary_b)
-    merged_bsummary = {
-        k: w_a * float(bsummary_a.get(k, 0.0)) + w_b * float(bsummary_b.get(k, 0.0))
-        for k in all_bkeys
-    }
-
-    # Reliability: weighted average.
-    reliability = (
-        w_a * float(pa.get("reliability", 1.0))
-        + w_b * float(pb.get("reliability", 1.0))
-    )
-
-    return {
-        "id": pa.get("id") or pb.get("id"),
-        "label": pa.get("label") or pb.get("label"),
-        "emotion_histogram": merged_hist,
-        "behavioral_summary": merged_bsummary,
-        "reliability": reliability,
-        "interaction_count": total,
-        "first_seen": min(
-            float(pa.get("first_seen", 0.0)), float(pb.get("first_seen", 0.0))
-        ),
-        "last_seen": max(
-            float(pa.get("last_seen", 0.0)), float(pb.get("last_seen", 0.0))
-        ),
-    }
-
-
-async def apply_merged_state(
-    store: AgentStore,
-    merged_state: dict[str, Any],
-) -> None:
-    """Persist every profile in a merged state dict to the store.
-
-    Called by the fork/merge manager after ``EmpatheiaMergeStrategy.merge``
-    to satisfy the requirement that merged profiles are persisted before
-    the merge completes.
-    """
-    profiles = merged_state.get("profiles") or {}
-    for agent_id, profile_dict in profiles.items():
-        model = AgentModel.from_dict(profile_dict)
-        await store.put(model)
