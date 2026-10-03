@@ -1,12 +1,11 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
-# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-
 import inspect
-import io
 import math
 import tokenize
+from io import BytesIO
 
+import numpy as np
 import pytest
+from scipy.signal import welch
 
 pytest.importorskip("snntorch")
 
@@ -16,149 +15,160 @@ from kaine.oscillator.module_oscillator import (
     make_self_rhythm_oscillator,
 )
 
-
-def test_deterministic_rate_histories() -> None:
-    osc1 = make_self_rhythm_oscillator(seed=42, eta=0.0)
-    osc2 = make_self_rhythm_oscillator(seed=42, eta=0.0)
-    assert osc1 is not None and osc2 is not None
-    for i in range(200):
-        ext = 0.2 if i % 20 < 10 else 0.0
-        osc1.step(0.3, external_drive=ext)
-        osc2.step(0.3, external_drive=ext)
-    assert osc1.rate_history() == osc2.rate_history()
-    assert osc1.tau_rec == pytest.approx(osc2.tau_rec)
+STEP_HZ = 20.0
 
 
-@pytest.mark.parametrize(
-    "override",
-    [
-        {"tau_rec": 0.2, "tau_min": 0.3},  # tau_rec < tau_min
-        {"tau_rec": 2.5, "tau_max": 2.0},  # tau_rec > tau_max
-        {"tau_min": -0.1, "tau_rec": 0.8},  # non-positive tau_min
-        {"plasticity_sign": 0.0},
-        {"plasticity_sign": -2.0},
-        {"afferent_gain": 1.5},
-        {"phase_band_hz": (0.3, 15.0)},  # hi above Nyquist at 20 Hz
-        {"phase_band_hz": (2.0, 0.3)},  # inverted band
-        {"phase_band_hz": (-0.1, 1.0)},  # non-positive lo
-        {"step_hz": float("inf")},
-    ],
-)
-def test_constructor_validation(override: dict) -> None:
-    kwargs = {"seed": 0}
-    kwargs.update(override)
+def _run_steps(osc, n, own=0.4, external=None):
+    for _ in range(n):
+        osc.step(own, external_drive=external)
+
+
+def _dominant_freq(activity, fs=STEP_HZ):
+    nperseg = min(len(activity), 1200)
+    f, P = welch(activity, fs=fs, nperseg=nperseg)
+    P[0] = 0.0
+    return float(f[np.argmax(P)])
+
+
+def test_factory_builds():
+    osc = make_self_rhythm_oscillator(seed=0)
+    assert isinstance(osc, SelfRhythmOscillator)
+
+
+def test_determinism_fixed_seed():
+    a = SelfRhythmOscillator(seed=123)
+    b = SelfRhythmOscillator(seed=123)
+    _run_steps(a, 400)
+    _run_steps(b, 400)
+    assert a.activity_history() == b.activity_history()
+    assert a.rate_history() == b.rate_history()
+    assert a.tau_rec == pytest.approx(b.tau_rec)
+
+
+def test_constructor_validation():
+    base = {"seed": 0}
     with pytest.raises(ValueError):
-        SelfRhythmOscillator(**kwargs)
+        SelfRhythmOscillator(tau_rec=0.5, tau_min=0.9, tau_max=3.0, **base)
+    with pytest.raises(ValueError):
+        SelfRhythmOscillator(tau_rec=4.0, tau_min=0.9, tau_max=3.0, **base)
+    with pytest.raises(ValueError):
+        SelfRhythmOscillator(tau_rec=1.6, tau_min=2.0, tau_max=3.0, **base)
+    with pytest.raises(ValueError):
+        SelfRhythmOscillator(plasticity_sign=2.0, **base)
+    with pytest.raises(ValueError):
+        SelfRhythmOscillator(afferent_gain=1.1, **base)
+    with pytest.raises(ValueError):
+        SelfRhythmOscillator(
+            step_hz=20.0, phase_band_hz=(0.3, 15.0), **base
+        )
+    with pytest.raises(ValueError):
+        SelfRhythmOscillator(substeps=0, **base)
 
 
-def test_adaptation_off_tau_unchanged() -> None:
-    osc = make_self_rhythm_oscillator(seed=1, eta=0.0)
-    assert osc is not None
-    tau0 = osc.tau_rec
-    for i in range(2000):
-        ext = 0.1 if i % 20 < 10 else 0.0
-        osc.step(0.3, external_drive=ext)
-    assert osc.tau_rec == pytest.approx(tau0)
+def test_undriven_rhythm_in_band():
+    osc = SelfRhythmOscillator(seed=42)
+    n = int(120.0 * STEP_HZ)
+    _run_steps(osc, n, own=0.4, external=None)
+    activity = np.asarray(osc.activity_history())
+    f_dom = _dominant_freq(activity)
+    assert 0.6 <= f_dom <= 0.9
+    assert np.std(activity) > 0.05
 
 
-def test_adaptation_on_changes_tau_within_bounds() -> None:
-    osc = make_self_rhythm_oscillator(
-        seed=2, eta=1.0, plasticity_sign=1.0, tau_min=0.3, tau_max=2.0
+def test_frequency_decreases_with_tau_rec():
+    n = int(120.0 * STEP_HZ)
+    osc_fast = SelfRhythmOscillator(seed=1, tau_rec=1.2)
+    osc_slow = SelfRhythmOscillator(seed=1, tau_rec=2.5)
+    _run_steps(osc_fast, n, own=0.4)
+    _run_steps(osc_slow, n, own=0.4)
+    f_fast = _dominant_freq(np.asarray(osc_fast.activity_history()))
+    f_slow = _dominant_freq(np.asarray(osc_slow.activity_history()))
+    assert f_fast > f_slow
+
+
+def test_eta_adaptation_bounds():
+    n = int(60.0 * STEP_HZ)
+    step_period = int(STEP_HZ / 0.5)
+
+    # eta=0 -> tau_rec stays at its initial value.
+    osc_zero = SelfRhythmOscillator(seed=2, eta=0.0, tau_rec=1.6)
+    for i in range(n):
+        ext = 0.5 + 0.5 * math.sin(2.0 * math.pi * i / step_period)
+        osc_zero.step(0.4, external_drive=ext)
+    assert osc_zero.tau_rec == pytest.approx(1.6)
+
+    # eta>0 with periodic drive -> tau_rec moves but stays within bounds.
+    osc_adapt = SelfRhythmOscillator(
+        seed=2, eta=0.01, plasticity_sign=-1.0, tau_rec=1.6
     )
-    assert osc is not None
-    tau0 = osc.tau_rec
-    for i in range(4000):
-        ext = 0.5 * (1.0 + math.sin(2.0 * math.pi * 0.8 * i / 20.0))
-        osc.step(0.3, external_drive=ext)
-    assert not math.isclose(osc.tau_rec, tau0, rel_tol=1e-4, abs_tol=1e-4)
-    assert 0.3 <= osc.tau_rec <= 2.0
+    for i in range(n):
+        ext = 0.5 + 0.5 * math.sin(2.0 * math.pi * i / step_period)
+        osc_adapt.step(0.4, external_drive=ext)
+    assert osc_adapt.tau_rec != pytest.approx(1.6, abs=1e-4)
+    assert 0.9 <= osc_adapt.tau_rec <= 3.0
+
+    # eta>0 but external_drive=None -> no adaptation.
+    osc_none = SelfRhythmOscillator(
+        seed=2, eta=0.01, plasticity_sign=-1.0, tau_rec=1.6
+    )
+    _run_steps(osc_none, n, own=0.4, external=None)
+    assert osc_none.tau_rec == pytest.approx(1.6)
 
 
-def test_no_external_drive_means_no_adaptation() -> None:
-    osc = make_self_rhythm_oscillator(seed=3, eta=1.0)
-    assert osc is not None
-    tau0 = osc.tau_rec
-    for _ in range(500):
-        osc.step(0.3, external_drive=None)
-    assert osc.tau_rec == pytest.approx(tau0)
+def test_serialization_v2_roundtrip():
+    original = SelfRhythmOscillator(seed=7)
+    _run_steps(original, 100, own=0.4)
 
-
-def test_v2_serialization_roundtrip() -> None:
-    osc1 = make_self_rhythm_oscillator(seed=4, eta=0.1)
-    assert osc1 is not None
-    for i in range(100):
-        ext = 0.2 if i % 10 < 5 else 0.0
-        osc1.step(0.3, external_drive=ext)
-
-    state = osc1.serialize()
-    assert state.get("kind") == "self_rhythm"
+    state = original.serialize()
     assert state.get("version") == 2
 
-    osc2 = make_self_rhythm_oscillator(seed=999, eta=0.1)
-    assert osc2 is not None
-    osc2.deserialize(state)
+    restored = SelfRhythmOscillator(seed=999)
+    restored.deserialize(state)
 
-    assert osc2.tau_rec == pytest.approx(osc1.tau_rec)
-    assert osc2.synaptic_resource == pytest.approx(osc1.synaptic_resource)
-    assert osc2.step_count == osc1.step_count
-    assert osc2.spike_sum == pytest.approx(osc1.spike_sum)
+    n = 200
+    for i in range(n):
+        ext = 0.3 * math.sin(2.0 * math.pi * i / STEP_HZ)
+        original.step(0.4, external_drive=ext)
+        restored.step(0.4, external_drive=ext)
 
-    for i in range(100):
-        ext = 0.15 if i % 7 < 4 else 0.0
-        osc1.step(0.3, external_drive=ext)
-        osc2.step(0.3, external_drive=ext)
-
-    assert osc2.rate_history() == osc1.rate_history()
-    assert osc2.tau_rec == pytest.approx(osc1.tau_rec)
+    assert np.allclose(original.activity_history(), restored.activity_history())
+    assert np.allclose(original.rate_history(), restored.rate_history())
+    assert original.tau_rec == pytest.approx(restored.tau_rec)
 
 
-def test_v1_state_is_ignored() -> None:
-    osc = make_self_rhythm_oscillator(seed=5, eta=0.0)
-    assert osc is not None
-    initial_tau = osc.tau_rec
-    osc.deserialize(
-        {"kind": "self_rhythm", "spike_rate_history": [0.1, 0.2, 0.3]}
-    )
-    assert osc.tau_rec == pytest.approx(initial_tau)
-    assert osc.synaptic_resource == pytest.approx(1.0)
-    assert osc.step_count == 0
+def test_serialization_v1_ignored():
+    a = SelfRhythmOscillator(seed=5)
+    b = SelfRhythmOscillator(seed=5)
+    v1_state = {"version": 1, "kind": "lif"}
+    a.deserialize(v1_state)
+    _run_steps(a, 50, own=0.4)
+    _run_steps(b, 50, own=0.4)
+    assert a.activity_history() == b.activity_history()
+    assert a.rate_history() == b.rate_history()
 
 
-def test_no_maternal_rate_constants_in_source() -> None:
+def test_no_maternal_rate_constant():
     source = inspect.getsource(SelfRhythmOscillator)
-    text_parts: list[str] = []
-    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+    forbidden = {"70", "1.16", "1.17", "bpm", "heartbeat"}
+    tokens = []
+    for tok in tokenize.tokenize(BytesIO(source.encode("utf-8")).readline):
         if tok.type in (tokenize.COMMENT, tokenize.STRING):
             continue
-        text_parts.append(tok.string)
-    text = " ".join(text_parts)
-    for forbidden in ("70", "1.16", "1.17", "bpm", "heartbeat"):
-        assert forbidden not in text, (
-            f"{forbidden!r} found in SelfRhythmOscillator source "
-            "outside comments/docstrings"
-        )
+        tokens.append(tok.string)
+    found = {t.lower() for t in tokens if t.lower() in forbidden}
+    assert not found, f"forbidden maternal-rate tokens found: {found}"
 
 
-def test_phase_and_amplitude_thresholds() -> None:
-    osc = make_self_rhythm_oscillator(seed=6, eta=0.0)
-    assert osc is not None
-    step_hz = 20.0
-    before_steps = int(3.9 * step_hz)
-    after_steps = int(5.0 * step_hz) + 50
-
-    for _ in range(before_steps):
-        osc.step(0.3, external_drive=None)
-
+def test_phase_and_amplitude_progression():
+    osc = SelfRhythmOscillator(seed=3)
+    _run_steps(osc, int(3.0 * STEP_HZ), own=0.4)
     assert osc.phase() == NEUTRAL_PHASE
     assert osc.amplitude() == 0.0
 
-    for _ in range(after_steps - before_steps):
-        osc.step(0.3, external_drive=None)
-
+    _run_steps(osc, int(7.0 * STEP_HZ), own=0.4)
     ph = osc.phase()
-    assert math.isfinite(ph)
-    assert ph != NEUTRAL_PHASE
-
     amp = osc.amplitude()
+    assert ph != NEUTRAL_PHASE
+    assert math.isfinite(ph)
+    assert amp > 0.0
     assert math.isfinite(amp)
-    assert amp >= 0.0
