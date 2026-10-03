@@ -195,13 +195,20 @@ def _make_locking_callbacks(
     own_freq: float = 0.6,
     amplitude: float = 1.0,
     withdrawal_amplitude: float | None = None,
+    withdrawal_freq: float | None = None,
 ) -> tuple[Any, Any]:
     phase = 0.0
     last_t: float | None = None
 
     def _freq() -> float:
         target = int(owner._config.baseline_withdrawals)
-        return own_freq if owner._self_rhythm_baseline_count < target else beat_freq
+        if owner._self_rhythm_baseline_count < target:
+            return own_freq
+        # An evoked response follows the beat while driven but falls back to its
+        # own rate when the drive is withdrawn (withdrawal_freq = own_freq).
+        if withdrawal_freq is not None and owner._probe_state == "withdrawal":
+            return withdrawal_freq
+        return beat_freq
 
     def _amp() -> float:
         if owner._self_rhythm_baseline_count < int(owner._config.baseline_withdrawals):
@@ -680,3 +687,55 @@ async def test_perturbation_sets_full_drive(owner_factory):
     ]
     assert len(ends) == 1
     assert ends[0].payload.get("aborted") is False
+
+
+@pytest.mark.asyncio
+async def test_evoked_response_without_frequency_pull_is_not_entrainment(owner_factory):
+    """A rhythm that follows the beat only while driven, and returns to its own
+    rate when the drive is withdrawn, is an evoked response (Zoefel 2018; Duecker
+    2021). It beats the surrogates and self-sustains, but its frequency was never
+    pulled, so it must not count as entrainment."""
+    clock = FakeClock()
+    drive = FakeDrive()
+    bus = FakeBus()
+    config = _config(
+        readout_period_seconds=30.0,
+        sample_hz=10.0,
+        withdrawal_period_seconds=30.0,
+        withdrawal_seconds=10.0,
+        perturbation_period_seconds=1.0e9,
+        perturbation_seconds=1.0,
+        entrainment_window_seconds=20.0,
+        edge_trim_seconds=1.0,
+        baseline_withdrawals=1.0,
+        frequency_pull_floor=0.5,
+    )
+    owner = owner_factory(
+        clock=clock,
+        bus=bus,
+        drive=drive,
+        beat_phase=_beat_phase(clock, freq=1.0),
+        surrogate_beat_phases=_surrogate_phases(clock),
+        config=config,
+    )
+    soma = owner._soma
+    activity_fn, state_fn = _make_locking_callbacks(
+        owner, clock, beat_freq=1.0, own_freq=0.6, amplitude=1.0, withdrawal_freq=0.6
+    )
+    soma.self_rhythm_activity = activity_fn
+    soma.self_rhythm_state = state_fn
+
+    dt = 1.0 / config.sample_hz
+    withdrawals_done = 0
+    while withdrawals_done < 2:
+        was = owner._probe_state
+        clock.t += dt
+        await owner.step()
+        if was == "withdrawal" and owner._probe_state == "idle":
+            withdrawals_done += 1
+
+    assert owner._entrainment_plv is not None and owner._entrainment_plv_surrogate_max is not None
+    assert owner._entrainment_plv > owner._entrainment_plv_surrogate_max
+    assert owner._endogenous_self_sustain is True
+    assert owner._frequency_pull is not None and owner._frequency_pull < 0.5
+    assert owner._entrain_then_autonomy is False
