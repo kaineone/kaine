@@ -74,7 +74,6 @@ Each table below lists the items in recommended order. The "Op." column says whe
   - **`external_utterances` is still on.** The operator rule of 2026-10 says a study records only the workspace graph. The branch keeps the utterances and the safety records. Get an explicit operator ruling on whether utterances count as "graph".
   - **The evaluation observers still run during a study.** `[evaluation]` is enabled by default with `ab_sample_rate = 1.0` (`config/kaine.toml:1324`). That means one extra A/B call to the organ for every sampled utterance, during a study meant to measure the entity undisturbed. Turn off `[evaluation]` in the overlay, but keep anything the safety net reads.
 - First confirm that `welfare_signal` and the preservation monitor do not depend on the evaluation master flag. `cycle/__main__.py:1741` says Spot reads the welfare signal directly. Verify that, and pin it with a test.
-- The branch's `main..` log also shows the pre-squash commits of #316. Rebase it onto `main` before review.
 - Acceptance criteria:
   - An overlay test asserts that no recorder outside the ignition log and the safety records is enabled.
   - A test asserts the safety net still receives its inputs with `[evaluation]` off.
