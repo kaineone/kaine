@@ -78,7 +78,7 @@ Every one of them can also appear nested in `workspace.broadcast` → `selected[
 1. **Named vector fields are always removed:** `latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector`. These join a `VECTOR_FIELDS` set beside `CONTENT_FIELDS`, so a short test latent is removed too.
 2. **A backstop for unnamed vectors:** any list or tuple of 16 or more numbers is removed, unless its key is one of the reviewed non-embedding keys `saliences` and `step_magnitudes`. Booleans do not count as numbers. Tuples are handled like lists, since in-process payloads can hold them.
 
-A new module that publishes an embedding under a new name is therefore still stopped. Adding a key to the exemption list is a reviewed change with a test.
+A new module that publishes an embedding under a new name is therefore still stopped. The backstop's limit: it recognises a list only when every item is a number, so an unnamed embedding carrying a null or a non-list sequence (bus payloads are JSON-decoded lists) would pass. The named fields cover every embedding published today; a new embedding field joins `VECTOR_FIELDS` with a test. Adding a key to the exemption list is a reviewed change with a test.
 
 **Effect on callers.**
 - **Nexus and the Nexus record** lose the vectors. Nothing displays them, and the Topos and Chronos reports shrink from about 49 KB and 1.9 KB to a few hundred bytes.
