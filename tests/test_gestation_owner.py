@@ -98,20 +98,33 @@ class FakeDrive:
 
 
 def _config(**overrides: Any) -> GestationReadoutConfig:
+    sample_hz = float(overrides.get("sample_hz", 10.0))
+    band_high = min(2.0, 0.4 * sample_hz)
+    band_low = min(0.3, band_high / 4.0)
     defaults: dict[str, Any] = {
+        # These tests exercise one withdrawal's entrainment test; replication
+        # across consecutive withdrawals is tested in
+        # tests/test_gestation_entrainment_replication.py.
+        "entrainment_replications": 1.0,
+        # The fake surrogate provider below supplies three foreign mothers.
+        "surrogate_count": 3.0,
         "readout_period_seconds": 10.0,
-        "sample_hz": 10.0,
+        "sample_hz": sample_hz,
         "withdrawal_period_seconds": 10.0,
         "withdrawal_seconds": 5.0,
         "perturbation_period_seconds": 20.0,
         "perturbation_seconds": 2.0,
         "baseline_drive_fraction": 0.5,
-        "entrainment_plv_floor": 0.5,
         "hrv_window_seconds": 10.0,
         "recovery_tolerance": 0.25,
         "recovery_cap_seconds": 30.0,
-        # These tests exercise the fixed schedule; jitter is tested separately.
         "probe_jitter_fraction": 0.0,
+        "entrainment_window_seconds": 300.0,
+        "entrainment_band_low_hz": band_low,
+        "entrainment_band_high_hz": band_high,
+        "edge_trim_seconds": 2.0,
+        "frequency_pull_floor": 0.5,
+        "baseline_withdrawals": 3.0,
     }
     defaults.update(overrides)
     return GestationReadoutConfig.from_dict(defaults)
@@ -134,6 +147,7 @@ def owner_factory(tmp_path: Path):
         drive: FakeDrive | None = None,
         soma: FakeSoma | None = None,
         beat_phase: Any = None,
+        surrogate_beat_phases: Any = None,
         is_paused: Any = None,
         config: GestationReadoutConfig | None = None,
         state_path: Path | None = None,
@@ -151,6 +165,7 @@ def owner_factory(tmp_path: Path):
             soma=soma,
             drive=drive,
             beat_phase=beat_phase,
+            surrogate_beat_phases=surrogate_beat_phases,
             is_paused=is_paused,
             config=config,
             clock=clock,
@@ -158,6 +173,67 @@ def owner_factory(tmp_path: Path):
         )
 
     return _make
+
+
+def _beat_phase(clock: FakeClock, freq: float = 1.0) -> Any:
+    return lambda: clock.t * 2.0 * np.pi * freq
+
+
+def _surrogate_phases(
+    clock: FakeClock,
+    freqs: tuple[float, ...] = (0.8, 1.2, 1.4),
+    offsets: tuple[float, ...] = (0.0, 0.5, 1.0),
+) -> Any:
+    return lambda: tuple(
+        clock.t * 2.0 * np.pi * f + off for f, off in zip(freqs, offsets)
+    )
+
+
+def _make_locking_callbacks(
+    owner: GestationOwner,
+    clock: FakeClock,
+    *,
+    beat_freq: float = 1.0,
+    own_freq: float = 0.6,
+    amplitude: float = 1.0,
+    withdrawal_amplitude: float | None = None,
+    withdrawal_freq: float | None = None,
+) -> tuple[Any, Any]:
+    phase = 0.0
+    last_t: float | None = None
+
+    def _freq() -> float:
+        target = int(owner._config.baseline_withdrawals)
+        if owner._self_rhythm_baseline_count < target:
+            return own_freq
+        # An evoked response follows the beat while driven but falls back to its
+        # own rate when the drive is withdrawn (withdrawal_freq = own_freq).
+        if withdrawal_freq is not None and owner._probe_state == "withdrawal":
+            return withdrawal_freq
+        return beat_freq
+
+    def _amp() -> float:
+        if owner._self_rhythm_baseline_count < int(owner._config.baseline_withdrawals):
+            return amplitude
+        if withdrawal_amplitude is not None and owner._probe_state == "withdrawal":
+            return withdrawal_amplitude
+        return amplitude
+
+    def activity() -> float:
+        nonlocal phase, last_t
+        t = clock.t
+        freq = _freq()
+        if last_t is None:
+            phase = 0.0
+        else:
+            phase += 2.0 * np.pi * freq * (t - last_t)
+        last_t = t
+        return 0.5 + 0.5 * np.cos(phase)
+
+    def state() -> tuple[float, float]:
+        return (0.0, _amp())
+
+    return activity, state
 
 
 @pytest.mark.asyncio
@@ -191,32 +267,37 @@ async def test_withdrawal_produces_true_markers(owner_factory):
     drive = FakeDrive()
     bus = FakeBus()
     config = _config(
-        readout_period_seconds=10.0,
-        withdrawal_period_seconds=10.0,
-        withdrawal_seconds=5.0,
+        readout_period_seconds=30.0,
+        sample_hz=10.0,
+        withdrawal_period_seconds=30.0,
+        withdrawal_seconds=10.0,
+        perturbation_period_seconds=1.0e9,
+        perturbation_seconds=1.0,
+        entrainment_window_seconds=20.0,
+        edge_trim_seconds=1.0,
+        baseline_withdrawals=1.0,
+        frequency_pull_floor=0.5,
     )
-
-    def beat():
-        return clock.t * 2 * np.pi
-
-    soma = FakeSoma(phase=0.0, amplitude=1.0)
-
-    def soma_state():
-        return (clock.t * 2 * np.pi, soma.amplitude)
-
-    soma.self_rhythm_state = soma_state  # type: ignore[method-assign]
 
     owner = owner_factory(
         clock=clock,
         bus=bus,
         drive=drive,
-        soma=soma,
-        beat_phase=beat,
+        beat_phase=_beat_phase(clock, freq=1.0),
+        surrogate_beat_phases=_surrogate_phases(clock),
         config=config,
     )
+
+    soma = owner._soma
+    activity_fn, state_fn = _make_locking_callbacks(
+        owner, clock, beat_freq=1.0, own_freq=0.6, amplitude=1.0
+    )
+    soma.self_rhythm_activity = activity_fn
+    soma.self_rhythm_state = state_fn
+
     dt = 1.0 / config.sample_hz
 
-    # Run until withdrawal starts at t=10.
+    # First withdrawal: establishes the baseline withdrawn frequency (0.6 Hz).
     for i in range(int(config.readout_period_seconds / dt) + 1):
         clock.t = i * dt
         await owner.step()
@@ -226,6 +307,21 @@ async def test_withdrawal_produces_true_markers(owner_factory):
 
     starts = _events(bus, f"{SOURCE}.out", PROBE_TYPE)
     assert len([e for e in starts if e.payload.get("phase") == "start"]) == 1
+
+    while owner._probe_state == "withdrawal":
+        clock.t += dt
+        await owner.step()
+
+    assert owner._probe_state == "idle"
+    assert drive.scale == config.baseline_drive_fraction
+
+    # Run to the second withdrawal, where the rhythm is now locked to the beat.
+    while owner._probe_state != "withdrawal":
+        clock.t += dt
+        await owner.step()
+
+    assert owner._probe_state == "withdrawal"
+    assert drive.scale == 0.0
 
     start_t = clock.t
     while clock.t < start_t + config.withdrawal_seconds + dt / 2:
@@ -237,11 +333,31 @@ async def test_withdrawal_produces_true_markers(owner_factory):
 
     ends = _events(bus, f"{SOURCE}.out", PROBE_TYPE)
     end_events = [e for e in ends if e.payload.get("phase") == "end"]
-    assert len(end_events) == 1
-    assert end_events[0].payload.get("aborted") is False
+    assert len(end_events) == 2
+    assert all(e.payload.get("aborted") is False for e in end_events)
 
     assert owner._endogenous_self_sustain is True
     assert owner._entrain_then_autonomy is True
+
+    assert owner._entrainment_plv is not None
+    assert owner._entrainment_plv_surrogate_max is not None
+    assert owner._self_rhythm_freq_withdrawn is not None
+    assert owner._frequency_pull is not None
+    assert np.isfinite(owner._entrainment_plv)
+    assert np.isfinite(owner._entrainment_plv_surrogate_max)
+    assert np.isfinite(owner._self_rhythm_freq_withdrawn)
+    assert np.isfinite(owner._frequency_pull)
+
+    # The numbers behind the marker are published in the readiness readout.
+    readout = owner.readout()
+    for key in (
+        "entrainment_plv",
+        "entrainment_plv_surrogate_max",
+        "self_rhythm_freq_withdrawn",
+        "frequency_pull",
+    ):
+        assert key in readout
+        assert np.isfinite(readout[key])
 
 
 @pytest.mark.asyncio
@@ -250,35 +366,57 @@ async def test_withdrawal_false_marker_when_amplitude_drops(owner_factory):
     drive = FakeDrive()
     bus = FakeBus()
     config = _config(
-        readout_period_seconds=10.0,
-        withdrawal_period_seconds=10.0,
-        withdrawal_seconds=5.0,
+        readout_period_seconds=30.0,
+        sample_hz=10.0,
+        withdrawal_period_seconds=30.0,
+        withdrawal_seconds=10.0,
+        perturbation_period_seconds=1.0e9,
+        perturbation_seconds=1.0,
+        entrainment_window_seconds=20.0,
+        edge_trim_seconds=1.0,
+        baseline_withdrawals=1.0,
+        frequency_pull_floor=0.5,
     )
-
-    def beat():
-        return clock.t * 2 * np.pi
-
-    soma = FakeSoma(phase=0.0, amplitude=1.0)
-
-    def soma_state():
-        phase = clock.t * 2 * np.pi
-        amp = 1.0 if clock.t < 10.0 else 0.1
-        return (phase, amp)
-
-    soma.self_rhythm_state = soma_state  # type: ignore[method-assign]
 
     owner = owner_factory(
         clock=clock,
         bus=bus,
         drive=drive,
-        soma=soma,
-        beat_phase=beat,
+        beat_phase=_beat_phase(clock, freq=1.0),
+        surrogate_beat_phases=_surrogate_phases(clock),
         config=config,
     )
+
+    soma = owner._soma
+    activity_fn, state_fn = _make_locking_callbacks(
+        owner,
+        clock,
+        beat_freq=1.0,
+        own_freq=0.6,
+        amplitude=1.0,
+        withdrawal_amplitude=0.1,
+    )
+    soma.self_rhythm_activity = activity_fn
+    soma.self_rhythm_state = state_fn
+
     dt = 1.0 / config.sample_hz
 
+    # First withdrawal establishes the baseline at the normal amplitude.
     for i in range(int(config.readout_period_seconds / dt) + 1):
         clock.t = i * dt
+        await owner.step()
+
+    assert owner._probe_state == "withdrawal"
+
+    while owner._probe_state == "withdrawal":
+        clock.t += dt
+        await owner.step()
+
+    assert owner._probe_state == "idle"
+
+    # Second withdrawal: amplitude drops, so self-sustain fails.
+    while owner._probe_state != "withdrawal":
+        clock.t += dt
         await owner.step()
 
     start_t = clock.t
@@ -286,8 +424,20 @@ async def test_withdrawal_false_marker_when_amplitude_drops(owner_factory):
         clock.t += dt
         await owner.step()
 
+    assert owner._probe_state == "idle"
+    assert drive.scale == config.baseline_drive_fraction
+
     assert owner._endogenous_self_sustain is False
     assert owner._entrain_then_autonomy is False
+
+    assert owner._entrainment_plv is not None
+    assert owner._entrainment_plv_surrogate_max is not None
+    assert owner._self_rhythm_freq_withdrawn is not None
+    assert owner._frequency_pull is not None
+    assert np.isfinite(owner._entrainment_plv)
+    assert np.isfinite(owner._entrainment_plv_surrogate_max)
+    assert np.isfinite(owner._self_rhythm_freq_withdrawn)
+    assert np.isfinite(owner._frequency_pull)
 
 
 @pytest.mark.asyncio
@@ -539,3 +689,55 @@ async def test_perturbation_sets_full_drive(owner_factory):
     ]
     assert len(ends) == 1
     assert ends[0].payload.get("aborted") is False
+
+
+@pytest.mark.asyncio
+async def test_evoked_response_without_frequency_pull_is_not_entrainment(owner_factory):
+    """A rhythm that follows the beat only while driven, and returns to its own
+    rate when the drive is withdrawn, is an evoked response (Zoefel 2018; Duecker
+    2021). It beats the surrogates and self-sustains, but its frequency was never
+    pulled, so it must not count as entrainment."""
+    clock = FakeClock()
+    drive = FakeDrive()
+    bus = FakeBus()
+    config = _config(
+        readout_period_seconds=30.0,
+        sample_hz=10.0,
+        withdrawal_period_seconds=30.0,
+        withdrawal_seconds=10.0,
+        perturbation_period_seconds=1.0e9,
+        perturbation_seconds=1.0,
+        entrainment_window_seconds=20.0,
+        edge_trim_seconds=1.0,
+        baseline_withdrawals=1.0,
+        frequency_pull_floor=0.5,
+    )
+    owner = owner_factory(
+        clock=clock,
+        bus=bus,
+        drive=drive,
+        beat_phase=_beat_phase(clock, freq=1.0),
+        surrogate_beat_phases=_surrogate_phases(clock),
+        config=config,
+    )
+    soma = owner._soma
+    activity_fn, state_fn = _make_locking_callbacks(
+        owner, clock, beat_freq=1.0, own_freq=0.6, amplitude=1.0, withdrawal_freq=0.6
+    )
+    soma.self_rhythm_activity = activity_fn
+    soma.self_rhythm_state = state_fn
+
+    dt = 1.0 / config.sample_hz
+    withdrawals_done = 0
+    while withdrawals_done < 2:
+        was = owner._probe_state
+        clock.t += dt
+        await owner.step()
+        if was == "withdrawal" and owner._probe_state == "idle":
+            withdrawals_done += 1
+
+    assert owner._entrainment_plv is not None and owner._entrainment_plv_surrogate_max is not None
+    assert owner._entrainment_plv > owner._entrainment_plv_surrogate_max
+    assert owner._endogenous_self_sustain is True
+    assert owner._frequency_pull is not None and owner._frequency_pull < 0.5
+    assert owner._entrain_then_autonomy is False

@@ -99,7 +99,15 @@ The readout probes briefly change the maternal drive that a gestating entity per
 | `perturbation_drive_fraction` | float | `0.75` | Raised drive as a fraction of `external_drive_max_amplitude` (1.5× the usual 0.5). |
 | `probe_jitter_fraction` | float | `0.25` | Each probe time varies ±25% around its period. `0` = fixed schedule. |
 | `baseline_drive_fraction` | float | `0.5` | Usual drive as a fraction of `external_drive_max_amplitude`. |
-| `entrainment_plv_floor` | float | `0.5` | Phase-locking value counted as entrainment (marker 2). |
+| `entrainment_window_seconds` | float | `300` | Idle window before each withdrawal over which entrainment (marker 2) is measured. |
+| `entrainment_band_low_hz` / `entrainment_band_high_hz` | float | `0.3` / `2.0` | Band the self-rhythm's activity is filtered to before its phase is taken. Must lie below half of `sample_hz`. |
+| `edge_trim_seconds` | float | `2.0` | Trimmed from each end of the filtered window. |
+| `frequency_pull_floor` | float | `0.5` | Minimum pull of the withdrawn frequency toward the beat, from the being's own baseline. |
+| `baseline_withdrawals` | integer | `3` | Withdrawals averaged into the being's own undriven baseline frequency. |
+| `entrainment_replications` | integer | `3` | Consecutive passing withdrawals needed before marker 2 is true. |
+| `surrogate_count` | integer | `19` | Foreign-mother heartbeats each withdrawal's phase locking must beat. A sample without exactly this many makes the measurement inconclusive. |
+
+`entrainment_plv_floor` no longer exists: entrainment is judged against surrogate beats, with no fixed phase-locking threshold. An operator file that still sets it fails at boot with "Unknown keys", so remove the line.
 | `hrv_window_seconds` | integer | `300` | Window for the HRV-analog variability (marker 3). |
 | `recovery_tolerance` | float | `0.25` | Settled when within 25% of the pre-perturbation median (marker 5). |
 | `recovery_cap_seconds` | integer | `300` | Upper bound on recovery time. |
