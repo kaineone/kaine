@@ -5,7 +5,9 @@ beat and the max over K foreign-mother surrogates, dominant frequency, and tau_r
 import math, sys, json
 import numpy as np
 from scipy.signal import butter, sosfiltfilt, hilbert, welch
-sys.path.insert(0, "/home/elim/projects/kaine")
+from pathlib import Path
+# The repository root (this file lives in openspec/changes/<change>/validation/).
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from kaine.modules.womb_drive import MaternalDriveProvider
 from kaine.modules.womb_signal import WombParams, heartbeat_phase
 
