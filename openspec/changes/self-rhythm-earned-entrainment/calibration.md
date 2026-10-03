@@ -59,3 +59,13 @@ It is integrated at 20 Hz with 10 substeps. The working regime: w = 2.0, k = 0.1
   - At own_gain 0.01, 76 bpm became unreachable (withdrawn frequency 0.74 Hz).
   - **The no-plasticity row shows the frequency-pull test is load-bearing.** The surrogate test alone detects even a weak evoked phase relation. Pull is what separates entrainment from an evoked response.
 - **Chosen:** own_gain 0.02 (class default) and eta 0.01 (`[soma].self_rhythm_eta`). That eta targets a median first lock of about 20 h, inside the 12-72 h window. Full validation (V1-V6, 96 h) is running.
+
+## Generator retune and final settings (candidate A)
+
+- **The 96 h validation of the first tuning failed V2.** The marker passed in only 0-2% of withdrawals at 70 bpm, because self-sustain failed: the learned tau_r sat at about 0.9 s, the fragile edge of that generator's oscillation, where its intrinsic amplitude falls about fourfold (0.31 at 0.73 Hz to 0.085 at 1.1 Hz).
+- **`sweep3.py` and `charA.py` found candidate A:** w 2.5, U 8, margin -0.25, tau_a 0.02, k 0.08.
+  - It oscillates from about 1.6 Hz (tau_r 0.9 s) down to about 0.75-0.9 Hz (2.2 s), with amplitude 0.17-0.29 throughout, so the maternal range (1.0-1.33 Hz) sits mid-band.
+  - It stops oscillating above about 2.4 s, so tau_r starts at 2.1 s and is clamped to [0.9, 2.3] s.
+- **Afferent gain.** Candidate A is easier to capture: at gain 0.1 the beat alone captured it, with no plasticity (median PLV 0.66). That is forcing, which the design forbids. At gain 0.03 the drive alone does not capture it (median PLV 0.10, and 0.24 at full drive).
+- **Learning rate.** At gain 0.03, eta 0.01-0.02 locked too fast (2-6 h); eta 0.0025 gives about 14 h at 70 bpm.
+- **Final settings:** candidate A, afferent_gain 0.03, own_gain 0.02, eta 0.0025, plus replication over 3 withdrawals. The results are in `validation.md`.
