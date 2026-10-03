@@ -86,3 +86,25 @@ The ignition analysis SHALL report, for each step, the range of `time_scale` in 
 #### Scenario: A study is found from another directory
 - **WHEN** a data root is installed, `init` creates `studies/s1`, and `status --study-dir studies/s1` runs from a different working directory
 - **THEN** `status` reads the study `init` created
+
+### Requirement: An unviable gestation ends early, with its data kept and a note written
+During a gestation step, until it requests the birth or a disk-low preservation, the study runner SHALL poll the step's `state/lifecycle/gestation_viability.json`, ignoring a file older than the step. On an unviable verdict it SHALL stop the cycle gracefully without requesting a preservation bundle, record the step with outcome `failed:gestation_unviable` and the verdict's evidence, write `ENDED-NOTE.md` into the step directory describing the issue and the evidence, and halt the study for the operator. If stopping the cycle fails, the runner SHALL retry on the next poll; it SHALL NOT send SIGKILL. A verdict SHALL NOT stop or relabel a step whose birth has been requested. It SHALL NOT delete any study data.
+
+#### Scenario: The runner ends an unviable gestation
+- **WHEN** the gestation's viability file reports an unviable verdict
+- **THEN** the cycle is stopped without a preservation request, the step is recorded as `failed:gestation_unviable`, `ENDED-NOTE.md` exists in the step directory, the study halts, and the step's data remains on disk
+
+#### Scenario: A verdict after birth is ignored
+- **WHEN** an unviable verdict file appears after the runner has requested the birth preservation
+- **THEN** the cycle is not stopped by the watch and the step is not recorded as `failed:gestation_unviable`
+
+### Requirement: A study records the workspace graph, not every module's output
+`build_overlay` SHALL set `[research_event_log.nexus_record].enabled = false` and `[evaluation].workspace_trajectory = false` for every study step, overriding any operator setting, and SHALL keep `[ignition_log].enabled = true`. Run-control and safety records (gestation readouts and viability, preservation and welfare monitors, research events, external utterances, the evaluation instruments) SHALL be unaffected.
+
+#### Scenario: An operator config enables the Nexus record
+- **WHEN** the operator config sets `[research_event_log.nexus_record].enabled = true` and `[evaluation].workspace_trajectory = true`
+- **THEN** every step's overlay sets both to false and the ignition log stays enabled
+
+#### Scenario: Safety records are kept
+- **WHEN** an overlay is built for a gestation step
+- **THEN** it still enables the ignition log, the research event log, external utterances and the preservation monitors
