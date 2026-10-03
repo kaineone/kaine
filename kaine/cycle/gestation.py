@@ -550,6 +550,8 @@ class GestationOwner:
 
         self._drive.scale = self._config.baseline_drive_fraction
         self._started_at = self._clock()
+        self._active_lived_seconds: float = 0.0
+        self._last_step_at: float = self._started_at
 
         max_samples = int(
             (
@@ -728,10 +730,19 @@ class GestationOwner:
                 log.warning("gestation: failed to initialise soma cursor", exc_info=True)
                 self._soma_cursor = "0"
 
+    def _advance_lived(self, now: float, paused: bool) -> None:
+        """Lived time for the viability rules excludes paused intervals (sleep,
+        freezes), because the rules were validated on un-paused lived time.
+        """
+        if not paused and now > self._last_step_at:
+            self._active_lived_seconds += now - self._last_step_at
+        self._last_step_at = now
+
     async def step(self) -> None:
         await self._ensure_cursors()
         now = self._clock()
         paused = self._paused()
+        self._advance_lived(now, paused)
 
         if paused and self._probe_state != "idle":
             await self._abort_probe(now)
@@ -1109,7 +1120,7 @@ class GestationOwner:
         self._self_rhythm_freq_withdrawn = f_w
         self._frequency_pull = pull
 
-        lived = (self._clock() - self._started_at) / 3600.0
+        lived = self._active_lived_seconds / 3600.0
         if self._entrainment_consecutive_passes >= int(cfg.entrainment_replications):
             self._ever_replicated = True
 

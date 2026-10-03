@@ -593,6 +593,7 @@ class StudyRunner:
         birth_requested = False
         first_embodied_wall: float | None = None
         unviable_verdict: dict[str, Any] | None = None
+        unviable_terminated = False
         extra_viability: dict[str, Any] | None = None
         # A verdict file older than this step belongs to an earlier attempt.
         step_started_wall = time.time()
@@ -736,7 +737,7 @@ class StudyRunner:
                             f"pid {child_pid} is still running"
                         )
 
-            if step_kind == "gestation" and unviable_verdict is None and not timeout_requested:
+            if step_kind == "gestation" and unviable_verdict is None and not timeout_requested and not birth_requested and not disk_low_requested:
                 viability_path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
                 try:
                     if viability_path.stat().st_mtime < step_started_wall:
@@ -754,15 +755,17 @@ class StudyRunner:
                         unviable_verdict.get("rule", "unknown"),
                         unviable_verdict.get("reason", ""),
                     )
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        log.warning(
-                            "Failed to terminate gestation process for %s step %s",
-                            line,
-                            k,
-                            exc_info=True,
-                        )
+            if unviable_verdict is not None and not unviable_terminated:
+                try:
+                    proc.terminate()
+                    unviable_terminated = True
+                except Exception:
+                    log.warning(
+                        "Failed to terminate gestation process for %s step %s",
+                        line,
+                        k,
+                        exc_info=True,
+                    )
             self.sleep(self.poll_seconds)
 
         ended_at = _utc_iso()
@@ -784,7 +787,7 @@ class StudyRunner:
             disk_low_preserved=disk_low_preserved,
         )
 
-        if unviable_verdict is not None:
+        if unviable_verdict is not None and not birth_requested:
             outcome = "failed:gestation_unviable"
             extra_viability = unviable_verdict
             try:

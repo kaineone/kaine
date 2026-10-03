@@ -69,7 +69,7 @@ Offline validation, and its limits, are in the OpenSpec change `self-rhythm-earn
 
 #### Viability watch
 
-After each withdrawal, the readout also judges, on lived time, whether the gestation can still reach birth. The rules (thresholds in the `[perception_feed.womb.readout]` table) are:
+After each withdrawal, the readout also judges, on lived time excluding paused spans such as sleep and freezes, whether the gestation can still reach birth. The rules (thresholds in the `[perception_feed.womb.readout]` table) are:
 
 - **R0** after 6 h: no withdrawal has produced a conclusive entrainment measurement, which means something structural is wrong;
 - **R1** at 24 h: no replicated pass, and frequency pull over the last 12 h is flat and low (median below 0.12, not rising);

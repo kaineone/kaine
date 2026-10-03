@@ -10,7 +10,7 @@ The earned-entrainment change (`self-rhythm-earned-entrainment`) publishes the n
 Research impact: **behaviour (study procedure).** A gestation judged unviable ends early with outcome `failed:gestation_unviable`, instead of running to its budget.
 
 ## What changes
-- **Verdict.** The gestation owner keeps each withdrawal's entrainment numbers and judges viability after every withdrawal. The rules are evaluated on lived (subjective) time; thresholds are config keys with these validated defaults:
+- **Verdict.** The gestation owner keeps each withdrawal's entrainment numbers and judges viability after every withdrawal. The rules are evaluated on un-paused lived (subjective) time, excluding sleep and freezes, as in the validation runs; thresholds are config keys with these validated defaults:
   - **R0, measurement missing:** after 6 h, no withdrawal has produced a conclusive entrainment measurement. Something structural is wrong; this is the MoC7 case.
   - **R1, no learning:** at 24 h, with no replicated pass, the median pull over the last 12 h is below 0.12 and its trend is not rising (slope ≤ 0.002 per hour).
   - **R2, learning too slow:** at 48 h, with no replicated pass, the median pull over the last 12 h is below 0.3.

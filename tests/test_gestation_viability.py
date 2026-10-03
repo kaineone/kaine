@@ -221,6 +221,7 @@ async def test_owner_publishes_viability_r1(
     monkeypatch.setattr("kaine.cycle.gestation.self_sustains", lambda *args, **kwargs: True)
 
     clock.t = 24.5 * 3600.0
+    owner._advance_lived(clock.t, False)
     await owner._compute_withdrawal_markers(0.0, 1.0)
 
     assert owner._viability_verdict is not None
@@ -271,8 +272,94 @@ async def test_owner_publishes_nothing_when_viability_watch_is_off(
     monkeypatch.setattr("kaine.cycle.gestation.self_sustains", lambda *args, **kwargs: True)
 
     clock.t = 24.5 * 3600.0
+    owner._advance_lived(clock.t, False)
     await owner._compute_withdrawal_markers(0.0, 1.0)
 
     assert owner._viability_verdict is None
     assert not (tmp_path / "gestation_viability.json").exists()
     assert not any(e.type == "gestation.viability" for e in bus.events)
+
+
+@pytest.mark.asyncio
+async def test_paused_time_is_not_lived_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_path = tmp_path / "gestation_readout.json"
+    clock = _FakeClock(0.0)
+    bus = _RecordingBus()
+    drive = _FakeDrive()
+    soma = _FakeSoma()
+    cfg = GestationReadoutConfig.from_dict({})
+
+    owner = GestationOwner(
+        bus,
+        soma=soma,
+        drive=drive,
+        beat_phase=lambda: 0.0,
+        is_paused=lambda: False,
+        config=cfg,
+        clock=clock,
+        state_path=state_path,
+    )
+
+    owner._viability_history = []
+    owner._self_rhythm_baseline_hz = 1.0
+    owner._self_rhythm_baseline_count = 3
+
+    monkeypatch.setattr(
+        "kaine.cycle.gestation.frequency_pull", lambda *args, **kwargs: 0.05
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.gestation.entrainment_plv", lambda *args, **kwargs: (0.2, 0.5)
+    )
+    monkeypatch.setattr("kaine.cycle.gestation.self_sustains", lambda *args, **kwargs: True)
+
+    owner._advance_lived(3600.0, False)
+    owner._advance_lived(60 * 3600.0, True)
+    clock.t = 60 * 3600.0
+    await owner._compute_withdrawal_markers(0.0, 1.0)
+
+    assert owner._viability_verdict is None
+    assert not (tmp_path / "gestation_viability.json").exists()
+    assert owner._active_lived_seconds == pytest.approx(3600.0)
+
+
+@pytest.mark.asyncio
+async def test_advance_lived_counts_only_unpaused_intervals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_path = tmp_path / "gestation_readout.json"
+    clock = _FakeClock(0.0)
+    bus = _RecordingBus()
+    drive = _FakeDrive()
+    soma = _FakeSoma()
+    cfg = GestationReadoutConfig.from_dict({})
+
+    owner = GestationOwner(
+        bus,
+        soma=soma,
+        drive=drive,
+        beat_phase=lambda: 0.0,
+        is_paused=lambda: False,
+        config=cfg,
+        clock=clock,
+        state_path=state_path,
+    )
+
+    owner._viability_history = []
+    owner._self_rhythm_baseline_hz = 1.0
+    owner._self_rhythm_baseline_count = 3
+
+    monkeypatch.setattr(
+        "kaine.cycle.gestation.frequency_pull", lambda *args, **kwargs: 0.05
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.gestation.entrainment_plv", lambda *args, **kwargs: (0.2, 0.5)
+    )
+    monkeypatch.setattr("kaine.cycle.gestation.self_sustains", lambda *args, **kwargs: True)
+
+    owner._advance_lived(10.0, False)
+    owner._advance_lived(20.0, True)
+    owner._advance_lived(30.0, False)
+
+    assert owner._active_lived_seconds == pytest.approx(20.0)

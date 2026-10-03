@@ -332,3 +332,102 @@ def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_module
 
     assert proc.terminate_calls == 0
     assert record["outcome"] != "failed:gestation_unviable"
+
+
+def test_verdict_after_birth_is_ignored(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(study_dir, script)
+
+    proc = _FakeProc(exit_after_polls=6)
+    runner.popen = lambda *args, **kwargs: proc
+
+    monkeypatch.setattr(
+        runner,
+        "_read_child_runtime",
+        lambda *args, **kwargs: {"run_id": "r1", "developmental_stage": {"stage": "embodied"}},
+    )
+    monkeypatch.setattr(runner, "_birth_bloom_over", lambda *args, **kwargs: True)
+
+    reasons: list[str] = []
+
+    def fake_preserve(*args, **kwargs):
+        if len(args) >= 2:
+            reasons.append(args[1])
+        return (None, None, None, True)
+
+    monkeypatch.setattr(runner, "_request_preserve", fake_preserve)
+
+    line_dir = study_dir / "gestation"
+    (line_dir / "state" / "lifecycle").mkdir(parents=True, exist_ok=True)
+
+    calls = 0
+
+    def fake_sleep(seconds: float) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
+            path.write_text(
+                json.dumps({"verdict": "unviable", "rule": "R3", "reason": "test"})
+            )
+
+    runner.sleep = fake_sleep
+
+    try:
+        record = runner._run_step(
+            {"line": "gestation", "k": 0, "revived_from": None, "is_retry": False}
+        )
+    except StudyHalted as exc:
+        record = exc.record
+
+    assert proc.terminate_calls == 0
+    assert "birth" in reasons
+    assert record["outcome"] != "failed:gestation_unviable"
+
+
+def test_failed_terminate_is_retried(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(study_dir, script)
+
+    class _FlakyFakeProc(_FakeProc):
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+            if self.terminate_calls == 1:
+                raise OSError("busy")
+            self.returncode = 0
+
+    monkeypatch.setattr(sys.modules[__name__], "_FakeProc", _FlakyFakeProc)
+
+    verdict = {
+        "verdict": "unviable",
+        "rule": "R1",
+        "reason": "entrainment collapsed",
+        "lived_hours": 0.5,
+        "evidence": {"loss": 0.9, "stage": "early"},
+    }
+
+    record, proc, line_dir = _run_step_capture(
+        study_dir,
+        runner,
+        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="gestation",
+        k=0,
+        modules=BASE_MODULES,
+        overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
+        run_id="run-unviable-retry",
+        monkeypatch=monkeypatch,
+        write_viability_after_calls=2,
+        viability_payload=verdict,
+        proc_exits_after_polls=6,
+    )
+
+    assert proc.terminate_calls == 2
+    assert record["outcome"] == "failed:gestation_unviable"
