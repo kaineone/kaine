@@ -107,18 +107,26 @@ class TrackedDrive:
 
 
 def _config(**overrides: Any) -> GestationReadoutConfig:
+    sample_hz = float(overrides.get("sample_hz", 10.0))
+    band_high = min(2.0, 0.4 * sample_hz)
+    band_low = min(0.3, band_high / 4.0)
     defaults: dict[str, Any] = {
         "readout_period_seconds": 10.0,
-        "sample_hz": 10.0,
+        "sample_hz": sample_hz,
         "withdrawal_period_seconds": 10.0,
         "withdrawal_seconds": 5.0,
         "perturbation_period_seconds": 20.0,
         "perturbation_seconds": 2.0,
         "baseline_drive_fraction": 0.5,
-        "entrainment_plv_floor": 0.5,
         "hrv_window_seconds": 10.0,
         "recovery_tolerance": 0.25,
         "recovery_cap_seconds": 30.0,
+        "entrainment_window_seconds": 300.0,
+        "entrainment_band_low_hz": band_low,
+        "entrainment_band_high_hz": band_high,
+        "edge_trim_seconds": 2.0,
+        "frequency_pull_floor": 0.5,
+        "baseline_withdrawals": 3.0,
     }
     defaults.update(overrides)
     return GestationReadoutConfig.from_dict(defaults)
@@ -141,6 +149,7 @@ def owner_factory(tmp_path: Path):
         drive: FakeDrive | None = None,
         soma: FakeSoma | None = None,
         beat_phase: Any = None,
+        surrogate_beat_phases: Any = None,
         is_paused: Any = None,
         config: GestationReadoutConfig | None = None,
         state_path: Path | None = None,
@@ -159,6 +168,7 @@ def owner_factory(tmp_path: Path):
             soma=soma,
             drive=drive,
             beat_phase=beat_phase,
+            surrogate_beat_phases=surrogate_beat_phases,
             is_paused=is_paused,
             config=config,
             clock=clock,

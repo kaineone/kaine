@@ -30,8 +30,9 @@ Soma is the predictive interoception module. It reads CPU, RAM, GPU, and cycle-l
 | `regulation_warmup_require_error_stabilized` | boolean | `false` | Optional extra guard: also require prediction-error variance to fall below `regulation_warmup_stable_variance`. Can only extend warm-up. |
 | `regulation_warmup_stable_window` | integer | `32` | Rolling window used for the optional stability check. |
 | `regulation_warmup_stable_variance` | float | `0.02` | Variance bound for the optional stability check. |
-| `self_rhythm_enabled` | boolean | `false` | Enable the endogenous LIF oscillator hosted by Soma. Required for local gestation and the oscillator extra. |
-| `self_rhythm_step_hz` | float | `20.0` | Subjective-time cadence of the self-rhythm oscillator. |
+| `self_rhythm_enabled` | boolean | `false` | Enable the self-rhythm Soma hosts: a breathing-like mean-field rhythm generator read out by 16 LIF units. Required for local gestation; needs the oscillator extra. |
+| `self_rhythm_step_hz` | float | `20.0` | Subjective-time cadence the self-rhythm integrates at. |
+| `self_rhythm_eta` | float | `0.0025` | Rate at which the self-rhythm's period adapts to its input. Calibrated so an earned lock to the maternal beat typically forms within the gestation budget. `0` disables adaptation, so entrainment can never be earned. |
 
 Warm-up does **not** gate the absolute thresholds in `[soma.thresholds]`. A real substrate breach (for example, GPU temperature ≥ 83 °C) overrides warm-up and actuates at full weight.
 

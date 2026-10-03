@@ -15,9 +15,12 @@ thereby shape what it measures.
 Markers and their research sites:
   * ``endogenous_self_sustain`` — self-rhythm amplitude during withdrawal vs.
     the preceding driven window (Khazipov & Luhmann 2006).
-  * ``entrain_then_autonomy`` — phase-locking value to the maternal beat during
-    the driven window, plus self-sustain during withdrawal
-    (Feldman & Eidelman 2003).
+  * ``entrain_then_autonomy`` — band-limited PLV between the self-rhythm's
+    generator activity and the maternal beat during the driven window,
+    relative to surrogate maternal beats from other mothers, and frequency
+    pull of the withdrawn self-rhythm toward the beat
+    (Lachaux 1999; Van Leeuwen 2003, 2009; Zoefel 2018; Notbohm 2016;
+    Duecker 2021).
   * ``hrv_variability`` — coefficient of variation of self-rhythm wrap
     intervals (Feldman & Eidelman 2003).
   * ``womb_prediction_error`` — Topos raw prediction-error ratio across
@@ -40,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+import scipy.signal
 
 from kaine.bus.schema import Event
 from kaine.modules.perception_prng import keyed_u64, unit_float
@@ -68,10 +72,17 @@ class GestationReadoutConfig:
     baseline_drive_fraction: float = 0.5
     perturbation_drive_fraction: float = 0.75
     probe_jitter_fraction: float = 0.25
-    entrainment_plv_floor: float = 0.5
+    entrainment_window_seconds: float = 300.0
+    entrainment_band_low_hz: float = 0.3
+    entrainment_band_high_hz: float = 2.0
+    edge_trim_seconds: float = 2.0
+    frequency_pull_floor: float = 0.5
+    baseline_withdrawals: float = 3.0
     hrv_window_seconds: float = 300.0
     recovery_tolerance: float = 0.25
     recovery_cap_seconds: float = 300.0
+    entrainment_replications: float = 3.0
+    surrogate_count: float = 19.0
 
     @classmethod
     def from_dict(cls, data) -> "GestationReadoutConfig":
@@ -110,10 +121,24 @@ class GestationReadoutConfig:
             if fv <= 0.0:
                 raise ValueError(f"{name} must be finite and > 0")
 
+            if name == "entrainment_replications":
+                if float(int(fv)) != fv or fv < 1.0:
+                    raise ValueError(f"{name} must be an integer >= 1")
+                kwargs[name] = fv
+                continue
+
+            if name == "surrogate_count":
+                if float(int(fv)) != fv or fv < 1.0:
+                    raise ValueError(f"{name} must be an integer >= 1")
+                kwargs[name] = fv
+                continue
+
             if name == "perturbation_drive_fraction" and fv > 1.0:
                 raise ValueError(f"{name} must be <= 1.0")
-            if name in ("baseline_drive_fraction", "entrainment_plv_floor") and fv > 1.0:
+            if name == "baseline_drive_fraction" and fv > 1.0:
                 raise ValueError(f"{name} must be in (0, 1]")
+            if name == "frequency_pull_floor" and fv > 1.0:
+                raise ValueError(f"{name} must be <= 1.0")
             if name == "withdrawal_seconds" and fv > WITHDRAWAL_MAX_SECONDS:
                 raise ValueError(
                     f"{name} must be <= {WITHDRAWAL_MAX_SECONDS}"
@@ -132,6 +157,22 @@ class GestationReadoutConfig:
                 "baseline_drive_fraction and at most 1.0"
             )
 
+        sample_hz = kwargs["sample_hz"]
+        low = kwargs["entrainment_band_low_hz"]
+        high = kwargs["entrainment_band_high_hz"]
+        if not (low < high < sample_hz / 2.0):
+            raise ValueError(
+                "entrainment_band_low_hz must be less than "
+                "entrainment_band_high_hz, which must be below sample_hz/2"
+            )
+        if kwargs["edge_trim_seconds"] * 2.0 >= kwargs["entrainment_window_seconds"]:
+            raise ValueError(
+                "entrainment_window_seconds must be greater than "
+                "2 * edge_trim_seconds"
+            )
+        if kwargs["frequency_pull_floor"] > 1.0:
+            raise ValueError("frequency_pull_floor must be <= 1.0")
+
         return cls(**kwargs)
 
 
@@ -143,6 +184,128 @@ def phase_locking_value(phases_a, phases_b) -> float | None:
         return None
     diffs = np.array(phases_a, dtype=float) - np.array(phases_b, dtype=float)
     return float(abs(np.mean(np.exp(1j * diffs))))
+
+
+def band_phase(values, sample_hz, low_hz, high_hz, trim_samples) -> np.ndarray | None:
+    """Band-pass, Hilbert-transform, and return the instantaneous phase.
+
+    A zero-phase 2nd-order Butterworth band-pass is applied, the analytic
+    signal is computed, and ``trim_samples`` is removed from each end.
+    """
+    arr = np.asarray(values, dtype=float)
+    n = arr.size
+    if n < 2 * trim_samples + 2:
+        return None
+
+    mean = float(np.mean(arr))
+    sos = scipy.signal.butter(
+        2, [low_hz, high_hz], btype="band", fs=sample_hz, output="sos"
+    )
+    filtered = scipy.signal.sosfiltfilt(sos, arr - mean)
+    analytic = scipy.signal.hilbert(filtered)
+    phase = np.angle(analytic)
+
+    if trim_samples:
+        phase = phase[trim_samples:-trim_samples]
+    if phase.size < 2:
+        return None
+
+    return phase
+
+
+def entrainment_plv(
+    activity,
+    beats,
+    surrogate_beats,
+    sample_hz,
+    low_hz,
+    high_hz,
+    trim_samples,
+    required_surrogates: int = 0,
+) -> tuple[float | None, float | None]:
+    """PLV of self-rhythm activity vs. the true beat and the max surrogate PLV.
+
+    ``surrogate_beats`` is a list of phase series, one per surrogate mother.
+    ``required_surrogates`` is the exact number of surrogate series a valid
+    sample must carry; if fewer are supplied, or if any surrogate yields a
+    non-finite PLV, ``surrogate_max`` is returned as None.
+
+    Returns ``(plv, surrogate_max)``; ``surrogate_max`` is None when no
+    surrogates are supplied or the surrogate ensemble is incomplete/invalid.
+    """
+    phase = band_phase(activity, sample_hz, low_hz, high_hz, trim_samples)
+    if phase is None:
+        return (None, None)
+
+    beats_arr = np.asarray(beats, dtype=float)
+    if trim_samples:
+        beats_arr = beats_arr[trim_samples:-trim_samples]
+    if beats_arr.size != phase.size:
+        return (None, None)
+
+    plv = phase_locking_value(phase, beats_arr)
+
+    surrogate_max = None
+    if surrogate_beats:
+        if len(surrogate_beats) < required_surrogates:
+            return (plv, None)
+        surr_plvs: list[float] = []
+        for sb in surrogate_beats:
+            sb_arr = np.asarray(sb, dtype=float)
+            if trim_samples:
+                sb_arr = sb_arr[trim_samples:-trim_samples]
+            if sb_arr.size != phase.size:
+                return (plv, None)
+            sp = phase_locking_value(phase, sb_arr)
+            if sp is None or not math.isfinite(sp):
+                return (plv, None)
+            surr_plvs.append(sp)
+        if surr_plvs:
+            surrogate_max = float(max(surr_plvs))
+
+    return (plv, surrogate_max)
+
+
+def withdrawn_frequency(times, activity, sample_hz, low_hz, high_hz) -> float | None:
+    """Least-squares frequency (Hz) of band-passed activity during withdrawal."""
+    arr = np.asarray(activity, dtype=float)
+    t = np.asarray(times, dtype=float)
+    if arr.size < 4 or t.size != arr.size:
+        return None
+
+    mean = float(np.mean(arr))
+    sos = scipy.signal.butter(
+        2, [low_hz, high_hz], btype="band", fs=sample_hz, output="sos"
+    )
+    filtered = scipy.signal.sosfiltfilt(sos, arr - mean)
+    phase = np.unwrap(np.angle(scipy.signal.hilbert(filtered)))
+    if phase.size < 2:
+        return None
+
+    slope = np.polyfit(t, phase, 1)[0]
+    return float(slope / (2.0 * math.pi))
+
+
+def beat_frequency(times, beats) -> float | None:
+    """Slope of the unwrapped beat phase over a window, in Hz."""
+    arr = np.asarray(beats, dtype=float)
+    t = np.asarray(times, dtype=float)
+    if arr.size < 2 or t.size != arr.size:
+        return None
+
+    phase = np.unwrap(arr)
+    slope = np.polyfit(t, phase, 1)[0]
+    return float(slope / (2.0 * math.pi))
+
+
+def frequency_pull(f_w, f_w0, f_beat) -> float | None:
+    """Frequency pull of the withdrawn rhythm toward the beat."""
+    if f_w is None or f_w0 is None or f_beat is None:
+        return None
+    denom = abs(f_w0 - f_beat)
+    if denom < 0.05:
+        return None
+    return 1.0 - abs(f_w - f_beat) / denom
 
 
 def self_sustains(driven_amplitudes, withdrawn_amplitudes) -> bool | None:
@@ -233,11 +396,13 @@ class GestationOwner:
         clock: Callable[[], float],
         seed: int = 0,
         state_path: Path | None = None,
+        surrogate_beat_phases: Callable[[], list[float]] | None = None,
     ) -> None:
         self._bus = bus
         self._soma = soma
         self._drive = drive
         self._beat_phase = beat_phase
+        self._surrogate_beat_phases = surrogate_beat_phases
         self._is_paused = is_paused
         self._config = config
         self._clock = clock
@@ -253,16 +418,16 @@ class GestationOwner:
         self._started_at = self._clock()
 
         max_samples = int(
-            max(
-                self._config.hrv_window_seconds,
-                self._config.withdrawal_seconds * 2.0,
-                120.0,
+            (
+                self._config.entrainment_window_seconds
+                + self._config.withdrawal_seconds * 2.0
+                + 120.0
             )
             * self._config.sample_hz
             * 1.5
         )
         self._samples: deque[
-            tuple[float, float | None, float | None, float | None, str]
+            tuple[float, float | None, float | None, float | None, str, float | None, tuple | None]
         ] = deque(maxlen=max(max_samples, 16))
 
         soma_maxlen = int((self._config.recovery_cap_seconds + 120.0) * 2.0)
@@ -307,11 +472,23 @@ class GestationOwner:
 
         self._endogenous_self_sustain: bool | None = None
         self._entrain_then_autonomy: bool | None = None
+        self._entrainment_consecutive_passes: int = 0
         self._hrv_variability: float | None = None
         self._womb_prediction_error: float | None = None
         self._return_to_baseline_seconds: float | None = None
 
+        self._entrainment_plv: float | None = None
+        self._entrainment_plv_surrogate_max: float | None = None
+        self._self_rhythm_freq_withdrawn: float | None = None
+        self._frequency_pull: float | None = None
+
         self._baseline: float | None = None
+        self._self_rhythm_baseline_hz: float | None = None
+        self._self_rhythm_baseline_count: int = 0
+
+        identity = getattr(getattr(soma, "_self_rhythm", None), "identity", None)
+        self._baseline_key = f"{self._seed}:{identity or 'none'}"
+
         self._load_baseline()
 
     def _jitter_unit(self, kind: str) -> float:
@@ -339,19 +516,51 @@ class GestationOwner:
                 and baseline > 0.0
             ):
                 self._baseline = float(baseline)
+
+            self._self_rhythm_baseline_hz = None
+            self._self_rhythm_baseline_count = 0
+
+            self_baseline = data.get("self_rhythm_baseline_hz")
+            stored_key = data.get("self_rhythm_baseline_key")
+            if (
+                stored_key == self._baseline_key
+                and isinstance(self_baseline, (int, float))
+                and not isinstance(self_baseline, bool)
+                and self_baseline > 0.0
+            ):
+                self._self_rhythm_baseline_hz = float(self_baseline)
+                count = data.get("self_rhythm_baseline_count", 0)
+                if isinstance(count, int) and not isinstance(count, bool):
+                    self._self_rhythm_baseline_count = max(0, count)
+            elif self_baseline is not None or stored_key is not None:
+                log.info(
+                    "gestation: ignoring self-rhythm baseline from "
+                    "mismatched being/run (stored_key=%s, current_key=%s)",
+                    stored_key,
+                    self._baseline_key,
+                )
         except Exception:
             log.warning("gestation: could not load baseline", exc_info=True)
 
     def _persist_baseline(self) -> None:
         if self._state_path is None:
             return
-        if self._baseline is None or self._baseline <= 0.0:
+        if (self._baseline is None or self._baseline <= 0.0) and (
+            self._self_rhythm_baseline_count <= 0
+        ):
             return
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self._state_path.with_suffix(".tmp")
+            data: dict[str, Any] = {}
+            if self._baseline is not None and self._baseline > 0.0:
+                data["prediction_error_baseline"] = self._baseline
+            if self._self_rhythm_baseline_count > 0:
+                data["self_rhythm_baseline_hz"] = self._self_rhythm_baseline_hz
+                data["self_rhythm_baseline_count"] = self._self_rhythm_baseline_count
+                data["self_rhythm_baseline_key"] = self._baseline_key
             tmp.write_text(
-                json.dumps({"prediction_error_baseline": self._baseline}),
+                json.dumps(data),
                 encoding="utf-8",
             )
             os.replace(tmp, self._state_path)
@@ -436,6 +645,15 @@ class GestationOwner:
             # marker windows skip it.
             log.debug("gestation: self-rhythm read failed", exc_info=True)
 
+        activity: float | None = None
+        try:
+            if hasattr(self._soma, "self_rhythm_activity"):
+                raw = self._soma.self_rhythm_activity()
+                if raw is not None:
+                    activity = float(raw)
+        except Exception:
+            log.debug("gestation: self-rhythm activity read failed", exc_info=True)
+
         beat: float | None = None
         try:
             beat = float(self._beat_phase())
@@ -444,7 +662,18 @@ class GestationOwner:
             # phase-locking pairs skip it.
             log.debug("gestation: beat phase read failed", exc_info=True)
 
-        self._samples.append((now, phase, amplitude, beat, self._probe_state))
+        surrogates: tuple | None = None
+        if self._surrogate_beat_phases is not None:
+            try:
+                phases = self._surrogate_beat_phases()
+                if phases is not None:
+                    surrogates = tuple(float(p) for p in phases)
+            except Exception:
+                log.debug("gestation: surrogate beat read failed", exc_info=True)
+
+        self._samples.append(
+            (now, phase, amplitude, beat, self._probe_state, activity, surrogates)
+        )
 
     async def _handle_probes(self, now: float) -> None:
         if self._probe_state != "idle":
@@ -513,7 +742,19 @@ class GestationOwner:
         self._probe_end = None
 
         if kind == "withdrawal" and start is not None and end is not None:
-            await self._compute_withdrawal_markers(start, end)
+            try:
+                await self._compute_withdrawal_markers(start, end)
+            except Exception:
+                log.warning(
+                    "gestation: withdrawal marker computation failed",
+                    exc_info=True,
+                )
+                self._entrain_then_autonomy = None
+                self._entrainment_consecutive_passes = 0
+                self._entrainment_plv = None
+                self._entrainment_plv_surrogate_max = None
+                self._self_rhythm_freq_withdrawn = None
+                self._frequency_pull = None
         elif kind == "perturbation" and start is not None and end is not None:
             self._last_perturbation = (start, end)
 
@@ -562,6 +803,7 @@ class GestationOwner:
 
     async def _compute_withdrawal_markers(self, start: float, end: float) -> None:
         duration = end - start
+
         driven = [
             s
             for s in self._samples
@@ -577,24 +819,156 @@ class GestationOwner:
         withdrawn_amps = [s[2] for s in withdrawn if s[2] is not None]
         self._endogenous_self_sustain = self_sustains(driven_amps, withdrawn_amps)
 
-        pairs = [
-            (s[1], s[3])
-            for s in driven
-            if s[1] is not None and s[3] is not None
+        cfg = self._config
+        sample_hz = cfg.sample_hz
+        low_hz = cfg.entrainment_band_low_hz
+        high_hz = cfg.entrainment_band_high_hz
+        trim_samples = int(cfg.edge_trim_seconds * sample_hz)
+
+        # Entrainment over the contiguous idle window immediately before
+        # withdrawal.  Walk backwards from the withdrawal start and stop at the
+        # first non-idle sample, the start of the requested window, or any
+        # sample at/after the withdrawal start.
+        idle_window = cfg.entrainment_window_seconds
+        expected_idle = int(idle_window * sample_hz)
+        run: list[Any] = []
+        for s in reversed(self._samples):
+            if s[0] >= start:
+                continue  # the withdrawal itself (newest samples come first)
+            if s[0] < start - idle_window:
+                break
+            if s[4] != "idle":
+                break
+            run.append(s)
+        run.reverse()
+        idle = run
+
+        required_surrogates = int(cfg.surrogate_count)
+        valid_idle = [
+            s for s in idle if s[5] is not None and s[3] is not None
         ]
-        driven_phases = [p[0] for p in pairs]
-        driven_beats = [p[1] for p in pairs]
-        plv = phase_locking_value(driven_phases, driven_beats)
+        if self._surrogate_beat_phases is not None:
+            valid_idle = [
+                s
+                for s in valid_idle
+                if (
+                    s[6] is not None
+                    and len(s[6]) == required_surrogates
+                    and all(
+                        isinstance(x, (int, float))
+                        and not isinstance(x, bool)
+                        and math.isfinite(x)
+                        for x in s[6]
+                    )
+                )
+            ]
+
+        idle_acts = np.array([s[5] for s in valid_idle], dtype=float)
+        idle_beats = np.array([s[3] for s in valid_idle], dtype=float)
+        idle_surrogates: list[np.ndarray] = []
         if (
-            plv is not None
-            and self._endogenous_self_sustain is not None
+            self._surrogate_beat_phases is not None
+            and valid_idle
+            and valid_idle[0][6] is not None
         ):
-            self._entrain_then_autonomy = (
-                plv >= self._config.entrainment_plv_floor
-                and self._endogenous_self_sustain
+            k = len(valid_idle[0][6])
+            for idx in range(k):
+                idle_surrogates.append(
+                    np.array([s[6][idx] for s in valid_idle], dtype=float)
+                )
+
+        plv: float | None = None
+        surrogate_max: float | None = None
+        if (
+            valid_idle
+            and len(valid_idle) >= 0.8 * expected_idle
+            and expected_idle > 0
+        ):
+            plv, surrogate_max = entrainment_plv(
+                idle_acts,
+                idle_beats,
+                idle_surrogates,
+                sample_hz,
+                low_hz,
+                high_hz,
+                trim_samples,
+                required_surrogates=required_surrogates,
             )
+
+        # Withdrawn self-rhythm frequency.
+        expected_withdrawn = int(cfg.withdrawal_seconds * sample_hz)
+        valid_withdrawn = [s for s in withdrawn if s[5] is not None]
+        f_w: float | None = None
+        if (
+            valid_withdrawn
+            and len(valid_withdrawn) >= 0.6 * expected_withdrawn
+            and expected_withdrawn > 0
+        ):
+            f_w = withdrawn_frequency(
+                [s[0] for s in valid_withdrawn],
+                [s[5] for s in valid_withdrawn],
+                sample_hz,
+                low_hz,
+                high_hz,
+            )
+
+        # Beat frequency over the entrainment window.
+        f_beat: float | None = None
+        if valid_idle:
+            f_beat = beat_frequency(
+                [s[0] for s in valid_idle],
+                idle_beats,
+            )
+
+        # Update own baseline f_w0 from the first withdrawals.
+        if f_w is not None:
+            target = int(cfg.baseline_withdrawals)
+            if self._self_rhythm_baseline_count < target:
+                n = self._self_rhythm_baseline_count
+                current = self._self_rhythm_baseline_hz or 0.0
+                n += 1
+                self._self_rhythm_baseline_hz = (current * (n - 1) + f_w) / n
+                self._self_rhythm_baseline_count = n
+                self._persist_baseline()
+
+        # Frequency pull toward the beat.
+        pull: float | None = None
+        f_w0 = self._self_rhythm_baseline_hz
+        if (
+            f_w0 is not None
+            and self._self_rhythm_baseline_count >= int(cfg.baseline_withdrawals)
+        ):
+            pull = frequency_pull(f_w, f_w0, f_beat)
+
+        if (
+            plv is None
+            or surrogate_max is None
+            or self._endogenous_self_sustain is None
+            or pull is None
+        ):
+            single = None
         else:
-            self._entrain_then_autonomy = None
+            single = (
+                plv > surrogate_max
+                and self._endogenous_self_sustain
+                and pull >= cfg.frequency_pull_floor
+            )
+
+        if single is True:
+            self._entrainment_consecutive_passes += 1
+        else:
+            self._entrainment_consecutive_passes = 0
+
+        self._entrain_then_autonomy = (
+            None
+            if single is None
+            else self._entrainment_consecutive_passes >= int(cfg.entrainment_replications)
+        )
+
+        self._entrainment_plv = plv
+        self._entrainment_plv_surrogate_max = surrogate_max
+        self._self_rhythm_freq_withdrawn = f_w
+        self._frequency_pull = pull
 
     async def _read_soma_reports(self, now: float) -> None:
         if now - self._last_soma_read_at < 1.0:
@@ -663,7 +1037,15 @@ class GestationOwner:
         hrv_cutoff = now - self._config.hrv_window_seconds
         hrv_times = []
         hrv_phases = []
-        for t, phase, _amp, _beat, _state in self._samples:
+        for (
+            t,
+            phase,
+            _amp,
+            _beat,
+            _state,
+            _activity,
+            _surrogates,
+        ) in self._samples:
             if t >= hrv_cutoff and phase is not None:
                 hrv_times.append(t)
                 hrv_phases.append(phase)
@@ -721,4 +1103,13 @@ class GestationOwner:
             result["womb_prediction_error"] = self._womb_prediction_error
         if self._return_to_baseline_seconds is not None:
             result["return_to_baseline_seconds"] = self._return_to_baseline_seconds
+        if self._entrainment_plv is not None:
+            result["entrainment_plv"] = self._entrainment_plv
+            result["entrainment_consecutive_passes"] = self._entrainment_consecutive_passes
+        if self._entrainment_plv_surrogate_max is not None:
+            result["entrainment_plv_surrogate_max"] = self._entrainment_plv_surrogate_max
+        if self._self_rhythm_freq_withdrawn is not None:
+            result["self_rhythm_freq_withdrawn"] = self._self_rhythm_freq_withdrawn
+        if self._frequency_pull is not None:
+            result["frequency_pull"] = self._frequency_pull
         return result

@@ -378,7 +378,13 @@ regulation_warmup_stable_variance = 0.02
 # oscillator extra (snnTorch). In womb mode the maternal beat is presented to it
 # as a bounded external drive it may couple to; coupling is never forced.
 self_rhythm_enabled = false
-self_rhythm_step_hz = 20.0      # subjective-time cadence; fast enough for a ~1.2 Hz beat
+self_rhythm_step_hz = 20.0      # subjective-time cadence the self-rhythm integrates at
+# Rate at which the self-rhythm's period adapts to its input (Righetti et al.
+# 2006). Calibrated offline so an earned lock to the maternal beat typically
+# forms within the gestation budget (12-72 h of lived time), a disclosed
+# compression of the weeks of exposure in the literature. 0 disables adaptation,
+# so entrainment can never be earned.
+self_rhythm_eta = 0.0025
 
 [soma.thresholds]
 "cpu_percent" = 90.0
@@ -907,7 +913,23 @@ perturbation_seconds = 5          # drive raised gently (see below); hard maximu
 perturbation_drive_fraction = 0.75  # the raised drive, as a fraction of its bound (1.5x the usual 0.5)
 probe_jitter_fraction = 0.25      # each probe time varies +/-25% around its period (0 = fixed)
 baseline_drive_fraction = 0.5     # usual drive, as a fraction of external_drive_max_amplitude
-entrainment_plv_floor = 0.5       # phase locking counted as entrainment (marker 2)
+# Entrainment (marker 2): band-limited phase locking of the self-rhythm's
+# activity to its own mother's beat over the window before each withdrawal,
+# counted only when it beats all 19 foreign-mother surrogates and the rhythm's
+# frequency during withdrawal has moved toward the beat (no fixed PLV floor).
+entrainment_window_seconds = 300.0
+entrainment_band_low_hz = 0.3
+entrainment_band_high_hz = 2.0
+edge_trim_seconds = 2.0
+frequency_pull_floor = 0.5        # withdrawn frequency pulled at least halfway toward the beat
+baseline_withdrawals = 3          # the being's own undriven frequency, from its first withdrawals
+# Each withdrawal's surrogate test is a p < 0.05 test, so a single pass can
+# happen by chance; entrainment counts only after this many consecutive passes.
+# Offline validation: with 3, none of 6 foreign-mother pairs passed in 96 h
+# each (single-withdrawal chance passes 2.6-10%). Consecutive withdrawals are
+# correlated, so this is not a p ~ 1e-4 claim.
+entrainment_replications = 3
+surrogate_count = 19              # foreign mothers each withdrawal is tested against
 hrv_window_seconds = 300          # window for the HRV-analog variability (marker 3)
 recovery_tolerance = 0.25         # settled when within 25% of the pre-perturbation median (marker 5)
 recovery_cap_seconds = 300
