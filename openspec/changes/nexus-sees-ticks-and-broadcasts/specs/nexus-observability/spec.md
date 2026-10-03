@@ -21,3 +21,15 @@ The coherence chart SHALL plot `metadata.coherence` from `workspace.broadcast` e
 #### Scenario: Operational events stay off the salience chart
 - **WHEN** a `cycle.tick` event with salience 0.05 arrives
 - **THEN** the salience chart receives no sample from it
+
+### Requirement: The bridge relays every event published after it starts
+The Nexus bus bridge SHALL resolve each stream's starting cursor to that stream's last entry id at the time of its first successful read (`0-0` when the stream is empty) and SHALL relay, after the privacy filter, every decodable event published to its streams after that point. A failed resolution SHALL be retried on the next poll. A non-blocking read SHALL never be issued with the `$` cursor.
+
+#### Scenario: Events after start reach a client
+- **WHEN** the bridge has started and a module publishes an event to a diagnostics stream
+- **THEN** a connected diagnostics client receives that event, filtered, within a poll interval
+
+#### Scenario: History before start is not replayed
+- **WHEN** a stream already holds entries when the bridge starts
+- **THEN** those entries are not relayed, and the next new entry is
+

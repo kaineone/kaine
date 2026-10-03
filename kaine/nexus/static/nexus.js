@@ -454,6 +454,30 @@
 
   function nowSeconds() { return Date.now() / 1000; }
 
+  // Route an SSE message to the chart samples used by diagnostics.
+  function chartSamples(msg) {
+    const p = msg.payload || {};
+    const out = {};
+
+    if (msg.type === "cycle.rates" || "processing_rate_hz" in p || "experiential_rate_hz" in p) {
+      out.rate = [num(p.processing_rate_hz), num(p.experiential_rate_hz)];
+    }
+    if (msg.source === "thymos" || "valence" in p || "arousal" in p || "dominance" in p) {
+      if ("valence" in p || "arousal" in p || "dominance" in p) {
+        out.affect = [num(p.valence), num(p.arousal), num(p.dominance)];
+      }
+    }
+    if (typeof msg.salience === "number" && msg.source !== "cycle" && msg.source !== "syneidesis") {
+      out.salience = msg.salience;
+    }
+    if (msg.type === "workspace.broadcast" && p.metadata && typeof p.metadata.coherence === "number" && isFinite(p.metadata.coherence)) {
+      out.coherence = p.metadata.coherence;
+    }
+    return out;
+  }
+
+  window.NexusChartRouting = { chartSamples: chartSamples };
+
   // Diagnostics: live cycle-rate, affect (VAD), salience, coherence from the SSE stream.
   function attachDiagnostics() {
     const rateEl = document.getElementById("chart-rate");
@@ -474,11 +498,10 @@
     const salience = salienceEl ? new LiveSeries(salienceEl, [
       { label: "salience", stroke: "#E7442A" },
     ]) : null;
-    // PLV coherence — fed from workspace.broadcast metadata['coherence'].
-    // The coherence dict maps pair labels to PLV floats; we render the mean
-    // across all pairs so the chart is a single line regardless of pair count.
+    // PLV coherence — fed from workspace.broadcast metadata.coherence, a single PLV float.
+    // The value is absent when the oscillator layer is off, so the chart stays flat.
     const coherence = coherenceEl ? new LiveSeries(coherenceEl, [
-      { label: "mean PLV", stroke: "#9EA5BA" },
+      { label: "PLV", stroke: "#9EA5BA" },
     ]) : null;
 
     if (!hasUPlot()) {
@@ -489,30 +512,19 @@
 
     NexusStream.subscribe(function (msg) {
       const t = nowSeconds();
-      const p = msg.payload || {};
+      const samples = chartSamples(msg);
 
-      if (rate && (msg.type === "cycle.rates" || "processing_rate_hz" in p || "experiential_rate_hz" in p)) {
-        rate.push(t, [num(p.processing_rate_hz), num(p.experiential_rate_hz)]);
+      if (rate && samples.rate) {
+        rate.push(t, samples.rate);
       }
-      if (affect && (msg.source === "thymos" || "valence" in p || "arousal" in p || "dominance" in p)) {
-        if ("valence" in p || "arousal" in p || "dominance" in p) {
-          affect.push(t, [num(p.valence), num(p.arousal), num(p.dominance)]);
-        }
+      if (affect && samples.affect) {
+        affect.push(t, samples.affect);
       }
-      if (salience && typeof msg.salience === "number") {
-        salience.push(t, [msg.salience]);
+      if (salience && typeof samples.salience === "number") {
+        salience.push(t, [samples.salience]);
       }
-      // workspace.broadcast carries metadata.coherence (PLV dict or absent).
-      if (coherence && msg.source === "cycle" && p.metadata) {
-        const coh = p.metadata.coherence;
-        if (coh && typeof coh === "object") {
-          const vals = Object.values(coh).filter(function (v) { return typeof v === "number" && isFinite(v); });
-          if (vals.length > 0) {
-            const mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
-            coherence.push(t, [mean]);
-          }
-        }
-        // Absent coherence key (oscillator disabled) → no point pushed; chart stays flat.
+      if (coherence && typeof samples.coherence === "number") {
+        coherence.push(t, [samples.coherence]);
       }
     });
   }

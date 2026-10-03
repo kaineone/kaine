@@ -87,11 +87,10 @@ def test_effective_memberships_are_golden():
     # Raw archive: full canonical set (Lingua now publishes aggregate lingua.out).
     golden_raw_archive = frozenset(golden_curated | {"lingua.out", "vox.out"})
 
-    # Diagnostics: cycle.tick + high-signal module streams (no cycle.out) +
-    # workspace.broadcast.
+    # Diagnostics: cycle.out + high-signal module streams + workspace.broadcast.
     golden_diagnostics = frozenset(
         {
-            "cycle.tick",
+            "cycle.out",
             "soma.out",
             "chronos.out",
             "topos.out",
