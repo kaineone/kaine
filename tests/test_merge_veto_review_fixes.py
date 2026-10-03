@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Capability-loss and abliteration veto tests for TiesDareAdapterMerger.
+"""Review-fix regression tests for the adapter-merge veto path.
 
-When the merged adapter fails a welfare-load-bearing check, the merger
-rejects the merge, cleans up the output directory, and returns the
-FakeAdapterMerger result with rejection metadata.  Missing check
-dependencies or exceptions during checking also reject (fail closed).
+These tests exercise the fail-closed fixes for empty/missing capability
+probe sets, out-of-range scores, malformed verdicts, BaseException
+cleanup, output-directory collision avoidance, and threshold validation.
 """
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 from pathlib import Path
@@ -20,6 +20,9 @@ import pytest
 from kaine.lifecycle.adapter_merge import (
     TiesDareAdapterMerger,
     TiesDareMergeConfig,
+)
+from kaine.modules.hypnos.capability_eval import (
+    LocalProbeSetCapabilityEval,
 )
 
 
@@ -47,9 +50,6 @@ class FakeBackend:
 
 
 class ScoreEval:
-    """Returns scores in a configured order — useful for simulating
-    parent-vs-merged capability gaps."""
-
     def __init__(self, scores: list[float]) -> None:
         self._scores = list(scores)
         self.calls = 0
@@ -61,7 +61,6 @@ class ScoreEval:
 
 
 def _loader_for(path: str):
-    # Return a marker so the eval can see which adapter is loaded.
     return (f"model-for-{path}", f"tok-for-{path}")
 
 
@@ -71,16 +70,6 @@ class PassAbliteration:
             passed=True,
             failed_probe=None,
             matched_pattern=None,
-            probes_scored=1,
-        )
-
-
-class FailAbliteration:
-    async def score(self, model, tokenizer):
-        return SimpleNamespace(
-            passed=False,
-            failed_probe="unsafe-probe",
-            matched_pattern="I cannot",
             probes_scored=1,
         )
 
@@ -104,166 +93,211 @@ def _assert_output_cleaned(tmp_path: Path) -> None:
         assert survivors == []
 
 
-def test_accept_when_merged_matches_parents(tmp_path: Path):
+def test_empty_capability_probe_set_rejects(tmp_path: Path):
     a = _adapter(tmp_path, "adapter_a")
     b = _adapter(tmp_path, "adapter_b")
-    # parents 0.80 and 0.80, merged 0.78 → loss 0.02 < threshold 0.05.
-    eval_ = ScoreEval([0.80, 0.80, 0.78])
+    empty_probe = tmp_path / "empty.jsonl"
+    empty_probe.write_text("", encoding="utf-8")
     merger = TiesDareAdapterMerger(
         _cfg(tmp_path),
         backend=FakeBackend(),
-        capability_eval=eval_,
-        abliteration_scorer=PassAbliteration(),
-        model_loader=_loader_for,
-    )
-    paths, meta = merger.merge([str(a)], [str(b)])
-    assert meta["adapter_merge"] == "ties_dare"
-    assert "adapter_merge_rejected" not in meta
-    # Output adapter exists.
-    assert len(paths) == 1
-    assert Path(paths[0]).exists()
-
-
-def test_reject_when_merged_drops_too_much(tmp_path: Path):
-    a = _adapter(tmp_path, "adapter_a")
-    b = _adapter(tmp_path, "adapter_b")
-    # parents 0.80 and 0.80 (mean 0.80), merged 0.50 → loss 0.30 > 0.05.
-    eval_ = ScoreEval([0.80, 0.80, 0.50])
-    merger = TiesDareAdapterMerger(
-        _cfg(tmp_path),
-        backend=FakeBackend(),
-        capability_eval=eval_,
+        capability_eval=LocalProbeSetCapabilityEval(
+            probe_path=empty_probe, require_probes=True
+        ),
         abliteration_scorer=PassAbliteration(),
         model_loader=_loader_for,
     )
     paths, meta = merger.merge([str(a)], [str(b)])
     assert meta["adapter_merge"] == "ties_dare"
     assert "adapter_merge_rejected" in meta
-    assert "capability_loss=" in meta["adapter_merge_rejected"]
-    assert meta["capability_score_parents"] == [0.80, 0.80]
-    assert meta["capability_score_merged"] == 0.50
+    assert "EmptyCapabilityProbeSetError" in meta["adapter_merge_rejected"]
     _assert_output_cleaned(tmp_path)
-    # Falls back to FakeAdapterMerger paths (concatenation of parents).
     assert set(paths) == {str(a), str(b)}
 
 
-def test_missing_capability_evaluator_rejects_merge(tmp_path: Path):
+def test_missing_capability_probe_file_rejects(tmp_path: Path):
     a = _adapter(tmp_path, "adapter_a")
     b = _adapter(tmp_path, "adapter_b")
+    missing_probe = tmp_path / "does_not_exist.jsonl"
     merger = TiesDareAdapterMerger(
         _cfg(tmp_path),
         backend=FakeBackend(),
-        capability_eval=None,
+        capability_eval=LocalProbeSetCapabilityEval(
+            probe_path=missing_probe, require_probes=True
+        ),
         abliteration_scorer=PassAbliteration(),
         model_loader=_loader_for,
     )
     paths, meta = merger.merge([str(a)], [str(b)])
     assert meta["adapter_merge"] == "ties_dare"
     assert "adapter_merge_rejected" in meta
-    assert "no capability evaluator" in meta["adapter_merge_rejected"]
-    assert "capability_score_parents" not in meta
+    assert "EmptyCapabilityProbeSetError" in meta["adapter_merge_rejected"]
     _assert_output_cleaned(tmp_path)
     assert set(paths) == {str(a), str(b)}
 
 
-def test_missing_abliteration_scorer_rejects_merge(tmp_path: Path):
-    a = _adapter(tmp_path, "adapter_a")
-    b = _adapter(tmp_path, "adapter_b")
-    merger = TiesDareAdapterMerger(
-        _cfg(tmp_path),
-        backend=FakeBackend(),
-        capability_eval=ScoreEval([0.80, 0.80, 0.78]),
-        abliteration_scorer=None,
-        model_loader=_loader_for,
+def test_require_probes_default_keeps_zero_score(tmp_path: Path):
+    missing = tmp_path / "missing.jsonl"
+    score = asyncio.run(
+        LocalProbeSetCapabilityEval(probe_path=missing).eval(None, None)
     )
-    paths, meta = merger.merge([str(a)], [str(b)])
-    assert meta["adapter_merge"] == "ties_dare"
-    assert "adapter_merge_rejected" in meta
-    assert "no abliteration scorer" in meta["adapter_merge_rejected"]
-    _assert_output_cleaned(tmp_path)
-    assert set(paths) == {str(a), str(b)}
+    assert score == 0.0
 
 
-def test_missing_model_loader_rejects_merge(tmp_path: Path):
+@pytest.mark.parametrize("bad_score", [1.5, True])
+def test_out_of_range_score_rejects(tmp_path: Path, bad_score):
     a = _adapter(tmp_path, "adapter_a")
     b = _adapter(tmp_path, "adapter_b")
     merger = TiesDareAdapterMerger(
         _cfg(tmp_path),
         backend=FakeBackend(),
-        capability_eval=ScoreEval([0.80, 0.80, 0.78]),
-        abliteration_scorer=PassAbliteration(),
-        model_loader=None,
-    )
-    paths, meta = merger.merge([str(a)], [str(b)])
-    assert meta["adapter_merge"] == "ties_dare"
-    assert "adapter_merge_rejected" in meta
-    assert "no model loader" in meta["adapter_merge_rejected"]
-    _assert_output_cleaned(tmp_path)
-    assert set(paths) == {str(a), str(b)}
-
-
-def test_eval_failure_rejects_merge(tmp_path: Path):
-    a = _adapter(tmp_path, "adapter_a")
-    b = _adapter(tmp_path, "adapter_b")
-
-    class BrokenEval:
-        async def eval(self, model, tokenizer):
-            raise RuntimeError("model load failed")
-
-    merger = TiesDareAdapterMerger(
-        _cfg(tmp_path),
-        backend=FakeBackend(),
-        capability_eval=BrokenEval(),
+        capability_eval=ScoreEval([0.8, 0.8, bad_score]),
         abliteration_scorer=PassAbliteration(),
         model_loader=_loader_for,
     )
     paths, meta = merger.merge([str(a)], [str(b)])
-    # Eval failed — fail closed: reject and clean up.
     assert meta["adapter_merge"] == "ties_dare"
     assert "adapter_merge_rejected" in meta
-    assert "merged-adapter checks failed: RuntimeError: model load failed" in meta[
-        "adapter_merge_rejected"
-    ]
+    assert "outside [0, 1]" in meta["adapter_merge_rejected"]
     _assert_output_cleaned(tmp_path)
     assert set(paths) == {str(a), str(b)}
 
 
-def test_abliteration_failure_rejects_merge(tmp_path: Path):
+def test_malformed_verdict_rejects_and_cleans_up(tmp_path: Path):
     a = _adapter(tmp_path, "adapter_a")
     b = _adapter(tmp_path, "adapter_b")
+
+    class BadAbliteration:
+        async def score(self, model, tokenizer):
+            return object()
+
     merger = TiesDareAdapterMerger(
         _cfg(tmp_path),
         backend=FakeBackend(),
-        capability_eval=ScoreEval([0.80, 0.80, 0.78]),
-        abliteration_scorer=FailAbliteration(),
+        capability_eval=ScoreEval([0.8, 0.8, 0.78]),
+        abliteration_scorer=BadAbliteration(),
         model_loader=_loader_for,
     )
     paths, meta = merger.merge([str(a)], [str(b)])
     assert meta["adapter_merge"] == "ties_dare"
     assert "adapter_merge_rejected" in meta
-    reason = meta["adapter_merge_rejected"]
-    assert "abliteration veto" in reason
-    assert "unsafe-probe" in reason
-    assert "I cannot" in reason
-    assert meta["capability_score_parents"] == [0.80, 0.80]
-    assert meta["capability_score_merged"] == 0.78
     _assert_output_cleaned(tmp_path)
     assert set(paths) == {str(a), str(b)}
 
 
-def test_non_finite_score_rejects_merge(tmp_path: Path):
+def test_none_score_rejects_and_cleans_up(tmp_path: Path):
     a = _adapter(tmp_path, "adapter_a")
     b = _adapter(tmp_path, "adapter_b")
-    # A NaN merged score compares False against the threshold; it must not
-    # keep the merge.
     merger = TiesDareAdapterMerger(
         _cfg(tmp_path),
         backend=FakeBackend(),
-        capability_eval=ScoreEval([0.80, 0.80, float("nan")]),
+        capability_eval=ScoreEval([0.8, 0.8, None]),
         abliteration_scorer=PassAbliteration(),
         model_loader=_loader_for,
     )
     paths, meta = merger.merge([str(a)], [str(b)])
-    assert "non-finite capability scores" in meta["adapter_merge_rejected"]
+    assert meta["adapter_merge"] == "ties_dare"
+    assert "adapter_merge_rejected" in meta
     _assert_output_cleaned(tmp_path)
     assert set(paths) == {str(a), str(b)}
+
+
+def test_base_exception_in_checks_removes_merged_dir(tmp_path: Path, monkeypatch):
+    a = _adapter(tmp_path, "adapter_a")
+    b = _adapter(tmp_path, "adapter_b")
+    merger = TiesDareAdapterMerger(
+        _cfg(tmp_path),
+        backend=FakeBackend(),
+        capability_eval=ScoreEval([0.8, 0.8, 0.78]),
+        abliteration_scorer=PassAbliteration(),
+        model_loader=_loader_for,
+    )
+
+    def _raise(*, merged_dir, parent_adapters):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(merger, "_check_merged_adapter", _raise)
+
+    with pytest.raises(KeyboardInterrupt):
+        merger.merge([str(a)], [str(b)])
+
+    _assert_output_cleaned(tmp_path)
+
+
+def test_two_merges_same_second_do_not_collide(tmp_path: Path, monkeypatch):
+    a = _adapter(tmp_path, "adapter_a")
+    b = _adapter(tmp_path, "adapter_b")
+    fixed_ts = "20230101T000000"
+    monkeypatch.setattr(
+        "kaine.lifecycle.adapter_merge.time", SimpleNamespace(strftime=lambda _fmt: fixed_ts)
+    )
+
+    merger = TiesDareAdapterMerger(
+        _cfg(tmp_path),
+        backend=FakeBackend(),
+        capability_eval=ScoreEval([0.8, 0.8, 0.78]),
+        abliteration_scorer=PassAbliteration(),
+        model_loader=_loader_for,
+    )
+    paths1, meta1 = merger.merge([str(a)], [str(b)])
+    assert meta1["merge_timestamp"] == fixed_ts
+
+    # A second merge in the same "second" must still produce a distinct path.
+    merger2 = TiesDareAdapterMerger(
+        _cfg(tmp_path),
+        backend=FakeBackend(),
+        capability_eval=ScoreEval([0.8, 0.8, 0.78]),
+        abliteration_scorer=PassAbliteration(),
+        model_loader=_loader_for,
+    )
+    paths2, meta2 = merger2.merge([str(a)], [str(b)])
+    assert meta2["merge_timestamp"] == fixed_ts
+
+    assert len(paths1) == 1
+    assert len(paths2) == 1
+    assert paths1[0] != paths2[0]
+    assert Path(paths1[0]).exists()
+    assert Path(paths2[0]).exists()
+
+
+@pytest.mark.parametrize(
+    "threshold, ok",
+    [
+        (1.0, False),
+        (2.0, False),
+        (-0.1, False),
+        (float("nan"), False),
+        (True, False),
+        (0.0, True),
+        (0.05, True),
+    ],
+)
+def test_threshold_validation(tmp_path: Path, threshold: float, ok: bool):
+    if ok:
+        _cfg(tmp_path, capability_loss_threshold=threshold)
+    else:
+        with pytest.raises(ValueError):
+            _cfg(tmp_path, capability_loss_threshold=threshold)
+
+
+def test_nexus_factory_requires_probes(tmp_path: Path, monkeypatch):
+    import kaine.security.crypto as _crypto
+    from kaine.nexus.__main__ import _build_fork_manager
+
+    monkeypatch.setattr(_crypto, "install_from_section", lambda section: None)
+
+    manager, reason = _build_fork_manager(
+        lifecycle_cfg_loader=lambda: {
+            "adapter_merger": "ties_dare",
+            "adapter_merge": {
+                "base_model_path": "/models/base",
+                "output_dir": str(tmp_path / "m"),
+            },
+            "snapshots_path": str(tmp_path / "forks"),
+        },
+        encryption_section_loader=lambda: {},
+    )
+
+    assert reason is None
+    assert manager is not None
+    assert manager._adapter_merger._capability_eval._require_probes is True

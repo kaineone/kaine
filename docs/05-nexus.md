@@ -245,7 +245,7 @@ POST /diagnostics/merges
 }
 ```
 
-If both parents carry a Phantasia world model and no `world_model_from` is given, the API returns `409`. The dashboard merge form has a "world model from" choice (none, A or B) that sets `world_model_from`, and when a merge is refused it shows the status and the server's reason. `allow_unmerged_adapters` is available only through the API, so keeping uncombined adapter weights is always a deliberate call. Fork bodies can carry a timing profile.
+If both parents carry a Phantasia world model and no `world_model_from` is given, the API returns `409`. It also returns `409`, with the reason, when the adapter merge is refused: no real merger is available for two adapter-carrying parents, or the merged adapter failed its capability or abliteration checks. Merges run in a worker thread, so a long check does not stall the dashboard. The dashboard merge form has a "world model from" choice (none, A or B) that sets `world_model_from`, and when a merge is refused it shows the status and the server's reason. `allow_unmerged_adapters` is available only through the API, so keeping uncombined adapter weights is always a deliberate call. Fork bodies can carry a timing profile.
 
 See [Forks and merges](12-forks-and-merges.md) for the lifecycle semantics.
 

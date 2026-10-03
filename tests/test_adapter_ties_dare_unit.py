@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -51,6 +52,25 @@ class FakeBackend:
             "fake-merged", encoding="utf-8"
         )
         return Path(output_dir)
+
+
+class PassingEval:
+    async def eval(self, model, tokenizer):
+        return 1.0
+
+
+class PassingAbliteration:
+    async def score(self, model, tokenizer):
+        return SimpleNamespace(
+            passed=True,
+            failed_probe=None,
+            matched_pattern=None,
+            probes_scored=1,
+        )
+
+
+def _stub_loader(path: str):
+    return (object(), object())
 
 
 def _adapter(tmp_path: Path, name: str) -> Path:
@@ -98,6 +118,9 @@ def test_merge_calls_backend_with_config_values(tmp_path: Path):
     merger = TiesDareAdapterMerger(
         _config(tmp_path, combination_type="ties", density=0.7),
         backend=backend,
+        capability_eval=PassingEval(),
+        abliteration_scorer=PassingAbliteration(),
+        model_loader=_stub_loader,
     )
     paths, meta = merger.merge([str(a)], [str(b)])
     assert len(backend.calls) == 1
@@ -120,7 +143,13 @@ def test_uniform_weights_when_unconfigured(tmp_path: Path):
     b = _adapter(tmp_path, "adapter_b")
     c = _adapter(tmp_path, "adapter_c")
     backend = FakeBackend()
-    merger = TiesDareAdapterMerger(_config(tmp_path), backend=backend)
+    merger = TiesDareAdapterMerger(
+        _config(tmp_path),
+        backend=backend,
+        capability_eval=PassingEval(),
+        abliteration_scorer=PassingAbliteration(),
+        model_loader=_stub_loader,
+    )
     merger.merge([str(a), str(b)], [str(c)])
     weights = backend.calls[0]["weights"]
     assert len(weights) == 3
@@ -134,6 +163,9 @@ def test_configured_weights_are_normalized(tmp_path: Path):
     merger = TiesDareAdapterMerger(
         _config(tmp_path, weights=[2.0, 3.0]),
         backend=backend,
+        capability_eval=PassingEval(),
+        abliteration_scorer=PassingAbliteration(),
+        model_loader=_stub_loader,
     )
     merger.merge([str(a)], [str(b)])
     weights = backend.calls[0]["weights"]
@@ -147,6 +179,9 @@ def test_wrong_length_weights_fall_back_to_uniform(tmp_path: Path):
     merger = TiesDareAdapterMerger(
         _config(tmp_path, weights=[1.0, 2.0, 3.0]),  # 3 weights, 2 adapters
         backend=backend,
+        capability_eval=PassingEval(),
+        abliteration_scorer=PassingAbliteration(),
+        model_loader=_stub_loader,
     )
     merger.merge([str(a)], [str(b)])
     weights = backend.calls[0]["weights"]
@@ -227,10 +262,19 @@ def test_merge_output_path_is_timestamped_subdir(tmp_path: Path):
     a = _adapter(tmp_path, "adapter_a")
     b = _adapter(tmp_path, "adapter_b")
     backend = FakeBackend()
-    merger = TiesDareAdapterMerger(_config(tmp_path), backend=backend)
+    merger = TiesDareAdapterMerger(
+        _config(tmp_path),
+        backend=backend,
+        capability_eval=PassingEval(),
+        abliteration_scorer=PassingAbliteration(),
+        model_loader=_stub_loader,
+    )
     paths, meta = merger.merge([str(a)], [str(b)])
     out_path = Path(paths[0])
     assert out_path.parent == tmp_path / "merged"
-    # Looks like a timestamp (YYYYMMDDTHHmmss).
-    assert len(out_path.name) == 15
-    assert out_path.name[8] == "T"
+    # A timestamp (YYYYMMDDTHHmmss) plus a random suffix, so concurrent
+    # merges never share a directory.
+    stamp, _, suffix = out_path.name.partition("-")
+    assert len(stamp) == 15
+    assert stamp[8] == "T"
+    assert len(suffix) == 8 and int(suffix, 16) >= 0

@@ -99,8 +99,10 @@ Only consulted when `adapter_merger` resolves to the real merger (`"auto"` with 
 | `density` | float | `0.5` | DARE survival fraction (per Yu et al. 2024). Ignored for pure `"ties"`. |
 | `weights` | list of floats | `[]` | Per-adapter scalar weights. Empty = uniform weighting. |
 | `output_dir` | string | `"state/forks/merged_adapters"` | Directory where merged adapters land (one timestamped subdirectory per merge). |
-| `capability_loss_threshold` | float | `0.05` | Reject the merge if the merged-adapter capability score falls more than this below the mean of the parent adapters. Mirrors [`[hypnos.voice_alignment]`](./perception-and-sleep.md). |
+| `capability_loss_threshold` | float | `0.05` | Must lie in [0, 1). Reject the merge if the merged-adapter capability score falls more than this below the mean of the parent adapters. Mirrors [`[hypnos.voice_alignment]`](./perception-and-sleep.md). Every merged adapter is also checked against the abliteration probes, and a merge whose checks cannot run is refused; see [Forks and merges](../12-forks-and-merges.md#merged-adapter-checks). |
 | `base_model_path` | string | `""` | Path to local Hugging Face-format base model weights for PEFT adapter loading. Empty falls back to `FakeAdapterMerger` with a logged warning. |
+| `capability_probe_path` | string | `""` | Capability-probe JSONL for the merged-adapter checks. Empty uses the bundled default, as in `[hypnos.voice_alignment]`. An empty or missing probe set refuses every merge. |
+| `abliteration_probe_path` | string | `""` | Abliteration-probe JSONL for the merged-adapter checks (welfare-load-bearing; must not be empty). Empty uses the bundled default. |
 
 ## `[developmental_stage]`
 
