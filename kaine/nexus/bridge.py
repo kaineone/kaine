@@ -27,7 +27,7 @@ class _BusLike(Protocol):
         ...
 
     async def last_entry_id(self, stream: str) -> str:
-        ...
+        """Return the id of the stream's newest entry, or ``"0-0"`` when empty."""
 
 
 @dataclass
