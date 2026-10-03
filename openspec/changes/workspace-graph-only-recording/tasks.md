@@ -11,7 +11,7 @@
 - [x] 3.2 Tests: a `topos.report` with `latent`, `peripheral` and `foveal` loses all three and keeps its scalars and fovea boxes; each display quantity the audit lists survives; the Nexus record of a `topos.report` holds no vector.
 
 ## 4. Ignition log lifecycle
-- [x] 4.1 A test pins that the ignition log's sink never purges (retention 0) and that its docstring states its purpose and that the operator deletes it.
+- [x] 4.1 `ignition_log_sink` builds the sink with no retention period, and a test pins that a 400-day-old file survives its start; the docstrings state the purpose and that only the operator deletes the log.
 
 ## 5. Docs
 - [x] 5.1 Ignition-study chapter: what a study records (the graph, the safety and evaluation records) and what it does not; the lifecycle.
