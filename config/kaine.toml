@@ -907,7 +907,16 @@ perturbation_seconds = 5          # drive raised gently (see below); hard maximu
 perturbation_drive_fraction = 0.75  # the raised drive, as a fraction of its bound (1.5x the usual 0.5)
 probe_jitter_fraction = 0.25      # each probe time varies +/-25% around its period (0 = fixed)
 baseline_drive_fraction = 0.5     # usual drive, as a fraction of external_drive_max_amplitude
-entrainment_plv_floor = 0.5       # phase locking counted as entrainment (marker 2)
+# Entrainment (marker 2): band-limited phase locking of the self-rhythm's
+# activity to its own mother's beat over the window before each withdrawal,
+# counted only when it beats all 19 foreign-mother surrogates and the rhythm's
+# frequency during withdrawal has moved toward the beat (no fixed PLV floor).
+entrainment_window_seconds = 300.0
+entrainment_band_low_hz = 0.3
+entrainment_band_high_hz = 2.0
+edge_trim_seconds = 2.0
+frequency_pull_floor = 0.5        # withdrawn frequency pulled at least halfway toward the beat
+baseline_withdrawals = 3          # the being's own undriven frequency, from its first withdrawals
 hrv_window_seconds = 300          # window for the HRV-analog variability (marker 3)
 recovery_tolerance = 0.25         # settled when within 25% of the pre-perturbation median (marker 5)
 recovery_cap_seconds = 300

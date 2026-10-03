@@ -871,11 +871,21 @@ def _start_gestation_owner(
     def beat_phase() -> float:
         return 2.0 * math.pi * float(heartbeat_phase(seed, womb_clock.womb_seconds(), params))
 
+    # "Foreign mothers": other mothers' heartbeats at the same nominal rate, the
+    # surrogate pairs of Van Leeuwen et al. (2003, 2009). Entrainment counts only
+    # when the self-rhythm locks to its own mother better than to every one.
+    surrogate_seeds = [seed + 1000 + k for k in range(19)]
+
+    def surrogate_beat_phases() -> list[float]:
+        t = womb_clock.womb_seconds()
+        return [2.0 * math.pi * float(heartbeat_phase(s, t, params)) for s in surrogate_seeds]
+
     owner = GestationOwner(
         bus,
         soma=soma,
         drive=drive,
         beat_phase=beat_phase,
+        surrogate_beat_phases=surrogate_beat_phases,
         is_paused=is_paused,
         config=config,
         clock=registry.entity_clock.now,

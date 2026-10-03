@@ -96,20 +96,27 @@ class FakeDrive:
 
 
 def _config(**overrides: Any) -> GestationReadoutConfig:
+    sample_hz = float(overrides.get("sample_hz", 10.0))
+    band_high = min(2.0, 0.4 * sample_hz)
+    band_low = min(0.3, band_high / 4.0)
     defaults: dict[str, Any] = {
         "readout_period_seconds": 10.0,
-        "sample_hz": 10.0,
+        "sample_hz": sample_hz,
         "withdrawal_period_seconds": 10.0,
         "withdrawal_seconds": 5.0,
         "perturbation_period_seconds": 20.0,
         "perturbation_seconds": 2.0,
         "baseline_drive_fraction": 0.5,
-        "entrainment_plv_floor": 0.5,
         "hrv_window_seconds": 10.0,
         "recovery_tolerance": 0.25,
         "recovery_cap_seconds": 30.0,
-        # These tests exercise the fixed schedule; jitter is tested separately.
         "probe_jitter_fraction": 0.0,
+        "entrainment_window_seconds": 300.0,
+        "entrainment_band_low_hz": band_low,
+        "entrainment_band_high_hz": band_high,
+        "edge_trim_seconds": 2.0,
+        "frequency_pull_floor": 0.5,
+        "baseline_withdrawals": 3.0,
     }
     defaults.update(overrides)
     return GestationReadoutConfig.from_dict(defaults)
@@ -132,6 +139,7 @@ def owner_factory(tmp_path: Path):
         drive: FakeDrive | None = None,
         soma: FakeSoma | None = None,
         beat_phase: Any = None,
+        surrogate_beat_phases: Any = None,
         is_paused: Any = None,
         config: GestationReadoutConfig | None = None,
         state_path: Path | None = None,
@@ -149,6 +157,7 @@ def owner_factory(tmp_path: Path):
             soma=soma,
             drive=drive,
             beat_phase=beat_phase,
+            surrogate_beat_phases=surrogate_beat_phases,
             is_paused=is_paused,
             config=config,
             clock=clock,
@@ -156,6 +165,60 @@ def owner_factory(tmp_path: Path):
         )
 
     return _make
+
+
+def _beat_phase(clock: FakeClock, freq: float = 1.0) -> Any:
+    return lambda: clock.t * 2.0 * np.pi * freq
+
+
+def _surrogate_phases(
+    clock: FakeClock,
+    freqs: tuple[float, ...] = (0.8, 1.2, 1.4),
+    offsets: tuple[float, ...] = (0.0, 0.5, 1.0),
+) -> Any:
+    return lambda: tuple(
+        clock.t * 2.0 * np.pi * f + off for f, off in zip(freqs, offsets)
+    )
+
+
+def _make_locking_callbacks(
+    owner: GestationOwner,
+    clock: FakeClock,
+    *,
+    beat_freq: float = 1.0,
+    own_freq: float = 0.6,
+    amplitude: float = 1.0,
+    withdrawal_amplitude: float | None = None,
+) -> tuple[Any, Any]:
+    phase = 0.0
+    last_t: float | None = None
+
+    def _freq() -> float:
+        target = int(owner._config.baseline_withdrawals)
+        return own_freq if owner._self_rhythm_baseline_count < target else beat_freq
+
+    def _amp() -> float:
+        if owner._self_rhythm_baseline_count < int(owner._config.baseline_withdrawals):
+            return amplitude
+        if withdrawal_amplitude is not None and owner._probe_state == "withdrawal":
+            return withdrawal_amplitude
+        return amplitude
+
+    def activity() -> float:
+        nonlocal phase, last_t
+        t = clock.t
+        freq = _freq()
+        if last_t is None:
+            phase = 0.0
+        else:
+            phase += 2.0 * np.pi * freq * (t - last_t)
+        last_t = t
+        return 0.5 + 0.5 * np.cos(phase)
+
+    def state() -> tuple[float, float]:
+        return (0.0, _amp())
+
+    return activity, state
 
 
 @pytest.mark.asyncio
@@ -339,50 +402,99 @@ async def test_plv_pairing_ignores_missing_beat_phases(owner_factory):
     drive = FakeDrive()
     bus = FakeBus()
     config = _config(
-        readout_period_seconds=5.0,
+        readout_period_seconds=20.0,
         sample_hz=10.0,
-        withdrawal_period_seconds=5.0,
-        withdrawal_seconds=2.0,
+        withdrawal_period_seconds=20.0,
+        withdrawal_seconds=5.0,
+        perturbation_period_seconds=1.0e9,
+        perturbation_seconds=1.0,
+        entrainment_window_seconds=10.0,
+        edge_trim_seconds=1.0,
+        baseline_withdrawals=1.0,
+        frequency_pull_floor=0.5,
     )
 
     calls = {"n": 0}
 
     def beat():
         calls["n"] += 1
-        if calls["n"] % 2:
+        if calls["n"] % 10 == 0:
             raise RuntimeError("missing beat")
-        return clock.t * 2 * np.pi
-
-    soma = FakeSoma()
-
-    def soma_state():
-        return (clock.t * 2 * np.pi, 1.0)
-
-    soma.self_rhythm_state = soma_state  # type: ignore[method-assign]
+        return clock.t * 2.0 * np.pi
 
     owner = owner_factory(
         clock=clock,
         bus=bus,
         drive=drive,
-        soma=soma,
         beat_phase=beat,
+        surrogate_beat_phases=_surrogate_phases(clock),
         config=config,
     )
+
+    soma = owner._soma
+    activity_fn, state_fn = _make_locking_callbacks(
+        owner, clock, beat_freq=1.0, own_freq=0.6, amplitude=1.0
+    )
+    soma.self_rhythm_activity = activity_fn
+    soma.self_rhythm_state = state_fn
+
     dt = 1.0 / config.sample_hz
 
+    # First withdrawal: baseline withdrawn frequency is the own rhythm.
     for i in range(int(config.readout_period_seconds / dt) + 1):
         clock.t = i * dt
         await owner.step()
 
     assert owner._probe_state == "withdrawal"
+    while owner._probe_state == "withdrawal":
+        clock.t += dt
+        await owner.step()
+
+    # Second withdrawal: rhythm is locked to the beat; some beat samples are missing.
+    while owner._probe_state != "withdrawal":
+        clock.t += dt
+        await owner.step()
 
     start_t = clock.t
-    while clock.t < start_t + config.withdrawal_seconds + dt / 2:
+    while owner._probe_state == "withdrawal":
         clock.t += dt
         await owner.step()
 
     assert owner._endogenous_self_sustain is True
     assert owner._entrain_then_autonomy is True
+
+    from kaine.cycle.gestation import entrainment_plv
+
+    window = config.entrainment_window_seconds
+    trim_samples = int(config.edge_trim_seconds * config.sample_hz)
+    valid_idle = [
+        s
+        for s in owner._samples
+        if start_t - window <= s[0] < start_t
+        and s[4] == "idle"
+        and s[5] is not None
+        and s[3] is not None
+        and s[6] is not None
+        and all(x is not None for x in s[6])
+    ]
+    acts = np.array([s[5] for s in valid_idle], dtype=float)
+    beats = np.array([s[3] for s in valid_idle], dtype=float)
+    surrs = [
+        np.array([s[6][i] for s in valid_idle], dtype=float)
+        for i in range(len(valid_idle[0][6]))
+    ]
+    expected_plv, expected_max = entrainment_plv(
+        acts,
+        beats,
+        surrs,
+        config.sample_hz,
+        config.entrainment_band_low_hz,
+        config.entrainment_band_high_hz,
+        trim_samples,
+    )
+
+    assert owner._entrainment_plv == pytest.approx(float(expected_plv))
+    assert owner._entrainment_plv_surrogate_max == pytest.approx(float(expected_max))
 
 
 @pytest.mark.asyncio
@@ -391,49 +503,92 @@ async def test_comparison_window_ignores_perturbation_samples(owner_factory):
     drive = FakeDrive()
     bus = FakeBus()
     config = _config(
-        readout_period_seconds=100.0,
-        sample_hz=1.0,
-        withdrawal_period_seconds=100.0,
+        readout_period_seconds=1000.0,
+        sample_hz=10.0,
+        withdrawal_period_seconds=1000.0,
         withdrawal_seconds=2.0,
+        perturbation_period_seconds=1000.0,
+        perturbation_seconds=1.0,
+        entrainment_window_seconds=2.0,
+        edge_trim_seconds=0.5,
+        baseline_withdrawals=1.0,
+        frequency_pull_floor=0.5,
     )
 
     owner = owner_factory(
         clock=clock,
         bus=bus,
         drive=drive,
-        soma=FakeSoma(amplitude=0.2),
+        surrogate_beat_phases=_surrogate_phases(clock),
         config=config,
     )
 
-    start_t = 50.0
-    duration = config.withdrawal_seconds
-
-    # Seed idle samples in the driven window with low amplitude.
-    for i in range(int(duration * config.sample_hz)):
-        t = start_t - duration + i / config.sample_hz
-        owner._samples.append((t, 0.0, 0.1, 0.0, "idle"))
-
-    # Contaminate the same window with high-amplitude perturbation samples.
-    for i in range(int(duration * config.sample_hz * 2)):
-        t = start_t - duration + i / (config.sample_hz * 2)
-        owner._samples.append((t, 0.0, 1.0, None, "perturbation"))
-
-    # Bypass the post-boot settle window and start the withdrawal.
     owner._settle_until = 0.0
+    start_t = 20.0
+    duration = config.withdrawal_seconds
+    hz = config.sample_hz
+
+    def activity(t: float, f: float = 1.0) -> float:
+        return 0.5 + 0.5 * np.cos(2.0 * np.pi * f * t)
+
+    def beat(t: float) -> float:
+        return 2.0 * np.pi * t
+
+    def surrs(t: float) -> tuple[float, ...]:
+        return tuple(
+            2.0 * np.pi * f * t + off
+            for f, off in zip((0.8, 1.2, 1.4), (0.0, 0.5, 1.0))
+        )
+
+    samples: list[tuple] = []
+
+    # Driven idle samples in the comparison/entrainment window.
+    for i in range(int(duration * hz)):
+        t = start_t - duration + i / hz
+        samples.append((t, 0.0, 1.0, beat(t), "idle", activity(t), surrs(t)))
+
+    # Perturbation samples that would corrupt self-sustain if included.
+    for i in range(int(duration * hz * 2)):
+        t = start_t - duration + i / (hz * 2)
+        samples.append((t, 0.0, 10.0, None, "perturbation", activity(t, f=0.3), None))
+
+    # Withdrawal samples.
+    for i in range(int(duration * hz)):
+        t = start_t + i / hz
+        samples.append((t, 0.0, 1.0, beat(t), "withdrawal", activity(t), surrs(t)))
+
+    samples.sort(key=lambda s: s[0])
+    owner._samples = samples
     owner._next_withdrawal_at = start_t
-    clock.t = start_t
-    await owner.step()
-    assert owner._probe_state == "withdrawal"
+    owner._self_rhythm_baseline_hz = 0.6
+    owner._self_rhythm_baseline_count = 1
 
-    dt = 1.0 / config.sample_hz
-    while clock.t < start_t + duration:
-        clock.t += dt
-        await owner.step()
+    await owner._compute_withdrawal_markers(start_t, start_t + duration)
 
-    # The high-amplitude perturbation samples must not enter the comparison
-    # window, otherwise self-sustain would be reported as False.
+    mixed = {
+        "sustain": owner._endogenous_self_sustain,
+        "marker": owner._entrain_then_autonomy,
+        "plv": owner._entrainment_plv,
+        "max": owner._entrainment_plv_surrogate_max,
+        "fw": owner._self_rhythm_freq_withdrawn,
+        "pull": owner._frequency_pull,
+    }
+
+    # Recompute after dropping the perturbation samples entirely.
+    owner._samples = [s for s in samples if s[4] != "perturbation"]
+    owner._self_rhythm_baseline_hz = 0.6
+    owner._self_rhythm_baseline_count = 1
+    await owner._compute_withdrawal_markers(start_t, start_t + duration)
+
     assert owner._endogenous_self_sustain is True
     assert owner._entrain_then_autonomy is True
+
+    assert mixed["sustain"] == owner._endogenous_self_sustain
+    assert mixed["marker"] == owner._entrain_then_autonomy
+    assert mixed["plv"] == pytest.approx(owner._entrainment_plv)
+    assert mixed["max"] == pytest.approx(owner._entrainment_plv_surrogate_max)
+    assert mixed["fw"] == pytest.approx(owner._self_rhythm_freq_withdrawn)
+    assert mixed["pull"] == pytest.approx(owner._frequency_pull)
 
 
 @pytest.mark.asyncio

@@ -310,6 +310,19 @@ class Soma(BaseModule):
         except Exception:
             log.warning("metrics reader shutdown failed", exc_info=True)
 
+    def self_rhythm_activity(self) -> float | None:
+        """Return the self-rhythm generator's current population activity, or None.
+
+        The gestation readout measures entrainment on this slow activity signal
+        (band-limited, against surrogate beats), not on the spiking readout."""
+        if self._self_rhythm is None:
+            return None
+        try:
+            value = float(self._self_rhythm.activity)
+        except Exception:
+            return None
+        return value if math.isfinite(value) else None
+
     def self_rhythm_state(self) -> tuple[float, float] | None:
         """Return (phase, amplitude) of the self-rhythm oscillator, or None."""
         if self._self_rhythm is None:
