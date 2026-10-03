@@ -930,6 +930,21 @@ baseline_withdrawals = 3          # the being's own undriven frequency, from its
 # correlated, so this is not a p ~ 1e-4 claim.
 entrainment_replications = 3
 surrogate_count = 19              # foreign mothers each withdrawal is tested against
+# Viability watch: after each withdrawal the readout judges, on lived time,
+# whether the gestation can still reach birth, and publishes gestation.viability
+# when it cannot (the study runner then ends the step early, keeping its data).
+# Thresholds come from the offline validation of earned entrainment: no viable
+# gestation was flagged, every unviable one was flagged by 24-27 h.
+viability_watch = true
+viability_r0_hours = 6.0          # R0: no conclusive entrainment measurement at all
+viability_r1_hours = 24.0         # R1: no learning (flat frequency pull) ...
+viability_r1_pull = 0.12          #     median pull below this over the window
+viability_r1_slope_per_hour = 0.002  # and not rising faster than this
+viability_r2_hours = 48.0         # R2: learning too slow ...
+viability_r2_pull = 0.3           #     median pull below this over the window
+viability_r3_hours = 60.0         # R3: deadline with no replicated pass
+viability_window_hours = 12.0
+viability_min_points = 8          # conclusive withdrawals needed in the window
 hrv_window_seconds = 300          # window for the HRV-analog variability (marker 3)
 recovery_tolerance = 0.25         # settled when within 25% of the pre-perturbation median (marker 5)
 recovery_cap_seconds = 300

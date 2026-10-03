@@ -67,6 +67,19 @@ Offline validation, and its limits, are in the OpenSpec change `self-rhythm-earn
 - These times compress the weeks of exposure reported in the literature.
 - A mother below about 60 bpm is too close to the rhythm's natural rate for entrainment to be shown.
 
+#### Viability watch
+
+After each withdrawal, the readout also judges, on lived time excluding paused spans such as sleep and freezes, whether the gestation can still reach birth. The rules (thresholds in the `[perception_feed.womb.readout]` table) are:
+
+- **R0** after 6 h: no withdrawal has produced a conclusive entrainment measurement, which means something structural is wrong;
+- **R1** at 24 h: no replicated pass, and frequency pull over the last 12 h is flat and low (median below 0.12, not rising);
+- **R2** at 48 h: no replicated pass, and median pull below 0.3;
+- **R3** at 60 h: still no replicated pass.
+
+In the offline validation, a gestation that is learning shows frequency pull rising from the first hours, even at 80 bpm. A gestation that cannot learn stays flat. None of the viable runs was flagged; every unviable one was flagged by 24-27 h.
+
+The first unviable verdict is published as `gestation.viability` on `gestation.out` and written to `state/lifecycle/gestation_viability.json`. The verdict is a measurement and changes nothing in the entity. Under the module-ignition study, the runner acts on it (see [The module-ignition study](../15-experiments/ignition-study.md)). Set `viability_watch = false` to let a gestation run to its full budget.
+
 ### Probes
 
 Markers 1, 2 and 5 are measured with brief, bounded changes to the maternal drive, announced as `gestation.probe` events on `gestation.out` so research logs can exclude the probe windows:

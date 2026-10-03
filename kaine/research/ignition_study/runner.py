@@ -592,6 +592,11 @@ class StudyRunner:
         disk_low_preserved: bool | None = None
         birth_requested = False
         first_embodied_wall: float | None = None
+        unviable_verdict: dict[str, Any] | None = None
+        unviable_terminated = False
+        extra_viability: dict[str, Any] | None = None
+        # A verdict file older than this step belongs to an earlier attempt.
+        step_started_wall = time.time()
 
         start_clock = self.clock()
         budget = (
@@ -732,6 +737,35 @@ class StudyRunner:
                             f"pid {child_pid} is still running"
                         )
 
+            if step_kind == "gestation" and unviable_verdict is None and not timeout_requested and not birth_requested and not disk_low_requested:
+                viability_path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
+                try:
+                    if viability_path.stat().st_mtime < step_started_wall:
+                        raise FileNotFoundError("verdict predates this step")
+                    viability_data = json.loads(viability_path.read_text())
+                except Exception:
+                    viability_data = None
+                if isinstance(viability_data, dict) and viability_data.get("verdict") == "unviable":
+                    unviable_verdict = viability_data
+                    log.warning(
+                        "Gestation viability watch declared unviable for %s step %s "
+                        "(rule %s): %s",
+                        line,
+                        k,
+                        unviable_verdict.get("rule", "unknown"),
+                        unviable_verdict.get("reason", ""),
+                    )
+            if unviable_verdict is not None and not unviable_terminated:
+                try:
+                    proc.terminate()
+                    unviable_terminated = True
+                except Exception:
+                    log.warning(
+                        "Failed to terminate gestation process for %s step %s",
+                        line,
+                        k,
+                        exc_info=True,
+                    )
             self.sleep(self.poll_seconds)
 
         ended_at = _utc_iso()
@@ -753,6 +787,24 @@ class StudyRunner:
             disk_low_preserved=disk_low_preserved,
         )
 
+        if unviable_verdict is not None and not birth_requested:
+            outcome = "failed:gestation_unviable"
+            extra_viability = unviable_verdict
+            try:
+                _write_unviable_note(
+                    line_dir,
+                    unviable_verdict,
+                    line=line,
+                    step=k,
+                    run_id=run_id,
+                )
+            except Exception:
+                log.warning(
+                    "Failed to write unviable gestation note for %s step %s",
+                    line,
+                    k,
+                    exc_info=True,
+                )
         world_model_captured: bool | None = None
         if "phantasia" in modules_set:
             world_model_captured = False
@@ -779,6 +831,9 @@ class StudyRunner:
             "outcome": outcome,
             "pid": child_pid,
         }
+
+        if extra_viability is not None:
+            record["viability"] = extra_viability
 
         if disk_low_requested:
             record["disk_low_preserved"] = bool(disk_low_preserved)
@@ -1128,3 +1183,46 @@ def _write_text_atomic(path: Path, text: str) -> None:
         fh.write(text)
     os.chmod(tmp, 0o600)
     tmp.replace(path)
+
+
+def _write_unviable_note(
+    line_dir: Path,
+    verdict: dict,
+    *,
+    line: str,
+    step: int,
+    run_id: str | None,
+) -> Path:
+    note_path = line_dir / "ENDED-NOTE.md"
+    rule = verdict.get("rule", "unknown")
+    reason = verdict.get("reason", "")
+    lived_hours = verdict.get("lived_hours", "unknown")
+    evidence = verdict.get("evidence", {})
+    when = datetime.now(timezone.utc).isoformat()
+    evidence_lines = (
+        "\n".join(f"- {key}: {value}" for key, value in evidence.items())
+        if isinstance(evidence, dict)
+        else f"- evidence: {evidence}"
+    )
+    text = (
+        f"# Gestation ended: it could not reach birth\n\n"
+        f"- When: {when}\n"
+        f"- Line: {line}\n"
+        f"- Step: {step}\n"
+        f"- Run id: {run_id}\n\n"
+        f"## Viability verdict\n\n"
+        f"- Rule: {rule}\n"
+        f"- Reason: {reason}\n"
+        f"- Lived hours: {lived_hours}\n\n"
+        f"## Evidence\n\n{evidence_lines}\n\n"
+        f"## What happened\n\n"
+        f"The gestation owner's viability watch judged, from the entrainment "
+        f"measurements, that the being could not complete gestation within its "
+        f"budget. The cycle was stopped without a preservation bundle (operator "
+        f"policy for entities that do not complete gestation). All of this "
+        f"step's data is kept in this directory.\n\n"
+        f"See the gestation chapter of the KAINE book (Readiness markers; How "
+        f"entrainment is measured; Viability watch).\n"
+    )
+    _write_text_atomic(note_path, text)
+    return note_path

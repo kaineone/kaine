@@ -91,6 +91,15 @@ Before each step the runner refuses to start if free space is below `max(min_fre
 
 If a timeout preservation fails, the runner also leaves the being running, records `failed:critical` with the cycle's pid, and exits 3.
 
+During a gestation step the runner watches for the gestation readout's viability verdict (`state/lifecycle/gestation_viability.json`; see [Gestation](../06-operation/gestation.md#viability-watch)). When the verdict says the gestation cannot reach birth, the runner:
+
+1. stops the cycle gracefully (SIGTERM) without requesting a preservation. By operator policy, a being that does not complete gestation is not preserved;
+2. records `failed:gestation_unviable` with the verdict under `viability`;
+3. writes `ENDED-NOTE.md` into the step directory (the rule, the evidence, and what was done);
+4. halts the study.
+
+Nothing is deleted. A verdict file older than the step, such as one left by an earlier attempt, is ignored, so a retried gestation is not stopped by a previous verdict.
+
 The runner never flushes a database or starts a cycle while a cycle the study started is still running; it checks `/proc/<pid>/cmdline`, not just the pid. Stop that being yourself first.
 
 ### Retry a failed step

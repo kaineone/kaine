@@ -107,6 +107,12 @@ The readout probes briefly change the maternal drive that a gestating entity per
 | `entrainment_replications` | integer | `3` | Consecutive passing withdrawals needed before marker 2 is true. |
 | `surrogate_count` | integer | `19` | Foreign-mother heartbeats each withdrawal's phase locking must beat. A sample without exactly this many makes the measurement inconclusive. |
 
+| `viability_watch` | boolean | `true` | Judge after each withdrawal whether the gestation can still reach birth (see [Gestation](../06-operation/gestation.md#viability-watch)). |
+| `viability_r0_hours` / `viability_r1_hours` / `viability_r2_hours` / `viability_r3_hours` | float | `6` / `24` / `48` / `60` | Lived time at which each rule applies; must increase. |
+| `viability_r1_pull` / `viability_r1_slope_per_hour` | float | `0.12` / `0.002` | R1: median pull below this, not rising faster than this. |
+| `viability_r2_pull` | float | `0.3` | R2: median pull below this. |
+| `viability_window_hours` / `viability_min_points` | float / integer | `12` / `8` | The window the R1/R2 statistics use, and the conclusive withdrawals it needs. |
+
 `entrainment_plv_floor` no longer exists: entrainment is judged against surrogate beats, with no fixed phase-locking threshold. An operator file that still sets it fails at boot with "Unknown keys", so remove the line.
 | `hrv_window_seconds` | integer | `300` | Window for the HRV-analog variability (marker 3). |
 | `recovery_tolerance` | float | `0.25` | Settled when within 25% of the pre-perturbation median (marker 5). |
