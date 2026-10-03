@@ -106,7 +106,7 @@ class FakeBus:
 async def test_trajectory_writes_snapshot_entry(tmp_path):
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="trajectory", flush_interval_s=0.05)
-    obs = TrajectoryRecorder(bus, sink, thymos_state_provider=lambda: {"valence": 0.1})
+    obs = TrajectoryRecorder(bus, sink)
     bus.push(
         "workspace.broadcast",
         _event(
@@ -131,7 +131,7 @@ async def test_trajectory_writes_snapshot_entry(tmp_path):
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
     assert line["tick_index"] == 42
-    assert line["thymos_state"] == {"valence": 0.1}
+    assert "thymos_state" not in line
 
 
 # ---------- AttributionRecorder ----------

@@ -89,15 +89,17 @@ def build_overlay(
         "empatheia": {"collection": collection_prefix},
         # Relative to the step's working directory; the runner records it.
         "ignition_log": {"enabled": True, "directory": IGNITION_LOG_DIR},
-        # Every step records what Nexus shows and the external utterances;
-        # the raw A/V archive is never part of a study.
+        # Every step records the workspace graph (the ignition log), the external
+        # utterances and the safety records; the Nexus record, the workspace
+        # trajectory and the raw archive are never part of a study, overriding the
+        # operator config.
         "research_event_log": {
             "enabled": True,
             "external_utterances": {"enabled": True},
-            "nexus_record": {"enabled": True},
+            "nexus_record": {"enabled": False},
             "raw_archive": {"enabled": False},
         },
-        "evaluation": {"workspace_trajectory": True},
+        "evaluation": {"workspace_trajectory": False},
         "preservation": {
             "divergence_monitor": {"enabled": True},
             "welfare_response": {"enabled": True},

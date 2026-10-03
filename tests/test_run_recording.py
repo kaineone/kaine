@@ -221,6 +221,34 @@ async def test_nexus_record_writes_filtered_payload():
 
 
 @pytest.mark.asyncio
+async def test_nexus_record_of_vision_report_holds_no_vector():
+    bus = FakeBus()
+    sink = FakeSink()
+    observer = NexusRecord(bus, sink, NexusRecordConfig(enabled=True))
+
+    event = _event(
+        "topos",
+        "topos.report",
+        {
+            "latent": [0.1] * 768,
+            "peripheral": [0.2] * 768,
+            "foveal": [0.3] * 768,
+            "change_score": 0.4,
+            "alert": True,
+        },
+    )
+    await observer.handle("topos.out", "1-0", event)
+
+    assert len(sink.rows) == 1
+    record = sink.rows[0]
+    assert record["stream"] == "topos.out"
+    assert record["entry_id"] == "1-0"
+    assert record["source"] == event.source
+    assert record["type"] == event.type
+    assert record["payload"] == {"change_score": 0.4, "alert": True}
+
+
+@pytest.mark.asyncio
 async def test_nexus_record_drops_event_when_filter_fails():
     bus = FakeBus()
     sink = FakeSink()

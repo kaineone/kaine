@@ -157,7 +157,7 @@ _REVIEWED_OPERATIONAL_KEYS = frozenset(
         "error_reason",    # nous: exception reason string
         "reason",          # hypnos/phantasia/perception/preservation: short reason enum (consumer-read)
         "source_label",    # audition: perception source name (e.g. "microphone")
-        "temporal_context",  # chronos: numeric hidden-state vector (list[float])
+        "temporal_context",  # chronos: numeric hidden-state vector; removed by the vector rule (VECTOR_FIELDS)
     }
 )
 

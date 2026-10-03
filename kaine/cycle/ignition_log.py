@@ -15,7 +15,9 @@ module receives it; the entity never learns its place in the programme.
 
 Records are written through AsyncJsonlSink, which adds run id and sequence
 number, encrypts at rest when state encryption is on, and never auto-purges
-when constructed with retention_days=0.
+when constructed with retention_days=0. The ignition log is the workspace-graph
+record; it is kept for the paper analysis and then as world-model training
+data, and is never purged automatically — only the operator deletes it.
 """
 from __future__ import annotations
 
@@ -23,6 +25,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+from kaine.persistence.jsonl_sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
@@ -145,6 +149,16 @@ class IgnitionLog:
                 "ignition log dropped %d records under backpressure",
                 self._sink.dropped_count,
             )
+
+
+def ignition_log_sink(directory: str | Path) -> AsyncJsonlSink:
+    """Return the ignition-log ``AsyncJsonlSink``.
+
+    The ignition log is the workspace-graph record; it is kept for the paper
+    analysis and then as world-model training data, and is never purged
+    automatically — only the operator deletes it.
+    """
+    return AsyncJsonlSink(Path(directory), name="ignition", retention_days=0)
 
 
 def playlist_position_provider(
