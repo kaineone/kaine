@@ -924,9 +924,12 @@ edge_trim_seconds = 2.0
 frequency_pull_floor = 0.5        # withdrawn frequency pulled at least halfway toward the beat
 baseline_withdrawals = 3          # the being's own undriven frequency, from its first withdrawals
 # Each withdrawal's surrogate test is a p < 0.05 test, so a single pass can
-# happen by chance; entrainment counts only after this many consecutive passes
-# (offline validation: 3 removed every chance pass in the controls).
+# happen by chance; entrainment counts only after this many consecutive passes.
+# Offline validation: with 3, none of 6 foreign-mother pairs passed in 96 h
+# each (single-withdrawal chance passes 2.6-10%). Consecutive withdrawals are
+# correlated, so this is not a p ~ 1e-4 claim.
 entrainment_replications = 3
+surrogate_count = 19              # foreign mothers each withdrawal is tested against
 hrv_window_seconds = 300          # window for the HRV-analog variability (marker 3)
 recovery_tolerance = 0.25         # settled when within 25% of the pre-perturbation median (marker 5)
 recovery_cap_seconds = 300

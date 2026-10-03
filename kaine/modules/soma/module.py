@@ -314,7 +314,10 @@ class Soma(BaseModule):
         """Return the self-rhythm generator's current population activity, or None.
 
         The gestation readout measures entrainment on this slow activity signal
-        (band-limited, against surrogate beats), not on the spiking readout."""
+        (band-limited, against surrogate beats), not on the spiking readout.
+        The gestation owner reads the oscillator ``identity`` attribute via
+        ``getattr(osc, "identity", None)`` to tie the self-rhythm baseline to
+        this being."""
         if self._self_rhythm is None:
             return None
         try:

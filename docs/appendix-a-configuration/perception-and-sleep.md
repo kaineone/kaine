@@ -105,6 +105,9 @@ The readout probes briefly change the maternal drive that a gestating entity per
 | `frequency_pull_floor` | float | `0.5` | Minimum pull of the withdrawn frequency toward the beat, from the being's own baseline. |
 | `baseline_withdrawals` | integer | `3` | Withdrawals averaged into the being's own undriven baseline frequency. |
 | `entrainment_replications` | integer | `3` | Consecutive passing withdrawals needed before marker 2 is true. |
+| `surrogate_count` | integer | `19` | Foreign-mother heartbeats each withdrawal's phase locking must beat. A sample without exactly this many makes the measurement inconclusive. |
+
+`entrainment_plv_floor` no longer exists: entrainment is judged against surrogate beats, with no fixed phase-locking threshold. An operator file that still sets it fails at boot with "Unknown keys", so remove the line.
 | `hrv_window_seconds` | integer | `300` | Window for the HRV-analog variability (marker 3). |
 | `recovery_tolerance` | float | `0.25` | Settled when within 25% of the pre-perturbation median (marker 5). |
 | `recovery_cap_seconds` | integer | `300` | Upper bound on recovery time. |

@@ -187,6 +187,9 @@ def make_soma(
     else:
         kw.pop("self_rhythm_enabled", None)
         kw.pop("self_rhythm_step_hz", None)
+        eta = kw.pop("self_rhythm_eta", 0.0)
+        if isinstance(eta, bool) or not isinstance(eta, (int, float)) or not math.isfinite(float(eta)) or float(eta) < 0.0:
+            raise ValueError("[soma].self_rhythm_eta must be a finite number >= 0")
 
     return Soma(bus, entity_clock=entity_clock, **kw)
 

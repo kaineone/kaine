@@ -104,6 +104,8 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
         # across consecutive withdrawals is tested in
         # tests/test_gestation_entrainment_replication.py.
         "entrainment_replications": 1.0,
+        # The fake surrogate provider below supplies three foreign mothers.
+        "surrogate_count": 3.0,
         "readout_period_seconds": 10.0,
         "sample_hz": sample_hz,
         "withdrawal_period_seconds": 10.0,
@@ -503,6 +505,8 @@ async def test_plv_pairing_ignores_missing_beat_phases(owner_factory):
 
 @pytest.mark.asyncio
 async def test_comparison_window_ignores_perturbation_samples(owner_factory):
+    """Probe samples never enter the comparisons: self-sustain skips them, and a
+    probe inside the entrainment window makes that measurement inconclusive."""
     clock = FakeClock()
     drive = FakeDrive()
     bus = FakeBus()
@@ -587,12 +591,13 @@ async def test_comparison_window_ignores_perturbation_samples(owner_factory):
     assert owner._endogenous_self_sustain is True
     assert owner._entrain_then_autonomy is True
 
+    # Self-sustain still ignores probe samples.
     assert mixed["sustain"] == owner._endogenous_self_sustain
-    assert mixed["marker"] == owner._entrain_then_autonomy
-    assert mixed["plv"] == pytest.approx(owner._entrainment_plv)
-    assert mixed["max"] == pytest.approx(owner._entrainment_plv_surrogate_max)
-    assert mixed["fw"] == pytest.approx(owner._self_rhythm_freq_withdrawn)
-    assert mixed["pull"] == pytest.approx(owner._frequency_pull)
+    # A probe inside the entrainment window is never spliced over: the window
+    # must be one contiguous idle run, so the entrainment measurement is
+    # inconclusive rather than computed across the gap.
+    assert mixed["plv"] is None
+    assert mixed["marker"] is None
 
 
 @pytest.mark.asyncio

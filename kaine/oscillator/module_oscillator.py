@@ -513,6 +513,10 @@ class SelfRhythmOscillator(ModuleOscillator):
 
         self._rng = np.random.default_rng(seed)
 
+        import uuid
+
+        self.identity = uuid.uuid4().hex
+
     @staticmethod
     def _sigmoid(x: float, k: float) -> float:
         """Numerically safe logistic 1/(1+exp(-x/k)) for k > 0."""
@@ -689,6 +693,7 @@ class SelfRhythmOscillator(ModuleOscillator):
             {
                 "kind": "self_rhythm",
                 "version": 2,
+                "identity": self.identity,
                 "a": self._a,
                 "s": self._s,
                 "ln_tau": self._ln_tau,
@@ -743,48 +748,28 @@ class SelfRhythmOscillator(ModuleOscillator):
 
         try:
             params = state.get("params", {})
-            step_hz = float(params["step_hz"])
-            substeps = int(params["substeps"])
-            w_rec = float(params["w_rec"])
-            k_sig = float(params["k_sig"])
-            tau_a = float(params["tau_a"])
-            depression_u = float(params["depression_u"])
-            margin = float(params["margin"])
-            own_gain = float(params["own_gain"])
-            afferent_gain = float(params["afferent_gain"])
-            noise_std = float(params["noise_std"])
-            tau_rec = float(params["tau_rec"])
-            tau_min = float(params["tau_min"])
-            tau_max = float(params["tau_max"])
-            eta = float(params["eta"])
-            plasticity_sign = float(params["plasticity_sign"])
-            mean_tau_s = float(params["mean_tau_s"])
-            readout_gain = float(params["readout_gain"])
-            phase_window_s = float(params["phase_window_s"])
-            band = params["phase_band_hz"]
-            phase_band_hz = (float(band[0]), float(band[1]))
-
-            SelfRhythmOscillator._validate_params(
-                step_hz=step_hz,
-                substeps=substeps,
-                w_rec=w_rec,
-                k_sig=k_sig,
-                tau_a=tau_a,
-                depression_u=depression_u,
-                margin=margin,
-                own_gain=own_gain,
-                afferent_gain=afferent_gain,
-                noise_std=noise_std,
-                tau_rec=tau_rec,
-                tau_min=tau_min,
-                tau_max=tau_max,
-                eta=eta,
-                plasticity_sign=plasticity_sign,
-                mean_tau_s=mean_tau_s,
-                readout_gain=readout_gain,
-                phase_window_s=phase_window_s,
-                phase_band_hz=phase_band_hz,
-            )
+            structural: dict[str, float] = {
+                "w_rec": float(params["w_rec"]),
+                "k_sig": float(params["k_sig"]),
+                "tau_a": float(params["tau_a"]),
+                "depression_u": float(params["depression_u"]),
+                "margin": float(params["margin"]),
+                "own_gain": float(params["own_gain"]),
+                "afferent_gain": float(params["afferent_gain"]),
+                "noise_std": float(params["noise_std"]),
+                "tau_min": float(params["tau_min"]),
+                "tau_max": float(params["tau_max"]),
+                "readout_gain": float(params["readout_gain"]),
+            }
+            if any(
+                abs(structural[k] - getattr(self, f"_{k}")) > 1e-12
+                for k in structural
+            ):
+                logger.info(
+                    "Ignoring v2 SelfRhythmOscillator state: structural "
+                    "generator parameters differ"
+                )
+                return
 
             a = float(state["a"])
             s = float(state["s"])
@@ -801,39 +786,15 @@ class SelfRhythmOscillator(ModuleOscillator):
                     raise ValueError(f"non-finite state value {value}")
 
             self._history_len = max(
-                int(phase_window_s * step_hz), self._history_len
+                int(self._phase_window_s * self._step_hz), self._history_len
             )
 
             super().deserialize(state)
 
-            self._step_hz = step_hz
-            self._dt_step = 1.0 / step_hz
-            self._substeps = substeps
-            self._dt_sub = self._dt_step / self._substeps
-
-            self._w_rec = w_rec
-            self._k_sig = k_sig
-            self._tau_a = tau_a
-            self._depression_u = depression_u
-            self._margin = margin
-            self._own_gain = own_gain
-            self._afferent_gain = afferent_gain
-            self._noise_std = noise_std
-
-            self._tau_rec_init = tau_rec
-            self._tau_min = tau_min
-            self._tau_max = tau_max
-
-            self._eta = eta
-            self._plasticity_sign = plasticity_sign
-            self._mean_tau_s = mean_tau_s
-            self._readout_gain = readout_gain
-            self._phase_window_s = phase_window_s
-            self._phase_band_hz = phase_band_hz
-
             self._a = a
             self._s = s
-            self._ln_tau = ln_tau
+            # Clamp in log space to the current bounds.
+            self._ln_tau = max(math.log(self._tau_min), min(ln_tau, math.log(self._tau_max)))
             self._ext_mean = ext_mean
             self._a_mean = a_mean
             self._s_mean = s_mean
@@ -848,6 +809,10 @@ class SelfRhythmOscillator(ModuleOscillator):
             rng_state = state.get("rng_state")
             if rng_state is not None:
                 self._rng.bit_generator.state = rng_state
+
+            stored_identity = state.get("identity")
+            if isinstance(stored_identity, str):
+                self.identity = stored_identity
 
         except Exception as exc:
             logger.info("Ignoring invalid v2 SelfRhythmOscillator state: %s", exc)

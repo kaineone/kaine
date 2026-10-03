@@ -82,6 +82,7 @@ class GestationReadoutConfig:
     recovery_tolerance: float = 0.25
     recovery_cap_seconds: float = 300.0
     entrainment_replications: float = 3.0
+    surrogate_count: float = 19.0
 
     @classmethod
     def from_dict(cls, data) -> "GestationReadoutConfig":
@@ -121,6 +122,12 @@ class GestationReadoutConfig:
                 raise ValueError(f"{name} must be finite and > 0")
 
             if name == "entrainment_replications":
+                if float(int(fv)) != fv or fv < 1.0:
+                    raise ValueError(f"{name} must be an integer >= 1")
+                kwargs[name] = fv
+                continue
+
+            if name == "surrogate_count":
                 if float(int(fv)) != fv or fv < 1.0:
                     raise ValueError(f"{name} must be an integer >= 1")
                 kwargs[name] = fv
@@ -214,12 +221,17 @@ def entrainment_plv(
     low_hz,
     high_hz,
     trim_samples,
+    required_surrogates: int = 0,
 ) -> tuple[float | None, float | None]:
     """PLV of self-rhythm activity vs. the true beat and the max surrogate PLV.
 
     ``surrogate_beats`` is a list of phase series, one per surrogate mother.
+    ``required_surrogates`` is the exact number of surrogate series a valid
+    sample must carry; if fewer are supplied, or if any surrogate yields a
+    non-finite PLV, ``surrogate_max`` is returned as None.
+
     Returns ``(plv, surrogate_max)``; ``surrogate_max`` is None when no
-    surrogates are supplied.
+    surrogates are supplied or the surrogate ensemble is incomplete/invalid.
     """
     phase = band_phase(activity, sample_hz, low_hz, high_hz, trim_samples)
     if phase is None:
@@ -235,15 +247,19 @@ def entrainment_plv(
 
     surrogate_max = None
     if surrogate_beats:
+        if len(surrogate_beats) < required_surrogates:
+            return (plv, None)
         surr_plvs: list[float] = []
         for sb in surrogate_beats:
             sb_arr = np.asarray(sb, dtype=float)
             if trim_samples:
                 sb_arr = sb_arr[trim_samples:-trim_samples]
-            if sb_arr.size == phase.size:
-                sp = phase_locking_value(phase, sb_arr)
-                if sp is not None:
-                    surr_plvs.append(sp)
+            if sb_arr.size != phase.size:
+                return (plv, None)
+            sp = phase_locking_value(phase, sb_arr)
+            if sp is None or not math.isfinite(sp):
+                return (plv, None)
+            surr_plvs.append(sp)
         if surr_plvs:
             surrogate_max = float(max(surr_plvs))
 
@@ -469,6 +485,10 @@ class GestationOwner:
         self._baseline: float | None = None
         self._self_rhythm_baseline_hz: float | None = None
         self._self_rhythm_baseline_count: int = 0
+
+        identity = getattr(getattr(soma, "_self_rhythm", None), "identity", None)
+        self._baseline_key = f"{self._seed}:{identity or 'none'}"
+
         self._load_baseline()
 
     def _jitter_unit(self, kind: str) -> float:
@@ -497,9 +517,14 @@ class GestationOwner:
             ):
                 self._baseline = float(baseline)
 
+            self._self_rhythm_baseline_hz = None
+            self._self_rhythm_baseline_count = 0
+
             self_baseline = data.get("self_rhythm_baseline_hz")
+            stored_key = data.get("self_rhythm_baseline_key")
             if (
-                isinstance(self_baseline, (int, float))
+                stored_key == self._baseline_key
+                and isinstance(self_baseline, (int, float))
                 and not isinstance(self_baseline, bool)
                 and self_baseline > 0.0
             ):
@@ -507,6 +532,13 @@ class GestationOwner:
                 count = data.get("self_rhythm_baseline_count", 0)
                 if isinstance(count, int) and not isinstance(count, bool):
                     self._self_rhythm_baseline_count = max(0, count)
+            elif self_baseline is not None or stored_key is not None:
+                log.info(
+                    "gestation: ignoring self-rhythm baseline from "
+                    "mismatched being/run (stored_key=%s, current_key=%s)",
+                    stored_key,
+                    self._baseline_key,
+                )
         except Exception:
             log.warning("gestation: could not load baseline", exc_info=True)
 
@@ -526,6 +558,7 @@ class GestationOwner:
             if self._self_rhythm_baseline_count > 0:
                 data["self_rhythm_baseline_hz"] = self._self_rhythm_baseline_hz
                 data["self_rhythm_baseline_count"] = self._self_rhythm_baseline_count
+                data["self_rhythm_baseline_key"] = self._baseline_key
             tmp.write_text(
                 json.dumps(data),
                 encoding="utf-8",
@@ -709,7 +742,19 @@ class GestationOwner:
         self._probe_end = None
 
         if kind == "withdrawal" and start is not None and end is not None:
-            await self._compute_withdrawal_markers(start, end)
+            try:
+                await self._compute_withdrawal_markers(start, end)
+            except Exception:
+                log.warning(
+                    "gestation: withdrawal marker computation failed",
+                    exc_info=True,
+                )
+                self._entrain_then_autonomy = None
+                self._entrainment_consecutive_passes = 0
+                self._entrainment_plv = None
+                self._entrainment_plv_surrogate_max = None
+                self._self_rhythm_freq_withdrawn = None
+                self._frequency_pull = None
         elif kind == "perturbation" and start is not None and end is not None:
             self._last_perturbation = (start, end)
 
@@ -780,14 +825,25 @@ class GestationOwner:
         high_hz = cfg.entrainment_band_high_hz
         trim_samples = int(cfg.edge_trim_seconds * sample_hz)
 
-        # Entrainment over the driven window before withdrawal.
+        # Entrainment over the contiguous idle window immediately before
+        # withdrawal.  Walk backwards from the withdrawal start and stop at the
+        # first non-idle sample, the start of the requested window, or any
+        # sample at/after the withdrawal start.
         idle_window = cfg.entrainment_window_seconds
         expected_idle = int(idle_window * sample_hz)
-        idle = [
-            s
-            for s in self._samples
-            if start - idle_window <= s[0] < start and s[4] == "idle"
-        ]
+        run: list[Any] = []
+        for s in reversed(self._samples):
+            if s[0] >= start:
+                continue  # the withdrawal itself (newest samples come first)
+            if s[0] < start - idle_window:
+                break
+            if s[4] != "idle":
+                break
+            run.append(s)
+        run.reverse()
+        idle = run
+
+        required_surrogates = int(cfg.surrogate_count)
         valid_idle = [
             s for s in idle if s[5] is not None and s[3] is not None
         ]
@@ -795,7 +851,16 @@ class GestationOwner:
             valid_idle = [
                 s
                 for s in valid_idle
-                if s[6] is not None and all(x is not None for x in s[6])
+                if (
+                    s[6] is not None
+                    and len(s[6]) == required_surrogates
+                    and all(
+                        isinstance(x, (int, float))
+                        and not isinstance(x, bool)
+                        and math.isfinite(x)
+                        for x in s[6]
+                    )
+                )
             ]
 
         idle_acts = np.array([s[5] for s in valid_idle], dtype=float)
@@ -827,6 +892,7 @@ class GestationOwner:
                 low_hz,
                 high_hz,
                 trim_samples,
+                required_surrogates=required_surrogates,
             )
 
         # Withdrawn self-rhythm frequency.

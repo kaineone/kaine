@@ -54,6 +54,8 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
         "edge_trim_seconds": 2.0,
         "frequency_pull_floor": 0.5,
         "baseline_withdrawals": 3.0,
+        # The prefilled samples carry one surrogate beat.
+        "surrogate_count": 1.0,
     }
     defaults.update(overrides)
     return GestationReadoutConfig.from_dict(defaults)
@@ -86,7 +88,7 @@ def _prefill_samples(owner: GestationOwner) -> None:
     for i in range(stop):
         t = i * dt
         state = "idle" if t < 10.0 else "withdrawal"
-        owner._samples.append((t, 0.0, 1.0, 0.0, state, 1.0, None))
+        owner._samples.append((t, 0.0, 1.0, 0.0, state, 1.0, (0.0,)))
 
 
 def _patch_outcome(monkeypatch: pytest.MonkeyPatch, outcome: tuple[float | None, float | None] | None) -> None:

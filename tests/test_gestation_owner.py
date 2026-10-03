@@ -106,6 +106,8 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
         # across consecutive withdrawals is tested in
         # tests/test_gestation_entrainment_replication.py.
         "entrainment_replications": 1.0,
+        # The fake surrogate provider below supplies three foreign mothers.
+        "surrogate_count": 3.0,
         "readout_period_seconds": 10.0,
         "sample_hz": sample_hz,
         "withdrawal_period_seconds": 10.0,
