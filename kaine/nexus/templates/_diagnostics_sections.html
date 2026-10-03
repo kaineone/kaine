@@ -63,7 +63,9 @@
           <input type="number" id="exp-rate" step="0.1" min="0.1"
                  value="{{ metrics.experiential_rate_hz or '' }}">
         </div>
-        {% if metrics.experiential_rate_effective_hz is not none %}
+        {# The metrics snapshot omits the rate keys when no cycle is running, and an
+           undefined value passes "is not none", so test for presence first. #}
+        {% if metrics.experiential_rate_effective_hz is defined and metrics.experiential_rate_effective_hz is not none %}
         <p class="muted" id="exp-rate-effective">
           conscious access now {{ "%.2f"|format(metrics.experiential_rate_effective_hz) }} Hz
           (drive {{ "%.2f"|format(metrics.access_drive or 0) }}); it rises from the
