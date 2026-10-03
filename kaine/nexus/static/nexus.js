@@ -344,7 +344,7 @@
 
 /* ---- Live charts (uPlot) ------------------------------------------------- */
 (function () {
-  const RING = 240; // ~ a few minutes of points at a few Hz
+  const RING = 1200; // about two minutes at 10 Hz
 
   // Every uPlot instance we create, paired with its container element, so a
   // board that re-shows at a changed width (collapse → reopen) can re-fit.
@@ -377,6 +377,7 @@
     this.t = [];
     this.cols = seriesDefs.map(function () { return []; });
     this.plot = null;
+    this._redrawPending = false;
   }
   LiveSeries.prototype._ensurePlot = function () {
     if (this.plot || !hasUPlot() || !this.el) return;
@@ -401,6 +402,16 @@
   LiveSeries.prototype._data = function () {
     return [this.t].concat(this.cols);
   };
+  LiveSeries.prototype._scheduleRedraw = function () {
+    if (this._redrawPending) return;
+    this._redrawPending = true;
+    const self = this;
+    requestAnimationFrame(function () {
+      self._redrawPending = false;
+      self._ensurePlot();
+      if (self.plot) self.plot.setData(self._data());
+    });
+  };
   LiveSeries.prototype.push = function (tsSeconds, values) {
     this.t.push(tsSeconds);
     for (let i = 0; i < this.cols.length; i++) {
@@ -411,8 +422,7 @@
       this.t.shift();
       this.cols.forEach(function (c) { c.shift(); });
     }
-    this._ensurePlot();
-    if (this.plot) this.plot.setData(this._data());
+    this._scheduleRedraw();
   };
 
   // Horizontal bar chart from a {label: count} map (SVG-free, divs).
@@ -477,6 +487,7 @@
   }
 
   window.NexusChartRouting = { chartSamples: chartSamples };
+  window.NexusLiveSeries = LiveSeries;
 
   // Diagnostics: live cycle-rate, affect (VAD), salience, coherence from the SSE stream.
   function attachDiagnostics() {

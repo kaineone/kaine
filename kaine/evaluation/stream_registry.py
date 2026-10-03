@@ -19,8 +19,9 @@ Documented exclusions:
   (transcripts) are NEVER curated — the research log stays content-free.
 - Nexus diagnostics additionally excludes the low-signal operational streams
   (``volition.out``, ``mundus.out``, ``perception.out``, ``welfare.out``,
-  ``preservation.out``, ``individuation.out``) and adds non-module streams
-  (``cycle.tick`` event type, ``workspace.broadcast``).
+  ``preservation.out``, ``individuation.out``) and adds the non-module
+  ``workspace.broadcast`` stream. It tails ``cycle.out``, which carries the
+  cycle's ``cycle.tick``, ``cycle.rates`` and ``cycle.time_scale`` events.
 """
 
 from __future__ import annotations

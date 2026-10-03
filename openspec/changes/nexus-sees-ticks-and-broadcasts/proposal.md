@@ -58,3 +58,7 @@ Research impact: **instrument (diagnostics display) only.**
   - bridge relays a broadcast
   - chart routing in a real browser
 - **Docs:** the Nexus chapter's chart descriptions, if they name the sources.
+
+## Known limit
+The bridge advances a stream's cursor to the last *decoded* entry (`bus.read`). A run of 64 or more consecutive undecodable entries on one stream would stall that stream's display, because the same batch is re-read. Undecodable entries are rare, since publish validates every event, and the stall affects only the diagnostics display, never the entity. Moving the bridge to `read_entries`, which reports the last scanned id as the engine's consumers already do, is a follow-up.
+

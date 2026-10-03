@@ -162,7 +162,6 @@ async def test_bridge_relays_events_published_after_start():
         poll_interval_s=0.01,
     )
     client = bridge.add_client("diagnostics")
-    await bridge.start()
 
     # Resolve cursors to the newest pre-start entry on each stream.
     await bridge._tick_once()
@@ -206,7 +205,6 @@ async def test_bridge_relays_events_published_after_start():
 
     # Pick up the newly published events.
     await bridge._tick_once()
-    await bridge.stop()
 
     drained: list[tuple[str, Event]] = []
     while True:
@@ -328,6 +326,112 @@ async def test_chart_routing_in_real_browser():
                     assert results[2].get("salience") == pytest.approx(0.6)
                     assert "coherence" not in results[2]
                     assert "coherence" not in results[3]
+
+                    assert errors == []
+        finally:
+            if browser is not None:
+                await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_live_series_batches_redraws_in_real_browser():
+    pytest.importorskip("playwright.async_api")
+    from playwright.async_api import async_playwright
+
+    browser = None
+    async with async_playwright() as pw:
+        try:
+            try:
+                browser = await pw.chromium.launch(channel="chrome")
+            except Exception as chrome_err:
+                try:
+                    browser = await pw.chromium.launch()
+                except Exception:
+                    pytest.skip(
+                        f"System Chrome unavailable and fallback Chromium failed: {chrome_err}"
+                    )
+
+            page = await browser.new_page(viewport={"width": 1600, "height": 1000})
+
+            config = NexusConfig(
+                host_allowlist=("127.0.0.1", "localhost", "test", "nexus.test"),
+            )
+            client, app = await _make_client(
+                config=config,
+                health_prober=_TallHealth(),
+            )
+            client.base_url = httpx.URL("http://nexus.test")
+
+            async with app.router.lifespan_context(app):
+                async with client:
+
+                    async def handler(route):
+                        parsed = urlparse(route.request.url)
+                        path_and_query = parsed.path + (
+                            "?" + parsed.query if parsed.query else ""
+                        )
+                        if parsed.path.endswith("/stream") or "/stream?" in path_and_query:
+                            await route.abort()
+                            return
+                        resp = await client.request(
+                            route.request.method,
+                            path_and_query,
+                            headers={"Authorization": "Bearer test-token"},
+                            content=route.request.post_data_buffer,
+                        )
+                        await route.fulfill(
+                            status=resp.status_code,
+                            headers={
+                                k: v
+                                for k, v in resp.headers.items()
+                                if k.lower()
+                                not in ("content-length", "content-encoding", "transfer-encoding")
+                            },
+                            body=resp.content,
+                        )
+
+                    await page.route("http://nexus.test/**", handler)
+
+                    errors = []
+                    page.on("pageerror", lambda e: errors.append(str(e)))
+
+                    await page.goto("http://nexus.test/diagnostics/")
+                    await page.wait_for_load_state("load")
+
+                    count = await page.evaluate(
+                        """() => {
+                            if (typeof uPlot === "undefined" || typeof window.NexusLiveSeries === "undefined") {
+                                return null;
+                            }
+                            const div = document.createElement("div");
+                            div.style.width = "400px";
+                            div.style.height = "200px";
+                            document.body.appendChild(div);
+                            const series = new window.NexusLiveSeries(div, [{label: "x", stroke: "#000"}]);
+                            series.push(Date.now() / 1000, [1]);
+                            return new Promise(resolve => {
+                                requestAnimationFrame(() => {
+                                    let calls = 0;
+                                    const original = series.plot.setData.bind(series.plot);
+                                    series.plot.setData = function(...args) {
+                                        calls += 1;
+                                        return original(...args);
+                                    };
+                                    for (let i = 0; i < 100; i++) {
+                                        series.push(Date.now() / 1000 + i * 0.1, [i]);
+                                    }
+                                    requestAnimationFrame(() => {
+                                        requestAnimationFrame(() => resolve(calls));
+                                    });
+                                });
+                            });
+                        }"""
+                    )
+
+                    if count is None:
+                        pytest.skip("uPlot is unavailable on the page")
+
+                    assert count <= 2
 
                     assert errors == []
         finally:
