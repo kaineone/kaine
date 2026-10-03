@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Generator retune: find mean-field params whose undriven oscillation spans ~0.5-1.6 Hz across tau_r
 with a robust band-passed amplitude near the maternal range (1.0-1.35 Hz). Vectorised over configs x tau."""
 import itertools, json, sys, math

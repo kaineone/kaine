@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 import json, numpy as np, sys
 def load(k): return json.load(open(f'{k}.out.json'))
 def summarize(k):

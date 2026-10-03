@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 import itertools, math, sys, numpy as np
 from scipy.signal import butter, sosfiltfilt, welch
 G = dict(w=2.5, U=8.0, m=-0.25, ta=0.02, k=0.08)

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Class vs prototype: same seed, one condition, 1 h driven at eta 1 (sign -1), 70 bpm.
 
 Run from anywhere: python fidelity.py (the class and the prototype must use the same generator

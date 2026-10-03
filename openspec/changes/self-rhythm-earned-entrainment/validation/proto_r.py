@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Batched prototype of option R: Tabak-style mean-field generator + weak afferent maternal drive
 + Righetti-style phase-projected plasticity on ln(tau_r). Uses the real MaternalDriveProvider and
 heartbeat_phase. Each batch column is one condition. Reports per-window band-limited PLV vs the true
