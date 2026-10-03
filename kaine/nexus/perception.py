@@ -74,15 +74,15 @@ def _availability() -> dict[str, bool]:
         import webrtcvad  # noqa: F401
 
         out["audio_available"] = True
-    except ImportError:
-        # Optional [audio] extra not installed — leave audio_available False.
+    except (ImportError, OSError):
+        # Optional [audio] extra not installed or a system library it needs (PortAudio) is absent.
         pass
     try:
         import cv2  # noqa: F401
 
         out["video_available"] = True
-    except ImportError:
-        # Optional [vision] extra not installed — leave video_available False.
+    except (ImportError, OSError):
+        # Optional [vision] extra not installed or a system library it needs (e.g. libGL) is absent.
         pass
     return out
 
