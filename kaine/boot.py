@@ -143,6 +143,7 @@ def make_soma(
         # Self-rhythm oscillator
         "self_rhythm_enabled",
         "self_rhythm_step_hz",
+        "self_rhythm_eta",
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
     kw = _pop(section, allowed)
@@ -151,7 +152,14 @@ def make_soma(
     if kw.get("self_rhythm_enabled"):
         kw.pop("self_rhythm_enabled")
         step_hz = float(kw.pop("self_rhythm_step_hz", 20.0))
-        osc = make_self_rhythm_oscillator(seed=int(feed_section.get("seed", 0)))
+        eta = kw.pop("self_rhythm_eta", 0.0)
+        if isinstance(eta, bool) or not isinstance(eta, (int, float)) or not math.isfinite(float(eta)) or float(eta) < 0.0:
+            raise ValueError("[soma].self_rhythm_eta must be a finite number >= 0")
+        # The oscillator integrates at the rate Soma steps it; a mismatch would
+        # silently change the rhythm's frequency.
+        osc = make_self_rhythm_oscillator(
+            seed=int(feed_section.get("seed", 0)), step_hz=step_hz, eta=float(eta)
+        )
         if osc is None:
             raise ValueError(
                 "[soma].self_rhythm_enabled requires the oscillator extra (snnTorch)"

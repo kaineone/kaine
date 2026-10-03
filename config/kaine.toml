@@ -378,7 +378,13 @@ regulation_warmup_stable_variance = 0.02
 # oscillator extra (snnTorch). In womb mode the maternal beat is presented to it
 # as a bounded external drive it may couple to; coupling is never forced.
 self_rhythm_enabled = false
-self_rhythm_step_hz = 20.0      # subjective-time cadence; fast enough for a ~1.2 Hz beat
+self_rhythm_step_hz = 20.0      # subjective-time cadence the self-rhythm integrates at
+# Rate at which the self-rhythm's period adapts to its input (Righetti et al.
+# 2006). Calibrated offline so an earned lock to the maternal beat typically
+# forms within the gestation budget (12-72 h of lived time), a disclosed
+# compression of the weeks of exposure in the literature. 0 disables adaptation,
+# so entrainment can never be earned.
+self_rhythm_eta = 0.01
 
 [soma.thresholds]
 "cpu_percent" = 90.0
