@@ -116,7 +116,7 @@ Monitor the fatigue chart on the diagnostics page. If it grows continuously with
 
 ### Oscillatory coherence
 
-When `[oscillator].enabled = true` and the `[oscillator]` extra is installed, the PLV chart shows phase-locking values between module pairs over time.
+When `[oscillator].enabled = true` and the `[oscillator]` extra is installed, the PLV chart shows, for each workspace broadcast, the phase-locking value of the modules competing in it.
 
 High PLV between a pair of modules that co-produce a workspace event means their outputs are receiving a coherence bonus in Syneidesis scoring. The bonus is bounded by `[oscillator].coherence_ceiling` (default 1.25). Desynchronized modules are attenuated down to `[oscillator].coherence_floor` (default 0.8).
 

@@ -324,3 +324,43 @@ def test_preservation_js_reads_only_allowlisted_payload_fields():
     block = js[start:end]
     for f in CONTENT_FIELDS:
         assert f"p.{f}" not in block, f"preservation handler reads content field {f!r}"
+
+
+def test_eidolon_self_model_text_is_scrubbed():
+    base_payload = {
+        "name": "kaine",
+        "values": ["curiosity"],
+        "behavioral_norms": ["be honest"],
+        "personality_baseline": {"openness": 0.7},
+        "capability_map": {"speech": 0.5},
+    }
+
+    event = Event(
+        source="eidolon",
+        type="eidolon.self_model",
+        payload=base_payload.copy(),
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    out = PrivacyFilter().filter_for_diagnostics(event)
+    assert "values" not in out.payload
+    assert "behavioral_norms" not in out.payload
+    assert out.payload["name"] == "kaine"
+    assert out.payload["personality_baseline"] == {"openness": 0.7}
+    assert out.payload["capability_map"] == {"speech": 0.5}
+
+    nested = {"selected": [{"payload": base_payload.copy()}]}
+    nested_event = Event(
+        source="eidolon",
+        type="eidolon.self_model",
+        payload=nested,
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    nested_out = PrivacyFilter().filter_for_diagnostics(nested_event)
+    payload = nested_out.payload["selected"][0]["payload"]
+    assert "values" not in payload
+    assert "behavioral_norms" not in payload
+    assert payload["name"] == "kaine"
+    assert payload["personality_baseline"] == {"openness": 0.7}
+    assert payload["capability_map"] == {"speech": 0.5}

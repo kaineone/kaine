@@ -26,6 +26,9 @@ class _BusLike(Protocol):
     async def current_workspace_id(self) -> str:
         ...
 
+    async def last_entry_id(self, stream: str) -> str:
+        """Return the id of the stream's newest entry, or ``"0-0"`` when empty."""
+
 
 @dataclass
 class SSEClient:
@@ -65,6 +68,7 @@ class BusBridge:
         self._read_count = int(read_count)
         self._cursors: dict[str, str] = {}
         self._clients: list[SSEClient] = []
+        self._resolve_warned: set[str] = set()
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
 
@@ -115,10 +119,30 @@ class BusBridge:
 
     async def _tick_once(self) -> None:
         for stream in self._streams:
+            cursor = self._cursors.get(stream, "$")
+            if cursor == "$":
+                try:
+                    self._cursors[stream] = await self._bus.last_entry_id(stream)
+                except Exception:
+                    if stream not in self._resolve_warned:
+                        log.warning(
+                            "nexus bridge cursor resolution failed for %s",
+                            stream,
+                            exc_info=True,
+                        )
+                        self._resolve_warned.add(stream)
+                    else:
+                        log.debug(
+                            "nexus bridge cursor resolution still failing for %s",
+                            stream,
+                        )
+                    continue
+                continue
+
             try:
                 entries = await self._bus.read(
                     stream,
-                    last_id=self._cursors.get(stream, "$"),
+                    last_id=self._cursors.get(stream, "0-0"),
                     count=self._read_count,
                     block_ms=0,
                 )

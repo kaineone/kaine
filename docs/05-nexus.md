@@ -173,10 +173,10 @@ Each line shows operational fields only: monitor, transition, reason, action, an
 
 The diagnostics SSE stream at `/diagnostics/stream` feeds the live charts:
 
-- **Cycle rate** — `processing_rate_hz` and `experiential_rate_hz`.
+- **Cycle rate** — `processing_rate_hz` and `experiential_rate_hz`, from the cycle's `cycle.tick` and `cycle.rates` events on `cycle.out`. The experiential line is the effective conscious-access rate of each tick.
 - **Thymos affect** — valence, arousal, and dominance as time series.
-- **Salience** — per-event salience scores from the workspace broadcast.
-- **Coherence** — oscillatory phase-locking value between module pairs. Requires the `[oscillator]` extra and `[oscillator].enabled = true`.
+- **Salience** — the salience of each module output event. Cycle and workspace events are left out, because their saliences are operational or aggregate.
+- **Coherence** — the phase-locking value of the modules competing in each workspace broadcast (`metadata.coherence`). Requires the `[oscillator]` extra and `[oscillator].enabled = true`.
 - **Fatigue** — Soma's fatigue accumulator over the current waking period. It builds from unexpected substrate prediction error (error beyond Soma's learned band), resets after Hypnos consolidation, and can also trigger on a raw-error hard-threshold breach.
 - **Prediction error** — per-module forward-model errors over sliding windows from the perception modules (Soma, Chronos, Topos, and Audition). This signal drives workspace salience.
 - **GPU pre-flight** — headroom and approval status for the boot-time GPU check.
