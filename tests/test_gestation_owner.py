@@ -102,6 +102,10 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
     band_high = min(2.0, 0.4 * sample_hz)
     band_low = min(0.3, band_high / 4.0)
     defaults: dict[str, Any] = {
+        # These tests exercise one withdrawal's entrainment test; replication
+        # across consecutive withdrawals is tested in
+        # tests/test_gestation_entrainment_replication.py.
+        "entrainment_replications": 1.0,
         "readout_period_seconds": 10.0,
         "sample_hz": sample_hz,
         "withdrawal_period_seconds": 10.0,

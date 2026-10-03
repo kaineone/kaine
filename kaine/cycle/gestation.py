@@ -81,6 +81,7 @@ class GestationReadoutConfig:
     hrv_window_seconds: float = 300.0
     recovery_tolerance: float = 0.25
     recovery_cap_seconds: float = 300.0
+    entrainment_replications: float = 3.0
 
     @classmethod
     def from_dict(cls, data) -> "GestationReadoutConfig":
@@ -118,6 +119,12 @@ class GestationReadoutConfig:
 
             if fv <= 0.0:
                 raise ValueError(f"{name} must be finite and > 0")
+
+            if name == "entrainment_replications":
+                if float(int(fv)) != fv or fv < 1.0:
+                    raise ValueError(f"{name} must be an integer >= 1")
+                kwargs[name] = fv
+                continue
 
             if name == "perturbation_drive_fraction" and fv > 1.0:
                 raise ValueError(f"{name} must be <= 1.0")
@@ -449,6 +456,7 @@ class GestationOwner:
 
         self._endogenous_self_sustain: bool | None = None
         self._entrain_then_autonomy: bool | None = None
+        self._entrainment_consecutive_passes: int = 0
         self._hrv_variability: float | None = None
         self._womb_prediction_error: float | None = None
         self._return_to_baseline_seconds: float | None = None
@@ -872,19 +880,29 @@ class GestationOwner:
             or self._endogenous_self_sustain is None
             or pull is None
         ):
-            marker = None
+            single = None
         else:
-            marker = (
+            single = (
                 plv > surrogate_max
                 and self._endogenous_self_sustain
                 and pull >= cfg.frequency_pull_floor
             )
 
+        if single is True:
+            self._entrainment_consecutive_passes += 1
+        else:
+            self._entrainment_consecutive_passes = 0
+
+        self._entrain_then_autonomy = (
+            None
+            if single is None
+            else self._entrainment_consecutive_passes >= int(cfg.entrainment_replications)
+        )
+
         self._entrainment_plv = plv
         self._entrainment_plv_surrogate_max = surrogate_max
         self._self_rhythm_freq_withdrawn = f_w
         self._frequency_pull = pull
-        self._entrain_then_autonomy = marker
 
     async def _read_soma_reports(self, now: float) -> None:
         if now - self._last_soma_read_at < 1.0:
@@ -1021,6 +1039,7 @@ class GestationOwner:
             result["return_to_baseline_seconds"] = self._return_to_baseline_seconds
         if self._entrainment_plv is not None:
             result["entrainment_plv"] = self._entrainment_plv
+            result["entrainment_consecutive_passes"] = self._entrainment_consecutive_passes
         if self._entrainment_plv_surrogate_max is not None:
             result["entrainment_plv_surrogate_max"] = self._entrainment_plv_surrogate_max
         if self._self_rhythm_freq_withdrawn is not None:
