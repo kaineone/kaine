@@ -10,8 +10,7 @@ from typing import Any
 
 import pytest
 
-import kaine.cycle.gestation as gestation
-from kaine.cycle.gestation import GestationOwner, GestationReadoutConfig
+from kaine.cycle import gestation
 
 
 class FakeClock:
@@ -32,7 +31,7 @@ class FakeDrive:
         self.scale = 0.0
 
 
-def _config(**overrides: Any) -> GestationReadoutConfig:
+def _config(**overrides: Any) -> gestation.GestationReadoutConfig:
     sample_hz = float(overrides.get("sample_hz", 10.0))
     band_high = min(2.0, 0.4 * sample_hz)
     band_low = min(0.3, band_high / 4.0)
@@ -58,13 +57,13 @@ def _config(**overrides: Any) -> GestationReadoutConfig:
         "surrogate_count": 1.0,
     }
     defaults.update(overrides)
-    return GestationReadoutConfig.from_dict(defaults)
+    return gestation.GestationReadoutConfig.from_dict(defaults)
 
 
-def _owner(tmp_path: Path, **cfg_overrides: Any) -> GestationOwner:
+def _owner(tmp_path: Path, **cfg_overrides: Any) -> gestation.GestationOwner:
     clock = FakeClock(0.0)
     config = _config(**cfg_overrides)
-    owner = GestationOwner(
+    owner = gestation.GestationOwner(
         bus=None,
         soma=FakeSoma(),
         drive=FakeDrive(),
@@ -81,7 +80,7 @@ def _owner(tmp_path: Path, **cfg_overrides: Any) -> GestationOwner:
     return owner
 
 
-def _prefill_samples(owner: GestationOwner) -> None:
+def _prefill_samples(owner: gestation.GestationOwner) -> None:
     # idle 0..10 s, then withdrawal 10..15 s at sample_hz.
     dt = 1.0 / owner._config.sample_hz
     stop = int(15.0 * owner._config.sample_hz)

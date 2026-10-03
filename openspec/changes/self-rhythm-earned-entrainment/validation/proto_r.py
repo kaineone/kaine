@@ -142,6 +142,7 @@ def run(conds, hours, *, w=2.0, k=0.1, tau_a=0.05, U=4.0, margin=-0.3, own_gain=
 if __name__ == "__main__":
     spec = json.loads(sys.argv[1]); out = sys.argv[2]
     rows = run(spec["conds"], spec["hours"], **spec.get("kw", {}))
-    json.dump(dict(spec=spec, rows=rows, withdrawals=run.withdrawals, markers=run.markers), open(out, "w"))
+    with open(out, "w") as fh:
+        json.dump(dict(spec=spec, rows=rows, withdrawals=run.withdrawals, markers=run.markers), fh)
     for t, row in rows:
         print("%6.2fh " % (t / 3600) + " | ".join("%s plv %.2f sur %.2f f %.2f tau %.2f" % (c.get("label", b), r["plv"], r["sur"], r["f"], r["tau"]) for b, (c, r) in enumerate(zip(spec["conds"], row))), flush=True)

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-import itertools, math, sys, numpy as np
+import math
+
+import numpy as np
 from scipy.signal import butter, sosfiltfilt, welch
 G = dict(w=2.5, U=8.0, m=-0.25, ta=0.02, k=0.08)
 taus = np.array([0.9, 1.0, 1.15, 1.3, 1.5, 1.7, 1.95, 2.2, 2.6, 3.0, 3.5])

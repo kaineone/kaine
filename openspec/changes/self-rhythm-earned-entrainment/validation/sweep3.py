@@ -52,4 +52,6 @@ for g, rows in res.items():
         good.append((ratio, g, [(t, round(f, 2), round(a_, 3)) for t, f, a_ in osc]))
 good.sort(key=lambda x: -x[0])
 for r in good[:12]: print(round(r[0], 2), r[1], r[2])
-json.dump([[r[0], r[1], r[2]] for r in good], open(sys.argv[1], "w")); print("good", len(good))
+with open(sys.argv[1], "w") as fh:
+    json.dump([[r[0], r[1], r[2]] for r in good], fh)
+print("good", len(good))

@@ -157,6 +157,7 @@ class ModuleOscillator:
         threshold: float = 1.0,
         base_drive: float = 1.5,
         seed: Optional[int] = None,
+        history_len: Optional[int] = None,
     ) -> None:
         if population_size < MIN_POPULATION_SIZE:
             raise ValueError(
@@ -175,7 +176,8 @@ class ModuleOscillator:
         # Keep a spike-rate history at least as long as the PLV window so a
         # single phase() call has enough samples for a meaningful Hilbert
         # transform. A little extra headroom stabilises edge effects.
-        self._history_len = max(int(plv_window) * 2, int(plv_window))
+        # A subclass may keep a longer history (the self-rhythm's phase window).
+        self._history_len = max(int(plv_window) * 2, int(plv_window), int(history_len or 0))
         self._beta = float(beta)
         self._threshold = float(threshold)
         self._base_drive = float(base_drive)
@@ -461,17 +463,15 @@ class SelfRhythmOscillator(ModuleOscillator):
             threshold=threshold,
             base_drive=base_drive,
             seed=seed,
+            # The self-rhythm keeps its whole phase window, so the parent's
+            # serialize/deserialize preserve it on restore.
+            history_len=int(phase_window_s * step_hz),
         )
 
         import numpy as np
 
         self._plv_window = int(plv_window)
 
-        # The self-rhythm keeps a longer history (its phase window) than the
-        # parent; recording it as the history length makes the parent's
-        # serialize/deserialize preserve the whole window on restore.
-        self._history_len = max(int(phase_window_s * step_hz), self._history_len)
-        self._spike_rate_history: deque[float] = deque(maxlen=self._history_len)
         self._activity_history: deque[float] = deque(maxlen=self._history_len)
 
         self._step_hz = float(step_hz)
@@ -581,7 +581,7 @@ class SelfRhythmOscillator(ModuleOscillator):
             f = ext - self._ext_mean
             xq = a - self._a_mean
             yq = s - self._s_mean
-            r = math.sqrt(xq * xq + yq * yq)
+            r = math.hypot(xq, yq)
             q = yq / r if r > 1e-9 else 0.0
             ln_tau = (
                 self._ln_tau

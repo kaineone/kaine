@@ -4,12 +4,12 @@
 
 Run from anywhere: python fidelity.py (the class and the prototype must use the same generator
 parameters; pass them to both if you change the defaults)."""
-import sys, math, numpy as np
+import sys
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[3])); sys.path.insert(0, str(HERE))
 from kaine.oscillator.module_oscillator import make_self_rhythm_oscillator
-import kaine, proto_r
+import proto_r
 from kaine.modules.womb_drive import MaternalDriveProvider
 from kaine.modules.womb_signal import WombParams
 cond = dict(bpm=70, scale=0.5, gain=0.03, eta=1.0, sign=-1, own=0.4, tau0=2.1)
