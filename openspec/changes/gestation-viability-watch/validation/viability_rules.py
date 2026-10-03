@@ -17,7 +17,9 @@ def verdict(ms, K=3):
         if t>=48 and not replicated and len(last)>=8 and np.median([b for _,b in last])<0.3: return (t,'R2 pull too slow')
     return None
 for f in sorted(glob.glob('valF/*.out.json')+glob.glob('valC/*.out.json')+glob.glob('val/*.out.json')):
-    d=json.load(open(f)); C=[c['label'] for c in d['spec']['conds']]
+    with open(f) as fh:
+        d=json.load(fh)
+    C=[c['label'] for c in d['spec']['conds']]
     for i,c in enumerate(C):
         ms=[(t,row[i]) for t,row in d['markers']]
         print(f"{f:28s} {c:18s} -> {verdict(ms)}")
