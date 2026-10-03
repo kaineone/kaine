@@ -200,8 +200,12 @@ class UnslothDPOTrainer:
                 samples_used=len(pairs),
             )
 
+        # An empty capability probe set would score both models 0 and pass the
+        # capability-loss veto for every adapter: require probes, so the
+        # pre-training eval raises and the adapter is rejected instead.
         eval_harness = self._capability_eval or LocalProbeSetCapabilityEval(
             probe_path=config.capability_probe_path,
+            require_probes=True,
         )
 
         adapter_output_dir = config.adapter_output_dir

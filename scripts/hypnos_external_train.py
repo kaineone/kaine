@@ -216,6 +216,32 @@ def _promote(tmp_dir: Path, final_dir: Path) -> Path:
 # the real unsloth DPO run
 # --------------------------------------------------------------------------- #
 def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
+    # Fail closed on an empty or missing capability probe set before touching
+    # heavy training imports or model weights. An empty set would score 0.0
+    # with zero loss and let every adapter through the capability-loss veto.
+    capability_probes = _load_jsonl(job.get("capability_probe_path"))
+    usable_capability = [
+        p
+        for p in capability_probes
+        if str(p.get("prompt", "")).strip() and str(p.get("expected", "")).strip()
+    ]
+    if not usable_capability:
+        return {
+            "ok": True,
+            "accepted": False,
+            "adapter_dir": None,
+            "steps": 0,
+            "dpo_loss": None,
+            "reason": (
+                f"capability probe set is empty: {job.get('capability_probe_path')!r} "
+                "has no usable probe; the capability-loss veto cannot run"
+            ),
+            "capability_score_before": None,
+            "capability_score_after": None,
+            "capability_loss": None,
+            "samples_used": min(len(pairs), int(job.get("max_samples", 200))),
+        }
+
     from unsloth import FastLanguageModel  # type: ignore[import-untyped]
     from datasets import Dataset  # type: ignore[import-untyped]
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
@@ -229,7 +255,6 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     training_device = str(job.get("training_device", "cuda:0"))
     cap_threshold = float(job.get("capability_loss_threshold", 0.05))
     adapter_output_dir = Path(job["adapter_output_dir"])
-    capability_probes = _load_jsonl(job.get("capability_probe_path"))
     abliteration_probes = _load_jsonl(job.get("abliteration_probe_path"))
 
     samples_used = min(len(pairs), max_samples)

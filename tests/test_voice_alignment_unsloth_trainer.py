@@ -347,3 +347,20 @@ async def test_run_dpo_receives_config_args(tmp_path: Path):
     assert args["lr"] == pytest.approx(1e-4)
     assert args["beta"] == pytest.approx(0.2)
     assert args["max_samples"] == 2
+
+
+@pytest.mark.asyncio
+async def test_empty_capability_probe_set_rejects_with_default_evaluator(tmp_path: Path):
+    """The default evaluator requires probes: an empty set must reject the
+    adapter rather than score both models 0 and pass the capability veto."""
+    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
+
+    empty = tmp_path / "capability_empty.jsonl"
+    empty.write_text("", encoding="utf-8")
+    trainer = UnslothDPOTrainer(
+        backend=FakeBackend(), abliteration_scorer=NoopAbliterationScorer()
+    )
+    result = await trainer.train(_pairs(), _config(tmp_path, capability_probe_path=str(empty)))
+    assert result.accepted is False
+    assert "EmptyCapabilityProbeSetError" in result.reason
+    assert not (tmp_path / "adapters" / "current").exists()
