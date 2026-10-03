@@ -75,7 +75,7 @@ Status: design accepted by the operator 2026-10-02; decisions in section 8. The 
   - Keep `self_sustains`.
   - Add a frequency-pull index P = 1 − |f_w − f_beat| / |f_w0 − f_beat|. f_w is the mean instantaneous frequency during the withdrawal (from the unwrapped phase slope). f_w0 is the being's own value from its first withdrawals, persisted next to the Topos baseline (329-360).
   - Echoes are short (Zoefel 2018), so the test uses frequency pull, not long phase continuity.
-- **Marker.** `entrain_then_autonomy = PLV ≥ entrainment_plv_floor AND PLV > surrogate max AND self_sustain AND P ≥ frequency_pull_floor`. The readout publishes `entrainment_plv`, `entrainment_plv_surrogate_max`, `self_rhythm_freq_withdrawn` and `frequency_pull`, which the gestation watcher also needs.
+- **Marker** (as decided in section 8). `entrain_then_autonomy = PLV > surrogate max AND self_sustain AND P ≥ frequency_pull_floor`. There is no fixed PLV floor. The readout publishes `entrainment_plv`, `entrainment_plv_surrogate_max`, `self_rhythm_freq_withdrawn` and `frequency_pull`, which the gestation watcher also needs.
 - **HRV.** Wrap detection (157-172) is only meaningful for a slow rhythm. Today a 5-10 Hz phase sampled at 10 Hz aliases.
 
 ## 4. Offline validation (before any study)
