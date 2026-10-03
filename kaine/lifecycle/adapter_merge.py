@@ -69,7 +69,8 @@ class CapabilityEval(Protocol):
     duplicated here to avoid coupling the lifecycle layer to the
     Hypnos module. Either implementation is interchangeable."""
 
-    async def eval(self, model: Any, tokenizer: Any) -> float: ...
+    async def eval(self, model: Any, tokenizer: Any) -> float:
+        """Return the capability score of ``model``."""
 
 
 @runtime_checkable
