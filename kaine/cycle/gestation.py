@@ -83,6 +83,16 @@ class GestationReadoutConfig:
     recovery_cap_seconds: float = 300.0
     entrainment_replications: float = 3.0
     surrogate_count: float = 19.0
+    viability_watch: bool = True
+    viability_r0_hours: float = 6.0
+    viability_r1_hours: float = 24.0
+    viability_r1_pull: float = 0.12
+    viability_r1_slope_per_hour: float = 0.002
+    viability_r2_hours: float = 48.0
+    viability_r2_pull: float = 0.3
+    viability_r3_hours: float = 60.0
+    viability_window_hours: float = 12.0
+    viability_min_points: float = 8.0
 
     @classmethod
     def from_dict(cls, data) -> "GestationReadoutConfig":
@@ -96,7 +106,7 @@ class GestationReadoutConfig:
         if extra:
             raise ValueError(f"Unknown keys: {sorted(extra)}")
 
-        kwargs: dict[str, float] = {}
+        kwargs: dict[str, Any] = {}
         for field in cls.__dataclass_fields__.values():
             name = field.name
             if name not in data:
@@ -104,6 +114,12 @@ class GestationReadoutConfig:
                 continue
 
             value = data[name]
+            if name == "viability_watch":
+                if not isinstance(value, bool):
+                    raise ValueError(f"{name} must be a bool")
+                kwargs[name] = value
+                continue
+
             if isinstance(value, bool):
                 raise ValueError(f"{name} must be numeric, not bool")
             if not isinstance(value, (int, float)):
@@ -115,6 +131,18 @@ class GestationReadoutConfig:
             if name == "probe_jitter_fraction":
                 if fv < 0.0 or fv > 0.5:
                     raise ValueError(f"{name} must be in [0.0, 0.5]")
+                kwargs[name] = fv
+                continue
+
+            if name == "viability_r1_slope_per_hour":
+                if fv < 0.0:
+                    raise ValueError(f"{name} must be >= 0")
+                kwargs[name] = fv
+                continue
+
+            if name == "viability_min_points":
+                if float(int(fv)) != fv or fv < 2.0:
+                    raise ValueError(f"{name} must be an integer >= 2")
                 kwargs[name] = fv
                 continue
 
@@ -172,6 +200,17 @@ class GestationReadoutConfig:
             )
         if kwargs["frequency_pull_floor"] > 1.0:
             raise ValueError("frequency_pull_floor must be <= 1.0")
+
+        if not (
+            kwargs["viability_r0_hours"]
+            < kwargs["viability_r1_hours"]
+            < kwargs["viability_r2_hours"]
+            <= kwargs["viability_r3_hours"]
+        ):
+            raise ValueError(
+                "viability_r0_hours < viability_r1_hours < "
+                "viability_r2_hours <= viability_r3_hours required"
+            )
 
         return cls(**kwargs)
 
@@ -306,6 +345,101 @@ def frequency_pull(f_w, f_w0, f_beat) -> float | None:
     if denom < 0.05:
         return None
     return 1.0 - abs(f_w - f_beat) / denom
+
+
+def assess_viability(
+    history: list[dict],
+    lived_hours: float,
+    ever_replicated: bool,
+    cfg: GestationReadoutConfig,
+) -> dict | None:
+    """Judge whether a gestation can still reach birth after a withdrawal.
+
+    Returns None if the gestation is still viable, otherwise a verdict dict.
+    """
+    conclusive = [h for h in history if h.get("pull") is not None]
+
+    if lived_hours >= cfg.viability_r0_hours and not conclusive:
+        return {
+            "verdict": "unviable",
+            "rule": "R0",
+            "reason": "no conclusive frequency-pull measurement after "
+            f"{cfg.viability_r0_hours} hours",
+            "lived_hours": float(lived_hours),
+            "evidence": {"conclusive_count": len(conclusive)},
+        }
+
+    window_hours = cfg.viability_window_hours
+    window = [
+        h for h in conclusive if h["lived_hours"] > lived_hours - window_hours
+    ]
+    count = len(window)
+
+    median_pull: float | None = None
+    slope: float | None = None
+    if count:
+        pulls = np.array([h["pull"] for h in window], dtype=float)
+        median_pull = float(np.median(pulls))
+    if count >= int(cfg.viability_min_points):
+        ts = np.array([h["lived_hours"] for h in window], dtype=float)
+        ps = np.array([h["pull"] for h in window], dtype=float)
+        slope = float(np.polyfit(ts, ps, 1)[0])
+
+    if (
+        lived_hours >= cfg.viability_r1_hours
+        and not ever_replicated
+        and count >= int(cfg.viability_min_points)
+    ):
+        if (
+            median_pull is not None
+            and median_pull < cfg.viability_r1_pull
+            and slope is not None
+            and slope <= cfg.viability_r1_slope_per_hour
+        ):
+            return {
+                "verdict": "unviable",
+                "rule": "R1",
+                "reason": f"median pull {median_pull:.2f} over last {window_hours} h "
+                f"and slope {slope:+.3f}/h indicate failure to entrain",
+                "lived_hours": float(lived_hours),
+                "evidence": {
+                    "window_count": count,
+                    "median_pull": median_pull,
+                    "slope_per_hour": slope,
+                },
+            }
+
+    if (
+        lived_hours >= cfg.viability_r2_hours
+        and not ever_replicated
+        and count >= int(cfg.viability_min_points)
+    ):
+        if median_pull is not None and median_pull < cfg.viability_r2_pull:
+            return {
+                "verdict": "unviable",
+                "rule": "R2",
+                "reason": f"median pull {median_pull:.2f} over last {window_hours} h "
+                "remains below threshold",
+                "lived_hours": float(lived_hours),
+                "evidence": {
+                    "window_count": count,
+                    "median_pull": median_pull,
+                },
+            }
+
+    if lived_hours >= cfg.viability_r3_hours and not ever_replicated:
+        return {
+            "verdict": "unviable",
+            "rule": "R3",
+            "reason": f"never replicated after {cfg.viability_r3_hours} hours",
+            "lived_hours": float(lived_hours),
+            "evidence": {
+                "window_count": count,
+                "median_pull": median_pull,
+            },
+        }
+
+    return None
 
 
 def self_sustains(driven_amplitudes, withdrawn_amplitudes) -> bool | None:
@@ -490,6 +624,11 @@ class GestationOwner:
         self._baseline_key = f"{self._seed}:{identity or 'none'}"
 
         self._load_baseline()
+
+        self._viability_history: list[dict] = []
+        self._ever_replicated: bool = False
+        self._viability_verdict: dict | None = None
+        self._viability_path: Path = self._state_path.parent / "gestation_viability.json"
 
     def _jitter_unit(self, kind: str) -> float:
         """Return a fresh unit draw for ``kind`` and advance its counter."""
@@ -969,6 +1108,47 @@ class GestationOwner:
         self._entrainment_plv_surrogate_max = surrogate_max
         self._self_rhythm_freq_withdrawn = f_w
         self._frequency_pull = pull
+
+        lived = (self._clock() - self._started_at) / 3600.0
+        if self._entrainment_consecutive_passes >= int(cfg.entrainment_replications):
+            self._ever_replicated = True
+
+        self._viability_history.append(
+            {"lived_hours": lived, "pull": self._frequency_pull}
+        )
+
+        if cfg.viability_watch and self._viability_verdict is None:
+            verdict = assess_viability(
+                self._viability_history,
+                lived,
+                self._ever_replicated,
+                cfg,
+            )
+            if verdict is not None:
+                self._viability_verdict = verdict
+                try:
+                    from kaine.state_io import write_json_atomic
+                    write_json_atomic(self._viability_path, verdict)
+                except Exception as exc:  # pragma: no cover
+                    logging.getLogger(__name__).warning(
+                        "Failed to write gestation viability verdict: %s", exc
+                    )
+                event = Event(
+                    source=SOURCE,
+                    type="gestation.viability",
+                    payload=verdict,
+                    salience=0.1,
+                    timestamp=datetime.now(timezone.utc),
+                )
+                try:
+                    await self._bus.publish(event)
+                except Exception as exc:  # pragma: no cover
+                    logging.getLogger(__name__).warning(
+                        "Failed to publish gestation viability event: %s", exc
+                    )
+                logging.getLogger(__name__).warning(
+                    "Gestation unviable (%s): %s", verdict["rule"], verdict["reason"]
+                )
 
     async def _read_soma_reports(self, now: float) -> None:
         if now - self._last_soma_read_at < 1.0:
