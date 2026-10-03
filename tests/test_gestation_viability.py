@@ -231,3 +231,48 @@ async def test_owner_publishes_viability_r1(
     assert len(viability_events) == 1
     assert viability_events[0].source == SOURCE
     assert viability_events[0].payload["rule"] == "R1"
+
+
+@pytest.mark.asyncio
+async def test_owner_publishes_nothing_when_viability_watch_is_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_path = tmp_path / "gestation_readout.json"
+    clock = _FakeClock(0.0)
+    bus = _RecordingBus()
+    drive = _FakeDrive()
+    soma = _FakeSoma()
+    cfg = GestationReadoutConfig.from_dict({"viability_watch": False})
+
+    owner = GestationOwner(
+        bus,
+        soma=soma,
+        drive=drive,
+        beat_phase=lambda: 0.0,
+        is_paused=lambda: False,
+        config=cfg,
+        clock=clock,
+        state_path=state_path,
+    )
+
+    # 48 flat withdrawals up to 24 h.
+    owner._viability_history = [
+        {"lived_hours": i * 0.5, "pull": 0.05} for i in range(48)
+    ]
+    owner._self_rhythm_baseline_hz = 1.0
+    owner._self_rhythm_baseline_count = 3
+
+    monkeypatch.setattr(
+        "kaine.cycle.gestation.frequency_pull", lambda *args, **kwargs: 0.05
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.gestation.entrainment_plv", lambda *args, **kwargs: (0.2, 0.5)
+    )
+    monkeypatch.setattr("kaine.cycle.gestation.self_sustains", lambda *args, **kwargs: True)
+
+    clock.t = 24.5 * 3600.0
+    await owner._compute_withdrawal_markers(0.0, 1.0)
+
+    assert owner._viability_verdict is None
+    assert not (tmp_path / "gestation_viability.json").exists()
+    assert not any(e.type == "gestation.viability" for e in bus.events)
