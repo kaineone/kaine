@@ -1,6 +1,6 @@
 # Design: earned entrainment of the self-rhythm
 
-Status: draft for operator review (2026-10-02). The sources are in `references.bib`; each entry notes what it supports and whether it was read in full or only as an abstract. The design was researched after study `moc7-2026-10` showed the birth-gate marker `entrain_then_autonomy` cannot be met (see the study's `ENDED-NOTE.md`).
+Status: design accepted by the operator 2026-10-02; decisions in section 8. The sources are in `references.bib`; each entry notes what it supports and whether it was read in full or only as an abstract. The design was researched after study `moc7-2026-10` showed the birth-gate marker `entrain_then_autonomy` cannot be met (see the study's `ENDED-NOTE.md`).
 
 ## 0. Current state (verified)
 
@@ -134,12 +134,15 @@ Each condition runs 96 h simulated, with 5 seeds, the real probe schedule, and o
 - Preserved beings with `self_rhythm_enabled = false` are unaffected, bit for bit (test).
 - Any being with the self-rhythm enabled sees a different distribution in Soma's forward-model input slots 4-6, and its v1 oscillator state is reset. Treat it as a new cohort.
 
-## 8. Decisions for the operator
+## 8. Operator decisions (2026-10-02)
 
-1. Option R (respiration-like, 1:1), H (fetal heart, n:m), or B (adaptive Hopf phase oscillator) as a fallback.
-2. Keep the 0.5 floor, which is not taken from fetal data, with the surrogate test added, or lower it.
-3. η sets when locking happens. Earnedness rests on the controls failing, not on timing. Calibrating η to the 24-96 h budget compresses weeks into hours, and that compression has to be disclosed.
+1. **Mechanism: option R.** A breathing-like self-rhythm (0.5-0.9 Hz) from recurrence plus synaptic depression, with slow period plasticity. Option B (adaptive Hopf) stays the fallback if the phase-projected rule fails the V4 specificity test.
+2. **Criterion: surrogate significance only.** No fixed PLV floor. `entrain_then_autonomy` passes when the PLV exceeds every one of the 19 foreign-mother surrogates (p < 0.05), the rhythm self-sustains during withdrawal, and the frequency pull holds. `entrainment_plv_floor` is removed. The PLV and the surrogate maximum are still published.
+3. **Timescale: compress and disclose.** η is calibrated so locking typically emerges in 12-72 h of lived time (validated offline in V2), and the paper states the compression from the weeks of exposure in the literature.
+
+Still open, to be answered by validation rather than by decision:
+
 4. The arousal confound (V6).
-5. A tight lock lowers HRV CV, which may conflict with the 0.2 floor.
-6. Fetal breathing is episodic (about 14% of the time); the model runs continuously.
-7. The beat runs on womb time while the oscillator steps on subjective time. This is unverified when time_scale ≠ 1.
+5. Whether a tight lock pushes HRV CV below its 0.2 floor (V7).
+6. Fetal breathing is episodic (about 14% of the time) while the model runs continuously; the paper discloses this.
+7. The beat runs on womb time while the oscillator steps on subjective time; this needs a test for time_scale ≠ 1.
