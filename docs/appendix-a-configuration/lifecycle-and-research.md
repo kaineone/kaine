@@ -9,7 +9,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Runs the evaluation sidecar, the read-only observers that record the research instruments. |
-| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir`. Off by default for privacy; enable only after reviewing the privacy implications. Records are filtered through `PrivacyFilter` before persistence. |
+| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir` as a graph-only row. Each row contains the tick index, `is_experiential`, inhibition, salience scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included. Off by default; enable only after reviewing the privacy implications. A study never enables it. |
 | `ab_divergence` | boolean | `true` | Run the A/B divergence test (conditioned vs. unconditioned generation) to measure the architecture's contribution. |
 | `ab_sample_rate` | float | `1.0` | Fraction of workspace broadcasts sampled for A/B comparison. `1.0` = every broadcast. |
 | `voice_tracking` | boolean | `true` | Track voice-alignment preference-pair evolution. |
@@ -302,9 +302,7 @@ Optional local-only external-speech recorder. Never export-eligible. Subscribes 
 
 ### `[research_event_log.nexus_record]`
 
-Optional local-only Nexus diagnostics recorder. Never export-eligible. Subscribes to the same diagnostics streams the Nexus bridge reads and writes the payload produced by `PrivacyFilter` with `dev_content_override=false`, plus the stream name and entry id. Filter failures drop the event with a warning.
-
-Expected size is about 2 GB per four-hour viewing session.
+Optional local-only Nexus diagnostics recorder. Never export-eligible. Subscribes to the same diagnostics streams the Nexus bridge reads and writes the payload produced by `PrivacyFilter` with `dev_content_override=false` and numeric vectors removed, plus the stream name and entry id. Studies never enable it. Filter failures drop the event with a warning.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

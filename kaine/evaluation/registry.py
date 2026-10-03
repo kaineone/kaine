@@ -262,11 +262,7 @@ class SidecarRegistry:
         config = self._config
         if config.workspace_trajectory:
             sink = self._make_sink("_trajectory_root", "trajectory")
-            self._observers.append(
-                TrajectoryRecorder(
-                    self._bus, sink, thymos_state_provider=self._thymos_provider
-                )
-            )
+            self._observers.append(TrajectoryRecorder(self._bus, sink))
         if config.module_attribution:
             sink = self._make_sink("attribution", "attribution")
             self._observers.append(AttributionRecorder(self._bus, sink))

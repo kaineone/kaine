@@ -39,7 +39,7 @@ What does persist from live perception:
 - `state/perception/runtime.json` and `state/perception/desired.json`—booleans and ISO timestamps only; no sensory content.
 - Standard logger lines for capture state transitions—never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.
-- The optional **Nexus record** (`[research_event_log.nexus_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with stream name and entry id. It is local-only and never exported.
+- The optional **Nexus record** (`[research_event_log.nexus_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
 
 The on-air banner (microphone on / camera on) appears on both the console and the diagnostics page whenever a stream is active. The operator holds the hardware kill switch as the strongest guarantee.
 
@@ -115,9 +115,11 @@ The `PrivacyFilter` implementation is in `kaine/privacy_filter.py` (re-exported 
 
 Scrubbed fields (removed from diagnostics events) are: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, and `statement`.
 
+Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `foveal`, `temporal_context`, and `feature_vector` are dropped unconditionally. Any list or tuple of 16 or more numbers is dropped as well; booleans are not treated as numbers. The exempt keys `saliences` and `step_magnitudes` are left intact, and vectors inside lists are removed individually. This rule applies even when `dev_content_override = true`.
+
 `filter()` scrubs every surface; there is no unfiltered diagnostics stream. The conversation route serves only the same filtered diagnostics context; no separate unfiltered transcript stream exists.
 
-`dev_content_override = true` disables scrubbing for the diagnostics surface and shows a "dev mode" banner on every page load so operators cannot forget they are in this mode. The shipped default is `false`. Do not set `dev_content_override = true` on a shared machine or in production.
+`dev_content_override = true` lets content fields through to the diagnostics surface, but vectors are still removed. It also shows a "dev mode" banner on every page load so operators cannot forget they are in this mode. The shipped default is `false`. Do not set `dev_content_override = true` on a shared machine or in production.
 
 ## Two-layer safety gates
 

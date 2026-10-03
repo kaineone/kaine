@@ -72,7 +72,7 @@ To answer session-spanning research questions, there is an opt-in durable event 
 
 ### Nexus record (local only)
 
-`[research_event_log.nexus_record]` ships disabled. It subscribes to the streams the Nexus bridge reads and writes exactly the payload Nexus displays after its privacy filter, plus the stream name and entry id. It lands in `data/nexus_record/` on the `kaine-nexus-record` volume. Expect about 2 GB per four-hour viewing. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never exported.
+`[research_event_log.nexus_record]` ships disabled. It subscribes to the streams the Nexus bridge reads and writes exactly the payload Nexus displays after its privacy filter, with numeric vectors removed, plus the stream name and entry id. It lands in `data/nexus_record/` on the `kaine-nexus-record` volume. Studies never enable it. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never exported.
 
 ### Ignition log (local only)
 

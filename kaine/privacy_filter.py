@@ -36,9 +36,9 @@ from kaine.bus.schema import Event
 #      (console.html). A key-name allowlist would blank the coherence chart and
 #      the presence visualizer.
 #   2. The recursion below is LOAD-BEARING: `workspace.broadcast` embeds entire
-#      downstream module payloads under `selected_events[].payload`, and the
-#      recursive scrub is what strips content nested there. A top-level allowlist
-#      that passed container keys through intact would reopen that nested surface.
+#      downstream module payloads under `selected[].payload`, and the recursive
+#      scrub is what strips content nested there. A top-level allowlist that
+#      passed container keys through intact would reopen that nested surface.
 # So this surface keeps the recursive denylist (safe against nested content at
 # any depth), and the "novel content key" gap is closed two ways instead:
 #   - genuinely content-bearing keys the audit found leaking are added below
@@ -50,6 +50,25 @@ from kaine.bus.schema import Event
 # `agent_label` is deliberately NOT here: the research taxonomy keeps it as an
 # operational familiarity label (metrics), so it is not entity-interior content.
 # ---------------------------------------------------------------------------
+
+# Perceptual/latent embeddings (Topos clip embeddings 768/384-dim; Chronos
+# CfC hidden state 32-dim and 24-dim feature vector); never displayed by
+# Nexus; persisting them would break zero raw-sense-data persistence.
+VECTOR_FIELDS: frozenset[str] = frozenset(
+    {"latent", "peripheral", "foveal", "temporal_context", "feature_vector"}
+)
+
+# Backstop for embeddings published under a name not in VECTOR_FIELDS. 16 sits
+# above the longest small numeric list on the diagnostics streams (5-element
+# Thymos appraisal scores, 3-element proprioceptive position) and below the
+# shortest embedding (the 24-element Chronos feature vector).
+VECTOR_BACKSTOP_MIN_LEN: int = 16
+
+# Reviewed non-embedding numeric lists of unbounded length (Hypnos ignition-audit
+# saliences, Phantasia per-step magnitudes); adding a key here is a reviewed
+# change with a test.
+VECTOR_EXEMPT_KEYS: frozenset[str] = frozenset({"saliences", "step_magnitudes"})
+
 CONTENT_FIELDS: frozenset[str] = frozenset(
     {
         "text",
@@ -86,7 +105,8 @@ class PrivacyFilter:
     for call-site compatibility — it no longer selects a less-filtered path.
     When ``dev_content_override`` is True, content passes through on the
     diagnostics surface and operators see a "dev mode" banner on the page so
-    they know they're seeing privileged data.
+    they know they're seeing privileged data. Vector fields and large numeric
+    lists are always stripped, even in dev mode.
     """
 
     dev_content_override: bool = False
@@ -97,8 +117,14 @@ class PrivacyFilter:
 
     def filter_for_diagnostics(self, event: Event) -> Event:
         if self.dev_content_override:
-            return event
-        scrubbed_payload = _scrub(event.payload, self.fields())
+            # Content passes, but vectors are still removed.
+            scrubbed_payload = _scrub(
+                event.payload, frozenset(), vector_fields=VECTOR_FIELDS
+            )
+        else:
+            scrubbed_payload = _scrub(
+                event.payload, self.fields(), vector_fields=VECTOR_FIELDS
+            )
         return Event(
             source=event.source,
             type=event.type,
@@ -115,14 +141,51 @@ class PrivacyFilter:
         return self.filter_for_diagnostics(event)
 
 
-def _scrub(value: Any, fields: Iterable[str]) -> Any:
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_numeric_vector(value: Any) -> bool:
+    if not isinstance(value, (list, tuple)):
+        return False
+    if len(value) < VECTOR_BACKSTOP_MIN_LEN:
+        return False
+    return all(_is_number(item) for item in value)
+
+
+def _scrub(
+    value: Any,
+    fields: Iterable[str],
+    *,
+    vector_fields: Iterable[str] = VECTOR_FIELDS,
+) -> Any:
+    """Recursively remove content-bearing and vector-bearing keys.
+
+    The vector rule is on by default: a key in ``VECTOR_FIELDS`` is removed,
+    as is any dict key whose value is a list/tuple of length
+    ``VECTOR_BACKSTOP_MIN_LEN`` or more containing only numbers (excluding
+    bools), unless the key is in ``VECTOR_EXEMPT_KEYS``. Within lists and
+    tuples, any item that is itself a numeric vector is dropped. Content
+    keys in ``fields`` are also removed. Tuples that survive come back as
+    lists.
+    """
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for k, v in value.items():
+            if k in vector_fields:
+                continue
             if k in fields:
                 continue
-            out[k] = _scrub(v, fields)
+            if _is_numeric_vector(v) and k not in VECTOR_EXEMPT_KEYS:
+                continue
+            out[k] = _scrub(v, fields, vector_fields=vector_fields)
         return out
-    if isinstance(value, list):
-        return [_scrub(item, fields) for item in value]
+
+    if isinstance(value, (list, tuple)):
+        return [
+            _scrub(item, fields, vector_fields=vector_fields)
+            for item in value
+            if not _is_numeric_vector(item)
+        ]
+
     return copy.deepcopy(value)

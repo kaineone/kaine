@@ -27,7 +27,7 @@ python tools/build_playlist_manifest.py --dir <films> --out <programme.toml>
 
 The study records the manifest's sha256, so changing the file voids the study.
 
-Research mode and unattended mode are separate supervision modes; selecting both is a configuration error. The study overlay already enables the autonomous safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the research event log, external utterance capture, Nexus recording, and the ignition log on every step. The operator must supply the Redis password and the state key. Set `KAINE_REDIS_PASSWORD` or `config/secrets.toml [redis].password`; the runner refuses to start without one. `[preservation].require_encryption` is true in the shipped config, so research-mode boots also require state encryption. Set `KAINE_STATE_KEY` or a keyring entry named `kaine:state_key`. The runner does not send `SIGKILL` and will not stop a being it cannot preserve. See [Preservation and the safety net](../11-preservation.md).
+Research mode and unattended mode are separate supervision modes; selecting both is a configuration error. The study overlay already enables the autonomous safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the research event log, external utterance capture, and the ignition log on every step. It forces `[research_event_log.nexus_record].enabled = false`, `[evaluation].workspace_trajectory = false` and `[research_event_log.raw_archive].enabled = false`, overriding the operator config to keep those records off. The operator must supply the Redis password and the state key. Set `KAINE_REDIS_PASSWORD` or `config/secrets.toml [redis].password`; the runner refuses to start without one. `[preservation].require_encryption` is true in the shipped config, so research-mode boots also require state encryption. Set `KAINE_STATE_KEY` or a keyring entry named `kaine:state_key`. The runner does not send `SIGKILL` and will not stop a being it cannot preserve. See [Preservation and the safety net](../11-preservation.md).
 
 ## Create a study
 
@@ -147,6 +147,12 @@ services:
 Voice alignment is enabled only on the pre-registered steps. The study overlay sets `trainer_backend = "job_queue"`, `hot_swap_mode = "organ_adapter"` and `trainer_jobs_dir = "/trainer-jobs"` there, and disables it elsewhere. The `kaine-study` run itself needs `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, because the child cycle's Hypnos checks it, and so does the `kaine-trainer` service. The `kaine-study` service mounts the `kaine-trainer-jobs` and `kaine-organ-adapters` volumes used by the `kaine-trainer` service. Start the trainer with `--profile training`; it needs `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED`. The trainer waits for the organ to report asleep before starting a job, so setting `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS=-1` stalls container training jobs. `docker/organ-launcher.sh` restarts the organ when a new adapter is promoted.
 
 For details on backends and hot-swap modes, see [Voice alignment](../10-sleep/voice-alignment.md).
+
+## What a study records
+
+The ignition log is the workspace-graph record. It writes one row for every successful workspace broadcast, at full rate and never sampled, because an ignition is a discrete event and sampling would miss them. Each row contains coalition members (entry id, source, type, salience, original timestamp), salience scores, inhibition, timing, programme position and time scale. It never holds payloads or perceptual embeddings. It grows about 11 MB per hour of running. It is kept for the paper analysis and afterwards as training data for the world model; nothing reads it for training yet. Only the operator deletes it, after both uses; it is never purged automatically.
+
+A study also keeps the research event log, external utterances, and the preservation monitors (divergence monitor and welfare response). The evaluation instruments and gestation readouts are recorded normally. The Nexus record, the workspace trajectory, and the research-event raw archive are never enabled in a study.
 
 ## Read the report
 

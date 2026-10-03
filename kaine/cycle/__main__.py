@@ -53,6 +53,7 @@ from kaine.cycle.escalation_state import clear_escalation, read_escalation
 from kaine.cycle.ignition_log import (
     IgnitionLog,
     IgnitionLogConfig,
+    ignition_log_sink,
     playlist_position_provider,
 )
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
@@ -82,7 +83,6 @@ from kaine.perception_state import (
     write_desired_audio,
     write_desired_video,
 )
-from kaine.persistence.jsonl_sink import AsyncJsonlSink
 from kaine.security.intent_signing import IntentSigner, generate_intent_secret
 from kaine.state_io import write_json_atomic
 from kaine.storage import install_data_root, resolve
@@ -1652,9 +1652,7 @@ async def _boot_and_run(
                 def audio_position_provider() -> tuple[int, float] | None:
                     return None
 
-            sink = AsyncJsonlSink(
-                Path(il_cfg.directory), name="ignition", retention_days=0
-            )
+            sink = ignition_log_sink(il_cfg.directory)
             await sink.start()
             ignition_log = IgnitionLog(
                 sink,

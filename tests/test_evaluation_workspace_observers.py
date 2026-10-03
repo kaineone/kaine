@@ -83,15 +83,14 @@ async def test_trajectory_writes_one_row_per_broadcast():
 
 
 @pytest.mark.asyncio
-async def test_trajectory_includes_thymos_state_when_provided():
+async def test_trajectory_rows_carry_no_affect_state():
     sink = FakeSink()
     rec = TrajectoryRecorder(
         FakeWorkspaceBus([("1-0", _snapshot(1, ["soma"]))]),
         sink,
-        thymos_state_provider=lambda: {"valence": 0.2, "arousal": 0.4},
     )
     await _drain(rec, sink, n_expected=1)
-    assert sink.rows[0]["thymos_state"] == {"valence": 0.2, "arousal": 0.4}
+    assert "thymos_state" not in sink.rows[0]
 
 
 # ---- attribution ------------------------------------------------------------
@@ -208,40 +207,24 @@ class IdleWorkspaceBus:
 
 
 @pytest.mark.asyncio
-async def test_trajectory_records_row_when_thymos_provider_raises():
-    def _boom():
-        raise RuntimeError("boom")
-
-    sink = FakeSink()
-    rec = TrajectoryRecorder(
-        FakeWorkspaceBus([("1-0", _snapshot(1, ["soma"]))]),
-        sink,
-        thymos_state_provider=_boom,
-    )
-    await _drain(rec, sink, n_expected=1)
-    # Fail-soft: the row is still written, with thymos_state None.
-    assert len(sink.rows) == 1
-    assert sink.rows[0]["thymos_state"] is None
-    assert sink.rows[0]["tick_index"] == 1
-
-
-@pytest.mark.asyncio
 async def test_trajectory_filters_content_from_selected_entries():
-    """Selected entries are scrubbed through PrivacyFilter before persistence.
-    Source/type/salience/causal_parent remain; content-bearing payload fields
-    are removed or emptied."""
+    """Selected members are persisted as the workspace graph only:
+    entry_id, source, type, salience, original timestamp and causal_parent.
+    No payload key is written, so content and numeric vectors cannot leak."""
     snapshot = {
         "tick_index": 1,
         "is_experiential": True,
         "inhibited": False,
-        "salience_scores": {"lingua": 0.9},
+        "salience_scores": {"topos": 0.9},
         "selected": [
             {
-                "source": "lingua",
-                "type": "lingua.external_speech",
+                "entry_id": "1-0",
+                "source": "topos",
+                "type": "topos.report",
                 "salience": 0.9,
-                "payload": {"text": "secret user message"},
+                "timestamp": "2026-10-03T00:00:00+00:00",
                 "causal_parent": "0-0",
+                "payload": {"latent": [0.1] * 768, "text": "secret vector"},
             }
         ],
         "metadata": {},
@@ -249,13 +232,22 @@ async def test_trajectory_filters_content_from_selected_entries():
     sink = FakeSink()
     rec = TrajectoryRecorder(FakeWorkspaceBus([("1-0", snapshot)]), sink)
     await _drain(rec, sink, n_expected=1)
+    import json
+
     selected = sink.rows[0]["selected"]
     assert len(selected) == 1
-    assert selected[0]["source"] == "lingua"
-    assert selected[0]["type"] == "lingua.external_speech"
-    assert selected[0]["causal_parent"] == "0-0"
-    # The raw message text must not survive into the persisted trajectory.
-    assert "secret user message" not in str(selected[0].get("payload", {}))
+    assert "payload" not in selected[0]
+    assert selected[0] == {
+        "entry_id": "1-0",
+        "source": "topos",
+        "type": "topos.report",
+        "salience": 0.9,
+        "timestamp": "2026-10-03T00:00:00+00:00",
+        "causal_parent": "0-0",
+    }
+    row_json = json.dumps(sink.rows[0])
+    assert "latent" not in row_json
+    assert "secret vector" not in row_json
 
 
 @pytest.mark.asyncio

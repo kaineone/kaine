@@ -266,7 +266,7 @@ _RECORDING_STEPS = [
 ]
 
 
-def test_overlay_records_nexus_and_external_utterances_every_step(repo, plan):
+def test_overlay_records_graph_and_external_utterances_every_step(repo, plan):
     for line, kind, k in _RECORDING_STEPS:
         overlay, _, _ = build_overlay(
             plan, line, kind, k, repo, repo / "config" / "kaine.toml",
@@ -275,8 +275,8 @@ def test_overlay_records_nexus_and_external_utterances_every_step(repo, plan):
         log = overlay["research_event_log"]
         assert log["enabled"] is True
         assert log["external_utterances"]["enabled"] is True
-        assert log["nexus_record"]["enabled"] is True
-        assert overlay["evaluation"]["workspace_trajectory"] is True
+        assert log["nexus_record"]["enabled"] is False
+        assert overlay["evaluation"]["workspace_trajectory"] is False
         assert overlay["ignition_log"]["enabled"] is True
 
 
@@ -288,6 +288,20 @@ def test_overlay_never_enables_raw_archive(repo, plan):
             plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
         )
         assert overlay["research_event_log"]["raw_archive"]["enabled"] is False
+
+
+def test_overlay_never_enables_nexus_record_or_trajectory(repo, plan):
+    op = repo / "config" / "kaine.operator.toml"
+    op.write_text(
+        "[research_event_log.nexus_record]\nenabled = true\n[evaluation]\nworkspace_trajectory = true\n"
+    )
+    for line, kind, k in _RECORDING_STEPS:
+        overlay, _, _ = build_overlay(
+            plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
+        )
+        assert overlay["research_event_log"]["nexus_record"]["enabled"] is False
+        assert overlay["evaluation"]["workspace_trajectory"] is False
+        assert overlay["ignition_log"]["enabled"] is True
 
 
 @pytest.fixture
