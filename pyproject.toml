@@ -113,7 +113,7 @@ internvideo = [
 # `internvideo` (`pip install .[internvideo,internvideo-flash]`) when the fused
 # path is wanted.
 internvideo-flash = [
-    "flash-attn>=2.5",
+    "flash-attn>=2.8.3.post1",
 ]
 # Aggregate convenience extra: everything the reproducible perception feed needs
 # (the unified [perception_feed] — cv2 decodes playlist video, sounddevice/av
