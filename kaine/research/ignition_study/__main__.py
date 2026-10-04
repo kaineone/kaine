@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from kaine.config import load_kaine_config
+from kaine.defaults import DEFAULT_REDIS_PORT
 from kaine.research.ignition_study import analysis
 from kaine.research.ignition_study.plan import (
     DEFAULT_GESTATION_BUDGET_SECONDS,
@@ -183,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     init_p.add_argument("--order", nargs="+", default=_default_order())
     init_p.add_argument("--programme-manifest", required=True)
-    init_p.add_argument("--redis-base-url", default="redis://127.0.0.1:6479")
+    init_p.add_argument("--redis-base-url", default=f"redis://127.0.0.1:{DEFAULT_REDIS_PORT}")
     init_p.add_argument("--db-gestation", type=int, default=10)
     init_p.add_argument("--db-branch", type=int, default=11)
     init_p.add_argument("--db-repeat", type=int, default=12)

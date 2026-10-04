@@ -353,7 +353,7 @@ class Thymos(BaseModule):
                     peer_streams.append(self._empatheia_agent_model_stream)
                 for stream in peer_streams:
                     try:
-                        entries = await self._bus.read(
+                        entries, last_scanned = await self._bus.read_entries(
                             stream,
                             last_id=self._cursors.get(stream, "0"),
                             count=64,
@@ -361,9 +361,9 @@ class Thymos(BaseModule):
                         )
                     except Exception:
                         continue
-                    if entries:
+                    if last_scanned is not None:
                         progressed = True
-                        self._cursors[stream] = entries[-1][0]
+                        self._cursors[stream] = last_scanned
                         for _, event in entries:
                             await self._handle_peer_event(stream, event)
                 if not progressed:

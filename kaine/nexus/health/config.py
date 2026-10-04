@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from kaine import model_paths
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
-from kaine.setup import speech_models
 from kaine.storage import resolve
 
 from .prober import DependencySpec, HealthProber
@@ -93,8 +93,8 @@ def build_dependency_specs(
         if d:
             return str(d)
         return str(
-            speech_models.model_dir(
-                audition_cfg.get("sherpa_model_id") or speech_models.DEFAULT_STT
+            model_paths.speech_model_dir(
+                audition_cfg.get("sherpa_model_id") or model_paths.DEFAULT_STT
             )
         )
 
@@ -103,15 +103,15 @@ def build_dependency_specs(
         if d:
             return str(d)
         return str(
-            speech_models.model_dir(
-                vox_cfg.get("sherpa_model_id") or speech_models.DEFAULT_TTS
+            model_paths.speech_model_dir(
+                vox_cfg.get("sherpa_model_id") or model_paths.DEFAULT_TTS
             )
         )
 
     audition_sherpa_model_id = (
-        audition_cfg.get("sherpa_model_id") or speech_models.DEFAULT_STT
+        audition_cfg.get("sherpa_model_id") or model_paths.DEFAULT_STT
     )
-    vox_sherpa_model_id = vox_cfg.get("sherpa_model_id") or speech_models.DEFAULT_TTS
+    vox_sherpa_model_id = vox_cfg.get("sherpa_model_id") or model_paths.DEFAULT_TTS
     audition_sherpa_num_threads = int(audition_cfg.get("sherpa_num_threads", 2))
     vox_sherpa_num_threads = int(vox_cfg.get("sherpa_num_threads", 2))
     vox_sherpa_speaker_id = int(vox_cfg.get("sherpa_speaker_id", 0))

@@ -660,7 +660,7 @@ class RemoteBridge:
                 progressed = False
                 for stream in (LINGUA_EXTERNAL_STREAM, AUDITION_STREAM):
                     try:
-                        entries = await self._bus.read(
+                        entries, last_scanned = await self._bus.read_entries(
                             stream,
                             last_id=cursors.get(stream, "0"),
                             count=32,
@@ -668,13 +668,13 @@ class RemoteBridge:
                         )
                     except Exception:
                         continue
-                    if entries:
+                    if last_scanned is not None:
                         progressed = True
-                        cursors[stream] = entries[-1][0]
-                        for _, event in entries:
-                            line = self._transcript_line(stream, event)
-                            if line is not None:
-                                self._fanout_transcript(line)
+                        cursors[stream] = last_scanned
+                    for _, event in entries:
+                        line = self._transcript_line(stream, event)
+                        if line is not None:
+                            self._fanout_transcript(line)
                 if not progressed:
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
@@ -752,16 +752,16 @@ class RemoteBridge:
         try:
             while True:
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         THYMOS_STREAM,
                         last_id=cursor,
                         count=32,
                         block_ms=0,
                     )
                 except Exception:
-                    entries = []
-                if entries:
-                    cursor = entries[-1][0]
+                    entries, last_scanned = [], None
+                if last_scanned is not None:
+                    cursor = last_scanned
                     for _, event in entries:
                         line = self._affect_line(THYMOS_STREAM, event)
                         if line is not None:

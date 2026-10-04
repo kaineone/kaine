@@ -757,7 +757,8 @@ class Hypnos(BaseModule):
             )
             if last_scanned:
                 cursor = last_scanned
-            if not entries:
+            # Stop only when read_entries saw nothing at all (decodable or not).
+            if last_scanned is None:
                 break
             events.extend(entries)
         self._audit_cursors[stream] = cursor

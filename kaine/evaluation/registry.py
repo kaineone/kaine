@@ -156,20 +156,7 @@ class SidecarRegistry:
         try:
             await embedder.load()
         except Exception:
-            if self._config.require_semantic_embedder:
-                raise RuntimeError(
-                    "require_semantic_embedder=true but the text embedder "
-                    "failed to load; refusing to fall back to HashEmbedder (fail-closed). "
-                    "Provision the embedding model (python -m kaine.setup.provision) or set require_semantic_embedder=false."
-                ) from None
-            log.error(
-                "the text embedder failed to load — falling back to "
-                "HashEmbedder. WARNING: A/B-divergence and memory-probe cosine metrics "
-                "will be LEXICAL token-hash similarity, NOT semantic similarity. "
-                "All records will carry embedder='hash' for filtering.",
-                exc_info=True,
-            )
-            self._resolved_embedder = HashEmbedder()
+            self._resolved_embedder = self._embedder_fallback()
         else:
             self._resolved_embedder = embedder
         return self._resolved_embedder
@@ -182,20 +169,29 @@ class SidecarRegistry:
         try:
             return make_text_embedder({})
         except Exception:
-            if self._config.require_semantic_embedder:
-                raise RuntimeError(
-                    "require_semantic_embedder=true but the text embedder "
-                    "failed to load; refusing to fall back to HashEmbedder (fail-closed). "
-                    "Provision the embedding model (python -m kaine.setup.provision) or set require_semantic_embedder=false."
-                ) from None
-            log.error(
-                "the text embedder failed to load — falling back to "
-                "HashEmbedder. WARNING: A/B-divergence and memory-probe cosine metrics "
-                "will be LEXICAL token-hash similarity, NOT semantic similarity. "
-                "All records will carry embedder='hash' for filtering.",
-                exc_info=True,
-            )
-            return HashEmbedder()
+            return self._embedder_fallback()
+
+    def _embedder_fallback(self) -> TextEmbedder:
+        """The shared failure path when the semantic embedder cannot load.
+
+        Fail-closed when ``require_semantic_embedder`` is set; otherwise log
+        loudly and degrade to ``HashEmbedder``. Called only from an ``except``
+        block, so the logged traceback is the load failure.
+        """
+        if self._config.require_semantic_embedder:
+            raise RuntimeError(
+                "require_semantic_embedder=true but the text embedder "
+                "failed to load; refusing to fall back to HashEmbedder (fail-closed). "
+                "Provision the embedding model (python -m kaine.setup.provision) or set require_semantic_embedder=false."
+            ) from None
+        log.error(
+            "the text embedder failed to load — falling back to "
+            "HashEmbedder. WARNING: A/B-divergence and memory-probe cosine metrics "
+            "will be LEXICAL token-hash similarity, NOT semantic similarity. "
+            "All records will carry embedder='hash' for filtering.",
+            exc_info=True,
+        )
+        return HashEmbedder()
 
     def _bare_client_default(self) -> BareInferenceClient:
         if self._bare_client is not None:

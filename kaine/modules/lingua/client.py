@@ -371,15 +371,16 @@ def build_chat_client_registry(
 ) -> Any:
     """Backend registry for the Lingua chat client (openspec runtime-backends).
 
-    ``ollama`` (the default, an alias ``openai`` too) is the current workstation
-    HTTP path — an OpenAI-compatible server (Ollama on CUDA, or any conforming
-    llama.cpp/vLLM server). ``llama_cpp`` is the in-process GGUF edge runtime; it
-    declares ``ollama`` as its fallback, so a host that selects it without the
-    wheel degrades to the HTTP client with a surfaced reason instead of crashing.
+    ``openai`` (the default) is the workstation HTTP path — an OpenAI-compatible
+    server such as llama.cpp's ``llama-server`` or vLLM. ``ollama`` is kept as an
+    accepted alias for older configs and resolves to the same HTTP client.
+    ``llama_cpp`` is the in-process GGUF edge runtime; it declares ``openai`` as
+    its fallback, so a host that selects it without the wheel degrades to the HTTP
+    client with a surfaced reason instead of crashing.
     """
     from kaine.modules.backends import BackendRegistry
 
-    registry: BackendRegistry[ChatClient] = BackendRegistry("lingua", default="ollama")
+    registry: BackendRegistry[ChatClient] = BackendRegistry("lingua", default="openai")
 
     def _http() -> ChatClient:
         return OpenAIChatClient(base_url=chat_url, api_key=api_key, timeout_s=timeout_s)
@@ -391,9 +392,9 @@ def build_chat_client_registry(
             filename=gguf_filename,
         )
 
-    registry.register("ollama", _http)
     registry.register("openai", _http)
-    registry.register("llama_cpp", _llama_cpp, fallback="ollama")
+    registry.register("ollama", _http)  # accepted alias for older configs
+    registry.register("llama_cpp", _llama_cpp, fallback="openai")
     return registry
 
 

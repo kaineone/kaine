@@ -34,7 +34,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 _BASE_DEVICES = ("cuda", "xpu", "mps", "cpu")
 _ENV_OVERRIDE = "KAINE_FORCE_DEVICE"
@@ -575,7 +575,7 @@ def device_consumers(timeout_s: float = 5.0) -> list[dict[str, Any]]:
     return rows
 
 
-def describe_host() -> dict[str, Any]:
+class HostSnapshot(TypedDict):
     """Structured snapshot for diagnostics and `soma.report` payloads.
 
     Guaranteed keys (spec contract — never removed):
@@ -593,6 +593,28 @@ def describe_host() -> dict[str, Any]:
         memory       — {state, pools, evidence, unknown_reason}; state is
                        "discrete", "unified", or "unknown"
     """
+
+    device: str
+    cuda_available: bool
+    mps_available: bool
+    gpu_count: int
+    gpu_names: list[str]
+    cuda_devices: list[dict[str, Any]]
+    torch_version: str | None
+    torch_installed: bool
+    platform: str
+    python_version: str
+    backend: str
+    hip_version: str | None
+    xpu_available: bool
+    xpu_count: int
+    xpu_names: list[str]
+    xpu_devices: list[dict[str, Any]]
+    memory: dict[str, Any]
+
+
+def describe_host() -> HostSnapshot:
+    """Return a HostSnapshot (see the class docstring for the key contract)."""
     torch = _try_torch()
     cuda_available = False
     mps_available = False
@@ -876,31 +898,16 @@ class TierRecommendation:
 def total_ram_gb() -> float | None:
     """Best-effort total physical RAM in GiB, or ``None`` if undetectable.
 
-    Tries POSIX ``sysconf`` first (no third-party dependency), then
-    ``/proc/meminfo``, then ``psutil`` if it happens to be installed. Returns
-    ``None`` rather than guessing when none of those work.
+    Delegates to ``kaine.hostmem.system_memory_pool()``, the single owner of
+    the system-memory fallback chain. Never raises.
     """
     try:
-        page_size = os.sysconf("SC_PAGE_SIZE")
-        phys_pages = os.sysconf("SC_PHYS_PAGES")
-        if page_size > 0 and phys_pages > 0:
-            return round(page_size * phys_pages / (1024 ** 3), 2)
-    except (ValueError, OSError, AttributeError):
-        # sysconf unavailable on this platform — fall through to /proc/meminfo
-        pass
-    try:
-        with open("/proc/meminfo", encoding="utf-8") as fh:
-            for line in fh:
-                if line.startswith("MemTotal:"):
-                    kib = int(line.split()[1])
-                    return round(kib / (1024 ** 2), 2)
-    except (OSError, ValueError, IndexError):
-        # no readable /proc/meminfo — fall through to the psutil probe
-        pass
-    try:
-        import psutil  # type: ignore[import-untyped]
+        from kaine import hostmem
 
-        return round(int(psutil.virtual_memory().total) / (1024 ** 3), 2)
+        pool = hostmem.system_memory_pool()
+        if pool.total_bytes is None or pool.total_bytes <= 0:
+            return None
+        return round(pool.total_bytes / (1024 ** 3), 2)
     except Exception:
         return None
 
