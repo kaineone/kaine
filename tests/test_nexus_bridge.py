@@ -46,6 +46,11 @@ class FakeBus:
                     break
         return entries[start : start + count]
 
+    async def read_entries(self, stream, *, last_id, count, block_ms):
+        # Every fake entry decodes, so the last scanned id is the last returned.
+        entries = await self.read(stream, last_id=last_id, count=count, block_ms=block_ms)
+        return entries, (entries[-1][0] if entries else None)
+
     async def current_workspace_id(self):
         return "0"
 
