@@ -5,7 +5,6 @@ import dataclasses
 
 import pytest
 
-import kaine.cycle.individuation_producer as ip_module
 from kaine.cycle.individuation_probe import ProbeFailure
 from kaine.lifecycle.individuation_store import (
     IndividuationStoreError,
@@ -132,7 +131,9 @@ async def test_statistics_failure_is_statistics_failed(tmp_path, monkeypatch):
     def raising_permutation_test(*_args, **_kwargs):
         raise ValueError("statistics boom")
 
-    monkeypatch.setattr(ip_module, "permutation_test", raising_permutation_test)
+    monkeypatch.setattr(
+        "kaine.cycle.individuation_producer.permutation_test", raising_permutation_test
+    )
 
     core, paths = make_core(tmp_path, conditioning_inputs=changing())
     await core.capture_reference("capture")
@@ -214,7 +215,9 @@ async def test_birth_adapter_not_copied_if_save_reference_fails(
     def raising_save(*_args, **_kwargs):
         raise OSError("save failed")
 
-    monkeypatch.setattr(ip_module, "save_reference", raising_save)
+    monkeypatch.setattr(
+        "kaine.cycle.individuation_producer.save_reference", raising_save
+    )
 
     with pytest.raises(OSError):
         await core.capture_reference("birth")

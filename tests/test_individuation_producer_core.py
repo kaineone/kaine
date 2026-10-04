@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import dataclasses
+import hashlib
+import itertools
 from datetime import datetime
 from pathlib import Path
 
@@ -47,6 +49,16 @@ CONDITIONS = {
 
 
 @pytest.fixture(autouse=True)
+def deterministic_seeds(monkeypatch):
+    """Fixed probe seeds, so a no-drift look is not significant by chance."""
+    counter = itertools.count(1)
+    monkeypatch.setattr(
+        "kaine.cycle.individuation_producer.secrets.randbits",
+        lambda _bits: next(counter),
+    )
+
+
+@pytest.fixture(autouse=True)
 def reset_encryptor():
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     yield
@@ -83,7 +95,8 @@ class FakeEmbed:
         parts = text.split("|")
         prompt, variant, seed_str = parts[0], parts[1], parts[2]
         centre_rng = np.random.default_rng(
-            abs(hash(prompt + variant)) % 2**32
+            # A stable digest, not hash(), which is randomised per process.
+            int(hashlib.sha256((prompt + variant).encode()).hexdigest()[:8], 16)
         )
         if variant == "drifted":
             centre = centre_rng.normal(5.0, 1.0, 16)

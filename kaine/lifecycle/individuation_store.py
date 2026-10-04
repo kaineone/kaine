@@ -113,6 +113,7 @@ def _write_encrypted_json(path: Path, obj: dict) -> None:
         try:
             os.unlink(tmp_name)
         except FileNotFoundError:
+            # The temporary file was never created or is already gone.
             pass
         raise
 
