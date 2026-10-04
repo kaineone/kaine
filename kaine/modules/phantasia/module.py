@@ -76,6 +76,7 @@ log = logging.getLogger(__name__)
 
 class Phantasia(BaseModule):
     name: ClassVar[str] = "phantasia"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom"})
 
     def __init__(
         self,

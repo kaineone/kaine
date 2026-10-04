@@ -21,7 +21,7 @@ loop — only read-only probes and throwaway round-trips):
                   health board uses (``kaine.nexus.health``).
   2. ORGAN      — the configured language organ actually GENERATES content
                   (not merely listed/served-but-mute). Reuses the boot-time
-                  content gate (``kaine.setup.organ.verify_organ_generates``).
+                  content gate (``kaine.organ_probe.verify_organ_generates``).
   3. PERCEPTION — when a deterministic feed is configured (seeded/playlist),
                   the configured source factory actually YIELDS a video frame
                   and an audio block. Reuses the exact factories the cycle
@@ -93,10 +93,11 @@ from kaine.config import (
 from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
+from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
+from kaine.organ_probe import verify_organ_generates
 from kaine.security.crypto import CryptoConfigError, install_from_section
-from kaine.setup.organ import verify_organ_generates
 from kaine.storage import configured_data_root, resolve, storage_min_free_gb
 from kaine.torch_stack import check_torch_stack, describe_torch_stack
 
@@ -237,9 +238,9 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
 
     lingua_cfg = config.get("lingua") or {}
     gate = await verify_organ_generates(
-        str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1")),
+        lingua_section_chat_url(lingua_cfg),
         str(lingua_cfg.get("model_id") or ""),
-        api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+        api_key=lingua_section_api_key(lingua_cfg),
     )
     return [CheckResult(GROUP_ORGAN, "Organ content", PASS if gate.ok else FAIL, gate.detail)]
 

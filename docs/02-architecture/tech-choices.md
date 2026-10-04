@@ -95,6 +95,23 @@ GPU training is opt-in via `training_device` when the operator has enough VRAM. 
 
 ---
 
+## Paired implementations
+
+Four components have two implementations each: one ships, and the other is the reference. Both read and write the same state, so a being can move between them. A parity test holds them to the same results.
+
+| Component | Ships by default | Reference | Selected by | Parity tests |
+|---|---|---|---|---|
+| CfC reservoir (Soma, Chronos) | NumPy | `ncps` on torch | `[soma].cfc_backend`, `[chronos].cfc_backend` | `tests/test_numpy_cfc.py` |
+| Text embedder | NumPy MiniLM | `sentence-transformers` | `[embedding].backend` | `tests/test_text_embedding_numpy.py` |
+| Active inference (Nous) | pymdp on JAX | NumPy engine | `[nous].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_nous_engine.py` |
+| World model (Phantasia) | JAX RSSM | NumPy RSSM | `[phantasia].engine` | `tests/test_rssm_numpy_parity.py` |
+
+The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. Nous and Phantasia are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
+
+CI installs every extra that both sides need and runs the whole suite on every pull request, so the parity tests run whenever either side changes. Changing which side ships changes the entity's computation, so it is a change of its own, never part of a refactor.
+
+---
+
 ## Oscillatory binding layer
 
 Each module keeps a small LIF spiking-neuron population (minimum 16 neurons). Syneidesis computes pairwise phase-locking value among coalition modules and applies a bounded coherence multiplier to aggregate salience. `snntorch` supplies a PyTorch-compatible LIF neuron, and `scipy` supplies the Hilbert transform used to estimate instantaneous phase.

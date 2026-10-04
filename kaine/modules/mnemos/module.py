@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 class Mnemos(BaseModule):
     name: ClassVar[str] = "mnemos"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
     preservation_state_key: ClassVar[str | None] = "memory_state"
 
     def holds_external_resources(self) -> bool:

@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 
 class Empatheia(BaseModule):
     name: ClassVar[str] = "empatheia"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive"})
     preservation_state_key: ClassVar[str | None] = "profiles"
 
     def holds_external_resources(self) -> bool:

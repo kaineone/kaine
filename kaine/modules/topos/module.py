@@ -44,6 +44,7 @@ _HYPNOS_STREAM: str = "hypnos.out"
 
 class Topos(BaseModule):
     name: ClassVar[str] = "topos"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
 
     def holds_external_resources(self) -> bool:
         return True

@@ -39,6 +39,7 @@ _SWITCH_TYPE = "intent.perception.switch"
 
 class PerceptionLocus(BaseModule):
     name: ClassVar[str] = "perception"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
 
     def __init__(
         self,
