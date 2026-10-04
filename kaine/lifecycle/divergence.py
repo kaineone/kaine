@@ -238,6 +238,8 @@ def read_individuation(
         "reference_captured_at": None,
         "looks_completed": 0,
         "latest": None,
+        "inconclusive_since": None,
+        "inconclusive_alerted": False,
     }
 
     try:
@@ -245,6 +247,10 @@ def read_individuation(
     except Exception:
         log.debug("read_individuation: ledger unreadable", exc_info=True)
         return unreadable
+
+    if ledger is not None:
+        unreadable["inconclusive_since"] = ledger.inconclusive_since
+        unreadable["inconclusive_alerted"] = ledger.inconclusive_alerted
 
     try:
         ref = load_reference(paths)
@@ -262,6 +268,8 @@ def read_individuation(
                 "reference_captured_at": None,
                 "looks_completed": ledger.looks_completed if ledger is not None else 0,
                 "latest": None,
+                "inconclusive_since": ledger.inconclusive_since,
+                "inconclusive_alerted": ledger.inconclusive_alerted,
             }
         return {
             "state": "no_reference",
@@ -271,6 +279,8 @@ def read_individuation(
             "reference_captured_at": None,
             "looks_completed": ledger.looks_completed if ledger is not None else 0,
             "latest": None,
+            "inconclusive_since": ledger.inconclusive_since if ledger is not None else None,
+            "inconclusive_alerted": ledger.inconclusive_alerted if ledger is not None else False,
         }
 
     try:
@@ -311,6 +321,8 @@ def read_individuation(
         "reference_captured_at": ref.captured_at,
         "looks_completed": ledger.looks_completed if ledger is not None else 0,
         "latest": ev.latest,
+        "inconclusive_since": ledger.inconclusive_since if ledger is not None else None,
+        "inconclusive_alerted": ledger.inconclusive_alerted if ledger is not None else False,
     }
 
 

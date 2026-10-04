@@ -399,45 +399,6 @@ def test_individuation_section_absent(tmp_path):
     assert result["individuation"] is None
 
 
-def test_individuation_section_from_jsonl(tmp_path):
-    from kaine.evaluation.config import EvaluationConfig
-    from kaine.evaluation.nexus_tab import _aggregate
-
-    ind_dir = tmp_path / "individuation"
-    ind_dir.mkdir()
-    (ind_dir / "run-2026-06-01.jsonl").write_text(
-        json.dumps({
-            "ts": "2026-06-01T00:00:00Z",
-            "metric": "cosine_divergence",
-            "null_samples": 50,
-            "fork_divergence": 0.31,
-            "null_mean": 0.15,
-            "null_p95": 0.28,
-            "p_value": 0.04,
-            "significant": True,
-        }) + "\n"
-    )
-
-    cfg = EvaluationConfig.from_mapping(
-        {
-            "enabled": True,
-            "paths": {
-                "trajectory_dir": str(tmp_path / "traj"),
-                "evaluation_logs": str(tmp_path / "eval"),
-                "retention_days": 30,
-            },
-            "individuation": {
-                "enabled": False,
-                "output_dir": str(ind_dir),
-            },
-        }
-    )
-    result = _aggregate(cfg, attribution=None, registry=None)
-    ind = result["individuation"]
-    assert ind is not None
-    assert ind["significant"] is True
-
-
 # ---------------------------------------------------------------------------
 # Section 4 (HTTP) — evaluation router accepts optional registry param
 # ---------------------------------------------------------------------------

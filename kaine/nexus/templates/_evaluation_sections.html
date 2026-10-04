@@ -54,22 +54,27 @@
 
     {% if metrics.individuation %}
     <section class="panel">
-      <h2>Individuation boundary (latest result)</h2>
+      <h2>Individuation</h2>
       {% set ind = metrics.individuation %}
       <dl class="kv">
-        <dt>timestamp</dt><dd>{{ ind.ts or "—" }}</dd>
-        <dt>metric</dt><dd>{{ ind.metric or "—" }}</dd>
-        <dt>null samples</dt><dd>{{ ind.null_samples or "—" }}</dd>
-        <dt>fork divergence</dt>
-          <dd>{{ "%.4f"|format(ind.fork_divergence) if ind.fork_divergence is not none else "—" }}</dd>
-        <dt>null mean</dt>
-          <dd>{{ "%.4f"|format(ind.null_mean) if ind.null_mean is not none else "—" }}</dd>
-        <dt>null p95</dt>
-          <dd>{{ "%.4f"|format(ind.null_p95) if ind.null_p95 is not none else "—" }}</dd>
-        <dt>p-value</dt>
+        <dt>state</dt><dd>{{ ind.state or "—" }}</dd>
+        <dt>latched</dt><dd>{{ "yes" if ind.latched else "no" }}</dd>
+        <dt>reference</dt><dd>{{ ind.reference_kind or "—" }} / {{ ind.reference_captured_at or "—" }}</dd>
+        <dt>looks</dt><dd>{{ ind.looks_completed if ind.looks_completed is not none else "—" }}</dd>
+        <dt>last outcome</dt><dd>{{ ind.outcome or "—" }}</dd>
+        <dt>H</dt>
+          <dd>{{ "%.4f"|format(ind.effect_size_h) if ind.effect_size_h is not none else "—" }}</dd>
+        <dt>p</dt>
           <dd>{{ "%.4f"|format(ind.p_value) if ind.p_value is not none else "—" }}</dd>
-        <dt>significant</dt>
-          <dd>{{ ind.significant if ind.significant is not none else "—" }}</dd>
+        <dt>α_k</dt>
+          <dd>{{ "%.4f"|format(ind.alpha_k) if ind.alpha_k is not none else "—" }}</dd>
+        <dt>warmed up</dt><dd>{{ "yes" if ind.warmed_up else "no" }}</dd>
+        <dt>last inconclusive reason</dt><dd>{{ ind.inconclusive_reason or "—" }}</dd>
+        <dt>inconclusive since</dt>
+          <dd>
+            {{ ind.inconclusive_since or "—" }}
+            {% if ind.inconclusive_alerted %}(operator alerted){% endif %}
+          </dd>
       </dl>
     </section>
     {% endif %}

@@ -1403,32 +1403,6 @@ prediction_error = true
 welfare = true
 nous_policy = true
 
-[evaluation.individuation]
-# Individuation boundary permutation-test instrument (paper §5.6 / §7.4).
-# Guardian-only, operator-run at fork merge points; never called from the
-# cognitive cycle. Ships disabled — enable only when preparing a Guardian
-# review of a specific fork.
-enabled = false
-# Number of parent-vs-parent samples used to build the stochastic-variation
-# null distribution.
-null_samples = 50
-# Fork divergence must exceed this percentile of the null to be significant.
-significance_percentile = 95.0
-# Divergence metric. Only "cosine_divergence" is currently supported.
-metric = "cosine_divergence"
-# Path to an operator-supplied JSONL preference battery. Empty = bundled default.
-battery_path = ""
-# Directory for JSONL evidence reports (relative to working directory).
-output_dir = "data/evaluation/individuation"
-# Warm-up / minimum-lived-experience floor (fail-closed). The permutation test
-# measures individuation against the entity's OWN birth-state (captured at run
-# start), never the bare organ. ``significant`` cannot be true (and the report
-# carries warmed_up = false) until the entity has accumulated at least
-# min_observations logged lived events AND min_lived_time_s of elapsed lived
-# (running) time — a sensory-void / just-booted entity reads not-individuated.
-# Defaults err toward assessing LATE (the safe direction for a fail-closed gate).
-min_observations = 200
-min_lived_time_s = 1800.0   # >= 30 min lived
 
 [individuation]
 # Individuation producer: periodically and privately assesses how much the being
