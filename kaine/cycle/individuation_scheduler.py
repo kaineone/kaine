@@ -122,6 +122,8 @@ class IndividuationScheduler:
         embedder_ready: Callable[[], bool],
         lingua_idle: Callable[[], bool],
         alert: Callable[[dict], Awaitable[None]],
+        adapter_verifiable: Callable[[], bool] | None = None,
+        on_capture_kind_change: Callable[[str | None], None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -136,6 +138,7 @@ class IndividuationScheduler:
         self._embedder_ready = embedder_ready
         self._lingua_idle = lingua_idle
         self._alert = alert
+        self._adapter_verifiable = adapter_verifiable
         self._monotonic = monotonic
         self._now_dt = now
         self._sleep = sleep
@@ -148,6 +151,7 @@ class IndividuationScheduler:
         self._look_due_at: float | None = None
         self._next_daily_at: float | None = None
         self._capture_kind: str | None = None
+        self._capture_regenerate = False
         self._capture_at: float | None = None
         self._capture_backoff = settings.capture_retry_initial_s
         self._run_deadline_at: float | None = None
@@ -158,6 +162,7 @@ class IndividuationScheduler:
         self._stopped = False
         self._state = IndividuationState()
         self._reference_kind: str | None = None
+        self._on_capture_kind_change = on_capture_kind_change
         self._last_skip: str | None = None
         self._alerted_since: str | None = None
 
@@ -206,17 +211,34 @@ class IndividuationScheduler:
 
         return gated
 
+    def _notify_capture_kind_change(self, kind: str | None) -> None:
+        if self._on_capture_kind_change is None:
+            return
+        try:
+            self._on_capture_kind_change(kind)
+        except Exception:
+            log.debug(
+                "on_capture_kind_change callback failed", exc_info=True
+            )
+
     def notify_sleep_started(self) -> None:
         self._asleep = True
 
     def notify_sleep_completed(self) -> None:
         self._asleep = False
+        if self._capture_kind == "birth":
+            self._capture_kind = "capture"
+            log.info(
+                "individuation birth capture downgraded to capture after sleep"
+            )
+            self._notify_capture_kind_change("capture")
         self._schedule_look(
             self._monotonic() + self._settings.sleep_settle_s
         )
 
-    def request_capture(self, kind: str) -> None:
+    def request_capture(self, kind: str, *, regenerate: bool = False) -> None:
         self._capture_kind = kind
+        self._capture_regenerate = regenerate
         self._capture_at = self._monotonic()
         self._capture_backoff = self._settings.capture_retry_initial_s
 
@@ -339,6 +361,10 @@ class IndividuationScheduler:
             return "asleep"
         if self._safe(self._paused, True):
             return "paused"
+        if self._adapter_verifiable is not None and not self._safe(
+            self._adapter_verifiable, False
+        ):
+            return "adapter_unverifiable"
         if for_look and not self._safe(self._embedder_ready, False):
             return "embedder_not_ready"
         return None
@@ -353,11 +379,18 @@ class IndividuationScheduler:
         self._flush_lived()
         self._run_deadline_at = m + self._settings.capture_deadline_s
         try:
-            doc, reason = await self._core.capture_reference(self._capture_kind)
+            if self._capture_regenerate:
+                doc, reason = await self._core.capture_reference(
+                    self._capture_kind, regenerate=True
+                )
+            else:
+                doc, reason = await self._core.capture_reference(self._capture_kind)
         except ReferenceExists:
             log.info("individuation capture skipped: reference already exists")
             self._capture_kind = None
+            self._capture_regenerate = False
             self._capture_at = None
+            self._notify_capture_kind_change(None)
             self._refresh_state()
             return
         except Exception:
@@ -384,8 +417,10 @@ class IndividuationScheduler:
 
             self._reference_kind = doc.reference_kind
             self._capture_kind = None
+            self._capture_regenerate = False
             self._capture_at = None
             self._capture_backoff = self._settings.capture_retry_initial_s
+            self._notify_capture_kind_change(None)
             self._reanchor_lived()
             self._refresh_state()
         finally:

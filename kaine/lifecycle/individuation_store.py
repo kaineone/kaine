@@ -67,6 +67,10 @@ class LedgerRegression(IndividuationStoreError):
     """A ledger write attempted to roll back an accumulated value."""
 
 
+class ReportsUnreadable(IndividuationStoreError):
+    """One or more report lines could not be decrypted or parsed."""
+
+
 DEFAULT_ROOT = Path("state/individuation")
 
 
@@ -91,6 +95,10 @@ class IndividuationPaths:
     @property
     def birth_adapter(self) -> Path:
         return self.root / "birth_adapter.gguf"
+
+    @property
+    def birth_pending(self) -> Path:
+        return self.root / "birth_pending"
 
 
 def _write_encrypted_json(path: Path, obj: dict) -> None:
@@ -580,7 +588,7 @@ def report_sink(paths: IndividuationPaths) -> "AsyncJsonlSink":
 
 
 def read_reports(
-    paths: IndividuationPaths, *, reference_id: str
+    paths: IndividuationPaths, *, reference_id: str, strict: bool = False
 ) -> list[dict]:
     """Read and decrypt all reports matching the current reference."""
     reports_dir = paths.reports
@@ -625,6 +633,10 @@ def read_reports(
         log.warning(
             "skipped %d unreadable report line(s) in %s", skipped, reports_dir
         )
+        if strict:
+            raise ReportsUnreadable(
+                f"{skipped} individuation report line(s) could not be read"
+            )
 
     return sorted(matched, key=lambda r: r["ts"])
 
@@ -714,21 +726,46 @@ def conditioning_digest(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+# Module-level cache: the adapter file can be hundreds of MB and is read on
+# the event loop, so we avoid hashing it more than once per (path, mtime, size).
+_ADAPTER_SHA_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def adapter_sha_of(adapter_output_dir: Path | None) -> str | None:
+    """Return the sha256 of the current adapter.gguf, if any."""
+    if adapter_output_dir is None:
+        return None
+    from kaine.modules.hypnos.adapter_store import current_path
+    from kaine.modules.hypnos.organ_adapter import sha256_file
+
+    current = current_path(adapter_output_dir)
+    if current is None:
+        return None
+    adapter_file = current / "adapter.gguf"
+    if not adapter_file.is_file():
+        return None
+
+    st = adapter_file.stat()
+    key = (str(adapter_file.resolve()), st.st_mtime_ns, st.st_size)
+    if key in _ADAPTER_SHA_CACHE:
+        return _ADAPTER_SHA_CACHE[key]
+
+    digest = sha256_file(adapter_file)
+    # Keep the cache small; entries are tiny and invalidation is based on
+    # filesystem metadata, so reuse is cheap.
+    if len(_ADAPTER_SHA_CACHE) > 8:
+        _ADAPTER_SHA_CACHE.clear()
+    _ADAPTER_SHA_CACHE[key] = digest
+    return digest
+
+
 def read_conditioning_inputs(
     *,
     self_model_path: Path,
     adapter_output_dir: Path,
 ) -> tuple[str | None, list[str], list[str]]:
     """Read the adapter sha and self-model identity clauses."""
-    from kaine.modules.hypnos.adapter_store import current_path
-    from kaine.modules.hypnos.organ_adapter import sha256_file
-
-    current = current_path(adapter_output_dir)
-    adapter_sha: str | None = None
-    if current is not None:
-        adapter_file = current / "adapter.gguf"
-        if adapter_file.is_file():
-            adapter_sha = sha256_file(adapter_file)
+    adapter_sha = adapter_sha_of(adapter_output_dir)
 
     values: list[str] = []
     norms: list[str] = []
@@ -756,3 +793,20 @@ def read_conditioning_inputs(
             )
 
     return adapter_sha, values, norms
+
+
+def conditioning_from_snapshot(
+    self_model: dict | None, adapter_output_dir: Path | None
+) -> tuple[str | None, list[str], list[str]]:
+    """The conditioning digest inputs taken from the same self-model snapshot the probe renders."""
+    if self_model is None:
+        raise IndividuationStoreError("no self-model snapshot yet")
+    values = self_model.get("values", []) or []
+    norms = self_model.get("behavioral_norms", []) or []
+    if not isinstance(values, list) or not isinstance(norms, list):
+        raise IndividuationStoreError("malformed self-model identity clauses")
+    return (
+        adapter_sha_of(adapter_output_dir),
+        [str(v) for v in values],
+        [str(n) for n in norms],
+    )

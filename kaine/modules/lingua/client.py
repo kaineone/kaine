@@ -105,6 +105,11 @@ class OpenAIChatClient:
     def base_url(self) -> str:
         return self._base_url
 
+    @property
+    def applies_lora(self) -> bool:
+        """True when a per-request LoRA resolver is attached."""
+        return self._lora_resolver is not None
+
     def set_lora_resolver(self, resolver) -> None:
         """Attach (or replace) the per-request LoRA resolver."""
         self._lora_resolver = resolver

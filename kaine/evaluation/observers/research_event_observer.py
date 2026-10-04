@@ -324,6 +324,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     "welfare.gray_zone": frozenset({"gray_zone_event"}),  # + numeric scalars passthrough
     "individuation.divergence": frozenset({"divergence_scalar", "significant"}),
+    "individuation.alert": frozenset({"inconclusive_since", "days"}),
     "perception.locus.changed": frozenset({"locus", "changed_by"}),
     "perception.locus.denied": frozenset({"locus_requested", "denied_by", "reason_label"}),
     # mundus.proprio handled specially (position hash + region label only).

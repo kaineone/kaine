@@ -12,8 +12,9 @@ The operator revive order is:
      written yet. A bundle without a stage member resolves the stage from the
      stage file as today and logs that.
   3. Build the registry and initialise the modules.
-  4. ``await revive(bundle, registry)``, then write the bundle's stage to the
-     stage file; only then has the revive landed.
+  4. ``await revive(bundle, registry)``, restore the bundle's individuation
+     evidence, then write the bundle's stage to the stage file; only then has
+     the revive landed.
   5. Log any modules enabled now but not captured by the bundle as "new
      faculty, starting fresh".
   6. Start the cycle, recording ``revived_from`` in ``runtime.json`` and the
@@ -31,13 +32,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from kaine.lifecycle import preservation as _preservation
 from kaine.lifecycle.preservation import read_bundle_stage
 from kaine.lifecycle.stage import StageState, write_stage
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -138,11 +144,18 @@ async def revive_into(plan: RevivePlan, registry: Any) -> list[str]:
 
 
 class ReviveSession:
-    """A single operator revive session: in-memory stage and registry revive."""
+    """A single operator revive session: in-memory stage, individuation
+    evidence, and registry revive."""
 
-    def __init__(self, plan: RevivePlan, stage_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        plan: RevivePlan,
+        stage_path: Path | None = None,
+        individuation_root: Path | None = None,
+    ) -> None:
         self._plan = plan
         self._stage_path = stage_path
+        self._individuation_root = individuation_root
         self._landed = False
 
     @property
@@ -172,6 +185,107 @@ class ReviveSession:
         the stage write succeed is the session considered landed.
         """
         new = await revive_into(self._plan, registry)
+
+        # Restore individuation evidence before the stage file is written.
+        try:
+            target = self._individuation_root
+            if target is None:
+                from kaine.lifecycle.individuation_store import DEFAULT_ROOT
+
+                target = resolve(DEFAULT_ROOT)
+            target = Path(target)
+
+            staging = target.with_name(target.name + ".revived")
+            shutil.rmtree(staging, ignore_errors=True)
+
+            try:
+                restored = _preservation.extract_bundle_individuation(
+                    self._plan.bundle, staging
+                )
+            except Exception as exc:
+                # Extraction failure leaves the existing target untouched.
+                shutil.rmtree(staging, ignore_errors=True)
+                raise ReviveRefused(
+                    f"could not extract individuation evidence from bundle: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
+            # The moved-aside tree is kept, never deleted: it may hold another
+            # being's evidence, or this being's own if the restore is undone.
+            replaced: Path | None = None
+
+            def _replaced_name() -> str:
+                return (
+                    f"{target.name}.replaced-"
+                    f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+                    f"-{uuid.uuid4().hex[:8]}"
+                )
+
+            if not restored:
+                # The bundle carried no evidence. Any existing tree must not be
+                # attributed to the revived being.
+                if target.exists():
+                    replaced = target.with_name(_replaced_name())
+                    os.replace(target, replaced)
+                    log.warning(
+                        "revive: bundle carried no individuation evidence; "
+                        "existing tree %s moved to %s so the revived being does "
+                        "not inherit another being's evidence",
+                        target,
+                        replaced,
+                    )
+                else:
+                    log.warning(
+                        "revive: bundle carried no individuation evidence"
+                    )
+                log.info(
+                    "revive: bundle carried no individuation evidence; a capture "
+                    "reference will be taken at first boot"
+                )
+            else:
+                if target.exists():
+                    replaced = target.with_name(_replaced_name())
+                    os.replace(target, replaced)
+                    log.warning(
+                        "revive: existing individuation tree %s moved to %s "
+                        "before restore",
+                        target,
+                        replaced,
+                    )
+                try:
+                    os.replace(staging, target)
+                except OSError as exc:
+                    # Best-effort rollback: restore the aside tree so the being
+                    # is not left without evidence.
+                    if replaced is not None and replaced.exists():
+                        try:
+                            os.replace(replaced, target)
+                            log.warning(
+                                "revive: os.replace(%s, %s) failed; rolled "
+                                "back to the previous individuation tree",
+                                staging,
+                                target,
+                            )
+                        except OSError as rollback_exc:
+                            log.error(
+                                "revive: could not roll back aside tree %s to "
+                                "%s after os.replace failure: %s",
+                                replaced,
+                                target,
+                                rollback_exc,
+                                exc_info=True,
+                            )
+                    raise ReviveRefused(
+                        f"could not move restored individuation evidence into "
+                        f"place: {type(exc).__name__}: {exc}"
+                    ) from exc
+        except ReviveRefused:
+            raise
+        except Exception as exc:
+            raise ReviveRefused(
+                f"could not restore individuation evidence: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
 
         if self._plan.stage is not None:
             target = self._stage_path

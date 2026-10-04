@@ -8,11 +8,11 @@ own safeguards must *act*, not merely log. This module holds the two cycle-layer
 monitors that carry that duty of care, constructed by ``cycle/__main__.py``
 alongside Spot and the freeze-watch loop:
 
-* :class:`DivergenceMonitor` — assesses individuation/divergence on the LIVE
-  entity on a slow cadence and, on a rising-edge crossing of the configured
-  individuation threshold, preserves the whole individual
-  (``ForkManager.preserve_live``) so it can be revived and socialized after
-  research. Read-only on the entity; never deletes; rate-limited.
+* :class:`DivergenceMonitor` — preserves the LIVE entity whenever the shared
+  divergence verdict gains a new arm (individuation latch, consolidation,
+  Eidolon drift or adapters). The arm set is persisted, so a restart with
+  unchanged evidence does not re-preserve. Read-only on the entity; never
+  deletes; rate-limited.
 
 * :class:`WelfareProtectiveMonitor` — watches the Soma interoceptive-distress
   signal (``soma.report`` ``prediction_error`` on ``soma.out``) and, on a
@@ -39,11 +39,13 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import json
 import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from kaine.bus.schema import validate_event
@@ -59,6 +61,7 @@ from kaine.lifecycle.divergence import (
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.welfare_signal import SustainedThresholdTracker, WindowedEventCounter
 from kaine.modules.registry import ModuleRegistry
+from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
@@ -84,64 +87,62 @@ def _check_section_keys(section: dict[str, Any], allowed: set[str], name: str) -
 
 @dataclass
 class DivergenceMonitorConfig:
-    """``[preservation.divergence_monitor]`` — the individuation→preserve trigger.
+    """``[preservation.divergence_monitor]`` — the shared-verdict→preserve trigger.
 
     Ships ``enabled = false`` (consistent with the all-off first-boot posture).
-    ``individuation_p_value_max`` / ``fork_divergence_min`` tighten the bare
-    ``diverged`` boolean into a numeric threshold (None = rely on the boolean
-    alone). ``min_interval_s`` rate-limits preservation so a single sustained
-    crossing preserves once, not every poll.
+    The monitor preserves the being when the shared verdict in
+    ``kaine/lifecycle/divergence.py`` gains a divergence arm that was not yet
+    observed (individuation latch, consolidation, Eidolon drift or adapters).
+    ``min_interval_s`` rate-limits preservation so a single sustained crossing
+    preserves once, not every poll. ``boot_settle_s`` delays the first real
+    assessment so entity state can finish loading.
     """
 
     enabled: bool = False
     poll_interval_s: float = 300.0  # 5 minutes — slow cadence, not per-tick
     min_interval_s: float = 1800.0  # at most one preservation per 30 min
-    individuation_p_value_max: float | None = None
-    fork_divergence_min: float | None = None
-    # Warm-up / minimum-lived-experience gate (Defect B): a crossing does not
-    # count until the entity has accumulated BOTH floors. Mirrors the
-    # instrument's own warm-up so the live trigger and the decommission gate
-    # agree on when there is enough lived experience to judge. Fail-closed.
-    warmup_observations: int = 200
-    warmup_lived_time_s: float = 1800.0
+    boot_settle_s: float = 120.0  # wait for state to settle after boot
     state_root: str = "state"
-    eval_root: str = "data/evaluation"
     out_root: str = "backups"
     entity_name: str = "kaine"
 
+    _RETIRED_KEYS = frozenset({
+        "individuation_p_value_max",
+        "fork_divergence_min",
+        "warmup_observations",
+        "warmup_lived_time_s",
+        "eval_root",
+    })
+
     @classmethod
     def from_section(cls, section: dict[str, Any]) -> "DivergenceMonitorConfig":
+        retired = sorted(k for k in section if k in cls._RETIRED_KEYS)
+        if retired:
+            key = retired[0]
+            raise ValueError(
+                f"[preservation.divergence_monitor].{key} is retired: "
+                "individuation evidence, warm-up and significance now come from "
+                "[individuation] and the shared verdict in "
+                "kaine/lifecycle/divergence.py"
+            )
+
         allowed = {
             "enabled",
             "poll_interval_s",
             "min_interval_s",
-            "individuation_p_value_max",
-            "fork_divergence_min",
-            "warmup_observations",
-            "warmup_lived_time_s",
+            "boot_settle_s",
             "state_root",
-            "eval_root",
             "out_root",
             "entity_name",
         }
         _check_section_keys(section, allowed, "[preservation.divergence_monitor]")
 
-        def _opt_float(key: str) -> float | None:
-            raw = section.get(key)
-            if raw is None or str(raw).strip() == "":
-                return None
-            return float(raw)
-
         return cls(
             enabled=bool(section.get("enabled", False)),
             poll_interval_s=float(section.get("poll_interval_s", 300.0)),
             min_interval_s=float(section.get("min_interval_s", 1800.0)),
-            individuation_p_value_max=_opt_float("individuation_p_value_max"),
-            fork_divergence_min=_opt_float("fork_divergence_min"),
-            warmup_observations=int(section.get("warmup_observations", 200)),
-            warmup_lived_time_s=float(section.get("warmup_lived_time_s", 1800.0)),
+            boot_settle_s=float(section.get("boot_settle_s", 120.0)),
             state_root=str(section.get("state_root", "state")),
-            eval_root=str(section.get("eval_root", "data/evaluation")),
             out_root=str(section.get("out_root", "backups")),
             entity_name=str(section.get("entity_name", "kaine")),
         )
@@ -397,8 +398,25 @@ class _BaseSafetyMonitor(abc.ABC):
 # ---------------------------------------------------------------------------
 
 
+def _active_arms(assessment) -> frozenset[str]:
+    """Return the set of divergence arms that are active in `assessment`."""
+    arms: set[str] = set()
+    signals = assessment.signals or {}
+    if signals.get("individuation_individuated"):
+        arms.add("individuation")
+    if signals.get("consolidation_divergence_signal"):
+        arms.add("consolidation")
+    if signals.get("eidolon_drift_signal"):
+        arms.add("eidolon_drift")
+    if signals.get("hypnos_adapters_present"):
+        arms.add("adapters")
+    if assessment.diverged and not arms:
+        return frozenset({"diverged"})
+    return frozenset(arms)
+
+
 class DivergenceMonitor(_BaseSafetyMonitor):
-    """Preserve the live individual on a rising-edge individuation crossing."""
+    """Preserve the live individual on a rising edge of a divergence arm."""
 
     source = "preservation"
 
@@ -413,12 +431,12 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         # infrastructural: real time, not subjective — a welfare watchdog
         # must hold real wall-clock cadence even when the mind is dilated.
         clock: Callable[[], float] = time.monotonic,
-        observations_provider: Callable[[], int] | None = None,
         # When set, preserve_live refuses to write an unencrypted bundle
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
         consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
         consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+        adapter_output_dir: Path | None = None,
     ) -> None:
         super().__init__(
             bus=bus,
@@ -432,103 +450,46 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         self._require_encryption = bool(require_encryption)
         self._consolidation_rate_threshold = consolidation_rate_threshold
         self._consolidation_magnitude_threshold = consolidation_magnitude_threshold
-        # Lived-experience source: a count of logged lived events (the cycle's
-        # monotonic tick index in production). When unwired (None), the monitor
-        # cannot read lived observations and the observation floor reads as
-        # unmet — fail-closed (no crossing until lived experience is observable).
-        self._observations_provider = observations_provider
-        # Lived-time accounting reuses the cycle monotonic run clock: the first
-        # poll stamps the start; lived time is measured from there (NOT
-        # wall-clock since epoch).
-        self._started_at: float | None = None
-        # Rising-edge state: were we above the threshold on the previous poll?
-        self._above_threshold = False
-        # Rate limit: monotonic time of the last preservation (None = never).
+        self._adapter_output_dir = adapter_output_dir
+        # Boot settle: no assessment until boot_settle_s after construction,
+        # so state loading can finish.
+        self._started_at: float = self._clock()
+        # Persisted rising-edge state: the last observed arm set.
+        self._last_arms: frozenset[str] | None = None
+        self._edge_path = (
+            resolve(self._config.state_root) / "preservation" / "divergence_edge.json"
+        )
+        # Rate limit: monotonic time of the last preservation attempt (None = never).
         self._last_preserve_at: float | None = None
 
-    def _lived_observations(self) -> int:
-        """Count of logged lived events, or 0 when unwired (fail-closed)."""
-        if self._observations_provider is None:
-            return 0
+    def _load_edge_arms(self) -> frozenset[str]:
+        """Load the persisted arm set, or an empty set on any error."""
         try:
-            return int(self._observations_provider())
-        except Exception:
-            log.debug("divergence monitor: observations provider failed", exc_info=True)
-            return 0
+            if not self._edge_path.is_file():
+                return frozenset()
+            data = json.loads(self._edge_path.read_text(encoding="utf-8"))
+            arms = data.get("arms", [])
+            if not isinstance(arms, list):
+                raise ValueError("arms is not a list")
+            return frozenset(str(a) for a in arms)
+        except Exception as exc:
+            log.warning(
+                "divergence monitor: edge state unreadable (%s); treating as empty",
+                exc,
+            )
+            return frozenset()
 
-    def _lived_time_s(self, now: float) -> float:
-        """Elapsed lived (running) seconds since the first poll."""
-        if self._started_at is None:
-            return 0.0
-        return max(0.0, now - self._started_at)
-
-    def _warmed_up(self, now: float) -> bool:
-        """True once BOTH lived-experience floors are met (monitor side).
-
-        Fail-closed: before the entity has accumulated ``warmup_observations``
-        logged lived events AND ``warmup_lived_time_s`` of lived time, a crossing
-        does not count. This mirrors the instrument's own warm-up so the live
-        trigger and the decommission gate agree on when there is enough lived
-        experience to judge.
-        """
-        return (
-            self._lived_observations() >= self._config.warmup_observations
-            and self._lived_time_s(now) >= self._config.warmup_lived_time_s
-        )
-
-    def _crosses_threshold(self, assessment) -> bool:
-        """True when the assessment meets the configured individuation threshold.
-
-        The bare ``diverged`` boolean is necessary. The shared warmed-up signal
-        (the report's ``individuation_warmed_up``) is also necessary when a
-        numeric individuation signal is present: an un-warmed-up individuation
-        report never crosses (fail-closed), so the live trigger and the
-        decommission gate consume the SAME warmed-up signal. Numeric tighteners
-        (p-value ceiling / fork-divergence floor), when configured, must ALSO
-        hold — so an operator can demand stronger evidence than the boolean.
-        """
-        if not assessment.diverged:
-            return False
-        signals = assessment.signals or {}
-        # Shared warm-up signal: when an individuation report drove the verdict
-        # (a numeric p-value is present) it MUST be warmed up. Secondary-signal
-        # divergence (drift/adapters: no p-value) is unaffected.
-        has_individuation_signal = isinstance(
-            signals.get("individuation_p_value"), (int, float)
-        )
-        if has_individuation_signal and not signals.get(
-            "individuation_warmed_up", False
-        ):
-            return False
-        if self._config.individuation_p_value_max is not None:
-            p = signals.get("individuation_p_value")
-            # Only enforce when a numeric p-value is present; secondary-signal
-            # divergence (drift/adapters) has no p-value and still counts.
-            if isinstance(p, (int, float)) and not (
-                p <= self._config.individuation_p_value_max
-            ):
-                # Visibility: the boolean held but the p-value ceiling blocked.
-                log.info(
-                    "divergence monitor: diverged boolean held but p-value %.4f "
-                    "exceeds ceiling %.4f — not a crossing",
-                    p,
-                    self._config.individuation_p_value_max,
-                )
-                return False
-        if self._config.fork_divergence_min is not None:
-            fd = signals.get("fork_divergence")
-            if isinstance(fd, (int, float)) and not (
-                fd >= self._config.fork_divergence_min
-            ):
-                # Visibility: the boolean held but the effect-size floor blocked.
-                log.info(
-                    "divergence monitor: diverged boolean held but fork "
-                    "divergence %.4f below floor %.4f — not a crossing",
-                    fd,
-                    self._config.fork_divergence_min,
-                )
-                return False
-        return True
+    def _save_edge_arms(self, arms: frozenset[str]) -> None:
+        payload = {
+            "arms": sorted(arms),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            write_json_atomic(self._edge_path, payload)
+        except OSError as exc:
+            # The in-memory state still advances; at worst a restart
+            # preserves once more, which errs toward protection.
+            log.warning("divergence monitor: could not save edge state: %s", exc)
 
     def _rate_limited(self, now: float) -> bool:
         if self._last_preserve_at is None:
@@ -538,53 +499,32 @@ class DivergenceMonitor(_BaseSafetyMonitor):
     async def _poll_once(self, stop_event: asyncio.Event) -> None:
         self.poll_index += 1
         now = self._clock()
-        if self._started_at is None:
-            # First poll: stamp the lived-time origin (monotonic run clock).
-            self._started_at = now
+        if now - self._started_at < self._config.boot_settle_s:
+            return
+        if self._last_arms is None:
+            self._last_arms = self._load_edge_arms()
         # assess_divergence does multi-file disk I/O (decrypt+parse of run
         # records); run it off the event loop so the monitor poll never stalls
         # the cycle.
         assessment = await asyncio.to_thread(
             assess_divergence,
             state_root=resolve(self._config.state_root),
-            eval_root=resolve(self._config.eval_root),
             consolidation_rate_threshold=self._consolidation_rate_threshold,
             consolidation_magnitude_threshold=self._consolidation_magnitude_threshold,
+            adapter_output_dir=self._adapter_output_dir,
         )
-        # Warm-up / minimum-lived-experience gate (Defect B). Before the entity
-        # has accumulated the configured lived experience, NO crossing counts —
-        # an assessment at t≈0 (or in a sensory void) is treated as not-crossed
-        # and recorded as a warming-up note. Fail-closed: preservation of a
-        # genuinely individuated entity is at most DELAYED, never denied. The
-        # rising-edge latch is held cleared during warm-up so the first
-        # post-warm-up crossing still registers as a rising edge.
-        if not self._warmed_up(now):
-            self._above_threshold = False
-            if self._crosses_threshold(assessment):
-                await self._record(
-                    {
-                        "monitor": "divergence",
-                        "transition": "warming_up",
-                        "run_id": self._run_id(),
-                        "poll_index": self.poll_index,
-                        "observations": self._lived_observations(),
-                        "lived_time_s": self._lived_time_s(now),
-                        "warmup_observations": self._config.warmup_observations,
-                        "warmup_lived_time_s": self._config.warmup_lived_time_s,
-                        "signals": dict(assessment.signals or {}),
-                    },
-                    event_type="preservation.skipped",
-                )
-            return
-        above = self._crosses_threshold(assessment)
-        rising_edge = above and not self._above_threshold
-        self._above_threshold = above
-        if not rising_edge:
+        arms = _active_arms(assessment)
+        new_arms = arms - self._last_arms
+        if not new_arms:
+            if arms != self._last_arms:
+                self._save_edge_arms(arms)
+                self._last_arms = arms
             return
         if self._rate_limited(now):
             log.info(
-                "divergence monitor: crossing detected but rate-limited "
+                "divergence monitor: %s arm(s) detected but rate-limited "
                 "(last preserve %.0fs ago < %.0fs)",
+                sorted(new_arms),
                 now - (self._last_preserve_at or now),
                 self._config.min_interval_s,
             )
@@ -595,13 +535,19 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                     "run_id": self._run_id(),
                     "poll_index": self.poll_index,
                     "signals": dict(assessment.signals or {}),
+                    "new_arms": sorted(new_arms),
                 },
                 event_type="preservation.skipped",
             )
             return
-        await self._preserve(assessment, now)
+        ok = await self._preserve(assessment, now, new_arms=new_arms)
+        if ok:
+            self._save_edge_arms(arms)
+            self._last_arms = arms
 
-    async def _preserve(self, assessment, now: float) -> None:
+    async def _preserve(
+        self, assessment, now: float, *, new_arms: frozenset[str]
+    ) -> bool:
         incident_id = uuid.uuid4().hex[:16]
         label = f"individuation:{incident_id}"
         try:
@@ -616,6 +562,8 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         except Exception as exc:
             # Fail loud: a preservation that could not capture the whole
             # individual is recorded as a failure, never a silent partial.
+            # A failed preservation must be retried at the next poll, so we do
+            # not update _last_preserve_at here; only successes rate-limit.
             log.error("divergence monitor: preservation FAILED", exc_info=True)
             await self._record(
                 {
@@ -626,10 +574,12 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                     "poll_index": self.poll_index,
                     "error": scrub_paths(f"{type(exc).__name__}: {exc}"),
                     "signals": dict(assessment.signals or {}),
+                    "arms": sorted(new_arms),
                 },
                 event_type="preservation.failed",
             )
-            return
+            return False
+        # Success: rate-limit subsequent preservation attempts.
         self._last_preserve_at = now
         await self._record(
             {
@@ -643,6 +593,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                 "world_model_captured": result.world_model_captured,
                 "poll_index": self.poll_index,
                 "signals": dict(assessment.signals or {}),
+                "arms": sorted(new_arms),
             },
             event_type="preservation.preserved",
         )
@@ -652,6 +603,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             result.preservation_id,
             result.snapshot_id,
         )
+        return True
 
 
 # ---------------------------------------------------------------------------

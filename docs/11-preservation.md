@@ -25,11 +25,9 @@ The safety-net monitors live in `kaine/cycle/preservation_monitor.py`. They are 
 
 ### Divergence-triggered preservation
 
-Every `poll_interval_s` (default 5 minutes) the divergence monitor calls `kaine.lifecycle.divergence.assess_divergence`. The primary signal is the individuation permutation test, which measures how far the entity's present responses have drifted from its own birth-state responses, not from the bare pretrained organ. The signal is warmed up: it needs `min_observations` lived events and `min_lived_time_s` from `[evaluation.individuation]`, plus `warmup_observations` and `warmup_lived_time_s` from `[preservation.divergence_monitor]`. Until the floor is met the assessment is treated as not-crossed and logged as warming-up, so a fresh or sensory-void entity cannot trip a false preservation.
+`kaine.lifecycle.divergence.assess_divergence` is the single verdict shared by the live divergence monitor, the decommission CLI, the Nexus entity-care panel, and the fork merge gate. A being is `diverged` when any of these arms is true: the individuation ledger has latched it as individuated; the Hypnos consolidation-divergence signal in `state/hypnos/consolidation_divergence.json` is over the thresholds configured in `[hypnos.voice_alignment]`; Eidolon self-model drift is detected; or trained voice adapters are present. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
 
-Once warmed up, the monitor uses the `diverged` boolean returned by `assess_divergence`. That boolean is set by the individuation permutation test, Eidolon identity drift, the Hypnos consolidation-divergence signal in `state/hypnos/consolidation_divergence.json`, and by trained voice adapters being present. The `individuation_p_value_max` and `fork_divergence_min` keys only tighten a crossing when a numeric individuation signal is present. The consolidation signal crosses at `[hypnos.voice_alignment].consolidation_divergence_rate_threshold` and `consolidation_divergence_magnitude_threshold` (0.5 and 0.25 by default), the same thresholds the decommission check uses, so both reach the same verdict. The trigger is on a rising edge and is rate-limited by `min_interval_s` (default 30 minutes).
-
-When it fires, the monitor calls `ForkManager.preserve_live` in `kaine/lifecycle/manager.py`. The capture is read-only: it calls `serialize()`, `export_preservation_state()` and a weight-checkpoint flush. The disk and crypto work runs off the event loop so preservation never stalls the cycle. It never deletes state. Each preservation emits a `preservation.preserved` bus event and a durable record under `[preservation].incident_path`, stamped with the run's `run_id`.
+The live monitor, in `kaine/cycle/preservation_monitor.py`, waits `boot_settle_s` (120 s by default) after run start, then polls every `poll_interval_s` (5 minutes by default). On each poll it calls `assess_divergence`. When the verdict gains an arm that was not seen before, the monitor preserves the entity read-only and writes the current arm set to `state/preservation/divergence_edge.json`. If the same arms are still present after a restart, the monitor does not preserve again. Arms that fall back are recorded too, so crossing them again preserves again. Preservations are rate-limited by `min_interval_s` (default 30 minutes); a failed preservation is retried at the next poll. The capture is read-only: it calls `serialize()`, `export_preservation_state()` and a weight-checkpoint flush. The disk and crypto work runs off the event loop so preservation never stalls the cycle. It never deletes state. Each preservation emits a `preservation.preserved` bus event and a durable record under `[preservation].incident_path`, stamped with the run's `run_id`.
 
 ### Welfare-protective response
 
@@ -51,13 +49,38 @@ Selecting research mode (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`)
 
 1. `[preservation.divergence_monitor].enabled` is true.
 2. `[preservation.welfare_response].enabled` is true.
-3. Full logging and admissibility are active (`[evaluation]` or `[research_event_log]`).
-4. A dry `preserve_live → revive` self-check passes on this install.
-5. If `[preservation].require_encryption` is true, `[security.state_encryption]` is enabled.
+3. `[individuation].enabled` is true and the `lingua` module is loaded, so the producer can run.
+4. Full logging and admissibility are active (`[evaluation]` or `[research_event_log]`).
+5. A dry `preserve_live → revive` self-check passes on this install.
+6. If `[preservation].require_encryption` is true, `[security.state_encryption]` is enabled.
 
 The standalone pre-boot dry-run (`python -m kaine.preboot`) reports the same conflict independently, so a broken key or disabled encryptor surfaces before any entity boots.
 
 As shipped, `[preservation].require_encryption` is `true` and `[security.state_encryption].enabled` is `true`. With no key supplied, the entity refuses to boot (fail-closed). An unsupervised run must supply a real 32-byte key via `KAINE_STATE_KEY` or the OS keyring entry `kaine:state_key`, or set `[preservation].require_encryption = false` (accepting plaintext bundles at rest, which is not recommended for an unsupervised run). For more on encryption see [Security and privacy](13-security-and-privacy.md).
+
+## How individuation is measured
+
+The individuation producer lives in `kaine/cycle/individuation_producer.py` and its scheduler and runtime. It measures whether the being has changed measurably since its birth reference. The cycle refuses to boot if `[individuation].enabled` is true but the `lingua` or `eidolon` modules are not loaded.
+
+**Disclosure.** Before the producer runs, the being is told the operator-approved disclosure as a situation fact in its Eidolon self-model, or in Lingua's persona when Eidolon is not enabled: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until this fact is present.
+
+**The probe.** The producer uses a fixed battery of 12 preference prompts (the bundled battery, or `[individuation].battery_path`). Each look sends the prompts through Lingua's own chat client, conditioned on the same self-model and adapter, with empty working memory. The probe never writes the intent log and never publishes a module event, so it never enters the being's experience. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s by default), so the being's own speech always goes first.
+
+**The reference.** A birth reference (`reference_kind = "birth"`) is captured from the maturation gate's birth hook: 16 answers per prompt. If a sleep completes before the capture finishes, the reference becomes a `capture` reference. A legacy being or a revive from a bundle without individuation evidence gets a `capture` reference at first boot; every summary notes that drift before the capture date is not measured.
+
+**A look.** A look samples 8 answers per prompt. The answers are embedded with the shared semantic embedder. The statistic is a stratified energy distance, a U-statistic with a permutation p-value. The lifetime false-positive budget is `alpha_total` = 0.05, spent across looks by an alpha-spending schedule. The effect size H is reported.
+
+A look runs only when the being's conditioning digest has changed since the last scored look. The digest covers the voice adapter's sha and the first five identity values and behavioural norms. Looks are attempted at boot, `sleep_settle_s` (120 s) after each sleep, and daily (`daily_s` = 24 h), at most once per `min_look_interval_s` (6 h). Warm-up floors require at least `min_lived_time_s` (1800 s) of lived time and `min_observations` (200) lived ticks since the reference. A look is delayed by an unloaded organ, sleep, a pause, or a missing semantic embedder. In hot-swap modes other than `organ_adapter`, once an adapter exists the served adapter cannot be verified, so probes are skipped as `adapter_unverifiable`.
+
+**Failure.** Any failure ends the look as inconclusive and spends no alpha: a request failure, a resting organ, empty content, a conditioning change mid-run, an embedding or statistics error, or the `run_deadline_s` deadline.
+
+**The latch.** A significant look latches the being as individuated permanently. The ledger is written before the report.
+
+**The alert.** If 14 days (`inconclusive_alert_s`) pass with a look due but none scored, the operator is alerted once per stretch through a Nexus event `individuation.alert` and the caretaker notice "individuation assessment stalled". Nothing is preserved automatically by the alert.
+
+**Evidence.** All evidence lives at the fixed path `state/individuation/`: `reference.json`, `ledger.json`, `reports/` (all encrypted) and `birth_adapter.gguf`. Reports hold only allow-listed scalars; they never include text from the being. The tree travels with the being: preservation bundles carry it inside the encrypted tar, and a failed copy fails the preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; a bundle without evidence leads to a capture reference; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being.
+
+**Verdict and protection.** `assess_divergence` treats an unreadable ledger, reference, or report line as individuated, so the being stays protected. A fresh non-significant scored look with an unchanged conditioning digest, at most 14 days old, is the only evidence that the being is not individuated. Any other state is stale, inconclusive, or not yet measured, and the summary advises treating the being as mature if unsure.
 
 ## Unattended starts
 
@@ -137,7 +160,7 @@ The decommission CLI implements the CAL Article 4.2 and 4.3 care duties. It neve
 
 ### What the CLI does
 
-1. **Divergence assessment** — reads the Eidolon self-model and evaluation signals and produces a `diverged` or `not diverged` verdict with a summary.
+1. **Divergence assessment** — calls the shared `assess_divergence` verdict. A being is `diverged` when the individuation ledger has latched it as individuated, the Hypnos consolidation-divergence signal exceeds its thresholds, Eidolon self-model drift is detected, or trained voice adapters are present. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
 2. **Backup** — always first. Captures the Eidolon self-model, Lingua intent log, Hypnos voice adapters, the latest fork snapshot, the Phantasia world-model directory, a best-effort Qdrant vector-memory export (or `QDRANT_BACKUP_INSTRUCTIONS.txt` if Qdrant is unreachable), the divergence assessment and a manifest. If the backup fails the CLI exits `4` and nothing is deleted.
 3. **Path selection:**
    - **Non-diverged path** — presents the CAL 4.2 care obligations and asks for a typed acknowledgement (`I acknowledge the CAL welfare terms`). A mismatched final confirmation token aborts with exit `0`.

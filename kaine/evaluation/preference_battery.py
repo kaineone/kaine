@@ -1,23 +1,22 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Default preference-elicitation battery for the individuation test.
+"""Default preference-elicitation battery for the individuation producer.
 
 Each prompt is an open-ended preference question that is reliably answered
 differently by forks with distinct stable dispositions, while remaining
 benign enough to run under operator supervision without exposing sensitive
 content. The battery is intentionally small (twelve questions) so a full
-null-distribution run (100 samples × 12 prompts) finishes in a reasonable
-operator session.
+run against the birth reference finishes in a reasonable operator session.
 
-Operator extension: set ``[evaluation.individuation] battery_path`` to the
-path of a JSONL file where each line is ``{"prompt": "<text>"}`` (additional
-fields are ignored).  The file replaces the default battery entirely; an
-empty file is explicitly rejected.
+Operator extension: set ``[individuation].battery_path`` to the path of a JSONL
+file where each line is ``{"prompt": "<text>"}`` (additional fields are
+ignored). The file replaces the default battery entirely; an empty file is
+explicitly rejected.
 
-GUARDIAN NOTE — read-only instrument: this module is consumed only by
-IndividuationTest (kaine/evaluation/individuation.py).  It produces no bus
-events, no side-effects, and persists nothing.
+GUARDIAN NOTE — read-only instrument: this module is read at boot by the cycle
+entry point, which injects it into the live individuation producer. It
+produces no bus events, no side-effects, and persists nothing.
 """
 from __future__ import annotations
 
