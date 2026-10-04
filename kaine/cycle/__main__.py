@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import logging
 import os
 import signal
@@ -36,7 +37,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from kaine.boot import (
-    MetricsCollector,
     build_registry,
     construct_module,
     drive_sources_for,
@@ -1133,10 +1133,12 @@ def _start_womb_presence(
     )
 
 
-async def _revive_or_refuse(revive, registry, bus) -> int | None:
-    """Apply a revive plan to the registry, or shut the boot down on refusal.
+async def _revive_or_refuse(revive, registry) -> int | None:
+    """Apply a revive plan to the registry, or shut the modules down on refusal.
 
     Returns None when the revive landed, else the revive-refused exit code.
+    The caller is responsible for stopping the welfare producer and closing
+    the bus after this returns.
 
     Initialisation happens first because Eidolon's initialize() reloads its
     disk file. Module background loops run briefly on fresh state before the
@@ -1159,7 +1161,6 @@ async def _revive_or_refuse(revive, registry, bus) -> int | None:
                     module.name,
                     exc_info=True,
                 )
-        await bus.close()
         return REVIVE_REFUSED_EXIT
 
 
@@ -1593,9 +1594,10 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # Module background loops run briefly on fresh state before the revive lands,
     # which is safe because the cognitive cycle (and so the workspace) has not started.
     if ctx.revive is not None:
-        refused = await _revive_or_refuse(ctx.revive, ctx.registry, ctx.bus)
+        refused = await _revive_or_refuse(ctx.revive, ctx.registry)
         if refused is not None:
             await _stop_welfare_producer(ctx.welfare_producer)
+            await ctx.bus.close()
             return refused
     return None
 
@@ -1846,8 +1848,6 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
             else None
         ),
     )
-    # Make a live MetricsCollector reachable by Nexus.
-    _ = MetricsCollector(ctx.cycle, ctx.registry)
 
 
 async def _phase_supervision(ctx: BootContext) -> int | None:
@@ -2520,6 +2520,43 @@ async def _shutdown(ctx: BootContext) -> None:
     _clear_runtime_state()
 
 
+async def _release_after_failed_boot(ctx: BootContext, phase_name: str) -> None:
+    """Release what a half-built boot holds.
+
+    This deliberately does NOT shut the modules down: a module's shutdown
+    persists its state (for example Phantasia's world-model weights), and a
+    half-built boot must not write that state over a good saved copy.
+    """
+    log.error("boot failed during phase %s; releasing resources", phase_name)
+    cancelled: list[asyncio.Task] = []
+    for field in dataclasses.fields(ctx):
+        if field.name.endswith("_task"):
+            value = getattr(ctx, field.name)
+            if isinstance(value, asyncio.Task) and not value.done():
+                value.cancel()
+                cancelled.append(value)
+    caretaker_tasks = getattr(ctx, "_caretaker_tasks", None)
+    if isinstance(caretaker_tasks, set):
+        for value in list(caretaker_tasks):
+            if isinstance(value, asyncio.Task) and not value.done():
+                value.cancel()
+                cancelled.append(value)
+    try:
+        await asyncio.gather(*cancelled, return_exceptions=True)
+    except Exception:
+        log.warning("cancelling boot tasks failed", exc_info=True)
+    try:
+        if ctx.welfare_producer is not None:
+            await _stop_welfare_producer(ctx.welfare_producer)
+    except Exception:
+        log.warning("stopping welfare producer failed", exc_info=True)
+    if ctx.bus is not None:
+        try:
+            await ctx.bus.close()
+        except Exception:
+            log.warning("closing bus failed", exc_info=True)
+
+
 async def _boot_and_run(
     *,
     supervision_mode: str = "operator",
@@ -2534,7 +2571,11 @@ async def _boot_and_run(
         kaine_config=kaine_config,
     )
     for phase in _BOOT_PHASES:
-        code = await phase(ctx)
+        try:
+            code = await phase(ctx)
+        except BaseException:
+            await _release_after_failed_boot(ctx, phase.__name__)
+            raise
         if code is not None:
             return code
     try:

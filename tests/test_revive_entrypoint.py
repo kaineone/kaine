@@ -442,18 +442,10 @@ async def test_revive_or_refuse_exits_7_on_missing_captured_module(
 
     eid2.shutdown = recorded_shutdown
 
-    class FakeBus:
-        def __init__(self):
-            self.closed = False
-
-        async def close(self):
-            self.closed = True
-
-    fake_bus = FakeBus()
-
-    ok = await _revive_or_refuse(revive, reg2, fake_bus)
+    ok = await _revive_or_refuse(revive, reg2)
     assert ok == 7
-    assert fake_bus.closed
+    # The modules shut down here; the caller stops the welfare producer and
+    # then closes the bus, so nothing that uses the bus outlives it.
     assert shutdowns == ["eid2"]
 
 
@@ -475,11 +467,7 @@ async def test_revive_or_refuse_none_when_modules_match(tmp_path, eidolon, bus, 
     plan = prepare_revive(bundle)
     revive = ReviveSession(plan)
 
-    class FakeBus:
-        async def close(self):
-            pass
-
-    ok = await _revive_or_refuse(revive, reg2, FakeBus())
+    ok = await _revive_or_refuse(revive, reg2)
     assert ok is None
     assert revive.landed
     await eid2.shutdown()

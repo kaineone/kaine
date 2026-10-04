@@ -181,12 +181,12 @@ def _empty_snapshot(tick: int = 0) -> WorkspaceSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# WelfareProtectiveMonitor — notify action must not skip post-crossing entries
+# WelfareProtectiveMonitor — every poll feeds the whole batch
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_welfare_notify_cursor_stops_at_crossing_then_catches_up(
+async def test_welfare_notify_cursor_advances_to_end_after_one_poll(
     bus, tmp_path
 ):
     reg, eid = await _entity(bus, tmp_path)
@@ -200,22 +200,13 @@ async def test_welfare_notify_cursor_stops_at_crossing_then_catches_up(
     )
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=_make_clock(0.0, 0.1))
 
-    # Push enough above-threshold reports so the sustained-distress crossing
-    # fires partway through the first poll batch, followed by more reports.
+    # Push enough above-threshold reports for a sustained-distress crossing.
     for _ in range(20):
         await _push_soma_report(bus, 0.9)
 
     stream_ids = await bus.client.xrange("soma.out")
     last_id = _str_id(stream_ids[-1][0])
 
-    stop = asyncio.Event()
-    await mon._poll_once(stop)
-    # The break stopped processing at the crossing entry, so the cursor must
-    # not jump to the last scanned id.
-    crossing_id = _str_id(mon._cursor)
-    assert crossing_id != last_id
-
-    # Every report after the crossing must reach the distress tracker.
     observed: list[float] = []
     original_observe = mon._distress.observe
 
@@ -224,19 +215,24 @@ async def test_welfare_notify_cursor_stops_at_crossing_then_catches_up(
         return original_observe(magnitude, now)
 
     mon._distress.observe = _counting_observe  # type: ignore[method-assign]
-    for _ in range(10):
-        if _str_id(mon._cursor) == last_id:
-            break
-        await mon._poll_once(stop)
 
+    async def _noop_respond(_reason: str) -> None:
+        pass
+
+    mon._respond = _noop_respond  # type: ignore[method-assign]
+
+    stop = asyncio.Event()
+    await mon._poll_once(stop)
+
+    # The poll now feeds every decoded entry, so the cursor jumps straight to
+    # the end of the batch and the tracker saw every report.
     assert _str_id(mon._cursor) == last_id
-    first_cross_index = [_str_id(e[0]) for e in stream_ids].index(crossing_id)
-    assert len(observed) == len(stream_ids) - first_cross_index - 1
+    assert len(observed) == len(stream_ids)
     await eid.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_welfare_gray_zone_cursor_stops_at_crossing_then_catches_up(
+async def test_welfare_gray_zone_cursor_advances_to_end_after_one_drain(
     bus, tmp_path
 ):
     reg, eid = await _entity(bus, tmp_path)
@@ -252,37 +248,30 @@ async def test_welfare_gray_zone_cursor_stops_at_crossing_then_catches_up(
     )
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=_make_clock(0.0, 1.0))
 
-    # Repeat threshold is 3; push enough events so the crossing fires partway
-    # through the batch, followed by more events.
     for _ in range(10):
         await _push_gray_zone(bus, "replay_overload")
 
     stream_ids = await bus.client.xrange("welfare.out")
     last_id = _str_id(stream_ids[-1][0])
 
-    reason = await mon._drain_gray_zone()
-    assert reason == "repeated_gray_zone"
-    crossing_id = _str_id(mon._welfare_cursor)
-    assert crossing_id != last_id
-
-    # The counter fires again every few events, so each drain stops at its
-    # next crossing; repeated drains still reach the end of the stream.
     recorded: list[float] = []
+    recorded_returns: list[bool] = []
     original_record = mon._repeat.record
 
     def _counting_record(now: float) -> bool:
+        ret = original_record(now)
         recorded.append(now)
-        return original_record(now)
+        recorded_returns.append(ret)
+        return ret
 
     mon._repeat.record = _counting_record  # type: ignore[method-assign]
-    for _ in range(10):
-        if _str_id(mon._welfare_cursor) == last_id:
-            break
-        await mon._drain_gray_zone()
+
+    reasons = await mon._drain_gray_zone()
+
     assert _str_id(mon._welfare_cursor) == last_id
-    # Every event after the first crossing reached the repeat counter.
-    first_cross_index = [_str_id(e[0]) for e in stream_ids].index(crossing_id)
-    assert len(recorded) == len(stream_ids) - first_cross_index - 1
+    assert len(recorded) == len(stream_ids)
+    assert all(r == "repeated_gray_zone" for r in reasons)
+    assert len(reasons) == recorded_returns.count(True)
     await eid.shutdown()
 
 
