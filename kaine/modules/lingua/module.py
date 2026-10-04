@@ -68,6 +68,7 @@ class Lingua(BaseModule):
     """
 
     name: ClassVar[str] = "lingua"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom", "social_drive"})
 
     def holds_external_resources(self) -> bool:
         return True

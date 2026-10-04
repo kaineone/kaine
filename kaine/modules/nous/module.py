@@ -65,6 +65,7 @@ _ACTION_TO_PROPOSAL_KIND: dict[str, str] = {
 
 class Nous(BaseModule):
     name: ClassVar[str] = "nous"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom"})
 
     def holds_external_resources(self) -> bool:
         return True

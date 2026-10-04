@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 
 class Audition(BaseModule):
     name: ClassVar[str] = "audition"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "social_drive"})
 
     def holds_external_resources(self) -> bool:
         return True

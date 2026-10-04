@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Protocol, runtime_checkable
+from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
 from kaine.bus.schema import Event
 
@@ -74,31 +74,51 @@ class StaticThymosModulator:
 # ENGINEERING EXTENSION (paper §3.4.3). The paper grounds goals as "preferred
 # interoceptive states" entering appraisal but does NOT fully specify the goal
 # function that weights salience. Grounding it in the four Thymos drives that
-# the architecture already accumulates and broadcasts, this table maps each
-# drive to the event SOURCES whose arrival tends to relieve it — the operational
-# stand-in for "an event relevant to the currently-dominant drive". The mapping
-# is a defensible first choice, not a claim from the paper; keep it labeled as
-# such and do not overstate it. Sources are canonical module names.
-_DRIVE_RELEVANT_SOURCES: dict[str, frozenset[str]] = {
-    # Curiosity is relieved by novel exteroceptive / perceptual input.
-    "curiosity": frozenset({"perception", "topos", "audition", "mundus", "mnemos"}),
-    # Boredom is relieved by any stimulating activity, incl. internal cognition.
-    "boredom": frozenset(
-        {"perception", "topos", "audition", "mundus", "mnemos", "nous", "phantasia", "lingua"}
-    ),
-    # Social drive is relieved by social interaction.
-    "social_drive": frozenset({"audition", "empatheia", "vox", "lingua", "chronos"}),
-    # Restlessness is relieved by motor / effector action.
-    "restlessness": frozenset({"praxis", "volition", "vox", "mundus"}),
-}
+# the architecture already accumulates and broadcasts, each registered module
+# declares the drives its events tend to relieve via ``BaseModule.relieves_drives``.
+# This function inverts those per-source tags into the per-drive source table
+# used by the scorer — the operational stand-in for "an event relevant to the
+# currently-dominant drive". The mapping is a defensible first choice, not a
+# claim from the paper; keep it labeled as such and do not overstate it.
+# Sources are canonical module names; workspace scaffolding sources (e.g.
+# volition) are added here because they are not registry modules.
+
+DRIVES: frozenset[str] = frozenset({"curiosity", "boredom", "social_drive", "restlessness"})
+
+# Event sources that are workspace scaffolding, not registry modules. Volition's
+# action events relieve restlessness.
+SCAFFOLDING_DRIVE_SOURCES: dict[str, frozenset[str]] = {"volition": frozenset({"restlessness"})}
+
+
+def build_drive_sources(tags_by_source: Mapping[str, Iterable[str]]) -> dict[str, frozenset[str]]:
+    """Invert per-source drive tags into the per-drive source table.
+
+    ``tags_by_source`` maps an event source (a module name) to the drives its
+    events tend to relieve; the workspace scaffolding sources are added. Raises
+    ValueError for a tag that is not a Thymos drive.
+    """
+    table: dict[str, set[str]] = {drive: set() for drive in DRIVES}
+    for source, tags in tags_by_source.items():
+        for tag in tags:
+            if tag not in DRIVES:
+                raise ValueError(f"unknown drive tag {tag!r} in source {source!r}")
+            table[tag].add(source)
+    for source, tags in SCAFFOLDING_DRIVE_SOURCES.items():
+        for tag in tags:
+            table[tag].add(source)
+    return {drive: frozenset(sources) for drive, sources in table.items()}
 
 
 class DriveRelevanceGoalScorer:
     """Goal factor: weight an event by its relevance to the dominant drive.
 
-    ENGINEERING EXTENSION (paper §3.4.3) — see ``_DRIVE_RELEVANT_SOURCES``. The
-    entity's current drive levels are injected via ``drive_getter`` (dependency
+    ENGINEERING EXTENSION (paper §3.4.3) — see ``build_drive_sources``. The
+    entity's current drive levels are injected via ``drive_getter`` and the
+    drive-to-source table is injected via ``drive_sources`` (dependency
     injection, so this workspace-layer strategy never imports ``kaine.modules``).
+    The mapping is built at cycle assembly from the registered modules'
+    ``relieves_drives`` declarations.
+
     Each score is the last-known dominant drive attenuating events that do NOT
     serve it, leaving serving events (and the neutral no-drive case) at 1.0:
 
@@ -117,11 +137,13 @@ class DriveRelevanceGoalScorer:
         self,
         drive_getter: Callable[[], Mapping[str, float]],
         *,
+        drive_sources: Mapping[str, frozenset[str]],
         attenuation: float = 0.5,
     ) -> None:
         if not 0.0 <= attenuation <= 1.0:
             raise ValueError("attenuation must be in [0, 1]")
         self._drive_getter = drive_getter
+        self._drive_sources = dict(drive_sources)
         self._attenuation = float(attenuation)
 
     async def relevance(self, event: Event) -> float:
@@ -135,6 +157,6 @@ class DriveRelevanceGoalScorer:
         )
         if dominant_value <= 0.0:
             return 1.0
-        serving = _DRIVE_RELEVANT_SOURCES.get(dominant_name, frozenset())
+        serving = self._drive_sources.get(dominant_name, frozenset())
         relevance = 1.0 if event.source in serving else 0.0
         return _clamp01(1.0 - dominant_value * (1.0 - relevance) * self._attenuation)
