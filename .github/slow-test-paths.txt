@@ -1,0 +1,10 @@
+# Paths whose change makes a pull request run the `slow` tests too.
+# One extended regular expression per line, matched against repo-relative
+# paths; blank lines and lines starting with # are ignored.
+# tests/test_slow_lane.py checks that every slow-marked test file is listed.
+^tests/test_active_inference_benchmark\.py$
+^kaine/evaluation/benchmarks/active_inference/
+^kaine/modules/nous/
+^pyproject\.toml$
+^\.github/slow-test-paths\.txt$
+^\.github/workflows/tests\.yml$
