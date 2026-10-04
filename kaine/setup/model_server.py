@@ -37,6 +37,11 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from kaine.defaults import (
+    DEFAULT_ORGAN_PORT,
+    lingua_section_api_key,
+    lingua_section_chat_url,
+)
 from kaine.setup.organ import ORGAN_GGUF_REPO
 from kaine.shared_services import is_shared
 from kaine.storage import install_data_root, resolve
@@ -108,7 +113,7 @@ def locate_binary(backend: str, override: Optional[str] = None) -> Optional[Path
 
 def _port_from_chat_url(chat_url: str) -> int:
     parsed = urlparse(chat_url if "//" in chat_url else "//" + chat_url)
-    return int(parsed.port or 11434)
+    return int(parsed.port or DEFAULT_ORGAN_PORT)
 
 
 def build_launch_cmd(
@@ -331,9 +336,9 @@ def _resolve_launch(
     from kaine.setup.organ import detect_organ_backend
 
     lingua = config.get("lingua") or {}
-    chat_url = str(lingua.get("chat_url", "http://127.0.0.1:11434/v1"))
+    chat_url = lingua_section_chat_url(lingua)
     alias = str(lingua.get("model_id", ORGAN_GGUF_REPO))
-    api_key = lingua.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    api_key = lingua_section_api_key(lingua)
 
     backend = detect_organ_backend().backend
     binary = locate_binary(backend, override=override_bin)
@@ -520,9 +525,9 @@ def cmd_status(
     emit = out if out is not None else sys.stdout.write
 
     lingua = cfg.get("lingua") or {}
-    chat_url = str(lingua.get("chat_url", "http://127.0.0.1:11434/v1"))
+    chat_url = lingua_section_chat_url(lingua)
     alias = str(lingua.get("model_id", ORGAN_GGUF_REPO))
-    api_key = lingua.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    api_key = lingua_section_api_key(lingua)
 
     from kaine.setup.organ import verify_served_alias
 
