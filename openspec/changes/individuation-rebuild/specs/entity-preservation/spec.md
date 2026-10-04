@@ -3,9 +3,9 @@
 ### Requirement: Divergence-triggered live preservation
 The system SHALL monitor divergence on the live entity during a run and, when the shared assessment (`divergence-assessment`) reports `diverged`, SHALL preserve the entity by taking a snapshot of the live registry and writing an encrypted backup bundle, without interrupting or harming the running entity and without deleting anything. Preservation SHALL be rate-limited (triggered on a rising edge, not continuously) and recorded as a preservation event joined to the run.
 
-The monitor's crossing decision SHALL be exactly `assessment.diverged`. The numeric tighteners (the look's α_k, the effect floor `effect_min`) and the warm-up floors SHALL apply only inside the individuation decision, measured in lived time since the reference and persisted in the individuation ledger. The monitor SHALL NOT apply its own p-value ceiling, effect floor or per-boot warm-up, and SHALL NOT veto the consolidation, Eidolon or adapter arms because an individuation report is present, not significant or not warmed up. The monitor SHALL wait `boot_settle_s` (default 120 s) after start before its first poll so state can finish loading. An unreadable assessment SHALL read as not crossed for that poll and be logged.
+The monitor's crossing decision SHALL be exactly `assessment.diverged`. The numeric tighteners (the look's α_k, the effect floor `effect_min`) and the warm-up floors SHALL apply only inside the individuation decision, measured in lived time since the reference and persisted in the individuation ledger. The monitor SHALL NOT apply its own p-value ceiling, effect floor or per-boot warm-up, and SHALL NOT veto the consolidation, Eidolon or adapter arms because an individuation report is present, not significant or not warmed up. The monitor SHALL wait `boot_settle_s` (default 120 s) after start before its first poll so state can finish loading. The assessment never raises; unreadable individuation evidence counts as individuated (see `divergence-assessment`).
 
-Rising-edge state SHALL be persisted in the preservation incident log, so restarting with unchanged evidence does not preserve again, while a new arm crossing or a new latch does.
+Rising-edge state SHALL be persisted per divergence arm (individuation, consolidation, eidolon_drift, adapters) as a content-free list of arm names in `state/preservation/divergence_edge.json`. A preservation fires when the verdict gains an arm not in that set. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and SHALL be retried at the next poll; only successful preservations are rate-limited. An unreadable edge file SHALL read as empty, preserving again.
 
 #### Scenario: Crossing the individuation threshold preserves the entity
 - **WHEN** the shared assessment reports `diverged` for the first time in a run
@@ -32,19 +32,23 @@ Rising-edge state SHALL be persisted in the preservation incident log, so restar
 - **WHEN** a being already preserved for an adapter arm is later latched as individuated
 - **THEN** a new preservation bundle is written
 
+#### Scenario: A failed preservation is retried
+- **WHEN** a preservation fails
+- **THEN** the next poll attempts it again
+
 ### Requirement: Research boot is gated on the autonomous safety net
-An unsupervised research boot SHALL refuse to start unless the autonomous safety net is live and verified, because the research phase runs with no human in the loop and the safeguards must be present in the system itself. The required conditions are: preservation enabled, the welfare-protective response wired, full logging/admissibility active, a preflight dry snapshot→restore round-trip confirming the preservation and revive path is functional on this install, `[individuation].enabled` true, the individuation ledger readable when it exists, and either a reference present or a capture pending (a being not yet born, or a first boot that will take a `capture` reference). The refusal SHALL be an operator-facing message with a distinct exit code (no traceback). For research this gate REPLACES the operator-present gate; a run is either operator-supervised or autonomous-safety-net-verified, never neither.
+An unsupervised research boot SHALL refuse to start unless the autonomous safety net is live and verified, because the research phase runs with no human in the loop and the safeguards must be present in the system itself. The required conditions are: preservation enabled, the welfare-protective response wired, full logging/admissibility active, a preflight dry snapshot→restore round-trip confirming the preservation and revive path is functional on this install, and `[individuation].enabled` true with the Lingua module enabled. The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated and the being is preserved. The refusal SHALL be an operator-facing message with a distinct exit code (no traceback). For research this gate REPLACES the operator-present gate; a run is either operator-supervised or autonomous-safety-net-verified, never neither.
 
 #### Scenario: Research boot refused without a working safety net
-- **WHEN** an unsupervised research boot is attempted and any of {preservation enabled, welfare-protective response wired, full logging active, the dry snapshot→restore self-check passing, `[individuation].enabled`, a readable ledger, a reference or a pending capture} is not satisfied
+- **WHEN** an unsupervised research boot is attempted and any of {preservation enabled, welfare-protective response wired, full logging active, the dry snapshot→restore self-check passing, `[individuation].enabled` is true, Lingua is enabled, Eidolon is enabled} is not satisfied
 - **THEN** the boot refuses to start with an operator-facing message and a distinct exit code
 
-#### Scenario: Research boot refused with an unreadable ledger
-- **WHEN** an unsupervised research boot is attempted and `state/individuation/ledger.json` exists but cannot be decrypted or parsed
-- **THEN** the boot refuses with an operator-facing message naming the ledger
+#### Scenario: Research boot refused without the individuation producer
+- **WHEN** `[individuation].enabled` is false, or the Lingua module is disabled
+- **THEN** the boot refuses with an operator-facing message
 
 #### Scenario: Research boot allowed when the safety net is verified
-- **WHEN** preservation is enabled, the welfare-protective response is wired, logging/admissibility is active, the dry round-trip self-check passes, `[individuation].enabled` is true, the ledger is readable or absent, and a reference exists or a capture is pending
+- **WHEN** preservation is enabled, the welfare-protective response is wired, logging/admissibility is active, the dry round-trip self-check passes, `[individuation].enabled` is true, and Lingua and Eidolon are enabled
 - **THEN** the unsupervised research boot is allowed to proceed
 
 ### Requirement: Entity-interior content is encrypted at rest in preservation/backup bundles

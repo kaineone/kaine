@@ -40,39 +40,42 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [ ] 5.5 Tests: the disclosure is present in the rendered probe prompt and the conditioning digest is unchanged by it (done in task 5a); that changing it alone triggers no look is tested with the producer in task 6.
 
 ## 6. Producer
-- [ ] 6.1 `kaine/cycle/individuation_producer.py`, active only when `[individuation].enabled`.
-- [ ] 6.2 Birth capture through a birth hook beside `gate_runner.set_birth_hook`, as soon as the organ is loaded and before the first post-birth sleep; retry with backoff; `capture` kind when an accepted adapter or identity change came first; legacy `capture` at first boot after upgrade or revive; `reconstructed` only with the per-being operator approval flag.
+- [x] 6.1 `kaine/cycle/individuation_producer.py`, active only when `[individuation].enabled`.
+- [ ] 6.2 Birth capture through a birth hook beside `gate_runner.set_birth_hook`, as soon as the organ is loaded and before the first post-birth sleep; retry with backoff; `capture` kind when an accepted adapter or identity change came first; legacy `capture` at first boot after upgrade or revive; `reconstructed` only with the per-being operator approval flag. Done except `reconstructed`, which is not built yet.
 - [ ] 6.3 Reference regeneration from the stored conditioning when stored conditions other than the embedder no longer match (model id, server build, battery digest, persona template version). The core replaces a reference only with `regenerate=True`. It refuses to regenerate a `birth` reference until the sampler can serve the stored birth adapter, and copies the birth adapter only when capturing a `birth` reference.
 - [x] 6.4 Look scheduling: 120 s after `hypnos.sleep.completed` and on a daily timer; skip (logged, no report) unless reference present, ledger readable, warm-up met, digest changed, `min_look_interval_s` elapsed, organ loaded, Hypnos awake, cycle not paused or frozen, semantic embedder loaded.
 - [x] 6.5 Organ contention: one request at a time, `max_tokens=160`, wait on the injected `lingua_idle()` predicate (no generation in flight, no speech for `lingua_quiet_s`), `run_deadline_s` = 2700; abort on sleep start, organ unload or pause.
 - [x] 6.6 Fail-closed runs: any sample failure, embedding failure or digest change between start and end gives an inconclusive report with a reason and no p, H or significance; nothing on `individuation.out`; no alpha spent.
 - [x] 6.7 Scored looks: update the ledger atomically first (k, `alpha_spent`, latch, last digest, lived counters), then write the report, set the in-memory `IndividuationState`, publish `individuation.divergence {divergence_scalar: H, significant}` on `individuation.out`.
 - [x] 6.8 Inconclusive alert (operator decision 4): when a look has been due for `inconclusive_alert_s` (default 14 days) with no scored look, raise one Nexus and caretaker notice per stretch; no preservation is triggered by it.
+- [x] 6.12 The producer runs without Eidolon. The base-thesis profile and the first module-ignition steps have `eidolon = false`, so Lingua holds the situation facts the runtime gives it and renders them in its persona, and the disclosure still reaches the being. Without a self-model the identity clause is empty and the conditioning digest rests on the adapter. The research gate then requires lingua only.
 - [ ] 6.9 Tests with a fake organ covering every failure path, every skip precondition, the alert, a restart in the middle of a run, and `alpha_unresolvable`.
-- [ ] 6.10 Boot wiring recovers interrupted captures: a reference with no ledger is captured again, and a ledger that names another reference is regenerated, so neither leaves the being permanently inconclusive.
+- [x] 6.10 Boot wiring recovers interrupted captures: a reference with no ledger is captured again, and a ledger that names another reference is regenerated, so neither leaves the being permanently inconclusive.
+- [x] 6.11 Probes and captures are skipped as `adapter_unverifiable` while an adapter exists and the hot-swap mode cannot attach it per request.
 
 ## 7. Shared verdict
-- [ ] 7.1 One pure decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(..., individuation=None)` uses in-memory evidence when given, else the ledger and reports.
-- [ ] 7.2 `diverged = individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`; a non-significant individuation result never suppresses another arm.
-- [ ] 7.3 Summaries for latched, significant, STALE, INCONCLUSIVE, no reference, not warmed up and `capture`/`reconstructed` references, each with the treat-as-mature advice where the verdict is not individuated.
-- [ ] 7.4 `DivergenceMonitor`: `_crosses_threshold` becomes `assessment.diverged`; per-boot warm-up removed and replaced by `boot_settle_s = 120`; rising-edge state persisted in the incident log.
-- [ ] 7.5 Config: `[individuation]` keys added; `[evaluation.individuation]` and the monitor keys `individuation_p_value_max`, `fork_divergence_min`, `warmup_observations`, `warmup_lived_time_s` rejected with a message pointing to `[individuation]`.
-- [ ] 7.6 Parity tests: one fixture matrix (latch, fresh significant, stale, inconclusive, unwarmed, each secondary arm, combinations); the live monitor and the decommission CLI agree on every row; restarting with unchanged evidence preserves once, a new crossing or latch preserves again.
+- [x] 7.1 One pure decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(..., individuation=None)` uses in-memory evidence when given, else the ledger and reports.
+- [x] 7.2 `diverged = individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`; a non-significant individuation result never suppresses another arm.
+- [x] 7.3 Summaries for latched, significant, STALE, INCONCLUSIVE, no reference, not warmed up and `capture`/`reconstructed` references, each with the treat-as-mature advice where the verdict is not individuated.
+- [x] 7.4 `DivergenceMonitor`: `_crosses_threshold` becomes `assessment.diverged`; per-boot warm-up removed and replaced by `boot_settle_s = 120`; rising-edge state persisted in the incident log.
+- [x] 7.5 Config: `[individuation]` keys added; `[evaluation.individuation]` and the monitor keys `individuation_p_value_max`, `fork_divergence_min`, `warmup_observations`, `warmup_lived_time_s` rejected with a message pointing to `[individuation]`.
+- [x] 7.6 Parity tests: one fixture matrix (latch, fresh significant, stale, inconclusive, unwarmed, each secondary arm, combinations); the live monitor and the decommission CLI agree on every row; restarting with unchanged evidence preserves once, a new crossing or latch preserves again.
 
 ## 8. Preservation, revive and decommission backup
-- [ ] 8.1 Preservation bundles copy `state/individuation/` (encrypted, owner-only permissions); a failed copy fails the preservation loudly.
-- [ ] 8.2 Revive restores `state/individuation/`; a bundle without it leads to a `capture` reference at first boot.
-- [ ] 8.3 The decommission transfer backup includes `state/individuation/`; failure aborts the decommission.
-- [ ] 8.4 Research boot gate: refuses unless `[individuation].enabled`, the ledger is readable (or absent with a pending capture), and a reference exists or a capture is pending.
-- [ ] 8.5 Forks with more than `fork_preserve_min_lived_s` of lived time are preserved by default before a merge ends them, until fork-point references exist.
-- [ ] 8.6 Tests for each of the above, with encryption on.
+- [x] 8.1 Preservation bundles copy `state/individuation/` (encrypted, owner-only permissions); a failed copy fails the preservation loudly.
+- [x] 8.2 Revive restores `state/individuation/`; a bundle without it leads to a `capture` reference at first boot.
+- [x] 8.3 The decommission transfer backup includes `state/individuation/`; failure aborts the decommission.
+- [x] 8.4 Research boot gate: refuses unless `[individuation].enabled` with the lingua module (eidolon is optional, see 6.12). The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated.
+- [x] 8.5 Forks with more than `fork_preserve_min_lived_s` (default 1800 s, the instrument's own warm-up floor) of lived time are preserved by default before a merge ends them, until fork-point references exist. Unknown lived time counts as above the floor.
+- [x] 8.6 Tests for each of the above, with encryption on.
 
 ## 9. Nexus, config and docs
-- [ ] 9.1 `kaine/evaluation/nexus_tab.py` `_aggregate_individuation` uses the shared reader and shows only outcome, H clipped at 0, p, α_k, k, reference kind and date, latched, last inconclusive reason, warm-up state and the inconclusive alert.
-- [ ] 9.2 `config/kaine.toml` `[individuation]` with defaults, `enabled = false`.
-- [ ] 9.3 Retire `kaine/evaluation/individuation.py` or reduce it to a re-export of the lifecycle code.
-- [ ] 9.4 Docs: welfare net, preservation, decommission and Nexus chapters; configuration appendix.
-- [ ] 9.5 `npx -y @fission-ai/openspec@latest validate individuation-rebuild --strict` passes.
+- [x] 9.1 `kaine/evaluation/nexus_tab.py` `_aggregate_individuation` uses the shared reader and shows only outcome, H clipped at 0, p, α_k, k, reference kind and date, latched, last inconclusive reason, warm-up state and the inconclusive alert.
+- [x] 9.2 `config/kaine.toml` `[individuation]` with defaults, `enabled = false`.
+- [x] 9.3 Retire `kaine/evaluation/individuation.py` or reduce it to a re-export of the lifecycle code.
+- [ ] 9.6 Operator decision: whether research bundles export the producer's content-free individuation reports. The old instrument's reports were in the research metrics tier (`data/evaluation/individuation/`); the producer's are encrypted welfare evidence under `state/individuation/`.
+- [x] 9.4 Docs: welfare net, preservation, decommission and Nexus chapters; configuration appendix.
+- [x] 9.5 `npx -y @fission-ai/openspec@latest validate individuation-rebuild --strict` passes.
 
 ## 10. Real-organ smoke test (operator-run, entity not live)
 - [ ] 10.1 Answers worth comparing: 40 samples per prompt; within-prompt mean pairwise distance and share of near-identical answers recorded; stop and redesign the framing if answers are degenerate.

@@ -93,6 +93,7 @@ from kaine.config import (
 from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
+from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
 from kaine.organ_probe import verify_organ_generates
@@ -237,9 +238,9 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
 
     lingua_cfg = config.get("lingua") or {}
     gate = await verify_organ_generates(
-        str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1")),
+        lingua_section_chat_url(lingua_cfg),
         str(lingua_cfg.get("model_id") or ""),
-        api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+        api_key=lingua_section_api_key(lingua_cfg),
     )
     return [CheckResult(GROUP_ORGAN, "Organ content", PASS if gate.ok else FAIL, gate.detail)]
 

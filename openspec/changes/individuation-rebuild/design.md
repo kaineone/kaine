@@ -119,6 +119,9 @@ The probe does not measure individuation carried only by memories or by workspac
 **Where it goes**
 
 - Everything sits under `state/individuation/`: reference, ledger (2.7) and reports (section 4).
+- The evidence lives at the fixed path `state/individuation/`, like every other piece of a being's state; it is not configurable, so no travel path can miss it.
+- Revive extracts the bundle's evidence into a staging directory first and swaps it in only when that succeeds. An existing tree is moved aside under a unique name and kept, never deleted, and it is moved back if the swap fails. A bundle without evidence moves any existing tree aside, so the revived being never inherits another being's evidence, and takes a capture reference.
+- A decommission backup whose evidence copy fails, or that leaves plaintext behind after encryption, is a failed backup, so the being's state is never deleted. A preservation that leaves plaintext behind fails loudly.
 - The whole directory is added to preservation bundles (`kaine/lifecycle/preservation.py` already copies `stage.json` the same way, `:306-312`), to revive, and to the decommission transfer backup.
 
 **Cost**
@@ -256,6 +259,7 @@ Statistically the floors are no longer needed: the test is valid at any time, an
    - Hypnos is not asleep (no `hypnos.sleep.started` without a matching completion)
    - the cycle is not paused or frozen (`kaine/cycle/control_state`), because a paused being is not probed
    - a semantic embedder is loaded
+   - the served adapter can be verified. Only the `organ_adapter` hot-swap mode attaches the adapter to each request and reports it on the response. In the other modes a promoted adapter sits on disk while the organ may still serve older weights, so once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. Measuring then would record the new adapter's digest against the old weights. The being stays protected meanwhile, because preservation already counts a present adapter as divergence, and the long-inconclusive alert tells the operator.
 
 **Organ contention**
 
@@ -327,7 +331,11 @@ A non-significant individuation report does not suppress the secondary arms. Rea
 - A non-significant small-sample test is absence of evidence, not evidence of absence.
 - Preservation errors are asymmetric: a missed preservation can be irreversible, an extra one cannot.
 
-Rising-edge state is persisted in the incident log. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does.
+Rising-edge state is persisted per divergence arm (individuation, consolidation, eidolon_drift, adapters) in `state/preservation/divergence_edge.json`, a content-free list of arm names. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and is retried after `min_interval_s`. An unreadable edge file reads as empty, which errs toward preserving again.
+
+The verdict computes the freshness digest from the configured adapter directory, the same one the producer uses, and from `self_model.json` on disk. Freshness only decides between "not individuated" and "stale", which the live monitor treats alike: neither preserves. The decommission CLI runs on a stopped being whose self-model was saved at shutdown. So the short window in which the on-disk self-model lags the snapshot the producer probed cannot cause a missed preservation. A corrupt report line makes the individuation state unreadable, which counts as individuated.
+
+Both consumers read the ledger and reports from disk through the same function, rather than the live monitor using in-memory evidence: one code path guarantees parity, and the monitor's five-minute poll makes the reads cheap. Unreadable individuation state counts as individuated, so that the being stays protected.
 
 **Nexus**
 

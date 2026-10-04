@@ -21,6 +21,7 @@ from kaine.cycle.unattended_gate import (
 
 def _all_pass_net() -> object:
     return evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=True,
@@ -119,6 +120,7 @@ def test_unattended_gate_without_built_fails_6_7_8():
 
 def test_unattended_gate_with_logging_failure():
     net = evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=False,

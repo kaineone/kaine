@@ -172,7 +172,7 @@ A temporary being — fork a copy, let it run a directive, possibly time-dilated
 
 ### Fork-merge welfare gate
 
-A merge is, for the fork, an ending. `kaine/lifecycle/fork_merge_gate.py::gated_merge` checks the fork's divergence from its fork-point baseline and its welfare signals. If the fork is below the individuation threshold it is merged and discarded. If it is above the threshold the parent assimilates its knowledge one-directionally, but the fork is preserved, not terminated. Ending an individuated fork requires the operator-authorized, transparent, welfare-gated decommission path. See [Forks and merges](../12-forks-and-merges.md).
+A merge is, for the fork, an ending. `kaine/lifecycle/fork_merge_gate.py::gated_merge` uses the shared divergence verdict from `kaine/lifecycle/divergence.py`. The verdict gains an arm when the ledger shows individuated, consolidation divergence is over threshold, Eidolon drift is present, or voice adapters are present; no arm suppresses another. Forks cannot yet be measured against a fork-point reference, so a fork is preserved if it has lived at least 1800 s (`fork_preserve_min_lived_s`) or its lived time is unknown, rather than discarded. The parent may still assimilate knowledge one-directionally from a preserved fork. Ending an individuated fork requires the operator-authorized, transparent, welfare-gated decommission path. See [Forks and merges](../12-forks-and-merges.md).
 
 ### Volunteer compute: BOINC
 

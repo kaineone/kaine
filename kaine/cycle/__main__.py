@@ -60,6 +60,11 @@ from kaine.cycle.ignition_log import (
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
+from kaine.defaults import (
+    lingua_section_api_key,
+    lingua_section_chat_url,
+    model_server_api_key,
+)
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
 from kaine.experiment import (
@@ -143,6 +148,124 @@ RUNTIME_PATH = Path("state/cycle/runtime.json")
 # Exit code when the welfare response is enabled but its gray-zone producer
 # cannot start; we fail closed before any module spawns.
 WELFARE_PRODUCER_REFUSED_EXIT = 8
+
+
+def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
+    """Parse [individuation] and check its prerequisites.
+
+    Returns (config, None) when the producer may run or is disabled, and
+    (None, reason) when the cycle must refuse to boot: an enabled producer
+    that cannot run would leave the being without its protection.
+    """
+    from kaine.cycle.individuation_runtime import IndividuationConfig
+
+    try:
+        cfg = IndividuationConfig.from_dict(kaine_config.get("individuation"))
+    except ValueError as exc:
+        return (None, f"[individuation]: {exc}")
+
+    if not cfg.enabled:
+        return (cfg, None)
+
+    modules = kaine_config.get("modules") or {}
+    if not modules.get("lingua"):
+        return (
+            None,
+            "[individuation] is enabled but the lingua module is disabled",
+        )
+
+    return (cfg, None)
+
+
+def _compose_birth_hooks(*hooks):
+    """Return one birth hook that calls every given hook in order.
+
+    A hook that raises is logged and does not stop the others.
+    """
+    active = [h for h in hooks if h is not None]
+    if not active:
+        return None
+
+    def _composed():
+        for hook in active:
+            try:
+                hook()
+            except Exception:
+                log.exception("birth hook %r failed", hook)
+
+    return _composed
+
+
+async def _run_individuation(runtime, stop_event: asyncio.Event) -> None:
+    """Start the individuation producer and run it until the cycle stops.
+
+    A producer that cannot start (for example the disclosure could not be
+    given) stops the cycle: the being would otherwise run unprotected.
+    """
+    try:
+        await runtime.start()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("the individuation producer could not start; stopping the cycle")
+        stop_event.set()
+        return
+
+    await runtime.run(stop_event)
+
+
+def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner, staging_enabled, caretaker):
+    """Build the individuation runtime from the cycle's live objects."""
+    from kaine.boot import _effective_hot_swap_mode, shared_embedder
+    from kaine.cycle.individuation_runtime import build_runtime
+    from kaine.evaluation.preference_battery import load_battery, validate_battery
+    from kaine.organ_window_state import organ_unloaded
+
+    battery = load_battery(cfg.battery_path or None)
+    validate_battery(battery)
+
+    lingua = registry.get("lingua")
+    eidolon = registry.get("eidolon") if "eidolon" in registry else None
+    lingua.set_expects_self_model(eidolon is not None)
+    ensure_fact = (
+        eidolon.ensure_situation_fact if eidolon is not None else lingua.add_situation_fact
+    )
+    hypnos = registry.get("hypnos") if "hypnos" in registry else None
+
+    voice_cfg = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
+    adapter_output_dir = resolve(voice_cfg.get("adapter_output_dir", "state/hypnos/adapters"))
+
+    per_request_adapter = (
+        _effective_hot_swap_mode(voice_cfg.get("hot_swap_mode", "manual"), kaine_config)
+        == "organ_adapter"
+        and bool(getattr(lingua.chat_client, "applies_lora", False))
+    )
+
+    entity_clock = getattr(registry, "entity_clock", None)
+
+    from kaine.lifecycle.individuation_store import DEFAULT_ROOT
+
+    return build_runtime(
+        config=cfg,
+        battery=battery,
+        lingua=lingua,
+        ensure_fact=ensure_fact,
+        embedder=shared_embedder(registry, kaine_config),
+        adapter_output_dir=adapter_output_dir,
+        per_request_adapter=per_request_adapter,
+        state_root=resolve(DEFAULT_ROOT),
+        clock_now=entity_clock.now if entity_clock is not None else None,
+        paused_seconds=cycle.paused_subjective_seconds,
+        tick_index=lambda: cycle.tick_index,
+        is_paused=lambda: cycle.is_paused,
+        organ_unloaded=organ_unloaded,
+        hypnos_sleeping=hypnos.is_sleeping if hypnos is not None else None,
+        born_at=lambda: gate_runner.stage.born_at,
+        is_gestating=lambda: bool(staging_enabled and gate_runner.stage.is_gestating),
+        bus=bus,
+        notify=caretaker.send_event if caretaker is not None else None,
+        entity_name="",
+    )
 
 
 def _thymos_state_factory(registry):
@@ -1178,15 +1301,17 @@ async def _boot_and_run(
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = (kaine_config.get("lingua") or {}).get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    lingua_api_key = model_server_api_key(kaine_config)
     try:
         eval_cfg = load_evaluation_config(
             lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
         )
     except ValueError as exc:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {exc}\n")
+        return 3
+    individuation_cfg, individuation_refusal = _individuation_refusal(kaine_config)
+    if individuation_refusal is not None:
+        sys.stderr.write(f"Refusing to boot KAINE cycle: {individuation_refusal}\n")
         return 3
     # Research event log config is INDEPENDENT of [evaluation].enabled — the
     # curated log (and the local-only raw archive) gate on their own flags.
@@ -1301,9 +1426,9 @@ async def _boot_and_run(
 
             lingua_cfg = kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(
-                str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1")),
+                lingua_section_chat_url(lingua_cfg),
                 str(lingua_cfg.get("model_id") or ""),
-                api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+                api_key=lingua_section_api_key(lingua_cfg),
             )
             log.info("organ-gate: %s", gate.detail)
             if not gate.ok:
@@ -1860,9 +1985,15 @@ async def _boot_and_run(
         PreservationConfig,
         WelfareProtectiveMonitor,
     )
-    from kaine.lifecycle.divergence import consolidation_thresholds_from_config
+    from kaine.lifecycle.divergence import (
+        adapter_dir_for,
+        consolidation_thresholds_from_config,
+    )
 
     cons_rate, cons_mag = consolidation_thresholds_from_config(kaine_config)
+    adapter_dir = adapter_dir_for(
+        kaine_config, resolve(preservation_cfg.divergence_monitor.state_root)
+    )
     divergence_monitor = None
     welfare_monitor = None
     if preservation_cfg.divergence_monitor.enabled:
@@ -1876,14 +2007,10 @@ async def _boot_and_run(
                 path=preservation_cfg.incident_path,
                 name="preservation_divergence",
             ),
-            # Lived-experience source for the warm-up gate: the cycle's
-            # monotonic tick index (logged lived events). The monitor measures
-            # lived time off its own monotonic clock. Until BOTH floors are met,
-            # no individuation crossing counts — fail-closed.
-            observations_provider=lambda: cycle.tick_index,
             require_encryption=preservation_cfg.require_encryption,
             consolidation_rate_threshold=cons_rate,
             consolidation_magnitude_threshold=cons_mag,
+            adapter_output_dir=adapter_dir,
         )
     if supervision_mode == "unattended":
         from kaine.cycle.caretaker import CaretakerConfig
@@ -1959,18 +2086,44 @@ async def _boot_and_run(
     )
     # Birth transition (local-womb-feed 3.6): at birth the local womb blooms
     # once over birth_transition_seconds, then falls silent.
+    # The individuation producer captures the birth reference from the same hook.
+    individuation_runtime = None
+    if individuation_cfg is not None and individuation_cfg.enabled:
+        individuation_runtime = _build_individuation(
+            cfg=individuation_cfg,
+            kaine_config=kaine_config,
+            registry=registry,
+            bus=bus,
+            cycle=cycle,
+            gate_runner=gate_runner,
+            staging_enabled=staging_enabled,
+            caretaker=caretaker,
+        )
     _womb_feed = kaine_config.get("perception_feed") or {}
     _birth_clock = _womb_feed.get("_shared_womb_clock")
+    _womb_birth_hook = None
     if _birth_clock is not None:
         from kaine.boot import _womb_params
 
         _birth_seconds = _womb_params(_womb_feed).birth_transition_seconds
-        gate_runner.set_birth_hook(
-            _make_birth_hook(_birth_clock, _womb_feed, _birth_seconds)
-        )
+        _womb_birth_hook = _make_birth_hook(_birth_clock, _womb_feed, _birth_seconds)
+    _birth_hook = _compose_birth_hooks(
+        _womb_birth_hook,
+        individuation_runtime.on_birth if individuation_runtime is not None else None,
+    )
+    if _birth_hook is not None:
+        gate_runner.set_birth_hook(_birth_hook)
     gate_task = (
         asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
         if staging_enabled and stage_state.is_gestating
+        else None
+    )
+    individuation_task = (
+        asyncio.create_task(
+            _run_individuation(individuation_runtime, stop_event),
+            name="cycle.individuation",
+        )
+        if individuation_runtime is not None
         else None
     )
     # Womb loss (maturation-gate-liveness 2.2): freeze a gestating entity under
@@ -2164,7 +2317,7 @@ async def _boot_and_run(
             except Exception:
                 log.warning("spot watchdog task raised during shutdown", exc_info=True)
         for monitor_task in (
-            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task, programme_end_task
+            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task, programme_end_task, individuation_task
         ):
             if monitor_task is None:
                 continue

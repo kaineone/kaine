@@ -29,6 +29,10 @@ lingua = true
 # (without it the workspace shows no interest or arousal in stimuli), NOT one of the
 # richer faculties deferred with the rest.
 thymos = true
+# Sleep: fatigue-triggered rest is part of the base thesis (operator decision of
+# 2026-09-08). Consolidation, the affective reset and the stimulus playlist's
+# sleep pause all hang off it. Voice alignment stays off ([hypnos.voice_alignment]).
+hypnos = true
 # Richer faculties — gated OFF until a positive base result (never deleted).
 echo = false
 nous = false
@@ -36,7 +40,6 @@ mnemos = false
 eidolon = false
 praxis = false
 vox = false
-hypnos = false
 empatheia = false
 phantasia = false
 perception = false

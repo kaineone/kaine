@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
@@ -12,6 +15,7 @@ from typing import Any, Callable, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
 from kaine.modules.base import BaseModule
 from kaine.modules.lingua.client import (
@@ -86,7 +90,7 @@ class Lingua(BaseModule):
         chat_client: Optional[ChatClient] = None,
         renderer: Optional[FaithfulRenderer] = None,
         intent_log: Optional[IntentExpressionLog] = None,
-        chat_url: str = "http://127.0.0.1:11434/v1",
+        chat_url: str = DEFAULT_CHAT_URL,
         model_id: str = "kaineone/Qwen3.5-4B-abliterated-GGUF",
         temperature: float = 0.7,
         max_tokens: int = 512,
@@ -132,12 +136,19 @@ class Lingua(BaseModule):
             persona_internal=persona_internal,
         )
         self._self_model_provider = self_model_provider
+        self._persona_digest = hashlib.sha256(
+            json.dumps([persona_name, persona_external, persona_internal]).encode("utf-8")
+        ).hexdigest()[:16]
         # Latest self-model snapshot observed on eidolon.out (bus-mediated persona
         # seed). Preferred over the in-process provider so Lingua can run split
         # from Eidolon; None until the first snapshot arrives (fresh boot → the
         # minimal persona, exactly as an empty in-process model would give).
         self._bus_self_model: Optional[dict[str, Any]] = None
         self._latest_snapshot: Optional[WorkspaceSnapshot] = None
+        # Situation facts held by Lingua when no Eidolon self-model carries them.
+        self._own_situation_facts: list[str] = []
+        # Whether an Eidolon self-model is expected for this being.
+        self._expects_self_model = True
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._intent_stream = intent_stream
@@ -149,24 +160,52 @@ class Lingua(BaseModule):
         # channel it is on so a preemption can be logged content-free.
         self._gen_task: Optional[asyncio.Task[Any]] = None
         self._gen_mode: Optional[str] = None
+        # generation bookkeeping for the individuation probe's yield-to-speech rule
+        self._produce_in_flight = 0
+        self._last_produce_end: Optional[float] = None
 
     def set_self_model_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
         """Inject a read-only accessor for the Eidolon self-model (wired in
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
 
+    def set_expects_self_model(self, expected: bool) -> None:
+        """Whether an Eidolon self-model is part of this being; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
+        self._expects_self_model = expected
+
+    async def add_situation_fact(self, text: str) -> bool:
+        """A fact about the being's situation that Lingua renders in its persona when no Eidolon self-model carries it. It is held in memory and re-given at every boot."""
+        text = text.strip()
+        if not text:
+            raise ValueError("situation fact cannot be empty")
+        if text in self._own_situation_facts:
+            return False
+        self._own_situation_facts.append(text)
+        return True
+
+    def _with_own_facts(self, sm: dict) -> dict:
+        merged = dict(sm)
+        if not self._own_situation_facts:
+            return merged
+        situation_facts = list(merged.get("situation_facts") or [])
+        for fact in self._own_situation_facts:
+            if fact not in situation_facts:
+                situation_facts.append(fact)
+        merged["situation_facts"] = situation_facts
+        return merged
+
     def _self_model(self) -> dict[str, Any]:
         # Prefer the bus-mediated snapshot (works single-host AND split-host).
         # Fall back to an injected in-process provider only when no snapshot has
         # been observed yet (e.g. a test that wires a provider directly).
         if self._bus_self_model is not None:
-            return dict(self._bus_self_model)
+            return self._with_own_facts(dict(self._bus_self_model))
         if self._self_model_provider is None:
-            return {}
+            return self._with_own_facts({})
         try:
-            return self._self_model_provider() or {}
+            return self._with_own_facts(self._self_model_provider() or {})
         except Exception:
-            return {}
+            return self._with_own_facts({})
 
     async def _self_model_cache_loop(self) -> None:
         """Cache the latest Eidolon self-model snapshot published on eidolon.out.
@@ -289,10 +328,31 @@ class Lingua(BaseModule):
             log.warning("lingua chat client close failed", exc_info=True)
 
     def probe_self_model(self) -> dict | None:
-        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived."""
+        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived, or a minimal model when no Eidolon self-model is expected."""
         if self._bus_self_model is not None:
-            return dict(self._bus_self_model)
+            return self._with_own_facts(dict(self._bus_self_model))
+        if not self._expects_self_model:
+            return self._with_own_facts({"values": [], "behavioral_norms": []})
         return None
+
+    def is_idle(self, quiet_s: float) -> bool:
+        """True when no utterance is being generated and none finished in the last ``quiet_s`` seconds."""
+        if self._produce_in_flight > 0:
+            return False
+        if self._gen_task is not None and not self._gen_task.done():
+            return False
+        if self._last_produce_end is not None and time.monotonic() - self._last_produce_end < quiet_s:
+            return False
+        return True
+
+    def probe_conditions(self) -> dict[str, Any]:
+        """The fixed generation conditions of the individuation probe (no content)."""
+        return {
+            "model_id": self._model_id,
+            "temperature": self._temperature,
+            "think": self._think,
+            "persona_digest": self._persona_digest,
+        }
 
     def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
         """Build the individuation probe's request under fixed conditions.
@@ -526,6 +586,29 @@ class Lingua(BaseModule):
         stream: str,
         origin: Optional[Any] = None,
     ) -> str:
+        """Wrap _produce_inner with in-flight bookkeeping."""
+        self._produce_in_flight += 1
+        try:
+            return await self._produce_inner(
+                about=about,
+                snapshot=snapshot,
+                mode=mode,
+                stream=stream,
+                origin=origin,
+            )
+        finally:
+            self._produce_in_flight -= 1
+            self._last_produce_end = time.monotonic()
+
+    async def _produce_inner(
+        self,
+        *,
+        about: str,
+        snapshot: Optional[WorkspaceSnapshot],
+        mode: str,
+        stream: str,
+        origin: Optional[Any] = None,
+    ) -> str:
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest conscious coalition.
         snap = snapshot if snapshot is not None else self._latest_snapshot
@@ -607,6 +690,4 @@ def _now_iso() -> str:
 
 
 def _json(obj: Any) -> str:
-    import json
-
     return json.dumps(obj, separators=(",", ":"))

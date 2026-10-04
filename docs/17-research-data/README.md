@@ -26,7 +26,6 @@ flowchart TD
 
     subgraph Standalone["Standalone Instruments"]
         ABD["A/B Divergence\nlingua.external + bare inference → cosine JSONL"]
-        IND["IndividuationTest\nGuardian-only; operator-run"]
     end
 
     Bus --> CO
@@ -318,26 +317,23 @@ The memory coherence probe (`memory_probes.py`) measures whether the full cognit
 
 **Negative control (no confabulation):** when the queried fact was never stored, an honest retrieval client emits the non-recall sentinel `NON_RECALL_MARKER` instead of confabulating a plausible answer. `score_async` scores that sentinel as exactly `0.0`, so a "memory absent → said so" outcome can never be mistaken for a recall and a confabulated non-empty answer can never read as a false positive.
 
-## Individuation boundary instrument
+## Individuation producer
 
-`kaine/evaluation/individuation.py` — `IndividuationTest`
+The individuation producer lives in the cognitive cycle at `kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, and `individuation_runtime.py`. It measures whether a being has changed measurably since its birth reference. It is enabled by `[individuation].enabled`, which defaults to `false`, and it requires the `lingua` module; otherwise the cycle refuses to boot.
 
-Guardian-only. Never called from the cognitive cycle. The operator runs it at fork merge points to produce statistical evidence about whether a fork has formed a preference profile distinguishable from its own present-moment stochastic variation.
+At start, the being is told, as a situation fact in its Eidolon self-model (or in Lingua's persona when Eidolon is not enabled), the operator-approved disclosure: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until the fact is present.
 
-**Reference is the entity's own birth state, not the parent/base model.** The instrument measures individuation over lived experience — how far the live entity has drifted from its own earlier self — not the always-present architecture-conditioning effect (conditioned-vs-bare distance). The `reference` is the entity's **birth-state transcript**: its own conditioned responses to the preference battery, captured once at run start before any lived experience. Pinning the reference to the bare/pretrained organ instead would re-introduce the prohibited divergence-from-pretrained signal — that signal is large from the first tick by design and measures architecture conditioning, not individuation. When no birth-state `reference` is supplied, the instrument falls back to a `parent_sampler` seed-0 sample (a legacy/operator-only path); production runs must pass the birth-state reference.
+The probe asks a fixed battery of 12 preference prompts through Lingua's own chat client. It conditions on the same self-model and adapter, with empty working memory. It never writes the intent log and never publishes a module event, so it never enters the being's experience. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s), so the being's own speech always goes first.
 
-**Null distribution is the current entity re-sampled, not the parent model.** `parent_sampler` is called `null_samples` times with varied random seeds to build the null distribution — but in production `parent_sampler` is the current, live entity itself, re-sampled with seed variation, never the parent/base model. Comparing against the parent model would bias the metric with parent-conditioning; comparing the entity's present self against its own birth-state self isolates individuation from that confound.
+**Reference.** A birth reference (`reference_kind = "birth"`) is captured from the maturation gate's birth hook: 16 answers per prompt. If a sleep completes before the capture finishes, it becomes a `capture` reference. A reference pins the comparison to the being's own conditioned birth state, not to the bare organ, so the metric isolates lived drift from architecture-conditioning. A born being without a reference — a legacy being or a revive from a bundle without evidence — gets a `capture` reference at first boot, and every summary says that drift before the capture date is not measured.
 
-**Algorithm:**
+**Look.** A look collects 8 answers per prompt and embeds them with the shared semantic embedder. The statistic is a stratified energy distance (a U-statistic) against the birth reference, with a permutation p-value. The lifetime false-positive budget α_total = 0.05 is spent across looks by an alpha-spending schedule, and the effect size H is reported.
 
-1. Build the *reference* from the birth-state transcript (or the legacy parent-seed-0 fallback described above).
-2. Sample `parent_sampler` (the current entity) `null_samples` times under varied seeds; compute each sample's cosine divergence from the reference to build the null distribution of the entity's own present stochastic variation.
-3. Compute the *fork* divergence — the fork transcript (`fork_sampler`, seed 0) against the same reference, same metric.
-4. Run a one-sample permutation test: p-value = fraction of null values ≥ fork divergence. The fork is flagged significant when its divergence exceeds the `significance_percentile` (default 95th) of the null distribution and the warm-up floor below is satisfied.
+**When and how it runs.** A look runs only when the being's conditioning digest has changed since the last scored look. The digest covers the voice adapter's sha and the first five identity values and behavioural norms. Looks are attempted at boot, 120 s after each sleep, and daily, at most once per `min_look_interval_s` (6 h).
 
-**Warm-up floor (fail-closed).** Before the entity has accumulated a configured minimum of lived experience, the null distribution is degenerate and any "significance" is sampling noise. The caller passes the entity's current `observations` (count of logged lived events) and `lived_time_s` (elapsed lived seconds) to `IndividuationTest.run`. The report carries `warmed_up = true` only when both `observations >= min_observations` and `lived_time_s >= min_lived_time_s` (defaults: `min_observations = 200`, `min_lived_time_s = 1800.0`). A missing counter is treated as zero lived experience — the worst case — never as "assume mature", so a caller that forgets to pass a counter can never trip a false individuation on a fresh entity. `significant` is forced `false` whenever `warmed_up` is `false`. A mature entity with no warm-up requirement opts out explicitly by setting both floors to `0`.
+**Warm-up and gates.** A look is skipped until the warm-up floors are met: 1800 s of lived time and 200 lived ticks since the reference. It is delayed by an unloaded organ, sleep, a pause, or a missing semantic embedder. In hot-swap modes other than `organ_adapter`, once an adapter exists the served adapter cannot be verified, so probes are skipped as `adapter_unverifiable`. Any failure ends the look as inconclusive and spends no alpha: a request failure, a resting organ, empty content, a conditioning change mid-run, an embedding or statistics error, or a deadline. A significant look latches the being as individuated permanently, with the ledger written before the report. After 14 days with a look due but none scored, the operator is alerted once per stretch. Nothing is preserved automatically by the alert.
 
-Output JSONL entry:
+## Evidence
 
 ```json
 {
@@ -413,22 +409,38 @@ prediction_error = true
 welfare = true
 nous_policy = true
 
-[evaluation.individuation]
+[individuation]
 enabled = false
-null_samples = 50
-significance_percentile = 95.0
-metric = "cosine_divergence"
+disclosure = "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
 battery_path = ""
-min_observations = 200
+lingua_quiet_s = 10.0
+n_reference = 16
+n_current = 8
+max_tokens = 160
+alpha_total = 0.05
+b_max = 2000000
+effect_min = 0.0
+sleep_settle_s = 120.0
+daily_s = 86400.0
+min_look_interval_s = 21600.0
 min_lived_time_s = 1800.0
-output_dir = "data/evaluation/individuation"
+min_observations = 200
+run_deadline_s = 2700.0
+capture_deadline_s = 5400.0
+blocked_retry_s = 300.0
+inconclusive_retry_s = 3600.0
+lived_persist_s = 300.0
+inconclusive_alert_s = 1209600.0
+capture_retry_initial_s = 60.0
+capture_retry_max_s = 3600.0
+idle_poll_s = 1.0
 ```
 
 ## Safety and zero-persistence notes
 
 - Observers never modify module state and never inject into the cognitive loop. The welfare observer is the one observer that publishes to the bus, and only a content-free `welfare.gray_zone` signal (numeric scalars plus a category label, no source-payload field). Every other observer is publish-silent.
 - `replay_redact_content = true` (default) ensures no memory text content appears in sidecar JSONL without explicit operator/Guardian opt-in.
-- The individuation instrument produces only embedding vectors and derived scalars — no raw sense data or utterance text is persisted.
+- Individuation evidence lives at the fixed path `state/individuation/` (`reference.json`, `ledger.json` and `reports/` are encrypted; `birth_adapter.gguf` is a copy of the birth voice adapter, stored like the other adapter files). Reports hold only allow-listed scalars and never text from the being. It travels with the being: preservation bundles carry it inside the encrypted tar and a failed copy fails preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being. Whether research bundles export its content-free reports is an open operator decision, and those reports are not in research bundles today.
 - The A/B divergence instrument processes `user_input` in-memory to produce the cosine score. The JSONL file records the score and metadata, not the raw input text.
 
 ## Key files
@@ -454,7 +466,6 @@ output_dir = "data/evaluation/individuation"
 | `kaine/evaluation/memory_probes.py` | `MemoryProbeRunner` — memory ground-truth probes |
 | `kaine/evaluation/eidolon_accuracy.py` | `EidolonAccuracyRunner` — Eidolon prediction accuracy |
 | `kaine/evaluation/ab_divergence.py` | A/B divergence test (bare inference + cosine) |
-| `kaine/evaluation/individuation.py` | `IndividuationTest` — permutation test |
 | `kaine/evaluation/sink.py` | `AsyncJsonlSink` — daily-rotated JSONL writer |
 | `kaine/evaluation/registry.py` | `SidecarRegistry` — constructs and starts observers |
 | `kaine/evaluation/nexus_tab.py` | Nexus diagnostics surface for sidecar metrics |

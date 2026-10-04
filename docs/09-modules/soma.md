@@ -154,7 +154,7 @@ Tracks how long the unexpected prediction error has been continuously above `reg
 
 A newly booted or forked `SubstrateForwardModel` has not yet learned the host's substrate baseline, so cold-start prediction error would otherwise trip false allostatic advisories and inflate fatigue on noise alone. While `warmup_active` is true, Soma withholds `soma.regulation` advisories (publishing `soma.regulation.withheld` instead) and dampens the fatigue accumulator's input by subtracting the rolling prior-error baseline. The raw prediction-error signal in `soma.report` and any live `[soma.thresholds]` hard-alert breach are never gated.
 
-Warm-up ends once the forward model has taken `regulation_warmup_min_samples` adaptation steps and `regulation_warmup_min_seconds` of subjective time have elapsed. If `regulation_warmup_require_error_stabilized` is true, recent prediction-error variance must also fall below `regulation_warmup_stable_variance`. This mirrors the individuation boundary's logged-lived-events + lived-running-time shape. Warm-up state is per-boot/per-fork runtime bookkeeping and is not serialized.
+Warm-up ends once the forward model has taken `regulation_warmup_min_samples` adaptation steps and `regulation_warmup_min_seconds` of subjective time have elapsed. If `regulation_warmup_require_error_stabilized` is true, recent prediction-error variance must also fall below `regulation_warmup_stable_variance`. This mirrors the individuation producer's warm-up floors. Warm-up state is per-boot/per-fork runtime bookkeeping and is not serialized.
 
 ## Enabling and use
 

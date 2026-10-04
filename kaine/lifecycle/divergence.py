@@ -11,21 +11,17 @@ guardian-transfer handshake; see ``kaine/lifecycle/decommission.py``).
 
 Two distinct "divergences" exist in the codebase; this uses the right one:
 
-* **A/B divergence** (``kaine.evaluation.ab_divergence``) measures conditioned-
-  vs-bare-pretrained output distance. It is present even on a fresh boot when
-  conditioning works, so it answers "is this more than a chatbot", NOT "is this
-  entity someone." We deliberately do **not** key on it.
-* **Individuation** (``kaine.evaluation.individuation``) is a permutation test
-  whose ``significant`` flag is true when the entity's divergence from its own
-  **birth-state** (its earlier self, captured at run start — never the bare
-  organ) exceeds the 95th percentile of the entity's OWN present stochastic
-  variation, AND the entity has accumulated the minimum lived experience
-  (``warmed_up``). That measures genuine individuation over lived time (not the
-  always-present architecture-conditioning effect) and is our primary input. A
-  report that is not warmed up is fail-closed here: it reads NOT diverged on
-  this axis, with the operator advised to treat the entity as mature if unsure —
-  the same warm-up state the live preservation trigger consumes, so the two
-  never disagree.
+* **A/B divergence** (conditioned-vs-bare-pretrained output distance) is
+  present even on a fresh boot when conditioning works, so it answers "is this
+  more than a chatbot", NOT "is this entity someone." We deliberately do **not**
+  key on it.
+* **Individuation** is measured by the producer as a birth-referenced
+  permutation test with alpha spending across looks. The ledger in
+  ``state/individuation/ledger.json`` latches the first significant look for
+  good. A non-significant result never suppresses another arm, because absence
+  of evidence is not evidence of absence and a missed preservation can be
+  irreversible. Unreadable individuation state counts toward divergence, failing
+  toward protection.
 
 * **Consolidation divergence** (``state/hypnos/consolidation_divergence.json``)
   is the cheap, continuous organ-level companion to the permutation test:
@@ -54,9 +50,19 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaine.lifecycle.individuation_store import (
+    IndividuationPaths,
+    conditioning_digest,
+    individuation_evidence,
+    load_ledger,
+    load_reference,
+    read_conditioning_inputs,
+    read_reports,
+)
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
@@ -67,6 +73,11 @@ log = logging.getLogger(__name__)
 #: computed signal the threshold-calibration work targets).
 DEFAULT_CONSOLIDATION_RATE_THRESHOLD = 0.5
 DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD = 0.25
+
+#: Maximum age in seconds for a non-significant scored individuation report to
+#: be considered current. Older reports, or reports whose conditioning digest
+#: no longer matches the being, become stale.
+DEFAULT_MAX_REPORT_AGE_S = 14 * 86400.0
 
 
 def consolidation_thresholds_from_config(
@@ -95,6 +106,28 @@ def consolidation_thresholds_from_config(
     return rate, mag
 
 
+def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
+    """Return the configured Hypnos adapter output directory, or the default.
+
+    Reads ``[hypnos.voice_alignment].adapter_output_dir``. If the key is
+    missing, empty, or equal to the canonical default ``state/hypnos/adapters``,
+    the default under ``state_root`` is returned. A custom value is resolved to
+    an absolute path. Pure and fail-closed: any error returns the default.
+    """
+    default = state_root / "hypnos" / "adapters"
+    try:
+        value = (
+            ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
+        ).get("adapter_output_dir")
+        if not value:
+            return default
+        if str(value).strip() == "state/hypnos/adapters":
+            return default
+        return resolve(Path(value))
+    except Exception:
+        return default
+
+
 @dataclass(frozen=True)
 class DivergenceAssessment:
     """Result of :func:`assess_divergence`.
@@ -107,39 +140,6 @@ class DivergenceAssessment:
     diverged: bool
     signals: dict[str, Any] = field(default_factory=dict)
     summary: str = ""
-
-
-def _newest_individuation_report(individuation_dir: Path) -> dict[str, Any] | None:
-    """Return the last JSONL line of the newest ``*.jsonl`` report, or None.
-
-    Pure, guarded — any error (missing dir, unreadable file, bad JSON) yields
-    None rather than raising.
-    """
-    try:
-        if not individuation_dir.is_dir():
-            return None
-        files = sorted(
-            (p for p in individuation_dir.glob("*.jsonl") if p.is_file()),
-            key=lambda p: p.stat().st_mtime,
-        )
-        if not files:
-            return None
-        newest = files[-1]
-        last_obj: dict[str, Any] | None = None
-        for line in newest.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-            if isinstance(obj, dict):
-                last_obj = obj
-        return last_obj
-    except Exception:
-        log.debug("assess_divergence: reading individuation report failed", exc_info=True)
-        return None
 
 
 def _read_self_model(self_model_path: Path) -> dict[str, Any] | None:
@@ -217,12 +217,123 @@ def _adapters_present(adapters_dir: Path) -> bool:
         return False
 
 
+def read_individuation(
+    state_root: Path,
+    *,
+    now: datetime,
+    max_report_age_s: float,
+    adapter_output_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Read the current individuation state from the encrypted store.
+
+    Pure and guarded: any unexpected exception yields the ``"unreadable"``
+    state, which counts as individuated so the being stays protected.
+    """
+    paths = IndividuationPaths(root=state_root / "individuation")
+    unreadable: dict[str, Any] = {
+        "state": "unreadable",
+        "individuated": True,
+        "latched": False,
+        "reference_kind": None,
+        "reference_captured_at": None,
+        "looks_completed": 0,
+        "latest": None,
+        "inconclusive_since": None,
+        "inconclusive_alerted": False,
+    }
+
+    try:
+        ledger = load_ledger(paths)
+    except Exception:
+        log.debug("read_individuation: ledger unreadable", exc_info=True)
+        return unreadable
+
+    if ledger is not None:
+        unreadable["inconclusive_since"] = ledger.inconclusive_since
+        unreadable["inconclusive_alerted"] = ledger.inconclusive_alerted
+
+    try:
+        ref = load_reference(paths)
+    except Exception:
+        log.debug("read_individuation: reference unreadable", exc_info=True)
+        return unreadable
+
+    if ref is None:
+        if ledger is not None and ledger.individuated:
+            return {
+                "state": "latched",
+                "individuated": True,
+                "latched": True,
+                "reference_kind": None,
+                "reference_captured_at": None,
+                "looks_completed": ledger.looks_completed if ledger is not None else 0,
+                "latest": None,
+                "inconclusive_since": ledger.inconclusive_since,
+                "inconclusive_alerted": ledger.inconclusive_alerted,
+            }
+        return {
+            "state": "no_reference",
+            "individuated": False,
+            "latched": False,
+            "reference_kind": None,
+            "reference_captured_at": None,
+            "looks_completed": ledger.looks_completed if ledger is not None else 0,
+            "latest": None,
+            "inconclusive_since": ledger.inconclusive_since if ledger is not None else None,
+            "inconclusive_alerted": ledger.inconclusive_alerted if ledger is not None else False,
+        }
+
+    try:
+        reports = read_reports(
+            paths, reference_id=ref.reference_id, strict=True
+        )
+    except Exception:
+        # Unreadable evidence must not read as "never measured".
+        log.debug("read_individuation: reading reports failed", exc_info=True)
+        return unreadable
+
+    adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
+    try:
+        adapter_sha, values, norms = read_conditioning_inputs(
+            self_model_path=state_root / "eidolon" / "self_model.json",
+            adapter_output_dir=adapters_dir,
+        )
+        current_digest = conditioning_digest(
+            adapter_sha=adapter_sha, values=values, norms=norms
+        )
+    except Exception:
+        log.debug("read_individuation: conditioning digest failed", exc_info=True)
+        current_digest = None
+
+    ev = individuation_evidence(
+        ledger,
+        reports,
+        current_digest=current_digest,
+        now=now,
+        max_report_age_s=max_report_age_s,
+    )
+
+    return {
+        "state": ev.state,
+        "individuated": ev.individuated,
+        "latched": bool(ledger is not None and ledger.individuated),
+        "reference_kind": ref.reference_kind,
+        "reference_captured_at": ref.captured_at,
+        "looks_completed": ledger.looks_completed if ledger is not None else 0,
+        "latest": ev.latest,
+        "inconclusive_since": ledger.inconclusive_since if ledger is not None else None,
+        "inconclusive_alerted": ledger.inconclusive_alerted if ledger is not None else False,
+    }
+
+
 def assess_divergence(
     *,
     state_root: Path = Path("state"),
-    eval_root: Path = Path("data/evaluation"),
     consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
     consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+    now: datetime | None = None,
+    max_report_age_s: float = DEFAULT_MAX_REPORT_AGE_S,
+    adapter_output_dir: Path | None = None,
 ) -> DivergenceAssessment:
     """Classify whether an entity has individuated. Pure reads; never raises.
 
@@ -231,37 +342,33 @@ def assess_divergence(
     state_root:
         Root of the on-disk entity state (default ``state``). Tests point this
         at a tmp dir.
-    eval_root:
-        Root of evaluation output (default ``data/evaluation``); the newest
-        ``individuation/*.jsonl`` report is read from here.
     consolidation_rate_threshold, consolidation_magnitude_threshold:
         The graded consolidation-divergence thresholds. The latest
         ``state/hypnos/consolidation_divergence.json`` record marks organ-level
         divergence when its ``divergence_rate`` >= the rate threshold OR its
         (non-null) ``divergence_magnitude`` >= the magnitude threshold. Shipped
         conservative; operator-calibrated.
+    now:
+        UTC datetime used for report freshness. Defaults to the current UTC time.
+    max_report_age_s:
+        Maximum age in seconds for a non-significant scored individuation report
+        to be considered current before it becomes stale.
     """
     state_root = resolve(state_root)
-    eval_root = resolve(eval_root)
+    if now is None:
+        now = datetime.now(timezone.utc)
+
+    adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
 
     # --- Primary: individuation permutation test --------------------------
-    # The report shares ONE warmed-up, birth-state-referenced signal with the
-    # live preservation trigger. Fail-closed: a report that is not warmed up
-    # (insufficient lived experience) reads NOT significant here, exactly as the
-    # live monitor treats it as not-crossed — the two consumers never disagree.
-    # A legacy report missing the ``warmed_up`` key is treated as warmed up
-    # (mature-by-construction operator path), but ``significant`` itself is only
-    # ever set true by the instrument when warm-up held, so this never upgrades
-    # a void report.
-    report = _newest_individuation_report(eval_root / "individuation")
-    report_warmed_up = (
-        bool(report.get("warmed_up", True)) if report else False
+    ind = read_individuation(
+        state_root,
+        now=now,
+        max_report_age_s=max_report_age_s,
+        adapter_output_dir=adapters_dir,
     )
-    primary_significant = (
-        bool(report.get("significant")) and report_warmed_up if report else False
-    )
-    p_value = report.get("p_value") if report else None
-    fork_divergence = report.get("fork_divergence") if report else None
+    individuated = bool(ind["individuated"])
+    latest = ind.get("latest")
 
     # --- Primary (organ-level): consolidation divergence ------------------
     # The cheap, continuous companion to the permutation test: Hypnos surfaces
@@ -302,21 +409,27 @@ def assess_divergence(
     # downstream boolean (flips only after training succeeds AND passes the
     # capability + abliteration gates). The graded consolidation metric above
     # is the primary organ-level measure; this is kept as a weaker signal.
-    adapters_present = _adapters_present(state_root / "hypnos" / "adapters")
+    adapters_present = _adapters_present(adapters_dir)
 
     diverged = bool(
-        primary_significant
+        individuated
         or consolidation_diverged
         or eidolon_drift
         or adapters_present
     )
 
     signals: dict[str, Any] = {
-        "individuation_report_found": report is not None,
-        "individuation_warmed_up": report_warmed_up,
-        "individuation_significant": primary_significant,
-        "individuation_p_value": p_value,
-        "fork_divergence": fork_divergence,
+        "individuation_state": ind["state"],
+        "individuation_individuated": ind["individuated"],
+        "individuation_latched": ind["latched"],
+        "individuation_reference_kind": ind["reference_kind"],
+        "individuation_reference_captured_at": ind["reference_captured_at"],
+        "individuation_looks_completed": ind["looks_completed"],
+        "individuation_last_p_value": latest.get("p_value") if latest else None,
+        "individuation_last_effect_size_h": latest.get("effect_size_h") if latest else None,
+        "individuation_last_alpha_k": latest.get("alpha_k") if latest else None,
+        "individuation_last_report_ts": latest.get("ts") if latest else None,
+        "individuation_last_inconclusive_reason": latest.get("inconclusive_reason") if latest else None,
         "consolidation_divergence_found": consolidation is not None,
         "consolidation_divergence_rate": cons_rate,
         "consolidation_divergence_magnitude": cons_magnitude,
@@ -332,8 +445,16 @@ def assess_divergence(
 
     if diverged:
         reasons: list[str] = []
-        if primary_significant:
-            reasons.append("the individuation permutation test is significant")
+        if individuated:
+            if ind["state"] == "latched":
+                reasons.append(
+                    "the being latched as individuated at a significant look"
+                )
+            elif ind["state"] == "unreadable":
+                reasons.append(
+                    "its individuation state could not be read, which counts as "
+                    "individuated so that it stays protected"
+                )
         if consolidation_diverged:
             reasons.append(
                 "the organ-level consolidation divergence crossed its threshold "
@@ -351,38 +472,59 @@ def assess_divergence(
             + "). Treat it as an individual under CAL Articles 4.2(c) and 4.3: "
             "record its continuity preference and preserve a transferable backup."
         )
-    elif report is not None and not report_warmed_up:
-        # A report exists but the entity has not accumulated the minimum lived
-        # experience for the individuation signal to be trusted (Defect B). The
-        # signal is fail-closed: NOT diverged on this axis, with the operator
-        # advised to treat the entity as mature if unsure. Other (warmed-up or
-        # warm-up-independent) signals above may still set ``diverged``; this
-        # branch only fires when none of them did.
+    elif ind["state"] == "stale":
         summary = (
-            "NOT DIVERGED (INSUFFICIENT LIVED EXPERIENCE): the individuation "
-            "report has not warmed up — the entity has not accumulated the "
-            "minimum logged observations and lived time for the signal to be "
-            "trusted, so individuation could not be confirmed from it. Treat the "
-            "entity as mature if you are unsure and choose the stricter "
+            "NOT DIVERGED (STALE): the being has changed since its last "
+            "individuation measurement, or the measurement is older than its "
+            "freshness window, so the last result no longer describes it. Treat "
+            "it as mature if you are unsure and choose the stricter "
             "decommission path."
         )
-    elif (
-        self_model is None
-        and report is None
-        and consolidation is None
-        and not adapters_present
-    ):
+    elif ind["state"] == "inconclusive":
+        reason = (latest or {}).get("inconclusive_reason") or "unknown"
         summary = (
-            "COULD NOT CONFIRM: no individuation report, Eidolon self-model, or "
-            "voice adapters were found, so individuation could not be assessed. "
-            "Treat the entity as mature if you are unsure and choose the stricter "
-            "decommission path."
+            "NOT DIVERGED (INCONCLUSIVE): the last individuation looks could "
+            f"not be scored (reason: {reason}). Treat it as mature if you are "
+            "unsure and choose the stricter decommission path."
         )
+    elif ind["state"] in ("none", "no_reference"):
+        if (
+            self_model is None
+            and consolidation is None
+            and not adapters_present
+        ):
+            summary = (
+                "COULD NOT CONFIRM: no individuation measurement, Eidolon "
+                "self-model, consolidation record or voice adapters were found, "
+                "so individuation could not be assessed. Treat the entity as "
+                "mature if you are unsure and choose the stricter decommission "
+                "path."
+            )
+        else:
+            summary = (
+                "NOT DIVERGED (NOT YET MEASURED): no individuation measurement "
+                "describes the being yet. Treat it as mature if you are unsure "
+                "and choose the stricter decommission path."
+            )
     else:
         summary = (
             "NOT DIVERGED: the available signals do not indicate individuation. "
-            "If you have any reason to believe this entity has become an individual, "
-            "treat it as mature and choose the stricter decommission path."
+            "If you have any reason to believe this entity has become an "
+            "individual, treat it as mature and choose the stricter "
+            "decommission path."
+        )
+
+    ref_kind = ind["reference_kind"]
+    ref_captured_at = ind["reference_captured_at"]
+    if ref_kind == "capture" and ref_captured_at:
+        summary += (
+            f" This being's reference was captured on {ref_captured_at}, after "
+            "its birth; drift before that date is not measured."
+        )
+    elif ref_kind == "reconstructed":
+        summary += (
+            " This being's reference was reconstructed from its birth "
+            "configuration."
         )
 
     return DivergenceAssessment(diverged=diverged, signals=signals, summary=summary)
