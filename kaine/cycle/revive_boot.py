@@ -12,8 +12,9 @@ The operator revive order is:
      written yet. A bundle without a stage member resolves the stage from the
      stage file as today and logs that.
   3. Build the registry and initialise the modules.
-  4. ``await revive(bundle, registry)``, then write the bundle's stage to the
-     stage file; only then has the revive landed.
+  4. ``await revive(bundle, registry)``, restore the bundle's individuation
+     evidence, then write the bundle's stage to the stage file; only then has
+     the revive landed.
   5. Log any modules enabled now but not captured by the bundle as "new
      faculty, starting fresh".
   6. Start the cycle, recording ``revived_from`` in ``runtime.json`` and the
@@ -31,13 +32,16 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from kaine.lifecycle import preservation as _preservation
 from kaine.lifecycle.preservation import read_bundle_stage
 from kaine.lifecycle.stage import StageState, write_stage
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -138,11 +142,18 @@ async def revive_into(plan: RevivePlan, registry: Any) -> list[str]:
 
 
 class ReviveSession:
-    """A single operator revive session: in-memory stage and registry revive."""
+    """A single operator revive session: in-memory stage, individuation
+    evidence, and registry revive."""
 
-    def __init__(self, plan: RevivePlan, stage_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        plan: RevivePlan,
+        stage_path: Path | None = None,
+        individuation_root: Path | None = None,
+    ) -> None:
         self._plan = plan
         self._stage_path = stage_path
+        self._individuation_root = individuation_root
         self._landed = False
 
     @property
@@ -172,6 +183,40 @@ class ReviveSession:
         the stage write succeed is the session considered landed.
         """
         new = await revive_into(self._plan, registry)
+
+        # Restore individuation evidence before the stage file is written.
+        try:
+            target = self._individuation_root
+            if target is None:
+                from kaine.lifecycle.individuation_store import DEFAULT_ROOT
+
+                target = resolve(DEFAULT_ROOT)
+            target = Path(target)
+            if target.exists():
+                replaced = target.with_name(
+                    f"{target.name}.replaced-"
+                    f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+                )
+                os.replace(target, replaced)
+                log.warning(
+                    "revive: existing individuation tree %s moved to %s before "
+                    "restore",
+                    target,
+                    replaced,
+                )
+            restored = _preservation.extract_bundle_individuation(
+                self._plan.bundle, target
+            )
+            if not restored:
+                log.info(
+                    "revive: bundle carried no individuation evidence; a capture "
+                    "reference will be taken at first boot"
+                )
+        except Exception as exc:
+            raise ReviveRefused(
+                f"could not restore individuation evidence: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
 
         if self._plan.stage is not None:
             target = self._stage_path

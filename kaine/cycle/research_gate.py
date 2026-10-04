@@ -6,13 +6,16 @@
 The research phase runs unsupervised (no human in the loop), so the
 operator-present hard gate (``KAINE_CYCLE_OPERATOR_PRESENT``) no longer fits it.
 For a research boot it is REPLACED by a gate that refuses to start unless the
-*autonomous safety net itself* is live and verified:
+*autonomous safety net itself* is live and verified, covering:
 
-1. preservation is enabled (the divergence monitor),
-2. the welfare-protective response is wired (the welfare monitor),
-3. full logging / admissibility is active (run identity + the sidecar observers),
-4. a preflight dry ``preserve_live → revive`` round-trip passes on THIS install
-   (proves the net is functional before any entity runs).
+* preservation enabled (the divergence monitor),
+* the welfare-protective response wired (the welfare monitor),
+* full logging / admissibility active (run identity + the sidecar observers),
+* a preflight dry ``preserve_live → revive`` round-trip passing on THIS install
+  (proves the net is functional before any entity runs),
+* the configured encryption contract satisfied when encryption is required,
+* the individuation producer enabled so the being's protection does not rest on
+  secondary signals alone.
 
 A run is EITHER operator-present OR research-safety-net-verified, never neither.
 The refusal mirrors the operator-present gate: an operator-facing message and a
@@ -65,7 +68,8 @@ class GateResult:
             return (
                 "Research safety net VERIFIED: preservation enabled, "
                 "welfare-protective response wired, logging/admissibility active, "
-                "and the dry preserve→revive self-check passed."
+                "individuation producer enabled, and the dry preserve→revive "
+                "self-check passed."
             )
         lines = [
             "Refusing to boot KAINE cycle: the autonomous research safety net is "
@@ -95,6 +99,7 @@ def evaluate_research_gate(
     logging_active: bool,
     self_check_passed: bool,
     encryption_satisfied: bool,
+    individuation_enabled: bool,
 ) -> GateResult:
     """Combine the safety-net conditions into a single allow/refuse verdict.
 
@@ -113,6 +118,7 @@ def evaluate_research_gate(
         "logging_active": bool(logging_active),
         "dry_self_check_passed": bool(self_check_passed),
         "encryption_satisfied": bool(encryption_satisfied),
+        "individuation_enabled": bool(individuation_enabled),
     }
     failures: list[str] = []
     if not checks["preservation_enabled"]:
@@ -134,6 +140,12 @@ def evaluate_research_gate(
         failures.append(
             "the preflight dry preserve→revive self-check did not pass on this "
             "install (the preservation+revive path is not functional)"
+        )
+    if not checks["individuation_enabled"]:
+        failures.append(
+            "the individuation producer is not enabled "
+            "([individuation].enabled = false, or its config is invalid, or the lingua or eidolon module is disabled): "
+            "the being's individuation would not be measured, so its protection would rest on the secondary signals alone"
         )
     if not checks["encryption_satisfied"]:
         failures.append(
@@ -270,15 +282,35 @@ def _logging_active(config: dict[str, Any]) -> bool:
 
 
 def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
-    """Run the five-condition research safety net over the resolved config.
+    """Run the research safety net conditions over the resolved config.
 
-    Reads the [preservation] toggles + the logging toggles, performs the real
-    dry preserve→revive self-check, and returns the combined :class:`GateResult`.
-    This is the same evaluator used by unattended mode for conditions 1–5.
+    Reads the [preservation] toggles, the [individuation] toggle, the logging
+    toggles, performs the real dry preserve→revive self-check, and returns the
+    combined :class:`GateResult`. This is the same evaluator used by unattended
+    mode.
     """
+    from kaine.cycle.individuation_runtime import IndividuationConfig
     from kaine.cycle.preservation_monitor import PreservationConfig
 
     preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
+
+    # The ledger and reference cannot be read here, because state encryption is
+    # installed later in boot. Their readability is enforced at runtime, where
+    # unreadable individuation state counts as individuated and the being is
+    # preserved.
+    try:
+        individuation_cfg = IndividuationConfig.from_dict(
+            config.get("individuation")
+        )
+        modules = config.get("modules") or {}
+        individuation_enabled = bool(
+            individuation_cfg.enabled
+            and modules.get("lingua")
+            and modules.get("eidolon")
+        )
+    except ValueError:
+        individuation_enabled = False
+
     self_check_ok, self_check_reason = run_preflight_self_check()
     if not self_check_ok and self_check_reason:
         log.error("research-gate self-check failed: %s", self_check_reason)
@@ -297,6 +329,7 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
         logging_active=_logging_active(config),
         self_check_passed=self_check_ok,
         encryption_satisfied=encryption_satisfied,
+        individuation_enabled=individuation_enabled,
     )
 
 

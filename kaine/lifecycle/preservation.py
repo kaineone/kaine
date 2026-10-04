@@ -36,6 +36,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -44,6 +45,7 @@ from typing import Any
 
 from kaine.experiment.run_context import _utc_iso, get_run_context
 from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
+from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +128,7 @@ async def preserve_live(
     label: str = "",
     require_encryption: bool = False,
     stage_path: Path | None = None,
+    individuation_root: Path | None = None,
 ) -> PreservationResult:
     """Preserve the whole individual from a LIVE registry. Read-only; fail-loud.
 
@@ -178,6 +181,14 @@ async def preserve_live(
 
         stage_path = _stage_module.STAGE_PATH
     stage_path = Path(stage_path)
+
+    # Resolve the individuation tree at call time (birth reference, ledger,
+    # reports, birth adapter). When None, use the production default.
+    if individuation_root is None:
+        from kaine.lifecycle.individuation_store import DEFAULT_ROOT
+
+        individuation_root = resolve(DEFAULT_ROOT)
+    individuation_root = Path(individuation_root)
 
     modules = list(registry.all_modules())
 
@@ -311,6 +322,27 @@ async def preserve_live(
             _chmod_quietly(bundle_dir / "stage.json", 0o600)
             inventory.append("stage.json (developmental stage)")
 
+        # Individuation evidence: encrypted birth reference, ledger, reports,
+        # and the stored birth adapter. This evidence travels with the being.
+        if individuation_root.is_dir():
+            try:
+                ind_dest = bundle_dir / "individuation"
+                shutil.copytree(individuation_root, ind_dest)
+                _chmod_quietly(ind_dest, 0o700)
+                for root, dirs, files in os.walk(ind_dest):
+                    for d in dirs:
+                        _chmod_quietly(Path(root) / d, 0o700)
+                    for f in files:
+                        _chmod_quietly(Path(root) / f, 0o600)
+                inventory.append(
+                    "individuation/ (birth reference, ledger, reports)"
+                )
+            except Exception as exc:
+                raise PreservationError(
+                    f"could not copy individuation evidence into the bundle: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
         # Tar the staged content and (when enabled) encrypt the tar via the same
         # StateEncryptor path the decommission backup uses, then remove the
         # plaintext originals. The manifest is excluded (stays loose + readable).
@@ -323,6 +355,8 @@ async def preserve_live(
             tar_member_names.append("phantasia")
         if (bundle_dir / "stage.json").is_file():
             tar_member_names.append("stage.json")
+        if (bundle_dir / "individuation").is_dir():
+            tar_member_names.append("individuation")
         tar_bytes_path = bundle_dir / "_bundle.tar"
         with tarfile.open(tar_bytes_path, "w") as tar:
             for name in tar_member_names:
@@ -386,7 +420,8 @@ async def preserve_live(
             "restore_notes": (
                 "Self-contained preservation bundle. Entity-interior content "
                 "(snapshot.json — every module's full preservation state: "
-                "self-model, memories, affect/drive, adapter paths — plus "
+                "self-model, memories, affect/drive, adapter paths, "
+                "individuation/ birth reference + ledger + reports — plus "
                 "phantasia/ world-model weights when captured) is tarred into "
                 "bundle.tar(.enc); when state encryption is enabled the tar is "
                 "StateEncryptor-encrypted (bundle.tar.enc). Revive via "
@@ -645,6 +680,106 @@ def read_bundle_stage(bundle: Path) -> dict | None:
         raise ReviveError(
             f"bundle {bundle.name}/stage.json is not valid JSON: {exc}"
         ) from exc
+
+
+def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
+    """Extract individuation evidence from a preservation bundle into ``dest``.
+
+    Opens the bundle tar the same way :func:`read_bundle_stage` does (decrypt
+    when encrypted, read plaintext otherwise). A legacy loose layout carries no
+    individuation archive, so this returns ``False``. Every regular-file member
+    whose name starts with ``individuation/`` is written under ``dest`` with the
+    ``individuation/`` prefix stripped, files set to mode 0o600 and parent
+    directories to 0o700. Path-traversal members (absolute or containing ``..``)
+    raise :class:`ReviveError`. The extraction uses a temporary sibling directory
+    and an atomic ``os.replace`` at the end, so a failed extraction never leaves
+    a half-written tree.
+    """
+    import io
+    import shutil
+    import tarfile
+
+    from kaine.security.crypto import get_state_encryptor
+
+    bundle = Path(bundle)
+    dest = Path(dest)
+
+    encryptor = get_state_encryptor()
+
+    enc_tar = bundle / "bundle.tar.enc"
+    plain_tar = bundle / "bundle.tar"
+    raw_tar: bytes | None = None
+    if enc_tar.is_file():
+        try:
+            raw_tar = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
+        except Exception as exc:
+            raise ReviveError(
+                f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+            ) from exc
+    elif plain_tar.is_file():
+        raw_tar = plain_tar.read_bytes()
+
+    if raw_tar is None:
+        # Legacy loose layout: no individuation archive to extract.
+        return False
+
+    incoming = dest.with_name(dest.name + ".incoming")
+    if incoming.exists():
+        if incoming.is_dir():
+            shutil.rmtree(incoming)
+        else:
+            incoming.unlink()
+    incoming.mkdir(mode=0o700, parents=True, exist_ok=False)
+
+    extracted = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tf:
+            for member in tf.getmembers():
+                if not member.isfile():
+                    continue
+                if not member.name.startswith("individuation/"):
+                    continue
+                rel = member.name[len("individuation/") :]
+                rel_path = Path(rel)
+                if rel_path.is_absolute() or ".." in rel_path.parts:
+                    raise ReviveError(
+                        f"revive: bundle member {member.name!r} escapes the "
+                        f"individuation tree"
+                    )
+                out = incoming / rel
+                out.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                fh = tf.extractfile(member)
+                if fh is None:
+                    continue
+                out.write_bytes(fh.read())
+                _chmod_quietly(out, 0o600)
+                extracted += 1
+    except ReviveError:
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise
+    except Exception as exc:
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise ReviveError(
+            f"revive: could not extract individuation evidence from bundle "
+            f"{bundle} ({type(exc).__name__}: {exc})"
+        ) from exc
+
+    if extracted == 0:
+        # Nothing to restore: leave no empty tree behind.
+        shutil.rmtree(incoming, ignore_errors=True)
+        return False
+
+    try:
+        os.replace(incoming, dest)
+    except Exception as exc:
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise ReviveError(
+            f"revive: could not place extracted individuation tree at {dest} "
+            f"({type(exc).__name__}: {exc})"
+        ) from exc
+
+    return True
 
 
 def _read_bundle_members(bundle: Path) -> dict[str, Any]:
