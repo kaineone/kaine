@@ -129,7 +129,7 @@ services:
     logging: *default-logging
 
   kaine-qdrant:
-    image: qdrant/qdrant:v1.18.0
+    image: qdrant/qdrant:v1.19.1
     container_name: kaine-qdrant
     ports:
       - "127.0.0.1:${KAINE_QDRANT_HOST_PORT:-6533}:6333"
@@ -140,7 +140,7 @@ services:
       - kaine-qdrant-data:/qdrant/storage
     restart: unless-stopped
     healthcheck:
-      # qdrant:v1.18.0 ships neither wget nor curl (the image is minimal), so an
+      # qdrant:v1.19.1 ships neither wget nor curl (the image is minimal), so an
       # HTTP-client probe exits 127 and the container is falsely unhealthy, blocking
       # every dependent. The image DOES ship bash, whose /dev/tcp opens a TCP socket
       # with no external tools — qdrant binds 6333 only once it is serving, so a

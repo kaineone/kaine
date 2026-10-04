@@ -213,7 +213,7 @@ Defaults that shape the deployment choice:
 - **Redis is capped and strict.** The effective default for `KAINE_REDIS_MAXMEMORY` is `4gb` from the `${KAINE_REDIS_MAXMEMORY:-4gb}` fallback in the compose and quadlet files; `compose/.env.example` only comments it out. Redis runs with `noeviction` so the bus fails loud rather than silently dropping events. A full study needs `12gb` or more on hosts with the RAM.
 - **Log rotation.** The `x-logging` anchor in `compose/kaine.yml` uses `json-file` with `max-size: "50m"` and `max-file: "3"` for every service.
 - **Manifest provenance.** Compose passes `GIT_SHA` through `build.args`; the Dockerfile bakes it as `ENV KAINE_GIT_SHA`, and the run manifest's `git_sha` falls back to it when the git subprocess lookup fails.
-- **Qdrant healthcheck.** `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'`: qdrant v1.18.0 ships neither wget nor curl, and a successful `/dev/tcp` connect is a readiness signal.
+- **Qdrant healthcheck.** `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'`: qdrant v1.19.1 ships neither wget nor curl, and a successful `/dev/tcp` connect is a readiness signal.
 
 `.git` is excluded by `../../.dockerignore`, so no repo data leaks into the image.
 
