@@ -234,7 +234,7 @@ class Mnemos(BaseModule):
                 progressed = False
                 for stream in (self._thymos_stream, self._hypnos_stream):
                     try:
-                        entries = await self._bus.read(
+                        entries, last_scanned = await self._bus.read_entries(
                             stream,
                             last_id=self._peer_cursors.get(stream, "0"),
                             count=32,
@@ -242,9 +242,9 @@ class Mnemos(BaseModule):
                         )
                     except Exception:
                         continue
-                    if entries:
+                    if last_scanned is not None:
                         progressed = True
-                        self._peer_cursors[stream] = entries[-1][0]
+                        self._peer_cursors[stream] = last_scanned
                         for _, event in entries:
                             self._handle_peer_event(stream, event)
                 if not progressed:

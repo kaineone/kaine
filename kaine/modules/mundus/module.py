@@ -346,7 +346,7 @@ class Mundus(BaseModule):
     async def _intent_loop(self) -> None:
         while True:
             try:
-                entries = await self._bus.read(
+                entries, last_scanned = await self._bus.read_entries(
                     self._intent_stream, last_id=self._intent_cursor,
                     count=32, block_ms=200)
             except asyncio.CancelledError:
@@ -355,9 +355,9 @@ class Mundus(BaseModule):
                 log.exception("mundus: intent read failed")
                 await asyncio.sleep(0.5)
                 continue
-            if not entries:
+            if last_scanned is None:
                 continue
-            self._intent_cursor = entries[-1][0]
+            self._intent_cursor = last_scanned
             for _id, event in entries:
                 if event.type.startswith(_AVATAR_PREFIX):
                     family = event.type[len(_AVATAR_PREFIX):]
@@ -378,7 +378,7 @@ class Mundus(BaseModule):
         intents directly. (intent.avatar.say from volition still works too.)"""
         while True:
             try:
-                entries = await self._bus.read(
+                entries, last_scanned = await self._bus.read_entries(
                     self._speech_stream, last_id=self._speech_cursor,
                     count=16, block_ms=200)
             except asyncio.CancelledError:
@@ -387,9 +387,9 @@ class Mundus(BaseModule):
                 log.exception("mundus: speech read failed")
                 await asyncio.sleep(0.5)
                 continue
-            if not entries:
+            if last_scanned is None:
                 continue
-            self._speech_cursor = entries[-1][0]
+            self._speech_cursor = last_scanned
             for _id, event in entries:
                 text = (event.payload or {}).get("text")
                 if text:

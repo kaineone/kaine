@@ -166,7 +166,7 @@ class Praxis(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         self._intent_stream,
                         last_id=self._intent_cursor,
                         count=32,
@@ -175,8 +175,8 @@ class Praxis(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.05)
                     continue
-                if entries:
-                    self._intent_cursor = entries[-1][0]
+                if last_scanned is not None:
+                    self._intent_cursor = last_scanned
                     for _, event in entries:
                         await self._handle_intent(event)
                 else:

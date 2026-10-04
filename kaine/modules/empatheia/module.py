@@ -159,7 +159,7 @@ class Empatheia(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         "audition.out",
                         last_id=self._audition_cursor,
                         count=32,
@@ -168,8 +168,8 @@ class Empatheia(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.05)
                     continue
-                if entries:
-                    self._audition_cursor = entries[-1][0]
+                if last_scanned is not None:
+                    self._audition_cursor = last_scanned
                     for _, event in entries:
                         await self._handle_audition_event(event)
                 else:
