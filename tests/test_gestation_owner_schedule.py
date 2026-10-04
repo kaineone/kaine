@@ -63,6 +63,13 @@ class FakeBus:
                     break
         return result
 
+    async def read_entries(
+        self, stream: str, last_id: str = "0", count: int = 100
+    ) -> tuple[list[tuple[str, Event]], str | None]:
+        result = await self.read(stream, last_id, count)
+        # Every fake entry decodes, so the last scanned id is the last returned.
+        return result, result[-1][0] if result else None
+
     async def range(
         self, stream: str, start: str, end: str = "+"
     ) -> list[tuple[str, Event]]:

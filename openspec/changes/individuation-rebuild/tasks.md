@@ -78,6 +78,7 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 9.5 `npx -y @fission-ai/openspec@latest validate individuation-rebuild --strict` passes.
 
 ## 10. Real-organ smoke test (operator-run, entity not live)
+- [x] 10.0 Harness: `validation/smoke.py` runs steps 10.1 to 10.5 against the configured organ through the producer's own probe path, persists only scalars, and exits 0 only when every acceptance threshold it ran passed. Usage: `python openspec/changes/individuation-rebuild/validation/smoke.py --config config/kaine.toml [--control-lora '[{"id": 0, "scale": 1.0}]']`.
 - [ ] 10.1 Answers worth comparing: 40 samples per prompt; within-prompt mean pairwise distance and share of near-identical answers recorded; stop and redesign the framing if answers are degenerate.
 - [ ] 10.2 Real-data null: 1,000 random splits of the 480 answers; rejection at α = 0.05 ≤ 0.05 + 2·SE; the 95th percentile of H sets `effect_min`.
 - [ ] 10.3 Positive controls: (a) changed identity clause, (b) a known test LoRA; power at α ≈ 3.8e-4 (look 10) ≥ 0.8 against (b), and the instrument stays disabled if it is below 0.5.
