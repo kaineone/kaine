@@ -40,7 +40,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 
 ### `[evaluation.observers]`
 
-Each toggle below is gated by `[evaluation].enabled`. All default to `true` so the sidecar is fully instrumented when enabled. Disable individual observers to reduce disk writes.
+Each toggle below is gated by `[evaluation].enabled`, except that the welfare observer also runs, whatever these settings say, whenever `[preservation.welfare_response].enabled` is true. All default to `true` so the sidecar is fully instrumented when enabled. Disable individual observers to reduce disk writes.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -51,7 +51,7 @@ Each toggle below is gated by `[evaluation].enabled`. All default to `true` so t
 | `voice_alignment_divergence` | boolean | `true` | Record each sleep's voice-alignment outcome category and training metrics. |
 | `fatigue` | boolean | `true` | Log Soma fatigue-accumulator trajectory. |
 | `prediction_error` | boolean | `true` | Log per-module prediction-error statistics over sliding windows. |
-| `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). |
+| `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). When `[preservation.welfare_response].enabled` is true, the cycle runs this observer as part of the welfare net and this toggle has no effect. |
 | `nous_policy` | boolean | `true` | Log Nous policy selections and EFE scores. |
 
 ### `[evaluation.welfare]`

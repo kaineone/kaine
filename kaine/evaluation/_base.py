@@ -93,7 +93,10 @@ class StreamSubscriberObserver(BaseObserver):
 
     async def _run(self) -> None:
         try:
-            self._cursors = await self._initial_cursors()
+            # A restarted observer resumes where it stopped and never
+            # re-processes events; cursors are initialised only on first start.
+            if not self._cursors:
+                self._cursors = await self._initial_cursors()
         except Exception:
             log.warning(
                 "observer %s initial cursor failed; falling back to 0", self.name, exc_info=True

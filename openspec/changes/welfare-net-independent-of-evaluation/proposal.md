@@ -39,3 +39,7 @@ Research impact:
   - the overlay forces evaluation off over an operator config.
 - **Docs:** the ignition-study chapter, and the welfare section of the preservation chapter.
 - **Review:** this is ethics infrastructure, so it gets an independent second review.
+
+## Follow-up
+The welfare observer stays in `kaine.evaluation` for now, because it builds on that package's observer base class. Moving it into the safety-net layer, so that core runtime again needs nothing from `kaine.evaluation`, belongs with the boot restructuring (complexity audit W4/W5).
+

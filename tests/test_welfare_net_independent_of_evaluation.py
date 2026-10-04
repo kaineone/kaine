@@ -235,6 +235,226 @@ async def test_welfare_producer_start_failure_refuses_to_run(bus, tmp_path, monk
 
 
 @pytest.mark.asyncio
+async def test_supervisor_ignores_a_live_producer(bus, tmp_path):
+    from kaine.cycle.__main__ import _supervise_welfare_producer
+
+    eval_cfg = EvaluationConfig.from_mapping(
+        {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
+        lingua_model_id=None,
+    )
+    preservation_cfg = PreservationConfig.from_section(
+        {"welfare_response": {"enabled": True}}
+    )
+    producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
+    observer, sink = producer
+    original_task = observer._task
+
+    state = {}
+    await _supervise_welfare_producer(producer, state, now=100.0)
+    assert "restarts" not in state
+    assert observer._task is original_task
+
+    await observer.stop()
+    await sink.stop()
+
+
+@pytest.mark.asyncio
+async def test_supervisor_restarts_a_dead_producer(bus, tmp_path):
+    from kaine.cycle.__main__ import _supervise_welfare_producer
+
+    eval_cfg = EvaluationConfig.from_mapping(
+        {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
+        lingua_model_id=None,
+    )
+    preservation_cfg = PreservationConfig.from_section(
+        {"welfare_response": {"enabled": True}}
+    )
+    producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
+    observer, sink = producer
+    original_task = observer._task
+
+    original_task.cancel()
+    try:
+        await original_task
+    except asyncio.CancelledError:
+        pass
+
+    state = {}
+    await _supervise_welfare_producer(producer, state, now=100.0)
+    assert observer._task is not None
+    assert observer._task is not original_task
+    assert not observer._task.done()
+    assert state["restarts"] == 1
+    assert state["next_restart_at"] == 105.0
+
+    observer._task.cancel()
+    try:
+        await observer._task
+    except asyncio.CancelledError:
+        pass
+
+    await _supervise_welfare_producer(producer, state, now=101.0)
+    assert state["restarts"] == 1
+
+    await _supervise_welfare_producer(producer, state, now=106.0)
+    assert state["restarts"] == 2
+    assert state["next_restart_at"] == 116.0
+
+    await observer.stop()
+    await sink.stop()
+
+
+@pytest.mark.asyncio
+async def test_restarted_producer_does_not_replay_backlog(bus, tmp_path):
+    from kaine.cycle.__main__ import _supervise_welfare_producer
+
+    eval_cfg = EvaluationConfig.from_mapping(
+        {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
+        lingua_model_id=None,
+    )
+    preservation_cfg = PreservationConfig.from_section(
+        {"welfare_response": {"enabled": True}}
+    )
+    producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
+    observer, sink = producer
+
+    # Lower the replay threshold so the single burst fires quickly in the test.
+    observer._consolidation_window_s = 5.0
+    observer._replay_rate_threshold = 3
+
+    # Publish one burst of replay events.
+    for i in range(5):
+        await bus.publish(
+            validate_event(
+                source="mnemos",
+                type="mnemos.replay",
+                payload={"memory_id": f"mem-0-{i}", "text": "x"},
+                salience=0.1,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
+    # Wait until the welfare observer has counted exactly one replay overload.
+    deadline = asyncio.get_running_loop().time() + 5.0
+    while observer.replay_overload_count < 1:
+        if asyncio.get_running_loop().time() > deadline:
+            break
+        await asyncio.sleep(0.05)
+    assert observer.replay_overload_count == 1
+
+    before = observer.replay_overload_count
+    before_cursors = observer._cursors.copy()
+
+    # Crash the observer task, then restart it via the supervisor.
+    observer._task.cancel()
+    try:
+        await observer._task
+    except asyncio.CancelledError:
+        pass
+
+    await _supervise_welfare_producer(producer, {}, now=0.0)
+
+    # Longer than the 0.5 s poll interval, so a restart would have time to replay.
+    await asyncio.sleep(0.6)
+
+    assert observer.replay_overload_count == before
+    for stream, old_cursor in before_cursors.items():
+        current_cursor = observer._cursors.get(stream, "0")
+        assert current_cursor >= old_cursor, (
+            f"cursor for {stream} regressed from {old_cursor!r} to {current_cursor!r}"
+        )
+        assert current_cursor != "0" or old_cursor == "0", (
+            f"cursor for {stream} was reset to '0' after restart"
+        )
+
+    await observer.stop()
+    await sink.stop()
+
+
+@pytest.mark.asyncio
+async def test_producer_construction_failure_refuses(bus, tmp_path, monkeypatch):
+    eval_cfg = EvaluationConfig.from_mapping(
+        {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
+        lingua_model_id=None,
+    )
+    preservation_cfg = PreservationConfig.from_section(
+        {"welfare_response": {"enabled": True}}
+    )
+
+    def bad_build(*args, **kwargs):
+        raise OSError("bad path")
+
+    import kaine.evaluation.observers.welfare_observer as welfare_observer_module
+    monkeypatch.setattr(welfare_observer_module, "build_welfare_producer", bad_build)
+
+    with pytest.raises(RuntimeError, match="gray-zone producer could not start"):
+        await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
+
+
+def test_boot_wiring_order():
+    import ast
+    import inspect
+
+    import kaine.cycle.__main__ as entry
+
+    source_path = Path(inspect.getsourcefile(entry))
+    source = source_path.read_text()
+    tree = ast.parse(source)
+
+    boot = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_boot_and_run":
+            boot = node
+            break
+    assert boot is not None, "_boot_and_run not found in source"
+
+    def _collect_calls(node):
+        calls = []
+        for child in ast.iter_child_nodes(node):
+            calls.extend(_collect_calls(child))
+        if isinstance(node, ast.Call):
+            name = ""
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                name = node.func.attr
+            calls.append((name, node.lineno))
+        return calls
+
+    all_calls = _collect_calls(boot)
+
+    def _first(name):
+        for n, lineno in all_calls:
+            if n == name:
+                return lineno
+        raise AssertionError(f"{name} not found in _boot_and_run")
+
+    audit_lineno = _first("audit")
+    producer_start_lineno = _first("_start_welfare_producer")
+    build_registry_lineno = _first("build_registry")
+    sidecar_registry_lineno = _first("SidecarRegistry")
+
+    assert audit_lineno < producer_start_lineno
+    assert producer_start_lineno < build_registry_lineno
+    assert build_registry_lineno < sidecar_registry_lineno
+
+    sidecar_kwarg_found = False
+    for node in ast.walk(boot):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "SidecarRegistry"
+        ):
+            if any(kw.arg == "welfare_observer" for kw in node.keywords):
+                sidecar_kwarg_found = True
+                break
+    assert sidecar_kwarg_found
+
+    stop_calls = sum(1 for n, _ in all_calls if n == "_stop_welfare_producer")
+    assert stop_calls >= 3
+
+
+@pytest.mark.asyncio
 async def test_gray_zone_reaches_the_monitor_with_evaluation_off(bus, tmp_path):
     eval_cfg = EvaluationConfig.from_mapping(
         {

@@ -227,9 +227,13 @@ root_packages = ["kaine"]
 include_external_packages = true
 
 # LOAD-BEARING: the sidecar boundary. kaine.evaluation is the observe-only
-# research subsystem; core runtime must run with it entirely absent. Nothing
-# under kaine/ may import kaine.evaluation EXCEPT the two composition-root
-# entrypoints that wire the sidecar in (the only seams).
+# research subsystem; core runtime must run with it entirely absent, with one
+# exception: when the welfare response is enabled, the cycle entrypoint runs the
+# welfare observer (the gray-zone producer of the welfare net) from
+# kaine.evaluation and refuses to run without it. Moving that producer into the
+# safety-net layer is planned with the boot restructuring. Nothing under kaine/
+# may import kaine.evaluation EXCEPT the two composition-root entrypoints that
+# wire the sidecar in (the only seams).
 #
 # The source list is every top-level kaine package/module EXCEPT evaluation
 # itself (evaluation submodules legitimately import each other). The two seams

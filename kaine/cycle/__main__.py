@@ -30,6 +30,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -138,6 +139,10 @@ def _make_birth_hook(clock, feed, birth_seconds, *, now=lambda: datetime.now(tim
 
 
 RUNTIME_PATH = Path("state/cycle/runtime.json")
+
+# Exit code when the welfare response is enabled but its gray-zone producer
+# cannot start; we fail closed before any module spawns.
+WELFARE_PRODUCER_REFUSED_EXIT = 8
 
 
 def _thymos_state_factory(registry):
@@ -382,17 +387,19 @@ async def _start_welfare_producer(bus, eval_cfg, preservation_cfg) -> tuple[Any,
         return None
     from kaine.evaluation.observers.welfare_observer import build_welfare_producer
 
-    observer, sink = build_welfare_producer(bus, eval_cfg)
+    observer = None
+    sink = None
     try:
+        observer, sink = build_welfare_producer(bus, eval_cfg)
         await sink.start()
         await observer.start()
     except Exception as exc:
-        try:
+        if observer is not None:
             try:
                 await observer.stop()
             except Exception:
                 log.warning("welfare producer observer stop failed during rollback", exc_info=True)
-        finally:
+        if sink is not None:
             try:
                 await sink.stop()
             except Exception:
@@ -402,6 +409,54 @@ async def _start_welfare_producer(bus, eval_cfg, preservation_cfg) -> tuple[Any,
             "welfare response is enabled but its gray-zone producer could not start; refusing to run without it"
         ) from exc
     return observer, sink
+
+
+async def _stop_welfare_producer(producer) -> None:
+    """Stop a running welfare producer, logging warnings on failure."""
+    if producer is None:
+        return
+    observer, sink = producer
+    try:
+        await observer.stop()
+    except Exception:
+        log.warning("welfare producer observer stop failed", exc_info=True)
+    try:
+        await sink.stop()
+    except Exception:
+        log.warning("welfare producer sink stop failed", exc_info=True)
+
+
+async def _supervise_welfare_producer(producer, state: dict, now: float) -> None:
+    """Restart the welfare observer if its task dies while the run is live."""
+    if producer is None:
+        return
+    observer, _sink = producer
+    task = observer._task
+    if task is None or task.done():
+        if now >= state.get("next_restart_at", 0.0):
+            exc_info = None
+            if task is not None and task.done():
+                try:
+                    exc_info = task.exception()
+                except (asyncio.CancelledError, Exception):
+                    exc_info = None
+            if exc_info is not None:
+                log.critical(
+                    "welfare gray-zone producer stopped unexpectedly; restarting (task exception: %s)",
+                    exc_info,
+                )
+            else:
+                log.critical("welfare gray-zone producer stopped unexpectedly; restarting")
+            try:
+                await observer.stop()
+                await observer.start()
+            except Exception as restart_exc:
+                log.critical("welfare gray-zone producer restart failed: %s", restart_exc)
+            restarts = state.get("restarts", 0)
+            state["restarts"] = restarts + 1
+            backoff = min(5.0 * (2 ** restarts), 300.0)
+            state["backoff_s"] = backoff
+            state["next_restart_at"] = now + backoff
 
 
 # Modules whose factories read `[<module>.qdrant].api_key`. They all share the
@@ -1270,6 +1325,22 @@ async def _boot_and_run(
     bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)
     await bus.audit()
 
+    # Preservation config is needed by the cycle safety-net and by the welfare
+    # gray-zone producer, which runs whenever the welfare response is enabled,
+    # independent of [evaluation].
+    from kaine.cycle.preservation_monitor import PreservationConfig
+
+    preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
+
+    try:
+        welfare_producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
+    except RuntimeError:
+        log.error(
+            "refusing to start: the welfare response is enabled but its gray-zone producer could not start"
+        )
+        await bus.close()
+        return WELFARE_PRODUCER_REFUSED_EXIT
+
     # Emit the first-gestation event now that the bus exists. This is the only
     # lifecycle event that fires at boot; the gate loop emits the rest on a
     # cadence once modules are up.
@@ -1324,6 +1395,7 @@ async def _boot_and_run(
                     continue
         if not womb_ready:
             log.info("shutdown requested while waiting for the womb; nothing was spawned")
+            await _stop_welfare_producer(welfare_producer)
             await bus.close()
             return 0
         from kaine import perception_state as _ps
@@ -1366,6 +1438,7 @@ async def _boot_and_run(
     if revive is not None:
         refused = await _revive_or_refuse(revive, registry, bus)
         if refused is not None:
+            await _stop_welfare_producer(welfare_producer)
             return refused
 
     # Developmental maturation gate. Constructed after modules exist so it can
@@ -1621,19 +1694,10 @@ async def _boot_and_run(
         revived_from=revive.revived_from if revive is not None else None,
     )
 
-    # Preservation config is needed by the cycle safety-net and by the welfare
-    # gray-zone producer, which runs whenever the welfare response is enabled,
-    # independent of [evaluation].
-    from kaine.cycle.preservation_monitor import PreservationConfig
-
-    preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
-
     # Optional evaluation sidecar. NO core module imports kaine.evaluation;
     # the cycle entrypoint is the single coupling point. eval_cfg was loaded at
     # the top of _boot_and_run (fail-closed before any resource opened).
     sidecar: SidecarRegistry | None = None
-    welfare_producer = None
-    welfare_producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
     research_active = research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
     if eval_cfg.enabled or research_active:
         from kaine.boot import shared_embedder
@@ -1991,9 +2055,13 @@ async def _boot_and_run(
     )
 
     try:
+        _welfare_supervision: dict = {}
         # Periodically update runtime.json so Nexus has fresh metrics
         # even before any tick happens.
         while not stop_event.is_set() and not cycle_task.done():
+            await _supervise_welfare_producer(
+                welfare_producer, _welfare_supervision, time.monotonic()
+            )
             if supervision_mode == "unattended":
                 if spot_task is None:
                     log.critical(
@@ -2129,16 +2197,7 @@ async def _boot_and_run(
                 await sidecar.stop()
             except Exception:
                 log.warning("evaluation sidecar stop failed", exc_info=True)
-        if welfare_producer is not None:
-            observer, sink = welfare_producer
-            try:
-                await observer.stop()
-            except Exception:
-                log.warning("welfare producer observer stop failed", exc_info=True)
-            try:
-                await sink.stop()
-            except Exception:
-                log.warning("welfare producer sink stop failed", exc_info=True)
+        await _stop_welfare_producer(welfare_producer)
         try:
             il = ignition_log
         except NameError:
