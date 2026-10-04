@@ -29,8 +29,8 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 4.3 Report sink at `state/individuation/reports/` (`AsyncJsonlSink`, `retention_days=0`, per-line encryption), record `kind="individuation_report"`, `schema_version=2`, no texts, seeds or digests.
 - [x] 4.4 Decrypting reader: skips undecryptable, non-object, wrong-kind and wrong-schema lines and reports for another `reference_id`; orders by `ts`; applies the staleness rule (`max_report_age_s`, digest equality) with the latch overriding it.
 - [x] 4.5 Conditioning-digest helper over inputs (adapter sha from the adapter store, `values[:5]` and `behavioral_norms[:5]` from `self_model.json`), with no module import.
-- [ ] 4.6 Shared lived-time accumulator factored out of `kaine/lifecycle/gate_runner.py` (EntityClock minus engine paused time; tick deltas anchored per boot); the maturation gate uses it unchanged.
-- [ ] 4.7 Tests with state encryption on and off, legacy plaintext lines, a corrupt ledger, a regressing `looks_completed` write (refused), and name-vs-ts ordering.
+- [x] 4.6 Shared lived-time accumulator factored out of `kaine/lifecycle/gate_runner.py` (EntityClock minus engine paused time; tick deltas anchored per boot); the maturation gate uses it unchanged.
+- [x] 4.7 Tests with state encryption on and off, legacy plaintext lines, a corrupt ledger, a regressing `looks_completed` write (refused), and name-vs-ts ordering.
 
 ## 5. Probe seam and disclosure
 - [ ] 5.1 `Lingua.probe_request(about, *, seed, max_tokens) -> ChatRequest`: side-effect free, `snapshot=None`, `mode="external"`, current self-model, Lingua's model, temperature and `think`, `cache_prompt` off.
