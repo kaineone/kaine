@@ -4,9 +4,9 @@
 # One image, many hosts. A single multi-stage build produces the KAINE runtime
 # image for both `kaine-cycle` (the cognitive runtime) and `kaine-nexus` (the
 # web UI) — same image, different CMD. The accelerator-correct PyTorch wheel is
-# selected at BUILD time from a FLAVOR build-arg that reuses scripts/install.py's
-# single source of truth (`install.py --print-index <flavor>`), never re-derived
-# here. See openspec/changes/containerize-deployment/design.md §3.
+# selected at BUILD time from a FLAVOR build-arg that reuses kaine.wheel_index's
+# single source of truth (its `--image-index <flavor>` table, run standalone
+# from a copy before the package is installed), never re-derived here. See openspec/changes/containerize-deployment/design.md §3.
 #
 #   FLAVOR=cuda  (default, published)     nvidia/cuda devel→runtime bases
 #   FLAVOR=cpu   (published, always-works) python:3.12-slim base
@@ -82,14 +82,17 @@ RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 RUN pip install --upgrade pip
 
-# Single source of truth for the wheel index: copy install.py and pyproject.toml
-# first so the torch layer caches independently of the rest of the source tree.
-# The torch layer also re-builds when pyproject.toml changes, which is required
-# so the image follows the project torch requirement.
-COPY scripts/install.py /src/scripts/install.py
+# Single source of truth for the wheel index: copy kaine.wheel_index and the
+# wheel data it needs, plus pyproject.toml, first so the torch layer caches
+# independently of the rest of the source tree. The torch layer also re-builds
+# when pyproject.toml changes, which is required so the image follows the project
+# torch requirement.
+COPY kaine/wheel_index.py /src/wheelidx/wheel_index.py
+COPY kaine/wheel_data.py /src/wheelidx/wheel_data.py
+RUN touch /src/wheelidx/__init__.py
 COPY pyproject.toml /src/pyproject.toml
-RUN TORCH_INDEX="$(python /src/scripts/install.py --print-index "${FLAVOR}")" \
- && TORCH_SPEC="$(python /src/scripts/install.py --print-torch-spec)" \
+RUN TORCH_INDEX="$(cd /src && python -m wheelidx.wheel_index --image-index "${FLAVOR}")" \
+ && TORCH_SPEC="$(cd /src && python -m wheelidx.wheel_index --torch-spec /src/pyproject.toml)" \
  && if [ -n "${TORCH_INDEX}" ]; then \
         pip install --index-url "${TORCH_INDEX}" "${TORCH_SPEC}" torchvision; \
     else \
@@ -216,9 +219,11 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# The index lookup uses only the standard library, so the system python3.12 is
-# sufficient before the trainer venv exists.
-COPY scripts/install.py /src/scripts/install.py
+# The index lookup uses only the standard library, so kaine.wheel_index can run
+# with the system python3.12 before the trainer venv exists.
+COPY kaine/wheel_index.py /src/wheelidx/wheel_index.py
+COPY kaine/wheel_data.py /src/wheelidx/wheel_data.py
+RUN touch /src/wheelidx/__init__.py
 COPY pyproject.toml /src/pyproject.toml
 
 # Separate venv so the [training] stack never touches the runtime venv.
@@ -227,7 +232,7 @@ ENV PATH="/opt/trainer/bin:${PATH}"
 
 # The trainer venv carries its own torch because the training stack (unsloth)
 # supports an older torch than the runtime. The runtime torch is unaffected.
-RUN TORCH_INDEX="$(python3.12 /src/scripts/install.py --print-index "${FLAVOR}")" \
+RUN TORCH_INDEX="$(cd /src && python3.12 -m wheelidx.wheel_index --image-index "${FLAVOR}")" \
  && if [ -n "${TORCH_INDEX}" ]; then \
         /opt/trainer/bin/pip install --index-url "${TORCH_INDEX}" "torch>=2.10,<2.13" torchvision; \
     else \

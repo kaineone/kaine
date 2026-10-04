@@ -96,7 +96,7 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 
 The full reference also lists `nous_step_burst` and `seed`.
 
-If a shared model server is in use, `hot_swap_mode` is forced to `manual` regardless of config (`kaine/boot.py`). The `[training]` extras are required only for `trainer_backend = "in_process"`.
+If a shared model server is in use, `hot_swap_mode` is forced to `manual` regardless of config (`kaine/boot/factories/hypnos.py`). The `[training]` extras are required only for `trainer_backend = "in_process"`.
 
 ## How it works
 

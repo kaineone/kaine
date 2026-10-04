@@ -1052,12 +1052,12 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, t
 
     for name in ("topos", "audition"):
         monkeypatch.setitem(SIMPLE_FACTORIES, name, _recorder(name))
-    monkeypatch.setattr("kaine.boot.install_state_encryption", lambda cfg: None)
-    monkeypatch.setattr("kaine.boot._wire_self_hearing_gate", lambda reg: None)
-    monkeypatch.setattr("kaine.boot._wire_lingua_self_model", lambda reg: None)
-    monkeypatch.setattr("kaine.boot._wire_eidolon_capabilities", lambda reg: None)
-    monkeypatch.setattr("kaine.boot._log_device_assignments", lambda reg, cfg: None)
-    monkeypatch.setattr("kaine.boot._wire_oscillators", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot.registry.install_state_encryption", lambda cfg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_self_hearing_gate", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_lingua_self_model", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_eidolon_capabilities", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._log_device_assignments", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_oscillators", lambda reg, cfg: None)
 
     kaine_config = {
         "modules": {"topos": True, "audition": True},

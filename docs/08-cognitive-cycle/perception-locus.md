@@ -183,7 +183,7 @@ allow_self_switch = false
 min_dwell_s = 30.0
 ```
 
-`boot.make_perception()` in `kaine/boot.py` reads this section and passes the keys to the `PerceptionLocus` constructor.
+`boot.make_perception()` in `kaine/boot/factories/perception.py` reads this section and passes the keys to the `PerceptionLocus` constructor.
 
 The `PerceptionLocus` module is toggled via:
 

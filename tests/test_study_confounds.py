@@ -148,7 +148,7 @@ async def test_make_audition_sets_source_label_per_feed(bus, monkeypatch):
 
     monkeypatch.setattr(LiveMicConfig, "__init__", tracking_init)
     monkeypatch.setattr(
-        "kaine.boot._build_perception_feed_audio_factory",
+        "kaine.boot.factories.audition._build_perception_feed_audio_factory",
         lambda mode, feed_section, **kwargs: lambda: None,
     )
 

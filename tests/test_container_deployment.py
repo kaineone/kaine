@@ -13,17 +13,17 @@ entity. They enforce the load-bearing invariants of the design:
   - no volume/bind mount captures raw audio/video (zero raw-sense-data
     persistence), and perception scratch is RAM-backed tmpfs;
   - model weights / secrets / state never enter the image;
-  - the image build reuses install.py's wheel-index mapping (single source of
-    truth);
+  - the image build reuses kaine.wheel_index's wheel-index mapping (single source
+    of truth);
   - the setup provisioner plans every model weight.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -42,50 +42,57 @@ def _load_compose() -> dict:
         return yaml.safe_load(fh)
 
 
-def _install_module():
-    """Import scripts/install.py directly from the worktree (not a package)."""
-    path = _REPO_ROOT / "scripts" / "install.py"
-    spec = importlib.util.spec_from_file_location("_kaine_install_under_test", path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+def _wheel_index_module():
+    """Import ``kaine.wheel_index`` from the worktree (as a package)."""
+    repo = str(_REPO_ROOT)
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
+    import kaine.wheel_index
+
+    return kaine.wheel_index
 
 
 # --------------------------------------------------------------------------
 # 1.1 — single source of truth for the wheel index
 # --------------------------------------------------------------------------
 def test_print_index_matches_index_by_flavor():
-    mod = _install_module()
-    for flavor, expected in mod._INDEX_BY_FLAVOR.items():
-        got = mod.torch_index_url(flavor)
-        if flavor == "cuda":
-            # The exact URL is host-dependent (the resolver picks the CPU index
-            # on GPU-less hosts, cu128 on NVIDIA hosts) — only require a
-            # non-empty string.
-            assert isinstance(got, str) and got, flavor
-        else:
-            assert got == expected, flavor
+    mod = _wheel_index_module()
+    for flavor, expected in mod.IMAGE_INDEX_BY_FLAVOR.items():
+        assert mod.image_index(flavor) == expected, flavor
     with pytest.raises(KeyError):
-        mod.torch_index_url("bogus")
+        mod.image_index("bogus")
 
 
 def test_print_index_cli_accessor():
     py = shutil.which("python3") or "python3"
-    script = str(_REPO_ROOT / "scripts" / "install.py")
     cuda = subprocess.run(
-        [py, script, "--print-index", "cuda"],
+        [py, "-m", "kaine.wheel_index", "--image-index", "cuda"],
+        cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
         check=True,
     )
     assert cuda.stdout.strip().startswith("https://download.pytorch.org/whl/")
     mps = subprocess.run(
-        [py, script, "--print-index", "mps"], capture_output=True, text=True, check=True
+        [py, "-m", "kaine.wheel_index", "--image-index", "mps"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert mps.stdout.strip() == ""  # MPS uses default PyPI
     spec = subprocess.run(
-        [py, script, "--print-torch-spec"], capture_output=True, text=True, check=True
+        [
+            py,
+            "-m",
+            "kaine.wheel_index",
+            "--torch-spec",
+            str(_REPO_ROOT / "pyproject.toml"),
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
 
     with open(_REPO_ROOT / "pyproject.toml", "rb") as f:
@@ -107,7 +114,8 @@ def test_dockerfile_shape():
     assert "AS build" in text and "AS runtime" in text
     # flavor build-arg + reuse of install.py's index
     assert "ARG FLAVOR" in text
-    assert "install.py --print-index" in text
+    assert "wheelidx.wheel_index --image-index" in text
+    assert "install.py" not in text
     # non-root user + volumes + offline guards. The state volume mounts at
     # /app/state (the app writes state CWD-relative under WORKDIR /app), not /state.
     assert "useradd" in text and "USER kaine" in text

@@ -165,7 +165,7 @@ The result is clamped to `[thymos.coupling].coupling_ceiling` (default `0.15`). 
 | `kaine/modules/empatheia/agent.py` | `AgentModel` — histogram, EMA update, `familiarity()`, deviation |
 | `kaine/modules/empatheia/store.py` | `AgentStore` protocol, `InMemoryAgentStore`, `QdrantAgentStore` |
 | `kaine/lifecycle/strategies.py` | `EmpatheiaMergeStrategy` (fork merges) |
-| `kaine/boot.py` | `make_empatheia()` — Qdrant sub-table wiring |
+| `kaine/boot/factories/empatheia.py` | `make_empatheia()` — Qdrant sub-table wiring |
 
 ## Enabling and use
 

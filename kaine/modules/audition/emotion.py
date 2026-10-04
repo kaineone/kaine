@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Speech emotion classification for AudioInput.
+"""Speech emotion classification for Audition.
 
 The default `Emotion2vecClassifier` lazy-imports `funasr` (an optional
 dep listed under the `audio` extra in pyproject.toml). If funasr isn't
 installed, the classifier degrades to neutral with a one-time warning
-so AudioInput as a whole still produces transcriptions.
+so Audition as a whole still produces transcriptions.
 """
 from __future__ import annotations
 

@@ -492,7 +492,7 @@ capture_device = 0                # cv2.VideoCapture device index or URL
 # per subjective second, benchmarked-cleared at 10 Hz on this host (RTX 4070
 # SUPER ~95 Hz encode headroom — operator-approved). capture_interval_s is kept
 # consistent (0.1 s = 1/10 Hz) for operator reference; vision_sample_hz wins
-# when both keys are present (see boot.py). The shared EntityClock dilates both
+# when both keys are present (see kaine/boot/factories/topos.py). The shared EntityClock dilates both
 # with time_scale coherently (biological-timing-and-dilation).
 capture_interval_s = 0.1
 vision_sample_hz = 10.0

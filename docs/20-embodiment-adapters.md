@@ -16,7 +16,7 @@ A body is a small adapter that:
  entity ◀──mundus.* events──  Mundus core  ◀──────── feed() yields FeedFrame ───  YOUR ADAPTER ◀── body
 ```
 
-The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/mundus/adapters/`](../kaine/modules/mundus/adapters/), register it in [`kaine/boot.py`](../kaine/boot.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
+The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/mundus/adapters/`](../kaine/modules/mundus/adapters/), register it in [`kaine/boot/factories/mundus.py`](../kaine/boot/factories/mundus.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
 
 The shipped reference body is the transport-free stub in [`kaine/modules/mundus/adapters/stub.py`](../kaine/modules/mundus/adapters/stub.py). It pins the whole protocol, including the continuous-control path, with no socket and no external dependency. Use it as a template and as a conformance-test baseline. A virtual-world (Paracosmic) adapter is planned behind the same contract; only the old Kosmos connector design was archived as superseded. The only adapter that ships today is `stub`.
 
@@ -171,7 +171,7 @@ Design your descriptor defaults conservatively: expose only benign families and 
 
 ## Wiring at boot
 
-Adapters are constructed in `make_mundus` in [`kaine/boot.py`](../kaine/boot.py). It:
+Adapters are constructed in `make_mundus` in [`kaine/boot/factories/mundus.py`](../kaine/boot/factories/mundus.py). It:
 
 1. reads `[mundus].adapter` (default `"stub"`);
 2. reads that adapter's own nested `[mundus.<adapter>]` table for adapter-specific settings and `expose_<family>` overrides;
