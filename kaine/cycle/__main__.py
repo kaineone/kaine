@@ -39,6 +39,7 @@ from kaine.boot import (
     MetricsCollector,
     build_registry,
     construct_module,
+    drive_sources_for,
     known_module_names,
     make_coherence_scorer,
     make_salience_factors,
@@ -60,6 +61,11 @@ from kaine.cycle.ignition_log import (
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
+from kaine.defaults import (
+    lingua_section_api_key,
+    lingua_section_chat_url,
+    model_server_api_key,
+)
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
 from kaine.experiment import (
@@ -895,7 +901,7 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
     # never crashes boot — a missing/unreadable state file simply contributes
     # nothing. Records "lingua@<repo>" -> "<sha>" only for the served repo.
     try:
-        from kaine.setup.organ import read_revision_state
+        from kaine.organ_probe import read_revision_state
 
         revisions = read_revision_state()
         if isinstance(lingua_model_id, str) and lingua_model_id in revisions:
@@ -1296,9 +1302,7 @@ async def _boot_and_run(
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = (kaine_config.get("lingua") or {}).get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    lingua_api_key = model_server_api_key(kaine_config)
     try:
         eval_cfg = load_evaluation_config(
             lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
@@ -1419,13 +1423,13 @@ async def _boot_and_run(
         if organ_unloaded():
             log.info("organ-gate: skipped (organ resting — voice-alignment window)")
         else:
-            from kaine.setup.organ import verify_organ_generates
+            from kaine.organ_probe import verify_organ_generates
 
             lingua_cfg = kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(
-                str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1")),
+                lingua_section_chat_url(lingua_cfg),
                 str(lingua_cfg.get("model_id") or ""),
-                api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+                api_key=lingua_section_api_key(lingua_cfg),
             )
             log.info("organ-gate: %s", gate.detail)
             if not gate.ok:
@@ -1592,7 +1596,7 @@ async def _boot_and_run(
     # pending validation on logged runs (see config/kaine.toml [syneidesis]).
     affect_provider = AffectStateProvider()
     thymos_modulator, goal_scorer, downgraded_factors = make_salience_factors(
-        kaine_config, affect_provider
+        kaine_config, affect_provider, drive_sources=drive_sources_for(registry)
     )
     # Foveation's fovea size reads the same affect snapshot (arousal → size).
     # Wiring it also means the provider must be refreshed each tick so the arousal

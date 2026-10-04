@@ -28,6 +28,7 @@ from kaine.workspace.strategies import (
     DriveRelevanceGoalScorer,
     StaticGoalScorer,
     StaticThymosModulator,
+    build_drive_sources,
 )
 from kaine.workspace.syneidesis import Syneidesis
 from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
@@ -54,6 +55,30 @@ def _thymos_state(*, valence=0.0, arousal=0.3, dominance=0.0, drives=None) -> Ev
         salience=0.1,
         timestamp=datetime.now(timezone.utc),
     )
+
+
+# Per-module drive-tag declarations (from BaseModule.relieves_drives). The
+# scaffolding source volition is added by build_drive_sources automatically.
+_MODULE_TAGS: dict[str, frozenset[str]] = {
+    "perception": frozenset({"curiosity", "boredom"}),
+    "topos": frozenset({"curiosity", "boredom"}),
+    "mnemos": frozenset({"curiosity", "boredom"}),
+    "audition": frozenset({"curiosity", "boredom", "social_drive"}),
+    "mundus": frozenset({"curiosity", "boredom", "restlessness"}),
+    "nous": frozenset({"boredom"}),
+    "phantasia": frozenset({"boredom"}),
+    "lingua": frozenset({"boredom", "social_drive"}),
+    "empatheia": frozenset({"social_drive"}),
+    "chronos": frozenset({"social_drive"}),
+    "vox": frozenset({"social_drive", "restlessness"}),
+    "praxis": frozenset({"restlessness"}),
+    "soma": frozenset(),
+    "thymos": frozenset(),
+    "eidolon": frozenset(),
+    "hypnos": frozenset(),
+    "echo": frozenset(),
+}
+_FULL_SOURCES = build_drive_sources(_MODULE_TAGS)
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +178,9 @@ def test_real_factors_emit_no_degraded_warning(caplog):
     with caplog.at_level(logging.WARNING, logger="kaine.workspace.salience"):
         RuleBasedSalience(
             NoveltyTracker(),
-            DriveRelevanceGoalScorer(provider.drive_values),
+            DriveRelevanceGoalScorer(
+                provider.drive_values, drive_sources=_FULL_SOURCES
+            ),
             StateModulator(provider.dimensional_state),
         )
     assert caplog.records == [], f"unexpected warnings: {[r.message for r in caplog.records]}"
@@ -233,7 +260,9 @@ async def test_real_four_factor_selection_is_deterministic():
         provider.observe([("0-0", thymos)])
         strategy = RuleBasedSalience(
             NoveltyTracker(window=8),
-            DriveRelevanceGoalScorer(provider.drive_values),
+            DriveRelevanceGoalScorer(
+                provider.drive_values, drive_sources=_FULL_SOURCES
+            ),
             StateModulator(provider.dimensional_state),
         )
         return Syneidesis(strategy, top_k=3, publication_threshold=0.05)
@@ -256,7 +285,7 @@ async def test_real_four_factor_selection_is_deterministic():
 @pytest.mark.asyncio
 async def test_drive_relevance_prefers_source_serving_dominant_drive():
     drives = {"curiosity": 0.9, "boredom": 0.1, "social_drive": 0.0, "restlessness": 0.0}
-    scorer = DriveRelevanceGoalScorer(lambda: drives)
+    scorer = DriveRelevanceGoalScorer(lambda: drives, drive_sources=_FULL_SOURCES)
 
     serving = await scorer.relevance(_event("perception", 0.5))  # serves curiosity
     non_serving = await scorer.relevance(_event("praxis", 0.5))  # does not
@@ -271,14 +300,15 @@ async def test_drive_relevance_prefers_source_serving_dominant_drive():
 
 @pytest.mark.asyncio
 async def test_drive_relevance_neutral_without_drives():
-    scorer = DriveRelevanceGoalScorer(lambda: {})
+    scorer = DriveRelevanceGoalScorer(lambda: {}, drive_sources=_FULL_SOURCES)
     assert await scorer.relevance(_event("praxis", 0.5)) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
 async def test_drive_relevance_neutral_when_all_drives_zero():
     scorer = DriveRelevanceGoalScorer(
-        lambda: {"curiosity": 0.0, "boredom": 0.0, "social_drive": 0.0, "restlessness": 0.0}
+        lambda: {"curiosity": 0.0, "boredom": 0.0, "social_drive": 0.0, "restlessness": 0.0},
+        drive_sources=_FULL_SOURCES,
     )
     assert await scorer.relevance(_event("praxis", 0.5)) == pytest.approx(1.0)
 
@@ -286,15 +316,23 @@ async def test_drive_relevance_neutral_when_all_drives_zero():
 @pytest.mark.asyncio
 async def test_drive_relevance_dominant_pick_is_deterministic():
     # Tie on value -> broken by name, independent of insertion order.
-    a = DriveRelevanceGoalScorer(lambda: {"curiosity": 0.6, "restlessness": 0.6})
-    b = DriveRelevanceGoalScorer(lambda: {"restlessness": 0.6, "curiosity": 0.6})
+    a = DriveRelevanceGoalScorer(
+        lambda: {"curiosity": 0.6, "restlessness": 0.6},
+        drive_sources=_FULL_SOURCES,
+    )
+    b = DriveRelevanceGoalScorer(
+        lambda: {"restlessness": 0.6, "curiosity": 0.6},
+        drive_sources=_FULL_SOURCES,
+    )
     ev = _event("praxis", 0.5)  # serves restlessness, not curiosity
     assert await a.relevance(ev) == await b.relevance(ev)
 
 
 def test_invalid_attenuation_rejected():
     with pytest.raises(ValueError):
-        DriveRelevanceGoalScorer(lambda: {}, attenuation=1.5)
+        DriveRelevanceGoalScorer(
+            lambda: {}, drive_sources=_FULL_SOURCES, attenuation=1.5
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +363,9 @@ def test_make_salience_factors_thymos_static_is_a_downgrade():
 
 def test_make_salience_factors_goal_drive_relevance_activates_real_scorer():
     thymos, goal, downgraded = make_salience_factors(
-        _cfg(salience_goal_factor="drive_relevance"), AffectStateProvider()
+        _cfg(salience_goal_factor="drive_relevance"),
+        AffectStateProvider(),
+        drive_sources=_FULL_SOURCES,
     )
     assert isinstance(goal, DriveRelevanceGoalScorer)
     assert downgraded == []

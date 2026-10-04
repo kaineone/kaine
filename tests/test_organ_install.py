@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import subprocess
 
+from kaine import organ_probe
 from kaine.setup import organ
 from kaine.setup.organ import (
     ORGAN_GGUF_REPO,
@@ -215,11 +216,11 @@ def test_revision_state_round_trip(tmp_path):
     assert written == str(path)
     data = json.loads(path.read_text())
     assert data == {ORGAN_GGUF_REPO: "b" * 40}
-    assert organ.read_revision_state(str(path)) == {ORGAN_GGUF_REPO: "b" * 40}
+    assert organ_probe.read_revision_state(str(path)) == {ORGAN_GGUF_REPO: "b" * 40}
 
 
 def test_revision_state_absent_is_empty(tmp_path):
-    assert organ.read_revision_state(str(tmp_path / "missing.json")) == {}
+    assert organ_probe.read_revision_state(str(tmp_path / "missing.json")) == {}
 
 
 def test_revision_state_nothing_to_write(tmp_path):
@@ -247,6 +248,8 @@ def test_gather_model_ids_pins_organ_revision(tmp_path, monkeypatch):
         path=str(state),
     )
     monkeypatch.setattr(organ, "ORGAN_REVISION_STATE_PATH", str(state))
+    # The reader lives in kaine.organ_probe; the writer stays in kaine.setup.organ.
+    monkeypatch.setattr("kaine.organ_probe.ORGAN_REVISION_STATE_PATH", str(state))
 
     ids = _gather_model_ids(
         {"lingua": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=ORGAN_GGUF_REPO

@@ -30,6 +30,11 @@ class BaseModule(ABC):
 
     name: ClassVar[str]
 
+    # ENGINEERING EXTENSION (paper §3.4.3): the Thymos drives that this module's
+    # events tend to relieve. The salience goal factor reads these declarations
+    # (see kaine.workspace.strategies.build_drive_sources). Empty means none.
+    relieves_drives: ClassVar[frozenset[str]] = frozenset()
+
     def __init__(self, bus: AsyncBus) -> None:
         self._enforce_name()
         self._bus = bus
