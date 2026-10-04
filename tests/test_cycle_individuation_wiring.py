@@ -18,12 +18,18 @@ def test_individuation_refusal_disabled_by_default():
 
 
 def test_individuation_refusal_missing_eidolon():
-    _, reason = _individuation_refusal(
+    cfg, reason = _individuation_refusal(
         {"individuation": {"enabled": True}, "modules": {"lingua": True}}
     )
+    assert cfg is not None
+    assert reason is None
+
+    _, reason = _individuation_refusal(
+        {"individuation": {"enabled": True}, "modules": {"eidolon": True}}
+    )
     assert reason is not None
-    assert "eidolon" in reason
-    assert "lingua" not in reason
+    assert "lingua" in reason
+    assert "eidolon" not in reason
 
 
 def test_individuation_refusal_unknown_key():

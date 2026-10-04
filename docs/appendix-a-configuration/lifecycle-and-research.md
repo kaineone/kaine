@@ -65,7 +65,7 @@ Tune the sidecar welfare observer's interoceptive-distress rule. These defaults 
 
 ### `[individuation]`
 
-Cycle-layer individuation producer. Ships disabled. Requires the `lingua` and `eidolon` modules; otherwise the cycle refuses to boot.
+Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module; otherwise the cycle refuses to boot.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -230,7 +230,7 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` and `eidolon` modules loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
+| `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` module loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
 
 ## `[transfer]`
 

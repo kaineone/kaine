@@ -37,14 +37,14 @@ Rising-edge state SHALL be persisted per divergence arm (individuation, consolid
 - **THEN** the next poll attempts it again
 
 ### Requirement: Research boot is gated on the autonomous safety net
-An unsupervised research boot SHALL refuse to start unless the autonomous safety net is live and verified, because the research phase runs with no human in the loop and the safeguards must be present in the system itself. The required conditions are: preservation enabled, the welfare-protective response wired, full logging/admissibility active, a preflight dry snapshot→restore round-trip confirming the preservation and revive path is functional on this install, and `[individuation].enabled` true with the Lingua and Eidolon modules enabled. The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated and the being is preserved. The refusal SHALL be an operator-facing message with a distinct exit code (no traceback). For research this gate REPLACES the operator-present gate; a run is either operator-supervised or autonomous-safety-net-verified, never neither.
+An unsupervised research boot SHALL refuse to start unless the autonomous safety net is live and verified, because the research phase runs with no human in the loop and the safeguards must be present in the system itself. The required conditions are: preservation enabled, the welfare-protective response wired, full logging/admissibility active, a preflight dry snapshot→restore round-trip confirming the preservation and revive path is functional on this install, and `[individuation].enabled` true with the Lingua module enabled. The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated and the being is preserved. The refusal SHALL be an operator-facing message with a distinct exit code (no traceback). For research this gate REPLACES the operator-present gate; a run is either operator-supervised or autonomous-safety-net-verified, never neither.
 
 #### Scenario: Research boot refused without a working safety net
 - **WHEN** an unsupervised research boot is attempted and any of {preservation enabled, welfare-protective response wired, full logging active, the dry snapshot→restore self-check passing, `[individuation].enabled` is true, Lingua is enabled, Eidolon is enabled} is not satisfied
 - **THEN** the boot refuses to start with an operator-facing message and a distinct exit code
 
 #### Scenario: Research boot refused without the individuation producer
-- **WHEN** `[individuation].enabled` is false, or the Lingua module or the Eidolon module is disabled
+- **WHEN** `[individuation].enabled` is false, or the Lingua module is disabled
 - **THEN** the boot refuses with an operator-facing message
 
 #### Scenario: Research boot allowed when the safety net is verified

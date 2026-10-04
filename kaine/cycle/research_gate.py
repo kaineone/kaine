@@ -144,7 +144,7 @@ def evaluate_research_gate(
     if not checks["individuation_enabled"]:
         failures.append(
             "the individuation producer is not enabled "
-            "([individuation].enabled = false, or its config is invalid, or the lingua or eidolon module is disabled): "
+            "([individuation].enabled = false, or its config is invalid, or the lingua module is disabled): "
             "the being's individuation would not be measured, so its protection would rest on the secondary signals alone"
         )
     if not checks["encryption_satisfied"]:
@@ -306,7 +306,6 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
         individuation_enabled = bool(
             individuation_cfg.enabled
             and modules.get("lingua")
-            and modules.get("eidolon")
         )
     except ValueError:
         individuation_enabled = False

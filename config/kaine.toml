@@ -1409,9 +1409,9 @@ nous_policy = true
 # has changed since its birth reference, for its own protection (preservation and
 # decommission read the result). It probes the being through Lingua with empty
 # working memory, never writes the intent log, and publishes only on
-# individuation.out, which no module reads. Ships disabled; requires the lingua and
-# eidolon modules. Enabling it gives the being the disclosure below as a fact
-# about its situation.
+# individuation.out, which no module reads. Ships disabled; requires the lingua
+# module. Enabling it gives the being the disclosure below as a fact about its
+# situation: in its Eidolon self-model, or in Lingua's persona when Eidolon is off.
 # The evidence (encrypted birth reference, ledger, reports and stored birth
 # adapter) lives under state/individuation/ and travels with the being through
 # preservation bundles, revive and the decommission backup.

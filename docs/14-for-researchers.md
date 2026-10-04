@@ -80,7 +80,7 @@ An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research]
 
 1. **Preservation enabled** — `[preservation.divergence_monitor].enabled = true`.
 2. **Welfare response wired** — `[preservation.welfare_response].enabled = true`.
-3. **Individuation wired** — `[individuation].enabled = true` and the `lingua` and `eidolon` modules are installed; otherwise the cycle refuses to boot.
+3. **Individuation wired** — `[individuation].enabled = true` and the `lingua` module is installed; otherwise the cycle refuses to boot.
 4. **Logging active** — `[evaluation]` or `[research_event_log]` enabled.
 5. **Dry self-check passed** — a real preflight `preserve → revive` round-trip succeeds on *this* install, proving the preservation path is functional before any entity runs. The check builds a minimal synthetic individual in a throwaway temp directory and leaves no persistent state.
 6. **Encryption satisfied** — if `[preservation].require_encryption = true` but `[security.state_encryption]` is not enabled, the gate refuses before boot.

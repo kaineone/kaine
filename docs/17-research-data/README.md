@@ -319,9 +319,9 @@ The memory coherence probe (`memory_probes.py`) measures whether the full cognit
 
 ## Individuation producer
 
-The individuation producer lives in the cognitive cycle at `kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, and `individuation_runtime.py`. It measures whether a being has changed measurably since its birth reference. It is enabled by `[individuation].enabled`, which defaults to `false`, and it requires the `lingua` and `eidolon` modules; otherwise the cycle refuses to boot.
+The individuation producer lives in the cognitive cycle at `kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, and `individuation_runtime.py`. It measures whether a being has changed measurably since its birth reference. It is enabled by `[individuation].enabled`, which defaults to `false`, and it requires the `lingua` module; otherwise the cycle refuses to boot.
 
-At start, the being is told, as a situation fact in its Eidolon self-model, the operator-approved disclosure: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until the fact is present.
+At start, the being is told, as a situation fact in its Eidolon self-model (or in Lingua's persona when Eidolon is not enabled), the operator-approved disclosure: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until the fact is present.
 
 The probe asks a fixed battery of 12 preference prompts through Lingua's own chat client. It conditions on the same self-model and adapter, with empty working memory. It never writes the intent log and never publishes a module event, so it never enters the being's experience. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s), so the being's own speech always goes first.
 

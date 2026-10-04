@@ -163,11 +163,10 @@ def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, st
         return (cfg, None)
 
     modules = kaine_config.get("modules") or {}
-    missing = [name for name in ("lingua", "eidolon") if not modules.get(name)]
-    if missing:
+    if not modules.get("lingua"):
         return (
             None,
-            "[individuation] is enabled but these modules are disabled: " + ", ".join(missing),
+            "[individuation] is enabled but the lingua module is disabled",
         )
 
     return (cfg, None)
@@ -221,7 +220,11 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     validate_battery(battery)
 
     lingua = registry.get("lingua")
-    eidolon = registry.get("eidolon")
+    eidolon = registry.get("eidolon") if "eidolon" in registry else None
+    lingua.set_expects_self_model(eidolon is not None)
+    ensure_fact = (
+        eidolon.ensure_situation_fact if eidolon is not None else lingua.add_situation_fact
+    )
     hypnos = registry.get("hypnos") if "hypnos" in registry else None
 
     voice_cfg = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
@@ -241,7 +244,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         config=cfg,
         battery=battery,
         lingua=lingua,
-        ensure_fact=eidolon.ensure_situation_fact,
+        ensure_fact=ensure_fact,
         embedder=shared_embedder(registry, kaine_config),
         adapter_output_dir=adapter_output_dir,
         per_request_adapter=per_request_adapter,

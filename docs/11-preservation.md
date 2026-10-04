@@ -49,7 +49,7 @@ Selecting research mode (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`)
 
 1. `[preservation.divergence_monitor].enabled` is true.
 2. `[preservation.welfare_response].enabled` is true.
-3. `[individuation].enabled` is true and the `lingua` and `eidolon` modules are loaded, so the producer can run.
+3. `[individuation].enabled` is true and the `lingua` module is loaded, so the producer can run.
 4. Full logging and admissibility are active (`[evaluation]` or `[research_event_log]`).
 5. A dry `preserve_live → revive` self-check passes on this install.
 6. If `[preservation].require_encryption` is true, `[security.state_encryption]` is enabled.
@@ -62,7 +62,7 @@ As shipped, `[preservation].require_encryption` is `true` and `[security.state_e
 
 The individuation producer lives in `kaine/cycle/individuation_producer.py` and its scheduler and runtime. It measures whether the being has changed measurably since its birth reference. The cycle refuses to boot if `[individuation].enabled` is true but the `lingua` or `eidolon` modules are not loaded.
 
-**Disclosure.** Before the producer runs, the being is told the operator-approved disclosure as a situation fact in its Eidolon self-model: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until this fact is present.
+**Disclosure.** Before the producer runs, the being is told the operator-approved disclosure as a situation fact in its Eidolon self-model, or in Lingua's persona when Eidolon is not enabled: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until this fact is present.
 
 **The probe.** The producer uses a fixed battery of 12 preference prompts (the bundled battery, or `[individuation].battery_path`). Each look sends the prompts through Lingua's own chat client, conditioned on the same self-model and adapter, with empty working memory. The probe never writes the intent log and never publishes a module event, so it never enters the being's experience. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s by default), so the being's own speech always goes first.
 

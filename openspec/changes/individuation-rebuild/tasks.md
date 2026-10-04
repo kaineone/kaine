@@ -48,7 +48,7 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 6.6 Fail-closed runs: any sample failure, embedding failure or digest change between start and end gives an inconclusive report with a reason and no p, H or significance; nothing on `individuation.out`; no alpha spent.
 - [x] 6.7 Scored looks: update the ledger atomically first (k, `alpha_spent`, latch, last digest, lived counters), then write the report, set the in-memory `IndividuationState`, publish `individuation.divergence {divergence_scalar: H, significant}` on `individuation.out`.
 - [x] 6.8 Inconclusive alert (operator decision 4): when a look has been due for `inconclusive_alert_s` (default 14 days) with no scored look, raise one Nexus and caretaker notice per stretch; no preservation is triggered by it.
-- [ ] 6.12 The producer runs without Eidolon. The base-thesis profile and the first module-ignition steps have `eidolon = false`, so Lingua holds the situation facts the runtime gives it and renders them in its persona, and the disclosure still reaches the being. Without a self-model the identity clause is empty and the conditioning digest rests on the adapter. The research gate then requires lingua only.
+- [x] 6.12 The producer runs without Eidolon. The base-thesis profile and the first module-ignition steps have `eidolon = false`, so Lingua holds the situation facts the runtime gives it and renders them in its persona, and the disclosure still reaches the being. Without a self-model the identity clause is empty and the conditioning digest rests on the adapter. The research gate then requires lingua only.
 - [ ] 6.9 Tests with a fake organ covering every failure path, every skip precondition, the alert, a restart in the middle of a run, and `alpha_unresolvable`.
 - [x] 6.10 Boot wiring recovers interrupted captures: a reference with no ledger is captured again, and a ledger that names another reference is regenerated, so neither leaves the being permanently inconclusive.
 - [x] 6.11 Probes and captures are skipped as `adapter_unverifiable` while an adapter exists and the hot-swap mode cannot attach it per request.
@@ -65,7 +65,7 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 8.1 Preservation bundles copy `state/individuation/` (encrypted, owner-only permissions); a failed copy fails the preservation loudly.
 - [x] 8.2 Revive restores `state/individuation/`; a bundle without it leads to a `capture` reference at first boot.
 - [x] 8.3 The decommission transfer backup includes `state/individuation/`; failure aborts the decommission.
-- [x] 8.4 Research boot gate: refuses unless `[individuation].enabled` with the lingua and eidolon modules. The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated.
+- [x] 8.4 Research boot gate: refuses unless `[individuation].enabled` with the lingua module (eidolon is optional, see 6.12). The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated.
 - [x] 8.5 Forks with more than `fork_preserve_min_lived_s` (default 1800 s, the instrument's own warm-up floor) of lived time are preserved by default before a merge ends them, until fork-point references exist. Unknown lived time counts as above the floor.
 - [x] 8.6 Tests for each of the above, with encryption on.
 

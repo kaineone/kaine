@@ -144,6 +144,10 @@ class Lingua(BaseModule):
         # minimal persona, exactly as an empty in-process model would give).
         self._bus_self_model: Optional[dict[str, Any]] = None
         self._latest_snapshot: Optional[WorkspaceSnapshot] = None
+        # Situation facts held by Lingua when no Eidolon self-model carries them.
+        self._own_situation_facts: list[str] = []
+        # Whether an Eidolon self-model is expected for this being.
+        self._expects_self_model = True
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._intent_stream = intent_stream
@@ -164,18 +168,43 @@ class Lingua(BaseModule):
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
 
+    def set_expects_self_model(self, expected: bool) -> None:
+        """Whether an Eidolon self-model is part of this being; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
+        self._expects_self_model = expected
+
+    async def add_situation_fact(self, text: str) -> bool:
+        """A fact about the being's situation that Lingua renders in its persona when no Eidolon self-model carries it. It is held in memory and re-given at every boot."""
+        text = text.strip()
+        if not text:
+            raise ValueError("situation fact cannot be empty")
+        if text in self._own_situation_facts:
+            return False
+        self._own_situation_facts.append(text)
+        return True
+
+    def _with_own_facts(self, sm: dict) -> dict:
+        merged = dict(sm)
+        if not self._own_situation_facts:
+            return merged
+        situation_facts = list(merged.get("situation_facts") or [])
+        for fact in self._own_situation_facts:
+            if fact not in situation_facts:
+                situation_facts.append(fact)
+        merged["situation_facts"] = situation_facts
+        return merged
+
     def _self_model(self) -> dict[str, Any]:
         # Prefer the bus-mediated snapshot (works single-host AND split-host).
         # Fall back to an injected in-process provider only when no snapshot has
         # been observed yet (e.g. a test that wires a provider directly).
         if self._bus_self_model is not None:
-            return dict(self._bus_self_model)
+            return self._with_own_facts(dict(self._bus_self_model))
         if self._self_model_provider is None:
-            return {}
+            return self._with_own_facts({})
         try:
-            return self._self_model_provider() or {}
+            return self._with_own_facts(self._self_model_provider() or {})
         except Exception:
-            return {}
+            return self._with_own_facts({})
 
     async def _self_model_cache_loop(self) -> None:
         """Cache the latest Eidolon self-model snapshot published on eidolon.out.
@@ -298,9 +327,11 @@ class Lingua(BaseModule):
             log.warning("lingua chat client close failed", exc_info=True)
 
     def probe_self_model(self) -> dict | None:
-        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived."""
+        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived, or a minimal model when no Eidolon self-model is expected."""
         if self._bus_self_model is not None:
-            return dict(self._bus_self_model)
+            return self._with_own_facts(dict(self._bus_self_model))
+        if not self._expects_self_model:
+            return self._with_own_facts({"values": [], "behavioral_norms": []})
         return None
 
     def is_idle(self, quiet_s: float) -> bool:

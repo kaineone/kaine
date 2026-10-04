@@ -88,6 +88,9 @@ class IndividuationConfig:
             raise ValueError("enabled must be a bool")
 
         disclosure = explicit.get("disclosure", cls.disclosure)
+        if isinstance(disclosure, str):
+            # Stored facts are stripped, so the probe's check compares like with like.
+            disclosure = disclosure.strip()
         if not isinstance(disclosure, str) or not disclosure or len(disclosure) > 300:
             raise ValueError("disclosure must be a non-empty str of at most 300 characters")
 
