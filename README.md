@@ -112,7 +112,7 @@ seed-reproducibility.
 docs/         Documentation (start at docs/README.md)
 kaine/        Python package:
               bus/ cycle/ workspace/ oscillator/ modules/ lifecycle/
-              evaluation/ faithful/ nexus/ security/ + boot.py
+              evaluation/ faithful/ nexus/ security/ boot/
 config/       kaine.toml (ships all-modules-off) + profiles/ (thesis_test is the
               default) and secrets schema
 compose/      Container definitions for the supporting services

@@ -414,7 +414,7 @@ def test_build_registry_logs_warnings_and_continues(monkeypatch, caplog):
     monkeypatch.setattr("kaine.extras.format_missing", lambda missing: "")
 
     # Prevent actual module construction in case torch is present.
-    monkeypatch.setattr("kaine.boot.ModuleRegistry", MagicMock)
+    monkeypatch.setattr("kaine.boot.registry.ModuleRegistry", MagicMock)
 
     with caplog.at_level("WARNING"):
         build_registry(bus, config)

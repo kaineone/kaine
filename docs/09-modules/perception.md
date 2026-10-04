@@ -70,7 +70,7 @@ On a successful switch, `perception_state.write_desired_locus(requested)` perfor
 
 ## Configuration
 
-`make_perception()` in `kaine/boot.py` reads the `[perception]` section from `config/kaine.toml`.
+`make_perception()` in `kaine/boot/factories/perception.py` reads the `[perception]` section from `config/kaine.toml`.
 
 | Constructor parameter | Config key | Default | Meaning |
 |---|---|---|---|

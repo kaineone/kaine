@@ -363,12 +363,12 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
             _recording_factory(name, captured_registry),
         )
 
-    monkeypatch.setattr("kaine.boot.install_state_encryption", lambda cfg: None)
-    monkeypatch.setattr("kaine.boot._wire_self_hearing_gate", lambda reg: None)
-    monkeypatch.setattr("kaine.boot._wire_lingua_self_model", lambda reg: None)
-    monkeypatch.setattr("kaine.boot._wire_eidolon_capabilities", lambda reg: None)
-    monkeypatch.setattr("kaine.boot._log_device_assignments", lambda reg, cfg: None)
-    monkeypatch.setattr("kaine.boot._wire_oscillators", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot.registry.install_state_encryption", lambda cfg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_self_hearing_gate", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_lingua_self_model", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_eidolon_capabilities", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._log_device_assignments", lambda reg, cfg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_oscillators", lambda reg, cfg: None)
 
     kaine_config = {
         "modules": {

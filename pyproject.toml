@@ -415,3 +415,10 @@ forbidden_modules = [
 ]
 ignore_imports = ["kaine.cycle.__main__ -> kaine.remote.bridge"]
 allow_indirect_imports = true
+
+# Each module factory stands alone: a factory maps one TOML table to one
+# module's constructor and never reaches into another factory.
+[[tool.importlinter.contracts]]
+name = "Module factories are independent"
+type = "independence"
+modules = ["kaine.boot.factories.*"]

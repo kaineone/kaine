@@ -160,9 +160,11 @@ class MyModule(BaseModule):
 
 ### 3. Add the boot factory
 
-Add a `make_<name>` factory function to `kaine/boot.py`. The factory takes `bus: AsyncBus` and `section: dict[str, Any]`, declares an `allowed` set of TOML keys, and calls `_require_keys` or `_pop` so unknown keys raise at boot instead of being silently dropped. It constructs and returns the module.
+Add a `make_<name>` factory function in a new file, `kaine/boot/factories/<name>.py`. The factory takes `bus: AsyncBus` and `section: dict[str, Any]`, declares an `allowed` set of TOML keys, and calls `_require_keys` or `_pop` so unknown keys raise at boot instead of being silently dropped. It constructs and returns the module.
 
-Register the factory in `SIMPLE_FACTORIES`:
+A factory never imports another factory; an import contract enforces this. Shared helpers live in `kaine/boot/common.py` and `kaine/boot/errors.py`.
+
+Register the factory in `SIMPLE_FACTORIES` in `kaine/boot/registry.py`, and re-export it from `kaine/boot/__init__.py`:
 
 ```python
 SIMPLE_FACTORIES: dict[str, ModuleFactory] = {

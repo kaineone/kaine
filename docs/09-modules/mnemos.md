@@ -140,7 +140,7 @@ Synaptic homeostasis: scales all in-memory activation vectors by `factor` ∈ (0
 | `kaine/text_embedding_numpy.py` | `NumpyMiniLMEmbedder` — built-in NumPy implementation of the all-MiniLM-L6-v2 BERT encoder |
 | `kaine/modules/mnemos/embeddings.py` | Back-compat re-export shim of `kaine.text_embedding` names; no second implementation |
 | `kaine/modules/mnemos/replay.py` | `ReplayEngine`, `ReplayEntry`, `ReplayEvent`, `select_traces`, `build_replay_events` |
-| `kaine/boot.py` | `make_mnemos()` — backend config, replay sub-table wiring |
+| `kaine/boot/factories/mnemos.py` | `make_mnemos()` — backend config, replay sub-table wiring |
 
 ## Enabling and use
 
