@@ -7,7 +7,6 @@ import importlib.util
 import io
 import sys
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
@@ -537,44 +536,31 @@ def test_nexus_table_matches_real_imports():
         )
 
 
-def _load_install_module() -> ModuleType:
+def _load_wheel_index():
     repo_root = _repo_root()
-    spec = importlib.util.spec_from_file_location(
-        "kaine_install_module", repo_root / "scripts" / "install.py"
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    path = str(repo_root)
+    if path not in sys.path:
+        sys.path.insert(0, path)
+    import kaine.wheel_index
+
+    return kaine.wheel_index
 
 
-def test_install_py_extras_need_torch():
-    module = _load_install_module()
-    assert module._extras_need_torch("full")
-    assert module._extras_need_torch("core")
-    assert module._extras_need_torch("core,memory")
-    assert module._extras_need_torch("memory,core,nexus")
-    assert not module._extras_need_torch("memory")
-    assert not module._extras_need_torch("memory,nexus,audio")
-    assert not module._extras_need_torch("nvidia,vision,reasoning")
-
-
-def test_install_py_torch_spec_reads_core_extra():
+def test_torch_requirement_reads_core_extra():
     repo_root = _repo_root()
-    module = _load_install_module()
-    spec = module.torch_spec(repo_root)
+    wheel_index = _load_wheel_index()
+    spec = wheel_index.torch_requirement(repo_root / "pyproject.toml")
     assert spec.startswith("torch")
-    assert "<" in spec or ">" in spec or "=" in spec
+    assert any(op in spec for op in ("<", ">", "="))
 
 
-def test_install_py_extras_argument_default_is_full():
-    module = _load_install_module()
-    # Exercise argparse by invoking --help; the default is tested by inspection
-    # of the parser definition.  This test ensures the parser accepts --extras.
-    result = module.subprocess.run(
-        [sys.executable, str(_repo_root() / "scripts" / "install.py"), "--extras", "nexus", "--help"],
-        capture_output=True,
-        text=True,
+def test_torch_requirement_fallback_to_project_dependencies(tmp_path):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nname = "demo"\nversion = "0.1"\n'
+        'dependencies = ["torch>=2.0"]\n'
+        'optional-dependencies = {core = ["numpy"]}\n'
     )
-    assert result.returncode == 0, result.stderr
-    assert "--extras" in result.stdout
+    wheel_index = _load_wheel_index()
+    spec = wheel_index.torch_requirement(pyproject)
+    assert spec == "torch>=2.0"

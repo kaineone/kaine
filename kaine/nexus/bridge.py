@@ -18,9 +18,9 @@ log = logging.getLogger(__name__)
 
 @runtime_checkable
 class _BusLike(Protocol):
-    async def read(
+    async def read_entries(
         self, stream: str, *, last_id: str, count: int, block_ms: int
-    ) -> list[tuple[str, Event]]:
+    ) -> tuple[list[tuple[str, Event]], str | None]:
         ...
 
     async def current_workspace_id(self) -> str:
@@ -140,7 +140,7 @@ class BusBridge:
                 continue
 
             try:
-                entries = await self._bus.read(
+                entries, last_scanned = await self._bus.read_entries(
                     stream,
                     last_id=self._cursors.get(stream, "0-0"),
                     count=self._read_count,
@@ -149,9 +149,9 @@ class BusBridge:
             except Exception:
                 log.warning("nexus bridge read failed for %s", stream, exc_info=True)
                 continue
-            if not entries:
+            if last_scanned is None:
                 continue
-            self._cursors[stream] = entries[-1][0]
+            self._cursors[stream] = last_scanned
             for entry_id, event in entries:
                 await self._dispatch(entry_id, event)
 
