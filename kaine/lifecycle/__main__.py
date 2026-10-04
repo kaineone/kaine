@@ -457,13 +457,18 @@ def main(
         return 7
 
     # --- Assess divergence (pure reads) --------------------------------
-    from kaine.lifecycle.divergence import consolidation_thresholds_from_config
+    from kaine.lifecycle.divergence import (
+        adapter_dir_for,
+        consolidation_thresholds_from_config,
+    )
 
     cons_rate, cons_mag = consolidation_thresholds_from_config(config)
+    adapter_dir = adapter_dir_for(config, state_root)
     assessment = assess_divergence(
         state_root=state_root,
         consolidation_rate_threshold=cons_rate,
         consolidation_magnitude_threshold=cons_mag,
+        adapter_output_dir=adapter_dir,
     )
     out.write(f"\n{assessment.summary}\n")
 

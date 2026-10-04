@@ -330,6 +330,8 @@ A non-significant individuation report does not suppress the secondary arms. Rea
 
 Rising-edge state is persisted per divergence arm (individuation, consolidation, eidolon_drift, adapters) in `state/preservation/divergence_edge.json`, a content-free list of arm names. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and is retried after `min_interval_s`. An unreadable edge file reads as empty, which errs toward preserving again.
 
+The verdict computes the freshness digest from the configured adapter directory, the same one the producer uses, and from `self_model.json` on disk. Freshness only decides between "not individuated" and "stale", which the live monitor treats alike: neither preserves. The decommission CLI runs on a stopped being whose self-model was saved at shutdown. So the short window in which the on-disk self-model lags the snapshot the producer probed cannot cause a missed preservation. A corrupt report line makes the individuation state unreadable, which counts as individuated.
+
 Both consumers read the ledger and reports from disk through the same function, rather than the live monitor using in-memory evidence: one code path guarantees parity, and the monitor's five-minute poll makes the reads cheap. Unreadable individuation state counts as individuated, so that the being stays protected.
 
 **Nexus**

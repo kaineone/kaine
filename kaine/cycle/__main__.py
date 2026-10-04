@@ -1977,9 +1977,15 @@ async def _boot_and_run(
         PreservationConfig,
         WelfareProtectiveMonitor,
     )
-    from kaine.lifecycle.divergence import consolidation_thresholds_from_config
+    from kaine.lifecycle.divergence import (
+        adapter_dir_for,
+        consolidation_thresholds_from_config,
+    )
 
     cons_rate, cons_mag = consolidation_thresholds_from_config(kaine_config)
+    adapter_dir = adapter_dir_for(
+        kaine_config, resolve(preservation_cfg.divergence_monitor.state_root)
+    )
     divergence_monitor = None
     welfare_monitor = None
     if preservation_cfg.divergence_monitor.enabled:
@@ -1996,6 +2002,7 @@ async def _boot_and_run(
             require_encryption=preservation_cfg.require_encryption,
             consolidation_rate_threshold=cons_rate,
             consolidation_magnitude_threshold=cons_mag,
+            adapter_output_dir=adapter_dir,
         )
     if supervision_mode == "unattended":
         from kaine.cycle.caretaker import CaretakerConfig

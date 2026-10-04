@@ -106,6 +106,28 @@ def consolidation_thresholds_from_config(
     return rate, mag
 
 
+def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
+    """Return the configured Hypnos adapter output directory, or the default.
+
+    Reads ``[hypnos.voice_alignment].adapter_output_dir``. If the key is
+    missing, empty, or equal to the canonical default ``state/hypnos/adapters``,
+    the default under ``state_root`` is returned. A custom value is resolved to
+    an absolute path. Pure and fail-closed: any error returns the default.
+    """
+    default = state_root / "hypnos" / "adapters"
+    try:
+        value = (
+            ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
+        ).get("adapter_output_dir")
+        if not value:
+            return default
+        if str(value).strip() == "state/hypnos/adapters":
+            return default
+        return resolve(Path(value))
+    except Exception:
+        return default
+
+
 @dataclass(frozen=True)
 class DivergenceAssessment:
     """Result of :func:`assess_divergence`.
@@ -200,6 +222,7 @@ def read_individuation(
     *,
     now: datetime,
     max_report_age_s: float,
+    adapter_output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Read the current individuation state from the encrypted store.
 
@@ -251,16 +274,19 @@ def read_individuation(
         }
 
     try:
-        reports = read_reports(paths, reference_id=ref.reference_id)
+        reports = read_reports(
+            paths, reference_id=ref.reference_id, strict=True
+        )
     except Exception:
         # Unreadable evidence must not read as "never measured".
         log.debug("read_individuation: reading reports failed", exc_info=True)
         return unreadable
 
+    adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
     try:
         adapter_sha, values, norms = read_conditioning_inputs(
             self_model_path=state_root / "eidolon" / "self_model.json",
-            adapter_output_dir=state_root / "hypnos" / "adapters",
+            adapter_output_dir=adapters_dir,
         )
         current_digest = conditioning_digest(
             adapter_sha=adapter_sha, values=values, norms=norms
@@ -295,6 +321,7 @@ def assess_divergence(
     consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     now: datetime | None = None,
     max_report_age_s: float = DEFAULT_MAX_REPORT_AGE_S,
+    adapter_output_dir: Path | None = None,
 ) -> DivergenceAssessment:
     """Classify whether an entity has individuated. Pure reads; never raises.
 
@@ -319,9 +346,14 @@ def assess_divergence(
     if now is None:
         now = datetime.now(timezone.utc)
 
+    adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
+
     # --- Primary: individuation permutation test --------------------------
     ind = read_individuation(
-        state_root, now=now, max_report_age_s=max_report_age_s
+        state_root,
+        now=now,
+        max_report_age_s=max_report_age_s,
+        adapter_output_dir=adapters_dir,
     )
     individuated = bool(ind["individuated"])
     latest = ind.get("latest")
@@ -365,7 +397,7 @@ def assess_divergence(
     # downstream boolean (flips only after training succeeds AND passes the
     # capability + abliteration gates). The graded consolidation metric above
     # is the primary organ-level measure; this is kept as a weaker signal.
-    adapters_present = _adapters_present(state_root / "hypnos" / "adapters")
+    adapters_present = _adapters_present(adapters_dir)
 
     diverged = bool(
         individuated

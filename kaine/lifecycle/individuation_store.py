@@ -67,6 +67,10 @@ class LedgerRegression(IndividuationStoreError):
     """A ledger write attempted to roll back an accumulated value."""
 
 
+class ReportsUnreadable(IndividuationStoreError):
+    """One or more report lines could not be decrypted or parsed."""
+
+
 DEFAULT_ROOT = Path("state/individuation")
 
 
@@ -584,7 +588,7 @@ def report_sink(paths: IndividuationPaths) -> "AsyncJsonlSink":
 
 
 def read_reports(
-    paths: IndividuationPaths, *, reference_id: str
+    paths: IndividuationPaths, *, reference_id: str, strict: bool = False
 ) -> list[dict]:
     """Read and decrypt all reports matching the current reference."""
     reports_dir = paths.reports
@@ -629,6 +633,10 @@ def read_reports(
         log.warning(
             "skipped %d unreadable report line(s) in %s", skipped, reports_dir
         )
+        if strict:
+            raise ReportsUnreadable(
+                f"{skipped} individuation report line(s) could not be read"
+            )
 
     return sorted(matched, key=lambda r: r["ts"])
 

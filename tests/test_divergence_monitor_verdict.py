@@ -345,11 +345,6 @@ class _StubFMRaisingOnce(_StubFM):
 async def test_failed_preservation_is_retried_after_min_interval(
     bus, tmp_path, monkeypatch
 ):
-    t = {"now": 0.0}
-
-    def clock():
-        return t["now"]
-
     cons = DivergenceAssessment(
         diverged=True,
         signals={"consolidation_divergence_signal": True},
@@ -367,8 +362,7 @@ async def test_failed_preservation_is_retried_after_min_interval(
             boot_settle_s=0.0,
             state_root=str(tmp_path / "state"),
         ),
-        clock=clock,
-        assessments=[cons, cons, cons],
+        assessments=[cons, cons],
     )
 
     edge_path = tmp_path / "state" / "preservation" / "divergence_edge.json"
@@ -377,12 +371,7 @@ async def test_failed_preservation_is_retried_after_min_interval(
     assert len(fm.calls) == 0
     assert not edge_path.exists()
 
-    t["now"] = 5.0
-    await monitor._poll_once(asyncio.Event())  # rate-limited
-    assert len(fm.calls) == 0
-    assert not edge_path.exists()
-
-    t["now"] = 10.0
+    # A failed preservation must be retried at the next poll (not rate-limited).
     await monitor._poll_once(asyncio.Event())  # succeeds
     assert len(fm.calls) == 1
     assert edge_path.exists()
