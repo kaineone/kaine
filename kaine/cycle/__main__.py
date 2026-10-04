@@ -39,6 +39,7 @@ from kaine.boot import (
     MetricsCollector,
     build_registry,
     construct_module,
+    drive_sources_for,
     known_module_names,
     make_coherence_scorer,
     make_salience_factors,
@@ -1470,7 +1471,7 @@ async def _boot_and_run(
     # pending validation on logged runs (see config/kaine.toml [syneidesis]).
     affect_provider = AffectStateProvider()
     thymos_modulator, goal_scorer, downgraded_factors = make_salience_factors(
-        kaine_config, affect_provider
+        kaine_config, affect_provider, drive_sources=drive_sources_for(registry)
     )
     # Foveation's fovea size reads the same affect snapshot (arousal → size).
     # Wiring it also means the provider must be refreshed each tick so the arousal

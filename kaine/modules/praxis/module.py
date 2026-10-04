@@ -42,6 +42,7 @@ _REQUEST_TYPES: dict[str, type[ActionRequest]] = {
 
 class Praxis(BaseModule):
     name: ClassVar[str] = "praxis"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"restlessness"})
 
     def __init__(
         self,
