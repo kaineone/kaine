@@ -212,14 +212,26 @@ async def test_welfare_notify_cursor_stops_at_crossing_then_catches_up(
     await mon._poll_once(stop)
     # The break stopped processing at the crossing entry, so the cursor must
     # not jump to the last scanned id.
-    assert _str_id(mon._cursor) != last_id
+    crossing_id = _str_id(mon._cursor)
+    assert crossing_id != last_id
 
+    # Every report after the crossing must reach the distress tracker.
+    observed: list[float] = []
+    original_observe = mon._distress.observe
+
+    def _counting_observe(magnitude: float, now: float) -> bool:
+        observed.append(magnitude)
+        return original_observe(magnitude, now)
+
+    mon._distress.observe = _counting_observe  # type: ignore[method-assign]
     for _ in range(10):
         if _str_id(mon._cursor) == last_id:
             break
         await mon._poll_once(stop)
 
     assert _str_id(mon._cursor) == last_id
+    first_cross_index = [_str_id(e[0]) for e in stream_ids].index(crossing_id)
+    assert len(observed) == len(stream_ids) - first_cross_index - 1
     await eid.shutdown()
 
 
