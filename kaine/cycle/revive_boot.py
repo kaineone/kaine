@@ -33,6 +33,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -192,26 +194,93 @@ class ReviveSession:
 
                 target = resolve(DEFAULT_ROOT)
             target = Path(target)
-            if target.exists():
-                replaced = target.with_name(
+
+            staging = target.with_name(target.name + ".revived")
+            shutil.rmtree(staging, ignore_errors=True)
+
+            try:
+                restored = _preservation.extract_bundle_individuation(
+                    self._plan.bundle, staging
+                )
+            except Exception as exc:
+                # Extraction failure leaves the existing target untouched.
+                shutil.rmtree(staging, ignore_errors=True)
+                raise ReviveRefused(
+                    f"could not extract individuation evidence from bundle: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
+            # The moved-aside tree is kept, never deleted: it may hold another
+            # being's evidence, or this being's own if the restore is undone.
+            replaced: Path | None = None
+
+            def _replaced_name() -> str:
+                return (
                     f"{target.name}.replaced-"
                     f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+                    f"-{uuid.uuid4().hex[:8]}"
                 )
-                os.replace(target, replaced)
-                log.warning(
-                    "revive: existing individuation tree %s moved to %s before "
-                    "restore",
-                    target,
-                    replaced,
-                )
-            restored = _preservation.extract_bundle_individuation(
-                self._plan.bundle, target
-            )
+
             if not restored:
+                # The bundle carried no evidence. Any existing tree must not be
+                # attributed to the revived being.
+                if target.exists():
+                    replaced = target.with_name(_replaced_name())
+                    os.replace(target, replaced)
+                    log.warning(
+                        "revive: bundle carried no individuation evidence; "
+                        "existing tree %s moved to %s so the revived being does "
+                        "not inherit another being's evidence",
+                        target,
+                        replaced,
+                    )
+                else:
+                    log.warning(
+                        "revive: bundle carried no individuation evidence"
+                    )
                 log.info(
                     "revive: bundle carried no individuation evidence; a capture "
                     "reference will be taken at first boot"
                 )
+            else:
+                if target.exists():
+                    replaced = target.with_name(_replaced_name())
+                    os.replace(target, replaced)
+                    log.warning(
+                        "revive: existing individuation tree %s moved to %s "
+                        "before restore",
+                        target,
+                        replaced,
+                    )
+                try:
+                    os.replace(staging, target)
+                except OSError as exc:
+                    # Best-effort rollback: restore the aside tree so the being
+                    # is not left without evidence.
+                    if replaced is not None and replaced.exists():
+                        try:
+                            os.replace(replaced, target)
+                            log.warning(
+                                "revive: os.replace(%s, %s) failed; rolled "
+                                "back to the previous individuation tree",
+                                staging,
+                                target,
+                            )
+                        except OSError as rollback_exc:
+                            log.error(
+                                "revive: could not roll back aside tree %s to "
+                                "%s after os.replace failure: %s",
+                                replaced,
+                                target,
+                                rollback_exc,
+                                exc_info=True,
+                            )
+                    raise ReviveRefused(
+                        f"could not move restored individuation evidence into "
+                        f"place: {type(exc).__name__}: {exc}"
+                    ) from exc
+        except ReviveRefused:
+            raise
         except Exception as exc:
             raise ReviveRefused(
                 f"could not restore individuation evidence: "

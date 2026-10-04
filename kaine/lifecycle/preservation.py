@@ -402,6 +402,17 @@ async def preserve_live(
                         name,
                         exc_info=True,
                     )
+            if target.exists():
+                if bundle_encrypted:
+                    raise PreservationError(
+                        f"could not remove plaintext {name!r} after "
+                        f"encrypting the bundle"
+                    )
+                log.warning(
+                    "preserve_live: plaintext original %s could not be removed "
+                    "(encryption disabled)",
+                    name,
+                )
         inventory.append(bundle_artifact)
 
         manifest = {

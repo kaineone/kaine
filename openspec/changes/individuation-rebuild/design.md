@@ -119,6 +119,9 @@ The probe does not measure individuation carried only by memories or by workspac
 **Where it goes**
 
 - Everything sits under `state/individuation/`: reference, ledger (2.7) and reports (section 4).
+- The evidence lives at the fixed path `state/individuation/`, like every other piece of a being's state; it is not configurable, so no travel path can miss it.
+- Revive extracts the bundle's evidence into a staging directory first and swaps it in only when that succeeds. An existing tree is moved aside under a unique name and kept, never deleted, and it is moved back if the swap fails. A bundle without evidence moves any existing tree aside, so the revived being never inherits another being's evidence, and takes a capture reference.
+- A decommission backup whose evidence copy fails, or that leaves plaintext behind after encryption, is a failed backup, so the being's state is never deleted. A preservation that leaves plaintext behind fails loudly.
 - The whole directory is added to preservation bundles (`kaine/lifecycle/preservation.py` already copies `stage.json` the same way, `:306-312`), to revive, and to the decommission transfer backup.
 
 **Cost**

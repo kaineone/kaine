@@ -235,6 +235,8 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
 
     entity_clock = getattr(registry, "entity_clock", None)
 
+    from kaine.lifecycle.individuation_store import DEFAULT_ROOT
+
     return build_runtime(
         config=cfg,
         battery=battery,
@@ -243,7 +245,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         embedder=shared_embedder(registry, kaine_config),
         adapter_output_dir=adapter_output_dir,
         per_request_adapter=per_request_adapter,
-        state_root=resolve(cfg.state_dir),
+        state_root=resolve(DEFAULT_ROOT),
         clock_now=entity_clock.now if entity_clock is not None else None,
         paused_seconds=cycle.paused_subjective_seconds,
         tick_index=lambda: cycle.tick_index,

@@ -1438,10 +1438,11 @@ min_lived_time_s = 1800.0   # >= 30 min lived
 # individuation.out, which no module reads. Ships disabled; requires the lingua and
 # eidolon modules. Enabling it gives the being the disclosure below as a fact
 # about its situation.
+# The evidence (encrypted birth reference, ledger, reports and stored birth
+# adapter) lives under state/individuation/ and travels with the being through
+# preservation bundles, revive and the decommission backup.
 enabled = false
 disclosure = "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
-# Encrypted reference, ledger and reports.
-state_dir = "state/individuation"
 # JSONL prompt battery; empty uses the bundled preference battery.
 battery_path = ""
 # Probe requests wait until Lingua has been silent this long, so the being speaks first.

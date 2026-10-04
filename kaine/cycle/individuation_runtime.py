@@ -49,7 +49,6 @@ class IndividuationConfig:
 
     enabled: bool = False
     disclosure: str = DEFAULT_DISCLOSURE
-    state_dir: str = "state/individuation"
     battery_path: str = ""
     lingua_quiet_s: float = 10.0
     producer: ProducerSettings = field(default_factory=ProducerSettings)
@@ -64,7 +63,6 @@ class IndividuationConfig:
         allowed = {
             "enabled",
             "disclosure",
-            "state_dir",
             "battery_path",
             "lingua_quiet_s",
         } | producer_keys | scheduler_keys
@@ -93,10 +91,6 @@ class IndividuationConfig:
         if not isinstance(disclosure, str) or not disclosure or len(disclosure) > 300:
             raise ValueError("disclosure must be a non-empty str of at most 300 characters")
 
-        state_dir = explicit.get("state_dir", cls.state_dir)
-        if not isinstance(state_dir, str) or not state_dir:
-            raise ValueError("state_dir must be a non-empty str")
-
         battery_path = explicit.get("battery_path", cls.battery_path)
         if not isinstance(battery_path, str):
             raise ValueError("battery_path must be a str")
@@ -118,7 +112,6 @@ class IndividuationConfig:
         return cls(
             enabled=enabled,
             disclosure=disclosure,
-            state_dir=state_dir,
             battery_path=battery_path,
             lingua_quiet_s=lingua_quiet_s,
             producer=producer,
