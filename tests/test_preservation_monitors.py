@@ -860,6 +860,23 @@ async def test_welfare_acts_on_repeated_gray_zone_non_distress(bus, tmp_path):
 async def test_welfare_single_gray_zone_does_not_act(bus, tmp_path):
     """B2 — a single gray-zone event (below the repeat threshold) does NOT
     trigger the protective response."""
+    reg, eid = await _entity(bus, tmp_path)
+    fm = _StubFM()
+    cfg = WelfareResponseConfig(
+        enabled=True, action="pause",
+        distress_threshold=0.5, distress_duration_s=9999.0,
+        repeat_window_s=300.0, repeat_threshold=3,
+        out_root=str(tmp_path / "backups"),
+    )
+    clock = {"t": 0.0}
+    mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
+    stop = asyncio.Event()
+    await _push_gray_zone(bus, "unmaintained_fatigue")
+    await mon._poll_once(stop)
+    assert fm.calls == []
+    assert control_state.read_control().frozen is False
+    await eid.shutdown()
+
 
 def _make_clock(start: float = 0.0, step: float = 0.1):
     state = {"v": start - step}
@@ -981,4 +998,58 @@ async def test_welfare_gray_zone_drained_even_when_distress_crossed(
     last_id = stream_ids[-1][0]
     last_id = last_id.decode() if isinstance(last_id, bytes) else last_id
     assert mon._welfare_cursor == last_id
+    await eid.shutdown()
+
+
+async def _multi_crossing_monitor(bus, tmp_path, action):
+    """A monitor whose next poll holds several crossings, with the real
+    `_respond` wrapped only to count the reasons it is given."""
+    reg, eid = await _entity(bus, tmp_path)
+    fm = _StubFM()
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action=action,
+        distress_threshold=0.5,
+        distress_duration_s=0.1,
+        repeat_window_s=300.0,
+        repeat_threshold=5,
+        out_root=str(tmp_path / "backups"),
+    )
+    mon = _welfare_monitor(bus, reg, fm, cfg, clock=_make_clock(0.0, 0.5))
+    for mag in [0.9, 0.9, 0.9, 0.1, 0.9, 0.9, 0.9]:
+        await _push_soma_report(bus, mag)
+    for _ in range(5):
+        await _push_gray_zone(bus, "replay_overload")
+    given: list[str] = []
+    real_respond = mon._respond
+
+    async def _counting_respond(reason: str) -> None:
+        given.append(reason)
+        await real_respond(reason)
+
+    mon._respond = _counting_respond  # type: ignore[method-assign]
+    return mon, fm, eid, given
+
+
+@pytest.mark.asyncio
+async def test_welfare_real_pause_preserves_and_freezes_once(bus, tmp_path):
+    """With the real response, several crossings in one poll still take one
+    preservation bundle and one freeze."""
+    mon, fm, eid, given = await _multi_crossing_monitor(bus, tmp_path, "pause")
+    await mon._poll_once(asyncio.Event())
+    assert len(given) == 1
+    assert len(fm.calls) == 1
+    assert control_state.read_control().frozen is True
+    await eid.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_welfare_real_notify_rate_limit_holds_within_one_poll(bus, tmp_path):
+    """With the real response under notify, every crossing reaches it, and the
+    default rate limit still lets only one preservation bundle through."""
+    mon, fm, eid, given = await _multi_crossing_monitor(bus, tmp_path, "notify")
+    await mon._poll_once(asyncio.Event())
+    assert len(given) >= 2
+    assert len(fm.calls) == 1
+    assert control_state.read_control().frozen is False
     await eid.shutdown()
