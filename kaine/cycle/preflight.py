@@ -41,6 +41,7 @@ from typing import Any, Optional
 import httpx
 
 from kaine.config import require_known_keys
+from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.shared_services import match_shared_service, shared_services
 from kaine.state_io import write_json_atomic
@@ -68,7 +69,7 @@ class GpuPreflightConfig:
     min_free_vram_gb: float = 2.0
     # OpenAI-compatible model server, queried read-only for its resident model
     # (report only — the single-resident backend has no idle model to evict).
-    model_server_url: str = "http://127.0.0.1:11434/v1"
+    model_server_url: str = DEFAULT_CHAT_URL
     timeout_s: float = 5.0
     # Set this env var to "1" to boot anyway when headroom is short.
     override_env: str = DEFAULT_OVERRIDE_ENV

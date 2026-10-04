@@ -15,8 +15,9 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
+from kaine.defaults import DEFAULT_MIN_FREE_GB  # noqa: F401
+
 DATA_ROOT_ENV = "KAINE_DATA_ROOT"
-DEFAULT_MIN_FREE_GB = 20.0
 
 GROWING_DATA_KEYS: tuple[tuple[str, ...], ...] = (
     ("lifecycle", "snapshots_path"),

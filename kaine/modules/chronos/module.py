@@ -30,6 +30,7 @@ _HYPNOS_STREAM: str = "hypnos.out"
 
 class Chronos(BaseModule):
     name: ClassVar[str] = "chronos"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive"})
 
     def __init__(
         self,

@@ -73,6 +73,7 @@ def operator_approved() -> bool:
 
 class Mundus(BaseModule):
     name: ClassVar[str] = "mundus"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "restlessness"})
 
     def __init__(
         self,

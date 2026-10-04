@@ -65,6 +65,7 @@ CHATTERBOX_PROSODY = ("temperature", "exaggeration", "cfg_weight", "speed_factor
 
 class Vox(BaseModule):
     name: ClassVar[str] = "vox"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive", "restlessness"})
 
     def holds_external_resources(self) -> bool:
         return True

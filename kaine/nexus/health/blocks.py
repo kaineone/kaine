@@ -25,6 +25,7 @@ from typing import Any
 
 from kaine.cycle.control_state import read_control
 from kaine.cycle.escalation_state import read_escalation
+from kaine.defaults import DEFAULT_ORGAN_PORT, lingua_section_chat_url
 from kaine.perception_state import read_runtime as read_perception_runtime
 
 from .probes import DOWN, NOT_CONFIGURED, UP
@@ -416,7 +417,7 @@ async def model_server_block(
     an unreachable server reports ``down`` with a reason.
     """
     cfg = model_server_cfg or {}
-    chat_url = str(cfg.get("chat_url", "http://127.0.0.1:11434/v1"))
+    chat_url = lingua_section_chat_url(cfg)
     alias = cfg.get("model_id")
     api_key = cfg.get("api_key")
     port: int | None = None
@@ -424,7 +425,7 @@ async def model_server_block(
         from urllib.parse import urlparse
 
         parsed = urlparse(chat_url if "//" in chat_url else "//" + chat_url)
-        port = parsed.port or 11434
+        port = parsed.port or DEFAULT_ORGAN_PORT
     except Exception:
         port = None
 
