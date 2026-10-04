@@ -472,6 +472,7 @@ class IndividuationCore:
             "lived_ticks": max(ledger.lived_ticks, lived_ticks),
             "inconclusive_since": None,
             "inconclusive_alerted": False,
+            "last_look_at": self._now().isoformat(),
         }
         if significant and not ledger.individuated:
             ledger_kwargs.update(
@@ -534,6 +535,22 @@ class IndividuationCore:
         )
 
         return LookOutcome("scored", None, report, significant, h)
+
+    def look_due(self) -> bool:
+        """True when a look would not be skipped as unchanged."""
+        try:
+            ledger = load_ledger(self._paths)
+        except LedgerUnreadable:
+            return True
+        if ledger is None:
+            return True
+        try:
+            adapter_sha, values, norms = self._conditioning_inputs()
+        except Exception:
+            return True
+        return conditioning_digest(
+            adapter_sha=adapter_sha, values=values, norms=norms
+        ) != ledger.last_look_conditions_digest
 
     def _normalize(self, vec: Any) -> np.ndarray:
         """Convert an embedding to a finite, L2-normalised float64 vector."""

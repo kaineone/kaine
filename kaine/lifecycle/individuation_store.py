@@ -317,6 +317,7 @@ class Ledger:
     latched_report_id: str | None = None
     inconclusive_since: str | None = None
     inconclusive_alerted: bool = False
+    last_look_at: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -331,6 +332,7 @@ class Ledger:
             "latched_report_id": self.latched_report_id,
             "inconclusive_since": self.inconclusive_since,
             "inconclusive_alerted": self.inconclusive_alerted,
+            "last_look_at": self.last_look_at,
         }
 
     @classmethod
@@ -380,6 +382,7 @@ class Ledger:
             "latched_at",
             "latched_report_id",
             "inconclusive_since",
+            "last_look_at",
         ):
             value = d.get(key)
             if value is not None and not isinstance(value, str):

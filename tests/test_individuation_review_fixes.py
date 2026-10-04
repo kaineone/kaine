@@ -203,6 +203,13 @@ async def test_ensure_situation_fact_publishes_and_persists(
     bus: AsyncBus, tmp_path: Path
 ):
     set_data_root(tmp_path)
+    try:
+        await _check_situation_fact(bus)
+    finally:
+        set_data_root(None)
+
+
+async def _check_situation_fact(bus: AsyncBus) -> None:
     eidolon = Eidolon(bus)
     fact = "You are periodically assessed for your own protection."
 
