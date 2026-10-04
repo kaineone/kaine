@@ -121,16 +121,12 @@ def test_assess_fork_reads_consolidation_divergence(tmp_path):
     (state_root / "hypnos" / "consolidation_divergence.json").write_text(
         json.dumps({"divergence_rate": 0.9, "divergence_magnitude": 0.6})
     )
-    assessment = assess_fork(
-        fork_state_root=state_root, eval_root=tmp_path / "eval"
-    )
+    assessment = assess_fork(fork_state_root=state_root)
     assert assessment.diverged is True
 
 
 def test_assess_fork_empty_state_is_not_diverged(tmp_path):
-    assessment = assess_fork(
-        fork_state_root=tmp_path / "empty", eval_root=tmp_path / "eval"
-    )
+    assessment = assess_fork(fork_state_root=tmp_path / "empty")
     assert assessment.diverged is False
 
 

@@ -462,7 +462,6 @@ def main(
     cons_rate, cons_mag = consolidation_thresholds_from_config(config)
     assessment = assess_divergence(
         state_root=state_root,
-        eval_root=eval_root,
         consolidation_rate_threshold=cons_rate,
         consolidation_magnitude_threshold=cons_mag,
     )

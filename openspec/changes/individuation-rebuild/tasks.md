@@ -53,12 +53,12 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 6.11 Probes and captures are skipped as `adapter_unverifiable` while an adapter exists and the hot-swap mode cannot attach it per request.
 
 ## 7. Shared verdict
-- [ ] 7.1 One pure decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(..., individuation=None)` uses in-memory evidence when given, else the ledger and reports.
-- [ ] 7.2 `diverged = individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`; a non-significant individuation result never suppresses another arm.
-- [ ] 7.3 Summaries for latched, significant, STALE, INCONCLUSIVE, no reference, not warmed up and `capture`/`reconstructed` references, each with the treat-as-mature advice where the verdict is not individuated.
-- [ ] 7.4 `DivergenceMonitor`: `_crosses_threshold` becomes `assessment.diverged`; per-boot warm-up removed and replaced by `boot_settle_s = 120`; rising-edge state persisted in the incident log.
-- [ ] 7.5 Config: `[individuation]` keys added; `[evaluation.individuation]` and the monitor keys `individuation_p_value_max`, `fork_divergence_min`, `warmup_observations`, `warmup_lived_time_s` rejected with a message pointing to `[individuation]`.
-- [ ] 7.6 Parity tests: one fixture matrix (latch, fresh significant, stale, inconclusive, unwarmed, each secondary arm, combinations); the live monitor and the decommission CLI agree on every row; restarting with unchanged evidence preserves once, a new crossing or latch preserves again.
+- [x] 7.1 One pure decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(..., individuation=None)` uses in-memory evidence when given, else the ledger and reports.
+- [x] 7.2 `diverged = individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`; a non-significant individuation result never suppresses another arm.
+- [x] 7.3 Summaries for latched, significant, STALE, INCONCLUSIVE, no reference, not warmed up and `capture`/`reconstructed` references, each with the treat-as-mature advice where the verdict is not individuated.
+- [x] 7.4 `DivergenceMonitor`: `_crosses_threshold` becomes `assessment.diverged`; per-boot warm-up removed and replaced by `boot_settle_s = 120`; rising-edge state persisted in the incident log.
+- [ ] 7.5 (monitor keys done; `[evaluation.individuation]` is retired with the old instrument in task 9) Config: `[individuation]` keys added; `[evaluation.individuation]` and the monitor keys `individuation_p_value_max`, `fork_divergence_min`, `warmup_observations`, `warmup_lived_time_s` rejected with a message pointing to `[individuation]`.
+- [x] 7.6 Parity tests: one fixture matrix (latch, fresh significant, stale, inconclusive, unwarmed, each secondary arm, combinations); the live monitor and the decommission CLI agree on every row; restarting with unchanged evidence preserves once, a new crossing or latch preserves again.
 
 ## 8. Preservation, revive and decommission backup
 - [ ] 8.1 Preservation bundles copy `state/individuation/` (encrypted, owner-only permissions); a failed copy fails the preservation loudly.

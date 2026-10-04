@@ -1993,11 +1993,6 @@ async def _boot_and_run(
                 path=preservation_cfg.incident_path,
                 name="preservation_divergence",
             ),
-            # Lived-experience source for the warm-up gate: the cycle's
-            # monotonic tick index (logged lived events). The monitor measures
-            # lived time off its own monotonic clock. Until BOTH floors are met,
-            # no individuation crossing counts — fail-closed.
-            observations_provider=lambda: cycle.tick_index,
             require_encryption=preservation_cfg.require_encryption,
             consolidation_rate_threshold=cons_rate,
             consolidation_magnitude_threshold=cons_mag,

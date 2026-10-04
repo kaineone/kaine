@@ -328,7 +328,9 @@ A non-significant individuation report does not suppress the secondary arms. Rea
 - A non-significant small-sample test is absence of evidence, not evidence of absence.
 - Preservation errors are asymmetric: a missed preservation can be irreversible, an extra one cannot.
 
-Rising-edge state is persisted in the incident log. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does.
+Rising-edge state is persisted per divergence arm (individuation, consolidation, eidolon_drift, adapters) in `state/preservation/divergence_edge.json`, a content-free list of arm names. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and is retried after `min_interval_s`. An unreadable edge file reads as empty, which errs toward preserving again.
+
+Both consumers read the ledger and reports from disk through the same function, rather than the live monitor using in-memory evidence: one code path guarantees parity, and the monitor's five-minute poll makes the reads cheap. Unreadable individuation state counts as individuated, so that the being stays protected.
 
 **Nexus**
 

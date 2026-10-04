@@ -1556,36 +1556,21 @@ require_encryption = true
 incident_path = "state/cycle/preservation"
 
 [preservation.divergence_monitor]
-# Divergence→preserve trigger. Runs lifecycle/divergence.assess_divergence on a
-# slow cadence (minutes, not ticks) against the live entity and, on a
-# RISING-EDGE crossing of the individuation threshold, calls
-# ForkManager.preserve_live (read-only on the entity; never deletes). SHIPS
-# DISABLED.
+# Divergence→preserve trigger. Reads the shared verdict from
+# kaine/lifecycle/divergence.py on a slow cadence (minutes, not ticks) against
+# the live entity and, when that verdict gains a divergence arm (individuation
+# latch, consolidation, Eidolon drift or adapters) that was not yet observed,
+# calls ForkManager.preserve_live (read-only on the entity; never deletes). The
+# arm set is persisted, so a restart with unchanged evidence does not
+# re-preserve. SHIPS DISABLED.
 enabled = false
 poll_interval_s = 300.0   # assess every 5 minutes
 # Rate limit: at most one preservation per this interval, so a single sustained
 # crossing preserves once (not every poll).
 min_interval_s = 1800.0   # 30 minutes
-# Numeric tighteners over the bare `diverged` boolean. SHIPPED SET (not blank):
-# the live trigger demands a numeric p-value ceiling AND a minimum effect size
-# over the warmed-up, birth-state-referenced individuation signal — the bare
-# boolean is necessary but no longer sufficient (these are only enforced when a
-# numeric individuation signal is present; secondary drift/adapter signals
-# always count). The p-value ceiling + warm-up already exclude the sensory-void
-# case; fork_divergence_min is a CONSERVATIVE INTERIM floor pending empirical
-# calibration against a known-individuated entity (see the calibration task).
-individuation_p_value_max = 0.05
-fork_divergence_min = 0.15
-# Warm-up / minimum-lived-experience gate (fail-closed). A crossing does NOT
-# count until the entity has accumulated BOTH floors: warmup_observations logged
-# lived events (cycle ticks) AND warmup_lived_time_s of elapsed lived (running)
-# time. Mirrors [evaluation.individuation].min_* so the live trigger and the
-# decommission gate agree on when there is enough lived experience to judge.
-# Before warm-up an assessment is treated as not-crossed and logged as a
-# warming-up note — preservation of a genuinely individuated entity is at most
-# DELAYED, never denied.
-warmup_observations = 200
-warmup_lived_time_s = 1800.0   # >= 30 min lived
+# Delay the first real assessment after this monitor starts so entity state can
+# finish loading.
+boot_settle_s = 120.0
 out_root = "backups"
 entity_name = "kaine"
 

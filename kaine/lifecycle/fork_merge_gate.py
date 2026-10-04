@@ -35,7 +35,6 @@ from typing import Any, Callable, Optional
 
 from kaine.lifecycle.divergence import DivergenceAssessment, assess_divergence
 from kaine.lifecycle.manager import ForkManager
-from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -90,19 +89,16 @@ class ForkMergeVerdict:
 def assess_fork(
     *,
     fork_state_root: Path | str,
-    eval_root: Path | str = Path("data/evaluation"),
 ) -> DivergenceAssessment:
     """Assess a fork's individuation against its birth-state baseline.
 
     Thin wrapper over :func:`kaine.lifecycle.divergence.assess_divergence`
-    pointed at the fork's own materialized state root, so the SAME warmed-up,
-    birth-state-referenced signal that drives the live preservation trigger and
-    the decommission gate decides whether a fork has individuated. Pure + guarded.
+    pointed at the fork's own materialized state root, so the same verdict that
+    drives the live preservation trigger and the decommission gate decides
+    whether a fork has individuated. The fork's own ``state/individuation/`` is
+    read. Pure + guarded.
     """
-    eval_root = resolve(eval_root)
-    return assess_divergence(
-        state_root=Path(fork_state_root), eval_root=eval_root
-    )
+    return assess_divergence(state_root=Path(fork_state_root))
 
 
 def gated_merge(

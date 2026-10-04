@@ -139,16 +139,12 @@ async def test_live_monitor_honours_configured_consolidation_thresholds(
     tmp_path, _consolidation_record, _capture_assess_divergence
 ):
     state_root = _consolidation_record
-    eval_root = tmp_path / "eval"
-    eval_root.mkdir(parents=True)
 
     config = DivergenceMonitorConfig(
         enabled=True,
         poll_interval_s=60.0,
         state_root=str(state_root),
-        eval_root=str(eval_root),
-        warmup_observations=0,
-        warmup_lived_time_s=0.0,
+        boot_settle_s=0.0,
         min_interval_s=0.0,
     )
 
@@ -163,7 +159,6 @@ async def test_live_monitor_honours_configured_consolidation_thresholds(
             path=tmp_path / "incidents_low",
             name="divergence",
         ),
-        observations_provider=lambda: 1,
         require_encryption=False,
         consolidation_rate_threshold=0.2,
         consolidation_magnitude_threshold=DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
@@ -188,7 +183,6 @@ async def test_live_monitor_honours_configured_consolidation_thresholds(
             path=tmp_path / "incidents_default",
             name="divergence",
         ),
-        observations_provider=lambda: 1,
         require_encryption=False,
     )
     await monitor_default._poll_once(asyncio.Event())
