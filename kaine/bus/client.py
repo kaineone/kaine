@@ -77,6 +77,10 @@ def _decode_entry(entry_id: Any, fields: dict[str, Any]) -> Optional[tuple[str, 
     if isinstance(entry_id, bytes):
         entry_id = entry_id.decode()
     try:
+        has_snapshot = "snapshot" in fields or b"snapshot" in fields
+        has_type = "type" in fields or b"type" in fields
+        if has_snapshot and not has_type:
+            return entry_id, _decode_workspace_event(fields)
         return entry_id, _decode_event(fields)
     except Exception:
         # Expected for legacy/malformed stored entries (pre-validation data).
@@ -91,6 +95,38 @@ def _decode_workspace(fields: dict[str, Any]) -> dict[str, Any]:
     if isinstance(raw, bytes):
         raw = raw.decode()
     return json.loads(raw or "{}")
+
+
+def _decode_workspace_event(fields: dict[str, Any]) -> Event:
+    """Decode a ``workspace.broadcast`` entry into a normalized Event."""
+    snapshot = _decode_workspace(fields)
+
+    timestamp_raw = fields.get("timestamp") or fields.get(b"timestamp")
+    if isinstance(timestamp_raw, bytes):
+        timestamp_raw = timestamp_raw.decode()
+    # A broadcast without a timestamp is malformed: raising here makes the read
+    # path skip it like any other undecodable entry, rather than inventing a time.
+    timestamp = datetime.fromisoformat(timestamp_raw)
+
+    selected = snapshot.get("selected") or []
+    salience = 0.0
+    for member in selected:
+        try:
+            member_salience = float(member["salience"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if member_salience > salience:
+            salience = member_salience
+    salience = max(0.0, min(1.0, salience))
+
+    return Event(
+        source=SYNEIDESIS_SOURCE,
+        type=WORKSPACE_STREAM,
+        payload=snapshot,
+        salience=salience,
+        timestamp=timestamp,
+        causal_parent=None,
+    )
 
 
 async def _reraise_swallowed_cancel(awaitable):
@@ -392,6 +428,21 @@ class AsyncBus:
             return None
         entry_id, fields = entries[0]
         return _decode_entry(entry_id, fields)
+
+    async def last_entry_id(self, stream: str) -> str:
+        """Return a starting cursor for a non-blocking reader that should
+        see only entries added from now on.
+
+        Resolves the stream's newest entry id via ``XREVRANGE``, returning
+        ``"0-0"`` for an empty stream.
+        """
+        entries = await self._client.xrevrange(stream, count=1)
+        if not entries:
+            return "0-0"
+        entry_id = entries[0][0]
+        if isinstance(entry_id, bytes):
+            entry_id = entry_id.decode()
+        return entry_id
 
     async def server_time_ms(self) -> int:
         """Return the Redis server time as milliseconds since the Unix epoch."""

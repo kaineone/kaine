@@ -49,6 +49,12 @@ class FakeBus:
     async def current_workspace_id(self):
         return "0"
 
+    async def last_entry_id(self, stream):
+        entries = self.streams.get(stream, [])
+        if not entries:
+            return "0-0"
+        return entries[-1][0]
+
 
 @pytest.mark.asyncio
 async def test_bridge_content_strips_for_any_client():

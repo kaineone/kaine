@@ -69,6 +69,8 @@ VECTOR_BACKSTOP_MIN_LEN: int = 16
 # change with a test.
 VECTOR_EXEMPT_KEYS: frozenset[str] = frozenset({"saliences", "step_magnitudes"})
 
+# Eidolon self-model values and norms are entity-interior text; Lingua reads them
+# from the raw bus, and no diagnostics consumer does.
 CONTENT_FIELDS: frozenset[str] = frozenset(
     {
         "text",
@@ -92,6 +94,8 @@ CONTENT_FIELDS: frozenset[str] = frozenset(
         # nexus tab already exclude/drop them — so they must not reach diagnostics.
         "description",
         "statement",
+        "values",
+        "behavioral_norms",
     }
 )
 

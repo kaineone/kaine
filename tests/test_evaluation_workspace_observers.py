@@ -3,10 +3,12 @@
 
 """Workspace-following evaluation observers (trajectory, attribution).
 
-Guards the bug found live 2026-06-03: these observers read `workspace.broadcast`
-via the standard Event decode, which rejects the broadcast's `{snapshot: <json>}`
-shape, so they silently recorded nothing. They must consume the broadcast via
-the canonical `subscribe_workspace` decoded-snapshot path.
+Guards the bug found live 2026-06-03: these observers used to read
+`workspace.broadcast` via the standard Event decode, which then rejected the
+broadcast's `{snapshot: <json>}` shape, so they silently recorded nothing. The
+standard Event decode now decodes the broadcast as a `workspace.broadcast`
+event, but these observers must still consume the canonical snapshot via
+`subscribe_workspace` for the typed fields they need.
 """
 
 import asyncio
@@ -130,7 +132,7 @@ async def bus():
 
 
 @pytest.mark.asyncio
-async def test_trajectory_records_real_broadcast_and_event_decode_would_not(bus):
+async def test_trajectory_records_real_broadcast_and_event_decode_reads_it(bus):
     # Publish exactly as Syneidesis does — {snapshot:<json>,...}.
     await bus.publish_workspace(_snapshot(7, ["soma", "eidolon"]), source="syneidesis")
     sink = FakeSink()
@@ -145,14 +147,18 @@ async def test_trajectory_records_real_broadcast_and_event_decode_would_not(bus)
     assert len(sink.rows) == 1
     assert sink.rows[0]["tick_index"] == 7
 
-    # Regression guard: the entry IS in the stream...
+    # The broadcast is now decoded as a workspace.broadcast event by the standard
+    # Event read path. Observers still must consume the typed snapshot via
+    # subscribe_workspace, but the raw stream entry is no longer invisible.
     raw_len = await bus._client.xlen("workspace.broadcast")
     assert raw_len == 1
-    # ...but the standard Event decode (what the observer used to use) rejects
-    # the broadcast shape outright (no type/salience), recording nothing — which
-    # is exactly why workspace observers must use subscribe_workspace.
     entries, _ = await bus.read_entries("workspace.broadcast", last_id="0")
-    assert entries == []
+    assert len(entries) == 1
+    event = entries[0]
+    if isinstance(event, (tuple, list)):
+        event = event[1]
+    assert event.type == "workspace.broadcast"
+    assert event.source == "syneidesis"
 
 
 @pytest.mark.asyncio

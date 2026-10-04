@@ -19,8 +19,9 @@ Documented exclusions:
   (transcripts) are NEVER curated — the research log stays content-free.
 - Nexus diagnostics additionally excludes the low-signal operational streams
   (``volition.out``, ``mundus.out``, ``perception.out``, ``welfare.out``,
-  ``preservation.out``, ``individuation.out``) and adds non-module streams
-  (``cycle.tick`` event type, ``workspace.broadcast``).
+  ``preservation.out``, ``individuation.out``) and adds the non-module
+  ``workspace.broadcast`` stream. It tails ``cycle.out``, which carries the
+  cycle's ``cycle.tick``, ``cycle.rates`` and ``cycle.time_scale`` events.
 """
 
 from __future__ import annotations
@@ -57,10 +58,10 @@ CANONICAL_MODULE_NAMES: tuple[str, ...] = (
 _CURATED_EXCLUSIONS: frozenset[str] = frozenset({"lingua.out", "vox.out"})
 
 #: Operational streams the nexus diagnostics monitor does not tail.
-#: (``cycle.out`` is excluded in favor of the ``cycle.tick`` event type.)
+#: ``cycle.out`` carries the cycle's operational events (``cycle.tick``,
+#: ``cycle.rates``, ``cycle.time_scale``) and Nexus tails it.
 _DIAGNOSTICS_EXCLUSIONS: frozenset[str] = frozenset(
     {
-        "cycle.out",
         "volition.out",
         "mundus.out",
         "perception.out",
@@ -96,6 +97,6 @@ def raw_archive_module_streams() -> tuple[str, ...]:
 
 def diagnostics_streams() -> tuple[str, ...]:
     """Nexus diagnostics streams: filtered module streams plus non-module
-    extras (the ``cycle.tick`` event type and ``workspace.broadcast``)."""
+    extras (``workspace.broadcast``)."""
     module_part = tuple(s for s in canonical_module_streams() if s not in _DIAGNOSTICS_EXCLUSIONS)
-    return ("cycle.tick",) + module_part + ("workspace.broadcast",)
+    return module_part + ("workspace.broadcast",)
