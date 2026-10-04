@@ -95,7 +95,6 @@ def _make_monitor(
     clock=None,
     assessments=None,
 ):
-    import kaine.cycle.preservation_monitor as pm
 
     if assessments is not None:
         seq = iter(assessments)
@@ -108,7 +107,9 @@ def _make_monitor(
                 pass
             return last["v"]
 
-        monkeypatch.setattr(pm, "assess_divergence", fake_assess)
+        monkeypatch.setattr(
+        "kaine.cycle.preservation_monitor.assess_divergence", fake_assess
+    )
 
     if config is None:
         config = DivergenceMonitorConfig(
@@ -172,9 +173,10 @@ async def test_boot_settle_delays_first_assessment(bus, tmp_path, monkeypatch):
         calls.append(kw)
         return DivergenceAssessment(diverged=False, signals={}, summary="")
 
-    import kaine.cycle.preservation_monitor as pm
 
-    monkeypatch.setattr(pm, "assess_divergence", fake_assess)
+    monkeypatch.setattr(
+        "kaine.cycle.preservation_monitor.assess_divergence", fake_assess
+    )
 
     t = {"now": 0.0}
 

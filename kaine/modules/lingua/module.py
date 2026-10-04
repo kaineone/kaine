@@ -689,6 +689,4 @@ def _now_iso() -> str:
 
 
 def _json(obj: Any) -> str:
-    import json
-
     return json.dumps(obj, separators=(",", ":"))

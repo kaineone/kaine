@@ -338,6 +338,7 @@ async def test_watch_hypnos(tmp_path: Path):
         try:
             await task
         except asyncio.CancelledError:
+            # Expected: the watcher was cancelled just above.
             pass
 
 

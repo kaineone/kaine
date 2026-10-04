@@ -157,7 +157,6 @@ def test_corrupt_report_line_counts_as_unreadable(tmp_path):
 
 @pytest.mark.asyncio
 async def test_monitor_poll_passes_adapter_output_dir(tmp_path, monkeypatch):
-    import kaine.cycle.preservation_monitor as pm
 
     recorded: dict = {}
 
@@ -167,7 +166,9 @@ async def test_monitor_poll_passes_adapter_output_dir(tmp_path, monkeypatch):
 
         return DivergenceAssessment(diverged=False, signals={}, summary="")
 
-    monkeypatch.setattr(pm, "assess_divergence", fake_assess)
+    monkeypatch.setattr(
+        "kaine.cycle.preservation_monitor.assess_divergence", fake_assess
+    )
 
     monitor = DivergenceMonitor(
         registry=ModuleRegistry(),
