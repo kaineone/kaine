@@ -19,7 +19,7 @@ For any of the twenty-six, a run of undecodable entries at least one read long s
 - Every cursor-advancing consumer reads with `read_entries`. Each one advances to the last scanned id whenever one is returned, and handles the decoded events exactly as before.
 - A batch that only advanced the cursor counts as progress, so a poll loop does not sleep on it.
 - Chronos records a user interaction only for a decoded event, never for one it skipped.
-- A consumer that stops partway through a batch advances only to the entry it stopped at. The welfare monitor's two loops advance to the last scanned id only when they ran to the end.
+- A consumer that stops partway through a batch advances only to the entry it stopped at. The welfare monitor's two loops advance to the last scanned id only when they ran to the end. (The `welfare-monitor-feeds-every-entry` change later made the monitor feed the whole batch each poll, so it no longer stops partway.)
 - The Hypnos audit drain stops only when a read scans nothing.
 - Nous's `_read_stream` returns the last scanned id along with the entries.
 - The Nexus bridge's bus protocol uses `read_entries`.

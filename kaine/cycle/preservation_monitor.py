@@ -785,7 +785,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         except Exception:
             log.warning("welfare monitor: soma.out read failed", exc_info=True)
             entries, last_scanned = [], None
-        crossing_reason: str | None = None
+        reasons: list[str] = []
         for entry_id, event in entries:
             self._cursor = entry_id
             if event.type != "soma.report":
@@ -796,44 +796,44 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             )
             now = self._clock()
             if self._distress.observe(magnitude, now):
-                crossing_reason = "sustained_distress"
+                reason = "sustained_distress"
                 # A sustained episode also counts toward the repeat window. A
                 # windowed-repeat crossing reclassifies as "repeated_distress"
                 # (record's side effect — appending this episode to the window —
                 # must happen regardless of the resulting classification).
                 if self._repeat.record(now):
-                    crossing_reason = "repeated_distress"
-                break
-        else:
-            # Only advance to the last scanned id when every decoded entry was
-            # processed; on break the cursor already points at the crossing
-            # entry and the next poll must resume from there.
-            if last_scanned is not None:
-                self._cursor = last_scanned
+                    reason = "repeated_distress"
+                reasons.append(reason)
+        if last_scanned is not None:
+            self._cursor = last_scanned
         # Timer-driven sustained crossing (episode elapses with no new sample).
-        if crossing_reason is None:
+        if not reasons:
             now = self._clock()
             if self._distress.check_timeout(now):
-                crossing_reason = "sustained_distress"
+                reason = "sustained_distress"
                 if self._repeat.record(now):
-                    crossing_reason = "repeated_distress"
+                    reason = "repeated_distress"
+                reasons.append(reason)
         # Repeated gray-zone arm: drain welfare.out for welfare.gray_zone events
         # (ANY of the four categories) and feed each into the windowed-repeat
         # counter. This is the cross-stream coupling that lets the protective
         # response cover all four gray-zone categories, not just sustained
         # interoceptive distress. Drained on every poll so the window stays
         # current even when no sustained-distress crossing fires.
-        if crossing_reason is None:
-            crossing_reason = await self._drain_gray_zone()
-        if crossing_reason is not None:
-            await self._respond(crossing_reason)
+        reasons.extend(await self._drain_gray_zone())
+        # Pause and end act once, so a second crossing in the same poll must
+        # not preserve or freeze again; notify keeps its own rate limit.
+        for reason in reasons:
+            if self._acted:
+                break
+            await self._respond(reason)
 
-    async def _drain_gray_zone(self) -> str | None:
-        """Drain welfare.gray_zone events; return a crossing reason or None.
+    async def _drain_gray_zone(self) -> list[str]:
+        """Drain welfare.gray_zone events; return all crossing reasons.
 
         Each gray-zone event (any category) counts toward the windowed-repeat
-        arm. Returns ``"repeated_gray_zone"`` when the count within the window
-        reaches the configured threshold.
+        arm. Returns a ``"repeated_gray_zone"`` entry for each crossing that
+        occurs while draining the batch.
         """
         try:
             entries, last_scanned = await self._bus.read_entries(
@@ -841,23 +841,18 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             )
         except Exception:
             log.warning("welfare monitor: welfare.out read failed", exc_info=True)
-            return None
-        crossing_reason: str | None = None
+            return []
+        reasons: list[str] = []
         for entry_id, event in entries:
             self._welfare_cursor = entry_id
             if event.type != "welfare.gray_zone":
                 continue
             now = self._clock()
             if self._repeat.record(now):
-                crossing_reason = "repeated_gray_zone"
-                break
-        else:
-            # Only advance to the last scanned id when every decoded entry was
-            # processed; on break the cursor already points at the crossing
-            # entry and the next drain resumes after it.
-            if last_scanned is not None:
-                self._welfare_cursor = last_scanned
-        return crossing_reason
+                reasons.append("repeated_gray_zone")
+        if last_scanned is not None:
+            self._welfare_cursor = last_scanned
+        return reasons
 
     async def _respond(self, crossing_reason: str) -> None:
         # M3 — "notify" continues the run, so sustained distress re-fires the
