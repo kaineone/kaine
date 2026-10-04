@@ -25,7 +25,7 @@ def _run_preflight(
 ):
     monkeypatch.setattr(
         "kaine.cycle.preflight._device_free_vram",
-        lambda: [
+        lambda *_a, **_k: [
             {
                 "device": "cuda:0",
                 "name": "GPU0",
@@ -42,7 +42,7 @@ def _run_preflight(
     )
     monkeypatch.setattr(
         "kaine.cycle.preflight._probe_memory_state",
-        lambda: {"state": "known-discrete"},
+        lambda *_a, **_k: {"state": "known-discrete"},
     )
     monkeypatch.setattr("kaine.cycle.preflight._gpu_consumers", lambda _timeout: [])
     monkeypatch.setattr(
