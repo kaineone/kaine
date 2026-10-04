@@ -27,9 +27,11 @@ On 2026-10-04 the operator chose a slow lane plus parallel CI.
   - the workflow wiring is in place.
 - The contributing docs describe parallel runs and the slow lane.
 
-## Known rare flake
+## A flaky test found and fixed
 
-`tests/test_nous_engine.py::test_real_pymdp_engine_rejects_mismatched_posterior` failed once in about nine full parallel runs on 2026-10-04. Eight later runs passed: five targeted runs of the Nous and Active Inference tests, and three full-suite runs. The failing assertion was not captured. The test relies on a 0.001 ms planning timeout always expiring; the engine's timeout path looks sound. If it recurs in parallel CI, the job log names the assertion, and it gets fixed then.
+Three Nous engine tests forced a planning overrun with a 0.001 ms deadline. That does not guarantee an overrun. `concurrent.futures` returns a result that is ready by the time the waiting thread resumes, and once JAX has compiled, inference takes about 2 ms. Parallel workers keep the JAX cache warm across a file's tests, which made the race visible. It failed once locally and once in main's first parallel CI run, as `timed_out=False` after 2.35 ms.
+
+The tests now hold each planning step 200 ms against a 10 ms deadline, so the overrun is certain. They still fail if the engine stops honouring its deadline. The engine's behaviour, returning a result that finished in time, is correct and unchanged.
 
 ## Impact
 

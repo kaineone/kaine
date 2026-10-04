@@ -39,6 +39,24 @@ def _snap():
     return _Snap([_Ev("soma", {}, 0.9)])
 
 
+def _overrunning(engine):
+    """Make every planning step overrun the engine's deadline.
+
+    A tiny deadline alone does not force an overrun: ``concurrent.futures``
+    returns a result that is ready by the time the waiting thread resumes, and
+    once JAX has compiled, inference takes about 2 ms. So each step is held
+    past the deadline instead; build the engine with ``efe_timeout_ms=10``.
+    """
+    infer = engine._infer
+
+    def slow_infer(obs):
+        time.sleep(0.2)
+        return infer(obs)
+
+    engine._infer = slow_infer
+    return engine
+
+
 def test_fake_engine_satisfies_protocol():
     fake = FakeEngine()
     assert isinstance(fake, ActiveInferenceEngine)
@@ -310,8 +328,8 @@ def test_real_pymdp_engine_runs_within_budget():
 def test_real_pymdp_engine_timeout_guard_returns_last_posterior():
     from kaine.modules.nous.engine import PymdpEngine
 
-    # Impossibly tight deadline forces an overrun on the (uncompiled) first call.
-    engine = PymdpEngine(efe_timeout_ms=0.001)
+    # Every step overruns its deadline (see _overrunning).
+    engine = _overrunning(PymdpEngine(efe_timeout_ms=10))
     try:
         result = engine.step(_snap())
         assert result.timed_out is True
@@ -384,7 +402,7 @@ def test_real_pymdp_engine_per_action_efe_at_horizon_two():
 def test_real_pymdp_engine_seeded_posterior_is_the_timeout_fallback():
     from kaine.modules.nous.engine import PymdpEngine
 
-    engine = PymdpEngine(efe_timeout_ms=0.001)
+    engine = _overrunning(PymdpEngine(efe_timeout_ms=10))
     try:
         seeded = []
         for size in engine.model.num_states:
@@ -406,7 +424,7 @@ def test_real_pymdp_engine_seeded_posterior_is_the_timeout_fallback():
 def test_real_pymdp_engine_rejects_mismatched_posterior():
     from kaine.modules.nous.engine import PymdpEngine
 
-    engine = PymdpEngine(efe_timeout_ms=0.001)
+    engine = _overrunning(PymdpEngine(efe_timeout_ms=10))
     try:
         sizes = list(engine.model.num_states)
         uniform = [[1.0 / n] * n for n in sizes]
