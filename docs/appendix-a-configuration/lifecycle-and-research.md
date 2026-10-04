@@ -63,20 +63,38 @@ Tune the sidecar welfare observer's interoceptive-distress rule. These defaults 
 | `interoceptive_distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
 | `interoceptive_distress_duration_s` | float | `30.0` | Seconds the distress must be sustained continuously. |
 
-### `[evaluation.individuation]`
+### `[individuation]`
 
-Individuation-boundary permutation-test instrument (paper §5.6 / §7.4). Guardian-only; operator-run at fork merge points. Never invoked from the cognitive cycle. Default is disabled.
+Cycle-layer individuation producer. Ships disabled. Requires the `lingua` and `eidolon` modules; otherwise the cycle refuses to boot.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Master gate. Enable only when preparing a Guardian review of a specific fork. |
-| `null_samples` | integer | `50` | Number of parent-vs-parent samples used to build the stochastic-variation null distribution. |
-| `significance_percentile` | float | `95.0` | Fork divergence must exceed this percentile of the null to be significant. |
-| `metric` | string | `"cosine_divergence"` | Divergence metric. Only `"cosine_divergence"` is currently supported. |
+| `enabled` | boolean | `false` | Master gate. When true, the cycle measures whether the being has changed since its birth reference. |
+| `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the being's Eidolon self-model. Probes fail closed until the fact is present. |
 | `battery_path` | string | `""` | Path to an operator-supplied JSONL preference battery. Empty uses the bundled default. |
-| `output_dir` | string | `"data/evaluation/individuation"` | Directory for JSONL evidence reports. |
-| `min_observations` | integer | `200` | Warm-up floor (fail-closed). `significant` cannot be true, and the report carries `warmed_up = false`, until at least this many logged lived events have accumulated. |
-| `min_lived_time_s` | float | `1800.0` | Warm-up floor: at least this many seconds of elapsed lived (running) time before `significant` may be true. Both floors must be met. |
+| `lingua_quiet_s` | float | `10.0` | Seconds Lingua must be silent before a probe runs, so the being's own speech goes first. |
+| `n_reference` | integer | `16` | Answers captured per prompt in a birth reference. |
+| `n_current` | integer | `8` | Answers sampled per prompt in a look. |
+| `max_tokens` | integer | `160` | Maximum tokens per probe answer. |
+| `alpha_total` | float | `0.05` | Lifetime false-positive budget across looks, spent by an alpha-spending schedule. |
+| `b_max` | integer | `2000000` | Permutation ceiling for the stratified energy-distance p-value. |
+| `effect_min` | float | `0.0` | Minimum effect size H before a look can be called significant. Stays at 0 until a real-organ smoke test calibrates it. |
+| `sleep_settle_s` | float | `120.0` | Seconds after a sleep before a look is attempted. |
+| `daily_s` | float | `86400.0` | Seconds between daily look attempts. |
+| `min_look_interval_s` | float | `21600.0` | Minimum seconds between scored looks. |
+| `min_lived_time_s` | float | `1800.0` | Warm-up floor: seconds of lived time since the reference before a look can score. |
+| `min_observations` | integer | `200` | Warm-up floor: lived ticks since the reference before a look can score. |
+| `run_deadline_s` | float | `2700.0` | Deadline for a normal look; failure ends the look as inconclusive. |
+| `capture_deadline_s` | float | `5400.0` | Deadline for capturing a reference; failure triggers a retry. |
+| `blocked_retry_s` | float | `300.0` | Retry interval when a look is blocked by an unloaded organ, sleep, a pause, or a missing semantic embedder. |
+| `inconclusive_retry_s` | float | `3600.0` | Retry interval after an inconclusive look. |
+| `lived_persist_s` | float | `300.0` | Cadence for persisting lived-time evidence used by warm-up floors. |
+| `inconclusive_alert_s` | float | `1209600.0` | Seconds a look can be due but unscored before the operator is alerted once. |
+| `capture_retry_initial_s` | float | `60.0` | Initial backoff for reference-capture retries. |
+| `capture_retry_max_s` | float | `3600.0` | Maximum backoff for reference-capture retries. |
+| `idle_poll_s` | float | `1.0` | Polling interval while the scheduler waits for Lingua silence and other conditions. |
+
+The retired `[evaluation.individuation]` section is refused; use `[individuation]` instead.
 
 ## `[lifecycle]`
 
@@ -165,21 +183,19 @@ The autonomous welfare safety net for unsupervised research. Two cycle-layer mon
 
 ### `[preservation.divergence_monitor]`
 
-Divergence-to-preservation trigger. Assesses individuation on the live entity on a slow cadence and, on a rising-edge threshold crossing, preserves the whole individual (read-only; never deletes; rate-limited).
+Divergence-to-preservation trigger. Calls the shared `assess_divergence` verdict on the live entity on a slow cadence and, when a new divergence arm appears, preserves the whole individual (read-only; never deletes; rate-limited). Persisted arm state in `state/preservation/divergence_edge.json` prevents repeated preservations for unchanged evidence.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Default is disabled. |
-| `poll_interval_s` | float | `300.0` | Assessment cadence in seconds. |
+| `poll_interval_s` | float | `300.0` | Seconds between polls after boot settle. |
+| `boot_settle_s` | float | `120.0` | Seconds after boot before the first poll. |
 | `min_interval_s` | float | `1800.0` | Rate limit: at most one preservation per this interval, so a single sustained crossing preserves once. |
-| `individuation_p_value_max` | float | `0.05` | The individuation permutation-test p-value must be at or below this. Only enforced when a numeric p-value is present. |
-| `fork_divergence_min` | float | `0.15` | Fork divergence must be at or above this floor. A conservative interim value pending empirical calibration. |
-| `warmup_observations` | integer | `200` | Warm-up gate: a crossing does not count until at least this many logged lived events (cycle ticks) have accumulated. |
-| `warmup_lived_time_s` | float | `1800.0` | Warm-up gate: at least this many seconds of elapsed lived (running) time before a crossing counts. |
 | `state_root` | string | `"state"` | Root directory the monitor reads for entity state. |
-| `eval_root` | string | `"data/evaluation"` | Root directory the monitor reads for evaluation data. |
 | `out_root` | string | `"backups"` | Directory where preservation bundles are written. |
 | `entity_name` | string | `"kaine"` | Entity name stamped into the bundle. |
+
+The keys `individuation_p_value_max`, `fork_divergence_min`, `warmup_observations`, `warmup_lived_time_s`, and `eval_root` are retired. The config loader refuses them and points to `[individuation]`.
 
 ### `[preservation.welfare_response]`
 
@@ -214,7 +230,7 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
+| `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` and `eidolon` modules loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
 
 ## `[transfer]`
 

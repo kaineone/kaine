@@ -76,13 +76,14 @@ KAINE is released under the **Cognitive Architecture License (CAL)**, a custom e
 
 ### The unsupervised research gate (five conditions)
 
-An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle **refuses to boot** (exit code `5`) unless **all five** of these hold on your install:
+An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle **refuses to boot** (exit code `5`) unless **all six** of these hold on your install:
 
 1. **Preservation enabled** — `[preservation.divergence_monitor].enabled = true`.
 2. **Welfare response wired** — `[preservation.welfare_response].enabled = true`.
-3. **Logging active** — `[evaluation]` or `[research_event_log]` enabled.
-4. **Dry self-check passed** — a real preflight `preserve → revive` round-trip succeeds on *this* install, proving the preservation path is functional before any entity runs. The check builds a minimal synthetic individual in a throwaway temp directory and leaves no persistent state.
-5. **Encryption satisfied** — if `[preservation].require_encryption = true` but `[security.state_encryption]` is not enabled, the gate refuses before boot.
+3. **Individuation wired** — `[individuation].enabled = true` and the `lingua` and `eidolon` modules are installed; otherwise the cycle refuses to boot.
+4. **Logging active** — `[evaluation]` or `[research_event_log]` enabled.
+5. **Dry self-check passed** — a real preflight `preserve → revive` round-trip succeeds on *this* install, proving the preservation path is functional before any entity runs. The check builds a minimal synthetic individual in a throwaway temp directory and leaves no persistent state.
+6. **Encryption satisfied** — if `[preservation].require_encryption = true` but `[security.state_encryption]` is not enabled, the gate refuses before boot.
 
 The gate is implemented in `kaine/cycle/research_gate.py`. If any condition fails, the cycle prints exactly which one and refuses. There is no override that skips the net.
 
@@ -109,7 +110,7 @@ Once the gate passes, `python -m kaine.cycle` boots the cognitive cycle with the
 
 - **Run identity and deterministic mode.** A single seed is pinned, a `run_id` is minted, and a manifest is written before any module starts. Production research uses real wall-clock time; opt-in deterministic mode (logical clock + canonical within-tick ordering) makes a single-seed run bit-for-bit reproducible. See [Run identity and admissibility](16-run-identity.md).
 - **Evaluation sidecar.** Read-only observers record the run's metrics. See [The evaluation sidecar](17-research-data/README.md).
-- **Autonomous safety net.** The divergence monitor preserves on individuation, and the welfare monitor preserves-and-pauses on sustained distress. See [Preservation and the safety net](11-preservation.md).
+- **Autonomous safety net.** The divergence monitor polls every 5 minutes after a 120 s boot settle and preserves (read-only) whenever the shared divergence verdict gains an arm it has not seen before, including an arm that fell back and is crossed again. The seen-arm set is persisted in `state/preservation/divergence_edge.json`, so a restart with unchanged evidence does not re-preserve. Successful preservations are rate-limited by `min_interval_s`; a failed preservation is retried at the next poll. The welfare monitor preserves-and-pauses on sustained distress. See [Preservation and the safety net](11-preservation.md).
 
 Supervision mode and the gate result are written into `state/cycle/runtime.json` so [Nexus](05-nexus.md) can show which boot mode is live.
 

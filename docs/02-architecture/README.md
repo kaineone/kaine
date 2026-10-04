@@ -308,7 +308,7 @@ Eight sidecar observers run as async tasks alongside the cycle:
 
 The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each Lingua external-speech event with a bare-LLM inference (no workspace context, no persona) and logs the cosine similarity, as a live secondary signal that the workspace context is shaping output. A divergence near zero means the conscious workspace is adding no signal at that moment. It is supporting evidence, not the primary test — the primary falsifiable claim is decided offline by the **workspace-mediation ablation**, which controls for information quantity and reports a pre-registered WIN/NULL/NEGATIVE verdict rather than an open-ended trend.
 
-The individuation boundary instrument (`kaine/evaluation/individuation.py`) runs a permutation test to produce statistical evidence about whether a fork has formed a preference profile distinguishable from parent stochastic variation. It is Guardian-only, operator-run at merge points, and never called from the cognitive cycle.
+The individuation producer (`kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, `individuation_runtime.py`) measures whether a being has changed measurably since its birth reference. It is enabled by `[individuation].enabled` and requires the `lingua` and `eidolon` modules. Evidence is encrypted welfare evidence under `state/individuation/`; it is not sidecar research data. The shared divergence verdict (`kaine/lifecycle/divergence.py`) is used by the decommission CLI, the Nexus entity-care panel, the fork merge gate, and the live divergence monitor.
 
 The core/evaluation boundary is load-bearing: core runtime must run with the sidecar absent, so nothing under `kaine/` imports `kaine.evaluation` except the two composition-root entrypoints (`kaine/cycle/__main__.py`, `kaine/nexus/__main__.py`). This — and the broader package layering — is enforced structurally by import contracts. See [Code boundaries](./boundaries.md) for the layer map, the boundary-neutral homes for cross-cutting primitives and how to run the check.
 
@@ -351,7 +351,7 @@ Covers: Eidolon self-model, fork/merge snapshot bundles, sidecar observer JSONL,
 | Snapshot/fork/merge, per-module strategies, TIES/DARE | [Forks and merges](../12-forks-and-merges.md) |
 | Hypnos five-phase pipeline, fatigue trigger, phase details | [Sleep and maintenance](../10-sleep/README.md) |
 | DPO+QLoRA pipeline, two-layer gate, abliteration veto | [Voice alignment](../10-sleep/voice-alignment.md) |
-| Eight observers, A/B divergence, individuation boundary | [The evaluation sidecar](../17-research-data/README.md) |
+| Eight observers, A/B divergence, individuation producer | [The evaluation sidecar](../17-research-data/README.md) |
 | Unsupervised research run: mode, safety-net gate, experiments, admissibility | [For researchers](../14-for-researchers.md) |
 | Three validation layers mapped to the seven experiments | [Verification](../18-verification.md) |
 | Live preservation, revive, encrypted bundle, retention | [Preservation and the safety net](../11-preservation.md) |

@@ -4,7 +4,7 @@ This page explains the package-level boundaries that keep KAINE's cognitive runt
 
 ## The sidecar boundary
 
-`kaine/evaluation/` is the observe-only research subsystem. It holds the sidecar observers, A/B divergence tracking, the individuation-boundary instrument, the red-team harness, and benchmarks. It reads the bus and module state; it never injects signals back into the cognitive loop.
+`kaine/evaluation/` is the observe-only research subsystem. It holds the sidecar observers, A/B divergence tracking, the red-team harness, and benchmarks. It reads the bus and module state; it never injects signals back into the cognitive loop. The individuation producer lives in the cycle under `kaine/cycle/` and writes encrypted welfare evidence to `state/individuation/`.
 
 Core code never imports `kaine.evaluation/`. The entity must be able to boot and run a full cognitive life with the entire `kaine/evaluation/` directory deleted. If core code reached into evaluation, disabling research would break the entity, and the "instrumentation is observe-only" guarantee would be false.
 

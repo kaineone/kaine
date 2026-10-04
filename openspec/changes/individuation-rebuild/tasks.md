@@ -73,8 +73,8 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 9.2 `config/kaine.toml` `[individuation]` with defaults, `enabled = false`.
 - [x] 9.3 Retire `kaine/evaluation/individuation.py` or reduce it to a re-export of the lifecycle code.
 - [ ] 9.6 Operator decision: whether research bundles export the producer's content-free individuation reports. The old instrument's reports were in the research metrics tier (`data/evaluation/individuation/`); the producer's are encrypted welfare evidence under `state/individuation/`.
-- [ ] 9.4 Docs: welfare net, preservation, decommission and Nexus chapters; configuration appendix.
-- [ ] 9.5 `npx -y @fission-ai/openspec@latest validate individuation-rebuild --strict` passes.
+- [x] 9.4 Docs: welfare net, preservation, decommission and Nexus chapters; configuration appendix.
+- [x] 9.5 `npx -y @fission-ai/openspec@latest validate individuation-rebuild --strict` passes.
 
 ## 10. Real-organ smoke test (operator-run, entity not live)
 - [ ] 10.1 Answers worth comparing: 40 samples per prompt; within-prompt mean pairwise distance and share of near-identical answers recorded; stop and redesign the framing if answers are degenerate.
