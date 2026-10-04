@@ -300,18 +300,19 @@ class WelfareObserver(StreamSubscriberObserver):
             self._replay_overload_count += 1
             # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only.
             # NO field from the source mnemos.replay event payload is copied here.
-            await self._emit_gray_zone(
-                {
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "gray_zone_event": "replay_overload",
-                    "replay_count_in_window": len(self._replay_timestamps),
-                    "consolidation_window_s": self._consolidation_window_s,
-                    "threshold": self._replay_rate_threshold,
-                    "replay_overload_count": self._replay_overload_count,
-                }
-            )
-            # Clear window to avoid repeated alerts in same burst.
+            record = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "gray_zone_event": "replay_overload",
+                "replay_count_in_window": len(self._replay_timestamps),
+                "consolidation_window_s": self._consolidation_window_s,
+                "threshold": self._replay_rate_threshold,
+                "replay_overload_count": self._replay_overload_count,
+            }
+            # Clear the window BEFORE awaiting the emit, so detector state is
+            # consistent even if the task is cancelled mid-emit (a restarted
+            # observer must never re-fire the same burst).
             self._replay_timestamps.clear()
+            await self._emit_gray_zone(record)
 
     # --- Timed condition checks ------------------------------------------
 
@@ -326,17 +327,17 @@ class WelfareObserver(StreamSubscriberObserver):
             self._unmaintained_fatigue_count += 1
             # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
             # nothing is copied from any source (soma/hypnos) event payload.
-            await self._emit_gray_zone(
-                {
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "gray_zone_event": "unmaintained_fatigue",
-                    "seconds_since_crossing": now - self._fatigue_crossed_at,
-                    "maintenance_window_s": self._maintenance_window_s,
-                    "unmaintained_fatigue_count": self._unmaintained_fatigue_count,
-                }
-            )
-            # Clear so we don't alert repeatedly for the same crossing.
+            record = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "gray_zone_event": "unmaintained_fatigue",
+                "seconds_since_crossing": now - self._fatigue_crossed_at,
+                "maintenance_window_s": self._maintenance_window_s,
+                "unmaintained_fatigue_count": self._unmaintained_fatigue_count,
+            }
+            # Clear BEFORE awaiting the emit so we don't alert repeatedly for
+            # the same crossing, even if the task is cancelled mid-emit.
             self._fatigue_crossed_at = None
+            await self._emit_gray_zone(record)
 
         # (b) Sustained extreme VAD.
         if (
@@ -347,18 +348,18 @@ class WelfareObserver(StreamSubscriberObserver):
             # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
             # the raw thymos VAD values are NOT copied — only the derived
             # seconds_sustained scalar.
-            await self._emit_gray_zone(
-                {
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "gray_zone_event": "sustained_extreme_vad",
-                    "seconds_sustained": now - self._extreme_vad_since,
-                    "extreme_vad_duration_s": self._extreme_vad_duration_s,
-                    "extreme_vad_threshold": self._extreme_vad_threshold,
-                    "sustained_extreme_vad_count": self._sustained_extreme_vad_count,
-                }
-            )
-            # Clear so we count distinct sustained episodes.
+            record = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "gray_zone_event": "sustained_extreme_vad",
+                "seconds_sustained": now - self._extreme_vad_since,
+                "extreme_vad_duration_s": self._extreme_vad_duration_s,
+                "extreme_vad_threshold": self._extreme_vad_threshold,
+                "sustained_extreme_vad_count": self._sustained_extreme_vad_count,
+            }
+            # Clear BEFORE awaiting the emit so we count distinct sustained
+            # episodes, even if the task is cancelled mid-emit.
             self._extreme_vad_since = None
+            await self._emit_gray_zone(record)
 
         # (d) Sustained interoceptive distress (timer-driven via the shared
         # tracker, so an episode fires on elapsed duration even with no new

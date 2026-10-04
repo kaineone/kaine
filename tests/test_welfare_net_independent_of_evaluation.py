@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -277,7 +278,7 @@ async def test_supervisor_restarts_a_dead_producer(bus, tmp_path):
     try:
         await original_task
     except asyncio.CancelledError:
-        pass
+        pass  # expected: the test cancelled this task itself
 
     state = {}
     await _supervise_welfare_producer(producer, state, now=100.0)
@@ -291,7 +292,7 @@ async def test_supervisor_restarts_a_dead_producer(bus, tmp_path):
     try:
         await observer._task
     except asyncio.CancelledError:
-        pass
+        pass  # expected: the test cancelled this task itself
 
     await _supervise_welfare_producer(producer, state, now=101.0)
     assert state["restarts"] == 1
@@ -350,7 +351,7 @@ async def test_restarted_producer_does_not_replay_backlog(bus, tmp_path):
     try:
         await observer._task
     except asyncio.CancelledError:
-        pass
+        pass  # expected: the test cancelled this task itself
 
     await _supervise_welfare_producer(producer, {}, now=0.0)
 
@@ -384,8 +385,9 @@ async def test_producer_construction_failure_refuses(bus, tmp_path, monkeypatch)
     def bad_build(*args, **kwargs):
         raise OSError("bad path")
 
-    import kaine.evaluation.observers.welfare_observer as welfare_observer_module
-    monkeypatch.setattr(welfare_observer_module, "build_welfare_producer", bad_build)
+    monkeypatch.setattr(
+        "kaine.evaluation.observers.welfare_observer.build_welfare_producer", bad_build
+    )
 
     with pytest.raises(RuntimeError, match="gray-zone producer could not start"):
         await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
@@ -395,8 +397,7 @@ def test_boot_wiring_order():
     import ast
     import inspect
 
-    import kaine.cycle.__main__ as entry
-
+    entry = sys.modules[_start_welfare_producer.__module__]
     source_path = Path(inspect.getsourcefile(entry))
     source = source_path.read_text()
     tree = ast.parse(source)
@@ -526,3 +527,49 @@ async def test_gray_zone_reaches_the_monitor_with_evaluation_off(bus, tmp_path):
     await observer.stop()
     await sink.stop()
     await eid.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_emit_leaves_detector_state_consistent(bus, tmp_path):
+    """A cancellation while a gray-zone event is being emitted must not leave
+    the replay window un-cleared; otherwise a restarted observer re-fires the
+    same burst on the next replay event."""
+    eval_cfg = EvaluationConfig.from_mapping(
+        {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
+        lingua_model_id=None,
+    )
+    observer, _sink = build_welfare_producer(bus, eval_cfg)
+    observer._consolidation_window_s = 60.0
+    observer._replay_rate_threshold = 3
+
+    blocked = asyncio.Event()
+
+    async def _blocking_emit(record):
+        blocked.set()
+        await asyncio.Event().wait()  # never returns; the test cancels it
+
+    observer._emit_gray_zone = _blocking_emit
+
+    def _replay(i):
+        return validate_event(
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": f"m-{i}"},
+            salience=0.1,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    async def _feed():
+        for i in range(4):
+            await observer._handle_mnemos(f"{i}-0", _replay(i))
+
+    task = asyncio.create_task(_feed())
+    await asyncio.wait_for(blocked.wait(), timeout=2.0)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass  # expected: the test cancelled this task itself
+
+    assert observer.replay_overload_count == 1
+    assert len(observer._replay_timestamps) == 0
