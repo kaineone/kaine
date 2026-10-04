@@ -92,6 +92,10 @@ class IndividuationPaths:
     def birth_adapter(self) -> Path:
         return self.root / "birth_adapter.gguf"
 
+    @property
+    def birth_pending(self) -> Path:
+        return self.root / "birth_pending"
+
 
 def _write_encrypted_json(path: Path, obj: dict) -> None:
     """Atomically write a JSON object through the active state encryptor."""
@@ -714,6 +718,11 @@ def conditioning_digest(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+# Module-level cache: the adapter file can be hundreds of MB and is read on
+# the event loop, so we avoid hashing it more than once per (path, mtime, size).
+_ADAPTER_SHA_CACHE: dict[tuple[str, int, int], str] = {}
+
+
 def adapter_sha_of(adapter_output_dir: Path | None) -> str | None:
     """Return the sha256 of the current adapter.gguf, if any."""
     if adapter_output_dir is None:
@@ -727,7 +736,19 @@ def adapter_sha_of(adapter_output_dir: Path | None) -> str | None:
     adapter_file = current / "adapter.gguf"
     if not adapter_file.is_file():
         return None
-    return sha256_file(adapter_file)
+
+    st = adapter_file.stat()
+    key = (str(adapter_file.resolve()), st.st_mtime_ns, st.st_size)
+    if key in _ADAPTER_SHA_CACHE:
+        return _ADAPTER_SHA_CACHE[key]
+
+    digest = sha256_file(adapter_file)
+    # Keep the cache small; entries are tiny and invalidation is based on
+    # filesystem metadata, so reuse is cheap.
+    if len(_ADAPTER_SHA_CACHE) > 8:
+        _ADAPTER_SHA_CACHE.clear()
+    _ADAPTER_SHA_CACHE[key] = digest
+    return digest
 
 
 def read_conditioning_inputs(

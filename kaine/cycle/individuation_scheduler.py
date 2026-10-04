@@ -123,6 +123,7 @@ class IndividuationScheduler:
         lingua_idle: Callable[[], bool],
         alert: Callable[[dict], Awaitable[None]],
         adapter_verifiable: Callable[[], bool] | None = None,
+        on_capture_kind_change: Callable[[str | None], None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -161,6 +162,7 @@ class IndividuationScheduler:
         self._stopped = False
         self._state = IndividuationState()
         self._reference_kind: str | None = None
+        self._on_capture_kind_change = on_capture_kind_change
         self._last_skip: str | None = None
         self._alerted_since: str | None = None
 
@@ -209,6 +211,16 @@ class IndividuationScheduler:
 
         return gated
 
+    def _notify_capture_kind_change(self, kind: str | None) -> None:
+        if self._on_capture_kind_change is None:
+            return
+        try:
+            self._on_capture_kind_change(kind)
+        except Exception:
+            log.debug(
+                "on_capture_kind_change callback failed", exc_info=True
+            )
+
     def notify_sleep_started(self) -> None:
         self._asleep = True
 
@@ -219,6 +231,7 @@ class IndividuationScheduler:
             log.info(
                 "individuation birth capture downgraded to capture after sleep"
             )
+            self._notify_capture_kind_change("capture")
         self._schedule_look(
             self._monotonic() + self._settings.sleep_settle_s
         )
@@ -377,6 +390,7 @@ class IndividuationScheduler:
             self._capture_kind = None
             self._capture_regenerate = False
             self._capture_at = None
+            self._notify_capture_kind_change(None)
             self._refresh_state()
             return
         except Exception:
@@ -406,6 +420,7 @@ class IndividuationScheduler:
             self._capture_regenerate = False
             self._capture_at = None
             self._capture_backoff = self._settings.capture_retry_initial_s
+            self._notify_capture_kind_change(None)
             self._reanchor_lived()
             self._refresh_state()
         finally:

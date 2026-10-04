@@ -30,7 +30,6 @@ from kaine.cycle.individuation_scheduler import IndividuationScheduler, Schedule
 from kaine.lifecycle.individuation_store import (
     IndividuationPaths,
     IndividuationStoreError,
-    adapter_sha_of,
     conditioning_from_snapshot,
     report_sink,
 )
@@ -184,7 +183,12 @@ class IndividuationRuntime:
             await self.notify("individuation_inconclusive")
 
     def on_birth(self) -> None:
-        log.info("individuation birth hook: requesting birth capture")
+        log.info("individuation birth hook: writing birth marker and requesting birth capture")
+        try:
+            self.paths.root.mkdir(parents=True, exist_ok=True)
+            self.paths.birth_pending.write_text("1", encoding="utf-8")
+        except OSError as exc:
+            log.warning("individuation failed to write birth marker: %s", exc)
         self.scheduler.request_capture("birth")
 
     async def start(self) -> None:
@@ -208,8 +212,17 @@ class IndividuationRuntime:
         except Exception:
             gestating = True
 
-        if not self.paths.reference.exists() and not gestating:
-            self.scheduler.request_capture("capture")
+        if self.scheduler._capture_kind is None:
+            if self.paths.reference.exists():
+                try:
+                    self.paths.birth_pending.unlink(missing_ok=True)
+                except OSError as exc:
+                    log.warning("individuation failed to remove stale birth marker: %s", exc)
+            elif self.paths.birth_pending.exists():
+                log.info("individuation resuming pending birth capture")
+                self.scheduler.request_capture("birth")
+            elif not gestating:
+                self.scheduler.request_capture("capture")
 
     async def run(self, stop_event: asyncio.Event) -> None:
         async def wait_stop() -> None:
@@ -329,9 +342,18 @@ def build_runtime(
 
     adapter_verifiable: Callable[[], bool] | None = None
     if not per_request_adapter:
-        def _no_adapter_on_disk() -> bool:
-            return adapter_sha_of(adapter_output_dir) is None
-        adapter_verifiable = _no_adapter_on_disk
+        def _no_adapter_file() -> bool:
+            # The rule only needs to know whether an adapter file is present.
+            # A presence check only: hashing a large adapter here would stall the loop.
+            return _birth_adapter_file(adapter_output_dir) is None
+        adapter_verifiable = _no_adapter_file
+
+    def _on_capture_kind_change(kind: str | None) -> None:
+        if kind != "birth":
+            try:
+                paths.birth_pending.unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning("individuation failed to remove birth marker: %s", exc)
 
     scheduler = IndividuationScheduler(
         paths=paths,
@@ -345,6 +367,7 @@ def build_runtime(
         lingua_idle=lambda: lingua.is_idle(config.lingua_quiet_s),
         alert=runtime.alert,
         adapter_verifiable=adapter_verifiable,
+        on_capture_kind_change=_on_capture_kind_change,
     )
 
     core = IndividuationCore(
