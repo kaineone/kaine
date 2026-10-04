@@ -95,7 +95,6 @@ from kaine.boot.factories.vox import (  # noqa: F401 - re-exported
     make_vox,
 )
 from kaine.boot.metrics import (  # noqa: F401 - re-exported
-    MetricsCollector,
     _log_device_assignments,
 )
 from kaine.boot.perception_feed import (  # noqa: F401 - re-exported
