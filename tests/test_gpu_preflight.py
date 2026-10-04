@@ -21,6 +21,7 @@ from kaine.cycle.preflight import (
     PreflightResult,
     run_preflight,
 )
+from kaine.net import SERVICE_PORTS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -75,7 +76,7 @@ def test_config_overrides():
 
 
 def test_disabled_returns_skipped(tmp_path, monkeypatch):
-    monkeypatch.setattr(pf, "_device_free_vram", lambda: [_dev("cuda:0", 0.1)])
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", 0.1)])
     r = run_preflight(GpuPreflightConfig(enabled=False), state_path=tmp_path / "s.json")
     assert r.status == "skipped"
     assert r.ok is True
@@ -84,7 +85,7 @@ def test_disabled_returns_skipped(tmp_path, monkeypatch):
 
 def test_pass_with_ample_headroom(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        pf, "_device_free_vram", lambda: [_dev("cuda:0", 10.0), _dev("cuda:1", 4.0)]
+        pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", 10.0), _dev("cuda:1", 4.0)]
     )
     cfg = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
     r = run_preflight(cfg, state_path=tmp_path / "s.json")
@@ -98,7 +99,7 @@ def test_resident_models_reported_never_evicted(tmp_path, monkeypatch):
     # The single-resident OpenAI backend has no unload API: resident models are
     # REPORTED (and unexpected ones flagged in the block message) but the gate
     # evicts nothing and re-measures nothing.
-    monkeypatch.setattr(pf, "_device_free_vram", lambda: [_dev("cuda:0", 0.5)])
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", 0.5)])
     monkeypatch.setattr(
         pf,
         "_server_resident_models",
@@ -120,7 +121,7 @@ def test_resident_models_reported_never_evicted(tmp_path, monkeypatch):
 
 
 def test_blocked_when_still_short(tmp_path, monkeypatch):
-    monkeypatch.setattr(pf, "_device_free_vram", lambda: [_dev("cuda:0", 0.5)])
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", 0.5)])
     monkeypatch.setattr(pf, "_gpu_consumers", lambda *_a, **_k: [
         {"pid": "123", "process_name": "blender", "used_mib": "9000"}
     ])
@@ -139,7 +140,7 @@ def test_blocked_when_still_short(tmp_path, monkeypatch):
 
 
 def test_override_boots_anyway(tmp_path, monkeypatch):
-    monkeypatch.setattr(pf, "_device_free_vram", lambda: [_dev("cuda:0", 0.5)])
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", 0.5)])
     monkeypatch.setenv("KAINE_GPU_PREFLIGHT_APPROVED", "1")
     cfg = GpuPreflightConfig(enabled=True, min_free_vram_gb=2.0)
     r = run_preflight(cfg, state_path=tmp_path / "s.json")
@@ -148,7 +149,7 @@ def test_override_boots_anyway(tmp_path, monkeypatch):
 
 
 def test_state_snapshot_round_trips(tmp_path, monkeypatch):
-    monkeypatch.setattr(pf, "_device_free_vram", lambda: [_dev("cuda:0", 9.0)])
+    monkeypatch.setattr(pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", 9.0)])
     cfg = GpuPreflightConfig(enabled=True)
     sp = tmp_path / "s.json"
     run_preflight(cfg, state_path=sp)
@@ -244,9 +245,8 @@ def test_model_server_port_in_preserved_set():
     service the pre-boot headroom gate preserves — never killed as a foreign
     consumer. Confirms the port the bootstrap launches on is in the preserved set.
     """
-    from kaine.cycle.preflight import KAINE_SERVICE_PORTS
 
-    assert KAINE_SERVICE_PORTS.get("model_server") == 11434
+    assert SERVICE_PORTS.get("model_server") == 11434
 
 
 def test_kaine_services_up_includes_model_server(monkeypatch):
@@ -255,13 +255,12 @@ def test_kaine_services_up_includes_model_server(monkeypatch):
     real _kaine_services_up (the autouse fixture stubs it to empty) over a faked
     port probe so no real socket is opened."""
     from kaine.cycle import preflight as pf
-    from kaine.cycle.preflight import KAINE_SERVICE_PORTS
 
     monkeypatch.setattr(
         pf, "port_listening", lambda port, *a, **k: port == 11434
     )
     services = {
-        name: pf.port_listening(port) for name, port in KAINE_SERVICE_PORTS.items()
+        name: pf.port_listening(port) for name, port in SERVICE_PORTS.items()
     }
     assert services["model_server"] is True
 
@@ -273,7 +272,7 @@ def test_blocked_message_preserves_model_server(monkeypatch, tmp_path):
     from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 
     monkeypatch.setattr(
-        pf, "_device_free_vram", lambda: [_dev("cuda:0", free=0.5, total=12.0)]
+        pf, "_device_free_vram", lambda *_a, **_k: [_dev("cuda:0", free=0.5, total=12.0)]
     )
     monkeypatch.setattr(
         pf, "_kaine_services_up", lambda: {"model_server": True}

@@ -950,14 +950,19 @@ def test_system_memory_pool_parses_proc_meminfo_into_bytes(fake_fs):
     assert "meminfo" in pool.provenance.lower()
 
 
-def test_system_memory_pool_unreadable_reports_none_with_reason(fake_fs):
-    """Invariant: an unreadable /proc/meminfo yields None figures plus an
-    unknown_reason — never 0, never a raise.
+def test_system_memory_pool_unreadable_reports_none_with_reason(fake_fs, monkeypatch):
+    """Invariant: with every source unreadable, the pool has None figures plus
+    an unknown_reason — never 0, never a raise.
 
     Why it matters: 0 bytes of system RAM is a silent lie; the spec demands
     an explicit unknown marker instead.
     """
-    # fake_fs stages nothing, so /proc/meminfo is unreadable on every host.
+    # fake_fs stages nothing, so /proc/meminfo is unreadable on every host;
+    # the last rung, POSIX sysconf, is made to fail too.
+    def _no_sysconf(name):
+        raise ValueError(f"unsupported sysconf name {name}")
+
+    monkeypatch.setattr(hostmem.os, "sysconf", _no_sysconf)
     pool = hostmem.system_memory_pool()
     assert pool.total_bytes is None
     assert pool.available_bytes is None
