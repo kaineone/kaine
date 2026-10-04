@@ -38,7 +38,7 @@ speech-edge = [
     "sherpa-onnx>=1.13.8,<2",
 ]
 nexus = [
-    "fastapi>=0.139.0,<1",
+    "fastapi>=0.142.2,<1",
     "uvicorn[standard]>=0.53.0,<1",
     "jinja2>=3.1.6,<4",
 ]
