@@ -1,7 +1,7 @@
 # audio-input Specification
 
 ## Purpose
-TBD - created by archiving change audio-input. Update Purpose after archive.
+Speech input: running transcription and emotion classification side by side over each heard channel, publishing them as separate events, and letting either classifier fail without blocking the other. Audition is the module that hears today.
 
 ## Requirements
 

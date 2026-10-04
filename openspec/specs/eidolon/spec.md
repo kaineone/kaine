@@ -1,7 +1,7 @@
 # eidolon Specification
 
 ## Purpose
-TBD - created by archiving change eidolon. Update Purpose after archive.
+Eidolon is the self-model module that persists a structured `SelfModel` to JSON at a configurable path, updates its drift detector from workspace broadcasts, records drift as episodes, keeps an unbounded identity history by default, and saves periodically and at shutdown.
 
 ## Requirements
 

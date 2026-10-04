@@ -1,7 +1,7 @@
 # eidolon-self-inference Specification
 
 ## Purpose
-TBD - created by archiving change eidolon-self-inference. Update Purpose after archive.
+Eidolon's `SelfInferenceEngine` populates the self-model fields from observed cognitive signals, deriving the personality baseline from Thymos VAD statistics and the capability map from the Praxis whitelist and Nous outcomes, with an operator-seeded fallback on first boot and no recording of raw speech.
 ## Requirements
 ### Requirement: Self-model fields populated from observation
 Eidolon's `SelfInferenceEngine` SHALL populate `behavioral_norms`,

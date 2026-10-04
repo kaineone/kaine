@@ -155,7 +155,7 @@ On `mnemos.replay` while the window is active:
 | `kaine/modules/phantasia/checkpoint.py` | Atomic, encryption-aware read/write of weight-checkpoint bytes |
 | `external/dreamerv3/rssm.py` | Clean-room JAX RSSM implementation (danijar/dreamerv3, MIT) |
 | `external/dreamerv3/UPSTREAM` | Provenance record: upstream URL, pinned commit, license |
-| `kaine/boot.py` | `make_phantasia()` — backend/engine selection and world-model wiring |
+| `kaine/boot/factories/phantasia.py` | `make_phantasia()` — backend/engine selection and world-model wiring |
 | `scripts/record_phantasia_golden.py` | Recorder that writes JAX-core golden fixtures for NumPy-engine parity tests |
 | `tests/fixtures/phantasia_golden/*.npz` | Golden fixtures for forward, loss, gradients, and training-trajectory parity |
 

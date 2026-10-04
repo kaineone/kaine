@@ -435,20 +435,25 @@ def test_aif_provably_outprobes_no_exploration_baseline_on_epistemic_task():
 
 @pytestmark_real
 def test_seeded_runs_reproduce_verdict():
-    """Same seeds -> identical per-task verdicts (reproducibility requirement)."""
+    """Same seeds -> identical per-task verdicts and metrics (reproducibility).
+
+    Determinism does not depend on scale, so this runs a small configuration
+    twice and compares everything the suite reports; the headline verdict at
+    full statistical power is tested by test_epistemic_task_verdict_is_win.
+    """
     from kaine.evaluation.benchmarks.active_inference.runner import (
         BenchmarkConfig,
         run_suite,
     )
 
     cfg = BenchmarkConfig(
-        seeds=(0, 1, 2),
-        rl_train_episodes=200,
-        rl_eval_episodes=30,
-        aif_eval_episodes=30,
+        seeds=(0, 1),
+        rl_train_episodes=60,
+        rl_eval_episodes=10,
+        aif_eval_episodes=10,
         tune_holdout_seeds=(1001,),
-        tune_train_episodes=120,
-        tune_eval_episodes=20,
+        tune_train_episodes=40,
+        tune_eval_episodes=10,
     )
     r1 = run_suite(default_suite(), cfg)
     r2 = run_suite(default_suite(), cfg)
@@ -456,9 +461,16 @@ def test_seeded_runs_reproduce_verdict():
     v2 = [(v["task"], v["verdict"]) for v in r2["verdicts"]]
     assert v1 == v2
     assert r1["summary"]["suite_verdict"] == r2["summary"]["suite_verdict"]
+    # Every reported verdict record repeats, metrics included; only the
+    # wall-clock timestamp differs between runs.
+    def _without_ts(records):
+        return [{k: v for k, v in rec.items() if k != "ts"} for rec in records]
+
+    assert _without_ts(r1["verdicts"]) == _without_ts(r2["verdicts"])
 
 
 @pytestmark_real
+@pytest.mark.slow
 def test_epistemic_task_verdict_is_win():
     """End-to-end: on the epistemic task the AIF agent should WIN (its belief +
     info-value machinery beats the belief-free baseline). This is the headline

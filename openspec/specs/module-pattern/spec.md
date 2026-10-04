@@ -1,7 +1,7 @@
 # module-pattern Specification
 
 ## Purpose
-TBD - created by archiving change module-pattern. Update Purpose after archive.
+This capability defines the BaseModule lifecycle and contract for all KAINE modules, including initialization, shutdown, publish, workspace consumption, serialization, and liveness/restart behavior, and provides a ModuleRegistry that satisfies the cycle protocol and can replace module instances. An EchoModule serves as an end-to-end canary for the pattern.
 ## Requirements
 ### Requirement: BaseModule lifecycle contract
 `BaseModule` SHALL define the lifecycle hooks `initialize`, `shutdown`,

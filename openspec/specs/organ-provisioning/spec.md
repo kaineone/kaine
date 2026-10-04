@@ -1,7 +1,7 @@
 # organ-provisioning Specification
 
 ## Purpose
-TBD - created by archiving change published-organ-install. Update Purpose after archive.
+This capability provisions the language organ so the shipped default points to the published KAINE abliterated organ, fresh installs can download that organ only after operator consent, and the download format matches the host's role and available hardware. It launches and supervises the model server as a service, verifies the served organ name against configuration, and records the published organ as a research covariate.
 ## Requirements
 ### Requirement: The shipped default resolves to the published KAINE organ
 

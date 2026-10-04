@@ -1,7 +1,7 @@
 # research-submission Specification
 
 ## Purpose
-TBD - created by archiving change research-submission. Update Purpose after archive.
+This capability supports operator-initiated, opt-in research submission that is disabled by default and never sends data automatically, with a metrics-only bundle as the default and explicit content preview and confirmation before any network call. It distinguishes an enabled-but-failed encryption attempt from disabled encryption through Bundle.encryption_error.
 ## Requirements
 ### Requirement: Opt-in, operator-initiated research submission
 Research submission SHALL be disabled by default and SHALL never transmit automatically. The

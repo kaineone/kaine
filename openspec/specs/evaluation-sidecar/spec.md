@@ -1,7 +1,7 @@
 # evaluation-sidecar Specification
 
 ## Purpose
-TBD - created by archiving change memory-probes-stub-cleanup. Update Purpose after archive.
+The evaluation-sidecar capability gives KAINE a decoupled offline measurement layer that scores memory reconstruction asynchronously, records workspace trajectory graphs without payloads, exposes A/B divergence and controlled probes, and supports both permanent negative-control tests and switched live ablation.
 
 ## Requirements
 

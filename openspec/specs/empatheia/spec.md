@@ -1,7 +1,7 @@
 # empatheia Specification
 
 ## Purpose
-TBD - created by archiving change empatheia-module. Update Purpose after archive.
+Empatheia is the social-modeling module that maintains a per-agent profile of emotion histograms, behavioral summaries, and interaction history, computes and publishes a monotonic familiarity score, and emits social-prediction-error events as salience signals while skipping model updates on degraded emotion events.
 
 ## Requirements
 

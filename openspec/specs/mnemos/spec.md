@@ -1,7 +1,7 @@
 # mnemos Specification
 
 ## Purpose
-TBD - created by archiving change mnemos. Update Purpose after archive.
+Mnemos is KAINE's episodic memory module. This capability covers its KAINE-owned, authenticated Qdrant store and collections, the store and recall API with its shared text embedder, automatic storage of workspace broadcasts, consolidation from short-term to episodic memory, and spontaneous cue-based recall in the live loop.
 
 ## Requirements
 

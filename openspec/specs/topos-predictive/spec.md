@@ -1,7 +1,7 @@
 # topos-predictive Specification
 
 ## Purpose
-TBD - created by archiving change topos-forward-model. Update Purpose after archive.
+This capability gives Topos a visual forward model that predicts the next latent from the current latent and recurrent visual buffer, driving salience from prediction error. Topos adapts the model online with a single gradient step per clip latent, summarizes the buffer as a statistical descriptor for serialization, and binds the latent dimension to the active encoder.
 
 ## Requirements
 

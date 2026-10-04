@@ -1,7 +1,7 @@
 # inference-backend Specification
 
 ## Purpose
-TBD - created by archiving change unify-inference-on-studio. Update Purpose after archive.
+One local OpenAI-compatible model server serves both the language organ and the A/B baseline, so the two share one backend and one served model. This capability also keeps reasoning suppression and the choice of GPU vendor portable across servers.
 ## Requirements
 ### Requirement: A single OpenAI-compatible local model server
 

@@ -1,7 +1,7 @@
 # host-probe Specification
 
 ## Purpose
-TBD - created by archiving change portability-tiers. Update Purpose after archive.
+The host-probe capability inspects the host's RAM, CPU architecture, accelerator availability, and PyTorch importability to recommend a matching capability-matrix tier, without applying that tier to the running configuration.
 
 ## Requirements
 

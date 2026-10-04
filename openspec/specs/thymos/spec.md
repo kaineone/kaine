@@ -1,7 +1,7 @@
 # thymos Specification
 
 ## Purpose
-TBD - created by archiving change thymos. Update Purpose after archive.
+Thymos is KAINE's affect module. This capability covers its dimensional affect state and homeostatic drift, appraisal into categorical emotions, its four drives, the goal ledger and goal relevance, and the salience multiplier it gives Syneidesis.
 
 ## Requirements
 

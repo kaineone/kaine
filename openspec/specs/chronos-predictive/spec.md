@@ -1,7 +1,7 @@
 # chronos-predictive Specification
 
 ## Purpose
-TBD - created by archiving change chronos-forward-model. Update Purpose after archive.
+Chronos's predictive timing capability runs a CfC forward model over temporal features, publishes `temporal_prediction_error` on `chronos.report`, and uses that error to drive anomaly salience instead of a rolling z-score on hidden-state norm.
 ## Requirements
 ### Requirement: Temporal forward model drives anomaly salience
 Chronos SHALL use its CfC to predict the next temporal feature vector and SHALL

@@ -16,6 +16,11 @@
 name: tests
 
 on:
+  # Nightly: the full suite, slow tests included, so a slow test that no pull
+  # request ran still runs every day. A red nightly blocks merging.
+  schedule:
+    - cron: "23 9 * * *"
+  workflow_dispatch: {}
   push:
     branches: ["main"]
     paths:
@@ -24,6 +29,7 @@ on:
       - "conftest.py"
       - "pyproject.toml"
       - ".github/workflows/tests.yml"
+      - ".github/slow-test-paths.txt"
       - "scripts/**"
       - "config/**"
       - "compose/**"
@@ -39,6 +45,7 @@ on:
       - "conftest.py"
       - "pyproject.toml"
       - ".github/workflows/tests.yml"
+      - ".github/slow-test-paths.txt"
       - "scripts/**"
       - "config/**"
       - "compose/**"
@@ -69,6 +76,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # Full history so a pull request can diff against its base commit to
+          # decide whether the slow tests run.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -121,8 +132,33 @@ jobs:
       - name: Show installed torch version
         run: python -c "import torch; print(torch.__version__)"
 
+      - name: Decide whether the slow tests run
+        # Slow tests (marker `slow`) run on main, nightly and on demand. On a pull
+        # request they run only when it changes a path listed in
+        # .github/slow-test-paths.txt; tests/test_slow_lane.py keeps that list
+        # covering every slow-marked test file.
+        id: lane
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "slow=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          grep -v '^#' .github/slow-test-paths.txt | grep -v '^[[:space:]]*$' > /tmp/slow-paths.re
+          changed="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)"
+          if printf '%s\n' "$changed" | grep -E -q -f /tmp/slow-paths.re; then
+            echo "slow=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "slow=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run the offline test suite
-        # A test that runs longer than 10 minutes dumps every thread's stack to
-        # the log (pytest's built-in faulthandler), so a hang names itself
-        # instead of ending as a silent job timeout.
-        run: python -m pytest -q -o faulthandler_timeout=600
+        # In parallel, one worker per CPU, each test file kept on one worker so
+        # tests that share module state stay together. A test that runs longer
+        # than 10 minutes dumps every thread's stack to the log (pytest's
+        # built-in faulthandler), so a hang names itself instead of ending as a
+        # silent job timeout.
+        run: python -m pytest -q -n auto --dist loadfile -m "not slow" -o faulthandler_timeout=600
+
+      - name: Run the slow tests
+        if: steps.lane.outputs.slow == 'true'
+        run: python -m pytest -q -m slow -o faulthandler_timeout=600
