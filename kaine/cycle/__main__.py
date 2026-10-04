@@ -372,6 +372,38 @@ def build_ab_divergence_control_client(eval_cfg, *, assembler=None):
     return AssemblerConditionedClient(_build_prompt, _complete)
 
 
+async def _start_welfare_producer(bus, eval_cfg, preservation_cfg) -> tuple[Any, Any] | None:
+    """Start the welfare-net gray-zone producer when the welfare response is on.
+
+    The gray-zone producer belongs to the welfare net, so it runs whenever the
+    welfare response is enabled, independent of ``[evaluation]``.
+    """
+    if not preservation_cfg.welfare_response.enabled:
+        return None
+    from kaine.evaluation.observers.welfare_observer import build_welfare_producer
+
+    observer, sink = build_welfare_producer(bus, eval_cfg)
+    try:
+        await sink.start()
+        await observer.start()
+    except Exception as exc:
+        try:
+            try:
+                await observer.stop()
+            except Exception:
+                log.warning("welfare producer observer stop failed during rollback", exc_info=True)
+        finally:
+            try:
+                await sink.stop()
+            except Exception:
+                log.warning("welfare producer sink stop failed during rollback", exc_info=True)
+        log.error("welfare producer start failed", exc_info=True)
+        raise RuntimeError(
+            "welfare response is enabled but its gray-zone producer could not start; refusing to run without it"
+        ) from exc
+    return observer, sink
+
+
 # Modules whose factories read `[<module>.qdrant].api_key`. They all share the
 # single `[qdrant]` secret. Add to this tuple when a new qdrant-backed module
 # is introduced so the boot-time secrets merge keeps covering every consumer.
@@ -1589,10 +1621,19 @@ async def _boot_and_run(
         revived_from=revive.revived_from if revive is not None else None,
     )
 
+    # Preservation config is needed by the cycle safety-net and by the welfare
+    # gray-zone producer, which runs whenever the welfare response is enabled,
+    # independent of [evaluation].
+    from kaine.cycle.preservation_monitor import PreservationConfig
+
+    preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
+
     # Optional evaluation sidecar. NO core module imports kaine.evaluation;
     # the cycle entrypoint is the single coupling point. eval_cfg was loaded at
     # the top of _boot_and_run (fail-closed before any resource opened).
     sidecar: SidecarRegistry | None = None
+    welfare_producer = None
+    welfare_producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
     research_active = research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
     if eval_cfg.enabled or research_active:
         from kaine.boot import shared_embedder
@@ -1606,6 +1647,7 @@ async def _boot_and_run(
             memory_source=_memory_source_factory(registry),
             cognitive_query_client=_cognitive_query_client_factory(registry, eval_cfg),
             embedder=shared_embedder(registry, kaine_config),
+            welfare_observer=welfare_producer[0] if welfare_producer else None,
         )
         try:
             await sidecar.start()
@@ -1756,7 +1798,6 @@ async def _boot_and_run(
     )
     from kaine.lifecycle.divergence import consolidation_thresholds_from_config
 
-    preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
     cons_rate, cons_mag = consolidation_thresholds_from_config(kaine_config)
     divergence_monitor = None
     welfare_monitor = None
@@ -2088,6 +2129,16 @@ async def _boot_and_run(
                 await sidecar.stop()
             except Exception:
                 log.warning("evaluation sidecar stop failed", exc_info=True)
+        if welfare_producer is not None:
+            observer, sink = welfare_producer
+            try:
+                await observer.stop()
+            except Exception:
+                log.warning("welfare producer observer stop failed", exc_info=True)
+            try:
+                await sink.stop()
+            except Exception:
+                log.warning("welfare producer sink stop failed", exc_info=True)
         try:
             il = ignition_log
         except NameError:

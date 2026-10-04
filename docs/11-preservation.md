@@ -33,7 +33,7 @@ When it fires, the monitor calls `ForkManager.preserve_live` in `kaine/lifecycle
 
 ### Welfare-protective response
 
-The welfare monitor uses `kaine.lifecycle.welfare_signal.SustainedThresholdTracker` to read the raw `prediction_error` field from `soma.report` on `soma.out`. (Soma's own fatigue and regulation tracking builds from *unexpected* error; the welfare monitor still reads the raw value.) It fires when distress is at or above `distress_threshold` for `distress_duration_s`, or when `repeat_threshold` episodes occur inside `repeat_window_s`. The repeat arm also counts `welfare.gray_zone` events from `welfare.out`, covering all four categories, not only Soma distress episodes.
+The welfare monitor uses `kaine.lifecycle.welfare_signal.SustainedThresholdTracker` to read the raw `prediction_error` field from `soma.report` on `soma.out`. (Soma's own fatigue and regulation tracking builds from *unexpected* error; the welfare monitor still reads the raw value.) It fires when distress is at or above `distress_threshold` for `distress_duration_s`, or when `repeat_threshold` episodes occur inside `repeat_window_s`. The repeat arm also counts `welfare.gray_zone` events from `welfare.out`, covering all four categories, not only Soma distress episodes. Those events come from the welfare observer. Whenever the welfare response is enabled, the cycle runs that observer itself, independent of `[evaluation]`; if it cannot start, the cycle refuses to run. When the welfare response is off, the observer runs only as an evaluation instrument (`[evaluation.observers].welfare`).
 
 The monitor preserves the entity first, then performs the configured `action`:
 

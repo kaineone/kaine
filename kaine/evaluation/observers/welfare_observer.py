@@ -46,6 +46,7 @@ import logging
 import time
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from kaine.bus.schema import Event, validate_event
@@ -378,3 +379,25 @@ class WelfareObserver(StreamSubscriberObserver):
                     "sustained_interoceptive_distress_count": self._sustained_interoceptive_distress_count,
                 }
             )
+
+
+def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSink]:
+    """Construct the welfare gray-zone producer outside the evaluation sidecar.
+
+    This producer belongs to the welfare net; it is started whenever the
+    cycle-layer welfare-protective response is enabled, independent of the
+    ``[evaluation]`` master switch. The returned pair is UNSTARTED; the caller
+    is responsible for lifecycle management.
+    """
+    sink = AsyncJsonlSink(
+        Path(eval_cfg.paths.evaluation_logs) / "welfare",
+        name="welfare",
+        retention_days=eval_cfg.paths.retention_days,
+    )
+    observer = WelfareObserver(
+        bus,
+        sink,
+        interoceptive_distress_threshold=eval_cfg.welfare.interoceptive_distress_threshold,
+        interoceptive_distress_duration_s=eval_cfg.welfare.interoceptive_distress_duration_s,
+    )
+    return observer, sink

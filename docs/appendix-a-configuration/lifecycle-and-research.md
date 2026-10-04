@@ -193,7 +193,7 @@ Autonomous welfare-protective response. Watches the Soma interoceptive-distress 
 | `distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
 | `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires. |
 | `repeat_window_s` | float | `300.0` | Window for the repeated-episodes arm. |
-| `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the sidecar welfare observer. |
+| `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. |
 | `warmup_s` | float | `120.0` | Cold-start warm-up: during the first `warmup_s` after run start, gray-zone/distress events are logged but do not count toward the repeat threshold or trigger the response. |
 | `warmup_ceiling_s` | float | `1800.0` | Maximum extension, in seconds, that Soma's `warmup_active` flag can add to the warm-up beyond `warmup_s`. It does not cap the `warmup_s` window itself. |
 | `min_interval_s` | float | `1800.0` | Rate limit for the `notify` action only: at most one `notify` event per this interval. |

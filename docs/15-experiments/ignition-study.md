@@ -161,7 +161,7 @@ For details on backends and hot-swap modes, see [Voice alignment](../10-sleep/vo
 
 The ignition log is the workspace-graph record. It writes one row for every successful workspace broadcast, at full rate and never sampled, because an ignition is a discrete event and sampling would miss them. Each row contains coalition members (entry id, source, type, salience, original timestamp), salience scores, inhibition, timing, programme position and time scale. It never holds payloads or perceptual embeddings. It grows about 11 MB per hour of running. It is kept for the paper analysis and afterwards as training data for the world model; nothing reads it for training yet. Only the operator deletes it, after both uses; it is never purged automatically.
 
-A study also keeps the research event log, external utterances, and the preservation monitors (divergence monitor and welfare response). The evaluation instruments and gestation readouts are recorded normally. The Nexus record, the workspace trajectory, and the research-event raw archive are never enabled in a study.
+A study also keeps the research event log, external utterances, and the preservation monitors (divergence monitor and welfare response). Gestation readouts are recorded normally. No evaluation observer runs in a study: the overlay sets `[evaluation].enabled = false`, so there are no A/B organ calls, memory probes or other instrument logs during a viewing. The welfare net is unaffected, because its gray-zone producer runs with the welfare response, not with evaluation. The Nexus record, the workspace trajectory, and the research-event raw archive are never enabled in a study.
 
 ## Read the report
 
