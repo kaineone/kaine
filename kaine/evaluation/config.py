@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
+from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.storage import configured_data_root, resolve_under
 
 # ---------------------------------------------------------------------------
@@ -508,7 +509,7 @@ class EvaluationConfig:
     # reasoning and returns empty content — so it DEFAULTS to False here too. The
     # server's `--reasoning-budget 0` flag does not reliably suppress CoT, so
     # suppression is enforced client-side via enable_thinking (see lingua.client).
-    chat_url: str = "http://127.0.0.1:11434"
+    chat_url: str = DEFAULT_CHAT_URL
     # The A/B-divergence baseline runs this model bare (no architecture). It MUST
     # equal the language organ's model or the divergence measures a model
     # difference, not the architecture's conditioning. At cycle startup this is

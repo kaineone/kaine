@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from kaine.boot import known_module_names
+from kaine.defaults import DEFAULT_MIN_FREE_GB
 
 PLAN_FILE = "study.json"
 STEPS_FILE = "steps.jsonl"
@@ -115,7 +116,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(plan[key], (int, float)) or plan[key] <= 0:
             raise ValueError(f"{key} must be positive")
 
-    plan.setdefault("min_free_gb", 20.0)
+    plan.setdefault("min_free_gb", DEFAULT_MIN_FREE_GB)
     if (
         isinstance(plan["min_free_gb"], bool)
         or not isinstance(plan["min_free_gb"], (int, float))

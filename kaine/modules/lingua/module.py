@@ -12,6 +12,7 @@ from typing import Any, Callable, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
 from kaine.modules.base import BaseModule
 from kaine.modules.lingua.client import (
@@ -86,7 +87,7 @@ class Lingua(BaseModule):
         chat_client: Optional[ChatClient] = None,
         renderer: Optional[FaithfulRenderer] = None,
         intent_log: Optional[IntentExpressionLog] = None,
-        chat_url: str = "http://127.0.0.1:11434/v1",
+        chat_url: str = DEFAULT_CHAT_URL,
         model_id: str = "kaineone/Qwen3.5-4B-abliterated-GGUF",
         temperature: float = 0.7,
         max_tokens: int = 512,

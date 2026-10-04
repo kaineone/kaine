@@ -363,6 +363,7 @@ source_modules = [
     "kaine.shared_services",
     "kaine.net",
     "kaine.memory_kinds",
+    "kaine.defaults",
 ]
 forbidden_modules = [
     "kaine.cycle",

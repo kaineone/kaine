@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import socket
 
+from kaine.defaults import DEFAULT_ORGAN_PORT
+
 __all__ = ["SERVICE_PORTS", "port_listening"]
 
 # KAINE's own GPU-using services, by local port.
@@ -33,7 +35,7 @@ __all__ = ["SERVICE_PORTS", "port_listening"]
 #   chatterbox   — text-to-speech (vox).
 #   speaches     — speech-to-text (audition).
 SERVICE_PORTS: dict[str, int] = {
-    "model_server": 11434,
+    "model_server": DEFAULT_ORGAN_PORT,
     "chatterbox": 8883,
     "speaches": 8000,
 }

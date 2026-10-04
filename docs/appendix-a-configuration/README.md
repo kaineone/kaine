@@ -68,6 +68,7 @@ Real secret values are never printed in documentation or committed to the reposi
 Environment variables override the merged TOML where the code reads them. They do not always win over every secret source:
 
 - A `[lingua].api_key` set in config takes precedence over `KAINE_MODEL_SERVER_API_KEY`.
+- The organ address defaults to `http://127.0.0.1:11434/v1` when `[lingua].chat_url` is unset. The organ default, the model-server key lookup and the free-disk floor are defined once, in `kaine/defaults.py`.
 - Per-consumer `[mnemos|empatheia.qdrant].api_key` values take precedence over `KAINE_QDRANT_API_KEY` and any secrets-file value.
 - `KAINE_STATE_KEY` is read from the environment or the keyring, not from `config/secrets.toml`.
 
@@ -92,7 +93,9 @@ Environment variables override the merged TOML where the code reads them. They d
 | `KAINE_NEXUS_READ_ONLY` | `[nexus].read_only` |
 | `KAINE_NEXUS_EXTRA_HOSTS` | Extra tailnet or reverse-proxy host names |
 | `KAINE_STATE_KEY` | State encryption key |
-| `KAINE_MODEL_SERVER_API_KEY` | Model server API key |
+| `KAINE_MODEL_SERVER_API_KEY` | Model server API key, read when `[lingua].api_key` is unset |
+| `KAINE_ORGAN_URL` | Organ address for the Hypnos trainer service, which runs without the config |
+| `KAINE_MODELS_DIR` | Directory holding provisioned model weights |
 | `KAINE_SMTP_PASSWORD` | SMTP password for email alerts |
 
 ### Redis secrets

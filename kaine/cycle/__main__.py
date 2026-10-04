@@ -60,6 +60,11 @@ from kaine.cycle.ignition_log import (
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
+from kaine.defaults import (
+    lingua_section_api_key,
+    lingua_section_chat_url,
+    model_server_api_key,
+)
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
 from kaine.evaluation.config import load_research_event_log_config
 from kaine.experiment import (
@@ -1178,9 +1183,7 @@ async def _boot_and_run(
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = (kaine_config.get("lingua") or {}).get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    lingua_api_key = model_server_api_key(kaine_config)
     try:
         eval_cfg = load_evaluation_config(
             lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
@@ -1301,9 +1304,9 @@ async def _boot_and_run(
 
             lingua_cfg = kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(
-                str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1")),
+                lingua_section_chat_url(lingua_cfg),
                 str(lingua_cfg.get("model_id") or ""),
-                api_key=lingua_cfg.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+                api_key=lingua_section_api_key(lingua_cfg),
             )
             log.info("organ-gate: %s", gate.detail)
             if not gate.ok:

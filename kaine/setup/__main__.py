@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, TextIO
 
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
+from kaine.defaults import DEFAULT_CHAT_URL, lingua_section_api_key, lingua_section_chat_url
 from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.setup import tomlwriter
@@ -58,7 +59,7 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
     # Model server (Unsloth Studio / llama.cpp): OpenAI-compatible
     # /v1/models -> {"data": [{"id": "..."}, ...]}.
     try:
-        resp = httpx.get("http://127.0.0.1:11434/v1/models", timeout=timeout_s)
+        resp = httpx.get(f"{DEFAULT_CHAT_URL}/models", timeout=timeout_s)
         if resp.status_code == 200:
             data = resp.json()
             result["served_models"] = [
@@ -186,11 +187,9 @@ def _provision_organ(
         }
     # The served alias the operator chose (or the shipped default).
     lingua_cfg = {**(shipped.get("lingua") or {}), **(config.get("lingua") or {})}
-    chat_url = str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1"))
+    chat_url = lingua_section_chat_url(lingua_cfg)
     model_id = str(lingua_cfg.get("model_id", organ_mod.ORGAN_GGUF_REPO))
-    api_key = lingua_cfg.get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    api_key = lingua_section_api_key(lingua_cfg)
 
     out("\n" + "-" * 70 + "\n")
     out("Language organ download + serve\n")
