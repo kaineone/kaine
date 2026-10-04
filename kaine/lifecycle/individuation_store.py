@@ -7,6 +7,9 @@ Holds the birth-reference document, the look ledger, the encrypted report
 log and the conditioning digest used to decide whether the being is
 individuated.
 
+The producer is the only writer of the ledger and reference in a running
+cycle; there is one producer per process.
+
 Fail-closed rules:
 
 - A missing file is reported as absent (``None``), never silently recreated.
@@ -24,6 +27,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import math
 import os
 import shutil
 import tempfile
@@ -37,6 +42,9 @@ from kaine.security.crypto import get_state_encryptor
 
 if TYPE_CHECKING:
     from kaine.persistence.jsonl_sink import AsyncJsonlSink
+
+
+log = logging.getLogger(__name__)
 
 
 class IndividuationStoreError(RuntimeError):
@@ -250,8 +258,24 @@ def new_reference_id() -> str:
     return uuid.uuid4().hex
 
 
-def save_reference(paths: IndividuationPaths, doc: ReferenceDoc) -> None:
-    """Persist the reference document atomically and encrypted."""
+def save_reference(
+    paths: IndividuationPaths, doc: ReferenceDoc, *, overwrite: bool = False
+) -> None:
+    """Persist the reference document atomically and encrypted.
+
+    Raises IndividuationStoreError if a reference already exists and
+    overwrite=False. Raises ReferenceUnreadable if the existing reference
+    cannot be read.
+    """
+    if paths.reference.exists() and not overwrite:
+        try:
+            load_reference(paths)
+        except ReferenceUnreadable:
+            raise
+        raise IndividuationStoreError(
+            "a reference already exists; pass overwrite=True to regenerate"
+        )
+
     _write_encrypted_json(paths.reference, doc.to_dict())
 
 
@@ -331,12 +355,16 @@ class Ledger:
         alpha_spent = d.get("alpha_spent")
         if not isinstance(alpha_spent, (int, float)):
             raise LedgerUnreadable("alpha_spent must be a number")
+        if not math.isfinite(alpha_spent):
+            raise LedgerUnreadable("alpha_spent must be finite")
         if alpha_spent < 0.0 or alpha_spent > 1.0:
             raise LedgerUnreadable("alpha_spent must be in [0, 1]")
 
         lived_seconds = d.get("lived_seconds")
         if not isinstance(lived_seconds, (int, float)) or lived_seconds < 0:
             raise LedgerUnreadable("lived_seconds must be a non-negative number")
+        if not math.isfinite(lived_seconds):
+            raise LedgerUnreadable("lived_seconds must be finite")
 
         lived_ticks = d.get("lived_ticks")
         if not isinstance(lived_ticks, int) or lived_ticks < 0:
@@ -374,6 +402,11 @@ def load_ledger(paths: IndividuationPaths) -> Ledger | None:
 
 def save_ledger(paths: IndividuationPaths, new: Ledger) -> None:
     """Persist the ledger only if it does not regress any stored value."""
+    if not math.isfinite(new.alpha_spent):
+        raise IndividuationStoreError("alpha_spent is not finite")
+    if not math.isfinite(new.lived_seconds):
+        raise IndividuationStoreError("lived_seconds is not finite")
+
     if paths.ledger.exists():
         old = load_ledger(paths)
 
@@ -444,6 +477,30 @@ REPORT_FIELDS = frozenset(
     }
 )
 
+INCONCLUSIVE_REASONS: frozenset[str] = frozenset(
+    {
+        "ledger_unreadable",
+        "reference_unreadable",
+        "no_reference",
+        "ledger_missing",
+        "battery_changed",
+        "alpha_unresolvable",
+        "conditioning_changed_mid_run",
+        "embedding_failed",
+        "embedder_not_semantic",
+        "adapter_not_applied",
+        "request_failed",
+        "organ_resting",
+        "no_content",
+        "self_model_not_ready",
+        "disclosure_not_ready",
+        "organ_unloaded",
+        "asleep",
+        "paused",
+        "deadline_exceeded",
+    }
+)
+
 
 def build_report(**fields: object) -> dict:
     """Build and validate an individuation report record."""
@@ -473,6 +530,8 @@ def build_report(**fields: object) -> dict:
             raise ValueError(
                 f"Field {key!r} must be scalar, got {type(value).__name__}"
             )
+        if isinstance(value, str) and len(value) > 200:
+            raise ValueError(f"Field {key!r} exceeds 200 characters")
 
     if outcome == "scored":
         for required in ("p_value", "effect_size_h", "alpha_k", "significant"):
@@ -484,6 +543,11 @@ def build_report(**fields: object) -> dict:
         if "inconclusive_reason" not in record:
             raise ValueError(
                 "Inconclusive report requires inconclusive_reason"
+            )
+        reason = record["inconclusive_reason"]
+        if reason not in INCONCLUSIVE_REASONS:
+            raise ValueError(
+                f"inconclusive_reason {reason!r} is not in INCONCLUSIVE_REASONS"
             )
         for forbidden in ("p_value", "T", "effect_size_h", "significant"):
             if forbidden in record:
@@ -511,6 +575,7 @@ def read_reports(
     if not reports_dir.exists():
         return []
 
+    skipped = 0
     matched: list[dict] = []
     for path in reports_dir.rglob("*.jsonl"):
         with path.open("r", encoding="utf-8") as fh:
@@ -522,11 +587,13 @@ def read_reports(
                 try:
                     plaintext = get_state_encryptor().decrypt_text(line)
                 except Exception:
+                    skipped += 1
                     continue
 
                 try:
                     obj = json.loads(plaintext)
                 except Exception:
+                    skipped += 1
                     continue
 
                 if not isinstance(obj, dict):
@@ -541,6 +608,11 @@ def read_reports(
                     continue
 
                 matched.append(obj)
+
+    if skipped > 0:
+        log.warning(
+            "skipped %d unreadable report line(s) in %s", skipped, reports_dir
+        )
 
     return sorted(matched, key=lambda r: r["ts"])
 

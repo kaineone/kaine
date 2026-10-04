@@ -10,6 +10,7 @@ from kaine.bus.config import BusConfig
 from kaine.cycle.individuation_probe import (
     ProbeFailure,
     adapter_applied,
+    adapter_expected_from,
     build_probe_sampler,
 )
 from kaine.lifecycle.individuation_store import ProbeSample
@@ -53,12 +54,18 @@ class _ConfigurableFakeChatClient:
 def _make_lingua(bus: AsyncBus, tmp_path: Path, responses=None, chat_client=None) -> Lingua:
     if chat_client is None:
         chat_client = FakeChatClient(responses=responses)
-    return Lingua(
+    lingua = Lingua(
         bus,
         chat_client=chat_client,
         intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
         model_id="fake-model",
     )
+    lingua._bus_self_model = {
+        "values": [],
+        "behavioral_norms": [],
+        "situation_facts": [],
+    }
+    return lingua
 
 
 @pytest.mark.asyncio
@@ -158,6 +165,116 @@ async def test_sample_adapter_not_applied(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_sample_self_model_not_ready(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(text="ok", model="m", from_content=True)
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    lingua._bus_self_model = None
+    sampler = build_probe_sampler(lingua=lingua)
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeFailure)
+    assert result.reason == "self_model_not_ready"
+    assert fake.requests == []
+
+
+@pytest.mark.asyncio
+async def test_sample_disclosure_not_ready(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(text="ok", model="m", from_content=True)
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(lingua=lingua, required_fact="F")
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeFailure)
+    assert result.reason == "disclosure_not_ready"
+    assert fake.requests == []
+
+
+@pytest.mark.asyncio
+async def test_sample_adapter_expected_not_applied(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(
+        text="ok", model="m", from_content=True, lora_applied=False
+    )
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(
+        lingua=lingua, adapter_expected=lambda: True
+    )
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeFailure)
+    assert result.reason == "adapter_not_applied"
+
+
+@pytest.mark.asyncio
+async def test_sample_adapter_expected_applied(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(
+        text="ok", model="m", from_content=True, lora_applied=True
+    )
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(
+        lingua=lingua, adapter_expected=lambda: True
+    )
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeSample)
+    assert result.text == "ok"
+
+
+@pytest.mark.asyncio
+async def test_sample_adapter_check_raises(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(text="ok", model="m", from_content=True)
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    async def _raises() -> bool:
+        raise RuntimeError("nope")
+
+    sampler = build_probe_sampler(lingua=lingua, adapter_check=_raises)
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeFailure)
+    assert result.reason == "adapter_not_applied"
+    assert fake.requests == []
+
+
+@pytest.mark.asyncio
+async def test_sample_probe_request_raises(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(text="ok", model="m", from_content=True)
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    lingua.probe_request = lambda *args, **kwargs: (_ for _ in ()).throw(
+        RuntimeError("boom")
+    )
+
+    sampler = build_probe_sampler(lingua=lingua)
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeFailure)
+    assert result.reason == "request_failed"
+    assert fake.requests == []
+
+
+@pytest.mark.asyncio
+async def test_sample_adapter_expected_raises(bus: AsyncBus, tmp_path: Path):
+    response = ChatResponse(
+        text="ok", model="m", from_content=True, lora_applied=True
+    )
+    fake = _ConfigurableFakeChatClient(response)
+    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(
+        lingua=lingua, adapter_expected=lambda: (_ for _ in ()).throw(
+            RuntimeError("nope")
+        )
+    )
+
+    result = await sampler("hello", 1)
+    assert isinstance(result, ProbeFailure)
+    assert result.reason == "adapter_not_applied"
+
+
+@pytest.mark.asyncio
 async def test_adapter_applied_none_dir():
     assert await adapter_applied(adapter_output_dir=None, resolver=None) is True
 
@@ -227,6 +344,30 @@ async def test_adapter_applied_current_link_lora_raises(tmp_path: Path):
             raise RuntimeError("nope")
 
     assert await adapter_applied(adapter_output_dir=adapter_dir, resolver=Resolver()) is False
+
+
+def test_adapter_expected_from_none_dir():
+    fn = adapter_expected_from(None)
+    assert fn() is False
+
+
+def test_adapter_expected_from_no_current_link(tmp_path: Path):
+    adapter_dir = tmp_path / "adapters"
+    adapter_dir.mkdir()
+    fn = adapter_expected_from(adapter_dir)
+    assert fn() is False
+
+
+def test_adapter_expected_from_current_with_adapter(tmp_path: Path):
+    adapter_dir = tmp_path / "adapters"
+    target = adapter_dir / "v1"
+    target.mkdir(parents=True)
+    (target / "adapter.gguf").write_text("weights", encoding="utf-8")
+    current = adapter_dir / "current"
+    current.symlink_to(target, target_is_directory=True)
+
+    fn = adapter_expected_from(adapter_dir)
+    assert fn() is True
 
 
 @pytest.mark.asyncio

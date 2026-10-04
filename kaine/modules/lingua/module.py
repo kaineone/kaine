@@ -288,7 +288,13 @@ class Lingua(BaseModule):
         except Exception:
             log.warning("lingua chat client close failed", exc_info=True)
 
-    def probe_request(self, about: str, *, seed: int, max_tokens: int) -> ChatRequest:
+    def probe_self_model(self) -> dict | None:
+        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived."""
+        if self._bus_self_model is not None:
+            return dict(self._bus_self_model)
+        return None
+
+    def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
         """Build the individuation probe's request under fixed conditions.
 
         Working memory is empty and the current self-model seeds the persona.
@@ -296,7 +302,7 @@ class Lingua(BaseModule):
         never enters the being's experience.
         """
         ctx = self._assembler.assemble(
-            about=about, snapshot=None, self_model=self._self_model(), mode="external"
+            about=about, snapshot=None, self_model=self_model, mode="external"
         )
         return ChatRequest(
             prompt=ctx.prompt,

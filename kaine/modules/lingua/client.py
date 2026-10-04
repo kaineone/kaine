@@ -48,6 +48,8 @@ class ChatResponse:
     # True only when `text` came from `choices[0].message.content`; False for the
     # reasoning-channel fallback, the resting-organ deferral and an empty answer.
     from_content: bool = False
+    # True when the request was sent with a `lora` field.
+    lora_applied: bool = False
 
 
 @runtime_checkable
@@ -224,6 +226,7 @@ class OpenAIChatClient:
             raw=data,
             finish_reason=finish_reason,
             from_content=from_content,
+            lora_applied="lora" in body,
         )
 
     async def aclose(self) -> None:
@@ -312,12 +315,16 @@ class LlamaCppChatClient:
 
         def _run() -> dict[str, Any]:
             llama = self._ensure_llama()
-            return llama.create_chat_completion(
-                messages=messages,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                stop=list(request.stop) if request.stop else None,
-            )
+            kwargs: dict[str, Any] = {
+                "messages": messages,
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+            }
+            if request.stop:
+                kwargs["stop"] = list(request.stop)
+            if request.seed is not None:
+                kwargs["seed"] = int(request.seed)
+            return llama.create_chat_completion(**kwargs)
 
         start = _time.monotonic()
         # llama.cpp inference is blocking + CPU-bound — run it off the event loop
@@ -328,6 +335,8 @@ class LlamaCppChatClient:
         message = choice.get("message") or {}
         text = message.get("content") or ""
         usage = data.get("usage") or {}
+        finish_reason = choice.get("finish_reason")
+        from_content = bool(message.get("content"))
         return ChatResponse(
             text=text,
             model=str(data.get("model", request.model)),
@@ -335,6 +344,8 @@ class LlamaCppChatClient:
             completion_tokens=int(usage.get("completion_tokens", 0)),
             latency_ms=elapsed_ms,
             raw=data,
+            finish_reason=finish_reason,
+            from_content=from_content,
         )
 
     async def aclose(self) -> None:

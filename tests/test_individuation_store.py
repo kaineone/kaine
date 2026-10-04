@@ -337,7 +337,7 @@ def test_sink_and_reader(tmp_path, monkeypatch):
             entity_name="ent",
             reference_id="ref-b",
             reference_kind="birth",
-            inconclusive_reason="warmup",
+            inconclusive_reason="organ_resting",
             ts="2025-01-01T00:00:00+00:00",
         )
 
@@ -453,7 +453,7 @@ def test_individuation_evidence_truth_table():
     inconclusive = {
         "ts": "2025-01-10T00:00:00+00:00",
         "outcome": "inconclusive",
-        "inconclusive_reason": "warmup",
+        "inconclusive_reason": "organ_resting",
     }
     ev = individuation_evidence(
         None, [inconclusive], current_digest=None, now=now, max_report_age_s=86400

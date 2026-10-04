@@ -463,12 +463,12 @@ class Eidolon(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    def ensure_situation_fact(self, text: str) -> bool:
+    async def ensure_situation_fact(self, text: str) -> bool:
         """Tell the being a fact about its situation.
 
-        The fact is persisted with the self-model on the next save and published
-        with it. It is not a value or norm and never touches drift or identity
-        history.
+        The fact is persisted and published at once, so the language organ can
+        condition on it immediately. It is not a value or norm and never touches
+        drift or identity history.
         """
         text = text.strip()
         if not text:
@@ -478,6 +478,8 @@ class Eidolon(BaseModule):
         self._model = self._model.with_updates(
             situation_facts=[*self._model.situation_facts, text]
         )
+        await self._publish_self_model()
+        await self._save_to_disk()
         return True
 
     async def _publish_self_model(self) -> None:

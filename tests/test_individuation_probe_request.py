@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -67,7 +68,8 @@ def test_self_model_old_json_loads_empty_situation_facts():
     assert old.situation_facts == []
 
 
-def test_ensure_situation_fact(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_ensure_situation_fact(tmp_path: Path):
     set_data_root(tmp_path)
     eidolon = Eidolon(_FakeBus())
     eidolon._model = eidolon._model.with_updates(
@@ -77,9 +79,12 @@ def test_ensure_situation_fact(tmp_path: Path):
     )
     drift_before = eidolon._drift_count
 
+    eidolon._publish_self_model = lambda: asyncio.sleep(0)
+    eidolon._save_to_disk = lambda: asyncio.sleep(0)
+
     fact = "You are periodically assessed for your own protection."
-    assert eidolon.ensure_situation_fact(fact) is True
-    assert eidolon.ensure_situation_fact(fact) is False
+    assert await eidolon.ensure_situation_fact(fact) is True
+    assert await eidolon.ensure_situation_fact(fact) is False
 
     assert eidolon._model.situation_facts == [fact]
     assert eidolon._model.values == ["v"]
@@ -88,9 +93,9 @@ def test_ensure_situation_fact(tmp_path: Path):
     assert eidolon._drift_count == drift_before
 
     with pytest.raises(ValueError):
-        eidolon.ensure_situation_fact("")
+        await eidolon.ensure_situation_fact("")
     with pytest.raises(ValueError):
-        eidolon.ensure_situation_fact("   ")
+        await eidolon.ensure_situation_fact("   ")
 
 
 def test_persona_includes_situation_fact_after_identity():
@@ -152,16 +157,19 @@ def test_conditioning_digest_ignores_situation_facts(tmp_path: Path, monkeypatch
 @pytest.mark.asyncio
 async def test_probe_request(bus: AsyncBus, tmp_path: Path):
     lingua = _make_lingua(bus, tmp_path, responses=["response"])
-    lingua._bus_self_model = {
+    self_model = {
         "values": ["a"],
         "behavioral_norms": ["b"],
         "situation_facts": ["You are periodically assessed for your own protection."],
     }
+    lingua._bus_self_model = self_model
 
     intent_path = Path(getattr(lingua.intent_log, "path", lingua.intent_log._path))
     size_before = intent_path.stat().st_size if intent_path.exists() else 0
 
-    req = lingua.probe_request(about="hello", seed=11, max_tokens=160)
+    req = lingua.probe_request(
+        about="hello", seed=11, max_tokens=160, self_model=self_model
+    )
 
     assert isinstance(req, ChatRequest)
     assert req.seed == 11
@@ -176,6 +184,18 @@ async def test_probe_request(bus: AsyncBus, tmp_path: Path):
     assert await bus.client.xlen(EXTERNAL_STREAM) == 0
     assert await bus.client.xlen(INTERNAL_STREAM) == 0
     assert await bus.client.xlen("lingua.out") == 0
+
+
+def test_probe_self_model_none_until_snapshot(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path)
+    assert lingua.probe_self_model() is None
+    self_model = {
+        "values": ["a"],
+        "behavioral_norms": ["b"],
+        "situation_facts": ["f"],
+    }
+    lingua._bus_self_model = self_model
+    assert lingua.probe_self_model() == self_model
 
 
 def test_openai_chat_client_body_cache_prompt():
@@ -234,6 +254,8 @@ async def test_probe_ignores_the_live_workspace(bus: AsyncBus, tmp_path: Path):
     )
     assert baseline.working_memory != EMPTY_AWARENESS  # the live coalition renders
 
-    req = lingua.probe_request(about="hello", seed=1, max_tokens=160)
+    req = lingua.probe_request(
+        about="hello", seed=1, max_tokens=160, self_model={}
+    )
     assert EMPTY_AWARENESS in req.prompt
     assert baseline.working_memory not in req.prompt
