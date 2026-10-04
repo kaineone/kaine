@@ -17,10 +17,9 @@ NO dependency on ``kaine.evaluation``: it takes a *callable* ``run_fn(seed)`` an
 crossing the sidecar privacy boundary. It depends only on the standard library and
 ``kaine.experiment`` siblings (``set_global_seed``, the ``Verdict`` schema).
 
-Statistical posture mirrors ``kaine.evaluation.individuation`` (mean / std across a
-seeded ensemble), but here the ensemble is over *experiment runs* rather than
-permutation samples, and the headline summary adds a coefficient of variation and a
-verdict-distribution count.
+The summary statistics (mean / std across a seeded ensemble) are computed over
+*experiment runs* rather than permutation samples, and the headline summary adds a
+coefficient of variation and a verdict-distribution count.
 
 Scope (honest): this harness is the right instrument for genuinely
 nondeterministic live experiments. As exercised in this codebase it runs *offline*
@@ -39,9 +38,8 @@ from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome, Verdict
 
 # --------------------------------------------------------------------------- #
-# Pure summary statistics (stdlib only). These are the single canonical
-# definitions; kaine.evaluation.individuation imports them from here so the two
-# never drift (this module is boundary-neutral and may not import evaluation).
+# Pure summary statistics (stdlib only). These are the module's own canonical
+# definitions (this module is boundary-neutral and may not import evaluation).
 # --------------------------------------------------------------------------- #
 
 
@@ -50,8 +48,7 @@ def _mean(values: Sequence[float]) -> float:
 
 
 def _std(values: Sequence[float]) -> float:
-    """Population standard deviation (the canonical definition shared with
-    kaine.evaluation.individuation)."""
+    """Population standard deviation (the canonical definition used here)."""
     if len(values) < 2:
         return 0.0
     m = _mean(values)

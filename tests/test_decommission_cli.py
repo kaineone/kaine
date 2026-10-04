@@ -20,7 +20,17 @@ from kaine.lifecycle.__main__ import (
     _bus_shows_live_entity,
     main,
 )
+from kaine.lifecycle.individuation_store import (
+    IndividuationPaths,
+    Ledger,
+    save_ledger,
+)
 from kaine.lifecycle.liveness import argv_is_cycle as _argv_is_cycle
+from kaine.security.crypto import (
+    CryptoConfig,
+    StateEncryptor,
+    set_state_encryptor,
+)
 
 
 class _FakeClient:
@@ -101,6 +111,13 @@ def _hermetic_liveness_signals(monkeypatch):
         "kaine.lifecycle.__main__._cycle_process_running",
         lambda: False,
     )
+
+
+@pytest.fixture(autouse=True)
+def _disabled_state_encryption():
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    yield
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
 
 def _args(tmp_path, *, dry_run=False, eval_root=None):
@@ -187,11 +204,17 @@ def test_non_diverged_wrong_ack_aborts(tmp_path, monkeypatch):
 
 
 def _make_diverged(tmp_path):
-    eval_root = tmp_path / "data" / "evaluation"
-    d = eval_root / "individuation"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "r.jsonl").write_text(json.dumps({"significant": True}) + "\n", encoding="utf-8")
-    return eval_root
+    state_root = tmp_path / "state"
+    paths = IndividuationPaths(state_root / "individuation")
+    save_ledger(
+        paths,
+        Ledger(
+            reference_id="diverged-cli-latch",
+            individuated=True,
+            looks_completed=1,
+        ),
+    )
+    return tmp_path / "data" / "evaluation"
 
 
 def test_diverged_declines_continuity_exit_5(tmp_path, monkeypatch):

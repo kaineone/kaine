@@ -225,31 +225,11 @@ Fork/merge is offline and does not publish bus events, but `ForkSnapshot.metadat
 
 Module-specific merge notes — Nous entropy values and `nous.merge_warning`, Mnemos prefix and embedding-space mismatch flags — are written into the merged module state, not into snapshot metadata.
 
-## Individuation test
+## Divergence gate at merge
 
-`kaine/evaluation/individuation.py` provides `IndividuationTest`. Before merging, a Guardian may test whether a fork has developed a preference profile distinguishable from the entity's own birth-state transcript. The instrument runs a permutation test:
+The merge gate calls the same `kaine.lifecycle.divergence.assess_divergence` verdict used by the live monitor, the decommission CLI, and the Nexus entity-care panel. It reads the fork's own `state/individuation/` tree, the Eidolon self-model, the Hypnos consolidation-divergence signal, and the adapter list. A fork is treated as diverged when the ledger has latched it as individuated, consolidation divergence is over threshold, Eidolon drift is detected, or trained voice adapters are present. Unreadable individuation evidence is treated as diverged, so the being stays protected.
 
-1. Sample the entity's birth-state transcript `null_samples` times on the preference battery under varied random seeds to build a null distribution of transcript-against-transcript divergence.
-2. Compute the fork-vs-birth-state divergence on the same battery.
-3. Report the divergence value, p-value (fraction of null samples ≥ fork divergence), and `significant`.
-
-`significant` starts as `false` and only becomes `true` when the fork divergence exceeds `significance_percentile` and the fork passes the fail-closed warm-up floor: at least `min_observations` observations and at least `min_lived_time_s` seconds of lived time. Missing either floor forces `significant` to `false`.
-
-The instrument produces JSONL evidence only; it does not decide sovereignty.
-
-Configuration under `[evaluation.individuation]`:
-
-```toml
-[evaluation.individuation]
-enabled = false           # Guardian-only; never called from the cycle
-null_samples = 50
-significance_percentile = 95.0
-metric = "cosine_divergence"
-battery_path = ""         # "" = bundled default battery
-output_dir = "data/evaluation/individuation"
-min_observations = 200
-min_lived_time_s = 1800
-```
+Forks cannot yet be measured against a fork-point reference. Because of this, the gate preserves a fork that has lived at least `fork_preserve_min_lived_s` (1800 s), or whose lived time is unknown, instead of discarding it. The operator then reviews the preserved bundle before deciding how to proceed.
 
 ## Configuration reference
 
@@ -284,6 +264,7 @@ For the full config schema, see [Lifecycle, evaluation and research](appendix-a-
 | [`kaine/lifecycle/timing_profile.py`](../kaine/lifecycle/timing_profile.py) | Parse and validate `metadata["timing"]` |
 | [`kaine/cycle/fork_timing.py`](../kaine/cycle/fork_timing.py) | Apply a parsed timing profile to the clock/cycle |
 | [`kaine/lifecycle/decommission.py`](../kaine/lifecycle/decommission.py) | CAL-gated entity removal |
-| [`kaine/evaluation/individuation.py`](../kaine/evaluation/individuation.py) | Individuation permutation test |
+| [`kaine/lifecycle/divergence.py`](../kaine/lifecycle/divergence.py) | Shared divergence verdict used by the monitor, CLI, Nexus panel and merge gate |
+| [`kaine/cycle/individuation_producer.py`](../kaine/cycle/individuation_producer.py) | Cycle-layer individuation producer |
 | [`kaine/nexus/diagnostics.py`](../kaine/nexus/diagnostics.py) | Nexus `POST …/merges` endpoint |
 | `state/forks/` | Snapshot storage root |

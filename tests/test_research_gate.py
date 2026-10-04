@@ -51,6 +51,7 @@ def _all_ok(**overrides):
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        individuation_enabled=True,
     )
     base.update(overrides)
     return base
@@ -71,6 +72,7 @@ def test_gate_allows_when_all_conditions_hold():
         ("logging_active", "logging / admissibility is not active"),
         ("self_check_passed", "self-check did not pass"),
         ("encryption_satisfied", "encryption is required but not active"),
+        ("individuation_enabled", "individuation producer is not enabled"),
     ],
 )
 def test_gate_refuses_when_any_condition_missing(missing, needle):
@@ -141,6 +143,8 @@ def test_evaluate_safety_net(monkeypatch):
             "require_encryption": False,
         },
         "evaluation": {"enabled": True},
+        "individuation": {"enabled": True},
+        "modules": {"lingua": True, "eidolon": True},
     }
     monkeypatch.setattr(
         "kaine.cycle.research_gate.run_preflight_self_check",
@@ -154,6 +158,7 @@ def test_evaluate_safety_net(monkeypatch):
         "logging_active": True,
         "dry_self_check_passed": True,
         "encryption_satisfied": True,
+        "individuation_enabled": True,
     }
 
     encrypted_cfg = {

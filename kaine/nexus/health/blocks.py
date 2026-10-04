@@ -231,6 +231,7 @@ def cycle_pacing_block(cycle_runtime_path: Path) -> dict[str, Any]:
 
 def entity_care_block(
     consolidation_thresholds: tuple[float, float] | None,
+    adapter_output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Read-only entity-care status for the operator (CAL 4.2/4.3).
 
@@ -261,6 +262,8 @@ def entity_care_block(
             rate, mag = consolidation_thresholds
             kwargs["consolidation_rate_threshold"] = rate
             kwargs["consolidation_magnitude_threshold"] = mag
+        if adapter_output_dir is not None:
+            kwargs["adapter_output_dir"] = adapter_output_dir
         assessment = assess_divergence(**kwargs)
         diverged = bool(assessment.diverged)
         summary = assessment.summary
