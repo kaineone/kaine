@@ -38,10 +38,7 @@ from kaine.model_paths import (  # noqa: F401 - re-exported for callers
 )
 from kaine.speech_manifest import (  # noqa: F401 - re-exported for callers
     MANIFEST,
-    SpeechKind,
     SpeechModel,
-    _archive_url,
-    _read_verified_marker,
     _sha256_file,
     _verify_error,
     is_installed,

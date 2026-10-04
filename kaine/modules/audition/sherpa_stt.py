@@ -15,8 +15,8 @@ from typing import Any
 
 import numpy as np
 
-from kaine.modules.audition.stt_client import TranscriptionResult
 from kaine import speech_manifest
+from kaine.modules.audition.stt_client import TranscriptionResult
 
 
 class SherpaMoonshineSTT:

@@ -16,8 +16,8 @@ from typing import Any
 
 import numpy as np
 
-from kaine.modules.vox.client import SynthesisResult, TTSRequest
 from kaine import speech_manifest
+from kaine.modules.vox.client import SynthesisResult, TTSRequest
 
 APPLIED_PROSODY = ("speed_factor",)
 
