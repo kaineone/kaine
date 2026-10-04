@@ -90,7 +90,7 @@ The script:
 4. Installs PyTorch from the chosen index when needed.
 5. Runs `pip install -e ".[test,<extras>]"` for the chosen extras (default: `full`).
 
-The script is idempotent, so re-run it safely when `pyproject.toml` changes. When run interactively it offers to launch the first-run wizard; pass `--no-wizard` to skip the prompt. A Python equivalent is available for non-bash hosts: `python3 scripts/install.py`.
+The script is idempotent, so re-run it safely when `pyproject.toml` changes. When run interactively it offers to launch the first-run wizard; pass `--no-wizard` to skip the prompt.
 
 Force a specific flavor if needed:
 

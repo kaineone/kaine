@@ -33,7 +33,7 @@ The [Dockerfile](../../Dockerfile) builds two targets:
 - `runtime` — the default image, `kaine:<flavor>`.
 - `trainer` — `kaine:trainer-<flavor>`, used by the voice-alignment service.
 
-The `FLAVOR` build-arg selects the accelerator-correct PyTorch build by reusing `scripts/install.py` (`install.py --print-index <flavor>`):
+The `FLAVOR` build-arg selects the accelerator-correct PyTorch build from `kaine/wheel_index.py`, run standalone before the package is installed (`--image-index <flavor>` for the index, `--torch-spec` for the torch requirement):
 
 ```bash
 # CUDA runtime (default)
