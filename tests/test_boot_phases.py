@@ -68,6 +68,9 @@ def _collect_returns(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[s
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             return
         if isinstance(node, ast.Return) and node.value is not None:
+            # ``return None`` is the explicit "continue the boot".
+            if isinstance(node.value, ast.Constant) and node.value.value is None:
+                return
             returns.add(ast.unparse(node.value))
         for child in ast.iter_child_nodes(node):
             visit(child)

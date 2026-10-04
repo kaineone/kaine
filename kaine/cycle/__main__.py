@@ -1323,6 +1323,7 @@ async def _phase_preconditions(ctx: BootContext) -> int | None:
     # Research event log config is INDEPENDENT of [evaluation].enabled — the
     # curated log (and the local-only raw archive) gate on their own flags.
     ctx.research_event_log_cfg = load_research_event_log_config()
+    return None
 
 
 async def _phase_run_identity(ctx: BootContext) -> int | None:
@@ -1460,6 +1461,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
                         "or set KAINE_ALLOW_MUTE_ORGAN=1 to boot anyway.\n"
                     )
                     return ORGAN_GATE_REFUSED_EXIT
+    return None
 
 
 async def _phase_bus(ctx: BootContext) -> int | None:
@@ -1484,6 +1486,7 @@ async def _phase_bus(ctx: BootContext) -> int | None:
         )
         await ctx.bus.close()
         return WELFARE_PRODUCER_REFUSED_EXIT
+    return None
 
 
 async def _phase_womb_hold(ctx: BootContext) -> int | None:
@@ -1553,6 +1556,7 @@ async def _phase_womb_hold(ctx: BootContext) -> int | None:
         _ps.write_desired_audio(True)
         _ps.write_desired_video(True)
         log.info("gestation: womb ready; pinned locus to the virtual womb (locked by gestation)")
+    return None
 
 
 async def _phase_registry(ctx: BootContext) -> int | None:
@@ -1593,6 +1597,7 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         if refused is not None:
             await _stop_welfare_producer(ctx.welfare_producer)
             return refused
+    return None
 
 
 async def _phase_maturation_gate(ctx: BootContext) -> int | None:
