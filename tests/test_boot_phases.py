@@ -122,7 +122,8 @@ def test_every_ctx_attribute_is_boot_context_field() -> None:
             for a in fn.args.args + fn.args.kwonlyargs
         )
     ]
-    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 2  # the phases, run loop and shutdown
+    # the phases, the run loop, shutdown, and the failed-boot release
+    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 3
     for fn in boot_fns:
         for node in ast.walk(fn):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx":

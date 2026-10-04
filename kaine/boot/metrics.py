@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Device-assignment logging and the metrics collector."""
+"""Device-assignment logging."""
 from __future__ import annotations
 
 import logging
@@ -72,32 +72,3 @@ def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, An
     log.info("device assignment summary:")
     for module_name, device in rows:
         log.info("  device assignment: %s → %s", module_name, device)
-
-
-class MetricsCollector:
-    """Live cycle metrics for Nexus diagnostics.
-
-    Snapshot is read at request time so the JSON endpoint always
-    returns current values.
-    """
-
-    def __init__(self, cycle: Any, registry: ModuleRegistry) -> None:
-        self._cycle = cycle
-        self._registry = registry
-
-    def snapshot(self) -> dict[str, Any]:
-        cycle = self._cycle
-        return {
-            "tick_index": getattr(cycle, "tick_index", 0),
-            "processing_rate_hz": getattr(cycle, "processing_rate_hz", 0.0),
-            "experiential_rate_hz": getattr(cycle, "experiential_rate_hz", 0.0),
-            "error_counts": dict(getattr(cycle, "error_counts", {}) or {}),
-            "modules": sorted(name for name in self._iter_module_names()),
-        }
-
-    def _iter_module_names(self):
-        try:
-            for module in self._registry.all_modules():
-                yield module.name
-        except Exception:
-            return
