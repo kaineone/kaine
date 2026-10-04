@@ -204,7 +204,6 @@ class _FakeEmbedder:
 
 def test_main_async_runs_end_to_end_with_a_fake_organ(tmp_path, monkeypatch):
     import argparse
-    import asyncio
     import json as _json
 
     smoke = _load_smoke()
