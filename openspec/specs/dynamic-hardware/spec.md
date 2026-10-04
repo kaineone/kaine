@@ -6,8 +6,7 @@ How KAINE fits its PyTorch stack to the host it is installed on: the installers 
 ## Requirements
 
 ### Requirement: Install script picks the PyTorch wheel by host probe
-The repository SHALL ship an install script at `scripts/install.sh` (Bash) and
-`scripts/install.py` (Python equivalent) that detects the host's accelerator and
+The repository SHALL ship an install script at `scripts/install.sh` (Bash) that detects the host's accelerator and
 picks the PyTorch wheel index URL accordingly. Detection order when no flavor is
 forced SHALL be: NVIDIA (a usable driver via `nvidia-smi`) → AMD ROCm
 (`rocm-smi` present or `/opt/rocm` exists) → Intel XPU (`xpu-smi` or `sycl-ls`
@@ -23,10 +22,10 @@ in-range torch that index publishes for the host architecture, with its recorded
 torchvision and torchaudio companions (preferring a version with a torchaudio
 companion when `torchaudio` is needed). When the recorded data covers the host
 architecture for that flavor but has no in-range torch, or the flavor is xpu and
-the architecture is not recorded, both installers SHALL refuse before installing
+the architecture is not recorded, the installer SHALL refuse before installing
 torch with a message naming the flavor and the host architecture. When the flavor
 is cpu and the host architecture is not recorded at all (for example s390x), or
-when the resolver cannot run, the installers SHALL install from the CPU index
+when the resolver cannot run, the installer SHALL install from the CPU index
 within the tested range without an exact pin and print a warning naming the
 reason; for xpu a resolver that cannot run SHALL be refused with a message saying
 the resolver could not run. The mps flavor SHALL install torch within the tested range from the
@@ -44,8 +43,8 @@ pass `--need-torchaudio` to the resolver, replace a `torchaudio` that does not
 match the resolved stack, keep one that matches it, and on the mps flavor, which
 has no resolved `torchaudio` pin, reinstall `torchaudio` from the default PyPI
 index under the torch constraints. If `torchaudio` is installed and the
-chosen index publishes no `torchaudio` for the resolved torch version, both
-installers SHALL refuse before installing torch.
+chosen index publishes no `torchaudio` for the resolved torch version, the
+installer SHALL refuse before installing torch.
 
 The NVIDIA flavor SHALL NOT map to a single fixed CUDA index. When the NVIDIA
 flavor is selected (auto-detected or forced with `--cuda`), the script SHALL
@@ -82,7 +81,7 @@ override: when `--index-url` is given and the CUDA flavor is selected, the
 script SHALL use that URL verbatim in place of the table-resolved index.
 `--index-url` SHALL NOT change which flavor is detected or forced. A cuda
 override result SHALL carry `torchaudio_unavailable`; with `--research` and no
-`torchaudio` on that index, both installers SHALL refuse before installing torch.
+`torchaudio` on that index, the installer SHALL refuse before installing torch.
 Other flavors SHALL print `NOTICE: ignoring --index-url for flavor ...` and ignore
 the override. The Bash and Python implementations SHALL agree on detection order,
 resolution, and flag semantics.
@@ -157,7 +156,7 @@ resolution, and flag semantics.
 - **WHEN** an operator runs `bash scripts/install.sh --cuda --index-url
   https://download.pytorch.org/whl/cu132` on a host where `torchaudio` is already
   installed and `--research` is not given
-- **THEN** both installers refuse before installing torch, because `torchaudio`
+- **THEN** the installer refuses before installing torch, because `torchaudio`
   is installed but the cu132 index publishes no `torchaudio` wheels for the
   resolved torch version, and they tell the operator to choose a different
   `--index-url` or uninstall `torchaudio` first
@@ -227,7 +226,7 @@ resolution, and flag semantics.
 #### Scenario: --research refuses an --index-url without torchaudio
 - **WHEN** an operator runs `bash scripts/install.sh --cuda --research
   --index-url https://download.pytorch.org/whl/cu132` on an NVIDIA host
-- **THEN** both installers refuse before installing torch, because `--research`
+- **THEN** the installer refuses before installing torch, because `--research`
   requires torchaudio and the cu132 index publishes no torchaudio wheels
 
 #### Scenario: Probe results and resolved index are logged
@@ -401,11 +400,11 @@ escapes).
   (`xpu_available == False`, `xpu_count == 0`)
 
 ### Requirement: Installers keep the PyTorch stack coherent
-The installers SHALL take the torch requirement from `pyproject.toml`, SHALL install `torch` and `torchvision` together from the single resolved wheel index, and SHALL pin the installed `torch`, `torchvision` and `torchaudio` versions with a constraints file passed to every subsequent `pip install` in the same run.
+The installer SHALL take the torch requirement from `pyproject.toml`, SHALL install `torch` and `torchvision` together from the single resolved wheel index, and SHALL pin the installed `torch`, `torchvision` and `torchaudio` versions with a constraints file passed to every subsequent `pip install` in the same run.
 
 #### Scenario: Installer spec matches the project requirement
 - **WHEN** `pyproject.toml` declares `torch>=2.14.0,<3`
-- **THEN** both `scripts/install.sh` and `scripts/install.py` install torch with exactly that requirement
+- **THEN** `scripts/install.sh` installs torch with exactly that requirement
 
 #### Scenario: Extras cannot swap the torch stack
 - **WHEN** the installer installs KAINE and its extras after the torch step
@@ -447,3 +446,14 @@ The base installation SHALL contain only the dependencies every entity uses, and
 #### Scenario: A lean host
 - **WHEN** only the base and the extras for the enabled modules are installed
 - **THEN** the start proceeds without any other heavy package present
+
+### Requirement: Container image builds take the torch index from the wheel-index module
+The container image build SHALL take its PyTorch wheel index and torch requirement from `kaine/wheel_index.py`, run standalone from a copy before the package is installed, and SHALL NOT keep its own table. For each image flavor the index SHALL be fixed, because a build stage has no accelerator to probe: `cuda` uses `https://download.pytorch.org/whl/cu126`, `cpu` and `xpu` use their PyTorch indexes, and `mps` and the experimental `rocm` flavor install from the default PyPI index. The torch requirement SHALL be the one `pyproject.toml` declares in the `core` extra, else in the project dependencies.
+
+#### Scenario: The build stage resolves the cuda index without the package
+- **WHEN** only `wheel_index.py`, `wheel_data.py` and `pyproject.toml` are present and `--image-index cuda` is run
+- **THEN** it prints `https://download.pytorch.org/whl/cu126`
+
+#### Scenario: An unknown flavor fails the build
+- **WHEN** `--image-index` is given a flavor it does not know
+- **THEN** it exits with a non-zero status

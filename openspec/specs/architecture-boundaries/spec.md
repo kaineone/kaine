@@ -54,3 +54,25 @@ The boot, cycle and workspace packages SHALL NOT import the install, setup, tran
 #### Scenario: Shared defaults live in neutral modules
 - **WHEN** the runtime needs a speech-model default or the organ content check
 - **THEN** it imports them from `kaine.model_paths` or `kaine.organ_probe`, not from `kaine.setup`
+
+### Requirement: The runtime verifies speech models without importing setup
+The speech-model manifest and the integrity check run before a speech model loads SHALL live outside `kaine.setup`, in a module that imports only the standard library and `kaine.model_paths`. The runtime speech modules and the Nexus health probes SHALL NOT import `kaine.setup`, directly or indirectly. `kaine.setup.speech_models` SHALL import the manifest and the installed-model check from that module rather than keep its own copies.
+
+#### Scenario: The speech modules do not reach setup
+- **WHEN** the import graph is built
+- **THEN** there is no chain from the sherpa STT or TTS module, or from the Nexus health probes, to `kaine.setup`
+
+#### Scenario: Setup uses the runtime definitions
+- **WHEN** install-time code reads `MANIFEST` or `is_installed` from `kaine.setup.speech_models`
+- **THEN** each is the same object the runtime module defines
+
+### Requirement: Module factories are independent
+Each module factory SHALL live in its own module under `kaine.boot.factories`, and no factory module SHALL import another factory module. Helpers that several factories share SHALL live outside `kaine.boot.factories`. An import contract SHALL enforce this. `kaine.boot` SHALL re-export every factory and boot helper, so callers import from `kaine.boot` alone.
+
+#### Scenario: A factory imports another factory
+- **WHEN** one module under `kaine.boot.factories` imports another
+- **THEN** the import contract check fails
+
+#### Scenario: Callers keep importing from kaine.boot
+- **WHEN** code imports a factory or boot helper from `kaine.boot`
+- **THEN** it receives the object defined in the submodule

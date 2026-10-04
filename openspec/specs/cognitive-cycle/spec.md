@@ -349,3 +349,43 @@ Every `cycle.tick` event SHALL carry the tick's effective `experiential_rate_hz`
 #### Scenario: Deterministic runs stay reproducible
 - **WHEN** two deterministic runs are given the same events and affect snapshots
 - **THEN** they make identical broadcast decisions and report identical drives
+
+### Requirement: Each boot refusal has its own exit code
+Each reason the cycle entrypoint refuses to boot SHALL exit with a code no other refusal uses, so an operator or a process wrapper can tell the refusals apart from the exit status alone. The organ content gate SHALL exit with 9 and the individuation refusal with 10. The researcher documentation SHALL list every refusal code.
+
+#### Scenario: A mute organ
+- **WHEN** the organ content gate finds the served organ producing no content and `KAINE_ALLOW_MUTE_ORGAN` is not set
+- **THEN** the cycle exits with code 9
+
+#### Scenario: Refusal codes stay distinct
+- **WHEN** the refusal codes are collected
+- **THEN** no two refusals share a code
+
+### Requirement: A failed boot releases what it holds
+When a boot phase raises, the cycle entrypoint SHALL cancel every boot task already started, stop the welfare producer and close the bus, and SHALL then re-raise. It SHALL NOT shut the modules down, so a half-built boot never writes module state over a saved copy. On every early exit, anything that reads the bus SHALL stop before the bus closes.
+
+#### Scenario: A phase raises after the bus opened
+- **WHEN** a boot phase raises after the bus, the welfare producer and a boot task exist
+- **THEN** the task is cancelled, the welfare producer is stopped and the bus is closed
+- **AND** no module is shut down
+- **AND** the exception propagates
+
+#### Scenario: A revive is refused
+- **WHEN** a revive is refused after the modules initialised
+- **THEN** the modules shut down, then the welfare producer stops, then the bus closes
+
+### Requirement: The cycle boots through ordered phases
+The cycle entrypoint SHALL boot by running an ordered list of phase functions over one shared boot context. Each phase SHALL return an exit code to stop the boot, or nothing to continue, and the entrypoint SHALL return the first exit code a phase returns without running the later phases, the run loop or shutdown. Once every phase has run, the entrypoint SHALL run the cycle until it is stopped and SHALL then run shutdown, even if the run loop raised. Every value a phase shares with a later phase SHALL be a declared field of the boot context.
+
+#### Scenario: A phase refuses the boot
+- **WHEN** a phase returns an exit code
+- **THEN** the entrypoint returns that code
+- **AND** no later phase, run loop or shutdown runs
+
+#### Scenario: Shutdown follows a failed run loop
+- **WHEN** every phase completes and the run loop raises
+- **THEN** shutdown runs
+
+#### Scenario: An undeclared context field
+- **WHEN** a phase sets a boot-context attribute that is not a declared field
+- **THEN** it raises
