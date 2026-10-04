@@ -115,7 +115,7 @@ def make_vox(
             num_threads=int(sherpa_num_threads),
         )
 
-    registry = BackendRegistry[TTSClient]("vox", default="sherpa_onnx").register(
+    registry = BackendRegistry[TTSClient]("vox", default="chatterbox").register(
         "chatterbox", _chatterbox_factory
     ).register("sherpa_onnx", _sherpa_factory)
     try:

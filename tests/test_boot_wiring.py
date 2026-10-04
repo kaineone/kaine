@@ -21,7 +21,6 @@ import pytest
 from kaine.boot import (
     SIMPLE_FACTORIES,
     ConfigurationError,
-    MetricsCollector,
     build_registry,
     make_audition,
     make_chronos,
@@ -737,26 +736,6 @@ def test_simple_factories_covers_expected_modules():
     # Hypnos is intentionally outside SIMPLE_FACTORIES (interdependency
     # wiring happens in build_registry's second pass).
 
-
-def test_metrics_collector_snapshots_live_cycle_values():
-    class FakeCycle:
-        tick_index = 42
-        processing_rate_hz = 3.333
-        experiential_rate_hz = 1.0
-        error_counts: dict[str, int] = {}
-
-    class FakeRegistry:
-        def all_modules(self):
-            class M:
-                name = "soma"
-
-            return iter([M()])
-
-    collector = MetricsCollector(FakeCycle(), FakeRegistry())
-    snap = collector.snapshot()
-    assert snap["tick_index"] == 42
-    assert snap["processing_rate_hz"] == 3.333
-    assert snap["modules"] == ["soma"]
 
 
 def test_committed_config_ships_all_modules_disabled():

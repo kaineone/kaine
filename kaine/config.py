@@ -255,6 +255,20 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                     f"modules.{key} expected bool, got {type(value).__name__}"
                 )
 
+    empatheia = config.get("empatheia")
+    if isinstance(empatheia, dict):
+        operator_sources = empatheia.get("operator_sources")
+        if operator_sources is not None:
+            if not isinstance(operator_sources, list):
+                raise ConfigShapeError(
+                    f"empatheia.operator_sources expected list of strings, got {type(operator_sources).__name__}"
+                )
+            for idx, item in enumerate(operator_sources):
+                if not isinstance(item, str):
+                    raise ConfigShapeError(
+                        f"empatheia.operator_sources[{idx}] expected string, got {type(item).__name__}"
+                    )
+
     tier = config.get("tier")
     if tier is not None:
         if not isinstance(tier, dict):
