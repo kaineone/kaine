@@ -24,7 +24,6 @@ GROWING_DATA_KEYS: tuple[tuple[str, ...], ...] = (
     ("lifecycle", "adapter_merge", "output_dir"),
     ("preservation", "incident_path"),
     ("preservation", "divergence_monitor", "state_root"),
-    ("preservation", "divergence_monitor", "eval_root"),
     ("preservation", "divergence_monitor", "out_root"),
     ("preservation", "welfare_response", "state_root"),
     ("preservation", "welfare_response", "eval_root"),

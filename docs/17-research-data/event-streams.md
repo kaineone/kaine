@@ -24,7 +24,7 @@ The registry treats each canonical module as one `<module>.out` stream. Two list
 - `curated_module_streams()` adds `volition_feedback.out`.
 - `raw_archive_module_streams()` adds `volition_feedback.out`.
 - The curated log excludes `vox.out` (raw audio) and `lingua.out` (transcripts) to stay content-free.
-- `diagnostics_streams()` excludes the low-signal operational streams `volition.out`, `mundus.out`, `perception.out`, `welfare.out`, `preservation.out` and `individuation.out`, and appends `workspace.broadcast`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
+- `diagnostics_streams()` excludes the low-signal operational streams `volition.out`, `mundus.out`, `perception.out`, `welfare.out` and `preservation.out`, and appends `workspace.broadcast`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
 
 The Lingua module in `kaine/modules/lingua/module.py` publishes `lingua.external` and `lingua.internal`, not `lingua.out`. The registry lists `lingua.out`, and the consumer helpers do not expand it into the two real streams. The raw archive and Nexus diagnostics therefore subscribe to `lingua.out` and do not consume Lingua output.
 

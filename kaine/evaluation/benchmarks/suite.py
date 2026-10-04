@@ -312,11 +312,10 @@ def run_suite(
 ) -> dict[str, Any]:
     """Run all seven experiments under one seed; return the combined report.
 
-    ``individuation`` (optional): a result dict from
-    ``kaine.evaluation.benchmarks.individuation_runner.run_individuation`` whose
-    permutation p-value should join the family-wise correction. It is not one of
-    the seven (it needs live samplers); when supplied its p-value is folded into
-    the Holm family alongside the active-inference tasks.
+    ``individuation`` (optional): a result dict with ``report["p_value"]`` and a
+    ``verdict``, folded into the family-wise correction when supplied; the live
+    individuation producer uses its own alpha spending across looks and does not
+    emit one.
     """
     config = config or SuiteConfig()
     # Opt-in determinism for the whole offline run, seeded from the master.

@@ -176,17 +176,15 @@ class _StubFM:
         )
 
 
-def _div_monitor(bus, registry, fm, cfg, monkeypatch, *, assessments, warmed=True):
+def _div_monitor(bus, registry, fm, cfg, monkeypatch, *, assessments, tmp_state_root):
     """Build a DivergenceMonitor whose assess_divergence yields `assessments`.
 
-    ``warmed`` defaults True so the monitor-side warm-up gate is satisfied
-    (the lived-experience floor is exercised in its own dedicated tests). It
-    sets warmup floors to 0 and supplies an observations provider above 0.
+    Boot settle is disabled and the edge state lives under ``tmp_state_root``.
     """
     seq = iter(assessments)
     last = {"v": assessments[-1]}
 
-    def _fake_assess(*, state_root, eval_root, **_thresholds):
+    def _fake_assess(*, state_root, **_thresholds):
         try:
             last["v"] = next(seq)
         except StopIteration:
@@ -196,16 +194,14 @@ def _div_monitor(bus, registry, fm, cfg, monkeypatch, *, assessments, warmed=Tru
     import kaine.cycle.preservation_monitor as pm
 
     monkeypatch.setattr(pm, "assess_divergence", _fake_assess)
-    if warmed:
-        cfg.warmup_observations = 0
-        cfg.warmup_lived_time_s = 0.0
+    cfg.boot_settle_s = 0.0
+    cfg.state_root = str(tmp_state_root)
     return DivergenceMonitor(
         registry=registry,
         fork_manager=fm,
         config=cfg,
         bus=bus,
         incident_log=IncidentLog(enabled=False, path="unused"),
-        observations_provider=lambda: 10_000,
     )
 
 
@@ -232,7 +228,7 @@ async def test_divergence_rising_edge_preserves_once(bus, tmp_path, monkeypatch)
     cfg = DivergenceMonitorConfig(enabled=True, min_interval_s=0.0)
     # below, below, ABOVE, ABOVE(stay), below, ABOVE(new edge)
     mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
+        bus, reg, fm, cfg, monkeypatch, tmp_state_root=tmp_path / "state",
         assessments=[
             _not_diverged(), _not_diverged(),
             _diverged(), _diverged(),
@@ -256,7 +252,7 @@ async def test_divergence_sub_threshold_does_nothing(bus, tmp_path, monkeypatch)
     fm = _StubFM()
     cfg = DivergenceMonitorConfig(enabled=True, min_interval_s=0.0)
     mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
+        bus, reg, fm, cfg, monkeypatch, tmp_state_root=tmp_path / "state",
         assessments=[_not_diverged(), _not_diverged(), _not_diverged()],
     )
     stop = asyncio.Event()
@@ -274,83 +270,17 @@ async def test_divergence_rate_limited(bus, tmp_path, monkeypatch):
     # rate-limited.
     cfg = DivergenceMonitorConfig(enabled=True, min_interval_s=10_000.0)
     mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
+        bus, reg, fm, cfg, monkeypatch, tmp_state_root=tmp_path / "state",
         assessments=[
             _diverged(), _not_diverged(), _diverged(),
         ],
     )
     mon._clock = lambda: 100.0  # frozen clock
+    mon._started_at = 100.0  # settle measured on the same clock
     stop = asyncio.Event()
     for _ in range(3):
         await mon._poll_once(stop)
     # First crossing preserves; second crossing is within min_interval → skipped.
-    assert len(fm.calls) == 1
-    await eid.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_divergence_numeric_threshold_gates(bus, tmp_path, monkeypatch):
-    reg, eid = await _entity(bus, tmp_path)
-    fm = _StubFM()
-    cfg = DivergenceMonitorConfig(
-        enabled=True, min_interval_s=0.0, individuation_p_value_max=0.01
-    )
-    # diverged but p-value 0.5 > 0.01 → does NOT cross; then p=0.005 crosses.
-    mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
-        assessments=[_diverged(p=0.5), _diverged(p=0.005)],
-    )
-    stop = asyncio.Event()
-    await mon._poll_once(stop)
-    assert fm.calls == []  # p-value too high
-    await mon._poll_once(stop)
-    assert len(fm.calls) == 1  # tighter p-value crosses
-    await eid.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_divergence_fork_divergence_min_gates(bus, tmp_path, monkeypatch):
-    """fork_divergence_min floor: a diverged assessment with fd below the floor
-    does NOT cross; a later rising edge with fd at/above the floor preserves
-    once."""
-    reg, eid = await _entity(bus, tmp_path)
-    fm = _StubFM()
-    cfg = DivergenceMonitorConfig(
-        enabled=True, min_interval_s=0.0, fork_divergence_min=0.5
-    )
-    # fd=0.2 (< floor) → no cross; below (clear edge); fd=0.7 (>= floor) → cross.
-    mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
-        assessments=[_diverged(fd=0.2), _not_diverged(), _diverged(fd=0.7)],
-    )
-    stop = asyncio.Event()
-    await mon._poll_once(stop)
-    assert fm.calls == []          # fd below the floor → not a crossing
-    await mon._poll_once(stop)     # drops below → clears the rising-edge latch
-    await mon._poll_once(stop)
-    assert len(fm.calls) == 1      # fd at/above the floor → one preserve
-    await eid.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_divergence_secondary_signal_only_passes_p_value_tightener(
-    bus, tmp_path, monkeypatch
-):
-    """Secondary-signal divergence (drift/adapters: p_value is None, diverged
-    True) has NO numeric p-value, so the individuation_p_value_max tightener does
-    not veto it — it still preserves."""
-    reg, eid = await _entity(bus, tmp_path)
-    fm = _StubFM()
-    cfg = DivergenceMonitorConfig(
-        enabled=True, min_interval_s=0.0, individuation_p_value_max=0.01
-    )
-    # diverged=True but p_value is None (drift/adapter signal, no significance
-    # test) → the p-value ceiling is only enforced when a number is present.
-    mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch, assessments=[_diverged(p=None)]
-    )
-    stop = asyncio.Event()
-    await mon._poll_once(stop)
     assert len(fm.calls) == 1
     await eid.shutdown()
 
@@ -379,7 +309,7 @@ async def test_divergence_preserve_failure_recorded_and_monitor_continues(
     cfg = DivergenceMonitorConfig(enabled=True, min_interval_s=0.0)
     # Two rising edges (below between them) → two preserve attempts, both fail.
     mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
+        bus, reg, fm, cfg, monkeypatch, tmp_state_root=tmp_path / "state",
         assessments=[_diverged(), _not_diverged(), _diverged()],
     )
     stop = asyncio.Event()
@@ -408,7 +338,10 @@ async def test_divergence_preserve_is_read_only_real_forkmanager(bus, tmp_path, 
         enabled=True, min_interval_s=0.0, out_root=str(tmp_path / "backups"),
         entity_name="iris",
     )
-    mon = _div_monitor(bus, reg, fm, cfg, monkeypatch, assessments=[_diverged()])
+    mon = _div_monitor(
+        bus, reg, fm, cfg, monkeypatch,
+        tmp_state_root=tmp_path / "state", assessments=[_diverged()],
+    )
     stop = asyncio.Event()
     await mon._poll_once(stop)
     backups = list((tmp_path / "backups").iterdir())
@@ -425,84 +358,6 @@ async def test_divergence_preserve_is_read_only_real_forkmanager(bus, tmp_path, 
 # ---------------------------------------------------------------------------
 # individuation-instrument-gate — DivergenceMonitor warm-up gate (Defect B)
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_divergence_warmup_blocks_crossing_at_t0(bus, tmp_path, monkeypatch):
-    """A genuine crossing at t≈0 (no lived experience) does NOT preserve; it is
-    recorded as a warming-up note (fail-closed)."""
-    reg, eid = await _entity(bus, tmp_path)
-    fm = _StubFM()
-    cfg = DivergenceMonitorConfig(
-        enabled=True, min_interval_s=0.0,
-        warmup_observations=200, warmup_lived_time_s=1800.0,
-    )
-    # warmed=False so we keep the real warm-up floors; observations provider
-    # returns 0 → floor unmet.
-    mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch, assessments=[_diverged()], warmed=False
-    )
-    mon._observations_provider = lambda: 0
-    mon._clock = lambda: 0.0
-    stop = asyncio.Event()
-    await mon._poll_once(stop)
-    assert fm.calls == []  # warm-up not satisfied → no preserve
-    skipped = [
-        e for e in (await _drain(bus, "preservation.out"))
-        if e.type == "preservation.skipped"
-    ]
-    assert skipped, "a warming-up note was recorded"
-    assert skipped[-1].payload.get("transition") == "warming_up"
-    await eid.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_divergence_preserves_after_warmup(bus, tmp_path, monkeypatch):
-    """Once BOTH lived-experience floors are met, a genuine crossing preserves."""
-    reg, eid = await _entity(bus, tmp_path)
-    fm = _StubFM()
-    cfg = DivergenceMonitorConfig(
-        enabled=True, min_interval_s=0.0,
-        warmup_observations=100, warmup_lived_time_s=50.0,
-    )
-    obs = {"n": 0}
-    clock = {"t": 0.0}
-    mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
-        assessments=[_diverged(), _diverged()], warmed=False,
-    )
-    mon._observations_provider = lambda: obs["n"]
-    mon._clock = lambda: clock["t"]
-    stop = asyncio.Event()
-    # Poll 1: t=0, 0 observations → warming up, no preserve.
-    await mon._poll_once(stop)
-    assert fm.calls == []
-    # Poll 2: floors met → genuine crossing preserves.
-    obs["n"] = 500
-    clock["t"] = 100.0
-    await mon._poll_once(stop)
-    assert len(fm.calls) == 1
-    await eid.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_divergence_unwarmed_report_is_fail_closed(bus, tmp_path, monkeypatch):
-    """An individuation report carrying individuation_warmed_up == false never
-    crosses, even past the monitor's own lived-experience floor (shared signal,
-    fail-closed)."""
-    reg, eid = await _entity(bus, tmp_path)
-    fm = _StubFM()
-    cfg = DivergenceMonitorConfig(enabled=True, min_interval_s=0.0)
-    # Monitor floor satisfied (warmed=True), but the report's signal says the
-    # instrument itself has not warmed up.
-    mon = _div_monitor(
-        bus, reg, fm, cfg, monkeypatch,
-        assessments=[_diverged(p=0.001, warmed_up=False)],
-    )
-    stop = asyncio.Event()
-    await mon._poll_once(stop)
-    assert fm.calls == []  # un-warmed-up individuation report → no crossing
-    await eid.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -832,62 +687,6 @@ async def test_welfare_sustained_distress_after_warmup_still_acts(bus, tmp_path)
 # individuation-instrument-gate — shared signal: preserve + decommission agree
 # (Task 5.2)
 # ---------------------------------------------------------------------------
-
-
-def test_shared_signal_consumers_agree_on_warmed_up_report(tmp_path):
-    """A single warmed-up, significant individuation report makes BOTH
-    consumers read individuated: assess_divergence() returns diverged AND the
-    DivergenceMonitor crossing decision fires on the same report's signals."""
-    from kaine.lifecycle.divergence import assess_divergence
-
-    eval_dir = tmp_path / "eval" / "individuation"
-    eval_dir.mkdir(parents=True)
-    report = {
-        "significant": True, "warmed_up": True,
-        "p_value": 0.001, "fork_divergence": 0.6,
-    }
-    (eval_dir / "r.jsonl").write_text(__import__("json").dumps(report) + "\n")
-
-    a = assess_divergence(state_root=tmp_path / "state", eval_root=tmp_path / "eval")
-    assert a.diverged is True
-    assert a.signals["individuation_warmed_up"] is True
-
-    # The monitor's crossing decision, fed the SAME assessment, must agree.
-    cfg = DivergenceMonitorConfig(individuation_p_value_max=0.05, fork_divergence_min=0.15)
-    mon = DivergenceMonitor(
-        registry=ModuleRegistry(), fork_manager=_StubFM(), config=cfg,
-        bus=None, incident_log=IncidentLog(enabled=False, path="unused"),
-    )
-    assert mon._crosses_threshold(a) is True
-
-
-def test_shared_signal_unwarmed_report_neither_consumer_individuates(tmp_path):
-    """A report with warmed_up == false reads NOT diverged for decommission AND
-    NOT crossed for preservation — the two never disagree (fail-closed)."""
-    from kaine.lifecycle.divergence import assess_divergence
-
-    eval_dir = tmp_path / "eval" / "individuation"
-    eval_dir.mkdir(parents=True)
-    # The instrument would already have forced significant=false when not warmed
-    # up; assert the decommission gate is fail-closed even on a malformed report
-    # that left significant=true but warmed_up=false.
-    report = {
-        "significant": True, "warmed_up": False,
-        "p_value": 0.001, "fork_divergence": 0.6,
-    }
-    (eval_dir / "r.jsonl").write_text(__import__("json").dumps(report) + "\n")
-
-    a = assess_divergence(state_root=tmp_path / "state", eval_root=tmp_path / "eval")
-    assert a.diverged is False  # fail-closed: not warmed up
-    assert a.signals["individuation_warmed_up"] is False
-    assert "INSUFFICIENT LIVED EXPERIENCE" in a.summary
-
-    cfg = DivergenceMonitorConfig()
-    mon = DivergenceMonitor(
-        registry=ModuleRegistry(), fork_manager=_StubFM(), config=cfg,
-        bus=None, incident_log=IncidentLog(enabled=False, path="unused"),
-    )
-    assert mon._crosses_threshold(a) is False
 
 
 # ---------------------------------------------------------------------------

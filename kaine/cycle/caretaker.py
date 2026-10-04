@@ -48,6 +48,7 @@ _EVENT_TITLE = {
     "input_lost": "input lost",
     "womb_lost": "womb lost",
     "boot_failed": "boot failed",
+    "individuation_inconclusive": "individuation assessment stalled",
 }
 
 EVENT_KINDS = tuple(_EVENT_TITLE)

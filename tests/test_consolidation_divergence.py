@@ -358,24 +358,22 @@ def _plant_consolidation(state_root: Path, *, rate: float, magnitude):
 
 def test_assess_flips_on_rate_threshold(tmp_path: Path):
     state_root = tmp_path / "state"
-    eval_root = tmp_path / "data" / "evaluation"
     # rate over threshold, magnitude null, no individuation report, no adapters.
     _plant_consolidation(state_root, rate=0.8, magnitude=None)
-    a = assess_divergence(state_root=state_root, eval_root=eval_root)
+    a = assess_divergence(state_root=state_root)
     assert a.diverged is True
     assert a.signals["consolidation_divergence_signal"] is True
     assert a.signals["consolidation_divergence_rate"] == pytest.approx(0.8)
     assert a.signals["hypnos_adapters_present"] is False
-    assert a.signals["individuation_significant"] is False
+    assert a.signals["individuation_individuated"] is False
     assert "consolidation divergence" in a.summary.lower()
 
 
 def test_assess_flips_on_magnitude_threshold(tmp_path: Path):
     state_root = tmp_path / "state"
-    eval_root = tmp_path / "data" / "evaluation"
     # rate BELOW threshold but magnitude OVER threshold.
     _plant_consolidation(state_root, rate=0.1, magnitude=0.9)
-    a = assess_divergence(state_root=state_root, eval_root=eval_root)
+    a = assess_divergence(state_root=state_root)
     assert a.diverged is True
     assert a.signals["consolidation_divergence_signal"] is True
     assert a.signals["consolidation_divergence_magnitude"] == pytest.approx(0.9)
@@ -383,10 +381,9 @@ def test_assess_flips_on_magnitude_threshold(tmp_path: Path):
 
 def test_assess_below_threshold_not_diverged(tmp_path: Path):
     state_root = tmp_path / "state"
-    eval_root = tmp_path / "data" / "evaluation"
     # Both below threshold; no other divergence condition.
     _plant_consolidation(state_root, rate=0.1, magnitude=0.05)
-    a = assess_divergence(state_root=state_root, eval_root=eval_root)
+    a = assess_divergence(state_root=state_root)
     assert a.diverged is False
     assert a.signals["consolidation_divergence_signal"] is False
     assert a.signals["consolidation_divergence_found"] is True
@@ -396,25 +393,22 @@ def test_assess_below_threshold_not_diverged(tmp_path: Path):
 def test_assess_consolidation_independent_of_adapters_and_individuation(tmp_path: Path):
     # No adapters dir, no individuation report — consolidation alone drives it.
     state_root = tmp_path / "state"
-    eval_root = tmp_path / "data" / "evaluation"
     _plant_consolidation(state_root, rate=0.9, magnitude=None)
-    a = assess_divergence(state_root=state_root, eval_root=eval_root)
+    a = assess_divergence(state_root=state_root)
     assert a.diverged is True
-    assert a.signals["individuation_report_found"] is False
+    assert a.signals["individuation_state"] == "no_reference"
     assert a.signals["hypnos_adapters_present"] is False
 
 
 def test_assess_respects_config_thresholds(tmp_path: Path):
     state_root = tmp_path / "state"
-    eval_root = tmp_path / "data" / "evaluation"
     _plant_consolidation(state_root, rate=0.3, magnitude=None)
     # Default rate threshold 0.5 -> not diverged.
-    a_default = assess_divergence(state_root=state_root, eval_root=eval_root)
+    a_default = assess_divergence(state_root=state_root)
     assert a_default.diverged is False
     # Lowered threshold 0.2 -> diverged.
     a_low = assess_divergence(
         state_root=state_root,
-        eval_root=eval_root,
         consolidation_rate_threshold=0.2,
     )
     assert a_low.diverged is True
@@ -438,11 +432,10 @@ def test_consolidation_thresholds_from_config():
 
 def test_assess_never_raises_on_garbage_state(tmp_path: Path):
     state_root = tmp_path / "state"
-    eval_root = tmp_path / "data" / "evaluation"
     d = state_root / "hypnos"
     d.mkdir(parents=True, exist_ok=True)
     (d / "consolidation_divergence.json").write_text("{broken", encoding="utf-8")
-    a = assess_divergence(state_root=state_root, eval_root=eval_root)
+    a = assess_divergence(state_root=state_root)
     assert a.diverged in (True, False)
 
 

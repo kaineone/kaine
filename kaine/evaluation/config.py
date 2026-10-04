@@ -12,73 +12,6 @@ from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_c
 from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.storage import configured_data_root, resolve_under
 
-# ---------------------------------------------------------------------------
-# Individuation config
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class IndividuationConfig:
-    """Parameters for the individuation boundary permutation-test instrument.
-
-    Shipped disabled (``enabled = false``) so the instrument only runs when
-    an operator explicitly sets ``[evaluation.individuation] enabled = true``
-    and invokes it at a merge point.  The test is never called from the
-    cognitive cycle.
-
-    Attributes
-    ----------
-    enabled:
-        Master gate.  When false, the test is not constructed.  Default
-        false because this is an operator-run instrument, not a background
-        observer.
-    null_samples:
-        Number of parent-vs-parent samples used to build the null
-        distribution (default 50; minimum 2).
-    significance_percentile:
-        Fork divergence must exceed this percentile of the null distribution
-        to be reported as significant (default 95.0).
-    metric:
-        Divergence metric.  Currently only ``"cosine_divergence"`` is
-        supported (1 − cosine similarity of concatenated-response embeddings).
-    battery_path:
-        Path to a JSONL operator battery file.  Empty string = use the
-        bundled default battery.
-    output_dir:
-        Directory where JSONL evidence reports are written.  Relative paths
-        are resolved from the working directory at instrument-run time.
-    """
-
-    enabled: bool = False
-    null_samples: int = 50
-    significance_percentile: float = 95.0
-    metric: str = "cosine_divergence"
-    battery_path: str = ""
-    output_dir: str = "data/evaluation/individuation"
-    # Warm-up / minimum-lived-experience floor: ``significant`` cannot be true
-    # (and ``warmed_up`` is false) until the entity has accumulated at least
-    # ``min_observations`` logged lived events AND ``min_lived_time_s`` of
-    # elapsed lived time. Fail-closed — a void/just-booted entity reads
-    # not-individuated.
-    min_observations: int = 200
-    min_lived_time_s: float = 1800.0
-
-    @classmethod
-    def from_mapping(cls, data: dict[str, Any] | None) -> "IndividuationConfig":
-        data = dict(data or {})
-        return cls(
-            enabled=bool(data.get("enabled", cls.enabled)),
-            null_samples=int(data.get("null_samples", cls.null_samples)),
-            significance_percentile=float(
-                data.get("significance_percentile", cls.significance_percentile)
-            ),
-            metric=str(data.get("metric", cls.metric)),
-            battery_path=str(data.get("battery_path", cls.battery_path)),
-            output_dir=str(data.get("output_dir", cls.output_dir)),
-            min_observations=int(data.get("min_observations", cls.min_observations)),
-            min_lived_time_s=float(data.get("min_lived_time_s", cls.min_lived_time_s)),
-        )
-
 
 class RawArchiveConfinementError(ValueError):
     """Raised when a local-only path is under a metrics-export allowlist root.
@@ -533,9 +466,6 @@ class EvaluationConfig:
     observers: ObserversConfig = field(default_factory=ObserversConfig)
     # Welfare observer parameters (interoceptive-distress detector).
     welfare: WelfareConfig = field(default_factory=WelfareConfig)
-    # Individuation boundary permutation-test instrument (Guardian-only,
-    # operator-run at merge points; never invoked from the cognitive cycle).
-    individuation: IndividuationConfig = field(default_factory=IndividuationConfig)
 
     @classmethod
     def from_mapping(
@@ -546,6 +476,10 @@ class EvaluationConfig:
         lingua_api_key: str | None = None,
     ) -> "EvaluationConfig":
         data = dict(data or {})
+        if "individuation" in data:
+            raise ValueError(
+                "[evaluation.individuation] is retired: individuation is measured by the producer configured in [individuation]"
+            )
         # The A/B-divergence baseline runs this model bare (no architecture), so it
         # MUST equal the language organ's model — otherwise the divergence measures
         # a model difference instead of the architecture's conditioning. Derive it
@@ -608,7 +542,7 @@ class EvaluationConfig:
             ),
             observers=ObserversConfig.from_mapping(data.get("observers")),
             welfare=WelfareConfig.from_mapping(data.get("welfare")),
-            individuation=IndividuationConfig.from_mapping(data.get("individuation")),
+
         )
 
 

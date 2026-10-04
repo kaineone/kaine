@@ -338,9 +338,13 @@ def load_health_prober(
 
     # Graded consolidation-divergence thresholds for the entity-care divergence
     # assessment (rate, magnitude), read from [hypnos.voice_alignment].
-    from kaine.lifecycle.divergence import consolidation_thresholds_from_config
+    from kaine.lifecycle.divergence import (
+        adapter_dir_for,
+        consolidation_thresholds_from_config,
+    )
 
     consolidation_thresholds = consolidation_thresholds_from_config(cfg)
+    adapter_output_dir = adapter_dir_for(cfg, resolve(Path("state")))
 
     # Evaluation JSONL rollup root (for the welfare-counter row) and the
     # autonomous safety-net incident path (for the preservation panel backfill).
@@ -364,6 +368,7 @@ def load_health_prober(
         audition_capture_geometry=audition_capture_geometry,
         model_server_cfg=model_server_cfg,
         consolidation_thresholds=consolidation_thresholds,
+        adapter_output_dir=adapter_output_dir,
         probe_timeout_s=probe_timeout_s,
         cache_ttl_s=cache_ttl_s,
         evaluation_logs_path=evaluation_logs_path,
