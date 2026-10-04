@@ -34,6 +34,7 @@ from typing import Any
 from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.experiment.stats import percentile as _percentile
 
 log = logging.getLogger(__name__)
 
@@ -72,21 +73,6 @@ _SOURCE_MAP: dict[str, tuple[frozenset[str], str]] = {
 
 _DEFAULT_WINDOW_SIZE = 64
 _DEFAULT_FLUSH_INTERVAL_S = 30.0
-
-
-def _percentile(values: list[float], pct: float) -> float:
-    """Simple percentile (linear interpolation on sorted values)."""
-    if not values:
-        return 0.0
-    sorted_vals = sorted(values)
-    n = len(sorted_vals)
-    k = (n - 1) * pct / 100.0
-    lo = int(k)
-    hi = lo + 1
-    if hi >= n:
-        return sorted_vals[-1]
-    frac = k - lo
-    return sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac
 
 
 class PredictionErrorObserver(StreamSubscriberObserver):

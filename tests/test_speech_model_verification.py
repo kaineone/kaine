@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for speech_models verification helpers."""
+"""Tests for the speech-model verification helpers (kaine.speech_manifest)."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from kaine.setup.speech_models import (
+from kaine.model_paths import speech_model_dir as model_dir
+from kaine.speech_manifest import (
     MANIFEST,
     is_installed,
-    model_dir,
     validate_tokens_file,
     verify_model_dir,
 )

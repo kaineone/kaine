@@ -250,18 +250,20 @@ class Nous(BaseModule):
             self._hypnos_cursor = await self._seed_cursor(HYPNOS_OUT_STREAM)
 
         feedback_entries: list[tuple[str, Any]] = []
+        feedback_last: str | None = None
         if self._feedback_cursor is not None:
-            feedback_entries = await self._read_stream(
+            feedback_entries, feedback_last = await self._read_stream(
                 VOLITION_FEEDBACK_STREAM, self._feedback_cursor
             )
-            if feedback_entries:
-                self._feedback_cursor = feedback_entries[-1][0]
+            if feedback_last is not None:
+                self._feedback_cursor = feedback_last
 
         hypnos_entries: list[tuple[str, Any]] = []
+        hypnos_last: str | None = None
         if self._hypnos_cursor is not None:
-            hypnos_entries = await self._read_stream(HYPNOS_OUT_STREAM, self._hypnos_cursor)
-            if hypnos_entries:
-                self._hypnos_cursor = hypnos_entries[-1][0]
+            hypnos_entries, hypnos_last = await self._read_stream(HYPNOS_OUT_STREAM, self._hypnos_cursor)
+            if hypnos_last is not None:
+                self._hypnos_cursor = hypnos_last
 
         for _eid, event in feedback_entries:
             if event.type != "volition.proposal_outcome":
@@ -316,9 +318,9 @@ class Nous(BaseModule):
             return latest[0]
         return "0"
 
-    async def _read_stream(self, stream: str, cursor: str) -> list[tuple[str, Any]]:
+    async def _read_stream(self, stream: str, cursor: str) -> tuple[list[tuple[str, Any]], str | None]:
         try:
-            entries = await self._bus.read(stream, last_id=cursor, count=64)
+            entries, last_scanned = await self._bus.read_entries(stream, last_id=cursor, count=64)
             self._feedback_read_failed = False
         except Exception:
             if not self._feedback_read_failed:
@@ -328,8 +330,8 @@ class Nous(BaseModule):
                     exc_info=True,
                 )
                 self._feedback_read_failed = True
-            entries = []
-        return entries
+            return ([], None)
+        return (entries, last_scanned)
 
     def _record_taken_action(self, action_index: int) -> None:
         try:
