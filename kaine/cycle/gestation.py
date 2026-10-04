@@ -1170,7 +1170,7 @@ class GestationOwner:
             return
 
         try:
-            entries = await self._bus.read(
+            entries, last_scanned = await self._bus.read_entries(
                 "soma.out", last_id=self._soma_cursor, count=1000
             )
             for entry_id, event in entries:
@@ -1188,6 +1188,8 @@ class GestationOwner:
                     and math.isfinite(err)
                 ):
                     self._soma_series.append((now, float(err)))
+            if last_scanned is not None:
+                self._soma_cursor = last_scanned
         except Exception:
             log.warning("gestation: failed to read soma reports", exc_info=True)
 
@@ -1199,7 +1201,7 @@ class GestationOwner:
         if self._topos_cursor is None:
             return []
         try:
-            entries = await self._bus.read(
+            entries, last_scanned = await self._bus.read_entries(
                 "topos.out", last_id=self._topos_cursor, count=1000
             )
         except Exception:
@@ -1222,6 +1224,8 @@ class GestationOwner:
                 and math.isfinite(err)
             ):
                 errors.append(float(err))
+        if last_scanned is not None:
+            self._topos_cursor = last_scanned
         return errors
 
     async def _do_readout(self, now: float) -> None:

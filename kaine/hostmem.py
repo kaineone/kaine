@@ -734,18 +734,34 @@ def _system_memory_pool() -> Pool:
                 notes.append("psutil reported no usable total figure")
             else:
                 notes.append("psutil reported no usable available figure")
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        phys_pages = os.sysconf("SC_PHYS_PAGES")
+        total = page_size * phys_pages
+    except (ValueError, OSError, AttributeError) as exc:
+        notes.append(f"sysconf fallback failed ({exc.__class__.__name__}: {exc})")
+    else:
+        if total is not None and total > 0:
+            return Pool(
+                kind="system",
+                total_bytes=total,
+                available_bytes=None,
+                provenance="sysconf",
+                unknown_reason="available memory not reported by sysconf",
+            )
+        notes.append("sysconf reported no usable total figure")
     detail = "; ".join(notes) if notes else "no system memory source succeeded"
     return Pool(
         kind="system",
         total_bytes=None,
         available_bytes=None,
         provenance="/proc/meminfo",
-        unknown_reason=f"/proc/meminfo unavailable and the psutil fallback failed: {detail}",
+        unknown_reason=f"/proc/meminfo, psutil and sysconf all unavailable: {detail}",
     )
 
 
 def system_memory_pool() -> Pool:
-    """System RAM pool (total/available) from /proc/meminfo, psutil fallback.
+    """System RAM pool (total/available) from /proc/meminfo, psutil, then POSIX sysconf.
 
     Never raises; a figure that cannot be determined is ``None`` with an
     ``unknown_reason`` (never a silent zero).
