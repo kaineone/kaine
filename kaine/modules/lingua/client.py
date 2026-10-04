@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from kaine.defaults import DEFAULT_CHAT_URL
+
 log = logging.getLogger(__name__)
 
 
@@ -72,7 +74,7 @@ _ENABLE_THINKING_KWARG = "enable_thinking"
 class OpenAIChatClient:
     """Thin async client for the OpenAI-compatible chat-completions endpoint
     exposed by the local model server (Unsloth Studio on CUDA, or any conforming
-    ``llama.cpp``/vLLM server) at e.g. http://127.0.0.1:11434/v1.
+    ``llama.cpp``/vLLM server) at the organ's chat URL.
 
     Chain-of-thought suppression travels via ``chat_template_kwargs`` (the
     portable llama.cpp mechanism), NOT Ollama's native ``think`` flag: Lingua is a
@@ -86,7 +88,7 @@ class OpenAIChatClient:
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:11434/v1",
+        base_url: str = DEFAULT_CHAT_URL,
         *,
         api_key: Optional[str] = None,
         timeout_s: float = 60.0,
@@ -104,6 +106,11 @@ class OpenAIChatClient:
     @property
     def base_url(self) -> str:
         return self._base_url
+
+    @property
+    def applies_lora(self) -> bool:
+        """True when a per-request LoRA resolver is attached."""
+        return self._lora_resolver is not None
 
     def set_lora_resolver(self, resolver) -> None:
         """Attach (or replace) the per-request LoRA resolver."""

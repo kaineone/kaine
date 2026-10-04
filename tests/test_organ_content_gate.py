@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Boot-time organ content-probe gate (kaine.setup.organ.verify_organ_generates).
+"""Boot-time organ content-probe gate (kaine.organ_probe.verify_organ_generates).
 
 The gate is the preventive for a served-but-MUTE organ: a hybrid-thinking model
 whose chain-of-thought is not suppressed returns empty content yet passes the
@@ -11,7 +11,7 @@ live model server is required.
 from __future__ import annotations
 
 from kaine.modules.lingua.client import FakeChatClient
-from kaine.setup.organ import verify_organ_generates
+from kaine.organ_probe import verify_organ_generates
 
 
 async def test_gate_passes_when_organ_returns_content():

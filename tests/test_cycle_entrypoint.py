@@ -36,7 +36,9 @@ def _hermetic_cwd(tmp_path: Path) -> Path:
 
 def test_main_refuses_without_operator_present(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "KAINE_CYCLE_OPERATOR_PRESENT"}
-    # Also force this venv's Python so we get the right kaine module.
+    # Import this checkout's kaine in the child, not whatever the venv's
+    # editable install points at.
+    env["PYTHONPATH"] = str(_REPO_ROOT)
     py = sys.executable
     result = subprocess.run(
         [py, "-m", "kaine.cycle"],
@@ -63,6 +65,7 @@ def test_main_refuses_research_boot_without_safety_net(tmp_path):
 
     env = {k: v for k, v in os.environ.items() if k != "KAINE_CYCLE_OPERATOR_PRESENT"}
     env["KAINE_RESEARCH_MODE"] = "1"
+    env["PYTHONPATH"] = str(_REPO_ROOT)
     py = sys.executable
     result = subprocess.run(
         [py, "-m", "kaine.cycle"],
@@ -91,6 +94,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
 
     calls = {"eval": 0}
     ok_result = evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=True,
@@ -127,6 +131,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
         "logging_active": True,
         "dry_self_check_passed": True,
         "encryption_satisfied": True,
+        "individuation_enabled": True,
     }
 
 
@@ -210,6 +215,7 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     net = evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=True,
@@ -264,6 +270,7 @@ def test_unattended_refusal_ignores_overrides(monkeypatch):
     monkeypatch.setenv("KAINE_FORCE_BOOT", "1")
 
     net = evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=True,
@@ -485,6 +492,7 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
         monkeypatch.delenv(var, raising=False)
 
     net = evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=True,
@@ -586,6 +594,7 @@ def test_cli_profile_config_is_the_one_booted(monkeypatch):
         return 0
 
     ok_result = evaluate_research_gate(
+        individuation_enabled=True,
         preservation_enabled=True,
         welfare_response_wired=True,
         logging_active=True,

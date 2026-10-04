@@ -602,8 +602,10 @@ def load_runtime_config(
     * When neither profile argument is set and ``config/profiles/thesis_test.toml``
       exists, the base-thesis ``thesis_test`` profile is applied. This is the
       project's default entity configuration: a fresh install that boots the cycle
-      with no explicit profile gets the five predictive-workspace processors,
-      STT off, and the self-initiated voice.
+      with no explicit profile gets the base-thesis module set (Soma, Chronos,
+      Topos, Audition, Lingua, Thymos and Hypnos), STT off, and the self-initiated
+      voice. The profile is the single definition of that set; the operator
+      overlay carries host-local values and deliberate deviations only.
     * The deployment tier is resolved by :func:`resolve_tier_name` (``KAINE_TIER``
       env, then ``[deployment].tier`` from the operator overlay) and layered on
       top of the module profile.

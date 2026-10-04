@@ -65,9 +65,9 @@ def test_make_audition_sherpa_onnx(bus, monkeypatch):
         "kaine.modules.audition.sherpa_stt.SherpaMoonshineSTT", FakeSherpa
     )
     monkeypatch.setattr(
-        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+        "kaine.model_paths.speech_model_dir", lambda _id: f"/fake/models/{_id}"
     )
-    monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_STT", "moonshine-base-en")
+    monkeypatch.setattr("kaine.model_paths.DEFAULT_STT", "moonshine-base-en")
 
     audition = make_audition(
         bus, {"backend": "sherpa_onnx", "transcription_enabled": True, "perception_feed": {}}
@@ -111,9 +111,9 @@ def test_make_audition_sherpa_failure_disables_transcription(bus, monkeypatch, c
         "kaine.modules.audition.sherpa_stt.SherpaMoonshineSTT", BrokenSherpa
     )
     monkeypatch.setattr(
-        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+        "kaine.model_paths.speech_model_dir", lambda _id: f"/fake/models/{_id}"
     )
-    monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_STT", "moonshine-base-en")
+    monkeypatch.setattr("kaine.model_paths.DEFAULT_STT", "moonshine-base-en")
 
     result = make_audition(
         bus, {"backend": "sherpa_onnx", "transcription_enabled": True, "perception_feed": {}}
@@ -171,9 +171,9 @@ def test_make_vox_sherpa_onnx(bus, monkeypatch):
 
     monkeypatch.setattr("kaine.modules.vox.sherpa_tts.SherpaKokoroTTS", FakeSherpa)
     monkeypatch.setattr(
-        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+        "kaine.model_paths.speech_model_dir", lambda _id: f"/fake/models/{_id}"
     )
-    monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_TTS", "kokoro-en")
+    monkeypatch.setattr("kaine.model_paths.DEFAULT_TTS", "kokoro-en")
 
     vox = make_vox(bus, {"backend": "sherpa_onnx"})
     assert isinstance(vox, Vox)
@@ -214,7 +214,7 @@ def test_make_vox_sherpa_failure_records_and_returns_none(bus, monkeypatch):
 
     monkeypatch.setattr("kaine.modules.vox.sherpa_tts.SherpaKokoroTTS", BrokenSherpa)
     monkeypatch.setattr(
-        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+        "kaine.model_paths.speech_model_dir", lambda _id: f"/fake/models/{_id}"
     )
 
     result = make_vox(bus, {"backend": "sherpa_onnx"})
@@ -233,9 +233,9 @@ def test_make_vox_normalises_backend_and_prosody(bus, monkeypatch):
 
     monkeypatch.setattr("kaine.modules.vox.sherpa_tts.SherpaKokoroTTS", FakeSherpa)
     monkeypatch.setattr(
-        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+        "kaine.model_paths.speech_model_dir", lambda _id: f"/fake/models/{_id}"
     )
-    monkeypatch.setattr("kaine.setup.speech_models.DEFAULT_TTS", "kokoro-en")
+    monkeypatch.setattr("kaine.model_paths.DEFAULT_TTS", "kokoro-en")
 
     vox = make_vox(bus, {"backend": "chatterbox "})
     assert isinstance(vox, Vox)
@@ -276,7 +276,7 @@ async def test_build_registry_registers_audition_despite_sherpa_failure(bus, mon
         "kaine.modules.audition.sherpa_stt.SherpaMoonshineSTT", BrokenSherpa
     )
     monkeypatch.setattr(
-        "kaine.setup.speech_models.model_dir", lambda _id: f"/fake/models/{_id}"
+        "kaine.model_paths.speech_model_dir", lambda _id: f"/fake/models/{_id}"
     )
     monkeypatch.setattr("kaine.extras.check", lambda cfg: [])
 

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
@@ -28,6 +27,7 @@ if TYPE_CHECKING:
 
 from kaine.bus.client import AsyncBus
 from kaine.config import require_known_keys
+from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
@@ -1621,9 +1621,9 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     kw = _pop(section, allowed)
     kw.pop("model_server_sleep_idle_seconds", None)
     # Bearer token for a keyed model server (e.g. Unsloth Studio). Resolve from
-    # [lingua].api_key, else the KAINE_MODEL_SERVER_API_KEY env var (so the secret
+    # [lingua].api_key, else the model-server key environment variable (so the secret
     # can stay out of the config file). None → keyless server (llama-server).
-    kw["api_key"] = kw.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    kw["api_key"] = lingua_section_api_key(kw)
 
     # Backend seam. The default path is byte-for-byte behaviour-preserving: when
     # no edge backend is selected we do NOT build a client here — Lingua
@@ -1639,7 +1639,7 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         from kaine.modules.lingua.client import build_chat_client_registry
 
         registry = build_chat_client_registry(
-            chat_url=kw.get("chat_url", "http://127.0.0.1:11434/v1"),
+            chat_url=lingua_section_chat_url(kw),
             api_key=kw.get("api_key"),
             timeout_s=float(kw.get("request_timeout_s", 60.0)),
             model_id=kw.get("model_id"),
@@ -1843,8 +1843,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         return SpeachesClient(base_url=speaches_url, timeout_s=timeout_s)
 
     def _sherpa_factory() -> STTClient:
+        from kaine.model_paths import DEFAULT_STT
+        from kaine.model_paths import speech_model_dir as model_dir
         from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
-        from kaine.setup.speech_models import DEFAULT_STT, model_dir
 
         model_id = section.get("sherpa_model_id") or DEFAULT_STT
         model_dir_path = section.get("sherpa_model_dir") or model_dir(model_id)
@@ -1863,7 +1864,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     except UnknownBackendError as exc:
         raise ConfigurationError(str(exc)) from exc
 
-    from kaine.setup.speech_models import DEFAULT_STT
+    from kaine.model_paths import DEFAULT_STT
 
     model_id = section.get("sherpa_model_id") or DEFAULT_STT
     if client is None:
@@ -1965,10 +1966,10 @@ def make_vox(
         kw["backend"] = "chatterbox"
         return Vox(bus, entity_clock=entity_clock, **kw)
 
+    from kaine.model_paths import DEFAULT_TTS
     from kaine.modules.backends import BackendRegistry, UnknownBackendError
     from kaine.modules.vox.client import ChatterboxClient, TTSClient
     from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY
-    from kaine.setup.speech_models import DEFAULT_TTS
 
     chatterbox_url = str(kw.get("chatterbox_url", "http://127.0.0.1:8883"))
     timeout_s = float(kw.get("request_timeout_s", 120.0))
@@ -1977,8 +1978,8 @@ def make_vox(
         return ChatterboxClient(base_url=chatterbox_url, timeout_s=timeout_s)
 
     def _sherpa_factory() -> TTSClient:
+        from kaine.model_paths import speech_model_dir as model_dir
         from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
-        from kaine.setup.speech_models import model_dir
 
         model_id = sherpa_model_id or DEFAULT_TTS
         model_dir_path = sherpa_model_dir or model_dir(model_id)
@@ -2390,7 +2391,6 @@ def _resolve_job_queue_trainer(
     extra, but it still needs the same non-empty abliteration probe set, and a
     positive trainer_timeout_s.
     """
-    import os
     from pathlib import Path
 
     from kaine.modules.hypnos.job_queue_trainer import JobQueueVoiceTrainer
@@ -2407,8 +2407,8 @@ def _resolve_job_queue_trainer(
         )
 
     lingua = (kaine_config or {}).get("lingua") or {}
-    chat_url = str(lingua.get("chat_url", "") or "")
-    api_key = str(lingua.get("api_key", "") or "") or os.environ.get("KAINE_MODEL_SERVER_API_KEY", "")
+    chat_url = lingua_section_chat_url(lingua)
+    api_key = lingua_section_api_key(lingua) or ""
 
     return JobQueueVoiceTrainer(
         jobs_dir=voice_config.trainer_jobs_dir,
@@ -3261,9 +3261,7 @@ def _wire_lingua_organ_adapter(
     organ_adapters_dir = Path(
         voice_cfg.get("organ_adapters_dir", "/organ-adapters")
     )
-    api_key = lingua_cfg.get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    api_key = lingua_section_api_key(lingua_cfg)
 
     from kaine.modules.hypnos.organ_adapter import OrganAdapterResolver, organ_root_url
 

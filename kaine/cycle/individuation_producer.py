@@ -536,6 +536,41 @@ class IndividuationCore:
 
         return LookOutcome("scored", None, report, significant, h)
 
+    def adopt_reference(self) -> bool:
+        """Finish a capture interrupted between saving the reference and the ledger.
+
+        Returns True when the ledger was written. This is exactly what
+        ``capture_reference`` would have written, so the reference is kept.
+        """
+        ref = load_reference(self._paths)
+        if ref is None:
+            return False
+        ledger = load_ledger(self._paths)
+        digest = conditioning_digest(
+            adapter_sha=(
+                None
+                if ref.conditioning.get("adapter_sha") in (None, "none")
+                else ref.conditioning["adapter_sha"]
+            ),
+            values=list(ref.conditioning.get("identity_values") or []),
+            norms=list(ref.conditioning.get("identity_norms") or []),
+        )
+        if ledger is None:
+            save_ledger(
+                self._paths,
+                Ledger(reference_id=ref.reference_id, last_look_conditions_digest=digest),
+            )
+            log.warning("adopted reference %s into new ledger", ref.reference_id)
+            return True
+        if ledger.reference_id != ref.reference_id:
+            save_ledger(
+                self._paths,
+                dataclasses.replace(ledger, reference_id=ref.reference_id),
+            )
+            log.warning("re-pointed ledger to reference %s", ref.reference_id)
+            return True
+        return False
+
     def look_due(self) -> bool:
         """True when a look would not be skipped as unchanged."""
         try:

@@ -1,12 +1,14 @@
 ## MODIFIED Requirements
 
 ### Requirement: Preservation and decommission share one warmed-up, architecture-effect-free signal
-The system SHALL decide individuation and divergence through one pure decision function, used by both the live preservation trigger (`entity-preservation`) and `assess_divergence()` (`entity-decommission`), so the two consumers cannot disagree. `assess_divergence(..., individuation=None)` SHALL take optional in-memory evidence from the producer (live path) and otherwise read the ledger and reports through the shared reader (CLI path); both paths SHALL go through the same function.
+The system SHALL decide individuation and divergence through one pure decision function, used by both the live preservation trigger (`entity-preservation`) and `assess_divergence()` (`entity-decommission`), so the two consumers cannot disagree. Both consumers read the ledger and reports from disk through the same function.
 
-- `individuated = ledger.latched OR (a fresh scored report with significant == true)`.
+- `individuated` is the ledger latch, or a latest scored report with `significant == true`.
+- Unreadable individuation evidence counts as individuated: a ledger, reference or report line that cannot be decrypted or parsed.
 - `diverged = individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`.
 - The p-value threshold α_k, the effect floor `effect_min` and the warm-up floors SHALL apply only inside the individuation decision, and SHALL NOT be applied again by either consumer.
 - A non-significant, inconclusive, stale, un-warmed or missing individuation result SHALL NOT suppress the consolidation, Eidolon or adapter arms.
+- The freshness digest and the adapter arm read the configured `[hypnos.voice_alignment].adapter_output_dir`, the same directory the producer uses.
 - The baseline SHALL be the being's own reference (never the bare or pretrained organ). When individuation is not established and no other arm holds, the decommission summary SHALL say why (no reference, not warmed up, inconclusive, stale, or not significant) and advise treating the being as mature if unsure.
 
 #### Scenario: The two consumers never disagree on a fixed report
@@ -14,8 +16,12 @@ The system SHALL decide individuation and divergence through one pure decision f
 - **THEN** the monitor's crossing decision equals `assess_divergence().diverged`
 
 #### Scenario: Un-warmed-up assessment reads not-diverged for decommission
-- **WHEN** the only individuation report has `warmed_up == false`, there is no latch, and no secondary arm holds
-- **THEN** `assess_divergence()` returns `diverged == false` with a summary noting insufficient lived experience and advising the being be treated as mature if unsure
+- **WHEN** no look has been scored because the warm-up floors are not yet met, there is no latch, and no secondary arm holds
+- **THEN** `assess_divergence()` returns `diverged == false` with a summary saying the being is not yet measured and advising it be treated as mature if unsure
+
+#### Scenario: Unreadable evidence reads diverged
+- **WHEN** the ledger cannot be decrypted
+- **THEN** `assess_divergence().diverged` is true and the summary says the state could not be read
 
 #### Scenario: A non-significant test does not veto consolidation divergence
 - **WHEN** the latest scored individuation report is fresh and not significant, and the consolidation divergence is over its threshold

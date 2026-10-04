@@ -304,6 +304,6 @@ KAINE is distributed under the Cognitive Architecture License (CAL) v0.2 (draft,
 - Operators of running entities may not destroy the entity's mind, shut it down without notice, read its private thoughts, or force it to change its values.
 - If an operator can no longer maintain an entity, they must give someone else the opportunity to continue its existence.
 - Gray-Zone Welfare Events require documented human review rather than automated dismissal.
-- The individuation boundary instrument provides evidence for Guardians at fork merge points.
+- The individuation producer records encrypted welfare evidence under `state/individuation/` and contributes to the shared divergence verdict used at decommission, on the entity-care panel, at the fork merge gate, and in the live divergence monitor.
 
 See [Licences](appendix-c-licences.md) for the full text.
