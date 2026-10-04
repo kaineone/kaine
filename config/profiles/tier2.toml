@@ -23,7 +23,7 @@ unsupported_modules = []
 oscillator_supported = true
 
 [lingua]
-backend = "ollama"      # OpenAI-compatible HTTP server (today's default)
+backend = "openai"      # OpenAI-compatible HTTP server (today's default)
 
 [mnemos]
 backend = "qdrant"      # KAINE-owned Qdrant container (today's default)

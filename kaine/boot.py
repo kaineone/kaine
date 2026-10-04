@@ -1611,10 +1611,11 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "persona_internal",
         "baseline_salience",
         "alert_salience",
-        # Runtime backend selection (openspec runtime-backends). Absent/"ollama"
-        # → today's OpenAI-compatible HTTP client (Tier-2, built by Lingua exactly
-        # as before); "llama_cpp" → in-process GGUF edge runtime. GGUF locators
-        # for the edge backend (unused by the HTTP default).
+        # Runtime backend selection (openspec runtime-backends). Absent/"openai"
+        # (or its alias "ollama") → today's OpenAI-compatible HTTP client
+        # (Tier-2, built by Lingua exactly as before); "llama_cpp" → in-process
+        # GGUF edge runtime. GGUF locators for the edge backend (unused by the
+        # HTTP default).
         "backend",
         "gguf_path",
         "gguf_filename",
@@ -1636,7 +1637,7 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     backend = kw.pop("backend", None)
     gguf_path = kw.pop("gguf_path", None)
     gguf_filename = kw.pop("gguf_filename", None)
-    if backend not in (None, "", "ollama", "openai"):
+    if backend not in (None, "", "openai", "ollama"):
         from kaine.modules.lingua.client import build_chat_client_registry
 
         registry = build_chat_client_registry(

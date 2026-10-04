@@ -393,7 +393,7 @@ Lingua is the language organ. It calls a local OpenAI-compatible model server at
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `api_key` | string | *(unset)* | Bearer token for a keyed server. Prefer the `KAINE_MODEL_SERVER_API_KEY` environment variable so the secret never lands in a file. |
-| `backend` | string | *(unset)* | Model backend selector: `"ollama"` or `"openai"` for an HTTP server, `"llama_cpp"` for in-process GGUF loading. |
+| `backend` | string | *(unset)* | Model backend selector: `"openai"` (or its alias `"ollama"`) for an OpenAI-compatible HTTP server, `"llama_cpp"` for in-process GGUF loading. |
 | `gguf_path` | string | *(unset)* | Local path to a GGUF file. |
 | `gguf_filename` | string | *(unset)* | Filename within `gguf_path`. |
 

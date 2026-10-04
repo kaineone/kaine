@@ -255,6 +255,7 @@ source_modules = [
     "kaine.hostmem",
     "kaine.memory_kinds",
     "kaine.model_paths",
+    "kaine.speech_manifest",
     "kaine.net",
     "kaine.organ_window_state",
     "kaine.perception_preview",
@@ -392,9 +393,10 @@ forbidden_modules = ["kaine.modules"]
 # workspace packages never import install, setup, transfer, distributed, remote
 # or research-export code directly. The remote bridge is the one declared
 # exception until the boot-phase refactor moves it into an optional phase.
-# Indirect chains through the modules (the sherpa speech checks and the organ
-# window's server control) are allowed for now; they move with the host-probe
-# consolidation (W6).
+# Indirect chains are allowed for now: they all run through the organ's setup
+# modules (the Hypnos organ window's server control, preboot's device map, and
+# the Nexus health served-alias check), which move out of kaine.setup together
+# in a follow-up. The sherpa speech checks no longer reach setup.
 [[tool.importlinter.contracts]]
 name = "Core runtime stays clear of edge features"
 type = "forbidden"
