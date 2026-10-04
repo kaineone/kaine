@@ -95,13 +95,6 @@ async def test_gestation_soma_reader_advances_past_undecodable_batch(
 ) -> None:
     bus = _make_bus()
 
-    class FakeClock:
-        def __init__(self, t: float = 0.0) -> None:
-            self.t = float(t)
-
-        def __call__(self) -> float:
-            return self.t
-
     class FakeDrive:
         def __init__(self) -> None:
             self.scale = 0.0
@@ -142,7 +135,7 @@ async def test_gestation_soma_reader_advances_past_undecodable_batch(
         surrogate_beat_phases=None,
         is_paused=lambda: False,
         config=config,
-        clock=FakeClock(),
+        clock=lambda: 0.0,
         state_path=tmp_path / "gestation_readout.json",
     )
     owner._soma_cursor = "0-0"
