@@ -216,3 +216,32 @@ def test_escalation_exit_code(
     assert len(shutdown_calls) == 1
     assert shutdown_calls[0].spot is not None
     assert shutdown_calls[0].spot.escalated is escalated
+
+
+def test_phase_exception_skips_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A phase that raises ends the boot without the run loop or shutdown."""
+    calls: list[str] = []
+
+    async def boom(ctx: cyc.BootContext) -> None:
+        raise RuntimeError("phase failed")
+
+    async def run(ctx: cyc.BootContext) -> None:
+        calls.append("run")
+
+    async def shutdown(ctx: cyc.BootContext) -> None:
+        calls.append("shutdown")
+
+    monkeypatch.setattr(cyc, "_BOOT_PHASES", (boom,))
+    monkeypatch.setattr(cyc, "_run_until_stopped", run)
+    monkeypatch.setattr(cyc, "_shutdown", shutdown)
+    with pytest.raises(RuntimeError, match="phase failed"):
+        asyncio.run(cyc._boot_and_run(kaine_config={}))
+    assert calls == []
+
+
+def test_boot_context_repr_hides_the_intent_secret() -> None:
+    """The context holds the Praxis intent secret, so its repr shows no field."""
+    ctx = cyc.BootContext(kaine_config={})
+    ctx.intent_secret = b"\x01secret-bytes\x02"
+    assert "secret-bytes" not in repr(ctx)
+    assert "intent_secret" not in repr(ctx)

@@ -12,12 +12,13 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, repr=False)
 class BootContext:
     """State the boot phases share, in the order the phases set it.
 
     Each field is set by the phase named in its comment and read by later
-    phases, the run loop or shutdown. Fields start as ``None``.
+    phases, the run loop or shutdown. Fields start as ``None``. The repr leaves
+    every field out, because the context holds the Praxis intent secret.
     """
 
     supervision_mode: Any = None  # parameter

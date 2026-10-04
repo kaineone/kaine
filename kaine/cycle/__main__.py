@@ -1560,8 +1560,8 @@ async def _phase_registry(ctx: BootContext) -> int | None:
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
-    # in this function's scope: it is never published to the bus, written to
-    # disk, or logged. The SAME bytes are injected into Praxis (to verify, via
+    # in the boot context, whose repr leaves out every field: it is never
+    # published to the bus, written to disk, or logged. The SAME bytes are injected into Praxis (to verify, via
     # build_registry) and Volition (to sign, below), so an act intent forged by
     # any other bus writer fails verification and never reaches an effector.
     ctx.intent_secret = generate_intent_secret()
