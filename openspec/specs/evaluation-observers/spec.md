@@ -1,7 +1,7 @@
 # evaluation-observers Specification
 
 ## Purpose
-TBD - created by archiving change sidecar-observers. Update Purpose after archive.
+The evaluation-observers capability adds read-only observers for the v4 signal family, including oscillatory coherence, replay, Empatheia accuracy, voice-alignment divergence, fatigue history, and Nous policy, with content redaction by default and sliding-window statistics for prediction errors.
 
 ## Requirements
 

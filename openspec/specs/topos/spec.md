@@ -1,7 +1,7 @@
 # topos Specification
 
 ## Purpose
-TBD - created by archiving change topos. Update Purpose after archive.
+Topos is KAINE's visual perception module. This capability covers its RAM-only frame buffer, the frozen, replaceable video encoder that turns clips into latents, change detection and habituation, and the `topos.report` events it publishes.
 
 ## Requirements
 

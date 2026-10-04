@@ -1,7 +1,7 @@
 # license-compliance Specification
 
 ## Purpose
-TBD - created by archiving change cal-license-compliance. Update Purpose after archive.
+This capability requires every shipped first-party Python file to carry an SPDX license header and copyright line, and adds NOTICE and contributor terms, with the test suite checking header presence. It applies to files under kaine/, scripts/, tests/, and the repository top level, while exempting vendored third-party code under external/.
 ## Requirements
 ### Requirement: SPDX license header on every shipped source file
 Every shipped first-party Python source file SHALL begin with a license header declaring

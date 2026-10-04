@@ -1,7 +1,7 @@
 # audition-predictive Specification
 
 ## Purpose
-TBD - created by archiving change audition-forward-model. Update Purpose after archive.
+The predictive-audition capability gives the Audition module a forward model over compact auditory features that predicts the next expected pattern and gates or weights the salience of `audition.transcription` and `audition.emotion` events by their prediction error.
 
 ## Requirements
 

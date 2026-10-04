@@ -1,7 +1,7 @@
 # entity-time Specification
 
 ## Purpose
-TBD - created by archiving change biological-timing-and-dilation. Update Purpose after archive.
+One injected `EntityClock` drives every cognitive timer in KAINE. It scales wall time into the entity's subjective time within operator-set bounds, and samples perception faster than conscious access.
 
 ## Requirements
 

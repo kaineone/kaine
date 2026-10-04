@@ -1,7 +1,7 @@
 # audition-prosody Specification
 
 ## Purpose
-TBD - created by archiving change audition-forward-model. Update Purpose after archive.
+The prosody capability lets Audition extract per-utterance numeric prosodic features from in-memory audio, including pitch contour, RMS energy, and speaking rate, and publish them as `audition.prosody` events.
 ## Requirements
 ### Requirement: Speaker prosody extracted in memory as numeric features
 When `prosody_enabled` is true, Audition SHALL extract per-utterance prosodic

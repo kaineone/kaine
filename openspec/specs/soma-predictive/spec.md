@@ -1,7 +1,7 @@
 # soma-predictive Specification
 
 ## Purpose
-TBD - created by archiving change soma-forward-model-fatigue. Update Purpose after archive.
+Soma's forward model: a CfC network that predicts the next interoceptive feature vector and publishes its prediction error as salience. The same capability covers fatigue accumulation that triggers maintenance and the homeostatic regulation Soma advises the cycle to apply.
 
 ## Requirements
 

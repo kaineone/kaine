@@ -1,7 +1,7 @@
 # remote-bridge Specification
 
 ## Purpose
-TBD - created by archiving change remote-perception-bridge. Update Purpose after archive.
+This capability adds an optional remote audio/video bridge that is disabled by default and injects remote operator senses into the perception modules while streaming generated speech and the conversation transcript back to clients. Remote senses follow the zero-persistence rule and respect the physical locus.
 
 ## Requirements
 

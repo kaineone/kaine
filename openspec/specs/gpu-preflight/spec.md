@@ -1,7 +1,7 @@
 # gpu-preflight Specification
 
 ## Purpose
-TBD - created by archiving change gpu-preboot-headroom. Update Purpose after archive.
+The gpu-preflight capability is a cooperative pre-boot gate that checks per-device GPU headroom before the cycle opens any resource, refuses to boot when free VRAM is below the configured threshold and cannot be reclaimed, and never terminates another process to reclaim memory.
 
 ## Requirements
 

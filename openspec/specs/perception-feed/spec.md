@@ -1,7 +1,7 @@
 # perception-feed Specification
 
 ## Purpose
-TBD - created by archiving change playlist-sleep-pause. Update Purpose after archive.
+This capability governs the perception feed around sleep and programme boundaries: Hypnos restores the locus that was active before sleep without keeping sensory content, the programme pauses while the entity cannot perceive, and the end of a programme preserves and stops the entity. A viewing after birth begins with the womb-to-world transition.
 
 ## Requirements
 

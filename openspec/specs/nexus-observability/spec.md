@@ -1,7 +1,7 @@
 # nexus-observability Specification
 
 ## Purpose
-TBD - created by archiving change nexus-v4-observability. Update Purpose after archive.
+Nexus's live diagnostics: one server-sent-event feed of every active module stream and the workspace broadcast, and the status indicators an operator needs to watch a run, from coherence, fatigue and welfare to encryption, supervision, the safety net and run admissibility.
 
 ## Requirements
 

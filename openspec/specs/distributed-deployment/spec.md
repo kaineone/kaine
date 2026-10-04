@@ -1,7 +1,7 @@
 # distributed-deployment Specification
 
 ## Purpose
-TBD - created by archiving change distributed-substrate. Update Purpose after archive.
+Distributed-deployment keeps KAINE's live cognitive cycle and stateful stores on trusted hosts while allowing modules to be split across trusted machines over an authenticated bus, and it codifies the sanctioned decentralization patterns as federation and encrypted backup rather than sharding.
 
 ## Requirements
 

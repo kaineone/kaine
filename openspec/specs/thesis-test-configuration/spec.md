@@ -1,7 +1,7 @@
 # thesis-test-configuration Specification
 
 ## Purpose
-TBD - created by archiving change thesis-test-configuration. Update Purpose after archive.
+The opt-in base-thesis configuration: the raw audio-visual predictive processors run with the always-on workspace and volition, Lingua serves only as the output voice, and the voice speaks on the entity's own initiative rather than in reply to a prompt.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # audio-output Specification
 
 ## Purpose
-TBD - created by archiving change audio-output. Update Purpose after archive.
+Speech output: rendering the entity's external utterances as audio, with Thymos state shaping expressivity, and keeping audio bytes off the bus and rendered audio out of long-term storage. Vox is the module that speaks today.
 ## Requirements
 ### Requirement: TTSClient protocol with Chatterbox default
 AudioOutput SHALL accept a `TTSClient` collaborator implementing

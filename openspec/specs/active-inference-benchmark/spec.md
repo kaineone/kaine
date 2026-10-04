@@ -1,7 +1,7 @@
 # active-inference-benchmark Specification
 
 ## Purpose
-TBD - created by archiving change nous-rl-benchmark. Update Purpose after archive.
+The active-inference benchmark is an offline harness for comparing Nous's active-inference engine against a reinforcement-learning baseline on a matched suite of bounded discrete decision tasks, producing seeded, reproducible metrics and a reportable verdict about the value of epistemic action.
 ## Requirements
 ### Requirement: Offline AIF-vs-RL benchmark on matched bounded tasks
 The system SHALL provide an offline benchmark harness that runs Nous's

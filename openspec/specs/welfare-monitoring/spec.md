@@ -1,7 +1,7 @@
 # welfare-monitoring Specification
 
 ## Purpose
-TBD - created by archiving change welfare-events-to-bus. Update Purpose after archive.
+This capability adds a welfare observer that publishes content-free gray-zone events to the bus and writes them to the research log and raw record sink. Repeated gray-zone events of any category trigger an autonomous protective response, and the monitor applies a boot cold-start warm-up period.
 
 ## Requirements
 
