@@ -31,7 +31,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from kaine.model_paths import models_dir
+from kaine.model_paths import (  # noqa: F401 - re-exported for callers
+    DEFAULT_STT,
+    DEFAULT_TTS,
+    models_dir,
+    speech_model_dir,
+)
 
 SpeechKind = Literal["stt", "tts"]
 
@@ -116,13 +121,8 @@ MANIFEST: dict[str, SpeechModel] = {
     ),
 }
 
-DEFAULT_STT = "moonshine-base-en"
-DEFAULT_TTS = "kokoro-en"
-
-
-def model_dir(model_id: str, root: Path | str | None = None) -> Path:
-    """Directory where the extracted model for ``model_id`` is expected to live."""
-    return (Path(root) if root else models_dir()) / "sherpa-onnx" / model_id
+# Defined in kaine.model_paths so the runtime need not import kaine.setup.
+model_dir = speech_model_dir
 
 
 def _sha256_file(p: Path) -> str:

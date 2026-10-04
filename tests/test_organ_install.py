@@ -247,6 +247,8 @@ def test_gather_model_ids_pins_organ_revision(tmp_path, monkeypatch):
         path=str(state),
     )
     monkeypatch.setattr(organ, "ORGAN_REVISION_STATE_PATH", str(state))
+    # The reader lives in kaine.organ_probe (re-exported by kaine.setup.organ).
+    monkeypatch.setattr("kaine.organ_probe.ORGAN_REVISION_STATE_PATH", str(state))
 
     ids = _gather_model_ids(
         {"lingua": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=ORGAN_GGUF_REPO

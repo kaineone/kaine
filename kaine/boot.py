@@ -1843,8 +1843,9 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         return SpeachesClient(base_url=speaches_url, timeout_s=timeout_s)
 
     def _sherpa_factory() -> STTClient:
+        from kaine.model_paths import DEFAULT_STT
+        from kaine.model_paths import speech_model_dir as model_dir
         from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
-        from kaine.setup.speech_models import DEFAULT_STT, model_dir
 
         model_id = section.get("sherpa_model_id") or DEFAULT_STT
         model_dir_path = section.get("sherpa_model_dir") or model_dir(model_id)
@@ -1863,7 +1864,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     except UnknownBackendError as exc:
         raise ConfigurationError(str(exc)) from exc
 
-    from kaine.setup.speech_models import DEFAULT_STT
+    from kaine.model_paths import DEFAULT_STT
 
     model_id = section.get("sherpa_model_id") or DEFAULT_STT
     if client is None:
@@ -1965,10 +1966,10 @@ def make_vox(
         kw["backend"] = "chatterbox"
         return Vox(bus, entity_clock=entity_clock, **kw)
 
+    from kaine.model_paths import DEFAULT_TTS
     from kaine.modules.backends import BackendRegistry, UnknownBackendError
     from kaine.modules.vox.client import ChatterboxClient, TTSClient
     from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY
-    from kaine.setup.speech_models import DEFAULT_TTS
 
     chatterbox_url = str(kw.get("chatterbox_url", "http://127.0.0.1:8883"))
     timeout_s = float(kw.get("request_timeout_s", 120.0))
@@ -1977,8 +1978,8 @@ def make_vox(
         return ChatterboxClient(base_url=chatterbox_url, timeout_s=timeout_s)
 
     def _sherpa_factory() -> TTSClient:
+        from kaine.model_paths import speech_model_dir as model_dir
         from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
-        from kaine.setup.speech_models import model_dir
 
         model_id = sherpa_model_id or DEFAULT_TTS
         model_dir_path = sherpa_model_dir or model_dir(model_id)

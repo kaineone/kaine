@@ -107,7 +107,7 @@ async def test_smoke_services_maps_up_not_configured_down_degraded(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 2. ORGAN — reuses kaine.setup.organ.verify_organ_generates
+# 2. ORGAN — reuses kaine.organ_probe.verify_organ_generates
 # ---------------------------------------------------------------------------
 
 

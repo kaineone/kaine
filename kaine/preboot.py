@@ -95,8 +95,8 @@ from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
 from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
+from kaine.organ_probe import verify_organ_generates
 from kaine.security.crypto import CryptoConfigError, install_from_section
-from kaine.setup.organ import verify_organ_generates
 from kaine.storage import configured_data_root, resolve, storage_min_free_gb
 from kaine.torch_stack import check_torch_stack, describe_torch_stack
 

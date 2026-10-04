@@ -25,12 +25,15 @@ from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 
 
 @pytest.fixture(autouse=True)
-def _stub_organ_window():
-    sys.modules["kaine.organ_window_state"] = types.SimpleNamespace(
-        organ_unloaded=lambda: False
+def _stub_organ_window(monkeypatch):
+    # setitem restores the original module afterwards; popping it instead made
+    # later lazy imports load a second module object that other tests' patches
+    # never reached.
+    monkeypatch.setitem(
+        sys.modules,
+        "kaine.organ_window_state",
+        types.SimpleNamespace(organ_unloaded=lambda: False),
     )
-    yield
-    sys.modules.pop("kaine.organ_window_state", None)
 
 
 def _make_own_adapter(adapter_output_dir: Path, content: bytes) -> Path:
