@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import kaine.model_paths as _model_paths_mod
 import kaine.nexus.health.probes as probes_mod
 import kaine.setup.speech_models as _speech_models_mod
 from kaine.nexus.health.config import build_dependency_specs
@@ -20,8 +21,8 @@ from kaine.nexus.health.config import build_dependency_specs
 
 @pytest.fixture
 def _patch_speech_models(monkeypatch):
-    monkeypatch.setattr(_speech_models_mod, "DEFAULT_STT", "moonshine-base-en")
-    monkeypatch.setattr(_speech_models_mod, "DEFAULT_TTS", "kokoro-en")
+    monkeypatch.setattr(_model_paths_mod, "DEFAULT_STT", "moonshine-base-en")
+    monkeypatch.setattr(_model_paths_mod, "DEFAULT_TTS", "kokoro-en")
     monkeypatch.setattr(
         _speech_models_mod, "model_dir", lambda model_id: Path(f"/fake/models/{model_id}")
     )

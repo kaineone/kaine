@@ -150,6 +150,12 @@ RUNTIME_PATH = Path("state/cycle/runtime.json")
 # cannot start; we fail closed before any module spawns.
 WELFARE_PRODUCER_REFUSED_EXIT = 8
 
+# Exit code when the organ content gate finds the served organ producing no content.
+ORGAN_GATE_REFUSED_EXIT = 9
+
+# Exit code when individuation is misconfigured or lacks the lingua module.
+INDIVIDUATION_REFUSED_EXIT = 10
+
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
     """Parse [individuation] and check its prerequisites.
@@ -1313,7 +1319,7 @@ async def _boot_and_run(
     individuation_cfg, individuation_refusal = _individuation_refusal(kaine_config)
     if individuation_refusal is not None:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {individuation_refusal}\n")
-        return 3
+        return INDIVIDUATION_REFUSED_EXIT
     # Research event log config is INDEPENDENT of [evaluation].enabled — the
     # curated log (and the local-only raw archive) gate on their own flags.
     research_event_log_cfg = load_research_event_log_config()
@@ -1445,7 +1451,7 @@ async def _boot_and_run(
                         "Bring the organ up (serve the model AND suppress thinking) "
                         "or set KAINE_ALLOW_MUTE_ORGAN=1 to boot anyway.\n"
                     )
-                    return 5
+                    return ORGAN_GATE_REFUSED_EXIT
 
     bus_config = load_bus_config()
     bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)

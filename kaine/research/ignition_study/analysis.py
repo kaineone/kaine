@@ -16,13 +16,14 @@ import json
 import logging
 import math
 import os
-import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from kaine.experiment.run_records import load_run_records
+from kaine.experiment.stats import mean as _mean
+from kaine.experiment.stats import percentile as _percentile
 from kaine.research.ignition_study.plan import load_plan
 from kaine.security.crypto import (
     CryptoConfig,
@@ -85,23 +86,6 @@ class ViewingResult:
     modules: list[str]
     measures: dict[str, Any]
     film_minute_bins: dict[str, PerFilmBins]
-
-
-def _percentile(values: list[float], pct: float) -> float:
-    if not values:
-        return 0.0
-    s = sorted(values)
-    k = (len(s) - 1) * pct / 100.0
-    f = math.floor(k)
-    c = math.ceil(k)
-    if f == c:
-        return float(s[int(k)])
-    d = k - f
-    return float(s[f] * (1.0 - d) + s[c] * d)
-
-
-def _mean(values: list[float]) -> float:
-    return float(statistics.mean(values)) if values else 0.0
 
 
 def _film_key(programme: dict[str, Any] | None) -> str:

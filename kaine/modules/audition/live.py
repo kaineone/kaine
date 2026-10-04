@@ -187,10 +187,10 @@ def encode_wav(
 
 
 class LiveMicrophone:
-    """Eyes-and-ears microphone stream. Constructed by AudioInput when
+    """Eyes-and-ears microphone stream. Constructed by Audition when
     [audition].capture_enabled is true. Lifecycle owned by the parent.
 
-    `sink` is `AudioInput.process_audio`. The microphone hands utterance
+    `sink` is `Audition.process_audio`. The microphone hands utterance
     bytes to it and never touches the result.
     """
 
@@ -493,7 +493,7 @@ class LiveMicrophone:
             # audition.perception. None for the real mic and seeded feed.
             item = getattr(self._stream, "current_item", None)
             try:
-                # AudioInput.process_audio takes source_label/item keyword-only.
+                # Audition.process_audio takes source_label/item keyword-only.
                 # Some sinks (tests) accept fewer kwargs; fall back below.
                 await self._sink(
                     wav_bytes,

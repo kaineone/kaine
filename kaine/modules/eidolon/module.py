@@ -310,7 +310,7 @@ class Eidolon(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         stream,
                         last_id=self._get_cursor(channel),
                         count=64,
@@ -319,8 +319,8 @@ class Eidolon(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.1)
                     continue
-                if entries:
-                    self._set_cursor(channel, entries[-1][0])
+                if last_scanned is not None:
+                    self._set_cursor(channel, last_scanned)
                     for entry_id, ev in entries:
                         self._record_voice(channel, ev.payload)
                         # Feed into self-inference (type label only; no text).
@@ -388,7 +388,7 @@ class Eidolon(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         "thymos.out",
                         last_id=self._thymos_cursor,
                         count=64,
@@ -397,8 +397,8 @@ class Eidolon(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.1)
                     continue
-                if entries:
-                    self._thymos_cursor = entries[-1][0]
+                if last_scanned is not None:
+                    self._thymos_cursor = last_scanned
                     for _, ev in entries:
                         if ev.type == "thymos.state":
                             self._inference.observe_thymos_state(ev.payload)
@@ -414,7 +414,7 @@ class Eidolon(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         "nous.out",
                         last_id=self._nous_cursor,
                         count=64,
@@ -423,8 +423,8 @@ class Eidolon(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.1)
                     continue
-                if entries:
-                    self._nous_cursor = entries[-1][0]
+                if last_scanned is not None:
+                    self._nous_cursor = last_scanned
                     for _, ev in entries:
                         if ev.type == "nous.policy":
                             self._inference.observe_nous_policy(ev.payload)
@@ -439,7 +439,7 @@ class Eidolon(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         "hypnos.out",
                         last_id=cursor,
                         count=32,
@@ -448,8 +448,8 @@ class Eidolon(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.1)
                     continue
-                if entries:
-                    cursor = entries[-1][0]
+                if last_scanned is not None:
+                    cursor = last_scanned
                     for _, ev in entries:
                         if ev.type == "hypnos.sleep.completed":
                             self._model = self._inference.maintenance_cycle_end(
