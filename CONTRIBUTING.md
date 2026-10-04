@@ -41,8 +41,10 @@ docker compose -f compose/qdrant.yml up -d # memory store (optional for most tes
 Run the suite (fakes stand in for external services):
 
 ```bash
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q -n auto --dist loadfile
 ```
+
+Statistical tests over a minute long are marked `slow`; see the test-suite section of [docs/21-contributing.md](docs/21-contributing.md).
 
 The safe offline path (test suite + experiment/benchmark runners, no entity) is
 described in [docs/15-experiments/README.md](docs/15-experiments/README.md); start at
