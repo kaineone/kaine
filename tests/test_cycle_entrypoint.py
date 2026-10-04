@@ -36,7 +36,9 @@ def _hermetic_cwd(tmp_path: Path) -> Path:
 
 def test_main_refuses_without_operator_present(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "KAINE_CYCLE_OPERATOR_PRESENT"}
-    # Also force this venv's Python so we get the right kaine module.
+    # Import this checkout's kaine in the child, not whatever the venv's
+    # editable install points at.
+    env["PYTHONPATH"] = str(_REPO_ROOT)
     py = sys.executable
     result = subprocess.run(
         [py, "-m", "kaine.cycle"],
@@ -63,6 +65,7 @@ def test_main_refuses_research_boot_without_safety_net(tmp_path):
 
     env = {k: v for k, v in os.environ.items() if k != "KAINE_CYCLE_OPERATOR_PRESENT"}
     env["KAINE_RESEARCH_MODE"] = "1"
+    env["PYTHONPATH"] = str(_REPO_ROOT)
     py = sys.executable
     result = subprocess.run(
         [py, "-m", "kaine.cycle"],

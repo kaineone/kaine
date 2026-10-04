@@ -65,7 +65,7 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 8.2 Revive restores `state/individuation/`; a bundle without it leads to a `capture` reference at first boot.
 - [x] 8.3 The decommission transfer backup includes `state/individuation/`; failure aborts the decommission.
 - [x] 8.4 Research boot gate: refuses unless `[individuation].enabled` with the lingua and eidolon modules. The ledger and reference cannot be read before state encryption is installed later in boot, so their readability is enforced at runtime, where unreadable individuation state counts as individuated.
-- [ ] 8.5 Forks with more than `fork_preserve_min_lived_s` of lived time are preserved by default before a merge ends them, until fork-point references exist.
+- [x] 8.5 Forks with more than `fork_preserve_min_lived_s` (default 1800 s, the instrument's own warm-up floor) of lived time are preserved by default before a merge ends them, until fork-point references exist. Unknown lived time counts as above the floor.
 - [x] 8.6 Tests for each of the above, with encryption on.
 
 ## 9. Nexus, config and docs

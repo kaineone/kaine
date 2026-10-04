@@ -67,7 +67,12 @@ def test_instrument_fork_is_merged_and_discarded(tmp_path):
     mgr, parent_id, fork_id = _parent_and_fork(tmp_path)
     surfaced: list[dict] = []
     verdict = gated_merge(
-        mgr, parent_id, fork_id, assessment=_NOT_DIVERGED, surface=surfaced.append
+        mgr,
+        parent_id,
+        fork_id,
+        assessment=_NOT_DIVERGED,
+        fork_lived_s=0.0,
+        surface=surfaced.append,
     )
     assert verdict.individuated is False
     assert verdict.fork_discarded is True
