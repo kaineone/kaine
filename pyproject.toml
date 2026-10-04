@@ -38,7 +38,7 @@ speech-edge = [
     "sherpa-onnx>=1.13.8,<2",
 ]
 nexus = [
-    "fastapi>=0.139.0,<1",
+    "fastapi>=0.142.2,<1",
     "uvicorn[standard]>=0.54.0,<1",
     "jinja2>=3.1.6,<4",
 ]
@@ -84,11 +84,11 @@ audio = [
     # install it the same dynamic way as torch (see docs/02-architecture/tech-choices.md).
     # The emotion2vec_plus_base weights resolve via the HuggingFace hub
     # (audition.emotion pins hub="hf"; the default ModelScope hub 404s).
-    "funasr>=1.1,<2",
+    "funasr>=1.4.16,<2",
     # In-memory prosody extraction for audition.prosody (ISC licence).
     # Required only if [audition].prosody_enabled = true. Lazy-imported.
     "librosa>=0.10,<1",
-    "av>=12,<15",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
+    "av>=18.1.0,<19",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
 ]
 # Temporally-native InternVideo-Next clip encoder for Topos
 # (topos-temporal-video-encoder). Required only when
@@ -113,7 +113,7 @@ internvideo = [
 # `internvideo` (`pip install .[internvideo,internvideo-flash]`) when the fused
 # path is wanted.
 internvideo-flash = [
-    "flash-attn>=2.5",
+    "flash-attn>=2.8.3.post1",
 ]
 # Aggregate convenience extra: everything the reproducible perception feed needs
 # (the unified [perception_feed] — cv2 decodes playlist video, sounddevice/av
