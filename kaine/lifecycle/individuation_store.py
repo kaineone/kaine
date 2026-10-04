@@ -714,21 +714,29 @@ def conditioning_digest(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def adapter_sha_of(adapter_output_dir: Path | None) -> str | None:
+    """Return the sha256 of the current adapter.gguf, if any."""
+    if adapter_output_dir is None:
+        return None
+    from kaine.modules.hypnos.adapter_store import current_path
+    from kaine.modules.hypnos.organ_adapter import sha256_file
+
+    current = current_path(adapter_output_dir)
+    if current is None:
+        return None
+    adapter_file = current / "adapter.gguf"
+    if not adapter_file.is_file():
+        return None
+    return sha256_file(adapter_file)
+
+
 def read_conditioning_inputs(
     *,
     self_model_path: Path,
     adapter_output_dir: Path,
 ) -> tuple[str | None, list[str], list[str]]:
     """Read the adapter sha and self-model identity clauses."""
-    from kaine.modules.hypnos.adapter_store import current_path
-    from kaine.modules.hypnos.organ_adapter import sha256_file
-
-    current = current_path(adapter_output_dir)
-    adapter_sha: str | None = None
-    if current is not None:
-        adapter_file = current / "adapter.gguf"
-        if adapter_file.is_file():
-            adapter_sha = sha256_file(adapter_file)
+    adapter_sha = adapter_sha_of(adapter_output_dir)
 
     values: list[str] = []
     norms: list[str] = []
@@ -756,3 +764,20 @@ def read_conditioning_inputs(
             )
 
     return adapter_sha, values, norms
+
+
+def conditioning_from_snapshot(
+    self_model: dict | None, adapter_output_dir: Path | None
+) -> tuple[str | None, list[str], list[str]]:
+    """The conditioning digest inputs taken from the same self-model snapshot the probe renders."""
+    if self_model is None:
+        raise IndividuationStoreError("no self-model snapshot yet")
+    values = self_model.get("values", []) or []
+    norms = self_model.get("behavioral_norms", []) or []
+    if not isinstance(values, list) or not isinstance(norms, list):
+        raise IndividuationStoreError("malformed self-model identity clauses")
+    return (
+        adapter_sha_of(adapter_output_dir),
+        [str(v) for v in values],
+        [str(n) for n in norms],
+    )

@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
@@ -132,6 +135,9 @@ class Lingua(BaseModule):
             persona_internal=persona_internal,
         )
         self._self_model_provider = self_model_provider
+        self._persona_digest = hashlib.sha256(
+            json.dumps([persona_name, persona_external, persona_internal]).encode("utf-8")
+        ).hexdigest()[:16]
         # Latest self-model snapshot observed on eidolon.out (bus-mediated persona
         # seed). Preferred over the in-process provider so Lingua can run split
         # from Eidolon; None until the first snapshot arrives (fresh boot → the
@@ -149,6 +155,9 @@ class Lingua(BaseModule):
         # channel it is on so a preemption can be logged content-free.
         self._gen_task: Optional[asyncio.Task[Any]] = None
         self._gen_mode: Optional[str] = None
+        # generation bookkeeping for the individuation probe's yield-to-speech rule
+        self._produce_in_flight = 0
+        self._last_produce_end: Optional[float] = None
 
     def set_self_model_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
         """Inject a read-only accessor for the Eidolon self-model (wired in
@@ -293,6 +302,25 @@ class Lingua(BaseModule):
         if self._bus_self_model is not None:
             return dict(self._bus_self_model)
         return None
+
+    def is_idle(self, quiet_s: float) -> bool:
+        """True when no utterance is being generated and none finished in the last ``quiet_s`` seconds."""
+        if self._produce_in_flight > 0:
+            return False
+        if self._gen_task is not None and not self._gen_task.done():
+            return False
+        if self._last_produce_end is not None and time.monotonic() - self._last_produce_end < quiet_s:
+            return False
+        return True
+
+    def probe_conditions(self) -> dict[str, Any]:
+        """The fixed generation conditions of the individuation probe (no content)."""
+        return {
+            "model_id": self._model_id,
+            "temperature": self._temperature,
+            "think": self._think,
+            "persona_digest": self._persona_digest,
+        }
 
     def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
         """Build the individuation probe's request under fixed conditions.
@@ -518,6 +546,29 @@ class Lingua(BaseModule):
         )
 
     async def _produce(
+        self,
+        *,
+        about: str,
+        snapshot: Optional[WorkspaceSnapshot],
+        mode: str,
+        stream: str,
+        origin: Optional[Any] = None,
+    ) -> str:
+        """Wrap _produce_inner with in-flight bookkeeping."""
+        self._produce_in_flight += 1
+        try:
+            return await self._produce_inner(
+                about=about,
+                snapshot=snapshot,
+                mode=mode,
+                stream=stream,
+                origin=origin,
+            )
+        finally:
+            self._produce_in_flight -= 1
+            self._last_produce_end = time.monotonic()
+
+    async def _produce_inner(
         self,
         *,
         about: str,

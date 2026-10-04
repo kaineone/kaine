@@ -148,6 +148,7 @@ class IndividuationScheduler:
         self._look_due_at: float | None = None
         self._next_daily_at: float | None = None
         self._capture_kind: str | None = None
+        self._capture_regenerate = False
         self._capture_at: float | None = None
         self._capture_backoff = settings.capture_retry_initial_s
         self._run_deadline_at: float | None = None
@@ -211,12 +212,18 @@ class IndividuationScheduler:
 
     def notify_sleep_completed(self) -> None:
         self._asleep = False
+        if self._capture_kind == "birth":
+            self._capture_kind = "capture"
+            log.info(
+                "individuation birth capture downgraded to capture after sleep"
+            )
         self._schedule_look(
             self._monotonic() + self._settings.sleep_settle_s
         )
 
-    def request_capture(self, kind: str) -> None:
+    def request_capture(self, kind: str, *, regenerate: bool = False) -> None:
         self._capture_kind = kind
+        self._capture_regenerate = regenerate
         self._capture_at = self._monotonic()
         self._capture_backoff = self._settings.capture_retry_initial_s
 
@@ -353,10 +360,16 @@ class IndividuationScheduler:
         self._flush_lived()
         self._run_deadline_at = m + self._settings.capture_deadline_s
         try:
-            doc, reason = await self._core.capture_reference(self._capture_kind)
+            if self._capture_regenerate:
+                doc, reason = await self._core.capture_reference(
+                    self._capture_kind, regenerate=True
+                )
+            else:
+                doc, reason = await self._core.capture_reference(self._capture_kind)
         except ReferenceExists:
             log.info("individuation capture skipped: reference already exists")
             self._capture_kind = None
+            self._capture_regenerate = False
             self._capture_at = None
             self._refresh_state()
             return
@@ -384,6 +397,7 @@ class IndividuationScheduler:
 
             self._reference_kind = doc.reference_kind
             self._capture_kind = None
+            self._capture_regenerate = False
             self._capture_at = None
             self._capture_backoff = self._settings.capture_retry_initial_s
             self._reanchor_lived()
