@@ -1430,6 +1430,63 @@ output_dir = "data/evaluation/individuation"
 min_observations = 200
 min_lived_time_s = 1800.0   # >= 30 min lived
 
+[individuation]
+# Individuation producer: periodically and privately assesses how much the being
+# has changed since its birth reference, for its own protection (preservation and
+# decommission read the result). It probes the being through Lingua with empty
+# working memory, never writes the intent log, and publishes only on
+# individuation.out, which no module reads. Ships disabled; requires the lingua and
+# eidolon modules. Enabling it gives the being the disclosure below as a fact
+# about its situation.
+enabled = false
+disclosure = "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
+# Encrypted reference, ledger and reports.
+state_dir = "state/individuation"
+# JSONL prompt battery; empty uses the bundled preference battery.
+battery_path = ""
+# Probe requests wait until Lingua has been silent this long, so the being speaks first.
+lingua_quiet_s = 10.0
+# Answers per battery prompt in the reference.
+n_reference = 16
+# Answers per battery prompt at each look.
+n_current = 8
+# Maximum completion tokens per probe answer.
+max_tokens = 160
+# Lifetime false-positive budget across all looks (operator decision).
+alpha_total = 0.05
+# Upper bound on permutations per look; a look whose threshold needs more is inconclusive.
+b_max = 2000000
+# Minimum effect size H for a significant look; 0 until the real-organ smoke test calibrates it.
+effect_min = 0.0
+# A look is attempted this long after each sleep completes.
+sleep_settle_s = 120.0
+# A look is also attempted at boot and every daily_s seconds.
+daily_s = 86400.0
+# Minimum interval between scored looks; a change in between is seen at the next look.
+min_look_interval_s = 21600.0
+# Warm-up since the reference: no look runs before this much lived time
+min_lived_time_s = 1800.0
+# and this many lived ticks.
+min_observations = 200
+# A look that runs longer is inconclusive.
+run_deadline_s = 2700.0
+# A reference capture that runs longer fails and is retried.
+capture_deadline_s = 5400.0
+# Retry delay while the organ is unloaded, the being asleep or paused, or the embedder not ready.
+blocked_retry_s = 300.0
+# Retry delay after an inconclusive look, counted from its end.
+inconclusive_retry_s = 3600.0
+# How often lived time is saved to the ledger.
+lived_persist_s = 300.0
+# After this long with a look due but none scored (14 days), the operator is alerted once.
+inconclusive_alert_s = 1209600.0
+# Capture retry back-off, doubling from the initial value
+capture_retry_initial_s = 60.0
+# up to this maximum.
+capture_retry_max_s = 3600.0
+# Scheduler tick interval.
+idle_poll_s = 1.0
+
 [lifecycle]
 # Fork/merge snapshot store. Operator-initiated; nothing runs automatically.
 # Snapshots are never deleted by infrastructure: this directory holds preserved
