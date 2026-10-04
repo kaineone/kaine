@@ -24,11 +24,11 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 3.3 Tests: seed present and absent in the body; a resting organ (`raw.organ_resting`) and a reasoning-only response are distinguishable from a real answer; non-200 status is reported.
 
 ## 4. Storage
-- [ ] 4.1 `kaine/lifecycle/individuation_store.py`: encrypted reference document and copied conditioning adapter under `state/individuation/`, atomic writes through the state encryptor.
-- [ ] 4.2 Ledger (`reference_id`, `looks_completed`, `alpha_spent`, `last_look_conditions_digest`, lived seconds and ticks, latch, inconclusive-due timestamp): atomic, `looks_completed` never decreases, the latch never clears, an unreadable ledger raises a fail-closed error and is never reset.
-- [ ] 4.3 Report sink at `state/individuation/reports/` (`AsyncJsonlSink`, `retention_days=0`, per-line encryption), record `kind="individuation_report"`, `schema_version=2`, no texts, seeds or digests.
-- [ ] 4.4 Decrypting reader: skips undecryptable, non-object, wrong-kind and wrong-schema lines and reports for another `reference_id`; orders by `ts`; applies the staleness rule (`max_report_age_s`, digest equality) with the latch overriding it.
-- [ ] 4.5 Conditioning-digest helper over inputs (adapter sha from the adapter store, `values[:5]` and `behavioral_norms[:5]` from `self_model.json`), with no module import.
+- [x] 4.1 `kaine/lifecycle/individuation_store.py`: encrypted reference document and copied conditioning adapter under `state/individuation/`, atomic writes through the state encryptor.
+- [x] 4.2 Ledger (`reference_id`, `looks_completed`, `alpha_spent`, `last_look_conditions_digest`, lived seconds and ticks, latch, inconclusive-due timestamp): atomic, `looks_completed` never decreases, the latch never clears, an unreadable ledger raises a fail-closed error and is never reset.
+- [x] 4.3 Report sink at `state/individuation/reports/` (`AsyncJsonlSink`, `retention_days=0`, per-line encryption), record `kind="individuation_report"`, `schema_version=2`, no texts, seeds or digests.
+- [x] 4.4 Decrypting reader: skips undecryptable, non-object, wrong-kind and wrong-schema lines and reports for another `reference_id`; orders by `ts`; applies the staleness rule (`max_report_age_s`, digest equality) with the latch overriding it.
+- [x] 4.5 Conditioning-digest helper over inputs (adapter sha from the adapter store, `values[:5]` and `behavioral_norms[:5]` from `self_model.json`), with no module import.
 - [ ] 4.6 Shared lived-time accumulator factored out of `kaine/lifecycle/gate_runner.py` (EntityClock minus engine paused time; tick deltas anchored per boot); the maturation gate uses it unchanged.
 - [ ] 4.7 Tests with state encryption on and off, legacy plaintext lines, a corrupt ledger, a regressing `looks_completed` write (refused), and name-vs-ts ordering.
 
