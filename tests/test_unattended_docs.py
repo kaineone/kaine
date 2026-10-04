@@ -29,10 +29,12 @@ def test_refusal_table_keeps_2_and_5_and_adds_6():
     )
     assert rows["5"] == (
         "| `5` | Research safety net not live and verified "
-        "(one or more of the five conditions failed), or the organ content gate "
-        "refused boot |"
+        "(one or more of the five conditions failed) |"
     )
     assert "unattended" in rows["6"].lower()
+    # The organ content gate and the individuation refusal have their own codes.
+    assert "organ content gate" in rows["9"].lower()
+    assert "individuation" in rows["10"].lower()
 
 
 def test_operations_guide_documents_unattended_starts():

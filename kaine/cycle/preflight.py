@@ -36,7 +36,7 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
 
@@ -47,15 +47,11 @@ from kaine.shared_services import match_shared_service, shared_services
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
+if TYPE_CHECKING:
+    from kaine.hardware import HostSnapshot
+
 PREFLIGHT_PATH = Path("state/cycle/gpu_preflight.json")
 DEFAULT_OVERRIDE_ENV = "KAINE_GPU_PREFLIGHT_APPROVED"
-
-# KAINE's own GPU-using services, by local port. Detected and PRESERVED — the
-# preflight never kills these. `model_server` is the OpenAI-compatible inference
-# server (Unsloth Studio / llama.cpp) that serves the language organ. Sourced
-# from the shared boundary-neutral registry (kaine.net.SERVICE_PORTS) so the
-# preflight and the setup dependency probe agree on one definition.
-KAINE_SERVICE_PORTS: dict[str, int] = SERVICE_PORTS
 
 
 def _now_iso() -> str:
@@ -129,23 +125,26 @@ class PreflightResult:
 # --- real probes (each returns honest empties on failure) --------------------
 
 
-def _device_free_vram() -> list[dict[str, Any]]:
-    """Per-device free/total VRAM from a live hardware scan (CUDA today)."""
+def _host_snapshot() -> HostSnapshot | None:
+    """One hardware snapshot per preflight run, or ``None`` if it fails."""
     try:
         from kaine.hardware import describe_host
 
-        host = describe_host()
+        return describe_host()
     except Exception:
+        return None
+
+
+def _device_free_vram(host: HostSnapshot | None) -> list[dict[str, Any]]:
+    """Per-device free/total VRAM from the cached hardware scan (CUDA today)."""
+    if host is None:
         return []
     return list(host.get("cuda_devices") or [])
 
 
-def _probe_memory_state() -> dict[str, Any]:
-    """Classify accelerator memory via describe_host() for the three-state gate."""
-    try:
-        from kaine.hardware import describe_host
-        host = describe_host()
-    except Exception:
+def _probe_memory_state(host: HostSnapshot | None) -> dict[str, Any]:
+    """Classify accelerator memory via the cached host snapshot."""
+    if host is None:
         return {"state": "unknown", "annotation": "describe_host() unavailable", "provenance": ""}
     memory = host.get("memory") or {}
     raw = memory.get("state", "unknown")
@@ -231,8 +230,15 @@ def _gpu_consumers(timeout_s: float) -> list[dict[str, Any]]:
 
 
 def _kaine_services_up() -> dict[str, bool]:
+    """Detect KAINE's own GPU-using services by local port and preserve them.
+
+    The preflight never kills these services. `model_server` is the
+    OpenAI-compatible inference server (Unsloth Studio / llama.cpp).
+    Sourced from the shared boundary-neutral registry (kaine.net.SERVICE_PORTS)
+    so the preflight and the setup dependency probe agree on one definition.
+    """
     return {
-        name: port_listening(port) for name, port in KAINE_SERVICE_PORTS.items()
+        name: port_listening(port) for name, port in SERVICE_PORTS.items()
     }
 
 
@@ -404,8 +410,9 @@ def run_preflight(
     if not config.enabled:
         return PreflightResult(status="skipped", checked_at=_now_iso())
 
-    devices = _device_free_vram()
-    mem_probe = _probe_memory_state()
+    host = _host_snapshot()
+    devices = _device_free_vram(host)
+    mem_probe = _probe_memory_state(host)
     memory_state = mem_probe.get("state", "unknown")
     consumers = _gpu_consumers(config.timeout_s)
     services = _kaine_services_up()

@@ -804,8 +804,12 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 if self._repeat.record(now):
                     crossing_reason = "repeated_distress"
                 break
-        if last_scanned is not None:
-            self._cursor = last_scanned
+        else:
+            # Only advance to the last scanned id when every decoded entry was
+            # processed; on break the cursor already points at the crossing
+            # entry and the next poll must resume from there.
+            if last_scanned is not None:
+                self._cursor = last_scanned
         # Timer-driven sustained crossing (episode elapses with no new sample).
         if crossing_reason is None:
             now = self._clock()
@@ -847,8 +851,12 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if self._repeat.record(now):
                 crossing_reason = "repeated_gray_zone"
                 break
-        if last_scanned is not None:
-            self._welfare_cursor = last_scanned
+        else:
+            # Only advance to the last scanned id when every decoded entry was
+            # processed; on break the cursor already points at the crossing
+            # entry and the next drain resumes after it.
+            if last_scanned is not None:
+                self._welfare_cursor = last_scanned
         return crossing_reason
 
     async def _respond(self, crossing_reason: str) -> None:
