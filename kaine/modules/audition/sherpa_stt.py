@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 
 from kaine.modules.audition.stt_client import TranscriptionResult
-from kaine.setup import speech_models
+from kaine import speech_manifest
 
 
 class SherpaMoonshineSTT:
@@ -54,7 +54,7 @@ class SherpaMoonshineSTT:
                 ) from exc
 
         if _verify:
-            speech_models.verify_model_dir(model_id, self._dir)
+            speech_manifest.verify_model_dir(model_id, self._dir)
 
         self._sherpa_module = so
         self._recognizer: Any | None = None

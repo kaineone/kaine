@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 
 from kaine.modules.vox.client import SynthesisResult, TTSRequest
-from kaine.setup import speech_models
+from kaine import speech_manifest
 
 APPLIED_PROSODY = ("speed_factor",)
 
@@ -59,7 +59,7 @@ class SherpaKokoroTTS:
                 ) from exc
 
         if _verify:
-            speech_models.verify_model_dir(model_id, self._dir)
+            speech_manifest.verify_model_dir(model_id, self._dir)
 
         self._sherpa_module = so
         self._tts: Any | None = None

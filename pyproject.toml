@@ -255,6 +255,7 @@ source_modules = [
     "kaine.hostmem",
     "kaine.memory_kinds",
     "kaine.model_paths",
+    "kaine.speech_manifest",
     "kaine.net",
     "kaine.organ_window_state",
     "kaine.perception_preview",
