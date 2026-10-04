@@ -45,7 +45,7 @@ from kaine.evaluation.observers.research_event_observer import ResearchEventObse
 from kaine.evaluation.observers.voice_alignment_divergence_observer import (
     VoiceAlignmentDivergenceObserver,
 )
-from kaine.evaluation.observers.welfare_observer import WelfareObserver
+from kaine.evaluation.observers.welfare_observer import WelfareObserver, build_welfare_producer
 from kaine.evaluation.proactive_audit import ProactiveAuditObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.sleep_snapshots import SleepSnapshotRecorder
@@ -71,6 +71,7 @@ class SidecarRegistry:
         cognitive_query_client: Optional[CognitiveQueryClient] = None,
         bare_inference_client: Optional[BareInferenceClient] = None,
         embedder: Optional[TextEmbedder] = None,
+        welfare_observer: Optional[WelfareObserver] = None,
     ) -> None:
         self._bus = bus
         self._config = config
@@ -90,7 +91,12 @@ class SidecarRegistry:
         self._started = False
         # Sidecar observers exposed for Nexus diagnostics.
         self._prediction_error_observer: PredictionErrorObserver | None = None
-        self._welfare_observer: WelfareObserver | None = None
+        # Welfare gray-zone producer. May be supplied externally (e.g. by the
+        # cycle-layer welfare response) so the producer runs even when
+        # [evaluation] is disabled. The registry neither starts nor stops an
+        # external observer.
+        self._welfare_observer: WelfareObserver | None = welfare_observer
+        self._welfare_external = welfare_observer is not None
         # The live oscillatory-ablation recorder is NOT a bus subscriber (it is
         # driven directly by the cycle), so it is held apart from _observers and
         # its record() is exposed via the ablation_recorder property. Its sink IS
@@ -367,17 +373,11 @@ class SidecarRegistry:
             pe_obs = PredictionErrorObserver(self._bus, sink)
             self._prediction_error_observer = pe_obs
             self._observers.append(pe_obs)
-        if obs_cfg.welfare:
-            sink = self._make_sink("welfare", "welfare")
-            wf_cfg = self._config.welfare
-            wf_obs = WelfareObserver(
-                self._bus,
-                sink,
-                interoceptive_distress_threshold=wf_cfg.interoceptive_distress_threshold,
-                interoceptive_distress_duration_s=wf_cfg.interoceptive_distress_duration_s,
-            )
-            self._welfare_observer = wf_obs
-            self._observers.append(wf_obs)
+        if obs_cfg.welfare and not self._welfare_external:
+            observer, sink = build_welfare_producer(self._bus, self._config)
+            self._sinks.append(sink)
+            self._observers.append(observer)
+            self._welfare_observer = observer
         if obs_cfg.nous_policy:
             sink = self._make_sink("nous_policy", "nous_policy")
             self._observers.append(NousPolicyObserver(self._bus, sink))

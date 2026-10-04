@@ -40,7 +40,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 
 ### `[evaluation.observers]`
 
-Each toggle below is gated by `[evaluation].enabled`. All default to `true` so the sidecar is fully instrumented when enabled. Disable individual observers to reduce disk writes.
+Each toggle below is gated by `[evaluation].enabled`, except that the welfare observer also runs, whatever these settings say, whenever `[preservation.welfare_response].enabled` is true. All default to `true` so the sidecar is fully instrumented when enabled. Disable individual observers to reduce disk writes.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -51,7 +51,7 @@ Each toggle below is gated by `[evaluation].enabled`. All default to `true` so t
 | `voice_alignment_divergence` | boolean | `true` | Record each sleep's voice-alignment outcome category and training metrics. |
 | `fatigue` | boolean | `true` | Log Soma fatigue-accumulator trajectory. |
 | `prediction_error` | boolean | `true` | Log per-module prediction-error statistics over sliding windows. |
-| `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). |
+| `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). When `[preservation.welfare_response].enabled` is true, the cycle runs this observer as part of the welfare net and this toggle has no effect. |
 | `nous_policy` | boolean | `true` | Log Nous policy selections and EFE scores. |
 
 ### `[evaluation.welfare]`
@@ -193,7 +193,7 @@ Autonomous welfare-protective response. Watches the Soma interoceptive-distress 
 | `distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
 | `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires. |
 | `repeat_window_s` | float | `300.0` | Window for the repeated-episodes arm. |
-| `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the sidecar welfare observer. |
+| `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. |
 | `warmup_s` | float | `120.0` | Cold-start warm-up: during the first `warmup_s` after run start, gray-zone/distress events are logged but do not count toward the repeat threshold or trigger the response. |
 | `warmup_ceiling_s` | float | `1800.0` | Maximum extension, in seconds, that Soma's `warmup_active` flag can add to the warm-up beyond `warmup_s`. It does not cap the `warmup_s` window itself. |
 | `min_interval_s` | float | `1800.0` | Rate limit for the `notify` action only: at most one `notify` event per this interval. |

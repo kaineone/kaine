@@ -99,7 +99,9 @@ def build_overlay(
             "nexus_record": {"enabled": False},
             "raw_archive": {"enabled": False},
         },
-        "evaluation": {"workspace_trajectory": False},
+        # No evaluation observer runs in a study; the welfare net's gray-zone
+        # producer is unaffected.
+        "evaluation": {"enabled": False, "workspace_trajectory": False},
         "preservation": {
             "divergence_monitor": {"enabled": True},
             "welfare_response": {"enabled": True},

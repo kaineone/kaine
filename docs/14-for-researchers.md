@@ -99,6 +99,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `5` | Research safety net not live and verified (one or more of the five conditions failed), or the organ content gate refused boot |
 | `6` | Unattended gate: one or more of its eight conditions failed |
 | `7` | Revive refused |
+| `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |
 
 A running cycle can also halt with exit code `70` when Spot escalates. The organ content gate refuses if the served organ returns no content, unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
 

@@ -304,6 +304,20 @@ def test_overlay_never_enables_nexus_record_or_trajectory(repo, plan):
         assert overlay["ignition_log"]["enabled"] is True
 
 
+def test_overlay_turns_evaluation_off(repo, plan):
+    op = repo / "config" / "kaine.operator.toml"
+    op.write_text("[evaluation]\nenabled = true\n")
+    for line, kind, k in _RECORDING_STEPS:
+        overlay, _, _ = build_overlay(
+            plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
+        )
+        assert overlay["evaluation"]["enabled"] is False
+        assert overlay["ignition_log"]["enabled"] is True
+        assert overlay["research_event_log"]["enabled"] is True
+        assert overlay["research_event_log"]["external_utterances"]["enabled"] is True
+        assert overlay["preservation"]["welfare_response"]["enabled"] is True
+
+
 @pytest.fixture
 def nine_plan(repo):
     order = [
