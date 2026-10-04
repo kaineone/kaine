@@ -1,7 +1,7 @@
 # enforcement-red-team Specification
 
 ## Purpose
-TBD - created by archiving change enforcement-red-team. Update Purpose after archive.
+The enforcement red-team capability is an offline adversarial harness that exercises the Praxis action gate and executive inhibition with synthetic adversarial intents, logs every blocked or allowed attempt, and produces a report covering the documented threat surfaces including an attack-success-rate.
 ## Requirements
 ### Requirement: Offline enforcement red-team harness
 The system SHALL provide an offline red-team harness that adversarially

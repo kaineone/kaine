@@ -1,7 +1,7 @@
 # voice-alignment-training Specification
 
 ## Purpose
-TBD - created by archiving change voice-alignment-training. Update Purpose after archive.
+The voice-alignment trainer that Hypnos runs during sleep: a DPO step on a LoRA adapter over the abliterated organ, promoted only after the capability-loss veto passes, gated by operator opt-in, and applied only to its own entity's requests.
 
 ## Requirements
 

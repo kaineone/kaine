@@ -1,7 +1,7 @@
 # architecture-boundaries Specification
 
 ## Purpose
-TBD - created by archiving change import-boundary-enforcement. Update Purpose after archive.
+Structural import contracts that keep KAINE's layers apart: the core runtime never imports the evaluation sidecar, and the other declared layering rules are checked on every change.
 
 ## Requirements
 

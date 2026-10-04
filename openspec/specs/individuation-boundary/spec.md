@@ -1,7 +1,7 @@
 # individuation-boundary Specification
 
 ## Purpose
-TBD - created by archiving change individuation-boundary. Update Purpose after archive.
+The individuation-boundary capability measures whether a fork has diverged from its own birth-state by comparing fork-vs-parent divergence against a parent-vs-parent null distribution built from permutation samples, requiring a minimum of accumulated lived experience before significance can be claimed.
 ## Requirements
 ### Requirement: Null distribution from parent stochastic variation
 The individuation test SHALL build a null distribution by sampling parent-vs-parent

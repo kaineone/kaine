@@ -1,7 +1,7 @@
 # thymos-affect-coupling Specification
 
 ## Purpose
-TBD - created by archiving change thymos-affect-coupling. Update Purpose after archive.
+This capability controls how Thymos couples perceived speaker emotion into appraisal, using a base weight when familiarity is unknown and persisting the familiarity cache. The coupling can be disabled gracefully, and the perceived-emotion contribution is routed through appraisal.
 ## Requirements
 ### Requirement: Graceful degradation and opt-out
 Thymos SHALL use `coupling_base` as the contribution weight when no familiarity

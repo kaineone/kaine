@@ -1,7 +1,7 @@
 # voice-alignment Specification
 
 ## Purpose
-TBD - created by archiving change external-unsloth-trainer. Update Purpose after archive.
+Voice-alignment training runs outside the cycle's process, in a subprocess or a trainer service, so the cycle never shares the trainer's torch and CUDA stack and is never blocked by it. Reloading the organ afterwards coordinates with the GPU headroom gate.
 
 ## Requirements
 

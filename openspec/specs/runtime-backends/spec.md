@@ -1,7 +1,7 @@
 # runtime-backends Specification
 
 ## Purpose
-TBD - created by archiving change portability-tiers. Update Purpose after archive.
+This capability lets heavy modules choose an interchangeable model runtime backend behind a stable internal client interface, so a backend failure degrades rather than crashing boot. The backend choice does not alter event shapes, subscriptions, or cognitive semantics.
 
 ## Requirements
 

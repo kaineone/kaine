@@ -1,7 +1,7 @@
 # vox Specification
 
 ## Purpose
-TBD - created by archiving change rename-audition-vox. Update Purpose after archive.
+Vox is KAINE's voice module. This capability fixes its name and its output stream `vox.out`, keeps its speech shaped by Thymos affect and its self-hearing suppression, and keeps it silent while the entity is in the womb.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # hypnos-fatigue-phases Specification
 
 ## Purpose
-TBD - created by archiving change hypnos-fatigue-phases. Update Purpose after archive.
+How fatigue drives Hypnos: maintenance starts when fatigue crosses its threshold or a maximum interval passes, the phases slow the oscillators and downscale activity during deep consolidation, and fatigue resets at the end, without interrupting sleep.
 ## Requirements
 ### Requirement: Fatigue-triggered maintenance with interval safety net
 Hypnos SHALL trigger offline maintenance when it observes a `soma.fatigue` event

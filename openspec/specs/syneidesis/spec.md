@@ -1,7 +1,7 @@
 # syneidesis Specification
 
 ## Purpose
-TBD - created by archiving change syneidesis. Update Purpose after archive.
+This capability defines the workspace selection layer: it accepts a SalienceStrategy protocol, ships a v1 product-form implementation, selects a top-k coalition, and supports executive inhibition and novelty habituation for repeated payloads. Default settings let the cycle run without Thymos or goals, errors are tolerated, and placeholder factors are disclosed at runtime.
 
 ## Requirements
 

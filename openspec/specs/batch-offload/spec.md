@@ -1,7 +1,7 @@
 # batch-offload Specification
 
 ## Purpose
-TBD - created by archiving change distributed-substrate. Update Purpose after archive.
+Batch offload lets latency-tolerant workloads such as voice-alignment training, self-abliteration, consolidation, and offline evaluation run as self-contained job descriptors on volunteer BOINC hosts, then promotes their artifacts only after a trusted-side verification gate and a required individuation check.
 
 ## Requirements
 
