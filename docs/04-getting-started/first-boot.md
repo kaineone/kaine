@@ -105,7 +105,7 @@ The entrypoint:
 
 In the operator-supervised path, the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set. The preflight script `scripts/first-boot.sh` checks the operator-present signal via `KAINE_FIRST_BOOT_OPERATOR_PRESENT`; the running cycle checks `KAINE_CYCLE_OPERATOR_PRESENT`. The only other boot paths are a verified autonomous safety net in an unsupervised research run — see [For researchers](../14-for-researchers.md) — or an opt-in unattended start that must pass eight conditions at every boot.
 
-If the organ returns no content, the cycle refuses boot and exits with code `5` unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
+If the organ returns no content, the cycle refuses boot and exits with code `9` unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
 
 `Ctrl-C` shuts the cycle and every module down cleanly. Do not `kill -9` the process during a Hypnos phase; partial voice-alignment adapter writes are unsafe.
 

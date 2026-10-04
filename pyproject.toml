@@ -58,6 +58,8 @@ full = [
 test = [
     "pytest>=8",
     "pytest-asyncio>=1.4.0",
+    # Parallel test runs (`pytest -n auto --dist loadfile`), as CI runs them.
+    "pytest-xdist>=3.8,<4",
     "fakeredis>=2.38.0",
     # Structural import-boundary contracts (kaine/evaluation sidecar boundary +
     # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
@@ -210,6 +212,7 @@ asyncio_mode = "auto"
 markers = [
     "integration: hits a live authenticated Redis; skipped unless KAINE_REDIS_PASSWORD is set",
     "systems: per-subsystem I/O contract test under tests/systems/",
+    "slow: a statistical test over a minute long; runs nightly, on main, and on pull requests that touch the paths in .github/slow-test-paths.txt",
 ]
 testpaths = ["tests"]
 
@@ -255,6 +258,7 @@ source_modules = [
     "kaine.hostmem",
     "kaine.memory_kinds",
     "kaine.model_paths",
+    "kaine.speech_manifest",
     "kaine.net",
     "kaine.organ_window_state",
     "kaine.perception_preview",
@@ -392,9 +396,10 @@ forbidden_modules = ["kaine.modules"]
 # workspace packages never import install, setup, transfer, distributed, remote
 # or research-export code directly. The remote bridge is the one declared
 # exception until the boot-phase refactor moves it into an optional phase.
-# Indirect chains through the modules (the sherpa speech checks and the organ
-# window's server control) are allowed for now; they move with the host-probe
-# consolidation (W6).
+# Indirect chains are allowed for now: they all run through the organ's setup
+# modules (the Hypnos organ window's server control, preboot's device map, and
+# the Nexus health served-alias check), which move out of kaine.setup together
+# in a follow-up. The sherpa speech checks no longer reach setup.
 [[tool.importlinter.contracts]]
 name = "Core runtime stays clear of edge features"
 type = "forbidden"

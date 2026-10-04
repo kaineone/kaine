@@ -11,6 +11,9 @@ DEFAULT_CHAT_URL = f"http://127.0.0.1:{DEFAULT_ORGAN_PORT}/v1"
 MODEL_SERVER_API_KEY_ENV = "KAINE_MODEL_SERVER_API_KEY"
 DEFAULT_MIN_FREE_GB = 20.0
 
+DEFAULT_REDIS_PORT = 6479  # the KAINE-owned Redis container's host port (compose/redis.yml)
+DEFAULT_QDRANT_PORT = 6533  # the KAINE-owned Qdrant container's host port (compose/qdrant.yml), not upstream's 6333
+
 
 def lingua_chat_url(config: Mapping[str, Any] | None) -> str:
     """[lingua].chat_url, else DEFAULT_CHAT_URL."""

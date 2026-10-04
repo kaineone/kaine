@@ -55,6 +55,56 @@ __all__ = [
     "resolve_rocm",
 ]
 
+# Fixed wheel indexes used by container image builds. A container build stage has
+# no GPU to probe, so each FLAVOR uses a fixed index: cuda gets the cu126 index
+# the host resolver also falls back to, and the experimental rocm flavor installs
+# from the default PyPI index.
+IMAGE_INDEX_BY_FLAVOR: dict[str, str | None] = {
+    "cuda": "https://download.pytorch.org/whl/cu126",
+    "cpu": "https://download.pytorch.org/whl/cpu",
+    "xpu": "https://download.pytorch.org/whl/xpu",
+    "mps": None,
+    "rocm": None,
+}
+
+
+def image_index(flavor: str) -> str | None:
+    """Return the fixed wheel index URL for a container build ``FLAVOR``.
+
+    Raises ``KeyError`` for an unknown flavor.
+    """
+    return IMAGE_INDEX_BY_FLAVOR[flavor]
+
+
+def torch_requirement(pyproject: Path) -> str:
+    """Return the first ``torch<op>...`` requirement from ``pyproject.toml``.
+
+    The ``core`` optional-dependency group is searched first, then the project
+    ``dependencies`` list.
+    """
+    # Imported here, not at module level: install.sh runs this module with the
+    # host's system Python, which may predate tomllib (3.11).
+    import tomllib
+
+    if not pyproject.is_file():
+        raise ValueError(f"{pyproject} not found")
+    try:
+        with pyproject.open("rb") as f:
+            data = tomllib.load(f)
+    except Exception as exc:
+        raise ValueError(f"could not parse {pyproject}: {exc}") from exc
+    project = data.get("project", {})
+    core = (project.get("optional-dependencies") or {}).get("core") or []
+    for dep in core:
+        if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep):
+            return dep
+    for dep in project.get("dependencies") or []:
+        if isinstance(dep, str) and re.match(r"^torch\s*[<>=!~]", dep):
+            return dep
+    raise ValueError(
+        f"could not find a torch dependency (e.g. 'torch>=2.0') in {pyproject}"
+    )
+
 # ---------------------------------------------------------------------------
 # Version / specifier helpers (stdlib only; no packaging)
 # ---------------------------------------------------------------------------
@@ -1991,6 +2041,8 @@ _USAGE = (
     "  --rocm-version X.Y      print ROCm resolution JSON instead of CUDA\n"
     "  --gfx gfxA[,gfxB]       GFX targets for --rocm-version\n"
     "  --verify-indexes        diff recorded indexes against download.pytorch.org\n"
+    "  --image-index FLAVOR    print the fixed wheel index URL for a Docker flavor (empty line for PyPI default)\n"
+    "  --torch-spec PATH       print the torch requirement line from pyproject.toml at PATH\n"
     "  -h, --help              show this help\n"
 )
 
@@ -2029,6 +2081,8 @@ def main(argv=None) -> int:
     gfx = None
     flavor = None
     verify = False
+    image_index_flavor = None
+    torch_spec_path = None
     ignored: list[str] = []
     args = [str(arg) for arg in argv] if argv is not None else []
     idx = 0
@@ -2065,12 +2119,45 @@ def main(argv=None) -> int:
             gfx = arg.split("=", 1)[1]
         elif arg == "--verify-indexes":
             verify = True
+        elif arg == "--image-index":
+            idx += 1
+            if idx < len(args):
+                image_index_flavor = args[idx]
+        elif arg.startswith("--image-index="):
+            image_index_flavor = arg.split("=", 1)[1]
+        elif arg == "--torch-spec":
+            idx += 1
+            if idx < len(args):
+                torch_spec_path = args[idx]
+        elif arg.startswith("--torch-spec="):
+            torch_spec_path = arg.split("=", 1)[1]
         elif arg in ("-h", "--help"):
             print(_USAGE)
             return 0
         else:
             ignored.append(arg)
         idx += 1
+
+    if image_index_flavor is not None:
+        try:
+            url = image_index(image_index_flavor)
+        except KeyError:
+            print(
+                f"error: unknown --image-index flavor {image_index_flavor!r}",
+                file=sys.stderr,
+            )
+            return 2
+        print(url if url is not None else "")
+        return 0
+
+    if torch_spec_path is not None:
+        try:
+            spec = torch_requirement(Path(torch_spec_path))
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(spec)
+        return 0
 
     if verify:
         result = verify_indexes()

@@ -82,7 +82,7 @@ async def _main():
     try:
         if kind == "stt":
             from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT
-            from kaine.setup import speech_models
+            from kaine.model_paths import DEFAULT_STT
 
             client = SherpaMoonshineSTT(
                 args["model_dir"],
@@ -110,13 +110,13 @@ async def _main():
                 filename="silence.wav",
             )
             detail = (
-                f"{args.get('model_id') or speech_models.DEFAULT_STT} "
+                f"{args.get('model_id') or DEFAULT_STT} "
                 "loaded and transcribed a test clip"
             )
         else:
             from kaine.modules.vox.client import TTSRequest
             from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
-            from kaine.setup import speech_models
+            from kaine.model_paths import DEFAULT_TTS
 
             client = SherpaKokoroTTS(
                 args["model_dir"],
@@ -133,7 +133,7 @@ async def _main():
             if not getattr(result, "audio", b""):
                 raise RuntimeError("synthesized audio was empty")
             detail = (
-                f"{args.get('model_id') or speech_models.DEFAULT_TTS} "
+                f"{args.get('model_id') or DEFAULT_TTS} "
                 "loaded and synthesized a test word"
             )
 
@@ -217,10 +217,10 @@ def _model_fingerprint(model_dir: str, model_id: str | None) -> tuple:
                 entries.append((".verified", 0, 0))
             seen.add(".verified")
 
-        from kaine.setup import speech_models
+        from kaine import speech_manifest
 
         required_files: list[str] | None = None
-        manifest = speech_models.MANIFEST.get(model_id)
+        manifest = speech_manifest.MANIFEST.get(model_id)
         if manifest is not None:
             required_files = list(manifest.required_files)
 

@@ -450,8 +450,7 @@ def _run_install(
     extra_env: dict[str, str] | None = None,
     probe_target: str | None = None,
 ) -> tuple[subprocess.CompletedProcess, str]:
-    """Run ``bash scripts/install.sh <flags>`` or ``python scripts/install.py
-    <flags>`` with a shimmed PATH.
+    """Run ``bash scripts/install.sh <flags>`` with a shimmed PATH.
 
     Returns ``(completed_process, pip_argv_log_text)``.  Every shim lives in
     ``tmp_path``; the pip shim absorbs every install attempt, so nothing is
@@ -641,12 +640,9 @@ exec {real_python3} "$@"
     repo_pycache = REPO_ROOT / "kaine" / "__pycache__"
     repo_pycache_before = repo_pycache.exists()
 
-    if installer == "install.sh":
-        cmd: list[str] = ["bash", "scripts/install.sh", *flags]
-    elif installer == "install.py":
-        cmd = [sys.executable, str(REPO_ROOT / "scripts" / "install.py"), *flags]
-    else:
+    if installer != "install.sh":
         raise ValueError(f"unknown installer: {installer}")
+    cmd: list[str] = ["bash", "scripts/install.sh", *flags]
 
     proc = None  # type: ignore[assignment]  # assigned inside try; pytest.fail always raises on timeout
     try:
@@ -1005,13 +1001,6 @@ def test_install_sh_torch_free_extras_nexus_does_not_install_torch(tmp_path: Pat
     _assert_no_torch_and_nexus_editable(proc, pip_log)
 
 
-def test_install_py_torch_free_extras_nexus_does_not_install_torch(tmp_path: Path) -> None:
-    proc, pip_log = _run_install(
-        tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.py"
-    )
-    _assert_no_torch_and_nexus_editable(proc, pip_log)
-
-
 def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path) -> None:
     """A failing GPU self-test falls back to CPU wheels and records the marker.
 
@@ -1203,10 +1192,7 @@ def test_matching_torchaudio_with_local_tag_is_not_uninstalled(tmp_path: Path) -
 JETSON_CU130_INDEX = "https://pypi.jetson-ai-lab.io/jp7/cu130"
 
 
-@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
-def test_cuda_132_plain_with_torchaudio_resolves_cu130_coherently(
-    tmp_path: Path, installer: str
-) -> None:
+def test_cuda_132_plain_with_torchaudio_resolves_cu130_coherently(tmp_path: Path) -> None:
     """A plain CUDA run with torchaudio installed stays on an index carrying it.
 
     Invariant: when torchaudio is already present and --research is not given,
@@ -1217,7 +1203,7 @@ def test_cuda_132_plain_with_torchaudio_resolves_cu130_coherently(
     proc, pip_log = _run_install(
         tmp_path,
         ["--cuda", "--no-wizard"],
-        installer=installer,
+        installer="install.sh",
         nvidia_cuda="13.2",
         fake_torchaudio="2.11.0+cu130",
     )
@@ -1233,10 +1219,7 @@ def test_cuda_132_plain_with_torchaudio_resolves_cu130_coherently(
     ), _context(proc, pip_log)
 
 
-@pytest.mark.parametrize("installer", ["install.sh", "install.py"])
-def test_non_pytorch_index_url_forces_reinstall_on_flavor_mismatch(
-    tmp_path: Path, installer: str
-) -> None:
+def test_non_pytorch_index_url_forces_reinstall_on_flavor_mismatch(tmp_path: Path) -> None:
     """A non-PyTorch --index-url still forces reinstall when the flavor differs.
 
     Invariant: a fake CPU-flavor torch already installed satisfies the bare
@@ -1247,7 +1230,7 @@ def test_non_pytorch_index_url_forces_reinstall_on_flavor_mismatch(
     proc, pip_log = _run_install(
         tmp_path,
         ["--cuda", "--index-url", JETSON_CU130_INDEX, "--no-wizard"],
-        installer=installer,
+        installer="install.sh",
         nvidia_cuda="13.2",
         fake_torch="cpu",
     )

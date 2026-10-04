@@ -26,6 +26,7 @@ import shutil
 from dataclasses import dataclass
 from typing import Optional
 
+from kaine.defaults import DEFAULT_QDRANT_PORT, DEFAULT_REDIS_PORT
 from kaine.net import SERVICE_PORTS, port_listening
 
 
@@ -60,7 +61,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
         role="event bus",
         modules=(),  # always required
         binary=None,
-        port=6479,
+        port=DEFAULT_REDIS_PORT,
         kind="command",
         command="bash scripts/redis-bootstrap.sh",
         note="starts the KAINE-owned Redis container (compose/redis.yml).",
@@ -88,10 +89,10 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
         name="qdrant",
         role="vector memory (mnemos, empatheia)",
         modules=("mnemos", "empatheia"),
-        # Containerised: no host binary to look for. 6533 is the KAINE-owned
-        # container's host port (compose/qdrant.yml), not upstream's 6333.
+        # Containerised: no host binary to look for. Uses DEFAULT_QDRANT_PORT,
+        # the KAINE-owned container's host port (compose/qdrant.yml), not upstream's default.
         binary=None,
-        port=6533,
+        port=DEFAULT_QDRANT_PORT,
         kind="command",
         command="bash scripts/qdrant-bootstrap.sh",
         note="starts the KAINE-owned Qdrant container.",
@@ -178,8 +179,8 @@ def detect_dependencies(
 ) -> list[DepStatus]:
     """Detect, for each NEEDED dependency, whether it is installed and running.
 
-    ``redis_port`` overrides the Redis port (the shipped config uses 6479);
-    ``qdrant_port`` overrides the Qdrant port (default 6533).
+    ``redis_port`` overrides the Redis port (the shipped config uses DEFAULT_REDIS_PORT);
+    ``qdrant_port`` overrides the Qdrant port (default DEFAULT_QDRANT_PORT).
     Real probes only: PATH lookup + TCP connect. Never raises.
     """
     out: list[DepStatus] = []

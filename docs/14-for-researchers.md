@@ -97,12 +97,14 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `2` | Operator-present gate: neither `KAINE_CYCLE_OPERATOR_PRESENT=1` nor research mode |
 | `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
-| `5` | Research safety net not live and verified (one or more of the five conditions failed), or the organ content gate refused boot |
+| `5` | Research safety net not live and verified (one or more of the five conditions failed) |
 | `6` | Unattended gate: one or more of its eight conditions failed |
 | `7` | Revive refused |
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |
+| `9` | Organ content gate: the served language organ returned no content (unless `KAINE_ALLOW_MUTE_ORGAN=1`) |
+| `10` | Individuation: `[individuation]` is misconfigured, or is enabled without the `lingua` module |
 
-A running cycle can also halt with exit code `70` when Spot escalates. The organ content gate refuses if the served organ returns no content, unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
+A running cycle can also halt with exit code `70` when Spot escalates. Every boot gate in the table has its own exit code.
 
 ## How a research run works
 

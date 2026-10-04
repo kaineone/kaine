@@ -58,10 +58,16 @@ Commit messages follow the conventional-commit style used in the repository. Be 
 Run the full suite with:
 
 ```bash
-.venv/bin/pytest -q
+.venv/bin/pytest -q -n auto --dist loadfile
 ```
 
+`-n auto` runs one worker per CPU (pytest-xdist, in the `test` extra), and `--dist loadfile` keeps each test file on one worker. Drop both flags to run serially.
+
 It must be green before you open a pull request or merge a branch.
+
+### Slow tests
+
+A statistical test that takes over a minute carries `@pytest.mark.slow`. Pull-request CI skips slow tests unless the pull request changes a path listed in `.github/slow-test-paths.txt`; main and a nightly run include them, and a red nightly blocks merging. When you mark a test slow, list its file and the code it exercises in that file; `tests/test_slow_lane.py` fails if the test's own file is missing. Run them with `.venv/bin/pytest -q -m slow`.
 
 ### Import boundary contracts
 
