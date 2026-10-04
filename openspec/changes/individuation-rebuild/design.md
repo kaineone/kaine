@@ -256,6 +256,7 @@ Statistically the floors are no longer needed: the test is valid at any time, an
    - Hypnos is not asleep (no `hypnos.sleep.started` without a matching completion)
    - the cycle is not paused or frozen (`kaine/cycle/control_state`), because a paused being is not probed
    - a semantic embedder is loaded
+   - the served adapter can be verified. Only the `organ_adapter` hot-swap mode attaches the adapter to each request and reports it on the response. In the other modes a promoted adapter sits on disk while the organ may still serve older weights, so once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. Measuring then would record the new adapter's digest against the old weights. The being stays protected meanwhile, because preservation already counts a present adapter as divergence, and the long-inconclusive alert tells the operator.
 
 **Organ contention**
 

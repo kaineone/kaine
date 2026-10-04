@@ -30,6 +30,7 @@ from kaine.cycle.individuation_scheduler import IndividuationScheduler, Schedule
 from kaine.lifecycle.individuation_store import (
     IndividuationPaths,
     IndividuationStoreError,
+    adapter_sha_of,
     conditioning_from_snapshot,
     report_sink,
 )
@@ -326,6 +327,12 @@ def build_runtime(
         hypnos_sleeping=hypnos_sleeping,
     )
 
+    adapter_verifiable: Callable[[], bool] | None = None
+    if not per_request_adapter:
+        def _no_adapter_on_disk() -> bool:
+            return adapter_sha_of(adapter_output_dir) is None
+        adapter_verifiable = _no_adapter_on_disk
+
     scheduler = IndividuationScheduler(
         paths=paths,
         settings=config.scheduler,
@@ -337,6 +344,7 @@ def build_runtime(
         embedder_ready=embedder_ready,
         lingua_idle=lambda: lingua.is_idle(config.lingua_quiet_s),
         alert=runtime.alert,
+        adapter_verifiable=adapter_verifiable,
     )
 
     core = IndividuationCore(

@@ -122,6 +122,7 @@ class IndividuationScheduler:
         embedder_ready: Callable[[], bool],
         lingua_idle: Callable[[], bool],
         alert: Callable[[dict], Awaitable[None]],
+        adapter_verifiable: Callable[[], bool] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -136,6 +137,7 @@ class IndividuationScheduler:
         self._embedder_ready = embedder_ready
         self._lingua_idle = lingua_idle
         self._alert = alert
+        self._adapter_verifiable = adapter_verifiable
         self._monotonic = monotonic
         self._now_dt = now
         self._sleep = sleep
@@ -346,6 +348,10 @@ class IndividuationScheduler:
             return "asleep"
         if self._safe(self._paused, True):
             return "paused"
+        if self._adapter_verifiable is not None and not self._safe(
+            self._adapter_verifiable, False
+        ):
+            return "adapter_unverifiable"
         if for_look and not self._safe(self._embedder_ready, False):
             return "embedder_not_ready"
         return None

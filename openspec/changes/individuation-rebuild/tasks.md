@@ -40,8 +40,8 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [ ] 5.5 Tests: the disclosure is present in the rendered probe prompt and the conditioning digest is unchanged by it (done in task 5a); that changing it alone triggers no look is tested with the producer in task 6.
 
 ## 6. Producer
-- [ ] 6.1 `kaine/cycle/individuation_producer.py`, active only when `[individuation].enabled`.
-- [ ] 6.2 Birth capture through a birth hook beside `gate_runner.set_birth_hook`, as soon as the organ is loaded and before the first post-birth sleep; retry with backoff; `capture` kind when an accepted adapter or identity change came first; legacy `capture` at first boot after upgrade or revive; `reconstructed` only with the per-being operator approval flag.
+- [x] 6.1 `kaine/cycle/individuation_producer.py`, active only when `[individuation].enabled`.
+- [ ] 6.2 Birth capture through a birth hook beside `gate_runner.set_birth_hook`, as soon as the organ is loaded and before the first post-birth sleep; retry with backoff; `capture` kind when an accepted adapter or identity change came first; legacy `capture` at first boot after upgrade or revive; `reconstructed` only with the per-being operator approval flag. Done except `reconstructed`, which is not built yet.
 - [ ] 6.3 Reference regeneration from the stored conditioning when stored conditions other than the embedder no longer match (model id, server build, battery digest, persona template version). The core replaces a reference only with `regenerate=True`. It refuses to regenerate a `birth` reference until the sampler can serve the stored birth adapter, and copies the birth adapter only when capturing a `birth` reference.
 - [x] 6.4 Look scheduling: 120 s after `hypnos.sleep.completed` and on a daily timer; skip (logged, no report) unless reference present, ledger readable, warm-up met, digest changed, `min_look_interval_s` elapsed, organ loaded, Hypnos awake, cycle not paused or frozen, semantic embedder loaded.
 - [x] 6.5 Organ contention: one request at a time, `max_tokens=160`, wait on the injected `lingua_idle()` predicate (no generation in flight, no speech for `lingua_quiet_s`), `run_deadline_s` = 2700; abort on sleep start, organ unload or pause.
@@ -49,7 +49,8 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 6.7 Scored looks: update the ledger atomically first (k, `alpha_spent`, latch, last digest, lived counters), then write the report, set the in-memory `IndividuationState`, publish `individuation.divergence {divergence_scalar: H, significant}` on `individuation.out`.
 - [x] 6.8 Inconclusive alert (operator decision 4): when a look has been due for `inconclusive_alert_s` (default 14 days) with no scored look, raise one Nexus and caretaker notice per stretch; no preservation is triggered by it.
 - [ ] 6.9 Tests with a fake organ covering every failure path, every skip precondition, the alert, a restart in the middle of a run, and `alpha_unresolvable`.
-- [ ] 6.10 Boot wiring recovers interrupted captures: a reference with no ledger is captured again, and a ledger that names another reference is regenerated, so neither leaves the being permanently inconclusive.
+- [x] 6.10 Boot wiring recovers interrupted captures: a reference with no ledger is captured again, and a ledger that names another reference is regenerated, so neither leaves the being permanently inconclusive.
+- [x] 6.11 Probes and captures are skipped as `adapter_unverifiable` while an adapter exists and the hot-swap mode cannot attach it per request.
 
 ## 7. Shared verdict
 - [ ] 7.1 One pure decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(..., individuation=None)` uses in-memory evidence when given, else the ledger and reports.
