@@ -26,15 +26,16 @@ The **base-thesis form** is KAINE's canonical default configuration: the smalles
 - **[Topos](09-modules/topos.md)** — foveated vision over raw video.
 - **[Audition](09-modules/audition.md)** — raw sound as prediction error.
 - **[Thymos](09-modules/thymos.md)** — affect and arousal, setting the gain on the competition.
+- **[Hypnos](09-modules/hypnos.md)** — fatigue-triggered sleep, with consolidation and the affective reset. Voice alignment stays off.
 - **[Lingua](09-modules/lingua.md)** — the output-only voice.
 
-**Syneidesis** (the workspace) and **Volition** (action selection) run as always-on scaffolding. The remaining ten module slots, including the embodiment layer **[Perception](09-modules/perception.md)** and **[Mundus](09-modules/mundus.md)**, are built and tested but disabled until a positive base-thesis result. The Mundus control surface is built, but nothing drives its per-tick loop yet; only the `stub` adapter ships, and a virtual-world adapter is planned.
+**Syneidesis** (the workspace) and **Volition** (action selection) run as always-on scaffolding. The remaining nine module slots, including the embodiment layer **[Perception](09-modules/perception.md)** and **[Mundus](09-modules/mundus.md)**, are built and tested but disabled until a positive base-thesis result. The Mundus control surface is built, but nothing drives its per-tick loop yet; only the `stub` adapter ships, and a virtual-world adapter is planned.
 
 If you start the cycle with no profile selected, the loader in `kaine/config.py` applies the base-thesis `thesis_test` profile automatically. The shipped `config/kaine.toml` has every module turned off, so `thesis_test` supplies the default active set. That default holds only while `config/kaine.operator.toml` does not set `[modules]`: the operator overlay is merged last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there. After the wizard has run, its choices replace the profile's module flags. The wizard offers the base-thesis module set or the full entity (all fourteen cognitive modules, embodiment off) and recommends one based on the host's hardware.
 
 The `thesis_test` profile enables only:
 
-- the six modules listed above;
+- the seven modules listed above;
 - `[perception_feed]` mode `"seeded"` with seed `0`;
 - `[topos].foveation = true`;
 - `[audition].transcription_enabled = false` and `general_audition = true`;
