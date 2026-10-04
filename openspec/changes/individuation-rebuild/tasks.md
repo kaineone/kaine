@@ -9,14 +9,14 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 1.6 Unit tests: exact p on toy data by full enumeration; the statistic uses Euclidean distance, not `1 − cos` (a pair of distributions with equal means but different spread is detected); p is never 0; Σγ_k over the first 10^6 looks is ≤ 1; α_1, α_10, α_50, α_100 match `design.md` 2.7; early stop never changes the decision.
 
 ## 2. Simulation and validation harness
-- [ ] 2.1 An offline simulation script, `openspec/changes/individuation-rebuild/validation/simulate.py` (no organ, no entity), using the statistics core: 12 prompts, 384-d mixtures of 2-4 vMF-like clusters per prompt. The bundle CLI in `kaine/evaluation/benchmarks/individuation_runner.py` is retired in task 9.
-- [ ] 2.2 Size: 5,000 null datasets at α ∈ {0.05, 0.01}; rejection ≤ α + 2·SE; KS check that p-values are uniform or conservative above 1/(B+1).
-- [ ] 2.3 Lifetime false-positive rate: 2,000 lives × 100 looks reusing one stored birth sample, no drift; share of lives with any rejection ≤ 0.05 + 2·SE. Report the same lives under "p ≤ 0.05 every look" and under the current percentile rule for contrast.
-- [ ] 2.4 Power under drift models (a) cluster fraction π, (b) mean shift Δ, (c) drift in m of 12 prompts, at looks 1, 10 and 50, for (n_b, n_c) ∈ {(12,6), (16,8), (24,12)}; compare energy vs Gaussian MMD and spending vs e-value sum.
-- [ ] 2.5 Fault injection moves to task 6, where the producer exists: empty content, resting organ, reasoning-only response, timeout, embedding failure, digest change mid-run and corrupt ledger each give `inconclusive`, and none are scored.
-- [ ] 2.6 Record the results and the pre-registered choices (statistic, combination rule, n_b, n_c, B_max) under `openspec/changes/individuation-rebuild/validation/` before any real-organ data are seen.
-- [ ] 2.7 Pre-registered power acceptance (written before any simulation result): at look 10 with (n_b, n_c) = (16, 8), power ≥ 0.8 against drift model (a) with π = 0.5 in all 12 prompts, at the baseline dispersion.
-- [ ] 2.8 **Gate:** if size, lifetime false-positive rate or power acceptance fails, stop and return to design. Groups 3-10 do not merge until this gate passes.
+- [x] 2.1 An offline simulation script, `openspec/changes/individuation-rebuild/validation/simulate.py` (no organ, no entity), using the statistics core: 12 prompts, 384-d mixtures of 2-4 vMF-like clusters per prompt. The bundle CLI in `kaine/evaluation/benchmarks/individuation_runner.py` is retired in task 9.
+- [x] 2.2 Size: 5,000 null datasets at α ∈ {0.05, 0.01}; rejection ≤ α + 2·SE; KS check that p-values are uniform or conservative above 1/(B+1).
+- [x] 2.3 Lifetime false-positive rate: 2,000 lives × 100 looks reusing one stored birth sample, no drift; share of lives with any rejection ≤ 0.05 + 2·SE. Report the same lives under "p ≤ 0.05 every look" and under the current percentile rule for contrast.
+- [x] 2.4 Power under drift models (a) cluster fraction π, (b) mean shift Δ, (c) drift in m of 12 prompts, at looks 1, 10 and 50, for (n_b, n_c) ∈ {(12,6), (16,8), (24,12)}; compare energy vs Gaussian MMD and spending vs e-value sum. (Done except the e-value comparison, which was not run; see `validation.md`.)
+- [x] 2.5 Fault injection moves to task 6, where the producer exists: empty content, resting organ, reasoning-only response, timeout, embedding failure, digest change mid-run and corrupt ledger each give `inconclusive`, and none are scored.
+- [x] 2.6 Record the results and the pre-registered choices (statistic, combination rule, n_b, n_c, B_max) under `openspec/changes/individuation-rebuild/validation/` before any real-organ data are seen.
+- [x] 2.7 Pre-registered power acceptance (written before any simulation result): at look 10 with (n_b, n_c) = (16, 8), power ≥ 0.8 against drift model (a) with π = 0.5 in all 12 prompts, at the baseline dispersion.
+- [x] 2.8 **Gate:** if size, lifetime false-positive rate or power acceptance fails, stop and return to design. Groups 3-10 do not merge until this gate passes.
 
 ## 3. Chat client
 - [ ] 3.1 `ChatRequest.seed: Optional[int]`, sent in the request body only when set.

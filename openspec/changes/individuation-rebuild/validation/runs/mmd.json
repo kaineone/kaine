@@ -1,0 +1,231 @@
+{
+  "experiment": "mmd",
+  "parameters": {
+    "R": 100,
+    "sigma": 1.0,
+    "seed": 20261003,
+    "quick": false
+  },
+  "mean_within_prompt_cosine": 0.2515944536020365,
+  "energy_results": [
+    {
+      "key": "cluster-pi0.25",
+      "look": 1,
+      "n_reject": 68,
+      "power": 0.68,
+      "se": 0.0466476151587624,
+      "ci_low": 0.5867047696824752,
+      "ci_high": 0.7732952303175249
+    },
+    {
+      "key": "cluster-pi0.25",
+      "look": 10,
+      "n_reject": 21,
+      "power": 0.21,
+      "se": 0.0407308237088326,
+      "ci_low": 0.12853835258233479,
+      "ci_high": 0.2914616474176652
+    },
+    {
+      "key": "cluster-pi0.5",
+      "look": 1,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    },
+    {
+      "key": "cluster-pi0.5",
+      "look": 10,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    },
+    {
+      "key": "partial-m3-pi0.5",
+      "look": 1,
+      "n_reject": 57,
+      "power": 0.57,
+      "se": 0.04950757517794625,
+      "ci_low": 0.4709848496441075,
+      "ci_high": 0.6690151503558924
+    },
+    {
+      "key": "partial-m3-pi0.5",
+      "look": 10,
+      "n_reject": 17,
+      "power": 0.17,
+      "se": 0.0375632799419859,
+      "ci_low": 0.09487344011602822,
+      "ci_high": 0.2451265598839718
+    },
+    {
+      "key": "partial-m6-pi0.5",
+      "look": 1,
+      "n_reject": 95,
+      "power": 0.95,
+      "se": 0.021794494717703377,
+      "ci_low": 0.9064110105645932,
+      "ci_high": 0.9935889894354067
+    },
+    {
+      "key": "partial-m6-pi0.5",
+      "look": 10,
+      "n_reject": 74,
+      "power": 0.74,
+      "se": 0.04386342439892262,
+      "ci_low": 0.6522731512021548,
+      "ci_high": 0.8277268487978452
+    },
+    {
+      "key": "shift-d0.25",
+      "look": 1,
+      "n_reject": 37,
+      "power": 0.37,
+      "se": 0.048280430818293245,
+      "ci_low": 0.2734391383634135,
+      "ci_high": 0.4665608616365865
+    },
+    {
+      "key": "shift-d0.25",
+      "look": 10,
+      "n_reject": 1,
+      "power": 0.01,
+      "se": 0.0099498743710662,
+      "ci_low": 0.0,
+      "ci_high": 0.0298997487421324
+    },
+    {
+      "key": "shift-d0.5",
+      "look": 1,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    },
+    {
+      "key": "shift-d0.5",
+      "look": 10,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    }
+  ],
+  "mmd_results": [
+    {
+      "key": "cluster-pi0.25",
+      "look": 1,
+      "n_reject": 64,
+      "power": 0.64,
+      "se": 0.048,
+      "ci_low": 0.544,
+      "ci_high": 0.736
+    },
+    {
+      "key": "cluster-pi0.25",
+      "look": 10,
+      "n_reject": 22,
+      "power": 0.22,
+      "se": 0.04142463035441596,
+      "ci_low": 0.13715073929116808,
+      "ci_high": 0.3028492607088319
+    },
+    {
+      "key": "cluster-pi0.5",
+      "look": 1,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    },
+    {
+      "key": "cluster-pi0.5",
+      "look": 10,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    },
+    {
+      "key": "partial-m3-pi0.5",
+      "look": 1,
+      "n_reject": 53,
+      "power": 0.53,
+      "se": 0.04990991885387112,
+      "ci_low": 0.4301801622922578,
+      "ci_high": 0.6298198377077423
+    },
+    {
+      "key": "partial-m3-pi0.5",
+      "look": 10,
+      "n_reject": 14,
+      "power": 0.14,
+      "se": 0.03469870314579494,
+      "ci_low": 0.07060259370841013,
+      "ci_high": 0.2093974062915899
+    },
+    {
+      "key": "partial-m6-pi0.5",
+      "look": 1,
+      "n_reject": 95,
+      "power": 0.95,
+      "se": 0.021794494717703377,
+      "ci_low": 0.9064110105645932,
+      "ci_high": 0.9935889894354067
+    },
+    {
+      "key": "partial-m6-pi0.5",
+      "look": 10,
+      "n_reject": 69,
+      "power": 0.69,
+      "se": 0.04624932431938871,
+      "ci_low": 0.5975013513612225,
+      "ci_high": 0.7824986486387774
+    },
+    {
+      "key": "shift-d0.25",
+      "look": 1,
+      "n_reject": 37,
+      "power": 0.37,
+      "se": 0.048280430818293245,
+      "ci_low": 0.2734391383634135,
+      "ci_high": 0.4665608616365865
+    },
+    {
+      "key": "shift-d0.25",
+      "look": 10,
+      "n_reject": 2,
+      "power": 0.02,
+      "se": 0.014,
+      "ci_low": 0.0,
+      "ci_high": 0.048
+    },
+    {
+      "key": "shift-d0.5",
+      "look": 1,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    },
+    {
+      "key": "shift-d0.5",
+      "look": 10,
+      "n_reject": 100,
+      "power": 1.0,
+      "se": 0.0,
+      "ci_low": 1.0,
+      "ci_high": 1.0
+    }
+  ],
+  "wall_seconds": 50.351288171019405
+}
