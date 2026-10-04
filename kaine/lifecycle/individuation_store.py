@@ -498,6 +498,10 @@ INCONCLUSIVE_REASONS: frozenset[str] = frozenset(
         "asleep",
         "paused",
         "deadline_exceeded",
+        "conditioning_unreadable",
+        "ledger_reference_mismatch",
+        "statistics_failed",
+        "unclassified_failure",
     }
 )
 

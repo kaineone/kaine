@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
+import math
 import secrets
 import time
 import uuid
@@ -31,6 +33,7 @@ from kaine.lifecycle.individuation_stats import (
     spending_alpha,
 )
 from kaine.lifecycle.individuation_store import (
+    INCONCLUSIVE_REASONS,
     REFERENCE_KINDS,
     IndividuationPaths,
     IndividuationStoreError,
@@ -50,6 +53,8 @@ from kaine.lifecycle.individuation_store import (
     save_reference,
 )
 
+log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ProducerSettings:
@@ -61,6 +66,20 @@ class ProducerSettings:
     alpha_total: float = 0.05
     b_max: int = 2_000_000
     effect_min: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.n_reference < 2:
+            raise ValueError("n_reference must be at least 2")
+        if self.n_current < 2:
+            raise ValueError("n_current must be at least 2")
+        if self.max_tokens < 1:
+            raise ValueError("max_tokens must be at least 1")
+        if not (0.0 < self.alpha_total < 1.0):
+            raise ValueError("alpha_total must be strictly between 0 and 1")
+        if self.b_max < 1:
+            raise ValueError("b_max must be at least 1")
+        if not (self.effect_min >= 0.0 and math.isfinite(self.effect_min)):
+            raise ValueError("effect_min must be finite and non-negative")
 
 
 @dataclass(frozen=True)
@@ -122,8 +141,10 @@ class IndividuationCore:
         """Capture and persist a new reference document.
 
         Nothing is written when the capture aborts, fails, or the conditioning changes
-        mid-capture; an existing reference is replaced only with ``regenerate=True``;
-        the birth adapter is copied only for a ``birth`` reference.
+        mid-capture; an existing reference is replaced only with ``regenerate=True`` or
+        when an incomplete capture (reference without a matching ledger) is detected;
+        the birth adapter is copied only for a ``birth`` reference and only after the
+        reference document is safely persisted.
         """
         if kind not in REFERENCE_KINDS:
             raise ValueError(f"Invalid reference kind {kind!r}")
@@ -134,15 +155,27 @@ class IndividuationCore:
                 "which is not supported yet"
             )
 
+        replace_incomplete = False
         if not regenerate and self._paths.reference.exists():
-            raise IndividuationStoreError(
-                "a reference already exists; pass regenerate=True to replace it"
+            existing_ledger = load_ledger(self._paths)
+            if existing_ledger is not None:
+                raise IndividuationStoreError(
+                    "a reference already exists; pass regenerate=True to replace it"
+                )
+            replace_incomplete = True
+            log.warning(
+                "replacing incomplete capture at %s: reference exists without a ledger",
+                self._paths.reference,
             )
 
         if (reason := self._abort_reason()) is not None:
-            return (None, reason)
+            return (None, self._reason(reason))
 
-        adapter_sha, values, norms = self._conditioning_inputs()
+        try:
+            adapter_sha, values, norms = self._conditioning_inputs()
+        except Exception:
+            return (None, self._reason("conditioning_unreadable"))
+
         digest_before = conditioning_digest(
             adapter_sha=adapter_sha, values=values, norms=norms
         )
@@ -152,23 +185,27 @@ class IndividuationCore:
             prompt_samples: list[ProbeSample] = []
             for _ in range(self._settings.n_reference):
                 if (reason := self._abort_reason()) is not None:
-                    return (None, reason)
+                    return (None, self._reason(reason))
                 seed = secrets.randbits(31)
-                result = await self._sampler(prompt, seed)
+                try:
+                    result = await self._sampler(prompt, seed)
+                except Exception:
+                    result = ProbeFailure("request_failed")
                 if isinstance(result, ProbeFailure):
-                    return (None, result.reason)
+                    return (None, self._reason(result.reason))
                 prompt_samples.append(result)
             captured_samples.append(tuple(prompt_samples))
 
-        adapter_sha_after, values_after, norms_after = self._conditioning_inputs()
+        try:
+            adapter_sha_after, values_after, norms_after = self._conditioning_inputs()
+        except Exception:
+            return (None, self._reason("conditioning_unreadable"))
+
         digest_after = conditioning_digest(
             adapter_sha=adapter_sha_after, values=values_after, norms=norms_after
         )
         if digest_after != digest_before:
             return (None, "conditioning_changed_mid_run")
-
-        if kind == "birth":
-            copy_birth_adapter(self._paths, self._birth_adapter_file())
 
         doc = ReferenceDoc(
             reference_id=new_reference_id(),
@@ -185,7 +222,10 @@ class IndividuationCore:
             },
             samples=tuple(captured_samples),
         )
-        save_reference(self._paths, doc, overwrite=regenerate)
+        save_reference(self._paths, doc, overwrite=regenerate or replace_incomplete)
+
+        if kind == "birth":
+            copy_birth_adapter(self._paths, self._birth_adapter_file())
 
         existing = load_ledger(self._paths)
         if existing is None:
@@ -250,9 +290,20 @@ class IndividuationCore:
             )
             return LookOutcome("inconclusive", "ledger_missing", report)
 
+        # 3. Reference/ledger match
+        if ledger.reference_id != ref.reference_id:
+            report = await self._inconclusive(
+                "ledger_reference_mismatch",
+                ref_id=ref.reference_id,
+                k=None,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "ledger_reference_mismatch", report)
+
         k = ledger.looks_completed + 1
 
-        # 3. Battery
+        # 4. Battery
         if ref.battery_digest != battery_digest_of(self._battery):
             report = await self._inconclusive(
                 "battery_changed",
@@ -263,15 +314,26 @@ class IndividuationCore:
             )
             return LookOutcome("inconclusive", "battery_changed", report)
 
-        # 4. Unchanged being
-        adapter_sha, values, norms = self._conditioning_inputs()
+        # 5. Unchanged being
+        try:
+            adapter_sha, values, norms = self._conditioning_inputs()
+        except Exception:
+            report = await self._inconclusive(
+                "conditioning_unreadable",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditioning_unreadable", report)
+
         digest_before = conditioning_digest(
             adapter_sha=adapter_sha, values=values, norms=norms
         )
         if digest_before == ledger.last_look_conditions_digest:
             return LookOutcome("skipped", "unchanged", None)
 
-        # 5. Threshold
+        # 6. Threshold
         alpha_k = spending_alpha(k, self._settings.alpha_total)
         B = required_permutations(alpha_k, self._settings.b_max)
         if B is None:
@@ -284,36 +346,52 @@ class IndividuationCore:
             )
             return LookOutcome("inconclusive", "alpha_unresolvable", report)
 
-        # 6. Sampling
+        # 7. Sampling
         current_samples: list[tuple[ProbeSample, ...]] = []
         for prompt in self._battery:
             prompt_samples: list[ProbeSample] = []
             for _ in range(self._settings.n_current):
                 if (reason := self._abort_reason()) is not None:
+                    validated = self._reason(reason)
                     report = await self._inconclusive(
-                        reason,
+                        validated,
                         ref_id=ref.reference_id,
                         k=k,
                         start=start,
                         ref=ref,
                     )
-                    return LookOutcome("inconclusive", reason, report)
+                    return LookOutcome("inconclusive", validated, report)
                 seed = secrets.randbits(31)
-                result = await self._sampler(prompt, seed)
+                try:
+                    result = await self._sampler(prompt, seed)
+                except Exception:
+                    result = ProbeFailure("request_failed")
                 if isinstance(result, ProbeFailure):
+                    validated = self._reason(result.reason)
                     report = await self._inconclusive(
-                        result.reason,
+                        validated,
                         ref_id=ref.reference_id,
                         k=k,
                         start=start,
                         ref=ref,
                     )
-                    return LookOutcome("inconclusive", result.reason, report)
+                    return LookOutcome("inconclusive", validated, report)
                 prompt_samples.append(result)
             current_samples.append(tuple(prompt_samples))
 
-        # 7. Mid-run change
-        adapter_sha_after, values_after, norms_after = self._conditioning_inputs()
+        # 8. Mid-run change
+        try:
+            adapter_sha_after, values_after, norms_after = self._conditioning_inputs()
+        except Exception:
+            report = await self._inconclusive(
+                "conditioning_unreadable",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditioning_unreadable", report)
+
         digest_after = conditioning_digest(
             adapter_sha=adapter_sha_after, values=values_after, norms=norms_after
         )
@@ -329,7 +407,7 @@ class IndividuationCore:
                 "inconclusive", "conditioning_changed_mid_run", report
             )
 
-        # 8. Embedding
+        # 9. Embedding
         strata: list[tuple[np.ndarray, np.ndarray]] = []
         try:
             ref_vecs = [
@@ -361,19 +439,30 @@ class IndividuationCore:
             )
             return LookOutcome("inconclusive", "embedding_failed", report)
 
-        # 9. Statistics
-        res, h = await asyncio.to_thread(
-            self._evaluate, strata, B, alpha_k
-        )
-        significant = decide(
-            p_value=res.p_value,
-            alpha_k=alpha_k,
-            effect_size_h=h,
-            effect_min=self._settings.effect_min,
-            warmed_up=warmed_up,
-        )
+        # 10. Statistics
+        rng = self._rng.spawn(1)[0]
+        try:
+            res, h = await asyncio.to_thread(
+                self._evaluate, strata, B, alpha_k, rng=rng
+            )
+            significant = decide(
+                p_value=res.p_value,
+                alpha_k=alpha_k,
+                effect_size_h=h,
+                effect_min=self._settings.effect_min,
+                warmed_up=warmed_up,
+            )
+        except Exception:
+            report = await self._inconclusive(
+                "statistics_failed",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "statistics_failed", report)
 
-        # 10. Ledger update FIRST
+        # 11. Ledger update
         report_id = uuid.uuid4().hex
         ledger_kwargs: dict[str, Any] = {
             "looks_completed": k,
@@ -393,9 +482,8 @@ class IndividuationCore:
                 }
             )
         new_ledger = dataclasses.replace(ledger, **ledger_kwargs)
-        save_ledger(self._paths, new_ledger)
 
-        # 11. Report
+        # 12. Report (built before the ledger is persisted)
         current_count = sum(len(p) for p in current_samples)
         length_count = sum(
             1
@@ -437,9 +525,10 @@ class IndividuationCore:
             length_capped_fraction=float(length_capped_fraction),
             duration_s=float(duration),
         )
+        save_ledger(self._paths, new_ledger)
         await self._report_sink.write(report)
 
-        # 12. Publish
+        # 13. Publish
         await self._publish(
             {"divergence_scalar": float(h), "significant": bool(significant)}
         )
@@ -463,13 +552,21 @@ class IndividuationCore:
         strata: list[tuple[np.ndarray, np.ndarray]],
         B: int,
         alpha_k: float,
+        rng: np.random.Generator,
     ) -> tuple[Any, float]:
         """Run the permutation test and effect-size computation off-loop."""
         res = permutation_test(
-            strata, permutations=B, rng=self._rng, alpha=alpha_k
+            strata, permutations=B, rng=rng, alpha=alpha_k
         )
         h = effect_size_h(strata)
         return res, h
+
+    def _reason(self, reason: object) -> str:
+        """Normalise an external failure reason to a known inconclusive reason."""
+        if isinstance(reason, str) and reason in INCONCLUSIVE_REASONS:
+            return reason
+        log.warning("unknown individuation failure reason %r", reason)
+        return "unclassified_failure"
 
     async def _inconclusive(
         self,
