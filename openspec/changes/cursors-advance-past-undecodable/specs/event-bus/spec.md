@@ -17,6 +17,6 @@ Every consumer that keeps a cursor on a bus stream SHALL read with `read_entries
 - **THEN** a test fails naming the file and line
 
 #### Scenario: A consumer that stops early resumes where it stopped
-- **WHEN** the welfare monitor detects a crossing partway through a batch and the run continues
-- **THEN** its cursor stays at the crossing entry
-- **AND** the remaining entries of that batch reach its trackers on later polls
+- **WHEN** a consumer stops handling a batch partway through
+- **THEN** its cursor stays at the last entry it handled
+- **AND** the remaining entries of that batch are read on its next poll
