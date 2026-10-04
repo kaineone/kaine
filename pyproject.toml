@@ -84,7 +84,7 @@ audio = [
     # install it the same dynamic way as torch (see docs/02-architecture/tech-choices.md).
     # The emotion2vec_plus_base weights resolve via the HuggingFace hub
     # (audition.emotion pins hub="hf"; the default ModelScope hub 404s).
-    "funasr>=1.1,<2",
+    "funasr>=1.4.16,<2",
     # In-memory prosody extraction for audition.prosody (ISC licence).
     # Required only if [audition].prosody_enabled = true. Lazy-imported.
     "librosa>=0.10,<1",
