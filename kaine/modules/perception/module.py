@@ -39,6 +39,7 @@ _SWITCH_TYPE = "intent.perception.switch"
 
 class PerceptionLocus(BaseModule):
     name: ClassVar[str] = "perception"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
 
     def __init__(
         self,
@@ -90,7 +91,7 @@ class PerceptionLocus(BaseModule):
     async def _intent_loop(self) -> None:
         while True:
             try:
-                entries = await self._bus.read(
+                entries, last_scanned = await self._bus.read_entries(
                     self._intent_stream, last_id=self._intent_cursor,
                     count=16, block_ms=200)
             except asyncio.CancelledError:
@@ -99,9 +100,9 @@ class PerceptionLocus(BaseModule):
                 log.exception("perception: intent read failed")
                 await asyncio.sleep(0.5)
                 continue
-            if not entries:
+            if last_scanned is None:
                 continue
-            self._intent_cursor = entries[-1][0]
+            self._intent_cursor = last_scanned
             for _id, event in entries:
                 if event.type == _SWITCH_TYPE:
                     await self._handle_switch(event)

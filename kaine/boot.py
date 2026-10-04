@@ -39,6 +39,7 @@ from kaine.text_embedding import (
     make_text_embedder,
     resolve_embedding_config,
 )
+from kaine.workspace.strategies import build_drive_sources
 
 log = logging.getLogger(__name__)
 
@@ -3074,7 +3075,17 @@ _SALIENCE_THYMOS_FACTOR_DEFAULT = "state_modulator"
 _SALIENCE_GOAL_FACTOR_DEFAULT = "static"
 
 
-def make_salience_factors(kaine_config: dict[str, Any], affect_provider: Any):
+def drive_sources_for(registry: ModuleRegistry) -> dict[str, frozenset[str]]:
+    """Build the goal factor's drive table from the registered modules' declarations."""
+    return build_drive_sources({m.name: m.relieves_drives for m in registry.all_modules()})
+
+
+def make_salience_factors(
+    kaine_config: dict[str, Any],
+    affect_provider: Any,
+    *,
+    drive_sources: Mapping[str, frozenset[str]] | None = None,
+):
     """Select the goal + Thymos salience factors from the [syneidesis] section.
 
     Returns ``(thymos_modulator, goal_scorer, downgraded_factors)``. Both real
@@ -3109,7 +3120,13 @@ def make_salience_factors(kaine_config: dict[str, Any], affect_provider: Any):
         )
 
     if goal_factor == "drive_relevance":
-        goal_scorer = DriveRelevanceGoalScorer(affect_provider.drive_values)
+        if drive_sources is None:
+            raise ConfigurationError(
+                "drive_relevance needs the registered modules' drive declarations"
+            )
+        goal_scorer = DriveRelevanceGoalScorer(
+            affect_provider.drive_values, drive_sources=drive_sources
+        )
     elif goal_factor == "static":
         goal_scorer = StaticGoalScorer()
     else:

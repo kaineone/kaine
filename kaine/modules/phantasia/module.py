@@ -76,6 +76,7 @@ log = logging.getLogger(__name__)
 
 class Phantasia(BaseModule):
     name: ClassVar[str] = "phantasia"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom"})
 
     def __init__(
         self,
@@ -400,7 +401,7 @@ class Phantasia(BaseModule):
                 progressed = False
                 for stream in (self._mnemos_stream, self._hypnos_stream):
                     try:
-                        entries = await self._bus.read(
+                        entries, last_scanned = await self._bus.read_entries(
                             stream,
                             last_id=self._peer_cursors.get(stream, "0"),
                             count=32,
@@ -408,9 +409,9 @@ class Phantasia(BaseModule):
                         )
                     except Exception:
                         continue
-                    if entries:
+                    if last_scanned is not None:
                         progressed = True
-                        self._peer_cursors[stream] = entries[-1][0]
+                        self._peer_cursors[stream] = last_scanned
                         for _, event in entries:
                             await self._handle_peer_event(stream, event)
                 if not progressed:

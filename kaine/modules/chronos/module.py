@@ -30,6 +30,7 @@ _HYPNOS_STREAM: str = "hypnos.out"
 
 class Chronos(BaseModule):
     name: ClassVar[str] = "chronos"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive"})
 
     def __init__(
         self,
@@ -242,7 +243,7 @@ class Chronos(BaseModule):
                 drained_any = False
                 for stream in self._user_input_streams:
                     try:
-                        entries = await self._bus.read(
+                        entries, last_scanned = await self._bus.read_entries(
                             stream,
                             last_id=self._user_input_cursors.get(stream, "0"),
                             count=64,
@@ -251,9 +252,10 @@ class Chronos(BaseModule):
                     except Exception:
                         log.exception("chronos user-input read failed for %s", stream)
                         continue
-                    if entries:
+                    if last_scanned is not None:
                         drained_any = True
-                        self._user_input_cursors[stream] = entries[-1][0]
+                        self._user_input_cursors[stream] = last_scanned
+                    if entries:
                         # Bus event stamps are wall epoch seconds; cognitive
                         # time-since-interaction must run on the subjective clock.
                         self._last_interaction_at = float(self._clock())
@@ -267,14 +269,14 @@ class Chronos(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         _HYPNOS_STREAM,
                         last_id=self._hypnos_cursor,
                         count=64,
                         block_ms=0,
                     )
-                    if entries:
-                        self._hypnos_cursor = entries[-1][0]
+                    if last_scanned is not None:
+                        self._hypnos_cursor = last_scanned
                         for _, event in entries:
                             if event.type == "hypnos.sleep.started":
                                 self._in_hypnos = True

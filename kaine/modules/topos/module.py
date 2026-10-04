@@ -44,6 +44,7 @@ _HYPNOS_STREAM: str = "hypnos.out"
 
 class Topos(BaseModule):
     name: ClassVar[str] = "topos"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
 
     def holds_external_resources(self) -> bool:
         return True
@@ -604,14 +605,14 @@ class Topos(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         _HYPNOS_STREAM,
                         last_id=self._hypnos_cursor,
                         count=64,
                         block_ms=0,
                     )
-                    if entries:
-                        self._hypnos_cursor = entries[-1][0]
+                    if last_scanned is not None:
+                        self._hypnos_cursor = last_scanned
                         for _, event in entries:
                             if event.type == "hypnos.sleep.started":
                                 self._in_hypnos = True

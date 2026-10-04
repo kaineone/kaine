@@ -35,25 +35,14 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
 
 from kaine.experiment.seeding import set_global_seed
+
+# --------------------------------------------------------------------------- #
+# Pure summary statistics (stdlib only). Canonical definitions live in
+# ``kaine.experiment.stats``; they match the previous local copies exactly.
+# --------------------------------------------------------------------------- #
+from kaine.experiment.stats import mean as _mean
+from kaine.experiment.stats import std as _std
 from kaine.experiment.verdict import Outcome, Verdict
-
-# --------------------------------------------------------------------------- #
-# Pure summary statistics (stdlib only). These are the module's own canonical
-# definitions (this module is boundary-neutral and may not import evaluation).
-# --------------------------------------------------------------------------- #
-
-
-def _mean(values: Sequence[float]) -> float:
-    return sum(values) / len(values) if values else 0.0
-
-
-def _std(values: Sequence[float]) -> float:
-    """Population standard deviation (the canonical definition used here)."""
-    if len(values) < 2:
-        return 0.0
-    m = _mean(values)
-    variance = sum((v - m) ** 2 for v in values) / len(values)
-    return math.sqrt(variance)
 
 
 def _coefficient_of_variation(mean: float, std: float) -> float:

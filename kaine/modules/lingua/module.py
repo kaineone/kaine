@@ -68,6 +68,7 @@ class Lingua(BaseModule):
     """
 
     name: ClassVar[str] = "lingua"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom", "social_drive"})
 
     def holds_external_resources(self) -> bool:
         return True
@@ -223,7 +224,7 @@ class Lingua(BaseModule):
         cursor = "0-0"
         while not self._stopped.is_set():
             try:
-                entries = await self._bus.read(
+                entries, last_scanned = await self._bus.read_entries(
                     EIDOLON_OUT_STREAM, last_id=cursor, count=32, block_ms=0
                 )
             except asyncio.CancelledError:
@@ -235,8 +236,8 @@ class Lingua(BaseModule):
                     # no stop signal within the backoff window; keep polling
                     pass
                 continue
-            if entries:
-                cursor = entries[-1][0]
+            if last_scanned is not None:
+                cursor = last_scanned
                 for _entry_id, ev in entries:
                     if ev.type == EIDOLON_SELF_MODEL_TYPE:
                         self._bus_self_model = {
@@ -425,7 +426,7 @@ class Lingua(BaseModule):
         try:
             while not self._stopped.is_set():
                 try:
-                    entries = await self._bus.read(
+                    entries, last_scanned = await self._bus.read_entries(
                         self._intent_stream,
                         last_id=self._intent_cursor,
                         count=32,
@@ -434,8 +435,8 @@ class Lingua(BaseModule):
                 except Exception:
                     await asyncio.sleep(0.05)
                     continue
-                if entries:
-                    self._intent_cursor = entries[-1][0]
+                if last_scanned is not None:
+                    self._intent_cursor = last_scanned
                     for _, event in entries:
                         await self._dispatch_intent(event)
                 else:

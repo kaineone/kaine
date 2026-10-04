@@ -65,6 +65,7 @@ CHATTERBOX_PROSODY = ("temperature", "exaggeration", "cfg_weight", "speed_factor
 
 class Vox(BaseModule):
     name: ClassVar[str] = "vox"
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive", "restlessness"})
 
     def holds_external_resources(self) -> bool:
         return True
@@ -436,7 +437,7 @@ class Vox(BaseModule):
                     active_streams.append(self._audition_prosody_stream)
                 for stream in active_streams:
                     try:
-                        entries = await self._bus.read(
+                        entries, last_scanned = await self._bus.read_entries(
                             stream,
                             last_id=self._cursors.get(stream, "0"),
                             count=32,
@@ -444,9 +445,9 @@ class Vox(BaseModule):
                         )
                     except Exception:
                         continue
-                    if entries:
+                    if last_scanned is not None:
                         progressed = True
-                        self._cursors[stream] = entries[-1][0]
+                        self._cursors[stream] = last_scanned
                         for _, event in entries:
                             await self._handle(stream, event)
                 if not progressed:
