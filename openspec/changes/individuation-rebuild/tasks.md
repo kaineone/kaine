@@ -19,9 +19,9 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 2.8 **Gate:** if size, lifetime false-positive rate or power acceptance fails, stop and return to design. Groups 3-10 do not merge until this gate passes.
 
 ## 3. Chat client
-- [ ] 3.1 `ChatRequest.seed: Optional[int]`, sent in the request body only when set.
-- [ ] 3.2 `ChatResponse` exposes `finish_reason`, `completion_tokens` and whether the text came from `choices[0].message.content` (not the reasoning fallback).
-- [ ] 3.3 Tests: seed present and absent in the body; a resting organ (`raw.organ_resting`) and a reasoning-only response are distinguishable from a real answer; non-200 status is reported.
+- [x] 3.1 `ChatRequest.seed: Optional[int]`, sent in the request body only when set.
+- [x] 3.2 `ChatResponse` exposes `finish_reason`, `completion_tokens` and whether the text came from `choices[0].message.content` (not the reasoning fallback).
+- [x] 3.3 Tests: seed present and absent in the body; a resting organ (`raw.organ_resting`) and a reasoning-only response are distinguishable from a real answer; non-200 status is reported.
 
 ## 4. Storage
 - [ ] 4.1 `kaine/lifecycle/individuation_store.py`: encrypted reference document and copied conditioning adapter under `state/individuation/`, atomic writes through the state encryptor.
