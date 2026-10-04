@@ -1,7 +1,7 @@
 # mnemos-replay Specification
 
 ## Purpose
-TBD - created by archiving change mnemos-replay. Update Purpose after archive.
+This capability extends Mnemos so stored memory traces are tagged with the latest Thymos affect state, and recall selects traces by affect intensity and recency for re-injection into the workspace during maintenance windows only. It also lets logs redact sensitive memory content.
 ## Requirements
 ### Requirement: Affect-tagging on store
 Mnemos SHALL subscribe to `thymos.state`, cache the latest affect, and tag each

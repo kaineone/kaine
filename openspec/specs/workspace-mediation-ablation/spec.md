@@ -1,7 +1,7 @@
 # workspace-mediation-ablation Specification
 
 ## Purpose
-TBD - created by archiving change workspace-mediation-ablation. Update Purpose after archive.
+A two-arm ablation that runs the cycle twice with identical seeds, stimuli and modules, differing only in whether the language organ is conditioned by the competitive workspace or by a flat fan-in of the same outputs, and reports a verdict that can come out against the workspace.
 
 ## Requirements
 

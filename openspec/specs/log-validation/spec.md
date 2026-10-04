@@ -1,7 +1,7 @@
 # log-validation Specification
 
 ## Purpose
-TBD - created by archiving change log-schema-range-sweep. Update Purpose after archive.
+This capability makes every logged record re-validatable after a run against a schema of physically possible numeric ranges, and reports any out-of-range value as a fail-closed violation. It supplies sweep_run and a CLI so records from each stream and field can be checked against the bounds declared by the producing modules.
 
 ## Requirements
 

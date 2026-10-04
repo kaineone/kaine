@@ -1,7 +1,7 @@
 # minimal-run-configuration Specification
 
 ## Purpose
-TBD - created by archiving change workspace-mediation-ablation. Update Purpose after archive.
+This capability provides an opt-in minimal experiment configuration that activates only Soma, Chronos, and Lingua while leaving Syneidesis and Volition always on, keeps every other built module constructed-but-disabled, and forces workspace competition in the smallest runnable set. It also gives the operator a way to inject text stimuli.
 
 ## Requirements
 

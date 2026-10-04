@@ -1,7 +1,7 @@
 # run-admissibility Specification
 
 ## Purpose
-TBD - created by archiving change run-completeness-gating. Update Purpose after archive.
+This capability lets finished runs be scanned for completeness from durable records and marks them inadmissible with reasons when required sequences or expected streams are missing. It checks contiguous tick and sink sequences and that every expected stream produced at least its required output.
 ## Requirements
 ### Requirement: Finished runs are scannable for completeness
 A finished run SHALL be scannable for completeness from its durable records and

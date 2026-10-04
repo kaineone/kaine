@@ -1,7 +1,7 @@
 # faithful-renderer Specification
 
 ## Purpose
-TBD - created by archiving change faithful-renderer. Update Purpose after archive.
+`FaithfulRenderer` is a deterministic, side-effect-free renderer that maps each event to a concise textual line from per-source/type templates, including the v4 predictive fields, for use as a bounded prompt input.
 
 ## Requirements
 

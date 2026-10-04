@@ -1,7 +1,7 @@
 # event-bus Specification
 
 ## Purpose
-TBD - created by archiving change event-bus. Update Purpose after archive.
+The event-bus capability defines one canonical event schema and a module-stream layout for KAINE, together with an async Redis client, singleton accessor, stream retention via `MAXLEN`, startup configuration audit, and resilient roundtrip serialization.
 
 ## Requirements
 

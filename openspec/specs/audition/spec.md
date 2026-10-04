@@ -1,7 +1,7 @@
 # audition Specification
 
 ## Purpose
-TBD - created by archiving change rename-audition-vox. Update Purpose after archive.
+Audition is KAINE's hearing module. This capability fixes its module name, its output stream `audition.out` and its event names, and marks events as degraded when a model is missing.
 ## Requirements
 ### Requirement: Audition module identity
 The hearing organ SHALL be the module named `audition` (renamed from

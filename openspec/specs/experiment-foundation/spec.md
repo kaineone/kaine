@@ -1,7 +1,7 @@
 # experiment-foundation Specification
 
 ## Purpose
-TBD - created by archiving change experiment-run-identity. Update Purpose after archive.
+Experiment-foundation provides shared global seed control, per-run identity and manifest tracking, a common verdict schema, and a multi-seed stability harness for running the seven experiments under one seed with corrected verdicts.
 
 ## Requirements
 

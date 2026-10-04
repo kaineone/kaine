@@ -1,7 +1,7 @@
 # praxis Specification
 
 ## Purpose
-TBD - created by archiving change praxis. Update Purpose after archive.
+This capability defines Praxis as KAINE's action layer, exposing three effectors with explicit success/failure results, sandboxed file writes, a shell-command whitelist, and a durable tamper-evident JSONL audit log. Praxis acts only on provenance-verified act intents, publishes diagnostics-only bus events, and ships a safe-by-default configuration that keeps audit and sandbox files owner-only.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # developmental-stage Specification
 
 ## Purpose
-TBD - created by archiving change developmental-maturation-gate. Update Purpose after archive.
+The developmental-stage capability maintains a monotonic `gestation` to `embodied` lifecycle for the entity, keeping it confined to the womb only when a womb feed is present, advancing to birth only on fail-closed readiness with an available embodied world, and making every stage transition observable.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # adapter-ties-dare-merge Specification
 
 ## Purpose
-TBD - created by archiving change adapter-ties-dare-merge. Update Purpose after archive.
+TiesDareAdapterMerger provides a real adapter-merging implementation used by ForkManager, offering three combination modes with configurable density and per-adapter weights, deterministic merged output, and a capability-loss veto that rejects degraded merges.
 
 ## Requirements
 

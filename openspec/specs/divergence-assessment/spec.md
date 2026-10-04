@@ -1,7 +1,7 @@
 # divergence-assessment Specification
 
 ## Purpose
-TBD - created by archiving change consolidation-divergence-signal. Update Purpose after archive.
+Divergence-assessment defines the content-free divergence metric emitted whenever voice-alignment consolidation builds preference pairs, giving preservation and decommission a single warmed-up signal and shared thresholds for deciding whether an entity has drifted.
 
 ## Requirements
 

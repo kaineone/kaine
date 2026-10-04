@@ -1,7 +1,7 @@
 # vox-prosodic-mirroring Specification
 
 ## Purpose
-TBD - created by archiving change vox-prosodic-mirroring. Update Purpose after archive.
+This capability lets Vox blend a bounded residual of the latest Audition prosody features into the affect-driven TTS parameters, controlled by mirror_strength clamped to a ceiling. It degrades gracefully, decays over time, and can be opted out.
 ## Requirements
 ### Requirement: Bounded prosodic mirroring on top of affect
 Vox SHALL blend a bounded residual of the latest `audition.prosody` features

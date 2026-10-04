@@ -1,7 +1,7 @@
 # entity-decommission Specification
 
 ## Purpose
-TBD - created by archiving change welfare-gated-decommission. Update Purpose after archive.
+Entity-decommission provides operator-gated deletion logic that assesses individuation divergence, offers a transferable encrypted backup before deletion, and requires an operator-confirmed continuity step when the entity has diverged.
 ## Requirements
 ### Requirement: Divergence assessment for decommission
 The system SHALL provide `assess_divergence()` that determines whether an entity has individuated,
