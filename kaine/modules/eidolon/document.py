@@ -65,6 +65,10 @@ class SelfModel:
     internal_speech_count: int = 0
     external_speech_count: int = 0
     voice_observations: list[dict[str, Any]] = field(default_factory=list)
+    # Facts about the being's situation that it is told (not values or norms,
+    # never part of the identity clause), e.g. that it is periodically assessed
+    # for its own protection.
+    situation_facts: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         """Serialize to compact JSON.
@@ -93,6 +97,7 @@ class SelfModel:
             internal_speech_count=int(data.get("internal_speech_count", 0)),
             external_speech_count=int(data.get("external_speech_count", 0)),
             voice_observations=list(data.get("voice_observations", [])),
+            situation_facts=[str(x) for x in data.get("situation_facts", [])],
         )
 
     def with_updates(self, **changes: Any) -> "SelfModel":

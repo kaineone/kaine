@@ -96,6 +96,8 @@ CONTENT_FIELDS: frozenset[str] = frozenset(
         "statement",
         "values",
         "behavioral_norms",
+        # The facts the being is told about its situation are entity-interior text.
+        "situation_facts",
     }
 )
 

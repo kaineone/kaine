@@ -30,6 +30,9 @@ class ChatRequest:
     think: Optional[bool] = False
     # The server's sampling seed is sent only when set (None lets the server choose).
     seed: Optional[int] = None
+    # When False, the server is told not to reuse a cached prompt, as the
+    # individuation probe needs; None leaves the server default.
+    cache_prompt: Optional[bool] = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,8 @@ class OpenAIChatClient:
             body["stop"] = list(request.stop)
         if request.seed is not None:
             body["seed"] = int(request.seed)
+        if request.cache_prompt is not None:
+            body["cache_prompt"] = bool(request.cache_prompt)
         if think is not None:
             # `think=False` → don't generate a chain-of-thought (the organ case);
             # `think=True` → allow it. Forwarded to the model's chat template.
