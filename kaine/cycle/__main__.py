@@ -49,6 +49,7 @@ from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
 from kaine.cycle.affect_state import AffectStateProvider
+from kaine.cycle.boot_context import BootContext
 from kaine.cycle.control_state import read_control, unfreeze
 from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
@@ -1261,32 +1262,31 @@ def _make_time_scale_controller(cycle_cfg: dict[str, Any]):
     return TimeScaleController(settings, initial_scale=ceiling)
 
 
-async def _boot_and_run(
-    *,
-    supervision_mode: str = "operator",
-    gate_checks: dict[str, bool] | None = None,
-    revive: "ReviveSession | None" = None,
-    kaine_config: dict[str, Any] | None = None,
-) -> int:
-    if kaine_config is None:
-        kaine_config = _load_kaine_config()
+async def _phase_stage(ctx: BootContext) -> int | None:
+    """Load the config if none was passed, and resolve the developmental stage this boot starts in."""
+    if ctx.kaine_config is None:
+        ctx.kaine_config = _load_kaine_config()
 
     # Developmental stage resolution. Done early so gestation can gate locus and
     # embodiment before any module opens. Ship-inert by default: a normal boot
     # is completely unaffected.
-    stage_state, staging_enabled, fresh_gestation = _resolve_start_stage(kaine_config, revive)
-    if revive is not None and revive.stage_state is not None:
+    ctx.stage_state, ctx.staging_enabled, ctx.fresh_gestation = _resolve_start_stage(ctx.kaine_config, ctx.revive)
+    if ctx.revive is not None and ctx.revive.stage_state is not None:
         log.info(
             "revive: using bundle's preserved developmental stage: %s",
-            stage_state.stage,
+            ctx.stage_state.stage,
         )
-    if staging_enabled:
+    if ctx.staging_enabled:
         log.info(
             "developmental stage: %s (staging enabled)",
-            stage_state.stage,
+            ctx.stage_state.stage,
         )
     else:
         log.debug("developmental staging disabled; running un-staged")
+
+
+async def _phase_preconditions(ctx: BootContext) -> int | None:
+    """Check the evaluation, individuation and research-event-log configs before anything opens."""
 
     # Gestation locus pinning happens once the bus exists and a womb is proven
     # ready (below): a configuration value alone never pins the entity to a
@@ -1303,26 +1303,31 @@ async def _boot_and_run(
     # modules, runtime.json) — so a mismatched A/B baseline fails closed cleanly
     # with no half-booted entity and no stale runtime state. The baseline model
     # DERIVES from [lingua].model_id and refuses an explicit divergent value.
-    lingua_model_id = (kaine_config.get("lingua") or {}).get("model_id")
+    lingua_model_id = (ctx.kaine_config.get("lingua") or {}).get("model_id")
     # The A/B baseline talks to the SAME model server as the organ, so it needs
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = model_server_api_key(kaine_config)
+    lingua_api_key = model_server_api_key(ctx.kaine_config)
     try:
-        eval_cfg = load_evaluation_config(
+        ctx.eval_cfg = load_evaluation_config(
             lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
         )
     except ValueError as exc:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {exc}\n")
         return 3
-    individuation_cfg, individuation_refusal = _individuation_refusal(kaine_config)
+    ctx.individuation_cfg, individuation_refusal = _individuation_refusal(ctx.kaine_config)
     if individuation_refusal is not None:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {individuation_refusal}\n")
         return INDIVIDUATION_REFUSED_EXIT
     # Research event log config is INDEPENDENT of [evaluation].enabled — the
     # curated log (and the local-only raw archive) gate on their own flags.
-    research_event_log_cfg = load_research_event_log_config()
+    ctx.research_event_log_cfg = load_research_event_log_config()
+    return None
+
+
+async def _phase_run_identity(ctx: BootContext) -> int | None:
+    """Seed the run, load plugins, mint the run context and manifest, and apply the hardware config."""
 
     # Per-run identity. Minted EARLY — before the seed-sensitive modules or any
     # sink starts — so (a) global randomness is pinned for the whole run and
@@ -1335,8 +1340,8 @@ async def _boot_and_run(
 
     from kaine import __version__ as _kaine_version
 
-    experiment_cfg = kaine_config.get("experiment") or {}
-    seed = _resolve_seed(kaine_config)
+    ctx.experiment_cfg = ctx.kaine_config.get("experiment") or {}
+    seed = _resolve_seed(ctx.kaine_config)
     set_global_seed(seed)
     from kaine.boot import gather_perception_feed_descriptor
     from kaine.plugins import load_plugins
@@ -1344,9 +1349,9 @@ async def _boot_and_run(
     # Module plugins load (and declare their seams) before the run manifest is
     # written, so the manifest records every substitution. A named plugin that
     # cannot load stops the boot (PluginError) rather than run on defaults.
-    plugins = load_plugins(kaine_config, known_modules=known_module_names())
+    ctx.plugins = load_plugins(ctx.kaine_config, known_modules=known_module_names())
 
-    _timing_cfg = kaine_config.get("cycle") or {}
+    _timing_cfg = ctx.kaine_config.get("cycle") or {}
     timing: dict[str, Any] = {
         "time_scale": float(_timing_cfg.get("time_scale", 1.0)),
         "auto_time_scale": bool(_timing_cfg.get("auto_time_scale", False)),
@@ -1359,35 +1364,35 @@ async def _boot_and_run(
         timing["dwell_s"] = float(_timing_cfg.get("auto_time_scale_dwell_s", 10.0))
         timing["window_s"] = float(_timing_cfg.get("auto_time_scale_window_s", 30.0))
 
-    run_ctx = mint_run_context(
+    ctx.run_ctx = mint_run_context(
         seed=seed,
         started_at=datetime.now(timezone.utc).isoformat(),
-        config=kaine_config,
-        model_ids=_gather_model_ids(kaine_config, eval_chat_model_id=eval_cfg.chat_model_id),
+        config=ctx.kaine_config,
+        model_ids=_gather_model_ids(ctx.kaine_config, eval_chat_model_id=ctx.eval_cfg.chat_model_id),
         version=_kaine_version,
         # Reproducible perception-feed covariate — gathered at the boot layer
         # (allowed to touch kaine.modules) and passed in as data.
         perception_feed=gather_perception_feed_descriptor(
-            kaine_config, stage_state=stage_state
+            ctx.kaine_config, stage_state=ctx.stage_state
         ),
-        plugins=plugins.manifest_entry(),
-        revived_from=revive.revived_from if revive is not None else None,
+        plugins=ctx.plugins.manifest_entry(),
+        revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
         timing=timing,
     )
-    set_run_context(run_ctx)
-    if bool(experiment_cfg.get("write_manifest", True)):
+    set_run_context(ctx.run_ctx)
+    if bool(ctx.experiment_cfg.get("write_manifest", True)):
         try:
-            manifest_path = write_manifest(run_ctx)
-            log.info("run %s manifest written to %s", run_ctx.run_id, manifest_path)
+            manifest_path = write_manifest(ctx.run_ctx)
+            log.info("run %s manifest written to %s", ctx.run_ctx.run_id, manifest_path)
         except Exception:
             log.warning("could not write run manifest", exc_info=True)
-    log.info("run_id=%s seed=%d git=%s", run_ctx.run_id, seed, run_ctx.git_sha)
+    log.info("run_id=%s seed=%d git=%s", ctx.run_ctx.run_id, seed, ctx.run_ctx.git_sha)
 
     # Apply [hardware] settings before any module constructs anything
     # heavy. Cap the torch CPU thread pool to [hardware].cpu_threads when
     # set, otherwise max(1, cpu_count // 2), and install the operator's
     # [hardware].allowed_devices set before any module resolves its device.
-    threads_set = apply_hardware_config(kaine_config)
+    threads_set = apply_hardware_config(ctx.kaine_config)
     if threads_set:
         log.info("torch CPU thread pool capped at %d threads", threads_set)
     if allowed_devices() is not None:
@@ -1396,18 +1401,22 @@ async def _boot_and_run(
             ", ".join(allowed_devices()),
         )
 
+
+async def _phase_gates(ctx: BootContext) -> int | None:
+    """The GPU pre-flight and the organ content gate."""
+
     # Cooperative GPU headroom pre-flight (opt-in via [gpu_preflight].enabled).
     # Runs BEFORE the bus/modules open so a starved host refuses to boot cleanly
     # rather than OOM-killing a just-born entity mid-init. It evicts only KAINE's
     # own idle Ollama models and never terminates a process; see preflight.py.
-    gpu_cfg = GpuPreflightConfig.from_section(kaine_config.get("gpu_preflight") or {})
+    gpu_cfg = GpuPreflightConfig.from_section(ctx.kaine_config.get("gpu_preflight") or {})
     if gpu_cfg.enabled:
-        organ_model = (kaine_config.get("lingua") or {}).get("model_id")
+        organ_model = (ctx.kaine_config.get("lingua") or {}).get("model_id")
         keep = [organ_model] if organ_model else []
         pf = run_preflight(
             gpu_cfg,
             keep_models=keep,
-            services_config=kaine_config.get("services"),
+            services_config=ctx.kaine_config.get("services"),
         )
         for line in pf.message.splitlines():
             log.info("gpu-preflight: %s", line)
@@ -1423,7 +1432,7 @@ async def _boot_and_run(
     # way a prior boot came up silent. When Lingua is enabled, probe the organ for
     # real content here and refuse to boot if it returns empty/unreachable. A
     # deliberately-voiceless boot must opt in via KAINE_ALLOW_MUTE_ORGAN=1.
-    if (kaine_config.get("modules") or {}).get("lingua"):
+    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
         from kaine.organ_window_state import organ_unloaded
 
         if organ_unloaded():
@@ -1431,7 +1440,7 @@ async def _boot_and_run(
         else:
             from kaine.organ_probe import verify_organ_generates
 
-            lingua_cfg = kaine_config.get("lingua") or {}
+            lingua_cfg = ctx.kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(
                 lingua_section_chat_url(lingua_cfg),
                 str(lingua_cfg.get("model_id") or ""),
@@ -1452,37 +1461,47 @@ async def _boot_and_run(
                         "or set KAINE_ALLOW_MUTE_ORGAN=1 to boot anyway.\n"
                     )
                     return ORGAN_GATE_REFUSED_EXIT
+    return None
+
+
+async def _phase_bus(ctx: BootContext) -> int | None:
+    """Open and audit the bus, and start the welfare producer before any module exists."""
 
     bus_config = load_bus_config()
-    bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)
-    await bus.audit()
+    ctx.bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)
+    await ctx.bus.audit()
 
     # Preservation config is needed by the cycle safety-net and by the welfare
     # gray-zone producer, which runs whenever the welfare response is enabled,
     # independent of [evaluation].
     from kaine.cycle.preservation_monitor import PreservationConfig
 
-    preservation_cfg = PreservationConfig.from_section(kaine_config.get("preservation") or {})
+    ctx.preservation_cfg = PreservationConfig.from_section(ctx.kaine_config.get("preservation") or {})
 
     try:
-        welfare_producer = await _start_welfare_producer(bus, eval_cfg, preservation_cfg)
+        ctx.welfare_producer = await _start_welfare_producer(ctx.bus, ctx.eval_cfg, ctx.preservation_cfg)
     except RuntimeError:
         log.error(
             "refusing to start: the welfare response is enabled but its gray-zone producer could not start"
         )
-        await bus.close()
+        await ctx.bus.close()
         return WELFARE_PRODUCER_REFUSED_EXIT
+    return None
+
+
+async def _phase_womb_hold(ctx: BootContext) -> int | None:
+    """Announce a fresh gestation and hold a gestating entity until the womb is ready."""
 
     # Emit the first-gestation event now that the bus exists. This is the only
     # lifecycle event that fires at boot; the gate loop emits the rest on a
     # cadence once modules are up.
-    if fresh_gestation:
+    if ctx.fresh_gestation:
         try:
-            await bus.publish(
+            await ctx.bus.publish(
                 _lifecycle_event(
                     STAGE_GESTATION_STARTED,
                     gestation_started_payload(
-                        gestation_started_at=stage_state.gestation_started_at
+                        gestation_started_at=ctx.stage_state.gestation_started_at
                     ),
                     salience=0.6,
                 )
@@ -1491,13 +1510,14 @@ async def _boot_and_run(
             log.warning("could not publish stage.gestation.started", exc_info=True)
 
     async def _publish_lifecycle(type_: str, payload: dict[str, Any], salience: float) -> None:
-        await bus.publish(_lifecycle_event(type_, payload, salience=salience))
+        await ctx.bus.publish(_lifecycle_event(type_, payload, salience=salience))
+    ctx._publish_lifecycle = _publish_lifecycle
 
     # Womb before spawn (maturation-gate-liveness 2.1): a gestating entity is
     # never spawned without a womb that is ready. Hold here, before any module
     # initializes, reporting stage.gestation.no_stimulus on every failed check.
-    womb_ready = False
-    if staging_enabled and stage_state.is_gestating:
+    ctx.womb_ready = False
+    if ctx.staging_enabled and ctx.stage_state.is_gestating:
         from kaine.cycle.womb_watch import hold_until_womb_ready
 
         hold_stop = asyncio.Event()
@@ -1510,12 +1530,12 @@ async def _boot_and_run(
                 # signal behaviour then ends the process, and nothing is spawned yet.
                 continue
         try:
-            _womb_cfg = MaturationConfig.from_dict(kaine_config.get("developmental_stage"))
-            womb_ready = await hold_until_womb_ready(
-                kaine_config,
-                bus,
+            _womb_cfg = MaturationConfig.from_dict(ctx.kaine_config.get("developmental_stage"))
+            ctx.womb_ready = await hold_until_womb_ready(
+                ctx.kaine_config,
+                ctx.bus,
                 hold_stop,
-                publish=_publish_lifecycle,
+                publish=ctx._publish_lifecycle,
                 retry_seconds=_womb_cfg.womb_ready_retry_seconds,
             )
         finally:
@@ -1525,10 +1545,10 @@ async def _boot_and_run(
                 except NotImplementedError:
                     # Nothing was installed on this loop, so there is nothing to remove.
                     continue
-        if not womb_ready:
+        if not ctx.womb_ready:
             log.info("shutdown requested while waiting for the womb; nothing was spawned")
-            await _stop_welfare_producer(welfare_producer)
-            await bus.close()
+            await _stop_welfare_producer(ctx.welfare_producer)
+            await ctx.bus.close()
             return 0
         from kaine import perception_state as _ps
 
@@ -1536,63 +1556,77 @@ async def _boot_and_run(
         _ps.write_desired_audio(True)
         _ps.write_desired_video(True)
         log.info("gestation: womb ready; pinned locus to the virtual womb (locked by gestation)")
+    return None
+
+
+async def _phase_registry(ctx: BootContext) -> int | None:
+    """Build and initialize the modules, hold effectors while gestating, and apply a revive."""
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
-    # in this function's scope: it is never published to the bus, written to
-    # disk, or logged. The SAME bytes are injected into Praxis (to verify, via
+    # in the boot context, whose repr leaves out every field: it is never
+    # published to the bus, written to disk, or logged. The SAME bytes are injected into Praxis (to verify, via
     # build_registry) and Volition (to sign, below), so an act intent forged by
     # any other bus writer fails verification and never reaches an effector.
-    intent_secret = generate_intent_secret()
+    ctx.intent_secret = generate_intent_secret()
 
-    registry = build_registry(
-        bus,
-        kaine_config,
-        intent_secret=intent_secret,
-        plugins=plugins,
-        boot_stage=stage_state,
+    ctx.registry = build_registry(
+        ctx.bus,
+        ctx.kaine_config,
+        intent_secret=ctx.intent_secret,
+        plugins=ctx.plugins,
+        boot_stage=ctx.stage_state,
     )
-    if not len(registry):
+    if not len(ctx.registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
     # Gestation: keep effectors dormant until birth. The gate_runner will
     # call activate() at birth before unlocking the locus.
-    if staging_enabled and stage_state.is_gestating:
-        _hold_effectors_for_gestation(registry)
+    if ctx.staging_enabled and ctx.stage_state.is_gestating:
+        _hold_effectors_for_gestation(ctx.registry)
 
-    for module in list(registry.all_modules()):
+    for module in list(ctx.registry.all_modules()):
         await module.initialize()
 
     # Revive the preserved individual after modules initialise (so Eidolon's
     # initialize() reloads its disk file) and before the cognitive cycle starts.
     # Module background loops run briefly on fresh state before the revive lands,
     # which is safe because the cognitive cycle (and so the workspace) has not started.
-    if revive is not None:
-        refused = await _revive_or_refuse(revive, registry, bus)
+    if ctx.revive is not None:
+        refused = await _revive_or_refuse(ctx.revive, ctx.registry, ctx.bus)
         if refused is not None:
-            await _stop_welfare_producer(welfare_producer)
+            await _stop_welfare_producer(ctx.welfare_producer)
             return refused
+    return None
+
+
+async def _phase_maturation_gate(ctx: BootContext) -> int | None:
+    """Build the maturation gate runner."""
 
     # Developmental maturation gate. Constructed after modules exist so it can
     # read Hypnos/Phantasia/Mundus signals; started as a background task once
     # the runtime loop is about to run. Ship-inert when staging is disabled.
-    ds_config = MaturationConfig.from_dict(kaine_config.get("developmental_stage"))
-    gate_runner = MaturationGateRunner(
-        bus=bus,
-        config=ds_config,
-        registry=registry,
-        entity_clock=getattr(registry, "entity_clock", None),
-        stage_state=stage_state,
-        staging_enabled=staging_enabled,
-        womb_feed_configured=womb_ready,
+    ctx.ds_config = MaturationConfig.from_dict(ctx.kaine_config.get("developmental_stage"))
+    ctx.gate_runner = MaturationGateRunner(
+        bus=ctx.bus,
+        config=ctx.ds_config,
+        registry=ctx.registry,
+        entity_clock=getattr(ctx.registry, "entity_clock", None),
+        stage_state=ctx.stage_state,
+        staging_enabled=ctx.staging_enabled,
+        womb_feed_configured=ctx.womb_ready,
     )
 
-    cycle_cfg = kaine_config.get("cycle") or {}
-    syn_cfg = kaine_config.get("syneidesis") or {}
+
+async def _phase_workspace(ctx: BootContext) -> int | None:
+    """Build the coherence scorer, affect provider, salience factors, access rate and Syneidesis."""
+
+    ctx.cycle_cfg = ctx.kaine_config.get("cycle") or {}
+    syn_cfg = ctx.kaine_config.get("syneidesis") or {}
     # Oscillatory-binding coherence layer. `make_coherence_scorer` returns None
     # when [oscillator].enabled is false, in which case Syneidesis selection is
     # bit-for-bit the pre-change behavior (no coherence factor, no metadata key).
-    coherence_scorer = make_coherence_scorer(kaine_config)
+    ctx.coherence_scorer = make_coherence_scorer(ctx.kaine_config)
     # Live four-factor salience (wire-salience-goal-thymos). Both real factors
     # read the entity's current affect/drives through an AffectStateProvider the
     # engine refreshes each tick from thymos.state — dependency injection, so the
@@ -1600,15 +1634,15 @@ async def _boot_and_run(
     # by default (the paper's real, already-tested StateModulator); the goal
     # factor is BUILT but ships on the static negative control by default, staged
     # pending validation on logged runs (see config/kaine.toml [syneidesis]).
-    affect_provider = AffectStateProvider()
+    ctx.affect_provider = AffectStateProvider()
     thymos_modulator, goal_scorer, downgraded_factors = make_salience_factors(
-        kaine_config, affect_provider, drive_sources=drive_sources_for(registry)
+        ctx.kaine_config, ctx.affect_provider, drive_sources=drive_sources_for(ctx.registry)
     )
     # Foveation's fovea size reads the same affect snapshot (arousal → size).
     # Wiring it also means the provider must be refreshed each tick so the arousal
     # it reads is live, not the frozen baseline.
-    topos_reads_arousal = _wire_topos_arousal(registry, affect_provider)
-    audition_reads_arousal = _wire_audition_arousal(registry, affect_provider)
+    topos_reads_arousal = _wire_topos_arousal(ctx.registry, ctx.affect_provider)
+    audition_reads_arousal = _wire_audition_arousal(ctx.registry, ctx.affect_provider)
     # The provider only needs refreshing when a real reader consumes it. When both
     # salience factors are the static negative control AND foveation / general
     # auditory perception are off, the engine stays byte-identical to the
@@ -1620,21 +1654,21 @@ async def _boot_and_run(
     from kaine.cycle.access_rate import AccessRateConfig, AccessRateController
 
     access_rate_cfg = AccessRateConfig.from_section(
-        cycle_cfg.get("access_rate"),
+        ctx.cycle_cfg.get("access_rate"),
         default_baseline=float(
-            (kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
+            (ctx.kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
         ),
     )
-    access_rate = AccessRateController(access_rate_cfg) if access_rate_cfg.enabled else None
+    ctx.access_rate = AccessRateController(access_rate_cfg) if access_rate_cfg.enabled else None
     reads_affect = (
         isinstance(thymos_modulator, StateModulator)
         or isinstance(goal_scorer, DriveRelevanceGoalScorer)
         or topos_reads_arousal
         or audition_reads_arousal
-        or access_rate is not None
+        or ctx.access_rate is not None
     )
-    affect_observer = affect_provider.observe if reads_affect else None
-    syneidesis = Syneidesis(
+    ctx.affect_observer = ctx.affect_provider.observe if reads_affect else None
+    ctx.syneidesis = Syneidesis(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),
             goal_scorer=goal_scorer,
@@ -1643,8 +1677,12 @@ async def _boot_and_run(
         ),
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
-        coherence=coherence_scorer,
+        coherence=ctx.coherence_scorer,
     )
+
+
+async def _phase_volition(ctx: BootContext) -> int | None:
+    """Select and build the volition policy."""
     # Executive action selection. By default the drive-biased policy is
     # injected (`drives-to-behavior`): it subsumes the conservative default
     # user-response behavior (one disposition-gated speak intent, no
@@ -1654,13 +1692,13 @@ async def _boot_and_run(
     # Inhibition still gates everything (Volition checks `inhibited` first).
     # An operator can disable drive initiative — falling back to the plain
     # default policy — via `[volition].drive_initiative = false`.
-    volition_cfg = kaine_config.get("volition") or {}
+    volition_cfg = ctx.kaine_config.get("volition") or {}
     policy_name = str(volition_cfg.get("policy", "")).strip().lower()
     drive_initiative = bool(volition_cfg.get("drive_initiative", True))
     # Operator-channel set is shared between Empatheia attribution and Volition
     # user-utterance detection. A single [empatheia].operator_sources key
     # configures both.
-    empatheia_cfg = kaine_config.get("empatheia") or {}
+    empatheia_cfg = ctx.kaine_config.get("empatheia") or {}
     _operator_sources_raw = empatheia_cfg.get("operator_sources")
     operator_sources = None
     if _operator_sources_raw is not None:
@@ -1672,13 +1710,13 @@ async def _boot_and_run(
     # Sign act intents with the per-boot secret so Praxis can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
-    intent_signer = IntentSigner(intent_secret, run_ctx.run_id)
+    intent_signer = IntentSigner(ctx.intent_secret, ctx.run_ctx.run_id)
 
     # Nous proposal realization wraps the chosen policy when the Nous module is
     # enabled. [nous].drive_actions (default true) disables the source for
     # ablation runs while still recording proposal outcomes.
-    modules_cfg = kaine_config.get("modules") or {}
-    nous_cfg = kaine_config.get("nous") or {}
+    modules_cfg = ctx.kaine_config.get("modules") or {}
+    nous_cfg = ctx.kaine_config.get("nous") or {}
     nous_enabled = bool(modules_cfg.get("nous", True))
 
     def _wrap_policy(policy):
@@ -1692,13 +1730,13 @@ async def _boot_and_run(
             speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
             think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
             rest_min_interval_s=float(
-                (kaine_config.get("hypnos") or {}).get(
+                (ctx.kaine_config.get("hypnos") or {}).get(
                     "requested_rest_min_interval_s", 1800.0
                 )
             ),
             time_fn=(
-                registry.entity_clock.now
-                if getattr(registry, "entity_clock", None) is not None
+                ctx.registry.entity_clock.now
+                if getattr(ctx.registry, "entity_clock", None) is not None
                 else None
             ),
         )
@@ -1709,7 +1747,7 @@ async def _boot_and_run(
         # Refractory timing reads the shared subjective clock.
         from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
-        _report_clock = registry.entity_clock.now if registry.entity_clock is not None else None
+        _report_clock = ctx.registry.entity_clock.now if ctx.registry.entity_clock is not None else None
         # Interruptible utterances (PR #81) are opt-in: an absent
         # [volition].interrupt_threshold keeps await-to-completion; a set
         # value must sit strictly above the report bar (enforced by the
@@ -1720,7 +1758,7 @@ async def _boot_and_run(
         # top coalition rarely changes signature, so external speech trends to
         # zero over a multi-day run. None (unset) preserves never-expire.
         _sig_expiry_raw = volition_cfg.get("sig_expiry_s")
-        volition = Volition(
+        ctx.volition = Volition(
             policy=_wrap_policy(
                 SelfInitiatedReportPolicy(
                     report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
@@ -1730,14 +1768,14 @@ async def _boot_and_run(
                     think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
                     sig_expiry_s=(float(_sig_expiry_raw) if _sig_expiry_raw is not None else None),
                     clock=_report_clock,
-                    guard_clock=registry.entity_clock.wall if registry.entity_clock is not None else None,
+                    guard_clock=ctx.registry.entity_clock.wall if ctx.registry.entity_clock is not None else None,
                 )
             ),
             signer=intent_signer,
             operator_sources=operator_sources,
         )
     elif drive_initiative:
-        volition = Volition(
+        ctx.volition = Volition(
             policy=_wrap_policy(
                 DriveBiasedActionSelectionPolicy(operator_sources=operator_sources)
             ),
@@ -1747,25 +1785,29 @@ async def _boot_and_run(
     else:
         from kaine.workspace.volition import DefaultActionSelectionPolicy
 
-        volition = Volition(
+        ctx.volition = Volition(
             policy=_wrap_policy(
                 DefaultActionSelectionPolicy(operator_sources=operator_sources)
             ),
             signer=intent_signer,
             operator_sources=operator_sources,
         )
-    cycle = CognitiveCycle(
-        bus=bus,
-        syneidesis=syneidesis,
-        registry=registry,
-        processing_rate_hz=float(cycle_cfg.get("processing_rate_hz", 10.0)),
+
+
+async def _phase_cycle(ctx: BootContext) -> int | None:
+    """Build the cognitive cycle and its metrics collector."""
+    ctx.cycle = CognitiveCycle(
+        bus=ctx.bus,
+        syneidesis=ctx.syneidesis,
+        registry=ctx.registry,
+        processing_rate_hz=float(ctx.cycle_cfg.get("processing_rate_hz", 10.0)),
         # Resting conscious-access (P3b) rate; held below processing so the
         # senses outrun awareness. With [cycle.access_rate] enabled the rate used
         # each tick rises from here toward the processing rate with arousal and
         # salient reports; this value stays the resting rate.
-        experiential_rate_hz=float(cycle_cfg.get("experiential_rate_hz", 3.333)),
-        volition=volition,
-        collect_phases=coherence_scorer is not None,
+        experiential_rate_hz=float(ctx.cycle_cfg.get("experiential_rate_hz", 3.333)),
+        volition=ctx.volition,
+        collect_phases=ctx.coherence_scorer is not None,
         # H3: tail-seed all cursors so a restarted live entity never replays
         # pre-boot bus events (tests keep the historical read-from-start).
         seed_cursors_to_tail=True,
@@ -1775,7 +1817,7 @@ async def _boot_and_run(
         # target (the cycle attempts the faster rate and the existing slip
         # measurement records any overrun honestly). Phase 3 wires the >1
         # throttle/report.
-        time_scale=float(cycle_cfg.get("time_scale", 1.0)),
+        time_scale=float(ctx.cycle_cfg.get("time_scale", 1.0)),
         # The ONE shared subjective clock built by build_registry from
         # [cycle].time_scale and injected into every cognitive module. Handing
         # the SAME instance to the cycle (it takes precedence over time_scale
@@ -1783,85 +1825,101 @@ async def _boot_and_run(
         # off a single time_scale — they can never desynchronize. None only if a
         # registry was built without one (then the cycle constructs its own from
         # time_scale, identical at 1.0).
-        entity_clock=registry.entity_clock,
+        entity_clock=ctx.registry.entity_clock,
         # Plugins that implement on_cycle_tick observe each tick (plugin-cycle-hook);
         # None when no loaded plugin does, which leaves the cycle unchanged.
-        tick_observer=plugins.cycle_observer(),
+        tick_observer=ctx.plugins.cycle_observer(),
         # Deterministic mode (opt-in, [experiment].deterministic; default false).
         # When true the engine stamps events from a logical clock and the seed
         # A1 already pinned makes the run bit-for-bit reproducible. Production
         # leaves it false → real wall-clock time. Used by ablation experiments.
-        deterministic=bool(experiment_cfg.get("deterministic", False)),
-        time_scale_controller=_make_time_scale_controller(cycle_cfg),
+        deterministic=bool(ctx.experiment_cfg.get("deterministic", False)),
+        time_scale_controller=_make_time_scale_controller(ctx.cycle_cfg),
         # DI seam for the live salience factors: the engine refreshes the affect/
         # drive snapshot from each tick's thymos.state. None when both factors are
         # the static negative control (then the tick is byte-identical).
-        affect_observer=affect_observer,
-        access_rate=access_rate,
+        affect_observer=ctx.affect_observer,
+        access_rate=ctx.access_rate,
         arousal_provider=(
-            (lambda: affect_provider.dimensional_state().arousal)
-            if access_rate is not None
+            (lambda: ctx.affect_provider.dimensional_state().arousal)
+            if ctx.access_rate is not None
             else None
         ),
     )
     # Make a live MetricsCollector reachable by Nexus.
-    _ = MetricsCollector(cycle, registry)
+    _ = MetricsCollector(ctx.cycle, ctx.registry)
+
+
+async def _phase_supervision(ctx: BootContext) -> int | None:
+    """Build the Spot config, the fork manager and the module rebuilder."""
 
     # Spot module supervisor (cycle-layer component, not a registry module).
-    spot_cfg = SpotConfig.from_section(kaine_config.get("spot") or {})
-    lifecycle_cfg = kaine_config.get("lifecycle") or {}
-    fork_manager = ForkManager(
+    ctx.spot_cfg = SpotConfig.from_section(ctx.kaine_config.get("spot") or {})
+    lifecycle_cfg = ctx.kaine_config.get("lifecycle") or {}
+    ctx.fork_manager = ForkManager(
         resolve(lifecycle_cfg.get("snapshots_path", "state/forks"))
     )
 
-    rebuild_module = _make_rebuild_module(bus, kaine_config, registry, intent_secret)
+    ctx.rebuild_module = _make_rebuild_module(ctx.bus, ctx.kaine_config, ctx.registry, ctx.intent_secret)
+
+
+async def _phase_runtime_state(ctx: BootContext) -> int | None:
+    """Write the first runtime state for Nexus."""
 
     await _write_runtime_state(
-        cycle,
-        registry,
-        supervision_mode=supervision_mode,
-        gate_checks=gate_checks,
-        stage_state=stage_state,
-        staging_enabled=staging_enabled,
-        revived_from=revive.revived_from if revive is not None else None,
+        ctx.cycle,
+        ctx.registry,
+        supervision_mode=ctx.supervision_mode,
+        gate_checks=ctx.gate_checks,
+        stage_state=ctx.stage_state,
+        staging_enabled=ctx.staging_enabled,
+        revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
     )
+
+
+async def _phase_sidecar(ctx: BootContext) -> int | None:
+    """Start the evaluation sidecar and the ablation recorder when enabled."""
 
     # Optional evaluation sidecar. NO core module imports kaine.evaluation;
     # the cycle entrypoint is the single coupling point. eval_cfg was loaded at
     # the top of _boot_and_run (fail-closed before any resource opened).
-    sidecar: SidecarRegistry | None = None
-    research_active = research_event_log_cfg.enabled or research_event_log_cfg.raw_archive.enabled
-    if eval_cfg.enabled or research_active:
+    ctx.sidecar = None
+    research_active = ctx.research_event_log_cfg.enabled or ctx.research_event_log_cfg.raw_archive.enabled
+    if ctx.eval_cfg.enabled or research_active:
         from kaine.boot import shared_embedder
 
-        sidecar = SidecarRegistry(
-            bus=bus,
-            config=eval_cfg,
-            research_event_log_config=research_event_log_cfg,
-            thymos_state_provider=_thymos_state_factory(registry),
-            sleep_state_provider=_sleep_state_factory(registry),
-            memory_source=_memory_source_factory(registry),
-            cognitive_query_client=_cognitive_query_client_factory(registry, eval_cfg),
-            embedder=shared_embedder(registry, kaine_config),
-            welfare_observer=welfare_producer[0] if welfare_producer else None,
+        ctx.sidecar = SidecarRegistry(
+            bus=ctx.bus,
+            config=ctx.eval_cfg,
+            research_event_log_config=ctx.research_event_log_cfg,
+            thymos_state_provider=_thymos_state_factory(ctx.registry),
+            sleep_state_provider=_sleep_state_factory(ctx.registry),
+            memory_source=_memory_source_factory(ctx.registry),
+            cognitive_query_client=_cognitive_query_client_factory(ctx.registry, ctx.eval_cfg),
+            embedder=shared_embedder(ctx.registry, ctx.kaine_config),
+            welfare_observer=ctx.welfare_producer[0] if ctx.welfare_producer else None,
         )
         try:
-            await sidecar.start()
+            await ctx.sidecar.start()
             log.info("evaluation sidecar started")
         except Exception:
             log.warning("evaluation sidecar start failed", exc_info=True)
-            sidecar = None
+            ctx.sidecar = None
 
     # Attach the live oscillatory-ablation recorder to the cycle once the sidecar
     # (and its ablation sink) is up. Off unless [evaluation].oscillatory_ablation
     # is set; when off this is a no-op and the cycle takes the plain select path.
-    if sidecar is not None and sidecar.ablation_recorder is not None:
-        cycle.set_ablation_recorder(sidecar.ablation_recorder)
+    if ctx.sidecar is not None and ctx.sidecar.ablation_recorder is not None:
+        ctx.cycle.set_ablation_recorder(ctx.sidecar.ablation_recorder)
         log.info("live oscillatory ablation attached to cycle")
 
-    ignition_log = None
+
+async def _phase_ignition_log(ctx: BootContext) -> int | None:
+    """Open the ignition log when enabled."""
+
+    ctx.ignition_log = None
     try:
-        il_cfg = IgnitionLogConfig.from_section(kaine_config.get("ignition_log"))
+        il_cfg = IgnitionLogConfig.from_section(ctx.kaine_config.get("ignition_log"))
     except Exception:
         log.warning("ignition log config invalid; continuing without it", exc_info=True)
         il_cfg = IgnitionLogConfig(enabled=False)
@@ -1870,7 +1928,7 @@ async def _boot_and_run(
         try:
             from kaine.modules.topos.feed import load_playlist_manifest
 
-            perception_cfg = kaine_config.get("perception_feed") or {}
+            perception_cfg = ctx.kaine_config.get("perception_feed") or {}
             clock = perception_cfg.get("_shared_playlist_clock")
             manifest_path = perception_cfg.get("playlist_manifest")
 
@@ -1881,7 +1939,7 @@ async def _boot_and_run(
                 def position_provider() -> tuple[Any, ...] | None:
                     return None
 
-            audition_mod = registry.get("audition") if "audition" in registry else None
+            audition_mod = ctx.registry.get("audition") if "audition" in ctx.registry else None
             if audition_mod is not None and hasattr(
                 audition_mod, "playlist_audio_position"
             ):
@@ -1892,60 +1950,73 @@ async def _boot_and_run(
 
             sink = ignition_log_sink(il_cfg.directory)
             await sink.start()
-            ignition_log = IgnitionLog(
+            ctx.ignition_log = IgnitionLog(
                 sink,
                 position_provider,
                 audio_position_provider=audio_position_provider,
             )
-            cycle.set_broadcast_observer(ignition_log)
+            ctx.cycle.set_broadcast_observer(ctx.ignition_log)
             log.info("ignition log enabled directory=%s", il_cfg.directory)
         except Exception:
             log.warning(
                 "ignition log setup failed; continuing without it", exc_info=True
             )
-            ignition_log = None
+            ctx.ignition_log = None
+
+
+async def _phase_preview(ctx: BootContext) -> int | None:
+    """Start the perception preview server when enabled."""
 
     # Dev-gated LOOPBACK perception-preview server (paper §4.4 explicit
     # override). Populated by Topos/Audition, this bridges the in-RAM preview
     # holder to the SEPARATE Nexus process over a 127.0.0.1-only socket so the
     # live PiP shows what the entity sees. Off by default; only binds when the
     # operator exports KAINE_PERCEPTION_PREVIEW=1. Frames never touch disk.
-    preview_server = None
+    ctx.preview_server = None
     try:
         from kaine import perception_preview
+        ctx.perception_preview = perception_preview
         from kaine.perception_preview_server import start_preview_server
 
-        preview_server = await start_preview_server(config=kaine_config)
-        if preview_server is not None:
+        ctx.preview_server = await start_preview_server(config=ctx.kaine_config)
+        if ctx.preview_server is not None:
             log.info(
                 "perception preview server on loopback %s:%d (dev override)",
-                preview_server.host,
-                preview_server.port,
+                ctx.preview_server.host,
+                ctx.preview_server.port,
             )
     except Exception:
         log.warning("perception preview server failed to start", exc_info=True)
-        preview_server = None
+        ctx.preview_server = None
+
+
+async def _phase_remote_bridge(ctx: BootContext) -> int | None:
+    """Start the remote bridge when enabled."""
 
     # Optional remote perception bridge ([remote_bridge].enabled; ships off).
     # Cycle-layer component like Spot: injects remote operator A/V into the
     # perception modules and streams speech/transcript back over the tailnet.
-    remote_bridge = None
+    ctx.remote_bridge = None
     try:
         from kaine.remote.bridge import build_remote_bridge
 
-        remote_bridge = build_remote_bridge(kaine_config, bus=bus, registry=registry)
-        if remote_bridge is not None:
-            await remote_bridge.start()
+        ctx.remote_bridge = build_remote_bridge(ctx.kaine_config, bus=ctx.bus, registry=ctx.registry)
+        if ctx.remote_bridge is not None:
+            await ctx.remote_bridge.start()
     except Exception:
         log.error("remote bridge failed to start", exc_info=True)
-        remote_bridge = None
+        ctx.remote_bridge = None
+
+
+async def _phase_signals(ctx: BootContext) -> int | None:
+    """Install the stop signal handlers and clear any stale freeze and escalation."""
 
     loop = asyncio.get_running_loop()
-    stop_event = asyncio.Event()
+    ctx.stop_event = asyncio.Event()
 
     def _signal_handler():
         log.info("signal received; shutting down")
-        stop_event.set()
+        ctx.stop_event.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
@@ -1967,19 +2038,27 @@ async def _boot_and_run(
     except Exception:
         log.debug("could not clear escalation at startup", exc_info=True)
 
-    spot = Spot(
-        registry=registry,
-        fork_manager=fork_manager,
-        kaine_config=kaine_config,
-        config=spot_cfg,
-        rebuild_module=rebuild_module,
-        bus=bus,
-        on_halt=lambda: stop_event.set(),
+
+async def _phase_spot(ctx: BootContext) -> int | None:
+    """Build Spot, the module supervisor."""
+
+    ctx.spot = Spot(
+        registry=ctx.registry,
+        fork_manager=ctx.fork_manager,
+        kaine_config=ctx.kaine_config,
+        config=ctx.spot_cfg,
+        rebuild_module=ctx.rebuild_module,
+        bus=ctx.bus,
+        on_halt=lambda: ctx.stop_event.set(),
         # Best-effort tick<->poll bridge: lets a spot.incident annotation be
         # located within the run by cycle tick, not just Spot's poll index.
-        tick_index_provider=lambda: cycle.tick_index,
-        escalate_on_crash=(supervision_mode == "unattended"),
+        tick_index_provider=lambda: ctx.cycle.tick_index,
+        escalate_on_crash=(ctx.supervision_mode == "unattended"),
     )
+
+
+async def _phase_safety_net(ctx: BootContext) -> int | None:
+    """Build the divergence monitor, the caretaker and the welfare-protective monitor."""
 
     # Autonomous welfare safety-net monitors (cycle-layer, siblings to Spot):
     # the divergence→preserve trigger and the welfare-protective response. Both
@@ -1989,7 +2068,6 @@ async def _boot_and_run(
     from kaine.cycle.incident_log import IncidentLog
     from kaine.cycle.preservation_monitor import (
         DivergenceMonitor,
-        PreservationConfig,
         WelfareProtectiveMonitor,
     )
     from kaine.lifecycle.divergence import (
@@ -1997,116 +2075,124 @@ async def _boot_and_run(
         consolidation_thresholds_from_config,
     )
 
-    cons_rate, cons_mag = consolidation_thresholds_from_config(kaine_config)
+    cons_rate, cons_mag = consolidation_thresholds_from_config(ctx.kaine_config)
     adapter_dir = adapter_dir_for(
-        kaine_config, resolve(preservation_cfg.divergence_monitor.state_root)
+        ctx.kaine_config, resolve(ctx.preservation_cfg.divergence_monitor.state_root)
     )
-    divergence_monitor = None
-    welfare_monitor = None
-    if preservation_cfg.divergence_monitor.enabled:
-        divergence_monitor = DivergenceMonitor(
-            registry=registry,
-            fork_manager=fork_manager,
-            config=preservation_cfg.divergence_monitor,
-            bus=bus,
+    ctx.divergence_monitor = None
+    ctx.welfare_monitor = None
+    if ctx.preservation_cfg.divergence_monitor.enabled:
+        ctx.divergence_monitor = DivergenceMonitor(
+            registry=ctx.registry,
+            fork_manager=ctx.fork_manager,
+            config=ctx.preservation_cfg.divergence_monitor,
+            bus=ctx.bus,
             incident_log=IncidentLog(
                 enabled=True,
-                path=preservation_cfg.incident_path,
+                path=ctx.preservation_cfg.incident_path,
                 name="preservation_divergence",
             ),
-            require_encryption=preservation_cfg.require_encryption,
+            require_encryption=ctx.preservation_cfg.require_encryption,
             consolidation_rate_threshold=cons_rate,
             consolidation_magnitude_threshold=cons_mag,
             adapter_output_dir=adapter_dir,
         )
-    if supervision_mode == "unattended":
+    if ctx.supervision_mode == "unattended":
         from kaine.cycle.caretaker import CaretakerConfig
         from kaine.cycle.caretaker_runtime import CaretakerNotifier
 
-        caretaker = CaretakerNotifier(
-            CaretakerConfig.from_section(kaine_config.get("caretaker") or {})
+        ctx.caretaker = CaretakerNotifier(
+            CaretakerConfig.from_section(ctx.kaine_config.get("caretaker") or {})
         )
-        await caretaker.start()
+        await ctx.caretaker.start()
     else:
-        caretaker = None
+        ctx.caretaker = None
 
-    _caretaker_tasks: set[asyncio.Task] = set()
+    ctx._caretaker_tasks = set()
 
     def _on_welfare_response(action: str) -> None:
-        if caretaker is None:
+        if ctx.caretaker is None:
             return
         try:
             task = asyncio.get_running_loop().create_task(
-                caretaker.send_event("welfare_response")
+                ctx.caretaker.send_event("welfare_response")
             )
         except RuntimeError:
             return
-        _caretaker_tasks.add(task)
-        task.add_done_callback(_caretaker_tasks.discard)
+        ctx._caretaker_tasks.add(task)
+        task.add_done_callback(ctx._caretaker_tasks.discard)
 
-    if preservation_cfg.welfare_response.enabled:
-        welfare_monitor = WelfareProtectiveMonitor(
-            registry=registry,
-            fork_manager=fork_manager,
-            config=preservation_cfg.welfare_response,
-            bus=bus,
+    if ctx.preservation_cfg.welfare_response.enabled:
+        ctx.welfare_monitor = WelfareProtectiveMonitor(
+            registry=ctx.registry,
+            fork_manager=ctx.fork_manager,
+            config=ctx.preservation_cfg.welfare_response,
+            bus=ctx.bus,
             incident_log=IncidentLog(
                 enabled=True,
-                path=preservation_cfg.incident_path,
+                path=ctx.preservation_cfg.incident_path,
                 name="preservation_welfare",
             ),
-            on_end=lambda: stop_event.set(),
-            require_encryption=preservation_cfg.require_encryption,
+            on_end=lambda: ctx.stop_event.set(),
+            require_encryption=ctx.preservation_cfg.require_encryption,
             on_response=_on_welfare_response,
         )
 
-    cycle_task = asyncio.create_task(cycle.run_forever(), name="cycle.run_forever")
-    freeze_task = asyncio.create_task(
+
+async def _phase_launch(ctx: BootContext) -> int | None:
+    """Start the cycle, freeze-watch, Spot, divergence and welfare tasks."""
+
+    ctx.cycle_task = asyncio.create_task(ctx.cycle.run_forever(), name="cycle.run_forever")
+    ctx.freeze_task = asyncio.create_task(
         _freeze_watch_loop(
-            cycle,
-            stop_event,
-            playlist_clock=(kaine_config.get("perception_feed") or {}).get(
+            ctx.cycle,
+            ctx.stop_event,
+            playlist_clock=(ctx.kaine_config.get("perception_feed") or {}).get(
                 "_shared_playlist_clock"
             ),
         ),
         name="cycle.freeze_watch",
     )
-    spot_task = (
-        asyncio.create_task(spot.run(stop_event), name="cycle.spot") if spot_cfg.enabled else None
+    ctx.spot_task = (
+        asyncio.create_task(ctx.spot.run(ctx.stop_event), name="cycle.spot") if ctx.spot_cfg.enabled else None
     )
-    divergence_task = (
-        asyncio.create_task(divergence_monitor.run(stop_event), name="cycle.divergence_monitor")
-        if divergence_monitor is not None
+    ctx.divergence_task = (
+        asyncio.create_task(ctx.divergence_monitor.run(ctx.stop_event), name="cycle.divergence_monitor")
+        if ctx.divergence_monitor is not None
         else None
     )
-    welfare_task = (
-        asyncio.create_task(welfare_monitor.run(stop_event), name="cycle.welfare_monitor")
-        if welfare_monitor is not None
+    ctx.welfare_task = (
+        asyncio.create_task(ctx.welfare_monitor.run(ctx.stop_event), name="cycle.welfare_monitor")
+        if ctx.welfare_monitor is not None
         else None
     )
+
+
+async def _phase_birth(ctx: BootContext) -> int | None:
+    """Wire the maturation gate's pause sources and birth hooks, and start the gate and individuation tasks."""
     # Frozen time is not lived time: the runner subtracts the subjective time
     # the cycle spends paused (maturation-gate-liveness 2.5).
     # A frozen entity is never born, whoever froze it.
-    gate_runner.set_pause_sources(
-        paused_seconds=cycle.paused_subjective_seconds,
-        is_paused=lambda: cycle.is_paused,
+    ctx.gate_runner.set_pause_sources(
+        paused_seconds=ctx.cycle.paused_subjective_seconds,
+        is_paused=lambda: ctx.cycle.is_paused,
     )
     # Birth transition (local-womb-feed 3.6): at birth the local womb blooms
     # once over birth_transition_seconds, then falls silent.
     # The individuation producer captures the birth reference from the same hook.
     individuation_runtime = None
-    if individuation_cfg is not None and individuation_cfg.enabled:
+    if ctx.individuation_cfg is not None and ctx.individuation_cfg.enabled:
         individuation_runtime = _build_individuation(
-            cfg=individuation_cfg,
-            kaine_config=kaine_config,
-            registry=registry,
-            bus=bus,
-            cycle=cycle,
-            gate_runner=gate_runner,
-            staging_enabled=staging_enabled,
-            caretaker=caretaker,
+            cfg=ctx.individuation_cfg,
+            kaine_config=ctx.kaine_config,
+            registry=ctx.registry,
+            bus=ctx.bus,
+            cycle=ctx.cycle,
+            gate_runner=ctx.gate_runner,
+            staging_enabled=ctx.staging_enabled,
+            caretaker=ctx.caretaker,
         )
-    _womb_feed = kaine_config.get("perception_feed") or {}
+    _womb_feed = ctx.kaine_config.get("perception_feed") or {}
     _birth_clock = _womb_feed.get("_shared_womb_clock")
     _womb_birth_hook = None
     if _birth_clock is not None:
@@ -2119,52 +2205,60 @@ async def _boot_and_run(
         individuation_runtime.on_birth if individuation_runtime is not None else None,
     )
     if _birth_hook is not None:
-        gate_runner.set_birth_hook(_birth_hook)
-    gate_task = (
-        asyncio.create_task(gate_runner.run(stop_event), name="cycle.maturation_gate")
-        if staging_enabled and stage_state.is_gestating
+        ctx.gate_runner.set_birth_hook(_birth_hook)
+    ctx.gate_task = (
+        asyncio.create_task(ctx.gate_runner.run(ctx.stop_event), name="cycle.maturation_gate")
+        if ctx.staging_enabled and ctx.stage_state.is_gestating
         else None
     )
-    individuation_task = (
+    ctx.individuation_task = (
         asyncio.create_task(
-            _run_individuation(individuation_runtime, stop_event),
+            _run_individuation(individuation_runtime, ctx.stop_event),
             name="cycle.individuation",
         )
         if individuation_runtime is not None
         else None
     )
+
+
+async def _phase_womb_watch(ctx: BootContext) -> int | None:
+    """Watch for womb loss while gestating."""
     # Womb loss (maturation-gate-liveness 2.2): freeze a gestating entity under
     # its own holder when the womb stops, and release it when the womb returns.
-    womb_watch_task = None
-    if staging_enabled and stage_state.is_gestating:
+    ctx.womb_watch_task = None
+    if ctx.staging_enabled and ctx.stage_state.is_gestating:
         from kaine.cycle.womb_watch import WombLossWatcher
 
-        womb_watch_task = asyncio.create_task(
+        ctx.womb_watch_task = asyncio.create_task(
             WombLossWatcher(
-                kaine_config,
-                bus,
-                publish=_publish_lifecycle,
-                is_gestating=lambda: gate_runner.stage.is_gestating,
-                notify=caretaker.send_event if caretaker is not None else None,
-                check_seconds=ds_config.womb_check_seconds,
-                loss_after_seconds=ds_config.womb_loss_after_seconds,
-                window_s=ds_config.womb_presence_window_seconds,
-                arm_timeout_seconds=ds_config.womb_arm_timeout_seconds,
-            ).run(stop_event),
+                ctx.kaine_config,
+                ctx.bus,
+                publish=ctx._publish_lifecycle,
+                is_gestating=lambda: ctx.gate_runner.stage.is_gestating,
+                notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
+                check_seconds=ctx.ds_config.womb_check_seconds,
+                loss_after_seconds=ctx.ds_config.womb_loss_after_seconds,
+                window_s=ctx.ds_config.womb_presence_window_seconds,
+                arm_timeout_seconds=ctx.ds_config.womb_arm_timeout_seconds,
+            ).run(ctx.stop_event),
             name="cycle.womb_watch",
         )
-    caretaker_task = (
-        asyncio.create_task(caretaker.run(stop_event), name="cycle.caretaker")
-        if caretaker is not None
+
+
+async def _phase_caretaker(ctx: BootContext) -> int | None:
+    """Start the caretaker and the continuous-input watch."""
+    ctx.caretaker_task = (
+        asyncio.create_task(ctx.caretaker.run(ctx.stop_event), name="cycle.caretaker")
+        if ctx.caretaker is not None
         else None
     )
-    input_watch_task = None
-    if caretaker is not None:
+    ctx.input_watch_task = None
+    if ctx.caretaker is not None:
         from kaine.cycle.caretaker import CaretakerConfig as _InputCaretakerConfig
         from kaine.cycle.input_check import InputLossWatcher
 
         streams: list[str] = []
-        modules = kaine_config.get("modules") or {}
+        modules = ctx.kaine_config.get("modules") or {}
         if modules.get("topos"):
             streams.append("topos.out")
         if modules.get("audition"):
@@ -2173,217 +2267,283 @@ async def _boot_and_run(
         if streams:
             # Validated by the gate (condition 7) before admission.
             threshold_s = _InputCaretakerConfig.from_section(
-                kaine_config.get("caretaker") or {}
+                ctx.kaine_config.get("caretaker") or {}
             ).input_loss_after_s
-            input_watch_task = asyncio.create_task(
+            ctx.input_watch_task = asyncio.create_task(
                 InputLossWatcher(
-                    bus,
+                    ctx.bus,
                     streams,
                     threshold_s=threshold_s,
-                    on_loss=lambda: caretaker.send_event("input_lost"),
-                ).run(stop_event),
+                    on_loss=lambda: ctx.caretaker.send_event("input_lost"),
+                ).run(ctx.stop_event),
                 name="cycle.input_watch",
             )
+
+
+async def _phase_gestation(ctx: BootContext) -> int | None:
+    """Start womb presence and the gestation owner."""
     # A running local womb proves itself from real deliveries: presence events
     # on gestation.out (the same contract an external provider uses), which the
     # maturation gate reads to detect womb loss. gestation.out is not a module
     # stream, so presence never enters the workspace.
-    womb_presence_task = _start_womb_presence(kaine_config, bus, stop_event)
+    ctx.womb_presence_task = _start_womb_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
-    gestation_task = None
-    if staging_enabled and stage_state.is_gestating:
-        gestation_task = _start_gestation_owner(
-            kaine_config,
-            bus,
-            registry,
-            stop_event,
-            is_paused=lambda: cycle.is_paused,
+    ctx.gestation_task = None
+    if ctx.staging_enabled and ctx.stage_state.is_gestating:
+        ctx.gestation_task = _start_gestation_owner(
+            ctx.kaine_config,
+            ctx.bus,
+            ctx.registry,
+            ctx.stop_event,
+            is_paused=lambda: ctx.cycle.is_paused,
         )
 
-    preserve_task = _start_preserve_watcher(
-        registry,
-        fork_manager,
-        preservation_cfg,
-        is_paused=lambda: cycle.is_paused,
-        request_stop=stop_event.set,
-        stop_event=stop_event,
+
+async def _phase_watchers(ctx: BootContext) -> int | None:
+    """Start the preserve watcher and the programme-end watcher."""
+
+    ctx.preserve_task = _start_preserve_watcher(
+        ctx.registry,
+        ctx.fork_manager,
+        ctx.preservation_cfg,
+        is_paused=lambda: ctx.cycle.is_paused,
+        request_stop=ctx.stop_event.set,
+        stop_event=ctx.stop_event,
     )
-    programme_end_task = _start_programme_end_watcher(
-        kaine_config,
-        notify=caretaker.send_event if caretaker is not None else None,
-        stop_event=stop_event,
+    ctx.programme_end_task = _start_programme_end_watcher(
+        ctx.kaine_config,
+        notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
+        stop_event=ctx.stop_event,
     )
 
-    try:
-        _welfare_supervision: dict = {}
-        # Periodically update runtime.json so Nexus has fresh metrics
-        # even before any tick happens.
-        while not stop_event.is_set() and not cycle_task.done():
-            await _supervise_welfare_producer(
-                welfare_producer, _welfare_supervision, time.monotonic()
-            )
-            if supervision_mode == "unattended":
-                if spot_task is None:
-                    log.critical(
-                        "Spot supervision task was never started; escalating"
-                    )
-                    await spot.escalate_supervision_lost(
-                        "supervision task never started"
-                    )
-                    stop_event.set()
-                    break
-                if spot_task.done() and not spot.escalated:
-                    log.critical(
-                        "Spot supervision task ended unexpectedly; escalating"
-                    )
-                    await spot.escalate_supervision_lost(
-                        "supervision task ended"
-                    )
-                    stop_event.set()
-                    break
-            await _write_runtime_state(
-                cycle,
-                registry,
-                supervision_mode=supervision_mode,
-                gate_checks=gate_checks,
-                stage_state=gate_runner.stage if staging_enabled else None,
-                gate_status=gate_runner.status if staging_enabled else None,
-                staging_enabled=staging_enabled,
-                revived_from=revive.revived_from if revive is not None else None,
-            )
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue
-    finally:
-        if womb_presence_task is not None:
-            womb_presence_task.cancel()
-            try:
-                await womb_presence_task
-            except asyncio.CancelledError:
-                # Expected: we just cancelled it.
-                log.debug("womb presence task cancelled at shutdown")
-            except Exception:
-                log.exception("womb presence task shutdown failed")
-        if input_watch_task is not None:
-            input_watch_task.cancel()
-            try:
-                await input_watch_task
-            except asyncio.CancelledError:
-                # Expected: we just cancelled it.
-                log.debug("input watch task cancelled at shutdown")
-            except Exception:
-                log.exception("input watch task shutdown failed")
-        if caretaker is not None:
-            try:
-                if spot.escalated:
-                    from kaine.cycle.escalation_state import read_escalation
 
-                    rec = read_escalation()
-                    await caretaker.send_event(
-                        "supervision_lost" if rec.module == "spot" else "spot_escalation"
-                    )
-            except Exception:
-                log.warning("caretaker escalation notice failed", exc_info=True)
-            try:
-                if _caretaker_tasks:
-                    await asyncio.gather(*_caretaker_tasks, return_exceptions=True)
-            except Exception:
-                log.warning("caretaker welfare tasks shutdown failed", exc_info=True)
-            try:
-                if caretaker_task is not None and not caretaker_task.done():
-                    caretaker_task.cancel()
-                    try:
-                        await caretaker_task
-                    except asyncio.CancelledError:
-                        # Expected: we just cancelled it.
-                        log.debug("caretaker task cancelled at shutdown")
-                    except Exception:
-                        log.warning("caretaker task raised during shutdown", exc_info=True)
-            except Exception:
-                log.warning("caretaker task cancellation failed", exc_info=True)
-            try:
-                await caretaker.stop()
-            except Exception:
-                log.warning("caretaker stop failed", exc_info=True)
-        if not freeze_task.done():
-            freeze_task.cancel()
+_BOOT_PHASES = (
+    _phase_stage,
+    _phase_preconditions,
+    _phase_run_identity,
+    _phase_gates,
+    _phase_bus,
+    _phase_womb_hold,
+    _phase_registry,
+    _phase_maturation_gate,
+    _phase_workspace,
+    _phase_volition,
+    _phase_cycle,
+    _phase_supervision,
+    _phase_runtime_state,
+    _phase_sidecar,
+    _phase_ignition_log,
+    _phase_preview,
+    _phase_remote_bridge,
+    _phase_signals,
+    _phase_spot,
+    _phase_safety_net,
+    _phase_launch,
+    _phase_birth,
+    _phase_womb_watch,
+    _phase_caretaker,
+    _phase_gestation,
+    _phase_watchers,
+)
+
+
+async def _run_until_stopped(ctx: BootContext) -> None:
+    """Supervise the running cycle until a stop is requested or the cycle ends."""
+    _welfare_supervision: dict = {}
+    # Periodically update runtime.json so Nexus has fresh metrics
+    # even before any tick happens.
+    while not ctx.stop_event.is_set() and not ctx.cycle_task.done():
+        await _supervise_welfare_producer(
+            ctx.welfare_producer, _welfare_supervision, time.monotonic()
+        )
+        if ctx.supervision_mode == "unattended":
+            if ctx.spot_task is None:
+                log.critical(
+                    "Spot supervision task was never started; escalating"
+                )
+                await ctx.spot.escalate_supervision_lost(
+                    "supervision task never started"
+                )
+                ctx.stop_event.set()
+                break
+            if ctx.spot_task.done() and not ctx.spot.escalated:
+                log.critical(
+                    "Spot supervision task ended unexpectedly; escalating"
+                )
+                await ctx.spot.escalate_supervision_lost(
+                    "supervision task ended"
+                )
+                ctx.stop_event.set()
+                break
+        await _write_runtime_state(
+            ctx.cycle,
+            ctx.registry,
+            supervision_mode=ctx.supervision_mode,
+            gate_checks=ctx.gate_checks,
+            stage_state=ctx.gate_runner.stage if ctx.staging_enabled else None,
+            gate_status=ctx.gate_runner.status if ctx.staging_enabled else None,
+            staging_enabled=ctx.staging_enabled,
+            revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
+        )
         try:
-            await freeze_task
+            await asyncio.wait_for(ctx.stop_event.wait(), timeout=1.0)
+        except asyncio.TimeoutError:
+            continue
+
+
+async def _shutdown(ctx: BootContext) -> None:
+    """Stop every task, service and module the boot started, in a fixed order, then close the bus."""
+    if ctx.womb_presence_task is not None:
+        ctx.womb_presence_task.cancel()
+        try:
+            await ctx.womb_presence_task
+        except asyncio.CancelledError:
+            # Expected: we just cancelled it.
+            log.debug("womb presence task cancelled at shutdown")
+        except Exception:
+            log.exception("womb presence task shutdown failed")
+    if ctx.input_watch_task is not None:
+        ctx.input_watch_task.cancel()
+        try:
+            await ctx.input_watch_task
+        except asyncio.CancelledError:
+            # Expected: we just cancelled it.
+            log.debug("input watch task cancelled at shutdown")
+        except Exception:
+            log.exception("input watch task shutdown failed")
+    if ctx.caretaker is not None:
+        try:
+            if ctx.spot.escalated:
+                from kaine.cycle.escalation_state import read_escalation
+
+                rec = read_escalation()
+                await ctx.caretaker.send_event(
+                    "supervision_lost" if rec.module == "spot" else "spot_escalation"
+                )
+        except Exception:
+            log.warning("caretaker escalation notice failed", exc_info=True)
+        try:
+            if ctx._caretaker_tasks:
+                await asyncio.gather(*ctx._caretaker_tasks, return_exceptions=True)
+        except Exception:
+            log.warning("caretaker welfare tasks shutdown failed", exc_info=True)
+        try:
+            if ctx.caretaker_task is not None and not ctx.caretaker_task.done():
+                ctx.caretaker_task.cancel()
+                try:
+                    await ctx.caretaker_task
+                except asyncio.CancelledError:
+                    # Expected: we just cancelled it.
+                    log.debug("caretaker task cancelled at shutdown")
+                except Exception:
+                    log.warning("caretaker task raised during shutdown", exc_info=True)
+        except Exception:
+            log.warning("caretaker task cancellation failed", exc_info=True)
+        try:
+            await ctx.caretaker.stop()
+        except Exception:
+            log.warning("caretaker stop failed", exc_info=True)
+    if not ctx.freeze_task.done():
+        ctx.freeze_task.cancel()
+    try:
+        await ctx.freeze_task
+    except asyncio.CancelledError:
+        pass  # expected: we just cancelled it
+    except Exception:
+        log.warning("freeze watch task raised during shutdown", exc_info=True)
+    if ctx.spot_task is not None:
+        if not ctx.spot_task.done():
+            ctx.spot_task.cancel()
+        try:
+            await ctx.spot_task
         except asyncio.CancelledError:
             pass  # expected: we just cancelled it
         except Exception:
-            log.warning("freeze watch task raised during shutdown", exc_info=True)
-        if spot_task is not None:
-            if not spot_task.done():
-                spot_task.cancel()
-            try:
-                await spot_task
-            except asyncio.CancelledError:
-                pass  # expected: we just cancelled it
-            except Exception:
-                log.warning("spot watchdog task raised during shutdown", exc_info=True)
-        for monitor_task in (
-            divergence_task, welfare_task, gate_task, womb_watch_task, gestation_task, preserve_task, programme_end_task, individuation_task
-        ):
-            if monitor_task is None:
-                continue
-            if not monitor_task.done():
-                monitor_task.cancel()
-            try:
-                await monitor_task
-            except asyncio.CancelledError:
-                pass  # expected: we just cancelled it
-            except Exception:
-                log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
-        if preview_server is not None:
-            try:
-                await preview_server.stop()
-            except Exception:
-                log.warning("perception preview server stop failed", exc_info=True)
-            # Drop any lingering in-RAM preview so no stale frame survives the
-            # cycle even in-process.
-            try:
-                perception_preview.clear()
-            except Exception:
-                log.debug("preview holder clear failed", exc_info=True)
-        if remote_bridge is not None:
-            try:
-                await remote_bridge.stop()
-            except Exception:
-                log.warning("remote bridge stop failed", exc_info=True)
-        if sidecar is not None:
-            try:
-                await sidecar.stop()
-            except Exception:
-                log.warning("evaluation sidecar stop failed", exc_info=True)
-        await _stop_welfare_producer(welfare_producer)
+            log.warning("spot watchdog task raised during shutdown", exc_info=True)
+    for monitor_task in (
+        ctx.divergence_task, ctx.welfare_task, ctx.gate_task, ctx.womb_watch_task, ctx.gestation_task, ctx.preserve_task, ctx.programme_end_task, ctx.individuation_task
+    ):
+        if monitor_task is None:
+            continue
+        if not monitor_task.done():
+            monitor_task.cancel()
         try:
-            il = ignition_log
-        except NameError:
-            il = None
-        if il is not None:
-            try:
-                await il.close()
-            except Exception:
-                log.warning("ignition log close failed", exc_info=True)
-        await cycle.shutdown()
-        if not cycle_task.done():
-            cycle_task.cancel()
+            await monitor_task
+        except asyncio.CancelledError:
+            pass  # expected: we just cancelled it
+        except Exception:
+            log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
+    if ctx.preview_server is not None:
         try:
-            await cycle_task
-        except (asyncio.CancelledError, Exception):
-            log.debug("cycle task ended", exc_info=True)
-        for module in list(registry.all_modules()):
-            try:
-                await module.shutdown()
-            except Exception:
-                log.warning("module %s shutdown failed", module.name, exc_info=True)
-        await bus.close()
-        _clear_runtime_state()
+            await ctx.preview_server.stop()
+        except Exception:
+            log.warning("perception preview server stop failed", exc_info=True)
+        # Drop any lingering in-RAM preview so no stale frame survives the
+        # cycle even in-process.
+        try:
+            ctx.perception_preview.clear()
+        except Exception:
+            log.debug("preview holder clear failed", exc_info=True)
+    if ctx.remote_bridge is not None:
+        try:
+            await ctx.remote_bridge.stop()
+        except Exception:
+            log.warning("remote bridge stop failed", exc_info=True)
+    if ctx.sidecar is not None:
+        try:
+            await ctx.sidecar.stop()
+        except Exception:
+            log.warning("evaluation sidecar stop failed", exc_info=True)
+    await _stop_welfare_producer(ctx.welfare_producer)
+    try:
+        il = ctx.ignition_log
+    except NameError:
+        il = None
+    if il is not None:
+        try:
+            await il.close()
+        except Exception:
+            log.warning("ignition log close failed", exc_info=True)
+    await ctx.cycle.shutdown()
+    if not ctx.cycle_task.done():
+        ctx.cycle_task.cancel()
+    try:
+        await ctx.cycle_task
+    except (asyncio.CancelledError, Exception):
+        log.debug("cycle task ended", exc_info=True)
+    for module in list(ctx.registry.all_modules()):
+        try:
+            await module.shutdown()
+        except Exception:
+            log.warning("module %s shutdown failed", module.name, exc_info=True)
+    await ctx.bus.close()
+    _clear_runtime_state()
+
+
+async def _boot_and_run(
+    *,
+    supervision_mode: str = "operator",
+    gate_checks: dict[str, bool] | None = None,
+    revive: "ReviveSession | None" = None,
+    kaine_config: dict[str, Any] | None = None,
+) -> int:
+    ctx = BootContext(
+        supervision_mode=supervision_mode,
+        gate_checks=gate_checks,
+        revive=revive,
+        kaine_config=kaine_config,
+    )
+    for phase in _BOOT_PHASES:
+        code = await phase(ctx)
+        if code is not None:
+            return code
+    try:
+        await _run_until_stopped(ctx)
+    finally:
+        await _shutdown(ctx)
     # Non-zero exit when Spot escalated, so a process wrapper sees the halt and
     # the operator-reboot requirement is honored rather than silently retried.
-    if spot is not None and spot.escalated:
+    if ctx.spot is not None and ctx.spot.escalated:
         return 70
     return 0
 
