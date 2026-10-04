@@ -11,7 +11,8 @@ from kaine import preboot
 from kaine.experiment.manifest import write_manifest
 from kaine.model_paths import models_dir
 from kaine.modules.mnemos.storage import SqliteVecStorage
-from kaine.setup.organ import read_revision_state, served_gguf_path, write_revision_state
+from kaine.organ_probe import read_revision_state
+from kaine.setup.organ import served_gguf_path, write_revision_state
 from kaine.storage import set_data_root
 
 

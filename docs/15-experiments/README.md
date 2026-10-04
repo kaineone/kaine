@@ -251,7 +251,7 @@ The suite collects p-values from the p-value-producing experiments:
 
 It applies the Holm-Bonferroni correction across those p-values at level `alpha` and reports the raw p-value, Holm-corrected p-value, and a reject/no-reject decision for each. Each experiment's own raw verdict is preserved unchanged; the family-wise view is an additional layer.
 
-An optional `individuation` result can be supplied by the caller. Its permutation p-value joins the family alongside the active-inference task p-values. Individuation is not one of the eight offline experiments because it needs live samplers.
+Individuation evidence is not one of the eight offline experiments because it requires a live being. It is collected by the cycle's individuation producer and stored as encrypted welfare evidence under `state/individuation/`.
 
 ### Scope
 

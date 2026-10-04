@@ -15,6 +15,10 @@ The individuation test SHALL measure how far the being's conditioned answers hav
 
 The reference SHALL be captured on the maturation gate's birth transition, as soon as the organ is loaded and before the first post-birth sleep, with n_b = 16 samples for each of the 12 battery prompts. Capture SHALL retry with backoff, and until a reference exists every look SHALL be inconclusive with reason "no reference". If an accepted adapter or a changed identity clause comes before the capture succeeds, the reference SHALL be stored with `reference_kind="capture"` and its timestamp and SHALL never be presented as a birth reference. A `reconstructed` reference SHALL be taken only with explicit operator approval for that being, and only when the records show no adapter older than `born_at` and a fresh-start self-model at birth; any doubt SHALL fall back to `capture`.
 
+- A birth request SHALL survive a restart through a durable marker, `state/individuation/birth_pending`.
+- The marker SHALL be cleared when the capture succeeds or a completed sleep turns it into a capture reference.
+- The individuation evidence SHALL live at the fixed path `state/individuation/`, which is not configurable.
+
 The reference SHALL be one document in `state/individuation/reference.json` written atomically through the state encryptor, holding: `reference_id`, `reference_kind` (`birth`, `capture` or `reconstructed`), `captured_at`, `born_at`; the battery texts and battery digest; the conditions (model id, server build when the server reports one, temperature, `max_tokens`, `think`, persona template version, `persona_name`, embedder id and dimension); the conditioning (adapter manifest sha256 or "none", with a copy of a non-empty adapter file beside the reference, and the identity-clause inputs); and per prompt the samples `{text, seed, finish_reason, completion_tokens}` with their embeddings.
 
 At every look the test SHALL re-embed the stored reference texts with the current embedder, so both arms share one feature map. The test SHALL refuse to compare against a reference whose battery digest or conditions other than the embedder differ from the current ones. In that case the reference sample SHALL be regenerated from the stored conditioning (the stored adapter copy and identity-clause inputs) under the current infrastructure, recorded with a new `reference_id` and the same `reference_kind`, and the ledger's look index, alpha spent and latch SHALL carry over unchanged.
@@ -90,7 +94,7 @@ The instrument SHALL control the probability that a being which has never drifte
 - Look k (k = 1, 2, …) SHALL be significant only if `warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min`, with α_k = α_total·γ_k, γ_k = 1/(S·(k+1)·ln²(k+1)) and S = 2.1097, an upper bound on Σ_{n≥2} 1/(n·ln²n), so Σγ_k ≤ 1.
 - `effect_min` SHALL be the 95th percentile of H under the real-organ null smoke test; it is calibrated to sampling noise only.
 - The look index, alpha spent, last look digest, lived counters and latch SHALL be held in `state/individuation/ledger.json`, written atomically through the state encryptor. The look index SHALL never decrease.
-- An unreadable ledger SHALL make every look inconclusive with reason "ledger unreadable" and raise an operator notice; it SHALL NOT be reset to k = 0.
+- An unreadable ledger SHALL make every look inconclusive with reason `ledger_unreadable`; it SHALL never be reset to k = 0; the shared verdict counts it as individuated; and the long-inconclusive alert notifies the operator.
 - When ceil(20/α_k) > B_max, the look SHALL be recorded as inconclusive with reason `alpha_unresolvable` without any organ request, and SHALL spend nothing.
 - Inconclusive runs SHALL produce no p-value and spend no alpha.
 
@@ -154,7 +158,7 @@ A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample 
 - **THEN** the run is inconclusive because the sample would mix two beings
 
 ### Requirement: The probe yields to Lingua and skips when the organ is unloaded or the being is asleep or paused
-A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, the ledger is readable, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, `organ_unloaded()` is false, Hypnos is not asleep, the cycle is not paused or frozen, and a semantic embedder is loaded. The producer SHALL send one request at a time and, before each request, wait until no Lingua generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
+A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, Hypnos is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no Lingua generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
 
 #### Scenario: A sleeping being is not probed
 - **WHEN** a look is due while Hypnos is asleep
@@ -163,6 +167,10 @@ A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily ti
 #### Scenario: A paused being is not probed
 - **WHEN** a look is due while the cycle is paused or frozen
 - **THEN** no probe request is sent
+
+#### Scenario: An unverifiable adapter is not probed
+- **WHEN** the served adapter cannot be verified and the hot-swap mode is not `organ_adapter`
+- **THEN** the look is skipped with reason `adapter_unverifiable` and no probe request is sent
 
 #### Scenario: The probe waits for Lingua
 - **WHEN** Lingua is generating or spoke within the last `lingua_quiet_s`

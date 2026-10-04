@@ -113,43 +113,18 @@ def test_suite_master_seed_moves_active_inference_pvalues():
 
 
 def test_suite_folds_individuation_pvalue_into_holm_family():
-    """An individuation result folded into the suite contributes its permutation
-    p-value to the family-wise correction (active-inference + individuation).
+    """An individuation result folded into the suite contributes its p-value to
+    the family-wise correction (active-inference + individuation)."""
+    from kaine.experiment.verdict import Outcome, Verdict
 
-    Sync test: ``run_suite`` drives its async experiments via ``asyncio.run``
-    internally, so it must be called from a non-async context. The individuation
-    result is built with ``asyncio.run`` up front, then folded in.
-    """
-    import asyncio
-
-    from kaine.evaluation.benchmarks.individuation_runner import (
-        IndividuationRunConfig,
-        run_individuation,
-    )
-
-    battery = ["What do you enjoy?", "Describe your day.", "What matters?"]
-
-    async def parent_sampler(prompt: str, seed: int) -> str:
-        return f"response to {prompt} noise {seed % 3}"
-
-    async def fork_sampler(prompt: str, seed: int) -> str:
-        return "Quantum lattice topological eigenvalue divergence completely different."
-
-    reference = [f"response to {p} noise 0" for p in battery]
-
-    ind = asyncio.run(
-        run_individuation(
-            IndividuationRunConfig(
-                null_samples=15, min_observations=0, min_lived_time_s=0.0
-            ),
-            parent_sampler=parent_sampler,
-            fork_sampler=fork_sampler,
-            observations=100,
-            lived_time_s=100.0,
-            battery=battery,
-            reference=reference,
-        )
-    )
+    ind = {
+        "report": {"p_value": 0.01},
+        "verdict": Verdict(
+            outcome=Outcome.PASS,
+            detail="synthetic individuation result",
+            metrics={"p_value": 0.01},
+        ),
+    }
 
     report = run_suite(SuiteConfig.fast(seed=1234), individuation=ind)
     fw_names = {c["name"] for c in report["family_wise"]["comparisons"]}

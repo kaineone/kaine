@@ -277,33 +277,56 @@ def _aggregate_nous_policy(logs_root: Path) -> dict[str, Any]:
 
 
 def _aggregate_individuation(config: EvaluationConfig) -> dict[str, Any] | None:
-    """Return the most recent individuation-boundary result, or None."""
+    """Return the most recent individuation-boundary result, or None.
+
+    Reads from the shared encrypted store via ``read_individuation``. Any
+    failure, or a being with no reference and no latch, is
+    surfaced as ``None`` so the Nexus panel stays empty until real evidence
+    exists.
+    """
+    from datetime import datetime, timezone
+
+    from kaine.lifecycle.divergence import (
+        DEFAULT_MAX_REPORT_AGE_S,
+        read_individuation,
+    )
+
     try:
-        output_dir = resolve(config.individuation.output_dir)
-    except AttributeError:
-        return None
-    if not output_dir.exists():
-        return None
-    jsonl_files = sorted(output_dir.glob("*.jsonl"))
-    if not jsonl_files:
-        return None
-    # Read lines from the newest file; return the last valid entry.
-    last_entry: dict[str, Any] | None = None
-    try:
-        for line in jsonl_files[-1].read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-                last_entry = _scrub(entry)
-            except json.JSONDecodeError:
-                # Skip a malformed/partial line (e.g. a torn last write) and
-                # keep scanning for the last valid entry in the file.
-                pass
+        raw = read_individuation(
+            resolve(Path("state")),
+            now=datetime.now(timezone.utc),
+            max_report_age_s=DEFAULT_MAX_REPORT_AGE_S,
+        )
     except Exception:
-        log.debug("individuation JSONL read failed", exc_info=True)
-    return last_entry
+        log.debug("_aggregate_individuation: shared reader failed", exc_info=True)
+        return None
+
+    if raw.get("state") == "no_reference" and not raw.get("latched"):
+        return None
+
+    latest = raw.get("latest") or {}
+    effect_size_h = latest.get("effect_size_h")
+    if isinstance(effect_size_h, (int, float)):
+        effect_size_h = max(0.0, float(effect_size_h))
+    else:
+        effect_size_h = None
+
+    result = {
+        "state": raw.get("state"),
+        "latched": raw.get("latched"),
+        "reference_kind": raw.get("reference_kind"),
+        "reference_captured_at": raw.get("reference_captured_at"),
+        "looks_completed": raw.get("looks_completed"),
+        "outcome": latest.get("outcome"),
+        "effect_size_h": effect_size_h,
+        "p_value": latest.get("p_value"),
+        "alpha_k": latest.get("alpha_k"),
+        "warmed_up": latest.get("warmed_up"),
+        "inconclusive_reason": latest.get("inconclusive_reason"),
+        "inconclusive_since": raw.get("inconclusive_since"),
+        "inconclusive_alerted": raw.get("inconclusive_alerted"),
+    }
+    return _scrub(result)
 
 
 def empty_evaluation_metrics() -> dict[str, Any]:

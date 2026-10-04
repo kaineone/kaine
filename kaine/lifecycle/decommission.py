@@ -375,6 +375,27 @@ def capture_backup(
         except Exception as exc:
             errors.append(f"copy phantasia/: {exc}")
 
+    # --- 4a. Individuation evidence ---------------------------------------
+    # Birth reference, ledger, reports and stored birth adapter. This evidence
+    # travels with the being into the backup and is included in the same
+    # tar/encryption pass as the other subtrees. A failure here is fatal: the
+    # CLI must not delete the only copy of the evidence.
+    individuation_src = state_root / "individuation"
+    if individuation_src.is_dir():
+        try:
+            shutil.copytree(
+                individuation_src,
+                bundle_dir / "individuation",
+                dirs_exist_ok=True,
+            )
+            inventory.append("individuation/")
+        except Exception as exc:
+            return BackupResult(
+                ok=False,
+                backup_path=bundle_dir,
+                errors=[f"could not copy individuation evidence: {type(exc).__name__}: {exc}"],
+            )
+
     # --- 5. Latest fork snapshot ----------------------------------------
     latest_snapshot_id: str | None = None
     try:
@@ -549,6 +570,21 @@ def capture_backup(
                             f"could not remove plaintext {child.name} after "
                             f"encryption: {exc}"
                         )
+                if child.exists():
+                    # A partial removal leaves plaintext entity content at rest
+                    # next to the encrypted archive; this is not a valid backup.
+                    return BackupResult(
+                        ok=False,
+                        backup_path=bundle_dir,
+                        manifest_path=None,
+                        encrypted=False,
+                        encryption_failed=True,
+                        inventory=inventory,
+                        errors=errors + [
+                            f"could not remove plaintext {child.name} after "
+                            f"encrypting the backup; unencrypted content remains"
+                        ],
+                    )
             encrypted = True
             inventory.append("bundle.tar.enc (encrypted)")
             # Refresh manifest inventory to reflect the encrypted layout.
@@ -634,10 +670,15 @@ _STATE_SUBTREES = (
     "phantasia",
     "forks",
     "perception",
+    "individuation",
 )
+
 # Files under state/cycle that belong to the entity run (not the dir itself,
 # which may hold operator config we leave alone — but these are entity files).
 _CYCLE_FILES = ("runtime.json",)
+
+# Other entity files, relative to state_root, that must be removed.
+_STATE_FILES = (Path("preservation") / "divergence_edge.json",)
 
 
 def delete_entity_state(
@@ -659,6 +700,7 @@ def delete_entity_state(
     # --- On-disk subtrees ----------------------------------------------
     targets: list[Path] = [state_root / sub for sub in _STATE_SUBTREES]
     targets += [state_root / "cycle" / f for f in _CYCLE_FILES]
+    targets += [state_root / f for f in _STATE_FILES]
     for target in targets:
         try:
             # Defensive: never operate outside state_root.

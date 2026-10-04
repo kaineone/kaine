@@ -49,3 +49,15 @@ def models_dir() -> Path:
     """
     override = os.environ.get(MODELS_DIR_ENV_VAR)
     return Path(override) if override else resolve(DEFAULT_MODELS_DIR)
+
+
+# Default sherpa-onnx speech models. They live here, not in kaine.setup, so the
+# boot package can use them without importing install-time code;
+# kaine.setup.speech_models re-exports them.
+DEFAULT_STT = "moonshine-base-en"
+DEFAULT_TTS = "kokoro-en"
+
+
+def speech_model_dir(model_id: str, root: Path | str | None = None) -> Path:
+    """Directory where the extracted model for ``model_id`` is expected to live."""
+    return (Path(root) if root else models_dir()) / "sherpa-onnx" / model_id

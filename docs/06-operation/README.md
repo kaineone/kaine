@@ -136,7 +136,7 @@ Near-zero divergence means the workspace is not conditioning the language organ.
 
 A fork is a deep copy of an existing stored snapshot. `POST /diagnostics/forks` requires a `parent_id` and duplicates that snapshot; it does not capture live state. A fork copies Phantasia's encrypted weights when they exist; a restore installs them at that instance's own checkpoint path. Use a fork before any significant configuration change or module enable. Forks are stored under `state/forks/` inside the configured data root.
 
-**Merge** combines two fork snapshots, using real TIES/DARE adapter merging whenever the `[training]` extra is installed (`[lifecycle].adapter_merger = "auto"`, the default — force `"ties_dare"` or `"fake"` to override auto-detection). The individuation boundary instrument on the evaluation tab quantifies whether a fork has developed statistically independent identity before merging.
+**Merge** combines two fork snapshots, using real TIES/DARE adapter merging whenever the `[training]` extra is installed (`[lifecycle].adapter_merger = "auto"`, the default — force `"ties_dare"` or `"fake"` to override auto-detection). The fork merge gate uses the shared divergence verdict, which includes the individuation ledger latch; because fork-point references are not built yet, forks with enough lived time or unknown lived time are preserved rather than merged.
 
 Both operations are available from the diagnostics page under the Fork/Merge panel and via the API:
 

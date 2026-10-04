@@ -25,6 +25,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from kaine.defaults import model_server_api_key
+
 LOGGER = logging.getLogger("kaine_trainer_service")
 
 
@@ -466,7 +468,7 @@ def _sha256_file(path: Path) -> str:
 
 def _default_organ_probe(cfg: Any) -> Callable[[], bool]:
     url = f"{cfg.organ_url.rstrip('/')}/props"
-    api_key = os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    api_key = model_server_api_key(None)
 
     def probe() -> bool:
         try:

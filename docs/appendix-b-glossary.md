@@ -82,7 +82,7 @@ A running value maintained by [Soma](#soma) that tracks unexpected substrate pre
 
 ### Fork / merge
 
-**Fork** creates a snapshot of every module's numeric state at a point in time, stored under `state/forks/`. Forks are the basis for parallel cognitive branches. **Merge** combines two fork snapshots, optionally using TIES/DARE adapter merging for voice-alignment LoRA adapters. Because Phantasia weights now travel in fork snapshots, a merge refuses to choose between two world models unless `world_model_from` is given. The individuation-boundary instrument quantifies whether a fork has developed statistically independent identity before merging. Both operations are available from the Nexus diagnostics page and via the API. See: `kaine/lifecycle/manager.py` and [Forks and merges](12-forks-and-merges.md).
+**Fork** creates a snapshot of every module's numeric state at a point in time, stored under `state/forks/`. Forks are the basis for parallel cognitive branches. **Merge** combines two fork snapshots, optionally using TIES/DARE adapter merging for voice-alignment LoRA adapters. Because Phantasia weights travel in fork snapshots, a merge refuses to choose between two world models unless `world_model_from` is given. The merge gate reads the fork's own `state/individuation/` tree and calls the shared `assess_divergence` verdict. Forks cannot yet be measured against a fork-point reference, so a fork that has lived at least `fork_preserve_min_lived_s` (1800 s), or whose lived time is unknown, is preserved for operator review instead of discarded. Both operations are available from the Nexus diagnostics page and via the API. See: `kaine/lifecycle/manager.py` and [Forks and merges](12-forks-and-merges.md).
 
 ### Forward model
 

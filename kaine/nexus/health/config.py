@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.setup import speech_models
 from kaine.storage import resolve
 
@@ -76,11 +77,9 @@ def build_dependency_specs(
     qdrant_host = str(qdrant_cfg.get("host", "127.0.0.1"))
     qdrant_port = int(qdrant_cfg.get("port", 6333))
 
-    chat_url = str(lingua_cfg.get("chat_url", "http://127.0.0.1:11434"))
+    chat_url = lingua_section_chat_url(lingua_cfg)
     model_id = lingua_cfg.get("model_id")
-    chat_api_key = lingua_cfg.get("api_key") or os.environ.get(
-        "KAINE_MODEL_SERVER_API_KEY"
-    )
+    chat_api_key = lingua_section_api_key(lingua_cfg)
 
     speaches_url = str(audition_cfg.get("speaches_url", "http://127.0.0.1:8000"))
     transcription_enabled = bool(audition_cfg.get("transcription_enabled", True))
@@ -332,17 +331,20 @@ def load_health_prober(
     # (presence only — the key is never logged). Same resolution as the cycle.
     lingua_cfg = cfg.get("lingua") or {}
     model_server_cfg = {
-        "chat_url": lingua_cfg.get("chat_url", "http://127.0.0.1:11434/v1"),
+        "chat_url": lingua_section_chat_url(lingua_cfg),
         "model_id": lingua_cfg.get("model_id"),
-        "api_key": lingua_cfg.get("api_key")
-        or os.environ.get("KAINE_MODEL_SERVER_API_KEY"),
+        "api_key": lingua_section_api_key(lingua_cfg),
     }
 
     # Graded consolidation-divergence thresholds for the entity-care divergence
     # assessment (rate, magnitude), read from [hypnos.voice_alignment].
-    from kaine.lifecycle.divergence import consolidation_thresholds_from_config
+    from kaine.lifecycle.divergence import (
+        adapter_dir_for,
+        consolidation_thresholds_from_config,
+    )
 
     consolidation_thresholds = consolidation_thresholds_from_config(cfg)
+    adapter_output_dir = adapter_dir_for(cfg, resolve(Path("state")))
 
     # Evaluation JSONL rollup root (for the welfare-counter row) and the
     # autonomous safety-net incident path (for the preservation panel backfill).
@@ -366,6 +368,7 @@ def load_health_prober(
         audition_capture_geometry=audition_capture_geometry,
         model_server_cfg=model_server_cfg,
         consolidation_thresholds=consolidation_thresholds,
+        adapter_output_dir=adapter_output_dir,
         probe_timeout_s=probe_timeout_s,
         cache_ttl_s=cache_ttl_s,
         evaluation_logs_path=evaluation_logs_path,
