@@ -21,10 +21,10 @@ class _BusLike(Protocol):
     async def read_entries(
         self, stream: str, *, last_id: str, count: int, block_ms: int
     ) -> tuple[list[tuple[str, Event]], str | None]:
-        ...
+        """Read decoded entries after ``last_id`` and the id of the last entry scanned."""
 
     async def current_workspace_id(self) -> str:
-        ...
+        """Return the id of the newest workspace broadcast."""
 
     async def last_entry_id(self, stream: str) -> str:
         """Return the id of the stream's newest entry, or ``"0-0"`` when empty."""
