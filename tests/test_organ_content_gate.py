@@ -11,7 +11,7 @@ live model server is required.
 from __future__ import annotations
 
 from kaine.modules.lingua.client import FakeChatClient
-from kaine.setup.organ import verify_organ_generates
+from kaine.organ_probe import verify_organ_generates
 
 
 async def test_gate_passes_when_organ_returns_content():

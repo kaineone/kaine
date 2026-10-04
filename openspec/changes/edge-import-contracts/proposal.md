@@ -7,7 +7,7 @@ The complexity audit of 2026-10-03 (W7) found that the core runtime reaches into
 ## What changes
 
 - The speech-model defaults the runtime needs (`DEFAULT_STT`, `DEFAULT_TTS`, `speech_model_dir`) move to `kaine/model_paths.py`. `kaine.setup.speech_models` re-exports them.
-- The organ content check and the organ revision reader that the cycle needs (`OrganContentResult`, `CONTENT_PROBE_TIMEOUT_S`, `verify_organ_generates`, `ORGAN_REVISION_STATE_PATH`, `read_revision_state`) move to a new `kaine/organ_probe.py`. `kaine.setup.organ` re-exports them.
+- The organ content check and the organ revision reader that the cycle needs (`OrganContentResult`, `CONTENT_PROBE_TIMEOUT_S`, `verify_organ_generates`, `ORGAN_REVISION_STATE_PATH`, `read_revision_state`) move to a new `kaine/organ_probe.py`. Callers import them from there; `kaine.setup.organ` keeps only `ORGAN_REVISION_STATE_PATH`, which its revision writer uses.
 - A new `lint-imports` contract forbids `kaine.boot`, `kaine.cycle` and `kaine.workspace` from importing:
   - `kaine.setup`;
   - `kaine.distributed`;

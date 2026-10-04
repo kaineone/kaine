@@ -18,8 +18,8 @@ import pytest
 
 import kaine.preboot as preboot
 from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE  # noqa: F401 (sanity import)
+from kaine.organ_probe import OrganContentResult
 from kaine.security.crypto import CryptoConfigError
-from kaine.setup.organ import OrganContentResult
 
 
 @pytest.fixture(autouse=True)

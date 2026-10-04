@@ -42,13 +42,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.model_paths import models_dir
-from kaine.organ_probe import (  # noqa: F401 - re-exported for callers
-    CONTENT_PROBE_TIMEOUT_S,
-    ORGAN_REVISION_STATE_PATH,
-    OrganContentResult,
-    read_revision_state,
-    verify_organ_generates,
-)
+from kaine.organ_probe import ORGAN_REVISION_STATE_PATH
 from kaine.storage import resolve
 
 # The published organ's repository ids (HF-repo-id-as-served-alias convention).
