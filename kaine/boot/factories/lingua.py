@@ -24,7 +24,7 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "max_tokens",
         "think",
         "request_timeout_s",
-        # read by kaine.setup.model_server when it launches the organ, not by Lingua
+        # read by kaine.organ_server.lifecycle when it launches the organ, not by Lingua
         "model_server_sleep_idle_seconds",
         "api_key",
         "intent_log_path",

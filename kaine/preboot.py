@@ -54,7 +54,7 @@ loop — only read-only probes and throwaway round-trips):
 Every check is best-effort and NEVER raises out of this module — a check that
 cannot run reports the honest gap as a FAIL/WARN/SKIP row with a reason, never
 a silent pass and never an uncaught traceback (mirrors the "never raises"
-contract of ``kaine.nexus.health`` and ``kaine.setup.organ``).
+contract of ``kaine.nexus.health`` and ``kaine.organ_server.served``).
 
 Exit code is non-zero iff any check reports FAIL (a WARN row reports a risk
 but does not fail the gate), so this composes as a CI / boot-script gate: ``python -m kaine.preboot && python -m kaine.cycle``.
@@ -1064,7 +1064,7 @@ async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
 
 def check_device_map(config: dict[str, Any]) -> list[CheckResult]:
     """Verify the device map agrees with compose variables and cycle keys."""
-    from kaine.setup.device_map import check_agreement
+    from kaine.organ_server.device_map import check_agreement
 
     status, detail = check_agreement(config, env_path=Path("compose/.env"))
     code = {"pass": PASS, "fail": FAIL, "skip": SKIP}[status]

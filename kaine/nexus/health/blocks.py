@@ -442,7 +442,7 @@ async def model_server_block(
     detail: str
     if alias:
         try:
-            from kaine.setup.organ import verify_served_alias
+            from kaine.organ_server.served import verify_served_alias
 
             result = await asyncio.to_thread(
                 verify_served_alias, chat_url, str(alias), api_key=api_key

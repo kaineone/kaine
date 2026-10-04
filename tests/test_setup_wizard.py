@@ -455,11 +455,11 @@ def test_defaults_full_run_does_not_download_organ(tmp_path: Path, monkeypatch):
     # is overridden; the real backend's summary/plan compatibility is preserved.
     import dataclasses
 
-    from kaine.setup import organ as organ_mod
+    from kaine.organ_server import served as served_mod
 
-    _real_detect = organ_mod.detect_organ_backend
+    _real_detect = served_mod.detect_organ_backend
     monkeypatch.setattr(
-        organ_mod,
+        served_mod,
         "detect_organ_backend",
         lambda *a, **k: dataclasses.replace(_real_detect(*a, **k), available=True),
     )
@@ -545,10 +545,11 @@ def test_provision_organ_consent_downloads_then_offers_launch(monkeypatch, tmp_p
     monkeypatch.setattr(
         setup_main_mod.subprocess, "run", lambda *a, **k: None
     )
-    from kaine.setup.organ import ServedAliasResult
+    from kaine.organ_server import served as served_mod
+    from kaine.organ_server.served import ServedAliasResult
 
     monkeypatch.setattr(
-        organ_mod, "verify_served_alias",
+        served_mod, "verify_served_alias",
         lambda *a, **k: ServedAliasResult(
             listed=True, served=("kaineone/Qwen3.5-4B-abliterated-GGUF",),
             detail="matches",

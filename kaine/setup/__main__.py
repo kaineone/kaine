@@ -21,8 +21,8 @@ from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_c
 from kaine.defaults import DEFAULT_CHAT_URL, lingua_section_api_key, lingua_section_chat_url
 from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
+from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env_values
 from kaine.setup import tomlwriter
-from kaine.setup.device_map import compose_gpu_env, device_map, write_env_values
 from kaine.setup.storage_step import existing_volumes, write_volume_override
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
@@ -169,6 +169,7 @@ def _provision_organ(
     turnkey server bootstrap launch and verify the served alias. On decline it
     prints acquisition guidance and downloads nothing. Never crashes the wizard.
     """
+    from kaine.organ_server import served
     from kaine.setup import organ as organ_mod
 
     modules = config.get("modules") or {}
@@ -188,7 +189,7 @@ def _provision_organ(
     # The served alias the operator chose (or the shipped default).
     lingua_cfg = {**(shipped.get("lingua") or {}), **(config.get("lingua") or {})}
     chat_url = lingua_section_chat_url(lingua_cfg)
-    model_id = str(lingua_cfg.get("model_id", organ_mod.ORGAN_GGUF_REPO))
+    model_id = str(lingua_cfg.get("model_id", served.ORGAN_GGUF_REPO))
     api_key = lingua_section_api_key(lingua_cfg)
 
     out("\n" + "-" * 70 + "\n")
@@ -196,7 +197,7 @@ def _provision_organ(
     out("-" * 70 + "\n")
 
     try:
-        backend = organ_mod.detect_organ_backend(str(host.get("backend") or "cpu"))
+        backend = served.detect_organ_backend(str(host.get("backend") or "cpu"))
         plan = organ_mod.plan_organ_download(modules, backend, config=resolved)
     except Exception as exc:  # never crash the wizard on a planning error
         out(f"  organ step skipped (planning error: {exc}).\n")
@@ -267,7 +268,7 @@ def _provision_organ(
 
     # Verify the served alias matches [lingua].model_id (catch the 404 pre-boot).
     try:
-        verdict = organ_mod.verify_served_alias(chat_url, model_id, api_key=api_key)
+        verdict = served.verify_served_alias(chat_url, model_id, api_key=api_key)
     except Exception as exc:
         out(f"  served-name verify skipped (probe error: {exc}).\n")
         return

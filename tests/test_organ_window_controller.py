@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from kaine.modules.hypnos.organ_window import OrganServerController
-from kaine.setup.model_server import LORA_ADAPTER_ENV, build_launch_cmd
+from kaine.organ_server.lifecycle import LORA_ADAPTER_ENV, build_launch_cmd
 
 
 def test_build_launch_cmd_appends_lora_flag_when_adapter_given():
@@ -87,7 +87,7 @@ def test_controller_real_start_exports_lora_env(monkeypatch):
         seen.append(__import__("os").environ.get(LORA_ADAPTER_ENV))
         return 0
 
-    monkeypatch.setattr("kaine.setup.model_server.cmd_start", fake_cmd_start)
+    monkeypatch.setattr("kaine.organ_server.lifecycle.cmd_start", fake_cmd_start)
     monkeypatch.delenv(LORA_ADAPTER_ENV, raising=False)
 
     ctrl = OrganServerController(config={}, preflight_fn=lambda cfg: True, probe_fn=lambda: True)
