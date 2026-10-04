@@ -17,8 +17,8 @@ from kaine.cycle.individuation_scheduler import (
 )
 from kaine.lifecycle.individuation_store import (
     IndividuationPaths,
-    IndividuationStoreError,
     Ledger,
+    ReferenceExists,
     load_ledger,
     save_ledger,
 )
@@ -446,7 +446,7 @@ async def test_capture_failure_backs_off(tmp_path: Path):
 
 async def test_capture_store_error_clears_request(tmp_path: Path):
     sched, core, clock = make(tmp_path)
-    core.raise_on_capture = IndividuationStoreError("already exists")
+    core.raise_on_capture = ReferenceExists("already exists")
     sched.request_capture("birth")
     await sched.tick()
     assert sched._capture_kind is None

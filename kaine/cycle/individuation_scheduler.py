@@ -25,6 +25,7 @@ from kaine.lifecycle.individuation_store import (
     IndividuationPaths,
     IndividuationStoreError,
     LedgerUnreadable,
+    ReferenceExists,
     ReferenceUnreadable,
     load_ledger,
     load_reference,
@@ -158,6 +159,7 @@ class IndividuationScheduler:
         self._state = IndividuationState()
         self._reference_kind: str | None = None
         self._last_skip: str | None = None
+        self._alerted_since: str | None = None
 
     def bind(self, core: Any) -> None:
         """Store the core this scheduler drives."""
@@ -314,19 +316,35 @@ class IndividuationScheduler:
         self._pending_ticks = 0
         self._refresh_state()
 
-    def _blocked_reason(self) -> str | None:
+    def _reanchor_lived(self) -> None:
+        self._lived.step()
+        idx = self._safe(self._tick_index, None)
+        if isinstance(idx, int):
+            self._ticks.step(idx)
+        self._pending_s = 0.0
+        self._pending_ticks = 0
+
+    def _maybe_reanchor_after_failed_capture(self) -> None:
+        try:
+            ledger = load_ledger(self._paths)
+        except Exception:
+            return
+        if ledger is None:
+            self._reanchor_lived()
+
+    def _blocked_reason(self, *, for_look: bool = True) -> str | None:
         if self._safe(self._organ_unloaded, True):
             return "organ_unloaded"
         if self._asleep:
             return "asleep"
         if self._safe(self._paused, True):
             return "paused"
-        if not self._safe(self._embedder_ready, False):
+        if for_look and not self._safe(self._embedder_ready, False):
             return "embedder_not_ready"
         return None
 
     async def _attempt_capture(self, m: float) -> None:
-        reason = self._blocked_reason()
+        reason = self._blocked_reason(for_look=False)
         if reason is not None:
             self._capture_at = m + self._settings.blocked_retry_s
             self._note_skip(reason)
@@ -336,7 +354,7 @@ class IndividuationScheduler:
         self._run_deadline_at = m + self._settings.capture_deadline_s
         try:
             doc, reason = await self._core.capture_reference(self._capture_kind)
-        except IndividuationStoreError:
+        except ReferenceExists:
             log.info("individuation capture skipped: reference already exists")
             self._capture_kind = None
             self._capture_at = None
@@ -344,26 +362,31 @@ class IndividuationScheduler:
             return
         except Exception:
             log.exception("individuation capture failed")
-            self._capture_at = m + self._capture_backoff
+            end = self._monotonic()
+            self._capture_at = end + self._capture_backoff
             self._capture_backoff = min(
                 2 * self._capture_backoff,
                 self._settings.capture_retry_max_s,
             )
+            self._maybe_reanchor_after_failed_capture()
             return
         else:
             if reason is not None:
                 log.info("individuation capture failed: %s", reason)
-                self._capture_at = m + self._capture_backoff
+                end = self._monotonic()
+                self._capture_at = end + self._capture_backoff
                 self._capture_backoff = min(
                     2 * self._capture_backoff,
                     self._settings.capture_retry_max_s,
                 )
+                self._maybe_reanchor_after_failed_capture()
                 return
 
             self._reference_kind = doc.reference_kind
             self._capture_kind = None
             self._capture_at = None
             self._capture_backoff = self._settings.capture_retry_initial_s
+            self._reanchor_lived()
             self._refresh_state()
         finally:
             self._run_deadline_at = None
@@ -416,6 +439,7 @@ class IndividuationScheduler:
 
         ledger_lived_s = 0.0
         ledger_lived_t = 0
+        before = None
         try:
             re_read = load_ledger(self._paths)
         except LedgerUnreadable:
@@ -423,6 +447,7 @@ class IndividuationScheduler:
         if re_read is not None:
             ledger_lived_s = re_read.lived_seconds
             ledger_lived_t = re_read.lived_ticks
+            before = re_read.looks_completed
 
         self._run_deadline_at = m + self._settings.run_deadline_s
         try:
@@ -435,19 +460,36 @@ class IndividuationScheduler:
             raise
         except Exception as exc:
             log.exception("individuation look failed")
-            self._look_due_at = None
-            self._state = dataclasses.replace(
-                self._state,
-                last_outcome="error",
-                last_reason=type(exc).__name__,
-            )
-            await self._mark_inconclusive()
+            end = self._monotonic()
+            try:
+                after = load_ledger(self._paths)
+            except LedgerUnreadable:
+                after = None
+            if (
+                after is not None
+                and before is not None
+                and after.looks_completed > before
+            ):
+                self._look_due_at = None
+                self._refresh_state(
+                    last_outcome="error",
+                    last_reason=type(exc).__name__,
+                )
+            else:
+                self._look_due_at = end + self._settings.inconclusive_retry_s
+                self._state = dataclasses.replace(
+                    self._state,
+                    last_outcome="error",
+                    last_reason=type(exc).__name__,
+                )
+                await self._mark_inconclusive()
             return
         else:
             if outcome.outcome == "scored":
                 self._look_due_at = None
             elif outcome.outcome == "inconclusive":
-                self._look_due_at = m + self._settings.inconclusive_retry_s
+                end = self._monotonic()
+                self._look_due_at = end + self._settings.inconclusive_retry_s
                 await self._mark_inconclusive()
             elif outcome.outcome == "skipped":
                 self._look_due_at = None
@@ -499,6 +541,7 @@ class IndividuationScheduler:
         if (
             elapsed >= self._settings.inconclusive_alert_s
             and not ledger.inconclusive_alerted
+            and ledger.inconclusive_since != self._alerted_since
         ):
             try:
                 await self._alert(
@@ -512,6 +555,7 @@ class IndividuationScheduler:
                 log.warning("individuation inconclusive alert failed")
                 self._refresh_state()
                 return
+            self._alerted_since = ledger.inconclusive_since
             try:
                 save_ledger(
                     self._paths,

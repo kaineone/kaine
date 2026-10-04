@@ -55,6 +55,10 @@ class ReferenceUnreadable(IndividuationStoreError):
     """The birth-reference document could not be read or validated."""
 
 
+class ReferenceExists(IndividuationStoreError):
+    """A reference is already stored and the caller did not ask to replace it."""
+
+
 class LedgerUnreadable(IndividuationStoreError):
     """The individuation ledger could not be read or validated."""
 
@@ -272,7 +276,7 @@ def save_reference(
             load_reference(paths)
         except ReferenceUnreadable:
             raise
-        raise IndividuationStoreError(
+        raise ReferenceExists(
             "a reference already exists; pass overwrite=True to regenerate"
         )
 

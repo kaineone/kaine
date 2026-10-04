@@ -36,11 +36,11 @@ from kaine.lifecycle.individuation_store import (
     INCONCLUSIVE_REASONS,
     REFERENCE_KINDS,
     IndividuationPaths,
-    IndividuationStoreError,
     Ledger,
     LedgerUnreadable,
     ProbeSample,
     ReferenceDoc,
+    ReferenceExists,
     ReferenceUnreadable,
     battery_digest_of,
     build_report,
@@ -159,7 +159,7 @@ class IndividuationCore:
         if not regenerate and self._paths.reference.exists():
             existing_ledger = load_ledger(self._paths)
             if existing_ledger is not None:
-                raise IndividuationStoreError(
+                raise ReferenceExists(
                     "a reference already exists; pass regenerate=True to replace it"
                 )
             replace_incomplete = True
