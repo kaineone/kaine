@@ -21,7 +21,7 @@ loop — only read-only probes and throwaway round-trips):
                   health board uses (``kaine.nexus.health``).
   2. ORGAN      — the configured language organ actually GENERATES content
                   (not merely listed/served-but-mute). Reuses the boot-time
-                  content gate (``kaine.setup.organ.verify_organ_generates``).
+                  content gate (``kaine.organ_probe.verify_organ_generates``).
   3. PERCEPTION — when a deterministic feed is configured (seeded/playlist),
                   the configured source factory actually YIELDS a video frame
                   and an audio block. Reuses the exact factories the cycle
@@ -96,8 +96,8 @@ from kaine.cycle.research_gate import research_mode_requested, run_preflight_sel
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.nexus import health
 from kaine.nexus.health import load_health_prober
+from kaine.organ_probe import verify_organ_generates
 from kaine.security.crypto import CryptoConfigError, install_from_section
-from kaine.setup.organ import verify_organ_generates
 from kaine.storage import configured_data_root, resolve, storage_min_free_gb
 from kaine.torch_stack import check_torch_stack, describe_torch_stack
 

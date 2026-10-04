@@ -387,3 +387,26 @@ name = "Workspace must not import the cognitive modules (dependency injection on
 type = "forbidden"
 source_modules = ["kaine.workspace"]
 forbidden_modules = ["kaine.modules"]
+
+# Breadth features stay at the edge (complexity audit W7): the boot, cycle and
+# workspace packages never import install, setup, transfer, distributed, remote
+# or research-export code directly. The remote bridge is the one declared
+# exception until the boot-phase refactor moves it into an optional phase.
+# Indirect chains through the modules (the sherpa speech checks and the organ
+# window's server control) are allowed for now; they move with the host-probe
+# consolidation (W6).
+[[tool.importlinter.contracts]]
+name = "Core runtime stays clear of edge features"
+type = "forbidden"
+source_modules = ["kaine.boot", "kaine.cycle", "kaine.workspace"]
+forbidden_modules = [
+    "kaine.setup",
+    "kaine.distributed",
+    "kaine.transfer",
+    "kaine.remote",
+    "kaine.install_target",
+    "kaine.wheel_index",
+    "kaine.research.claude_science_export",
+]
+ignore_imports = ["kaine.cycle.__main__ -> kaine.remote.bridge"]
+allow_indirect_imports = true

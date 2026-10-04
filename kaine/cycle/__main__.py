@@ -900,7 +900,7 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
     # never crashes boot — a missing/unreadable state file simply contributes
     # nothing. Records "lingua@<repo>" -> "<sha>" only for the served repo.
     try:
-        from kaine.setup.organ import read_revision_state
+        from kaine.organ_probe import read_revision_state
 
         revisions = read_revision_state()
         if isinstance(lingua_model_id, str) and lingua_model_id in revisions:
@@ -1422,7 +1422,7 @@ async def _boot_and_run(
         if organ_unloaded():
             log.info("organ-gate: skipped (organ resting — voice-alignment window)")
         else:
-            from kaine.setup.organ import verify_organ_generates
+            from kaine.organ_probe import verify_organ_generates
 
             lingua_cfg = kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(

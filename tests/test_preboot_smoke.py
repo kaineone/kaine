@@ -18,8 +18,8 @@ import pytest
 
 import kaine.preboot as preboot
 from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE  # noqa: F401 (sanity import)
+from kaine.organ_probe import OrganContentResult
 from kaine.security.crypto import CryptoConfigError
-from kaine.setup.organ import OrganContentResult
 
 
 @pytest.fixture(autouse=True)
@@ -107,7 +107,7 @@ async def test_smoke_services_maps_up_not_configured_down_degraded(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 2. ORGAN — reuses kaine.setup.organ.verify_organ_generates
+# 2. ORGAN — reuses kaine.organ_probe.verify_organ_generates
 # ---------------------------------------------------------------------------
 
 
