@@ -1,12 +1,12 @@
 Each numbered group is one PR. Every PR gets an independent second review (ethics infrastructure).
 
 ## 1. Statistics core
-- [ ] 1.1 `kaine/lifecycle/individuation_stats.py` (pure numpy, no `kaine.evaluation` import): per-prompt unbiased energy U-statistic E_j on Euclidean distances between L2-normalized vectors, and T = Σ_j E_j.
-- [ ] 1.2 Stratified permutation null (labels reassigned within each prompt, n_b and n_c kept), batched as quadratic forms over label vectors; p = (b+1)/(B+1); B = min(B_max, ceil(20/α_k)) with B_max = 2·10^6; exact early stop once b+1 > α_k·(B+1).
-- [ ] 1.3 Effect size H = Σ_j E_j / Σ_j 2·mean δ_j(b,c), reported as computed.
-- [ ] 1.4 Spending schedule: γ_k = 1/(S·(k+1)·ln²(k+1)) with S = 2.1097, α_k = α_total·γ_k; `alpha_unresolvable` when ceil(20/α_k) > B_max.
-- [ ] 1.5 Decision rule `significant_k = warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min`, and the pure verdict `individuated = latched OR (fresh scored report with significant)`.
-- [ ] 1.6 Unit tests: exact p on toy data by full enumeration; the statistic uses Euclidean distance, not `1 − cos` (a pair of distributions with equal means but different spread is detected); p is never 0; Σγ_k over the first 10^6 looks is ≤ 1; α_1, α_10, α_50, α_100 match `design.md` 2.7; early stop never changes the decision.
+- [x] 1.1 `kaine/lifecycle/individuation_stats.py` (pure numpy, no `kaine.evaluation` import): per-prompt unbiased energy U-statistic E_j on Euclidean distances between L2-normalized vectors, and T = Σ_j E_j.
+- [x] 1.2 Stratified permutation null (labels reassigned within each prompt, n_b and n_c kept), batched as quadratic forms over label vectors; p = (b+1)/(B+1); B = min(B_max, ceil(20/α_k)) with B_max = 2·10^6; exact early stop once b+1 > α_k·(B+1).
+- [x] 1.3 Effect size H = Σ_j E_j / Σ_j 2·mean δ_j(b,c), reported as computed.
+- [x] 1.4 Spending schedule: γ_k = 1/(S·(k+1)·ln²(k+1)) with S = 2.1097, α_k = α_total·γ_k; `alpha_unresolvable` when ceil(20/α_k) > B_max.
+- [x] 1.5 Decision rule `significant_k = warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min` (`decide`). The verdict `individuated = latched OR (fresh scored report with significant)` is built with the shared decision function in task 7.
+- [x] 1.6 Unit tests: exact p on toy data by full enumeration; the statistic uses Euclidean distance, not `1 − cos` (a pair of distributions with equal means but different spread is detected); p is never 0; Σγ_k over the first 10^6 looks is ≤ 1; α_1, α_10, α_50, α_100 match `design.md` 2.7; early stop never changes the decision.
 
 ## 2. Simulation and validation harness
 - [ ] 2.1 Replace the bundle CLI in `kaine/evaluation/benchmarks/individuation_runner.py` with an offline `simulate` command (no organ, no entity): 12 prompts, 384-d mixtures of 2-4 vMF-like clusters per prompt.
