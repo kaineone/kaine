@@ -168,43 +168,16 @@ def test_arm_timeout_zero_raises(tmp_path):
 
 def test_boot_holds_for_the_womb_before_any_module_exists() -> None:
     # maturation-gate-liveness 2.1: a gestating entity is never spawned without
-    # a ready womb. _boot_and_run cannot run in tests (it boots an entity), so
-    # pin the order of its statements: the hold comes after the bus exists and
-    # before the registry is built and any module initializes; the locus pin and
-    # the womb-loss watcher follow.
-    import ast
-    import importlib.util
-    from pathlib import Path
+    # a ready womb. The boot cannot run in tests (it boots an entity), so pin
+    # the order of its calls across the boot phases: the hold comes after the
+    # bus exists and before the registry is built and any module initializes;
+    # the locus pin and the womb-loss watcher follow.
+    from tests._boot_sequence import first_index
 
-    spec = importlib.util.find_spec("kaine.cycle.__main__")
-    assert spec is not None and spec.origin is not None
-    tree = ast.parse(Path(spec.origin).read_text())
-    fn = next(
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.AsyncFunctionDef) and n.name == "_boot_and_run"
-    )
-
-    def first_line(pred) -> int:
-        lines = [n.lineno for n in ast.walk(fn) if pred(n)]
-        assert lines, "expected call not found"
-        return min(lines)
-
-    def calls(name: str):
-        def pred(n) -> bool:
-            if not isinstance(n, ast.Call):
-                return False
-            f = n.func
-            return (isinstance(f, ast.Name) and f.id == name) or (
-                isinstance(f, ast.Attribute) and f.attr == name
-            )
-
-        return pred
-
-    bus_created = first_line(calls("AsyncBus"))
-    hold = first_line(calls("hold_until_womb_ready"))
-    pin = first_line(calls("write_desired_locus"))
-    registry = first_line(calls("build_registry"))
-    init = first_line(calls("initialize"))
-    watcher = first_line(calls("WombLossWatcher"))
+    bus_created = first_index("AsyncBus")
+    hold = first_index("hold_until_womb_ready")
+    pin = first_index("write_desired_locus")
+    registry = first_index("build_registry")
+    init = first_index("initialize")
+    watcher = first_index("WombLossWatcher")
     assert bus_created < hold < pin < registry < init < watcher

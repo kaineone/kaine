@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -394,64 +393,22 @@ async def test_producer_construction_failure_refuses(bus, tmp_path, monkeypatch)
 
 
 def test_boot_wiring_order():
-    import ast
-    import inspect
+    # The welfare producer starts after the bus audit and before any module or
+    # the evaluation sidecar exists, and the sidecar shares its observer.
+    from tests._boot_sequence import boot_calls, first_index
 
-    entry = sys.modules[_start_welfare_producer.__module__]
-    source_path = Path(inspect.getsourcefile(entry))
-    source = source_path.read_text()
-    tree = ast.parse(source)
+    assert first_index("audit") < first_index("_start_welfare_producer")
+    assert first_index("_start_welfare_producer") < first_index("build_registry")
+    assert first_index("build_registry") < first_index("SidecarRegistry")
 
-    boot = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_boot_and_run":
-            boot = node
-            break
-    assert boot is not None, "_boot_and_run not found in source"
-
-    def _collect_calls(node):
-        calls = []
-        for child in ast.iter_child_nodes(node):
-            calls.extend(_collect_calls(child))
-        if isinstance(node, ast.Call):
-            name = ""
-            if isinstance(node.func, ast.Name):
-                name = node.func.id
-            elif isinstance(node.func, ast.Attribute):
-                name = node.func.attr
-            calls.append((name, node.lineno))
-        return calls
-
-    all_calls = _collect_calls(boot)
-
-    def _first(name):
-        for n, lineno in all_calls:
-            if n == name:
-                return lineno
-        raise AssertionError(f"{name} not found in _boot_and_run")
-
-    audit_lineno = _first("audit")
-    producer_start_lineno = _first("_start_welfare_producer")
-    build_registry_lineno = _first("build_registry")
-    sidecar_registry_lineno = _first("SidecarRegistry")
-
-    assert audit_lineno < producer_start_lineno
-    assert producer_start_lineno < build_registry_lineno
-    assert build_registry_lineno < sidecar_registry_lineno
-
-    sidecar_kwarg_found = False
-    for node in ast.walk(boot):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "SidecarRegistry"
-        ):
-            if any(kw.arg == "welfare_observer" for kw in node.keywords):
-                sidecar_kwarg_found = True
-                break
-    assert sidecar_kwarg_found
-
-    stop_calls = sum(1 for n, _ in all_calls if n == "_stop_welfare_producer")
+    calls = boot_calls()
+    assert any(
+        name == "SidecarRegistry"
+        and any(kw.arg == "welfare_observer" for kw in node.keywords)
+        for name, node in calls
+    )
+    # Stopped on each early exit after it starts, and at shutdown.
+    stop_calls = sum(1 for name, _ in calls if name == "_stop_welfare_producer")
     assert stop_calls >= 3
 
 
