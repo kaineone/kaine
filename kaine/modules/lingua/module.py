@@ -204,6 +204,7 @@ class Lingua(BaseModule):
                             "name": ev.payload.get("name"),
                             "values": list(ev.payload.get("values", []) or []),
                             "behavioral_norms": list(ev.payload.get("behavioral_norms", []) or []),
+                            "situation_facts": list(ev.payload.get("situation_facts", []) or []),
                             "personality_baseline": dict(
                                 ev.payload.get("personality_baseline", {}) or {}
                             ),
@@ -286,6 +287,33 @@ class Lingua(BaseModule):
             await self._chat_client.aclose()
         except Exception:
             log.warning("lingua chat client close failed", exc_info=True)
+
+    def probe_self_model(self) -> dict | None:
+        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived."""
+        if self._bus_self_model is not None:
+            return dict(self._bus_self_model)
+        return None
+
+    def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
+        """Build the individuation probe's request under fixed conditions.
+
+        Working memory is empty and the current self-model seeds the persona.
+        Side-effect free: it never writes the intent log, publishes nothing and
+        never enters the being's experience.
+        """
+        ctx = self._assembler.assemble(
+            about=about, snapshot=None, self_model=self_model, mode="external"
+        )
+        return ChatRequest(
+            prompt=ctx.prompt,
+            model=self._model_id,
+            system=ctx.system,
+            temperature=self._temperature,
+            max_tokens=int(max_tokens),
+            think=self._think,
+            seed=int(seed),
+            cache_prompt=False,
+        )
 
     async def speak(
         self,

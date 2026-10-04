@@ -463,6 +463,25 @@ class Eidolon(BaseModule):
         except asyncio.CancelledError:
             raise
 
+    async def ensure_situation_fact(self, text: str) -> bool:
+        """Tell the being a fact about its situation.
+
+        The fact is persisted and published at once, so the language organ can
+        condition on it immediately. It is not a value or norm and never touches
+        drift or identity history.
+        """
+        text = text.strip()
+        if not text:
+            raise ValueError("situation fact text must be non-empty")
+        if text in self._model.situation_facts:
+            return False
+        self._model = self._model.with_updates(
+            situation_facts=[*self._model.situation_facts, text]
+        )
+        await self._publish_self_model()
+        await self._save_to_disk()
+        return True
+
     async def _publish_self_model(self) -> None:
         """Publish the populated self-model fields to eidolon.out.
 
@@ -480,6 +499,7 @@ class Eidolon(BaseModule):
                 "name": getattr(m, "name", None),
                 "values": list(m.values),
                 "behavioral_norms": list(m.behavioral_norms),
+                "situation_facts": list(m.situation_facts),
                 "personality_baseline": dict(m.personality_baseline),
                 "capability_map": dict(m.capability_map),
             },

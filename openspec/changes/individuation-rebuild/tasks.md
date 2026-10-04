@@ -19,36 +19,37 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 2.8 **Gate:** if size, lifetime false-positive rate or power acceptance fails, stop and return to design. Groups 3-10 do not merge until this gate passes.
 
 ## 3. Chat client
-- [ ] 3.1 `ChatRequest.seed: Optional[int]`, sent in the request body only when set.
-- [ ] 3.2 `ChatResponse` exposes `finish_reason`, `completion_tokens` and whether the text came from `choices[0].message.content` (not the reasoning fallback).
-- [ ] 3.3 Tests: seed present and absent in the body; a resting organ (`raw.organ_resting`) and a reasoning-only response are distinguishable from a real answer; non-200 status is reported.
+- [x] 3.1 `ChatRequest.seed: Optional[int]`, sent in the request body only when set.
+- [x] 3.2 `ChatResponse` exposes `finish_reason`, `completion_tokens` and whether the text came from `choices[0].message.content` (not the reasoning fallback).
+- [x] 3.3 Tests: seed present and absent in the body; a resting organ (`raw.organ_resting`) and a reasoning-only response are distinguishable from a real answer; non-200 status is reported.
 
 ## 4. Storage
-- [ ] 4.1 `kaine/lifecycle/individuation_store.py`: encrypted reference document and copied conditioning adapter under `state/individuation/`, atomic writes through the state encryptor.
-- [ ] 4.2 Ledger (`reference_id`, `looks_completed`, `alpha_spent`, `last_look_conditions_digest`, lived seconds and ticks, latch, inconclusive-due timestamp): atomic, `looks_completed` never decreases, the latch never clears, an unreadable ledger raises a fail-closed error and is never reset.
-- [ ] 4.3 Report sink at `state/individuation/reports/` (`AsyncJsonlSink`, `retention_days=0`, per-line encryption), record `kind="individuation_report"`, `schema_version=2`, no texts, seeds or digests.
-- [ ] 4.4 Decrypting reader: skips undecryptable, non-object, wrong-kind and wrong-schema lines and reports for another `reference_id`; orders by `ts`; applies the staleness rule (`max_report_age_s`, digest equality) with the latch overriding it.
-- [ ] 4.5 Conditioning-digest helper over inputs (adapter sha from the adapter store, `values[:5]` and `behavioral_norms[:5]` from `self_model.json`), with no module import.
-- [ ] 4.6 Shared lived-time accumulator factored out of `kaine/lifecycle/gate_runner.py` (EntityClock minus engine paused time; tick deltas anchored per boot); the maturation gate uses it unchanged.
-- [ ] 4.7 Tests with state encryption on and off, legacy plaintext lines, a corrupt ledger, a regressing `looks_completed` write (refused), and name-vs-ts ordering.
+- [x] 4.1 `kaine/lifecycle/individuation_store.py`: encrypted reference document and copied conditioning adapter under `state/individuation/`, atomic writes through the state encryptor.
+- [x] 4.2 Ledger (`reference_id`, `looks_completed`, `alpha_spent`, `last_look_conditions_digest`, lived seconds and ticks, latch, inconclusive-due timestamp): atomic, `looks_completed` never decreases, the latch never clears, an unreadable ledger raises a fail-closed error and is never reset.
+- [x] 4.3 Report sink at `state/individuation/reports/` (`AsyncJsonlSink`, `retention_days=0`, per-line encryption), record `kind="individuation_report"`, `schema_version=2`, no texts, seeds or digests.
+- [x] 4.4 Decrypting reader: skips undecryptable, non-object, wrong-kind and wrong-schema lines and reports for another `reference_id`; orders by `ts`; applies the staleness rule (`max_report_age_s`, digest equality) with the latch overriding it.
+- [x] 4.5 Conditioning-digest helper over inputs (adapter sha from the adapter store, `values[:5]` and `behavioral_norms[:5]` from `self_model.json`), with no module import.
+- [x] 4.6 Shared lived-time accumulator factored out of `kaine/lifecycle/gate_runner.py` (EntityClock minus engine paused time; tick deltas anchored per boot); the maturation gate uses it unchanged.
+- [x] 4.7 Tests with state encryption on and off, legacy plaintext lines, a corrupt ledger, a regressing `looks_completed` write (refused), and name-vs-ts ordering.
 
 ## 5. Probe seam and disclosure
-- [ ] 5.1 `Lingua.probe_request(about, *, seed, max_tokens) -> ChatRequest`: side-effect free, `snapshot=None`, `mode="external"`, current self-model, Lingua's model, temperature and `think`, `cache_prompt` off.
-- [ ] 5.2 Sampler built in `kaine/cycle/__main__.py` from Lingua's own chat client (with the LoRA resolver), returning `ProbeSample | ProbeFailure`; it rejects empty `content`, resting and non-200 responses.
-- [ ] 5.3 Disclosure (operator decision 3): the Eidolon self-model gains a situation-facts field (serialized and preserved with the self-model) holding the fact that the being is periodically assessed for its own protection; Lingua's context assembler renders situation facts. The fact is not part of `values` or `behavioral_norms`, does not enter the conditioning digest, and is identical in the birth and current arms.
-- [ ] 5.4 Contamination tests: a full fake-organ probe run leaves the intent log line count unchanged and publishes zero `lingua.*` and `*_speech` events.
-- [ ] 5.5 Tests: the disclosure is present in the rendered probe prompt, the conditioning digest is unchanged by it, and changing it alone triggers no look.
+- [x] 5.1 `Lingua.probe_request(about, *, seed, max_tokens) -> ChatRequest`: side-effect free, `snapshot=None`, `mode="external"`, current self-model, Lingua's model, temperature and `think`, `cache_prompt` off.
+- [x] 5.2 Sampler built in `kaine/cycle/__main__.py` from Lingua's own chat client (with the LoRA resolver), returning `ProbeSample | ProbeFailure`; it rejects empty `content`, resting and non-200 responses. When the being has its own accepted adapter, the sampler also requires that the organ actually applies it (the LoRA resolver returns a field); otherwise the run is inconclusive (`adapter_not_applied`), because samples from the base organ would not measure the being.
+- [x] 5.3 Disclosure (operator decision 3): the Eidolon self-model gains a situation-facts field (serialized and preserved with the self-model) holding the fact that the being is periodically assessed for its own protection; Lingua's context assembler renders situation facts. The fact is not part of `values` or `behavioral_norms`, does not enter the conditioning digest, and is identical in the birth and current arms.
+- [x] 5.4 Contamination tests: a full fake-organ probe run leaves the intent log line count unchanged and publishes zero `lingua.*` and `*_speech` events.
+- [ ] 5.5 Tests: the disclosure is present in the rendered probe prompt and the conditioning digest is unchanged by it (done in task 5a); that changing it alone triggers no look is tested with the producer in task 6.
 
 ## 6. Producer
 - [ ] 6.1 `kaine/cycle/individuation_producer.py`, active only when `[individuation].enabled`.
 - [ ] 6.2 Birth capture through a birth hook beside `gate_runner.set_birth_hook`, as soon as the organ is loaded and before the first post-birth sleep; retry with backoff; `capture` kind when an accepted adapter or identity change came first; legacy `capture` at first boot after upgrade or revive; `reconstructed` only with the per-being operator approval flag.
-- [ ] 6.3 Reference regeneration from the stored conditioning when stored conditions other than the embedder no longer match (model id, server build, battery digest, persona template version).
-- [ ] 6.4 Look scheduling: 120 s after `hypnos.sleep.completed` and on a daily timer; skip (logged, no report) unless reference present, ledger readable, warm-up met, digest changed, `min_look_interval_s` elapsed, organ loaded, Hypnos awake, cycle not paused or frozen, semantic embedder loaded.
-- [ ] 6.5 Organ contention: one request at a time, `max_tokens=160`, wait on the injected `lingua_idle()` predicate (no generation in flight, no speech for `lingua_quiet_s`), `run_deadline_s` = 2700; abort on sleep start, organ unload or pause.
-- [ ] 6.6 Fail-closed runs: any sample failure, embedding failure or digest change between start and end gives an inconclusive report with a reason and no p, H or significance; nothing on `individuation.out`; no alpha spent.
-- [ ] 6.7 Scored looks: write the report, update the ledger atomically (k, `alpha_spent`, latch, last digest, lived counters), set the in-memory `IndividuationState`, publish `individuation.divergence {divergence_scalar: H, significant}` on `individuation.out`.
-- [ ] 6.8 Inconclusive alert (operator decision 4): when a look has been due for `inconclusive_alert_s` (default 14 days) with no scored look, raise one Nexus and caretaker notice per stretch; no preservation is triggered by it.
+- [ ] 6.3 Reference regeneration from the stored conditioning when stored conditions other than the embedder no longer match (model id, server build, battery digest, persona template version). The core replaces a reference only with `regenerate=True`. It refuses to regenerate a `birth` reference until the sampler can serve the stored birth adapter, and copies the birth adapter only when capturing a `birth` reference.
+- [x] 6.4 Look scheduling: 120 s after `hypnos.sleep.completed` and on a daily timer; skip (logged, no report) unless reference present, ledger readable, warm-up met, digest changed, `min_look_interval_s` elapsed, organ loaded, Hypnos awake, cycle not paused or frozen, semantic embedder loaded.
+- [x] 6.5 Organ contention: one request at a time, `max_tokens=160`, wait on the injected `lingua_idle()` predicate (no generation in flight, no speech for `lingua_quiet_s`), `run_deadline_s` = 2700; abort on sleep start, organ unload or pause.
+- [x] 6.6 Fail-closed runs: any sample failure, embedding failure or digest change between start and end gives an inconclusive report with a reason and no p, H or significance; nothing on `individuation.out`; no alpha spent.
+- [x] 6.7 Scored looks: update the ledger atomically first (k, `alpha_spent`, latch, last digest, lived counters), then write the report, set the in-memory `IndividuationState`, publish `individuation.divergence {divergence_scalar: H, significant}` on `individuation.out`.
+- [x] 6.8 Inconclusive alert (operator decision 4): when a look has been due for `inconclusive_alert_s` (default 14 days) with no scored look, raise one Nexus and caretaker notice per stretch; no preservation is triggered by it.
 - [ ] 6.9 Tests with a fake organ covering every failure path, every skip precondition, the alert, a restart in the middle of a run, and `alpha_unresolvable`.
+- [ ] 6.10 Boot wiring recovers interrupted captures: a reference with no ledger is captured again, and a ledger that names another reference is regenerated, so neither leaves the being permanently inconclusive.
 
 ## 7. Shared verdict
 - [ ] 7.1 One pure decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(..., individuation=None)` uses in-memory evidence when given, else the ledger and reports.

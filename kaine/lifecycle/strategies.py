@@ -197,7 +197,7 @@ class EidolonMergeStrategy:
         if one is not None:
             return one
         out: dict[str, Any] = {}
-        for field_name in ("values", "behavioral_norms"):
+        for field_name in ("values", "behavioral_norms", "situation_facts"):
             merged: list[Any] = []
             seen: set[str] = set()
             for src in (state_a.get(field_name) or [], state_b.get(field_name) or []):

@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +32,7 @@ from typing import Any, Callable, Mapping
 
 from kaine.bus.schema import Event
 from kaine.lifecycle import stage as lifecycle_stage
+from kaine.lifecycle.lived_time import LivedTimeAccumulator
 from kaine.lifecycle.maturation_gate import (
     ACTION_BIRTH,
     ACTION_HOLD_AWAITING_ACK,
@@ -95,10 +95,11 @@ class MaturationGateRunner:
         self._stop_event: asyncio.Event | None = None
         # Redis server time at the first evaluation, anchoring readout age.
         self._boot_ms: int | None = None
-        # EntityClock baseline for per-boot subjective lived-time accumulation.
-        self._clock_baseline: float | None = None
-        # Paused-time baseline paired with _clock_baseline for exact subtraction.
-        self._paused_baseline: float | None = None
+        # Subjective-lived-time accumulator anchored per boot.
+        self._lived = LivedTimeAccumulator(
+            (lambda: entity_clock.now()) if entity_clock is not None else None,
+            paused_seconds,
+        )
         # Ensure the first tick anchors the stage file.
         self._stage_written = False
         # Track whether we have already emitted the birth-ready "awaiting
@@ -133,7 +134,7 @@ class MaturationGateRunner:
         """
         self._paused_seconds = paused_seconds
         self._is_paused = is_paused
-        self._paused_baseline = None
+        self._lived.set_paused_source(paused_seconds)
 
     def set_birth_hook(self, fn: Callable[[], None] | None) -> None:
         """Hand over the womb's ``begin_birth``; the runner calls it once, after the stage file says embodied."""
@@ -242,51 +243,12 @@ class MaturationGateRunner:
         (scale 0) produces no positive delta. Frozen (paused) time is
         measured by the cycle and subtracted exactly so a suspended span does
         not count toward maturation.
+
+        Logic lives in ``LivedTimeAccumulator``.
         """
-        if self._entity_clock is None:
-            return
-        try:
-            now = self._entity_clock.now()
-            if now is None:
-                return
-            now = float(now)
-        except Exception:
-            return
-
-        paused: float | None = None
-        if self._paused_seconds is not None:
-            try:
-                paused = float(self._paused_seconds())
-                if not math.isfinite(paused):
-                    raise ValueError("non-finite paused time")
-            except Exception:
-                # Source failed: drop both baselines so the next good tick
-                # re-anchors and adds nothing. The pauses inside this span are
-                # unknown, so it must not count; this fails toward counting less.
-                self._clock_baseline = None
-                self._paused_baseline = None
-                return
-
-        if self._clock_baseline is None:
-            self._clock_baseline = now
-            self._paused_baseline = paused if paused is not None else 0.0
-            return
-
-        if paused is None:
-            delta = now - self._clock_baseline
-        else:
-            if self._paused_baseline is None:
-                self._paused_baseline = paused
-            delta = (now - self._clock_baseline) - (paused - self._paused_baseline)
-
-        if delta > 0 and math.isfinite(delta):
-            self._stage = replace(
-                self._stage, lived_seconds=self._stage.lived_seconds + delta
-            )
-
-        self._clock_baseline = now
-        if paused is not None:
-            self._paused_baseline = paused
+        delta = self._lived.step()
+        if delta > 0:
+            self._stage = replace(self._stage, lived_seconds=self._stage.lived_seconds + delta)
 
     async def _womb_readiness_readout(self) -> Mapping[str, Any] | None:
         """Read the latest womb ``gestation.readiness`` event from the bus.

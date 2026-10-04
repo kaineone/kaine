@@ -742,13 +742,13 @@ async def test_lived_time_raising_paused_seconds_reanchors():
 
     clock._now = 0.0
     runner._accumulate_lived_time()
-    assert runner._clock_baseline == 0.0
+    assert runner._lived.clock_baseline == 0.0
 
     clock._now = 20.0
     runner._accumulate_lived_time()
     assert runner._stage.lived_seconds == 0.0
-    assert runner._clock_baseline is None
-    assert runner._paused_baseline is None
+    assert runner._lived.clock_baseline is None
+    assert runner._lived.paused_baseline is None
 
     # The span around the failed reading is unknown: the next good tick only
     # re-anchors, and counting resumes from there.

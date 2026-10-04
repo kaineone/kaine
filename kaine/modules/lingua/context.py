@@ -83,6 +83,14 @@ def _identity_clause(self_model: dict[str, Any]) -> Optional[str]:
     return " ".join(parts) if parts else None
 
 
+def _situation_clause(self_model: dict[str, Any]) -> Optional[str]:
+    """Build a short situation-facts clause, if any are recorded."""
+    facts = (self_model or {}).get("situation_facts") or []
+    if isinstance(facts, list) and facts:
+        return "Facts about your situation: " + " ".join(str(f) for f in facts)
+    return None
+
+
 class ContextAssembler:
     def __init__(
         self,
@@ -135,6 +143,9 @@ class ContextAssembler:
         identity = _identity_clause(self_model)
         if identity:
             parts.append(identity)
+        situation = _situation_clause(self_model)
+        if situation:
+            parts.append(situation)
         parts.append(_AWARENESS_GUARD)
         return " ".join(parts)
 
