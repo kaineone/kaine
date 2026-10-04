@@ -39,7 +39,7 @@ speech-edge = [
 ]
 nexus = [
     "fastapi>=0.139.0,<1",
-    "uvicorn[standard]>=0.53.0,<1",
+    "uvicorn[standard]>=0.54.0,<1",
     "jinja2>=3.1.6,<4",
 ]
 nvidia = [
