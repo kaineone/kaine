@@ -88,7 +88,7 @@ audio = [
     # In-memory prosody extraction for audition.prosody (ISC licence).
     # Required only if [audition].prosody_enabled = true. Lazy-imported.
     "librosa>=0.10,<1",
-    "av>=12,<15",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
+    "av>=18.1.0,<19",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
 ]
 # Temporally-native InternVideo-Next clip encoder for Topos
 # (topos-temporal-video-encoder). Required only when
