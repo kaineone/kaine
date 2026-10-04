@@ -36,14 +36,11 @@ from kaine.model_paths import (  # noqa: F401 - re-exported for callers
     models_dir,
     speech_model_dir,
 )
-from kaine.speech_manifest import (  # noqa: F401 - re-exported for callers
+from kaine.speech_manifest import (
     MANIFEST,
     SpeechModel,
     _sha256_file,
-    _verify_error,
     is_installed,
-    validate_tokens_file,
-    verify_model_dir,
 )
 
 

@@ -38,10 +38,8 @@ def test_setup_re_exports_speech_manifest_runtime_api() -> None:
     from kaine import speech_manifest
     from kaine.setup import speech_models
 
-    assert speech_models.verify_model_dir is speech_manifest.verify_model_dir
     assert speech_models.MANIFEST is speech_manifest.MANIFEST
     assert speech_models.is_installed is speech_manifest.is_installed
-    assert speech_models.validate_tokens_file is speech_manifest.validate_tokens_file
 
 
 def test_setup_source_has_no_private_sha256_implementation() -> None:

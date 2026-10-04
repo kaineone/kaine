@@ -11,7 +11,7 @@ The complexity audit of 2026-10-03 (W6) asked for the runtime's indirect imports
 ## What changes
 
 - **A new stdlib-only module, `kaine/speech_manifest.py`.** It holds the speech-model manifest (`SpeechModel`, `MANIFEST`) and the integrity checks the runtime runs before loading a model: `verify_model_dir`, `is_installed`, `validate_tokens_file` and the verified-marker reader. Each definition moves verbatim, except that `is_installed` names `speech_model_dir` directly instead of setup's `model_dir` alias.
-- **`kaine.setup.speech_models` keeps install and fetch.** It re-exports the moved names, so callers and the CLI are unchanged. It keeps one `_sha256_file`, imported from the new module.
+- **`kaine.setup.speech_models` keeps install and fetch.** It imports what it uses from the new module (the manifest, `is_installed` and one `_sha256_file`), so its callers and the CLI are unchanged.
 - **Runtime callers stop importing setup.** The sherpa STT and TTS modules import `kaine.speech_manifest`. The Nexus health probes and health config read the defaults from `kaine.model_paths` and the manifest from `kaine.speech_manifest`.
 - **Contract.** `kaine.speech_manifest` joins `kaine.model_paths` in the boundary-neutral import contract.
 
