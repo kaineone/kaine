@@ -45,8 +45,8 @@ EXPECTED_PHASE_ORDER = [
 
 # Must change only together with the exit-code table in docs/14-for-researchers.md.
 EXPECTED_RETURNS = {
-    "_phase_preconditions": {"3"},
-    "_phase_gates": {"4", "5"},
+    "_phase_preconditions": {"3", "INDIVIDUATION_REFUSED_EXIT"},
+    "_phase_gates": {"4", "ORGAN_GATE_REFUSED_EXIT"},
     "_phase_bus": {"WELFARE_PRODUCER_REFUSED_EXIT"},
     "_phase_womb_hold": {"0"},
     "_phase_registry": {"refused"},

@@ -32,28 +32,23 @@ def test_boot_refusal_exit_codes_are_distinct_and_documented():
     assert len(codes) == 11, f"Expected 11 distinct codes, got {codes}"
 
     repo_root = Path(__file__).resolve().parents[1]
-    main_path = repo_root / "kaine" / "cycle" / "__main__.py"
-    module = ast.parse(main_path.read_text(encoding="utf-8"), filename=str(main_path))
+    # The boot runs as phases (tests/_boot_sequence.py walks them in order);
+    # none of them may return the research gate's code for another refusal.
+    from tests._boot_sequence import boot_functions
 
-    boot_and_run = None
-    for node in ast.walk(module):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_boot_and_run":
-            boot_and_run = node
-            break
-    assert boot_and_run is not None, "_boot_and_run not found in __main__.py"
-
-    for sub in ast.walk(boot_and_run):
-        if not isinstance(sub, ast.Return):
-            continue
-        value = sub.value
-        if (
-            isinstance(value, ast.Constant)
-            and isinstance(value.value, int)
-            and value.value == 5
-        ):
-            raise AssertionError(
-                f"Found literal return 5 at line {sub.lineno} in _boot_and_run"
-            )
+    for fn in boot_functions():
+        for sub in ast.walk(fn):
+            if not isinstance(sub, ast.Return):
+                continue
+            value = sub.value
+            if (
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, int)
+                and value.value == 5
+            ):
+                raise AssertionError(
+                    f"Found literal return 5 at line {sub.lineno} in {fn.name}"
+                )
 
     docs_path = repo_root / "docs" / "14-for-researchers.md"
     docs_text = docs_path.read_text(encoding="utf-8")
