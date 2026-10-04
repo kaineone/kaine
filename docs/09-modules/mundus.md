@@ -96,7 +96,7 @@ The surface is inert before the birth handoff (`on_birth()`) and emits a null co
 
 ## Configuration
 
-The `[mundus]` section is read by `make_mundus` in `kaine/boot.py`. Adapter-specific settings live under `[mundus.<adapter>]`.
+The `[mundus]` section is read by `make_mundus` in `kaine/boot/factories/mundus.py`. Adapter-specific settings live under `[mundus.<adapter>]`.
 
 | Key | Default | Description |
 |---|---|---|

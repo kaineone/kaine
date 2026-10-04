@@ -124,7 +124,7 @@ The feature vector contains `cpu_percent/100`, `ram_percent/100`, `cycle_latency
 
 A non-finite loss or gradient guard skips weight updates. A non-finite input feature also skips committing that tick into the CfC's recurrent state, so one bad sensor read cannot permanently corrupt the hidden state. Adaptation is suspended while `_in_hypnos` is true. Per-channel expected absolute error and spread are learned only while Soma is awake and are serialized with the module.
 
-A plugin can replace the forward model at the `forward_model` seam in `kaine/boot.py`.
+A plugin can replace the forward model at the `forward_model` seam in `kaine/boot/factories/soma.py`.
 
 ### Self-rhythm
 

@@ -69,7 +69,7 @@ All keys live under `[nous]` in `config/kaine.toml`. See the [modules configurat
 | `timeout_salience` | `0.3` | Salience for `nous.timeout` and `nous.error` diagnostics |
 | `drive_actions` | `true` | When `true`, Volition may realize conscious `nous.proposal` events as intents. When `false`, Nous stays observational: every proposal receives outcome `disabled` and is learned as `no_op`. |
 
-`make_nous` in `kaine/boot.py` validates the complexity envelope: `factors × max_states_per_factor × actions × planning_horizon` must not exceed 4096. The shipped defaults give a product of 64. `make_nous` also exposes plugin seams for `engine` and `engine_wrapper` from `kaine/plugins.py`. An injected engine is used directly and the backend/extra check is skipped.
+`make_nous` in `kaine/boot/factories/nous.py` validates the complexity envelope: `factors × max_states_per_factor × actions × planning_horizon` must not exceed 4096. The shipped defaults give a product of 64. `make_nous` also exposes plugin seams for `engine` and `engine_wrapper` from `kaine/plugins.py`. An injected engine is used directly and the backend/extra check is skipped.
 
 ## How it works
 
@@ -144,7 +144,7 @@ The payload shape is preserved from the earlier NARS implementation so consumers
 | `kaine/modules/nous/numpy_engine.py` | `NumpyActiveInferenceEngine` — NumPy backend entry point |
 | `kaine/modules/nous/numpy_aif.py` | `NumpyAgent` — NumPy state inference, EFE, and Dirichlet learning |
 | `kaine/modules/nous/generative_model.py` | `build_generative_model()`, `encode_snapshot()`, A/B/C/D construction, `ACTION_SPACE` |
-| `kaine/boot.py` | `make_nous()` — complexity envelope validation, engine construction, plugin seams |
+| `kaine/boot/factories/nous.py` | `make_nous()` — complexity envelope validation, engine construction, plugin seams |
 | `kaine/plugins.py` | Plugin seam definitions for `engine` / `engine_wrapper` |
 
 ## Enabling and use

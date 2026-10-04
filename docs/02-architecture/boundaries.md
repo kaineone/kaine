@@ -66,7 +66,7 @@ The boundary-neutral homes must not import the core runtime or `kaine/evaluation
 The import contracts also protect three plugin boundaries, defined in [`pyproject.toml`](../../pyproject.toml):
 
 - `kaine/modules/` must not import `kaine/plugins/`.
-- `kaine/plugins/` must not import boot (`kaine/boot.py`), cycle (`kaine/cycle/`), or modules (`kaine/modules/`).
+- `kaine/plugins/` must not import boot (`kaine/boot/`), cycle (`kaine/cycle/`), or modules (`kaine/modules/`).
 - Core KAINE must not import `kaine_cl1`.
 
 These rules keep plugins optional and stop core code from depending on a plugin interface.

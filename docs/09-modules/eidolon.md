@@ -100,7 +100,7 @@ When enabled, `SelfInferenceEngine` populates four `SelfModel` fields from obser
 `values` lists drives that have crossed threshold at least `speech_pattern_min_count` times, but only after at least one behavioral norm exists. They are stored as `"drive:<drive_name>"`.
 
 `capability_map` is built by `CapabilityMapBuilder`:
-- `effectors`: the sorted Praxis effector whitelist from `[praxis].enabled_effectors`. `kaine/boot.py` wires it into `SelfInferenceEngine` at boot.
+- `effectors`: the sorted Praxis effector whitelist from `[praxis].enabled_effectors`. `kaine/boot/factories/eidolon.py` wires it into `SelfInferenceEngine` at boot.
 - `policy_outcomes`: per-action count and mean EFE from `nous.policy` events.
 
 No raw text or audio is used.
@@ -125,7 +125,7 @@ Saves run periodically every `save_interval_s` and unconditionally on `shutdown(
 | `kaine/modules/eidolon/drift.py` | `SourceDistributionDrift`, `DriftDetector` protocol, `DriftResult` |
 | `kaine/modules/eidolon/capability_map.py` | `CapabilityMapBuilder` — whitelist + policy-outcome accumulator |
 | `kaine/modules/eidolon/surnames.txt` | Second Life surname list |
-| `kaine/boot.py` | `make_eidolon()` — self-inference sub-table wiring |
+| `kaine/boot/factories/eidolon.py` | `make_eidolon()` — self-inference sub-table wiring |
 
 ## Enabling and use
 
