@@ -57,6 +57,10 @@ There are no `ignore_imports` exceptions for this rule. Any `from kaine.modules.
 
 `kaine/evaluation/` must not import `kaine/nexus/` internals. The sidecar observes the bus and runs headless; Nexus is only a presentation seam.
 
+### The core runtime and edge features
+
+Boot, the cycle and the workspace (`kaine.boot`, `kaine.cycle`, `kaine.workspace`) must not import the install and edge features: `kaine.setup`, `kaine.distributed`, `kaine.transfer`, `kaine.remote`, `kaine.install_target`, `kaine.wheel_index` and the research export `kaine.research.claude_science_export`. The contract forbids indirect imports too, so a chain through a third module breaks CI as well. The one declared exception is the cycle entrypoint's remote bridge (`kaine.cycle.__main__` importing `kaine.remote.bridge`). Code the runtime shares with setup lives in neutral homes such as `kaine.model_paths`, `kaine.organ_probe`, `kaine.speech_manifest` and the `kaine.organ_server` package.
+
 ### Neutral homes stay neutral
 
 The boundary-neutral homes must not import the core runtime or `kaine/evaluation/`. That bidirectional rule is what lets core reuse them without dragging in research, and lets research reuse them without depending on the entity.

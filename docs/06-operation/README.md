@@ -35,9 +35,9 @@ Do not `kill -9` the cycle process during a Hypnos pass. The Hypnos multi-phase 
 
 ### The organ sleeps when idle
 
-The model server unloads the organ after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds in container and Quadlet deployments, or after `[lingua].model_server_sleep_idle_seconds` when KAINE launches the server natively. The default is 600; `-1` keeps the model loaded. While it sleeps the server holds neither the model nor its KV cache, so once the cycle stops the organ unloads within that timeout with no operator action. The next inference request reloads it, which takes a few seconds.
+The model server unloads the organ after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds in container and Quadlet deployments, or after `[lingua].model_server_sleep_idle_seconds` when KAINE launches the server natively. The default is 600; `-1` keeps the model loaded. While it sleeps the server holds neither the model nor its KV cache, so once the cycle stops the organ unloads within that timeout with no operator action. The next inference request reloads it, which takes a few seconds. On the reference host, an asleep containerized organ holds about 210 MiB of VRAM (the CUDA context only) against several GB awake; check the release with `nvidia-smi`.
 
-Health polling against `/v1/models` and `/props` does not wake the organ. The Nexus health board and the pre-boot Chat LLM row therefore report it as `up` and `asleep`. The pre-boot Organ content row sends a real completion, which wakes the server. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
+Health polling against `/health`, `/v1/models` and `/props` does not wake the organ. The Nexus health board and the pre-boot Chat LLM row therefore report it as `up` and `asleep`. The pre-boot Organ content row sends a real completion, which wakes the server. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
 
 ### Service containers
 

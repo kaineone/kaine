@@ -122,6 +122,8 @@ kaine/modules/<name>/
 └── ...             — collaborators, clients, etc.
 ```
 
+Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. If your module's events relieve a Thymos drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
+
 The module class must:
 
 - Declare `name: ClassVar[str]` matching the bus stream prefix.
@@ -251,7 +253,8 @@ The extras declared in `pyproject.toml` include at least the following. For the 
 | `training` | `unsloth`, `trl`, `peft`, `datasets` |
 | `worldmodel` | `jax[cpu]`, `chex`, `einops` |
 | `oscillator` | `snntorch`, `scipy` |
-| `test` | `pytest`, `pytest-asyncio`, `fakeredis`, `import-linter` |
+| `test` | `pytest`, `pytest-asyncio`, `pytest-xdist`, `fakeredis`, `import-linter` |
+| `browser-test` | `playwright`, for the real-browser Nexus layout tests in `tests/test_nexus_detail_layout.py`. They drive the system Google Chrome and skip when no browser is available. Kept out of `test` because the runtime images install that extra. |
 | `core`, `memory`, `memory-edge`, `speech-edge`, `nexus`, `nvidia`, `internvideo`, `internvideo-flash`, `perception`, `full` | See `pyproject.toml` |
 
 ## Local config rule

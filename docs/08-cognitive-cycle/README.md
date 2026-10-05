@@ -4,6 +4,18 @@ The cognitive cycle is KAINE's repeating async loop. It paces the system, reads 
 
 For the selection algorithm, see [The global workspace](./global-workspace.md). For sleep and maintenance, see [Sleep and maintenance](../10-sleep/README.md). For wider system architecture, see [Architecture](../02-architecture/README.md). For cycle and host settings, see [Core, cycle and host configuration](../appendix-a-configuration/core.md).
 
+## How a boot runs
+
+The cycle entrypoint in `kaine/cycle/__main__.py` boots by running the phases in `_BOOT_PHASES` in order: `stage`, `preconditions`, `run_identity`, `gates`, `bus`, `womb_hold`, `registry`, `maturation_gate`, `workspace`, `volition`, `cycle`, `supervision`, `runtime_state`, `sidecar`, `ignition_log`, `preview`, `remote_bridge`, `signals`, `spot`, `safety_net`, `launch`, `birth`, `womb_watch`, `caretaker`, `gestation`, `watchers`.
+
+Every phase reads and writes one shared `BootContext`, a slotted dataclass in `kaine/cycle/boot_context.py`. Its repr shows no field, because it holds the Praxis intent secret.
+
+A phase returns `None` to continue, or an exit code to refuse the boot. The exit codes are documented with first boot; see [First boot](../04-getting-started/first-boot.md).
+
+After the last phase, the run loop supervises the cycle until stopped, and shutdown always runs. The process exits `70` when Spot escalated.
+
+When a phase raises, the entrypoint releases what the half-built boot holds. It cancels the boot tasks already started, stops the welfare producer and closes the bus, then re-raises. It deliberately does not shut the modules down. A module's shutdown persists its state, Phantasia's world-model weights for example, and a half-built boot must not write that state over a good saved copy.
+
 ## Rates and timing
 
 The cycle has two independently configurable rates.
@@ -259,6 +271,7 @@ Dynamic rate changes via the `cycle.control` stream override the `[cycle]` value
 | `kaine/cycle/engine.py` | `CognitiveCycle` — tick loop, rate control, Soma consumer |
 | `kaine/cycle/control_state.py` | Freeze state serialization — `CycleControl`, `freeze()`, `unfreeze()` |
 | `kaine/cycle/__main__.py` | Entrypoint — assembles modules, starts freeze-watch task |
+| `kaine/cycle/boot_context.py` | Shared slotted dataclass for boot-phase state — `BootContext` |
 | `kaine/cycle/types.py` | `TickResult`, `WorkspaceSnapshot` dataclasses |
 | `kaine/cycle/protocols.py` | `CycleHook`, `ModuleRegistryProtocol`, `SyneidesisProtocol` |
 | `kaine/entity_clock.py` | Shared subjective clock |
