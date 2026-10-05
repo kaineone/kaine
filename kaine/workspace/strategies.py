@@ -109,6 +109,17 @@ def build_drive_sources(tags_by_source: Mapping[str, Iterable[str]]) -> dict[str
     return {drive: frozenset(sources) for drive, sources in table.items()}
 
 
+def dominant_drive(drives: Mapping[str, float]) -> tuple[str, float] | None:
+    """Return the dominant drive — highest value, ties broken by name.
+
+    Returns ``None`` for an empty mapping. The tie-break is deterministic and
+    independent of dict insertion order.
+    """
+    if not drives:
+        return None
+    return max(drives.items(), key=lambda item: (item[1], item[0]))
+
+
 class DriveRelevanceGoalScorer:
     """Goal factor: weight an event by its relevance to the dominant drive.
 
@@ -148,15 +159,9 @@ class DriveRelevanceGoalScorer:
 
     async def relevance(self, event: Event) -> float:
         drives = self._drive_getter()
-        if not drives:
+        dominant = dominant_drive(drives)
+        if dominant is None or dominant[1] <= 0.0:
             return 1.0
-        # Deterministic dominant-drive pick: highest value, ties broken by name
-        # (independent of dict insertion order).
-        dominant_name, dominant_value = max(
-            drives.items(), key=lambda item: (item[1], item[0])
-        )
-        if dominant_value <= 0.0:
-            return 1.0
-        serving = self._drive_sources.get(dominant_name, frozenset())
+        serving = self._drive_sources.get(dominant[0], frozenset())
         relevance = 1.0 if event.source in serving else 0.0
-        return _clamp01(1.0 - dominant_value * (1.0 - relevance) * self._attenuation)
+        return _clamp01(1.0 - dominant[1] * (1.0 - relevance) * self._attenuation)

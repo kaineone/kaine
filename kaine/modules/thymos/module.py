@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, ClassVar, Optional
+from typing import Any, Callable, ClassVar, Mapping, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
@@ -110,6 +110,14 @@ class Thymos(BaseModule):
         # Transient perceived-emotion signal folded into appraisal (decays).
         # None until the first audition.emotion arrives while coupling enabled.
         self._perceived_emotion: Optional[dict[str, float]] = None
+        # Goal-significance method flag, disclosed in thymos.emotion events.
+        self._goal_method = "unavailable"
+        # Drive-to-source table and dominant-drive selector, injected at cycle
+        # assembly so Thymos never imports the workspace.
+        self._drive_sources: Optional[Mapping[str, frozenset[str]]] = None
+        self._dominant_drive: Optional[
+            Callable[[Mapping[str, float]], tuple[str, float] | None]
+        ] = None
         # Streams for coupling inputs (populated in initialize).
         self._audition_emotion_stream = "audition.out"
         self._empatheia_agent_model_stream = "empatheia.out"
@@ -145,6 +153,19 @@ class Thymos(BaseModule):
     @property
     def last_emotion(self) -> CategoricalEmotion:
         return self._last_emotion
+
+    def set_drive_relevance(
+        self,
+        drive_sources: Mapping[str, frozenset[str]],
+        dominant: Callable[[Mapping[str, float]], tuple[str, float] | None],
+    ) -> None:
+        """Store the drive-to-source table and the dominant-drive helper.
+
+        Both are injected by the cycle composition root; Thymos does not import
+        the workspace layer.
+        """
+        self._drive_sources = drive_sources
+        self._dominant_drive = dominant
 
     async def initialize(self) -> None:
         peer_streams = [self._soma_stream, self._chronos_stream, self._mnemos_stream]
@@ -234,7 +255,7 @@ class Thymos(BaseModule):
                     # (requires norm <= -0.4) is therefore unreachable by
                     # design until that integration lands.
                     "norm_compatibility_available": False,
-                    "goal_significance_method": "token_overlap_v1",
+                    "goal_significance_method": self._goal_method,
                 },
                 salience=self._alert_salience
                 if emotion != CategoricalEmotion.NEUTRAL
@@ -265,12 +286,58 @@ class Thymos(BaseModule):
             novelty = 0.0
         # Pleasantness proxy: mean salience (positive = pleasant).
         pleas = max(-1.0, min(1.0, (sum(sals) / len(sals)) * 2.0 - 0.5)) if sals else 0.0
-        # Goal significance: against current goal ledger.
-        event_text = " ".join(
-            f"{ev.source} {ev.type} {' '.join(str(v) for v in ev.payload.values())}"
-            for _, ev in snapshot.selected_events
+        # Goal/need-relevance check (Scherer 2009, "The dynamic architecture of
+        # emotion"; the component process model the paper cites): scored against the
+        # entity's homeostatic drives, which build from its own state.
+        selected = snapshot.selected_events
+        has_table = (
+            self._drive_sources is not None and self._dominant_drive is not None
         )
-        goal_score = max(-1.0, min(1.0, self._goals.relevance(event_text) * 2.0 - 0.2))
+        drive_score = 0.0
+        if has_table:
+            top = self._dominant_drive(self._drives.to_dict())
+            if top is None or top[1] <= 0.0:
+                drive_score = 0.0
+            else:
+                v = top[1]
+                serving = self._drive_sources.get(top[0], frozenset())
+                total_salience = sum(float(ev.salience) for _, ev in selected)
+                if total_salience == 0.0:
+                    f = 0.0
+                else:
+                    f = (
+                        sum(
+                            float(ev.salience)
+                            for _, ev in selected
+                            if ev.source in serving
+                        )
+                        / total_salience
+                    )
+                drive_score = v * (2.0 * f - 1.0)
+
+        active_goals = self._goals.active()
+        ledger_score = 0.0
+        if active_goals:
+            event_text = " ".join(
+                f"{ev.source} {ev.type} {' '.join(str(v) for v in ev.payload.values())}"
+                for _, ev in selected
+            )
+            ledger_score = self._goals.relevance(event_text) * 2.0 - 1.0
+
+        if has_table and active_goals:
+            goal_score = max(drive_score, ledger_score)
+            self._goal_method = "drive_relevance_v1+token_overlap_v1"
+        elif has_table:
+            goal_score = drive_score
+            self._goal_method = "drive_relevance_v1"
+        elif active_goals:
+            goal_score = ledger_score
+            self._goal_method = "token_overlap_v1"
+        else:
+            goal_score = 0.0
+            self._goal_method = "unavailable"
+
+        goal_score = max(-1.0, min(1.0, goal_score))
         # Coping potential: high arousal but low valence → low coping.
         coping = max(
             -1.0,
