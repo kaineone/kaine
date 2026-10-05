@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any
 
 from kaine.bus.schema import Event, validate_event
+from kaine.cycle.unfrozen_clock import UnfrozenClock
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
@@ -108,9 +109,12 @@ class WelfareObserver(StreamSubscriberObserver):
         interoceptive_distress_threshold: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_THRESHOLD,
         interoceptive_distress_duration_s: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_DURATION_S,
         poll_interval_s: float = 0.5,
+        unfrozen_clock: UnfrozenClock | None = None,
     ) -> None:
         super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
+        self._unfrozen = unfrozen_clock or UnfrozenClock.for_welfare()
+        self._diag_unknown_seen = 0
         self._maintenance_window_s = float(maintenance_window_s)
         self._extreme_vad_threshold = float(extreme_vad_threshold)
         self._extreme_vad_duration_s = float(extreme_vad_duration_s)
@@ -126,11 +130,11 @@ class WelfareObserver(StreamSubscriberObserver):
         self._sustained_interoceptive_distress_count: int = 0
 
         # --- State for (a): unmaintained fatigue. ---
-        # Wall-clock time when fatigue threshold was most recently crossed.
+        # Unfrozen-clock time when fatigue threshold was most recently crossed.
         self._fatigue_crossed_at: float | None = None
 
         # --- State for (b): sustained extreme VAD. ---
-        # Wall-clock time when extreme zone was entered (None = not extreme).
+        # Unfrozen-clock time when extreme zone was entered (None = not extreme).
         self._extreme_vad_since: float | None = None
 
         # --- State for (c): replay write-rate. ---
@@ -172,8 +176,28 @@ class WelfareObserver(StreamSubscriberObserver):
         await handler(entry_id, event)
 
     async def _tick(self) -> None:
+        # Read the clock first so an unreadable freeze state seen on this tick
+        # is recorded on this tick; record it once per episode.
+        self._unfrozen.now()
+        diag = self._unfrozen.diagnostic()
+        if diag["unknown_episodes"] > self._diag_unknown_seen:
+            self._diag_unknown_seen = diag["unknown_episodes"]
+            try:
+                await self._sink.write(
+                    {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "diagnostic": "freeze_state_unreadable",
+                        "unknown_episodes": diag["unknown_episodes"],
+                    }
+                )
+            except Exception:
+                log.warning("welfare_observer sink write failed", exc_info=True)
         # Check time-based conditions on every poll cycle.
         await self._check_timed_conditions()
+
+    @property
+    def freeze_clock_diagnostic(self) -> dict:
+        return self._unfrozen.diagnostic()
 
     @property
     def _stream_handlers(self) -> dict[str, Any]:
@@ -241,7 +265,7 @@ class WelfareObserver(StreamSubscriberObserver):
     async def _handle_soma(self, entry_id: str, event: Event) -> None:
         if event.type == "soma.fatigue":
             # Record fatigue threshold crossing time.
-            self._fatigue_crossed_at = time.monotonic()
+            self._fatigue_crossed_at = self._unfrozen.now()
             log.debug("welfare_observer: soma.fatigue crossing recorded at %s", entry_id)
         elif event.type == "soma.report":
             # (d) Track interoceptive prediction-error magnitude through the
@@ -251,7 +275,7 @@ class WelfareObserver(StreamSubscriberObserver):
             # episode (rising-edge), resetting its own timer.
             payload = event.payload or {}
             magnitude = float(payload.get("prediction_error", 0.0))
-            now = time.monotonic()
+            now = self._unfrozen.now()
             # Feed the shared tracker (records onset / resets on drop). The fire
             # itself is timer-driven in _check_timed_conditions so a sustained
             # episode is detected by the passage of time even with no further
@@ -279,7 +303,7 @@ class WelfareObserver(StreamSubscriberObserver):
         in_extreme = (
             abs(valence) >= self._extreme_vad_threshold and arousal >= self._extreme_vad_threshold
         )
-        now = time.monotonic()
+        now = self._unfrozen.now()
         if in_extreme:
             if self._extreme_vad_since is None:
                 self._extreme_vad_since = now
@@ -317,7 +341,7 @@ class WelfareObserver(StreamSubscriberObserver):
     # --- Timed condition checks ------------------------------------------
 
     async def _check_timed_conditions(self) -> None:
-        now = time.monotonic()
+        now = self._unfrozen.now()
 
         # (a) Unmaintained fatigue.
         if (

@@ -15,6 +15,8 @@ import threading
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
+from kaine.cycle.unfrozen_clock import UnfrozenClock
+
 if TYPE_CHECKING:
     from kaine.cycle.unattended_gate import Condition
 
@@ -266,6 +268,7 @@ class InputLossWatcher:
         threshold_s: float,
         on_loss: Callable[[], Awaitable[None]],
         poll_s: float = 5.0,
+        unfrozen_clock: UnfrozenClock | None = None,
     ) -> None:
         self._bus = bus
         self._streams = list(streams)
@@ -273,7 +276,9 @@ class InputLossWatcher:
         self._on_loss = on_loss
         self._poll_s = poll_s
         self._lost = False
-        self._start_ms = 0
+        self._unfrozen = unfrozen_clock or UnfrozenClock.for_welfare()
+        self._last_id: dict[str, str | None] = {}
+        self._changed_at: dict[str, float] = {}
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """Poll stream freshness until ``stop_event`` is set.
@@ -281,38 +286,45 @@ class InputLossWatcher:
         Cancellation propagates out of this method; bus errors are logged
         and skipped for that poll only.
         """
-        try:
-            self._start_ms = await self._bus.server_time_ms()
-        except Exception:
-            log.warning(
-                "InputLossWatcher: server_time_ms failed at start, using 0",
-                exc_info=True,
-            )
-            self._start_ms = 0
-
         self._lost = False
+        await self._baseline()
 
         while not stop_event.is_set():
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._poll_s)
             except asyncio.TimeoutError:
-                try:
-                    now_ms = await self._bus.server_time_ms()
-                except Exception:
-                    log.warning(
-                        "InputLossWatcher: server_time_ms failed, skipping poll",
-                        exc_info=True,
-                    )
-                    continue
-                await self._poll_once(now_ms)
+                await self._poll_once(0)
             else:
                 break
+
+    async def _baseline(self) -> None:
+        """Anchor every stream's silence at the start.
+
+        Entries that already exist (left over from a previous run) are old, not
+        new activity, so a stream is measured from the watcher's start: slow
+        boot-time loading is never reported as lost input.
+        """
+        u = self._unfrozen.now()
+        for stream in self._streams:
+            try:
+                latest = await self._bus.latest(stream)
+            except Exception:
+                log.warning(
+                    "InputLossWatcher: bus.latest(%r) failed at start", stream, exc_info=True
+                )
+                latest = None
+            self._last_id[stream] = latest[0] if latest is not None else None
+            self._changed_at[stream] = u
 
     async def _poll_once(self, now_ms: int) -> bool:
         """Evaluate freshness once and notify on a transition to lost.
 
+        ``now_ms`` is kept for compatibility but staleness is measured in
+        unfrozen seconds from :class:`UnfrozenClock`.
+
         Returns ``True`` when input just became lost in this poll.
         """
+        u = self._unfrozen.now()
         all_stale = True
         any_fresh = False
         bus_error = False
@@ -329,17 +341,17 @@ class InputLossWatcher:
                 bus_error = True
                 continue
 
-            if latest is None:
-                last_ms = self._start_ms
-            else:
+            # A stream first seen here (``_poll_once`` before ``run``) starts
+            # its silence now, as ``run`` does for every stream at start.
+            self._last_id.setdefault(stream, None)
+            self._changed_at.setdefault(stream, u)
+            if latest is not None:
                 entry_id = latest[0]
-                try:
-                    id_ms = int(entry_id.split("-")[0])
-                except Exception:
-                    id_ms = 0
-                last_ms = max(id_ms, self._start_ms)
+                if entry_id is not None and entry_id != self._last_id[stream]:
+                    self._last_id[stream] = entry_id
+                    self._changed_at[stream] = u
 
-            if now_ms - last_ms <= self._threshold_ms:
+            if (u - self._changed_at[stream]) * 1000 <= self._threshold_ms:
                 all_stale = False
                 any_fresh = True
 
