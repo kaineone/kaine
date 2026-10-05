@@ -1,6 +1,7 @@
 ## 0. Gates
 - [ ] 0.1 Integrator design check of this change.
-- [ ] 0.2 Operator confirms the provenance rule (design section 3) and reviews `schema.py`'s instructions, definitions and seed examples before the first data build.
+- [x] 0.2a Operator decided provenance (2026-10-05): Claude drafts the spec text, operator reviews; no cloud-model text in any example; a local stock Qwen3.5-9B generates every example.
+- [ ] 0.2b Operator approves `schema-v1.md` (definitions and seeds). No data is generated before this.
 
 ## 1. Schema and template
 - [ ] 1.1 `kaine/decision/__init__.py`, `kaine/decision/schema.py`: the 14 question templates, options, definitions, examples, near-miss categories, `SCHEMA_VERSION = 1`, and a function that builds the `/v1/systemone` `questions` object for a list of question ids.
@@ -15,14 +16,19 @@
 
 ## 3. Training data
 - [ ] 3.1 `build_data.py fetch`: Banking77 CSVs at a pinned commit (SHA-256 checked) and MultiNLI parquet at the pinned revision, fiction genre dropped.
-- [ ] 3.2 `build_data.py generate`: synthetic train and dev through a temporary local llama-server under the GPU lock, with the rule filter and the second-pass label check.
+- [ ] 3.2 `build_data.py generate`: synthetic train and dev through a temporary local llama-server under the GPU lock, with the rule filter and the second-pass label check. The generator's Qwen3.5-9B weights are fetched at setup time at a pinned revision and get a NOTICE entry (7.1).
 - [ ] 3.3 Refusal of any path under the data root or `state/`, and no input for arbitrary text files; tests prove both.
 - [ ] 3.4 Data manifest: per-source counts, label balance, hashes, licences.
 
 ## 4. Training
 - [ ] 4.1 `scripts/k1jev/train_sft.py` per design section 6, with the running-cycle guard.
 - [ ] 4.2 Tests with a tiny fake model under the kaine venv: argv has no shell, the loss mask covers only the answer letter, the guard refuses with a cycle present.
-- [ ] 4.3 Train 4B and 0.8B (GPU window announced to the integrator first).
+- [ ] 4.3 Train 4B and 0.8B, in GPU chunks of at most 2 hours with a gap between chunks so the Qwen review queue can drain. Each chunk is announced to the integrator before the lock is taken. Order:
+  - W1: synthetic data generation (local Qwen3.5-9B llama-server, stopped the moment the window ends), about 2 h; gold generation is a short slice of it.
+  - W2a: train 0.8B, then start 4B (checkpointing every 30 min).
+  - W2b: finish 4B from its checkpoint.
+  - W2c: fine-tune the deberta-v3-large and GLiClass controls.
+  - W2d: bake-off inference on gold for every system, then the export parity check.
 
 ## 5. Evaluation and bake-off
 - [ ] 5.1 `scripts/k1jev/evaluate.py`: temperature fit, thresholds, gold metrics with intervals and ECE.
