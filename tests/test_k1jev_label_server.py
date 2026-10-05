@@ -399,3 +399,66 @@ def test_non_string_item_id_is_a_400(tmp_path):
         server.shutdown()
         server.server_close()
         t.join()
+
+
+def test_negative_content_length_is_refused(tmp_path):
+    items = tmp_path / "items.jsonl"
+    _write_items(items, 2)
+    server, token = label_server.make_server(items, tmp_path / "labels.jsonl")
+    t = _start(server)
+    try:
+        c = _conn(server.server_port)
+        c.putrequest("POST", "/api/answer")
+        c.putheader("X-Label-Token", token)
+        c.putheader("Content-Length", "-1")
+        c.endheaders()
+        assert c.getresponse().status == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+        t.join()
+
+
+def test_non_object_body_is_a_400(tmp_path):
+    items = tmp_path / "items.jsonl"
+    _write_items(items, 2)
+    server, token = label_server.make_server(items, tmp_path / "labels.jsonl")
+    t = _start(server)
+    try:
+        c = _conn(server.server_port)
+        _api(c, "POST", "/api/skip", body=["item-000"], token=token)
+        assert c.getresponse().status == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+        t.join()
+
+
+@pytest.mark.parametrize("fraction", [-0.1, 1.5])
+def test_repeat_fraction_out_of_range_is_refused(tmp_path, fraction):
+    items = tmp_path / "items.jsonl"
+    _write_items(items, 2)
+    with pytest.raises(ValueError):
+        label_server.make_server(items, tmp_path / "labels.jsonl", repeat_fraction=fraction)
+
+
+def test_stale_labels_for_unknown_items_do_not_finish_the_first_pass(tmp_path):
+    items = tmp_path / "items.jsonl"
+    labels = tmp_path / "labels.jsonl"
+    _write_items(items, 2)
+    labels.write_text(
+        "".join(
+            json.dumps({"item_id": f"other-{i}", "question_id": "declined", "label": "true",
+                        "unsure": False, "pass": "first", "ts": "x"}) + "\n"
+            for i in range(5)
+        ),
+        encoding="utf-8",
+    )
+    server, _token = label_server.make_server(items, labels, repeat_fraction=1.0)
+    try:
+        assert server.first_pass_done() == 0
+        item, _ = server.next_item()
+        assert item["item_id"] == "item-000"
+    finally:
+        server.server_close()
+

@@ -298,7 +298,11 @@ class LabelServer(HTTPServer):
                 self.last_answered_key = key
 
     def first_pass_done(self) -> int:
-        return sum(1 for key in self.labels if key[1] == "first")
+        # Count only items in this items file, so stale lines from another
+        # file can never make the first pass look complete.
+        return sum(
+            1 for (iid, pass_) in self.labels if pass_ == "first" and iid in self.item_by_id
+        )
 
     def next_item(self):
         progress = {"done": self.first_pass_done(), "total": self.total}
@@ -352,14 +356,15 @@ class LabelServer(HTTPServer):
         self._append_label(record)
 
     def _append_label(self, record: dict) -> None:
-        key = (record["item_id"], record["pass"])
-        self.labels[key] = record
-        self.last_answered_key = key
+        # Persist first; only a label that reached the disk counts as given.
         self._ensure_labels_dir()
         with self.labels_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
             f.flush()
             os.fsync(f.fileno())
+        key = (record["item_id"], record["pass"])
+        self.labels[key] = record
+        self.last_answered_key = key
 
     def prev_item(self):
         progress = {"done": self.first_pass_done(), "total": self.total}
@@ -428,6 +433,9 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._send(400, b"", "text/plain")
             return None
+        if n < 0:
+            self._send(400, b"", "text/plain")
+            return None
         if n > MAX_BODY:
             self._send(413, b"", "text/plain")
             return None
@@ -493,6 +501,9 @@ class _Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._send(400, b"", "text/plain")
             return
+        if not isinstance(payload, dict):
+            self._send(400, b"", "text/plain")
+            return
         if parsed.path == "/api/answer":
             try:
                 iid = payload["item_id"]
@@ -527,6 +538,8 @@ def make_server(
 ):
     if bind != "127.0.0.1":
         raise ValueError(f"refusing to bind to {bind!r}; only 127.0.0.1 is allowed")
+    if not 0.0 <= float(repeat_fraction) <= 1.0:
+        raise ValueError(f"repeat_fraction must be between 0 and 1, got {repeat_fraction!r}")
     items = _load_items(Path(items_path))
     labels_path = Path(labels_path)
     if token is None:

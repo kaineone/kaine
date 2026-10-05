@@ -80,3 +80,14 @@ def test_letters_are_single_tokens_for_qwen():
     for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz":
         toks = tok.encode(ch, add_special_tokens=False)
         assert len(toks) == 1, f"{ch!r} tokenized as {toks}"
+
+
+def test_prompt_carries_both_message_closing_markers():
+    from kaine.decision.schema import get_question, state_text
+
+    prompt = render_prompt(state_text("No thanks.", "Tell me a joke."), get_question("declined"))
+    assert prompt.count("<|im_end|>") == 2
+    assert prompt.count("<|im_start|>") == 3
+    assert "<|im_end|>\n<|im_start|>user\n" in prompt
+    assert prompt.endswith("<|im_end|>\n<|im_start|>assistant\n")
+
