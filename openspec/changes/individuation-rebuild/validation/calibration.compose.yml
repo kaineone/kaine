@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+# Calibration override for the individuation real-organ smoke test.
+#
+# Usage:
+#   1. Bring the organ and trainer up with this override and
+#      KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1.
+#   2. Run the test LoRA fixture:
+#      docker compose -f compose/kaine.yml -f openspec/changes/individuation-rebuild/validation/calibration.compose.yml --profile study run --rm --no-deps --entrypoint python kaine-study /validation/test_lora.py
+#   3. Run smoke.py the same way with --control-lora '<lora_field>'.
+#   4. Recreate the organ WITHOUT this override afterwards, so the study never
+#      sees the test adapter.
+#
+# Paths resolve relative to the compose/ directory.
+
+services:
+  kaine-model-server:
+    volumes:
+      - kaine-organ-adapters-calibration:/organ-adapters:ro
+
+  kaine-trainer:
+    volumes:
+      - kaine-trainer-jobs-calibration:/trainer-jobs
+
+  kaine-study:
+    volumes:
+      - kaine-organ-adapters-calibration:/organ-adapters
+      - kaine-trainer-jobs-calibration:/trainer-jobs
+      - ../openspec/changes/individuation-rebuild/validation:/validation:ro
+
+volumes:
+  kaine-organ-adapters-calibration:
+    name: kaine-organ-adapters-calibration
+  kaine-trainer-jobs-calibration:
+    name: kaine-trainer-jobs-calibration
