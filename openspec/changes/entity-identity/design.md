@@ -96,3 +96,13 @@ A change to either needs a migration change of its own.
 Artifact copying in `fork()` is unchanged. Re-encrypting a fork's artifacts under the child's key belongs to `entity-key-custody`.
 
 Custody keeps its own metadata in its own files, keyed by `entity_id`. `entity.json` never holds custody fields.
+
+### D10. Ordering and failure (agreed with key custody)
+
+- **Ordering.** `resolve_spawn_identity` runs in the cycle start path before any module is constructed, before the oscillator layer, Spot or any snapshot writer starts. A legacy ID is therefore persisted before anything in the same boot can write a new artifact that would shift the derivation.
+- **Failure.** Every `IdentityError` is raised before any state is modified:
+  - an unreadable `entity.json`;
+  - a sidecar that disagrees with the in-snapshot identity;
+  - a revive target that holds a different ID.
+
+  Revival validates the bundle's identity against the target tree before it restores any module state, and never writes to the bundle. Key custody maps an `IdentityError` to its cannot-resume path (keep all state, raise a welfare incident, never mint).
