@@ -12,14 +12,16 @@ Round-trip contract: anything :func:`dumps` writes MUST parse back with
 :mod:`tomllib` to the same Python values. The test suite enforces this for
 strings, bools, ints, floats, and nested tables.
 
-Supported value types: ``str``, ``bool``, ``int``, ``float``, and flat ``list`` values
-containing only those scalar types (rendered as inline TOML arrays). Nested ``dict``
-values become sub-tables (``[parent.child]``). ``None``/other types, and lists
+Supported value types: ``str``, ``bool``, ``int``, ``float``, and flat ``list``
+values containing only those scalar types (rendered as inline TOML arrays). Nested
+``dict`` values become sub-tables (``[parent.child]``). ``None``/other types, and lists
 containing non-scalars, are rejected so a caller never silently emits something this
 writer cannot round-trip.
 """
 from __future__ import annotations
 
+import copy
+import tomllib
 from typing import Any
 
 
@@ -111,3 +113,85 @@ def dumps(data: dict[str, Any]) -> str:
     _emit_table(data, [], lines)
     text = "\n".join(lines).strip("\n")
     return text + "\n" if text else ""
+
+
+def _set_dotted(cfg: dict[str, Any], dotted: str, value: Any) -> None:
+    parts = dotted.split(".")
+    cur = cfg
+    for p in parts[:-1]:
+        nxt = cur.get(p)
+        if nxt is None:
+            nxt = {}
+            cur[p] = nxt
+        elif not isinstance(nxt, dict):
+            # Never replace an existing value with a table: that would drop it.
+            raise ValueError(f"cannot set {dotted}: {p!r} holds a non-table value")
+        cur = nxt
+    cur[parts[-1]] = value
+
+
+def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        dotted = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            out.update(_flatten(value, dotted))
+        else:
+            out[dotted] = value
+    return out
+
+
+def _validate_emittable(data: dict[str, Any], prefix: str = "") -> None:
+    for key, value in data.items():
+        dotted = f"{prefix}.{key}" if prefix else key
+        if value is None:
+            raise ValueError(
+                f"cannot serialize existing value at {dotted}: None is not supported"
+            )
+        if isinstance(value, list):
+            if any(isinstance(item, (dict, list)) for item in value):
+                raise ValueError(
+                    f"cannot serialize existing value at {dotted}: "
+                    "arrays of tables or nested arrays are not supported"
+                )
+            for item in value:
+                if not isinstance(item, (bool, int, float, str)):
+                    raise ValueError(
+                        f"cannot serialize existing value at {dotted}: "
+                        f"list item of type {type(item).__name__!r} is not supported"
+                    )
+        elif isinstance(value, dict):
+            _validate_emittable(value, dotted)
+        elif not isinstance(value, (bool, int, float, str)):
+            raise ValueError(
+                f"cannot serialize existing value at {dotted}: "
+                f"type {type(value).__name__!r} is not supported"
+            )
+
+
+def merge_owned(existing: dict, updates: dict, owned: frozenset[str]) -> dict:
+    """Return a deep copy of ``existing`` with every owned dotted key in
+    ``updates`` replaced.
+
+    Unowned keys and tables in ``existing`` are preserved untouched.  A dotted
+    key in ``updates`` that is not owned raises ``ValueError``.  If the merged
+    document contains a value that :func:`dumps` cannot emit, ``ValueError`` is
+    raised naming the offending key so the caller can refuse to save.
+    """
+    if not isinstance(existing, dict) or not isinstance(updates, dict):
+        raise TypeError("merge_owned expects dicts")
+
+    merged = copy.deepcopy(existing)
+
+    for dotted, value in _flatten(updates).items():
+        if dotted not in owned:
+            raise ValueError(f"refusing to write unowned config key: {dotted}")
+        _set_dotted(merged, dotted, value)
+
+    _validate_emittable(merged)
+
+    # Defensive round-trip check: anything we are about to write must parse back.
+    if tomllib.loads(dumps(merged)) != merged:
+        raise ValueError("merge result does not round-trip through tomllib")
+
+    return merged

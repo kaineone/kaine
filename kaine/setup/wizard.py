@@ -26,8 +26,25 @@ from kaine.setup.hardware_steps import (
     device_step,
     inventory_step,
     load_footprint_catalogue,
+    shared_services_step,
 )
 from kaine.setup.steps import StepContext, run_step
+from kaine.setup.wizard_steps import (
+    accel_mismatch_step,
+    ack_step,
+    audition_stt_step,
+    cl1_substrate_step,
+    custom_modules_step,
+    encryption_step,
+    lingua_model_step,
+    module_preset_step,
+    orientation_step,
+    research_opt_in_step,
+    research_recipient_step,
+    tier_step,
+    trainer_provisioning_step,
+    vox_voice_step,
+)
 
 # The required CAL welfare acknowledgement phrase (mirrors kaine.lifecycle).
 ACK_PHRASE = "I acknowledge the CAL welfare terms"
@@ -517,6 +534,7 @@ def run_wizard(
     recommend_tier_fn: Callable[[], Any] | None = None,
     services_up_fn: Callable[[], dict[str, bool]] | None = None,
     storage_old_root: Path | None = None,
+    existing_config: dict[str, Any] | None = None,
 ) -> WizardResult:
     """Run the wizard's step logic and return the assembled operator-config.
 
@@ -525,10 +543,13 @@ def run_wizard(
 
     ``storage_old_root`` is the current data root, or the working directory, whose
     data may be relocated.
-    the wizard can ask whether each one is shared with other applications.
 
     ``device_consumers_fn`` returns per-device process consumers used by the
     hardware inventory step.
+
+    ``existing_config`` is the parsed current operator file (if any). Field
+    defaults prefer the existing value for the key each field owns, so a
+    re-run with empty answers reproduces the previous configuration.
 
     Parameters
     ----------
@@ -548,67 +569,72 @@ def run_wizard(
         Skipped entirely in ``defaults`` mode and when None.
     probe_trainer:
         Optional real detection probe for the external voice-alignment trainer
-        interpreter (signature ``(interpreter, *, backend) -> (found, detail)``,
-        e.g. :func:`kaine.setup.trainer_provisioning.probe_trainer`). When None
-        or in ``defaults`` mode the optional Stage-2 trainer step is skipped.
+        interpreter. When None or in ``defaults`` mode the optional Stage-2
+        trainer step is skipped.
     recommend_tier_fn:
         Optional callable returning a :class:`kaine.hardware.TierRecommendation`.
-        When provided (and not in ``defaults`` mode) the wizard shows the tier,
-        reason, and memory budget, and asks whether to record the matching tier
-        as ``[deployment].tier``. Recording a tier only bounds backends and
-        devices for this hardware and never changes which modules are enabled;
-        the pre-boot check reports any enabled module this tier cannot run.
-        Never applies without an explicit ``yes``.
     defaults:
-        Non-interactive mode for tests/CI: records the ack as the default path,
-        chooses a minimal safe module set, all-CPU devices, no metrics, no
-        encryption.
+        Non-interactive mode for tests/CI.
+    existing_config:
+        Parsed current operator file used to pre-fill defaults and for the
+        merge-on-save diff.
     """
     cfg: dict[str, Any] = {}
+    if existing_config is None:
+        existing_config = {}
 
     def line(text: str = "") -> None:
         out(text + "\n")
 
-    # --- Step 1: orientation ------------------------------------------------
-    line("=" * 70)
-    line("KAINE first-run setup")
-    line("=" * 70)
-    line(
-        "This wizard records your local choices to config/kaine.operator.toml\n"
-        "(gitignored). It NEVER edits the shipped config/kaine.toml and NEVER\n"
-        "boots the entity. It will set up: license acknowledgement, device\n"
-        "assignments from a hardware scan, which modules to enable, the served\n"
-        "model/voice/STT ids, optional dependency extras, opt-in research\n"
-        "metrics, and state encryption."
-    )
-
-    # --- Step 2: CAL welfare acknowledgement (REQUIRED) ---------------------
-    line()
-    line("-" * 70)
-    line("CAL welfare acknowledgement (required)")
-    line("-" * 70)
-    line(CAL_ARTICLE_4_SUMMARY)
-    if defaults:
-        line(
-            f"\n[--defaults] Recording the acknowledgement '{ACK_PHRASE}' on the\n"
-            "non-interactive default path. By running --defaults you affirm these terms."
-        )
-    else:
-        ack = input_fn(
-            f"\nType '{ACK_PHRASE}' to confirm you accept these obligations\n"
-            "(anything else aborts without writing any config):\n> "
-        ).strip()
-        if ack != ACK_PHRASE:
-            line(
-                "\nAcknowledgement not given; aborting. No configuration was written."
-            )
-            return WizardResult(acknowledged=False)
-
-    # --- Step 3: hardware scan + device assignments -------------------------
     ctx = StepContext(
         config=cfg,
         host=host,
         extra={
+            "input_fn": input_fn,
+            "out": line,
+            "defaults": defaults,
+            "shipped_config": shipped_config,
+            "existing_config": existing_config,
+            "probe_trainer": probe_trainer,
+            "torch_cuda_probes": torch_cuda_probes,
+            "corrective_install_fn": corrective_install_fn,
+            "wheel_index_url": wheel_index_url,
+        },
+    )
+
+    # --- Orientation --------------------------------------------------------
+    run_step(
+        orientation_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+
+    # --- CAL welfare acknowledgement (REQUIRED) -----------------------------
+    run_step(
+        ack_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+    if not ctx.extra.get("acknowledged"):
+        line(
+            "\nAcknowledgement not given; aborting. No configuration was written."
+        )
+        return WizardResult(acknowledged=False)
+
+    # Nothing is probed or scanned before the acknowledgement is given.
+    discovered: dict[str, Any] = {}
+    if not defaults and probe_services is not None:
+        try:
+            discovered = probe_services() or {}
+        except Exception:
+            discovered = {}
+    ctx.extra.update(
+        {
+            "discovered": discovered,
             "consumers": device_consumers_fn() if device_consumers_fn else None,
             "catalogue": load_footprint_catalogue(),
             "floor_gb": float(
@@ -617,8 +643,19 @@ def run_wizard(
                 ))
             ),
             "services_up": (services_up_fn() if services_up_fn else {}),
-        },
+        }
     )
+    # The tier recommendation feeds the tier step and the module preset.
+    tier_rec = None
+    if recommend_tier_fn is not None:
+        try:
+            tier_rec = recommend_tier_fn()
+        except Exception as exc:
+            if not defaults:
+                line(f"  Tier recommendation unavailable ({exc}).")
+    ctx.extra["tier_rec"] = tier_rec
+
+    # --- Hardware scan + device assignments ---------------------------------
     run_step(
         inventory_step,
         ctx,
@@ -633,8 +670,6 @@ def run_wizard(
         out=out,
         defaults=defaults,
     )
-    from kaine.setup.hardware_steps import shared_services_step
-
     run_step(
         device_step(propose_device_assignments),
         ctx,
@@ -650,15 +685,13 @@ def run_wizard(
         defaults=defaults,
     )
 
+    # --- Storage ------------------------------------------------------------
     from kaine.setup.storage_step import relocation_step, storage_step
 
     ctx.extra["min_free_gb"] = float(
         ((shipped_config.get("storage") or {}).get("min_free_gb", 20.0))
     )
     ctx.extra["old_root"] = storage_old_root
-    ctx.extra["out"] = out
-    # The storage and relocation steps run when setup knows the current data
-    # root (the CLI always passes it); callers that do not keep their prompts.
     if storage_old_root is not None:
         run_step(
             storage_step,
@@ -679,246 +712,113 @@ def run_wizard(
     if "relocation_note" in ctx.extra:
         out(ctx.extra["relocation_note"] + "\n")
 
-    # --- Step 3a: deployment tier recommendation -----------------------------
-    tier_rec = None
-    if not defaults and recommend_tier_fn is not None:
-        line()
-        line("-" * 70)
-        line("Deployment tier recommendation")
-        line("-" * 70)
-        try:
-            rec = recommend_tier_fn()
-        except Exception as exc:
-            line(f"  Tier recommendation unavailable ({exc}).")
-            rec = None
-        tier_rec = rec
-        if rec is not None:
-            tier_label = getattr(rec, "profile", f"tier{getattr(rec, 'tier', '')}")
-            line(f"  Recommended tier: {tier_label}")
-            line(f"  Reason: {getattr(rec, 'reason', '')}")
-            budget = getattr(rec, "memory_budget_gb", None)
-            if budget is not None:
-                line(f"  Memory budget: {budget} GB")
-            else:
-                line("  Memory budget: unknown")
-            if _ask_yes_no(
-                input_fn,
-                f"Record tier {tier_label} for this install? It bounds backends and devices "
-                f"for this hardware and never changes which modules are enabled; the pre-boot "
-                f"check reports any enabled module this tier cannot run. [y/N]",
-                default=False,
-            ):
-                _set(cfg, "deployment", "tier", tier_label)
-    elif defaults and recommend_tier_fn is not None:
-        try:
-            tier_rec = recommend_tier_fn()
-        except Exception:
-            tier_rec = None
-
-    # --- Step 3b: accelerator/runtime mismatch check -----------------------
-    mismatch_info = _accel_mismatch_step(
+    # --- Deployment tier recommendation --------------------------------------
+    run_step(
+        tier_step(),
+        ctx,
         input_fn=input_fn,
-        line=line,
-        host=host,
-        torch_cuda_probes=torch_cuda_probes,
-        corrective_install_fn=corrective_install_fn,
-        wheel_index_url=wheel_index_url,
+        out=out,
         defaults=defaults,
     )
 
-    # --- Step 4: module selection -------------------------------------------
-    line()
-    line("-" * 70)
-    line("Module selection")
-    line("-" * 70)
-    preset, why = recommend_preset(tier_rec)
-    modules: dict[str, bool] = {}
-    module_preset = "custom"
-    if defaults:
-        modules = FULL_ENTITY_MODULES.copy() if preset == "full" else base_thesis_modules()
-        module_preset = "full entity" if preset == "full" else "base thesis"
-        line(f"[--defaults] module preset: {module_preset} ({why})")
-        for m in MODULE_ORDER:
-            line(f"  {m} = {str(modules[m]).lower()}")
-    else:
-        line(f"Recommended: {'full entity' if preset == 'full' else 'base thesis'} — {why}.")
-        while True:
-            choice = _ask(
-                input_fn,
-                "  modules: [b]ase thesis, [f]ull entity, or [c]ustom?",
-                default="f" if preset == "full" else "b",
-            )
-            first = (choice or "").strip().lower()[:1]
-            if first == "b":
-                modules = base_thesis_modules()
-                module_preset = "base thesis"
-                break
-            if first == "f":
-                modules = FULL_ENTITY_MODULES.copy()
-                module_preset = "full entity"
-                break
-            if first == "c":
-                module_preset = "custom"
-                break
-            line("  Please answer b, f, or c.")
-        if (choice or "").strip().lower()[:1] == "c":
-            # Custom starts from the recommended preset's values.
-            modules = FULL_ENTITY_MODULES.copy() if preset == "full" else base_thesis_modules()
-            line("Enable each module? (defaults shown; perception/echo/mundus default off)")
-            for m in MODULE_ORDER:
-                modules[m] = _ask_yes_no(input_fn, f"  enable {m}?", default=modules.get(m, False))
-    # echo is test infrastructure — always off.
-    modules["echo"] = False
-    cfg["modules"] = dict(modules)
+    # --- Accelerator/runtime mismatch check ----------------------------------
+    run_step(
+        accel_mismatch_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
 
-    # --- Step 5: model / voice / STT discovery ------------------------------
-    line()
-    line("-" * 70)
-    line("Model / voice / STT")
-    line("-" * 70)
-    discovered: dict[str, Any] = {}
-    if not defaults and probe_services is not None:
-        try:
-            discovered = probe_services() or {}
-        except Exception:
-            discovered = {}
-
-    shipped_lingua = shipped_config.get("lingua") or {}
-    shipped_audition = shipped_config.get("audition") or {}
-    shipped_vox = shipped_config.get("vox") or {}
-
-    if modules.get("lingua"):
-        models = discovered.get("served_models") or []
-        if models:
-            line("  Models served: " + ", ".join(str(m) for m in models))
-        default_model = str(shipped_lingua.get("model_id", ""))
-        if defaults:
-            model_id = default_model
-        else:
-            model_id = _ask(
-                input_fn,
-                f"  [lingua].model_id [{default_model}]: ",
-                default=default_model,
-            )
-        _set(cfg, "lingua", "model_id", model_id)
-
-    audition_backend = str(shipped_audition.get("backend", "speaches")).strip().lower()
-
-    if modules.get("vox"):
-        vox_backend = str(shipped_vox.get("backend", "chatterbox")).strip().lower()
-        if vox_backend == "chatterbox":
-            voices = discovered.get("voices") or []
-            if voices:
-                line("  Chatterbox voices: " + ", ".join(str(v) for v in voices))
-            default_voice = str(shipped_vox.get("predefined_voice_id", "")) or (
-                str(voices[0]) if voices else ""
-            )
-            if defaults:
-                voice_id = default_voice
-            else:
-                voice_id = ""
-                for _ in range(3):
-                    voice_id = _ask(
-                        input_fn,
-                        f"  [vox].predefined_voice_id (REQUIRED when vox is on) "
-                        f"[{default_voice}]: ",
-                        default=default_voice,
-                    )
-                    if voice_id:
-                        break
-                    line("    a voice id is required when vox is enabled.")
-            # vox enabled REQUIRES a voice id; if defaults left it blank, disable vox
-            # rather than write an unusable config.
-            if voice_id:
-                _set(cfg, "vox", "predefined_voice_id", voice_id)
-            else:
-                cfg["modules"]["vox"] = False
-                line("    no voice id available; disabling vox.")
-        else:
-            line("  Vox speaks through sherpa-onnx Kokoro (preset speaker [vox].sherpa_speaker_id); no Chatterbox voice needed.")
-
-    if modules.get("audition") and audition_backend == "speaches":
-        stt_models = discovered.get("stt_models") or []
-        if stt_models:
-            line("  Speaches STT models: " + ", ".join(str(s) for s in stt_models))
-        default_stt = str(shipped_audition.get("stt_model", ""))
-        if defaults:
-            stt = default_stt
-        else:
-            stt = _ask(
-                input_fn,
-                f"  [audition].stt_model [{default_stt}]: ",
-                default=default_stt,
-            )
-        _set(cfg, "audition", "stt_model", stt)
-
-    # --- Step 5b: voice-alignment trainer provisioning (Stage 2 / optional) -
-    if not defaults and probe_trainer is not None:
-        from kaine.setup.trainer_provisioning import trainer_guidance
-
-        _trainer_provisioning_step(
-            cfg,
+    # --- Module selection ---------------------------------------------------
+    run_step(
+        module_preset_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+    if ctx.extra.get("module_preset") == "custom":
+        run_step(
+            custom_modules_step(),
+            ctx,
             input_fn=input_fn,
-            line=line,
-            host=host,
-            probe_trainer=probe_trainer,
-            guidance_fn=trainer_guidance,
+            out=out,
+            defaults=defaults,
         )
 
-    # --- Step 6: optional extras (computed; install handled by __main__) ----
-    extras = implied_extras(cfg["modules"], shipped_config)
-
-    # --- Step 7: research metrics (opt-in) ----------------------------------
-    line()
-    line("-" * 70)
-    line("Research metrics (opt-in)")
-    line("-" * 70)
-    line(
-        "KAINE can submit NUMERIC METRICS ONLY (never speech, transcripts,\n"
-        "memories, or any conversation content) to the project, operator-initiated\n"
-        "via `python -m kaine.research`. Nothing is ever transmitted automatically."
+    # --- Model / voice / STT ------------------------------------------------
+    run_step(
+        lingua_model_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
     )
-    if not defaults and _ask_yes_no(
-        input_fn, "Opt in to metrics-only research submission?", default=False
-    ):
-        _set(cfg, "research_submission", "enabled", True)
-        _set(cfg, "research_submission", "tier", "metrics")
-        recipient = _ask(
-            input_fn,
-            "  recipient email [kaine.one@tuta.com]: ",
-            default="kaine.one@tuta.com",
-        )
-        _set(cfg, "research_submission", "recipient", recipient)
-        _set(cfg, "transfer", "recipient", recipient)
-    else:
-        line("Research submission left disabled (the default).")
-
-    # --- Step 8: state encryption (opt-in) ----------------------------------
-    line()
-    line("-" * 70)
-    line("State encryption (opt-in)")
-    line("-" * 70)
-    line(
-        "Optional AES-256-GCM encryption-at-rest for persisted cognitive state.\n"
-        "If enabled, the entity refuses to boot unless a 32-byte key is available\n"
-        "via the KAINE_STATE_KEY environment variable (fail-closed)."
+    run_step(
+        vox_voice_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
     )
-    if not defaults and _ask_yes_no(
-        input_fn, "Enable state encryption at rest?", default=False
-    ):
-        _set_nested(cfg, "security", "state_encryption", "enabled", True)
-        line(
-            "  Remember to export KAINE_STATE_KEY (32 raw bytes, or base64/hex of\n"
-            "  32 bytes) before booting, or the entity will refuse to start."
+    run_step(
+        audition_stt_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+
+    # --- Stage-2 trainer provisioning ---------------------------------------
+    run_step(
+        trainer_provisioning_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+
+    # --- Research metrics (opt-in) ------------------------------------------
+    run_step(
+        research_opt_in_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+    if ctx.extra.get("research_opted_in"):
+        run_step(
+            research_recipient_step(),
+            ctx,
+            input_fn=input_fn,
+            out=out,
+            defaults=defaults,
         )
-    else:
-        line("State encryption left disabled (the default).")
 
-    # --- Step 8b: optional CL1 substrate plugin (off by default) ------------
-    if not defaults:
-        _cl1_substrate_step(cfg, input_fn=input_fn, line=line)
+    # --- State encryption (opt-in) ------------------------------------------
+    run_step(
+        encryption_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
 
-    line(f"Module preset: {module_preset}")
+    # --- Optional CL1 substrate plugin --------------------------------------
+    run_step(
+        cl1_substrate_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+
+    line(f"Module preset: {ctx.extra.get('module_preset', 'custom')}")
+
+    extras = implied_extras(cfg.get("modules", {}), shipped_config)
+
+    mismatch_info = ctx.extra.get("mismatch_info", {})
     return WizardResult(
         acknowledged=True,
         config=cfg,

@@ -40,8 +40,30 @@ class Step:
     apply: Callable[[StepContext, dict[str, Any]], None]
 
 
+# Every module the wizard can enable or disable, in canonical order, plus echo.
+_SETUP_MODULES = (
+    "soma",
+    "chronos",
+    "thymos",
+    "eidolon",
+    "mnemos",
+    "nous",
+    "lingua",
+    "hypnos",
+    "topos",
+    "praxis",
+    "audition",
+    "vox",
+    "empatheia",
+    "phantasia",
+    "perception",
+    "mundus",
+    "echo",
+)
+
 OWNED_KEYS: frozenset[str] = frozenset(
     {
+        # hardware steps
         "hardware.allowed_devices",
         "hardware.cpu_threads",
         "hardware.devices.organ",
@@ -55,10 +77,44 @@ OWNED_KEYS: frozenset[str] = frozenset(
         "services.chatterbox.shared",
         "services.speaches.shared",
         "storage.data_root",
+        # deployment tier
+        "deployment.tier",
+        # modules
+        *(f"modules.{m}" for m in _SETUP_MODULES),
+        # model / voice / STT
+        "lingua.model_id",
+        "vox.predefined_voice_id",
+        "audition.stt_model",
+        # voice-alignment trainer provisioning
+        "hypnos.voice_alignment.trainer_python",
+        "hypnos.voice_alignment.trainer_backend",
+        # CL1 substrate plugin
+        "plugins.enabled",
+        "plugins.cl1.substrate.target",
+        "plugins.cl1.substrate.accelerated_time",
+        "plugins.cl1.substrate.data_source",
+        *(f"plugins.cl1.substrate.territories.{m}" for m in _SETUP_MODULES),
+        *(f"plugins.cl1.backends.{m}" for m in _SETUP_MODULES),
+        # research metrics
+        "research_submission.enabled",
+        "research_submission.tier",
+        "research_submission.recipient",
+        "transfer.recipient",
+        # state encryption
+        "security.state_encryption.enabled",
     }
 )
 
 _MISSING = object()
+
+
+def assert_owned(changed: set[str]) -> None:
+    """Raise ``ValueError`` if any changed key is outside the owned-key allowlist."""
+    offenders = changed - OWNED_KEYS
+    if offenders:
+        raise ValueError(
+            f"step wrote config key(s) outside the owned set: {sorted(offenders)}"
+        )
 
 
 def _flatten(cfg: dict[str, Any], prefix: str = "") -> dict[str, Any]:
@@ -155,6 +211,8 @@ def parse_answer(field: Field, raw: str) -> tuple[Any, str | None]:
 
 
 def _show_default(default: Any) -> str:
+    if isinstance(default, bool):
+        return "Y/n" if default else "y/N"
     if isinstance(default, (list, tuple)):
         return ", ".join(str(x) for x in default)
     return str(default)

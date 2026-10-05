@@ -14,6 +14,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
@@ -23,6 +24,7 @@ from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env_values
 from kaine.setup import tomlwriter
+from kaine.setup.steps import OWNED_KEYS, assert_owned, owned_changes
 from kaine.setup.storage_step import existing_volumes, write_volume_override
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
@@ -558,6 +560,17 @@ def main(
         write(f"shipped config not found at {args.config_path}\n")
         return 2
 
+    # Load the existing operator file (if any) for pre-fill and merge-on-save.
+    existing_raw: dict[str, Any] = {}
+    try:
+        with args.operator_path.open("rb") as fh:
+            existing_raw = tomllib.load(fh)
+    except FileNotFoundError:
+        existing_raw = {}
+    except Exception as exc:
+        write(f"could not read existing operator file at {args.operator_path}: {exc}\n")
+        return 1
+
     # Install the process data root from the shipped+operator overlay before any
     # provisioning writes.
     try:
@@ -590,18 +603,53 @@ def main(
         },
         defaults=args.defaults,
         storage_old_root=storage_old_root,
+        existing_config=existing_raw,
     )
 
     if not result.acknowledged:
         return 1
 
-    # Write the operator override.
+    # Merge wizard-owned updates with the existing file so hand edits survive.
+    try:
+        merged = tomlwriter.merge_owned(existing_raw, result.config, OWNED_KEYS)
+    except ValueError as exc:
+        write(f"configuration cannot be saved: {exc}\n")
+        return 1
+
+    try:
+        # merge_owned only sets owned keys, so any other change is a bug.
+        changed = owned_changes(existing_raw, merged)
+        assert_owned(changed)
+    except ValueError as exc:
+        write(f"internal error: unexpected config key change: {exc}\n")
+        return 1
+
     operator_path: Path = args.operator_path
+
+    if changed:
+        write(f"The following keys will change in {operator_path}:\n")
+        for key in sorted(changed):
+            write(f"  {key}\n")
+    else:
+        write(f"No wizard-owned keys to change in {operator_path}.\n")
+    write("Comments in the operator file are not preserved.\n")
+
+    if not args.defaults:
+        suffix = " [Y/n]: "
+        raw = (_input(f"Write these changes to {operator_path}?{suffix}") or "").strip().lower()
+        if not raw:
+            confirm = True
+        else:
+            confirm = raw in ("y", "yes")
+        if not confirm:
+            write("Not writing changes.\n")
+            return 0
+
     operator_path.parent.mkdir(parents=True, exist_ok=True)
-    operator_path.write_text(tomlwriter.dumps(result.config))
+    operator_path.write_text(tomlwriter.dumps(merged))
 
     compose_env_path = Path("compose/.env")
-    devmap = device_map(result.config)
+    devmap = device_map(merged)
     if compose_env_path.exists() and devmap:
         gpu_env = compose_gpu_env(devmap)
         if gpu_env:
@@ -611,7 +659,7 @@ def main(
                 + ", ".join(f"{k}={v}" for k, v in sorted(gpu_env.items()))
             )
 
-    data_root = result.config.get("storage", {}).get("data_root")
+    data_root = merged.get("storage", {}).get("data_root")
     if data_root and Path("compose/kaine.yml").exists():
         _, msg = write_volume_override(
             Path(data_root), Path("compose"), existing=existing_volumes()
@@ -625,7 +673,7 @@ def main(
 
     # Consented, hardware-aware organ download + turnkey serve (lingua only).
     _provision_organ(
-        result.config,
+        merged,
         shipped=shipped,
         host=host,
         input_fn=_input,
@@ -635,13 +683,13 @@ def main(
 
     # Detect + offer-or-guide the external services the enabled modules need.
     _provision_dependencies(
-        result.config, input_fn=_input, out=write, defaults=args.defaults
+        merged, input_fn=_input, out=write, defaults=args.defaults
     )
 
     # Resolved at call time (not as the argparse default) so tests can redirect it.
     _ensure_nexus_token(args.secrets_path or DEFAULT_SECRETS_PATH, out=write)
 
-    _print_next_steps(result.config, operator_path=operator_path, out=write)
+    _print_next_steps(merged, operator_path=operator_path, out=write)
     return 0
 
 

@@ -1,14 +1,14 @@
 ## 1. Step model
 
-- [ ] 1.1 Add `kaine/setup/steps.py` with `Step` and `Field`, and express every current wizard step in it (orientation, welfare acknowledgement, hardware and devices, tier, accelerator mismatch, modules, model/voice/STT, trainer, metrics, encryption).
-- [ ] 1.2 Add the owned-key allowlist and a test that no step writes outside it, including `[research]` (owned by the research harness) and any operator-presence gate.
-- [ ] 1.3 Make `run_wizard` render the step model while keeping its signature and all existing wizard tests green.
+- [x] 1.1 Add `kaine/setup/steps.py` with `Step` and `Field`, and express every current wizard step in it (orientation, welfare acknowledgement, hardware and devices, tier, accelerator mismatch, modules, model/voice/STT, trainer, metrics, encryption).
+- [x] 1.2 Add the owned-key allowlist and a test that no step writes outside it, including `[research]` (owned by the research harness) and any operator-presence gate.
+- [x] 1.3 Make `run_wizard` render the step model while keeping its signature and all existing wizard tests green.
 
 ## 2. Merge on save
 
-- [ ] 2.1 Add a `tomlwriter` merge that replaces owned keys and preserves every other table and key.
-- [ ] 2.2 Pre-fill from the existing operator file, and show the list of changes before writing.
-- [ ] 2.3 Tests:
+- [x] 2.1 Add a `tomlwriter` merge that replaces owned keys and preserves every other table and key.
+- [x] 2.2 Pre-fill from the existing operator file, and show the list of changes before writing.
+- [x] 2.3 Tests:
   - A hand-edited key survives a re-run.
   - An unchanged re-run writes identical content.
 
