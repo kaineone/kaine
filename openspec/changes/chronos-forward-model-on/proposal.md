@@ -35,7 +35,7 @@ The capability spec is also stale: it still names `audio_in.out` as the default 
 ## Impact
 
 - **Code:** `kaine/modules/chronos/module.py`, `kaine/modules/chronos/featurizer.py`, `kaine/boot/factories/chronos.py`, the shared operator-source constant and its two existing users.
-- **Config:** `config/profiles/thesis_test.toml` (sequenced through the integrator), a commented `interaction_event_types` default in `config/kaine.toml`.
+- **Config:** `config/profiles/thesis_test.toml` (sequenced through the integrator). `interaction_event_types` is documented in the configuration appendix; `config/kaine.toml` is unchanged.
 - **Preserved beings:** revive unchanged on layout 1. No weights are reset.
 - **Research impact:** in base-thesis runs, Chronos starts publishing a non-zero temporal prediction error, which feeds anomaly salience, and the interaction clock no longer resets on perception events. Both change what competes in the workspace and the social drive, so the next study is re-baselined with them in place. No study is running.
 - **Paper:** none. The change brings the code to what the paper already says.

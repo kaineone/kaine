@@ -32,6 +32,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Optional, Protocol, runtime_checkable
 
+from kaine.bus.schema import OPERATOR_SOURCES
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.security.intent_signing import IntentSigner
 
@@ -78,7 +79,7 @@ OWN_INTERNAL_SPEECH_TYPE = "internal_speech"
 # Channels whose voices are treated as the operator. Audio from any other
 # channel is modelled as "media:<channel>" and is not answered as a user
 # utterance. The list is shared with Empatheia attribution.
-DEFAULT_OPERATOR_SOURCES = ("live_mic", "microphone", "remote")
+DEFAULT_OPERATOR_SOURCES = OPERATOR_SOURCES
 
 
 @dataclass(frozen=True)

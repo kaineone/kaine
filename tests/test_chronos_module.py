@@ -110,12 +110,12 @@ async def test_user_input_resets_time_since_last_interaction(bus: AsyncBus):
         await bus.client.xadd(
             "user_input.out",
             {
-                "source": "user",
-                "type": "input.text",
+                "source": "audition",
+                "type": "audition.emotion",
                 "salience": "0.5",
                 "timestamp": datetime.fromtimestamp(1000.0, tz=timezone.utc).isoformat(),
                 "causal_parent": "",
-                "payload": "{}",
+                "payload": "{\"source_label\": \"live_mic\"}",
             },
         )
         # Give the consumer a moment.

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional
 if TYPE_CHECKING:
     pass
 from kaine.boot.common import _check_injections
-from kaine.boot.errors import _require_keys
+from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -35,6 +35,7 @@ def make_chronos(
         "rumination_threshold",
         "rumination_bucket_resolution",
         "user_input_streams",
+        "interaction_event_types",
         "forward_prediction",
         "prediction_error_window",
     }
@@ -52,10 +53,18 @@ def make_chronos(
             "rumination_threshold",
             "rumination_bucket_resolution",
             "user_input_streams",
+            "interaction_event_types",
             "forward_prediction",
             "prediction_error_window",
         )
         if k in section
     }
+    if "interaction_event_types" in kwargs:
+        types = kwargs["interaction_event_types"]
+        if isinstance(types, str) or not isinstance(types, (list, tuple)):
+            raise ConfigurationError(
+                "[chronos].interaction_event_types must be a list of event types"
+            )
+        kwargs["interaction_event_types"] = tuple(str(t) for t in types)
     kwargs.update(_check_injections("chronos", injections, {"network"}))
     return Chronos(bus, entity_clock=entity_clock, **kwargs)

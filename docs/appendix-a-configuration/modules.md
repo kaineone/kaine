@@ -76,6 +76,7 @@ Chronos models event rhythm across the bus with a small CfC network and publishe
 | `rumination_threshold` | integer | `4` | Count of the same event type within `rumination_window` that triggers a rumination alert. |
 | `rumination_bucket_resolution` | float | `0.25` | Bucket width (seconds) for discretizing event timestamps in the rumination detector. |
 | `user_input_streams` | list of strings | `["audition.out"]` | Streams Chronos monitors for user-input timing. |
+| `interaction_event_types` | list of strings | `["audition.transcription", "audition.emotion"]` | Event types on those streams that count as an interaction when they come from an operator channel. |
 | `forward_prediction` | boolean | `false` | Enable the forward-model prediction head. Disabled by default; enable per-install. |
 | `prediction_error_window` | integer | `32` | Rolling-window size (ticks) for normalizing the temporal prediction error signal. |
 

@@ -22,7 +22,7 @@ import logging
 from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus
-from kaine.bus.schema import Event
+from kaine.bus.schema import OPERATOR_SOURCES, Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.empatheia.agent import AgentModel
@@ -49,7 +49,7 @@ class Empatheia(BaseModule):
         backend: str = "inmemory",
         collection: str = "empatheia_agents",
         speaker_label: str = "operator",
-        operator_sources: Sequence[str] = ("live_mic", "microphone", "remote"),
+        operator_sources: Sequence[str] = OPERATOR_SOURCES,
         deviation_threshold: float = 0.5,
         baseline_salience: float = 0.15,
         alert_salience: float = 0.6,
