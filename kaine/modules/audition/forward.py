@@ -321,22 +321,25 @@ class AuditoryForwardModel:
         detected BEFORE any ``copy_``, so a mismatch is discarded rather than
         raising. Returns False on any malformed/short layer list too.
         """
+        torch = self._torch
+        import torch.nn as nn
+
         layers = state.get("layers")
-        if not isinstance(layers, list) or len(layers) < 2:
+        linears = [m for m in self._net if isinstance(m, nn.Linear)]
+        if not isinstance(layers, list) or len(layers) != len(linears):
             return False
-        try:
-            first_w = layers[0]["weight"]
-            last_w = layers[-1]["weight"]
-            in_units = len(first_w)
-            in_dim = len(first_w[0])
-            out_dim = len(last_w)
-        except (KeyError, TypeError, IndexError):
-            return False
-        return (
-            in_units == self._units
-            and in_dim == 2 * self._feature_dim
-            and out_dim == self._feature_dim
-        )
+        # Every weight and bias must convert to a tensor of exactly the shape
+        # it would be copied into: a ragged, non-numeric or differently sized
+        # entry is a mismatch, so load_state_dict can never fail part-way.
+        for layer, module in zip(layers, linears):
+            try:
+                weight = torch.tensor(layer["weight"], dtype=torch.float32)
+                bias = torch.tensor(layer["bias"], dtype=torch.float32)
+            except (KeyError, TypeError, ValueError, RuntimeError):
+                return False
+            if weight.shape != module.weight.shape or bias.shape != module.bias.shape:
+                return False
+        return True
 
     def buffer_summary(self) -> dict[str, Any]:
         """Return a statistical descriptor of the auditory buffer.

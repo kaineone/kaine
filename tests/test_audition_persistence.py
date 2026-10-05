@@ -252,3 +252,52 @@ def test_matches_state_shape_checks_each_dimension():
     assert not model.matches_state_shape(AuditoryForwardModel(feature_dim=8, units=5).state_dict())
     assert not model.matches_state_shape(AuditoryForwardModel(feature_dim=9, units=4).state_dict())
     assert not model.matches_state_shape({"layers": []})
+
+
+def test_matches_state_shape_rejects_bad_inner_shapes():
+    """Matching outer dimensions are not enough: the hidden width, every bias,
+    ragged rows, non-numeric values and extra layers must all fit, so
+    load_state_dict can never fail part-way through a restore."""
+    import copy
+
+    from kaine.modules.audition.forward import AuditoryForwardModel
+
+    model = AuditoryForwardModel(feature_dim=8, units=4)
+    good = model.state_dict()
+
+    def variant(mutate):
+        state = copy.deepcopy(good)
+        mutate(state["layers"])
+        return state
+
+    # Output layer reads a wider hidden layer than this model has.
+    assert not model.matches_state_shape(
+        variant(lambda ls: ls[-1].update(weight=[row + [0.0] for row in ls[-1]["weight"]]))
+    )
+    # Bias lengths.
+    assert not model.matches_state_shape(variant(lambda ls: ls[0].update(bias=ls[0]["bias"] + [0.0])))
+    assert not model.matches_state_shape(variant(lambda ls: ls[-1].update(bias=ls[-1]["bias"][:-1])))
+    # A ragged weight row.
+    assert not model.matches_state_shape(
+        variant(lambda ls: ls[0]["weight"].__setitem__(1, ls[0]["weight"][1][:-1]))
+    )
+    # A non-numeric value and a missing bias.
+    assert not model.matches_state_shape(
+        variant(lambda ls: ls[0]["weight"][0].__setitem__(0, "x"))
+    )
+    assert not model.matches_state_shape(variant(lambda ls: ls[0].pop("bias")))
+    # An extra layer.
+    assert not model.matches_state_shape(variant(lambda ls: ls.append(copy.deepcopy(ls[-1]))))
+
+
+@pytest.mark.asyncio
+async def test_speech_forward_model_bad_bias_discarded_not_raised(bus, caplog):
+    audition = _make_audition(bus)
+    original_weights = audition._forward_model.state_dict()
+    bad = audition._forward_model.state_dict()
+    bad["layers"][-1]["bias"] = bad["layers"][-1]["bias"] + [0.0]
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.audition"):
+        audition.deserialize({"forward_model": bad})
+    assert any("discarding" in rec.message.lower() for rec in caplog.records)
+    assert audition._forward_model.state_dict() == original_weights
+    await _close_module(audition)
