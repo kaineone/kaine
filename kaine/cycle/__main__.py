@@ -943,6 +943,7 @@ def _resolve_seed(config: dict[str, Any]) -> int:
 def _resolve_boot_stage(
     config: dict[str, Any],
     stage_override: lifecycle_stage.StageState | None = None,
+    identity: Any = None,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the developmental stage at boot.
 
@@ -972,7 +973,11 @@ def _resolve_boot_stage(
     existing = lifecycle_stage.read_stage()
     if existing is not None:
         return existing, True, False
-    prior = lifecycle_stage.has_prior_lived_history()
+    prior = lifecycle_stage.has_prior_lived_history(
+        identity,
+        resolve(Path("state")),
+        bundle_roots=_preservation_bundle_roots(config),
+    )
     resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
     # The gate runner persists the resolved stage on its first tick so the
     # gestation clock is anchored and evidence is owned by one writer.
@@ -981,12 +986,14 @@ def _resolve_boot_stage(
 
 
 def _resolve_start_stage(
-    config: dict[str, Any], revive: "ReviveSession | None"
+    config: dict[str, Any],
+    revive: "ReviveSession | None",
+    identity: Any = None,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the stage for this start: the bundle's preserved stage when
     reviving one that carries a stage, otherwise the stage file as usual."""
     override = revive.stage_state if revive is not None else None
-    return _resolve_boot_stage(config, stage_override=override)
+    return _resolve_boot_stage(config, stage_override=override, identity=identity)
 
 
 def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
@@ -1011,6 +1018,23 @@ def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
 def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
     """Persist a revived identity once the revive has successfully landed."""
     save_identity(identity, resolve(state_root) / "identity" / "entity.json")
+
+
+def _preservation_bundle_roots(config: dict[str, Any]) -> list[str]:
+    """Return the distinct preservation bundle root directories in ``config``.
+
+    Reads ``[preservation.divergence_monitor]`` and
+    ``[preservation.welfare_response]``. Missing sections default their
+    ``out_root`` to ``backups``.
+    """
+    preservation = config.get("preservation", {})
+    roots: list[str] = []
+    for section_name in ("divergence_monitor", "welfare_response"):
+        section = preservation.get(section_name, {})
+        out_root = str(section.get("out_root", "backups"))
+        if out_root not in roots:
+            roots.append(out_root)
+    return roots
 
 
 # Effectors that have nothing to act on in the womb: Mundus has no world and
@@ -1351,7 +1375,7 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     # Developmental stage resolution. Done early so gestation can gate locus and
     # embodiment before any module opens. Ship-inert by default: a normal boot
     # is completely unaffected.
-    ctx.stage_state, ctx.staging_enabled, ctx.fresh_gestation = _resolve_start_stage(ctx.kaine_config, ctx.revive)
+    ctx.stage_state, ctx.staging_enabled, ctx.fresh_gestation = _resolve_start_stage(ctx.kaine_config, ctx.revive, ctx.identity)
     if ctx.revive is not None and ctx.revive.stage_state is not None:
         log.info(
             "revive: using bundle's preserved developmental stage: %s",

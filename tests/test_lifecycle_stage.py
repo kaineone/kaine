@@ -8,9 +8,11 @@ Pure file-backed state; no entity is booted.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from kaine.lifecycle import stage as st
+from kaine.lifecycle.identity import mint_identity, write_identity_sidecar
 
 
 def _p(tmp_path: Path) -> Path:
@@ -87,35 +89,45 @@ def test_roundtrip_dict() -> None:
 
 
 def test_has_prior_lived_history_false_for_fresh_state(tmp_path: Path) -> None:
-    assert st.has_prior_lived_history(state_root=tmp_path) is False
+    identity = mint_identity()
+    assert st.has_prior_lived_history(identity, state_root=tmp_path) is False
 
 
-def test_has_prior_lived_history_true_for_fork(tmp_path: Path) -> None:
-    (tmp_path / "forks" / "abc123").mkdir(parents=True)
-    (tmp_path / "forks" / "abc123" / "snapshot.json").write_text("{}")
-    assert st.has_prior_lived_history(state_root=tmp_path) is True
+def test_has_prior_lived_history_true_for_fork_sidecar(tmp_path: Path) -> None:
+    identity = mint_identity()
+    fork_dir = tmp_path / "forks" / "abc123"
+    fork_dir.mkdir(parents=True)
+    (fork_dir / "snapshot.json").write_text("{}")
+    write_identity_sidecar(fork_dir, identity)
+    assert st.has_prior_lived_history(identity, state_root=tmp_path) is True
 
 
-def test_has_prior_lived_history_true_for_preservation(tmp_path: Path) -> None:
-    (tmp_path / "preservation").mkdir(parents=True)
-    (tmp_path / "preservation" / "bundle.json").write_text("{}")
-    assert st.has_prior_lived_history(state_root=tmp_path) is True
+def test_has_prior_lived_history_true_for_preservation_manifest(tmp_path: Path) -> None:
+    identity = mint_identity()
+    bundle_dir = tmp_path / "preservation" / "bundle1"
+    bundle_dir.mkdir(parents=True)
+    manifest = {"identity": {"entity_id": identity.entity_id, "lineage": []}}
+    (bundle_dir / "manifest.json").write_text(json.dumps(manifest))
+    assert st.has_prior_lived_history(identity, state_root=tmp_path) is True
 
 
 def test_has_prior_lived_history_true_for_phantasia_checkpoint(tmp_path: Path) -> None:
+    identity = mint_identity()
     (tmp_path / "phantasia").mkdir(parents=True)
     (tmp_path / "phantasia" / "world_model.ckpt").write_text("data")
-    assert st.has_prior_lived_history(state_root=tmp_path) is True
+    assert st.has_prior_lived_history(identity, state_root=tmp_path) is True
 
 
 def test_has_prior_lived_history_true_for_perception_desired(tmp_path: Path) -> None:
+    identity = mint_identity()
     (tmp_path / "perception").mkdir(parents=True)
     (tmp_path / "perception" / "desired.json").write_text("{}")
-    assert st.has_prior_lived_history(state_root=tmp_path) is True
+    assert st.has_prior_lived_history(identity, state_root=tmp_path) is True
 
 
-def test_has_prior_lived_history_excludes_stage_file(tmp_path: Path) -> None:
+def test_has_prior_lived_history_true_for_stage_file(tmp_path: Path) -> None:
+    identity = mint_identity()
     stage = tmp_path / "lifecycle" / "stage.json"
     stage.parent.mkdir(parents=True)
     stage.write_text('{"stage": "gestation"}')
-    assert st.has_prior_lived_history(state_root=tmp_path, stage_path=stage) is False
+    assert st.has_prior_lived_history(identity, state_root=tmp_path) is True

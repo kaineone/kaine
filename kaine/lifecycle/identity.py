@@ -511,3 +511,31 @@ def has_prior_lived_history_in_lineage(
                 return True
 
     return False
+
+
+def lived_before(
+    identity: EntityIdentity | None,
+    state_root: Path | str = "state",
+    bundle_roots: Iterable[Path | str] = (),
+) -> bool:
+    """Return whether this being has lived before this boot.
+
+    Implements the maturation-gate liveness rule approved for KAINE: a being is
+    treated as already-lived (and therefore must never be regressed into a womb)
+    when any of the following hold:
+
+      * its identity is unknown (``None``);
+      * this state tree contains any of its own lived artifacts
+        (:data:`OWN_LIVED_ARTIFACTS`), which deliberately excludes ``forks/``
+        and ``preservation/``;
+      * ``forks/``, in-tree ``preservation/`` or any configured bundle root
+        contains a record whose sidecar or manifest names this being or one of
+        its ancestors.
+
+    Foreign snapshots or bundles are not counted as this being's own history.
+    """
+    if identity is None:
+        return True
+    if own_lived_artifacts(state_root):
+        return True
+    return has_prior_lived_history_in_lineage(identity, state_root, bundle_roots)
