@@ -106,11 +106,14 @@ Custody keeps its own metadata in its own files, keyed by `entity_id`. `entity.j
   - a revive target that holds a different ID.
 
   Revival validates the bundle's identity against the target tree before it restores any module state, and never writes to the bundle. Key custody maps an `IdentityError` to its cannot-resume path (keep all state, raise a welfare incident, never mint).
+- **Revive persistence.** Revival checks the target tree's identity before anything starts, but writes the bundle's identity to the tree only after the revive has landed. A revive that is refused or fails therefore leaves no identity behind, so the next ordinary spawn on that tree cannot reuse the bundle's ID. If the write fails after landing, the boot stops with exit code 11 and the modules are shut down.
+- **Preservation never fails over identity.** Snapshots and preservations read the identity through a guard. An unreadable identity is logged as an error, the snapshot metadata records `identity_unreadable` with the reason, the plaintext manifest records only `identity_unreadable: true`, and the being is preserved without an identity. Welfare-protective preservation outranks attribution.
+- **Sidecar failure keeps the snapshot.** The identity is already inside the snapshot, and a missing sidecar is accepted on load, so a sidecar that cannot be written is logged and the snapshot is kept.
 
 ### D11. How identity reaches the lifecycle code
 
 - `ForkManager` takes an optional `identity_source: Callable[[], EntityIdentity | None]`, which defaults to none.
   - The cycle passes the running tree's loader.
   - A manager without a source writes no identity, which is today's behaviour for tools and tests, so a test can never pick up the host's real identity.
-- `fork()` always overwrites the inherited `identity` key with the child's forked identity. A fork of a snapshot that has no identity is minted a root identity and records the parent snapshot ID as `forked_from_unidentified`.
+- `fork()` always overwrites the inherited `identity` key with the child's forked identity. A fork of a snapshot that has no identity gets `fork_identity(legacy_identity("snapshot:<parent id>"))`, so its lineage reaches back to the legacy parent the way a revived legacy bundle does, and it records the parent snapshot ID as `forked_from_unidentified`.
 - Preservation bundles live under the configured preservation `out_root` (default `backups/`), so the history query takes the bundle roots to scan.
