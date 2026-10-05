@@ -246,8 +246,9 @@ class MnemosCore:
         """Recall from the short-term buffer using cosine similarity.
 
         The query is embedded once. Each short-term entry is embedded at most
-        once in its lifetime; the embedding is held in memory only and is never
-        exported. Equal cosine scores rank the more recent entry first.
+        once per embedding space (in practice once, since a running core's
+        embedder does not change); the embedding is held in memory only and is
+        never exported. Equal cosine scores rank the more recent entry first.
         """
         self._rebuild_embeddings_if_desynced()
 
@@ -438,6 +439,10 @@ class MnemosCore:
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):
+        # Both vectors come from the same embedding space; a length mismatch
+        # is a bug, never something to score by truncation.
+        raise ValueError(f"cannot compare embeddings of length {len(a)} and {len(b)}")
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))

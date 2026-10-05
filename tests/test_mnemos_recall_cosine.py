@@ -102,3 +102,10 @@ async def test_real_embedder_associative_recall():
         assert results[0].score > 0.0
     finally:
         await core.shutdown()
+
+
+def test_cosine_similarity_refuses_mismatched_lengths():
+    from kaine.modules.mnemos.memory import _cosine_similarity
+
+    with pytest.raises(ValueError):
+        _cosine_similarity([1.0, 0.0], [1.0, 0.0, 0.0])

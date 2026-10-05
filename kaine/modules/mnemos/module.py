@@ -635,9 +635,9 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
 
     The content view keeps each selected event's source and type with its
     stripped payload. It drops the tick index and bus entry IDs (both are
-    either stored in the payload or meaningless after stream trimming). Each
-    payload is passed through ``strip_vectors`` so memory text never carries
-    perceptual embeddings.
+    either stored in the payload or meaningless after stream trimming). Every
+    payload that is kept passes through ``strip_vectors``, so memory text never
+    carries perceptual embeddings; raw-perceptual payloads are not kept at all.
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")

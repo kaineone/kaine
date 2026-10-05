@@ -167,10 +167,10 @@ def _scrub(
 ) -> Any:
     """Recursively remove content-bearing and vector-bearing keys.
 
-    The vector rule is on by default: a key in ``VECTOR_FIELDS`` is removed,
-    as is any dict key whose value is a list/tuple of length
+    The vector rule is on by default: a key in ``VECTOR_FIELDS`` is always
+    removed, and so is any other dict key whose value is a list/tuple of length
     ``VECTOR_BACKSTOP_MIN_LEN`` or more containing only numbers (excluding
-    bools), unless the key is in ``VECTOR_EXEMPT_KEYS``. Within lists and
+    bools) — this backstop alone exempts the keys in ``VECTOR_EXEMPT_KEYS``. Within lists and
     tuples, any item that is itself a numeric vector is dropped. Content
     keys in ``fields`` are also removed. Tuples that survive come back as
     lists.
