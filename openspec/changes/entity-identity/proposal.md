@@ -20,7 +20,7 @@ KAINE has no notion of which being a piece of state belongs to.
 - **Forks record lineage.** A fork gets its own minted ID, with lineage set to the parent's lineage plus the parent's ID.
 - **Preserved beings from before this change still revive.**
   - A bundle without an identity revives with a deterministic legacy ID derived from that bundle's preservation ID. Reviving the same bundle twice gives the same ID.
-  - A state tree that has lived but has no identity file gets a deterministic legacy ID derived from the IDs of its own fork snapshots. That ID is persisted on first sight, so it never changes afterwards.
+  - A state tree whose own lived artifacts exist (the stage file, the Phantasia checkpoint, Hypnos records, the perception desired-state) but which has no identity file gets a deterministic legacy ID derived from those artifacts. It is persisted on first sight, so it never changes afterwards. Other beings' fork snapshots and bundles under `state/` never count as this tree's history, so a fresh spawn beside them is minted an ID.
   - No legacy being is ever given a freshly minted ID.
 - **Lineage-scoped history.** A prior-history query answers whether any fork or preservation record belongs to this being or its lineage. A being without a determinable identity counts as having lived. `maturation-gate-liveness` 3.3 consumes this.
 

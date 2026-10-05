@@ -12,15 +12,19 @@ KAINE SHALL give each being one `EntityIdentity`, holding an opaque `entity_id`,
 - **THEN** saving raises an error and the file is unchanged
 
 ### Requirement: An identity is minted only at a fresh spawn
-The cycle SHALL mint a new identity only when the state tree has no identity file and no prior lived history. A state tree with prior lived history but no identity file SHALL receive a legacy identity derived deterministically from its own fork snapshot IDs, persisted at once. Revival, restart and merge SHALL NOT mint.
+The cycle SHALL mint a new identity only when the state tree has no identity file and none of its own lived artifacts: the developmental stage file, the Phantasia world-model checkpoint, the Hypnos consolidation-divergence record and the perception desired-state. Fork snapshots and preservation bundles under the state tree SHALL NOT count as the tree's own lived artifacts. A state tree with own lived artifacts but no identity file SHALL receive a legacy identity derived deterministically from those artifacts, persisted at once. Revival, restart and merge SHALL NOT mint.
 
 #### Scenario: Fresh spawn
 - **WHEN** the cycle starts on a state tree with no identity file and no prior lived history
 - **THEN** a minted identity with empty lineage is saved
 
 #### Scenario: Lived tree without an identity
-- **WHEN** the cycle starts on a state tree with fork snapshots and no identity file
+- **WHEN** the cycle starts on a state tree with a Phantasia checkpoint and no identity file
 - **THEN** a legacy identity is saved, and starting again yields the same `entity_id`
+
+#### Scenario: Fresh spawn beside other beings
+- **WHEN** the cycle starts on a state tree with no identity file and none of its own lived artifacts, while `state/forks` and `state/preservation` hold other beings' snapshots and bundles
+- **THEN** a minted identity is saved and the being resolves to gestation
 
 ### Requirement: Snapshots carry the identity and forks record lineage
 Fork and preservation snapshots SHALL record the being's identity in their metadata. A fork SHALL receive a newly minted `entity_id` whose lineage is the parent's lineage followed by the parent's `entity_id`. A merge SHALL keep the target being's identity and record the merged-in being's `entity_id` as `merged_from`.
@@ -63,7 +67,7 @@ Every encrypted container of a being's state SHALL have a plaintext identity rec
 - **THEN** loading raises an identity error
 
 ### Requirement: The identity format and legacy derivation are frozen
-An `entity_id` SHALL be `ent-` or `legacy-` followed by 32 lowercase hexadecimal characters. A legacy ID SHALL be `legacy-` followed by the first 32 hexadecimal characters of the SHA-256 of its UTF-8 source string. The sources SHALL be `bundle:<preservation_id>`, and `forks:` followed by the SHA-256 hex of the newline-joined, sorted snapshot IDs of the tree.
+An `entity_id` SHALL be `ent-` or `legacy-` followed by 32 lowercase hexadecimal characters. A legacy ID SHALL be `legacy-` followed by the first 32 hexadecimal characters of the SHA-256 of its UTF-8 source string. The sources SHALL be `bundle:<preservation_id>`, and `tree:` followed by the SHA-256 hex of the newline-joined, sorted lines `<path relative to the state root>\0<SHA-256 hex of the file>` for each of the tree's own lived artifacts.
 
 #### Scenario: Golden value
 - **WHEN** the legacy identity of source `bundle:abc` is derived
