@@ -462,6 +462,9 @@ def _cmd_assemble(args: argparse.Namespace) -> int:
                 {
                     "prompt": prompt,
                     "answer": answer_letter,
+                    # The SFT loss is a softmax over the option letters, as
+                    # /v1/systemone serves it, so training needs the count.
+                    "n_options": len(opts),
                     "source": src,
                     "question_id": qid,
                 }

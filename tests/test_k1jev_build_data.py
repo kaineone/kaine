@@ -673,6 +673,10 @@ def test_assemble_tiny_fixtures(tmp_path, monkeypatch):
         assert rc == 0
         assert (work / "assembled" / "train.jsonl").exists()
         assert (work / "assembled" / "dev.jsonl").exists()
+        for line in (work / "assembled" / "train.jsonl").read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            assert isinstance(rec["n_options"], int) and rec["n_options"] >= 2
+            assert "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".index(rec["answer"]) < rec["n_options"]
         manifest = json.loads((work / "assembled" / "manifest.json").read_text())
         assert manifest["schema_digest"] == schema_module.schema_digest()
         assert manifest["nli_genre_counts"]["train"].get("fiction", 0) == 0
