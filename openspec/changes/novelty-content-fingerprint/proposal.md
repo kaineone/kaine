@@ -23,7 +23,7 @@ The 2026-10-05 alternatives review (§2.3 item 4) found this by reading the code
 - The fingerprint hashes the source, the type, and the payload after:
   - the privacy filter's vector rule removes every vector field and long numeric list;
   - remaining floats are quantised.
-- The quantisation rule and its resolution are recorded in the design with the Phase 1 numbers that justify them, and re-measured with the same script.
+- The quantisation rule and its resolution are recorded in the design with the Phase 1 numbers that justify them, and re-measured with the same script. The resolution is a config value (`[syneidesis].novelty_float_resolution`), fixed before launch and named in the run identity.
 - Non-numeric content (labels, text, categories, booleans, integers) is hashed unchanged, so a genuinely new categorical event is still fully novel.
 
 **Unchanged:** the `NoveltyTracker` semantics. The first sighting scores 1.0, repeats habituate monotonically within the window, and salience stays a pure function of its inputs.

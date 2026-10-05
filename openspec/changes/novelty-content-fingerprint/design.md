@@ -21,3 +21,10 @@ The fingerprint stays a pure function of the event, so salience stays a pure fun
 ## Risks
 
 - **Over-quantising** would make distinct scenes look identical and suppress real novelty. The record states each source's habituation profile under the chosen rule, and the tests pin that a marked scene change still scores 1.0.
+
+### D4. The resolution is a recorded thesis parameter
+
+The quantisation resolution is `[syneidesis].novelty_float_resolution`.
+- Its value and the Phase 1 justification are recorded under `docs/records/`.
+- It is fixed before the next study launches and is named in the run identity, so a run states which novelty definition it used.
+- Changing it changes what the workspace treats as recurring content, so it is a study parameter and is never tuned during a run.

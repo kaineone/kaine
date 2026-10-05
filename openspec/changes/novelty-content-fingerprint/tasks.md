@@ -5,11 +5,13 @@
 
 ## 2. Content fingerprint
 
-- [ ] 2.1 `fingerprint()` hashes source, type and the vector-stripped, quantised payload under the rule from 1.2.
+- [ ] 2.1 `fingerprint()` hashes source, type and the vector-stripped, quantised payload under the rule from 1.2. The resolution is `[syneidesis].novelty_float_resolution` (shipped value from 1.2, integrator pinged before the config edit) and is recorded in the run identity.
 - [ ] 2.2 Tests:
   - the spec scenarios still pass (first sighting scores 1.0, repeats habituate);
   - two perceptual reports that differ only by small float noise share a fingerprint;
   - a change in a categorical field, or a marked scene change, does not;
+  - a payload differing only below the configured resolution habituates, and one differing above it scores 1.0;
+  - the run identity names the resolution;
   - a payload whose vectors differ but whose content is the same shares a fingerprint.
 
   Mutation-check each one.
