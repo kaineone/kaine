@@ -14,7 +14,7 @@ The pattern already exists for lived time: `LivedTimeAccumulator` subtracts paus
 ## What changes
 - **One shared primitive, `UnfrozenClock`** (`kaine/cycle/unfrozen_clock.py`). It is a monotonic wall clock that does not advance while the freeze stack holds any entry, whatever its owner.
   - It reads the freeze state from `control_state`, the same file every freeze owner writes, so it works in the cycle process and in a sidecar process alike.
-  - Its accounting follows `LivedTimeAccumulator`: a span with an unknown freeze state counts as frozen, so it fails towards counting less.
+  - The policy for an unreadable freeze state is an explicit, required argument. Welfare passes `"unfrozen"`, so a broken control file keeps every timer running (fail safe for protection), and the unreadable state is logged and surfaced.
 - **Every elapsed-time arm measures unfrozen time:**
   - the sustained-distress tracker in the protective monitor and in the observer;
   - the observer's sustained-extreme-VAD arm;

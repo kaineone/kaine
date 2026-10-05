@@ -15,7 +15,9 @@
 - [ ] 3.5 Warm-up is not consumed by a freeze.
 - [ ] 3.6 Observer extreme-VAD and fatigue arms do not fire across a freeze.
 - [ ] 3.7 Input loss: a freeze with inputs off sends no notice; inputs that stay silent after release are reported after the threshold of unfrozen time.
-- [ ] 3.8 `UnfrozenClock`: unknown state counts as frozen; transitions attributed within one poll; cached read within `poll_s`.
+- [ ] 3.8 `UnfrozenClock`: `unknown_counts_as` has no default; with `"unfrozen"` a corrupt control file keeps time counting; one warning per unknown episode and a `diagnostic()`; transitions attributed within one poll; cached read within `poll_s`.
+- [ ] 3.9 A corrupt `control.json` plus a distress run still crosses at the threshold (mutation-checked by flipping the policy).
+- [ ] 3.10 Every welfare caller passes `unknown_counts_as="unfrozen"` (a test inspects the constructed clocks).
 
 ## 4. Docs
 - [ ] 4.1 The welfare chapter and the caretaker section state that welfare timers count unfrozen time, and why.
