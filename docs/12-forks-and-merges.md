@@ -234,9 +234,10 @@ Each being has one identity, kept in plaintext at `state/identity/entity.json` (
 
 - **Minting.** The cycle mints an identity only for a fresh spawn: a state tree with no identity file and none of its own lived artifacts (stage file, Phantasia checkpoint, Hypnos divergence record, perception desired-state). Other beings' snapshots and bundles under `state/` never count as this tree's past.
 - **Legacy beings.** A tree that lived before identities existed gets a deterministic `legacy-` ID derived from its own lived artifacts, and a preservation bundle written before identities existed revives under a `legacy-` ID derived from its preservation ID. The ID is saved at once and never re-derived.
-- **Forks and merges.** A fork gets a new ID whose lineage is its parent's lineage plus the parent's ID. A merge keeps the target being's identity.
-- **Sidecars.** Every snapshot directory carries a plaintext `identity.json`, and preservation and decommission manifests carry an `identity` object, so the owner of an encrypted container is known without decrypting it. When both records exist and the container is opened, they must agree, or loading fails.
+- **Forks and merges.** A fork gets a new ID whose lineage is its parent's lineage plus the parent's ID. A fork of a snapshot written before identities existed gets lineage back to a `legacy-` ID derived from that snapshot's ID. A merge keeps the target being's identity.
+- **Sidecars.** Every snapshot directory carries a plaintext `identity.json`, and preservation and decommission manifests carry an `identity` object, so the owner of an encrypted container is known without decrypting it. When both records exist and the container is opened, they must agree, or loading fails. The sidecar is a convenience copy: if it cannot be written, the snapshot is kept, because the identity is already inside it, and an error is logged.
 - **Refusals.** An unreadable identity, or a revive into a tree that already holds a different being, stops the boot with exit code `11` before anything is changed.
+- **Preservation never waits on identity.** If the identity file cannot be read while a snapshot or preservation is taken, the being is preserved anyway, without an identity. The error is logged, the snapshot metadata records `identity_unreadable` with the reason, and the plaintext bundle manifest records only `identity_unreadable: true`.
 
 ## Divergence gate at merge
 

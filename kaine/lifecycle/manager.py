@@ -21,7 +21,7 @@ from kaine.lifecycle.identity import (
     check_sidecar_agrees,
     fork_identity,
     identity_of_snapshot,
-    mint_identity,
+    legacy_identity,
     read_identity_sidecar,
     write_identity_sidecar,
 )
@@ -132,14 +132,34 @@ class ForkManager:
     def root(self) -> Path:
         return self._root
 
-    def _write_sidecar_or_discard(self, snapshot_id: str, identity: EntityIdentity) -> None:
+    def _read_identity(self) -> tuple[EntityIdentity | None, str | None]:
+        """Return the running entity identity, or None plus a reason string.
+
+        Never raises. If the configured source is absent or raises, we capture
+        the reason so snapshots/bundles can record that identity was unreadable
+        without failing a welfare-protective preservation.
+        """
+        if self._identity_source is None:
+            return (None, None)
+        try:
+            identity = self._identity_source()
+        except Exception as exc:
+            log.error("entity identity unreadable; continuing without it: %s", exc)
+            return (None, f"{type(exc).__name__}: {exc}")
+        return (identity, None)
+
+    def _write_sidecar(self, snapshot_id: str, identity: EntityIdentity) -> None:
         """Write the plaintext identity sidecar; a snapshot that cannot carry one
-        is removed rather than left behind unattributable."""
+        is kept and its metadata still carries the identity."""
         try:
             write_identity_sidecar(snapshot_dir(self._root, snapshot_id), identity)
         except Exception:
-            shutil.rmtree(snapshot_dir(self._root, snapshot_id), ignore_errors=True)
-            raise
+            log.error(
+                "identity sidecar could not be written for snapshot %s; "
+                "snapshot is kept and its metadata still carries the identity",
+                snapshot_id,
+                exc_info=True,
+            )
 
     def snapshot(
         self,
@@ -150,9 +170,7 @@ class ForkManager:
         parent_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ForkSnapshot:
-        identity: EntityIdentity | None = None
-        if self._identity_source is not None:
-            identity = self._identity_source()
+        identity, identity_unreadable = self._read_identity()
 
         modules: dict[str, dict[str, Any]] = {}
         for module in registry.all_modules():
@@ -164,6 +182,8 @@ class ForkManager:
         snap_meta = dict(metadata or {})
         if identity is not None:
             snap_meta["identity"] = identity.to_dict()
+        if identity_unreadable is not None:
+            snap_meta["identity_unreadable"] = identity_unreadable
         snap = ForkSnapshot(
             parent_id=parent_id,
             label=label,
@@ -204,7 +224,7 @@ class ForkManager:
             shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
             raise
         if identity is not None:
-            self._write_sidecar_or_discard(snap.id, identity)
+            self._write_sidecar(snap.id, identity)
         return snap
 
     def restore(self, snapshot_id: str, registry: _RegistryLike) -> ForkSnapshot:
@@ -242,7 +262,7 @@ class ForkManager:
         if parent_identity is not None:
             child_identity = fork_identity(parent_identity)
         else:
-            child_identity = mint_identity()
+            child_identity = fork_identity(legacy_identity(f"snapshot:{parent.id}"))
 
         shed_set = set(shed)
         modules = {
@@ -291,7 +311,7 @@ class ForkManager:
                 metadata={**child.metadata, "artifacts_from_parent": sorted(copied_names)},
             )
         save_snapshot(self._root, child)
-        self._write_sidecar_or_discard(child.id, child_identity)
+        self._write_sidecar(child.id, child_identity)
         return child
 
     def merge(
@@ -448,7 +468,7 @@ class ForkManager:
             )
         save_snapshot(self._root, merged)
         if a_identity is not None:
-            self._write_sidecar_or_discard(merged.id, a_identity)
+            self._write_sidecar(merged.id, a_identity)
         return merged
 
     async def preserve_live(
@@ -472,7 +492,7 @@ class ForkManager:
         """
         from kaine.lifecycle.preservation import preserve_live as _preserve_live
 
-        identity = self._identity_source() if self._identity_source else None
+        identity, identity_unreadable = self._read_identity()
         return await _preserve_live(
             registry,
             fork_root=self._root,
@@ -482,6 +502,7 @@ class ForkManager:
             label=label,
             require_encryption=require_encryption,
             identity=identity,
+            identity_unreadable=identity_unreadable,
         )
 
     async def revive(self, bundle: Path | str, registry: _RegistryLike) -> ForkSnapshot:

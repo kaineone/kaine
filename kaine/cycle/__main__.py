@@ -992,8 +992,9 @@ def _resolve_start_stage(
 def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
     """Resolve the entity identity for this boot before any module starts.
 
-    When reviving, the bundle's identity is persisted. A target tree that already
-    holds a different identity is refused before any state is modified.
+    When reviving, the bundle's identity is returned but not yet persisted: it is
+    written to disk only after the revive lands. A target tree that already holds
+    a different identity is refused before any state is modified.
     """
     path = resolve(state_root) / "identity" / "entity.json"
     if revive is not None:
@@ -1003,9 +1004,13 @@ def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
                 f"refusing revive into tree with identity {existing.entity_id!r}; "
                 f"bundle identity is {revive.plan.identity.entity_id!r}"
             )
-        save_identity(revive.plan.identity, path)
         return revive.plan.identity
     return resolve_spawn_identity(state_root)
+
+
+def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
+    """Persist a revived identity once the revive has successfully landed."""
+    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
 
 
 # Effectors that have nothing to act on in the womb: Mundus has no world and
@@ -1191,6 +1196,38 @@ async def _revive_or_refuse(revive, registry) -> int | None:
                     exc_info=True,
                 )
         return REVIVE_REFUSED_EXIT
+
+
+async def _apply_revive(revive, registry, state_root: Path) -> int | None:
+    """Apply a revive plan, then persist its identity only if the revive lands.
+
+    Returns None when the revive landed and its identity was persisted, else
+    the relevant exit code. The caller is responsible for stopping the welfare
+    producer and closing the bus after this returns.
+    """
+    refused = await _revive_or_refuse(revive, registry)
+    if refused is not None:
+        return refused
+
+    try:
+        _persist_revived_identity(state_root, revive.plan.identity)
+    except (IdentityError, OSError) as exc:
+        log.error(
+            "could not persist revived identity %s: %s",
+            revive.plan.identity.entity_id,
+            exc,
+        )
+        for module in list(registry.all_modules()):
+            try:
+                await module.shutdown()
+            except Exception:
+                log.warning(
+                    "module %s shutdown failed during revive identity refusal",
+                    module.name,
+                    exc_info=True,
+                )
+        return IDENTITY_REFUSED_EXIT
+    return None
 
 
 def _start_preserve_watcher(
@@ -1637,7 +1674,9 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # Module background loops run briefly on fresh state before the revive lands,
     # which is safe because the cognitive cycle (and so the workspace) has not started.
     if ctx.revive is not None:
-        refused = await _revive_or_refuse(ctx.revive, ctx.registry)
+        refused = await _apply_revive(
+            ctx.revive, ctx.registry, resolve(Path("state"))
+        )
         if refused is not None:
             await _stop_welfare_producer(ctx.welfare_producer)
             await ctx.bus.close()

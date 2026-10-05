@@ -168,6 +168,9 @@ def _chmod_quietly(path: Path, mode: int) -> None:
     try:
         os.chmod(path, mode)
     except (OSError, NotImplementedError):
+        # Permission tightening is best effort. Some filesystems (e.g. FAT or
+        # certain network mounts) reject chmod, and the file was already
+        # created owner-only, so a failure here is acceptable.
         pass
 
 

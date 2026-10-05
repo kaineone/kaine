@@ -16,8 +16,17 @@ from typing import Any, Iterable
 
 import pytest
 
-from kaine.cycle.__main__ import _resolve_boot_identity
-from kaine.cycle.revive_boot import RevivePlan, ReviveRefused, prepare_revive
+from kaine.cycle.__main__ import (
+    IDENTITY_REFUSED_EXIT,
+    _apply_revive,
+    _resolve_boot_identity,
+)
+from kaine.cycle.revive_boot import (
+    REVIVE_REFUSED_EXIT,
+    RevivePlan,
+    ReviveRefused,
+    prepare_revive,
+)
 from kaine.distributed.fork_being import build_forked_being_job
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle.decommission import capture_backup
@@ -26,6 +35,7 @@ from kaine.lifecycle.identity import (
     EntityIdentity,
     IdentityError,
     has_prior_lived_history_in_lineage,
+    legacy_identity,
     load_identity,
     mint_identity,
     save_identity,
@@ -33,7 +43,7 @@ from kaine.lifecycle.identity import (
 )
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import ReviveError, preserve_live, revive
-from kaine.lifecycle.snapshot import ForkSnapshot, snapshot_dir
+from kaine.lifecycle.snapshot import ForkSnapshot, load_snapshot, snapshot_dir
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 
@@ -154,7 +164,7 @@ async def test_fork_lineage_and_sidecar(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fork_of_unidentified_parent_mints_root(tmp_path):
+async def test_fork_of_unidentified_parent_carries_legacy_lineage(tmp_path):
     fm = ForkManager(tmp_path / "forks")
     parent = fm.snapshot(_Registry())
 
@@ -162,7 +172,8 @@ async def test_fork_of_unidentified_parent_mints_root(tmp_path):
     assert "identity" in child.metadata
     assert child.metadata.get("forked_from_unidentified") == parent.id
     child_identity = EntityIdentity.from_dict(child.metadata["identity"])
-    assert child_identity.lineage == ()
+    expected_parent = legacy_identity(f"snapshot:{parent.id}")
+    assert child_identity.lineage == (expected_parent.entity_id,)
 
 
 @pytest.mark.asyncio
@@ -396,3 +407,157 @@ def test_resolve_boot_identity_legacy_tree_then_snapshot_same_id(tmp_path):
 
     identity2 = _resolve_boot_identity(state_root, revive=None)
     assert identity2 == identity
+
+
+@pytest.mark.asyncio
+async def test_preserve_live_survives_corrupt_identity_file(tmp_path):
+    state_root = tmp_path / "state"
+    identity_path = state_root / "identity" / "entity.json"
+    identity_path.parent.mkdir(parents=True)
+    identity_path.write_text("garbage")
+
+    fm = ForkManager(
+        tmp_path / "forks",
+        identity_source=lambda: load_identity(identity_path),
+    )
+    out_root = tmp_path / "backups"
+    result = await fm.preserve_live(
+        _Registry(value=5),
+        out_root=out_root,
+        entity_name="t",
+        reason="test",
+    )
+
+    bundle_dir = _find_bundle(out_root)
+    manifest = json.loads((bundle_dir / "manifest.json").read_text())
+    assert manifest.get("identity_unreadable") is True
+    assert "identity" not in manifest
+    manifest_text = (bundle_dir / "manifest.json").read_text()
+    assert "garbage" not in manifest_text
+
+    snap_path = tmp_path / "forks" / result.snapshot_id / "snapshot.json"
+    snap = ForkSnapshot.from_dict(json.loads(snap_path.read_text()))
+    assert isinstance(snap.metadata.get("identity_unreadable"), str)
+    assert snap.metadata.get("identity_unreadable")
+    assert "identity" not in snap.metadata
+
+    snap2 = fm.snapshot(_Registry())
+    assert isinstance(snap2.metadata.get("identity_unreadable"), str)
+    assert "identity" not in snap2.metadata
+
+
+@pytest.mark.asyncio
+async def test_sidecar_failure_keeps_snapshot_and_fork(tmp_path, monkeypatch, caplog):
+    def _broken(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("kaine.lifecycle.manager.write_identity_sidecar", _broken)
+
+    identity = mint_identity()
+    fm = ForkManager(tmp_path / "forks", identity_source=lambda: identity)
+    snap = fm.snapshot(_Registry())
+    snap_file = snapshot_dir(fm.root, snap.id) / "snapshot.json"
+    assert snap_file.exists()
+    assert not (snapshot_dir(fm.root, snap.id) / "identity.json").exists()
+    loaded = load_snapshot(fm.root, snap.id)
+    assert loaded.metadata["identity"] == identity.to_dict()
+
+    child = fm.fork(snap.id)
+    assert (snapshot_dir(fm.root, child.id) / "snapshot.json").exists()
+
+    assert any(
+        record.levelname == "ERROR"
+        and "sidecar could not be written" in record.message
+        and snap.id in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_revive_identity_not_persisted_until_revive_lands(tmp_path):
+    state_root = tmp_path / "state"
+    identity_path = state_root / "identity" / "entity.json"
+    plan_identity = mint_identity()
+    revive = _MockRevive(tmp_path / "bundle", plan_identity)
+
+    resolved = _resolve_boot_identity(state_root, revive=revive)
+    assert resolved == plan_identity
+    assert load_identity(identity_path) is None
+
+    class _RefusingRevive:
+        plan = RevivePlan(
+            bundle=tmp_path / "bundle",
+            preservation_id=None,
+            stage=None,
+            identity=plan_identity,
+        )
+
+        async def revive(self, registry):
+            raise ReviveRefused("x")
+
+    registry = _Registry()
+    exit_code = await _apply_revive(_RefusingRevive(), registry, state_root)
+    assert exit_code == REVIVE_REFUSED_EXIT
+    assert load_identity(identity_path) is None
+
+    class _LandingRevive:
+        plan = RevivePlan(
+            bundle=tmp_path / "bundle",
+            preservation_id=None,
+            stage=None,
+            identity=plan_identity,
+        )
+
+        async def revive(self, registry):
+            return None
+
+    exit_code2 = await _apply_revive(_LandingRevive(), registry, state_root)
+    assert exit_code2 is None
+    assert load_identity(identity_path) == plan_identity
+
+
+@pytest.mark.asyncio
+async def test_apply_revive_refuses_when_tree_gained_another_identity(tmp_path):
+    state_root = tmp_path / "state"
+    identity_path = state_root / "identity" / "entity.json"
+    other_identity = mint_identity()
+    save_identity(other_identity, identity_path)
+
+    plan_identity = mint_identity()
+    shutdowns = []
+
+    class _RecordingModule:
+        name = "recorder"
+
+        def serialize(self):
+            return {}
+
+        def deserialize(self, state):
+            pass
+
+        async def shutdown(self):
+            shutdowns.append(self.name)
+
+    class _RecordingRegistry:
+        def __init__(self):
+            self.modules = [_RecordingModule()]
+
+        def all_modules(self):
+            return self.modules
+
+    class _LandingRevive:
+        plan = RevivePlan(
+            bundle=tmp_path / "bundle",
+            preservation_id=None,
+            stage=None,
+            identity=plan_identity,
+        )
+
+        async def revive(self, registry):
+            return None
+
+    registry = _RecordingRegistry()
+    exit_code = await _apply_revive(_LandingRevive(), registry, state_root)
+    assert exit_code == IDENTITY_REFUSED_EXIT
+    assert shutdowns == ["recorder"]
+    assert load_identity(identity_path) == other_identity
