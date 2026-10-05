@@ -45,6 +45,15 @@ The limits are stated, not hidden. Some combinations do not fit an 8 GB budget, 
 ### Modified Capabilities
 - (none) `deployment-tiers` already specifies "Tier 2 with module residency required"; `runtime-backends` already specifies fallback chains and surfaced failures; `host-probe` is unchanged. This change implements behaviour those specs anticipate.
 
+## Amendment (2026-10-05): dilation, lockstep, mapped weights and the quantization ladder
+
+The design assumed automatic dilation absorbs model loads. It cannot: the controller sees only the cycle's own busy time, and intake depends on wall-clock arrival. So task 9.3 could not pass. The change therefore adds:
+
+- **Module-aware dilation.** A stall indicator from the residency ledger feeds the time-scale controller.
+- **An opt-in lockstep barrier for deterministic runs.** Every event carries its causal tick, the engine waits for every module to finish each tick, and time is logical. This is an engine-semantics change and takes the second review.
+- **Mapped weights and lazy loading.** Mapped weights for the NumPy embedder and the torch engines, explicit ONNX Runtime settings, and lazy loading of the Topos encoder.
+- **A quantization ladder fixed before launch.** It is recorded in the run manifest, and no rung is substituted during a study.
+
 ## Impact
 
 - **New code:** `kaine/residency/` (budget, ledger, manager, planner, lanes, events), `kaine/setup/footprint.py` (calibration and fit report), a llama-swap config generator under `kaine/setup/`.

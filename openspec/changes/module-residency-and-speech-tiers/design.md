@@ -157,6 +157,32 @@ Reload cost is the whole game, so the warm path is a set of obligations:
 - **Warmup on load.** `loading` includes one dummy inference so ONNX arena allocation and CUDA module load land before the readiness probe, keeping first-real-request latency honest.
 - **Prewarm.** `[residency].prewarm` lists rungs to load at idle at background priority (e.g., the voice loop's STT+TTS pair), so the first turn after boot is warm instead of cold.
 
+## Mapped weights and lazy loading
+
+Reversible unload is cheap only when a reload does not copy weights again. The in-process engines change as follows.
+
+- **NumPy text embedder.** `read_safetensors` in `kaine/text_embedding_numpy.py` reads the whole file with `read_bytes()`, a private copy. It maps the file read-only with `numpy.memmap` and builds each tensor as a view at its header offset, so the pages are shared with the page cache and with any other process using the same file. `unload()` drops the views and the map; a reload maps again. Tensors that need a dtype conversion are converted once on load, and the conversion is recorded in the footprint.
+- **Torch engines** (the emotion classifier, the Topos encoders). Weights load through `safetensors.safe_open` on CPU. On a GPU the device copy still costs memory; the map only removes the host copy, and the footprint records which.
+- **Lazy Topos.** The Topos encoder is built on first use through `ensure_loaded()`, not when the module starts, so a host that multiplexes Topos does not pay for it until a frame needs encoding.
+- **ONNX Runtime sessions KAINE creates.**
+  - External initializers are memory-mapped on CPU.
+  - `session.save_external_prepacked_constant_initializers = 1` maps prepacked weights too.
+  - The CPU arena uses `arena_extend_strategy = kSameAsRequested`; a CUDA session gets `gpu_mem_limit` from its rung.
+  - `disable_prepacking` trades speed for memory, so it is measured per operation by the calibration tool and set per rung, never globally.
+- **sherpa-onnx** bundles its own ONNX Runtime. It accepts `SessionConfig` keys but not arena caps or shared allocators, so its footprint is measured, not bounded. The design says so instead of claiming a cap.
+
+## Quantization ladder fixed before launch
+
+A quantization change is a model change: a Q4 organ and a Q8 organ are different organs, and an int8 encoder perceives differently from a float one.
+
+- **Every rung carries its quantization** (`bf16`, `Q8_0`, `Q4_K_M`, `int8`, `int4`) and the SHA-256 of its weights file, in the rung catalogue and the footprint catalogue.
+- **Each tier names one rung per organ.** The tier profiles (`config/profiles/tier*.toml`, a shared file sequenced through the integrator) name the rung, and with it the quantization, for the organ, the speech engines and each encoder. The fit report shows the chosen ladder.
+- **The run manifest records what really loaded.** `RunContext` gains `model_rungs`: for each component, the backend, model id, quantization and weights hash that loaded at boot.
+- **No substitution during a run.**
+  - In deterministic mode, and in any run started by a study runner, rung selection is frozen at boot. A rung that later fails to load is a surfaced residency failure; the manager does not ladder down to a different rung.
+  - The failure is recorded as an incident, and the run's admissibility check marks the run inadmissible.
+  - Outside studies, automatic ladder-down stays as designed, with the reason surfaced.
+
 ## Speech ladder
 
 The ladder uses the backends and models that exist today (`runtime-backends`, `sherpa-onnx-speech`). A rung is a `(backend, model id)` pair:
@@ -221,6 +247,50 @@ groups:
 
 Installing llama-swap or enabling router mode is a wizard step and, like every heavy install, consent-gated. A remote `chat_url` (cloud endpoint) has zero local footprint; the ledger simply excludes the LLM tier and the residency machinery governs speech and perception alone.
 
+## Dilation that sees modules, and the lockstep barrier
+
+### Why the earlier assumption fails
+The integration notes below assumed that automatic dilation absorbs model loads. It cannot.
+- The time-scale controller observes only the cycle's own busy time: control intake, Soma regulation and `tick()`. A model load happens inside a module, off the event loop, so the controller never sees it.
+- Each tick reads whatever has reached the module streams by then, with a non-blocking read. How module output splits across ticks therefore depends on wall-clock arrival.
+- No event carries the tick that caused it. `Event` has `causal_parent`, but no module sets it. Module events carry wall timestamps and time-based Redis entry ids, and both reach the broadcast payload.
+- Deterministic mode today fixes the engine's own timestamps and turns the controller off, but it changes neither intake nor pacing.
+
+So task 9.3, identical traces between an all-resident run and a multiplexed run, cannot pass without a barrier.
+
+### Part A: module-aware dilation (outside deterministic mode)
+The controller gains one input beside busy time: the **stall indicator**. A tick is stalled when an interactive-lane rung that an enabled module depends on is in the residency ledger's `loading` state, or when a model-backed module's output is overdue by more than its calibrated load bound. Per tick, the controller observes `max(busy / period, stalled ? 1.0 : 0.0)` through the same EMA, hysteresis and dwell as today.
+
+The effect: a host that keeps swapping models runs at a lower `time_scale`, so subjective time slows instead of perception going stale. A single short load inside the 10 s dwell does not change the scale. That is intended: dilation answers sustained multiplexing, not one swap. With `[residency]` passive, nothing is ever stalled, and the controller behaves exactly as today.
+
+### Part B: the opt-in lockstep barrier (deterministic mode only)
+`[cycle].lockstep = true` is accepted only with `deterministic = true`. It is off by default and never on in a shipped profile. It makes the cycle's trace a function of its inputs alone, whatever the wall time.
+
+1. **Causal tick on every module event.**
+   - `Event` gains two optional fields: `tick` (int) and `seq` (int). Older events without them still parse.
+   - `BaseModule._workspace_loop` sets a context variable to the broadcast's `tick_index` while it runs `on_workspace`.
+   - `BaseModule.publish` stamps `tick` from that variable and `seq` from a per-module counter. The counter resets only at boot and travels in the module's snapshot.
+2. **Tracked follow-on work.**
+   - A task a module starts while handling broadcast k (for example Lingua's generation task) is registered with `self.track(task)`, and its events carry tick k.
+   - A module has **finished tick k** when `on_workspace(k)` has returned and every task tracked for k has completed.
+3. **Tick-driven producers.**
+   - Modules that produce on their own loops (Soma's interoception, the perception sources) gain a lockstep mode. The engine publishes `cycle.tick_start` with k, and each producer emits its sample for k and reports done.
+   - In lockstep, perception comes from a seeded, scripted feed (the perception-feed playlist or the womb), advanced one step per tick, never from live devices.
+4. **The barrier.**
+   - After broadcasting tick k, and on non-experiential ticks after `cycle.tick_start`, the engine waits until every participating module has published `module.tick_done` for k on its stream.
+   - The next intake then reads all events whose `tick` ≤ k, ordered by `(tick, source, seq)` rather than by Redis entry id.
+   - The broadcast payload's `entry_id` and `timestamp` for each selected event are replaced with the logical values `"<tick>-<source>-<seq>"` and the logical time of its causal tick.
+5. **Logical time everywhere.** In lockstep, the registry's shared `EntityClock` is driven by the engine's logical clock, the pattern `workspace_mediation_ablation` already uses with an injected monotonic. Module timers (Chronos, Hypnos, Mnemos, Soma, Thymos, Topos, Vox) then advance with ticks, not wall time. Infrastructure timers (Spot, network timeouts) stay on wall time.
+6. **Pacing.** The engine still sleeps to its real budget when a tick finishes early. When a barrier waits longer, wall time passes and logical time does not, which is how a model load appears to a lockstep entity.
+7. **Fail closed.**
+   - Boot refuses lockstep when any enabled module lacks lockstep support, and names the modules. A run never becomes silently non-deterministic.
+   - A participant that does not finish within `[cycle].lockstep_timeout_s` (default 300 s, above every calibrated load bound) pauses the cycle with the existing freeze, records an incident naming the module and tick, and marks the run inadmissible. It never kills the entity.
+8. **Spot.** A module waiting on the barrier, or on a model load inside `on_workspace`, does not beat its heartbeat. Spot therefore treats a module as alive while the residency ledger shows its rung `loading` within the bound (task 5.2), and while the engine is waiting at the barrier for a reason other than that module's own timeout.
+
+**Cost.** Lockstep throughput is capped by the slowest module on every tick. It is a research mode for reproducible studies and for task 9.3, not the way an entity lives day to day. A study that uses it fixes `time_scale` before launch and records `lockstep = true` in the run identity.
+
+**This is an engine-semantics change.** It touches `kaine/cycle/engine.py` and `kaine/bus/schema.py` (shared files), `kaine/modules/base.py`, the producers, and Lingua's task tracking. It ships in its own PRs with the integrator's second review. Every existing determinism test must stay green with lockstep off.
+
 ## Integration with what already runs
 
 - **The Hypnos organ window.** Voice-alignment training unloads the organ, trains, and reloads it (`run_with_organ_window`). There must be one owner of the organ's memory. The window therefore requests the organ's release and re-admission through the manager, and the manager counts the training footprint in the ledger for the window's duration. The window's shared state file and the consumers' `organ_resting` deferral stay as they are. When the manager is passive (everything fits, or a second GPU has room), the window behaves exactly as today.
@@ -228,7 +298,7 @@ Installing llama-swap or enabling router mode is a wizard step and, like every h
   - a module awaiting admission or a load keeps its heartbeat;
   - the manager publishes its `loading` state, and Spot treats a module whose model is loading within the load's measured bound as alive;
   - a load that exceeds its bound is a residency failure (ladder-down, surfaced), not a Spot restart.
-- **Cycle timing.** Organ calls are asynchronous, so a load delays that organ's output, not the tick. When loads do push work past tick boundaries, the overrun is recorded as slip, as today. The existing automatic dilation (`[cycle].auto_time_scale`, off by default) is the mechanism that slows subjective time instead of distorting the dynamics. The fit report recommends enabling it on hosts whose plan multiplexes an interactive organ.
+- **Cycle timing.** Organ calls are asynchronous, so a load delays that organ's output, not the tick. Outside lockstep, a load changes which tick the output lands in. Module-aware dilation (Part A above) slows subjective time on hosts that multiplex all the time, and the fit report recommends `[cycle].auto_time_scale = true` on them. Only the lockstep barrier (Part B) makes a multiplexed run reproduce an all-resident one.
 - **Perception while STT is not resident.** Audio segments that arrive while the STT rung is loading wait in a bounded in-memory queue: bounded by count and age, oldest dropped first, with the drop counted and surfaced. They are never written to disk; zero raw-sense-data persistence is unchanged. With `[audition].transcription_enabled = false` (the shipped default) there is nothing to queue.
 - **Privacy.** Residency events and the footprint catalogue are content-free: component, backend, model id, bytes, durations, reasons. No text, audio or latent ever appears in them.
 

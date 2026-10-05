@@ -20,6 +20,9 @@
 - [ ] 3.2 The same pair on the Topos encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them).
 - [ ] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`.
 - [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured).
+- [ ] 3.5 NumPy text embedder: `read_safetensors` maps the file read-only (`numpy.memmap`) and builds tensor views; `unload()` drops the views and the map.
+- [ ] 3.6 Torch engines (emotion classifier, Topos encoders) load through `safetensors.safe_open` on CPU; the Topos encoder is built lazily through `ensure_loaded()`.
+- [ ] 3.7 ONNX Runtime sessions KAINE creates: mapped external initializers, `session.save_external_prepacked_constant_initializers = 1`, `arena_extend_strategy = kSameAsRequested`, a per-rung `gpu_mem_limit`, and `disable_prepacking` measured per operation by the calibration tool. sherpa-onnx's limits are documented, not claimed.
 
 ## 4. Residency manager
 
@@ -60,7 +63,7 @@
 
 - [ ] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate.
 - [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
-- [ ] 9.3 Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
+- [ ] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
 - [ ] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green.
 - [ ] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent.
 
@@ -70,3 +73,23 @@
 - [ ] 10.2 Operator step: run the harness on the Orin Nano Super, the Pixel 6a and this desktop; commit results under `docs/benchmarks/`, with a table of combinations that do not fit, their shortfalls and their feel.
 - [ ] 10.3 Docs: a residency guide (budget, calibration, TTLs, pin, llama-swap, what multiplexing feels like, honest limits), plus updates to `docs/07-deployment/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/headless-host.md`, `docs/09-modules/audition.md` and `docs/09-modules/vox.md`.
 - [ ] 10.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes, and every task is checked or deferred with its reason.
+
+## 11. Quantization ladder fixed before launch
+
+- [ ] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file.
+- [ ] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder.
+- [ ] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot.
+- [ ] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three.
+
+## 12. Dilation that sees modules, and the lockstep barrier (engine semantics, high-risk)
+
+- [ ] 12.1 Stall indicator into `TimeScaleController.observe`; identical behaviour when `[residency]` is passive (test).
+- [ ] 12.2 `Event.tick` and `Event.seq` optional fields; older events parse (test).
+- [ ] 12.3 `BaseModule`: tick context variable around `on_workspace`, `publish` stamps `tick` and `seq`, `self.track(task)`, `module.tick_done` emission; the `seq` counter travels in snapshots.
+- [ ] 12.4 Lingua tracks its generation tasks; Soma and the perception sources gain a tick-driven lockstep mode fed by the seeded feed.
+- [ ] 12.5 Engine (`kaine/cycle/engine.py`, shared file, integrator told first): `cycle.tick_start`, the barrier, intake by `(tick, source, seq)`, logical `entry_id` and `timestamp` in the broadcast payload.
+- [ ] 12.6 Logical `EntityClock` for the registry in lockstep.
+- [ ] 12.7 Boot refuses lockstep without deterministic mode or with an unsupported module (names them); `lockstep_timeout_s` freezes the cycle, records an incident and marks the run inadmissible.
+- [ ] 12.8 Spot: alive while loading within bound or waiting at the barrier for another module.
+- [ ] 12.9 Tests: two lockstep runs on the same scripted inputs, one with random injected load delays per model call, give identical normalised traces and workspace contents; every existing determinism test stays green with lockstep off; module-aware dilation lowers the scale under sustained stalls and not under one short stall.
+- [ ] 12.10 Docs: the entity-time chapter and the residency guide describe dilation, lockstep, its cost, and that lockstep is a study mode.
