@@ -6,11 +6,10 @@
 # left a gap — a dependency-range bump (Dependabot edits pyproject.toml) or a code
 # change could land with the 3000+ test suite never run in CI. This job closes it.
 #
-# Path-filtered to code, tests, pyproject, the installers, container/deployment
-# artifacts, documentation and the workflow itself so a Dependabot dependency bump
-# is actually validated here (install the new version, run the suite) and so are
-# PRs that change only the installers, config, compose, quadlet, docker files,
-# Dockerfile or docs (all covered by existing tests). Offline: fakes stand in for
+# Every pull request and every merge-queue batch runs it, because pytest is a
+# required check. Pushes to main are path-filtered to code, tests, pyproject, the
+# installers, container and deployment artifacts, documentation and the workflow
+# itself. Offline: fakes stand in for
 # external services; no entity boot, no network services, no secrets. CPU torch
 # keeps the install light (the forward models are CPU-only by policy).
 name: tests
@@ -37,22 +36,12 @@ on:
       - "docker/**"
       - "Dockerfile"
       - "docs/**"
+  # Every pull request runs the suite, with no path filter: pytest is a required
+  # check, and a required check that never starts would block the merge queue.
   pull_request:
     branches: ["main"]
-    paths:
-      - "kaine/**"
-      - "tests/**"
-      - "conftest.py"
-      - "pyproject.toml"
-      - ".github/workflows/tests.yml"
-      - ".github/slow-test-paths.txt"
-      - "scripts/**"
-      - "config/**"
-      - "compose/**"
-      - "quadlet/**"
-      - "docker/**"
-      - "Dockerfile"
-      - "docs/**"
+  # The merge queue tests each batch before it reaches main.
+  merge_group:
 
 permissions:
   contents: read
@@ -134,17 +123,18 @@ jobs:
 
       - name: Decide whether the slow tests run
         # Slow tests (marker `slow`) run on main, nightly and on demand. On a pull
-        # request they run only when it changes a path listed in
+        # request or a merge-queue batch they run only when it changes a path listed in
         # .github/slow-test-paths.txt; tests/test_slow_lane.py keeps that list
         # covering every slow-marked test file.
         id: lane
         run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "slow=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          case "${{ github.event_name }}" in
+            pull_request) base="${{ github.event.pull_request.base.sha }}" ;;
+            merge_group) base="${{ github.event.merge_group.base_sha }}" ;;
+            *) echo "slow=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
           grep -v '^#' .github/slow-test-paths.txt | grep -v '^[[:space:]]*$' > /tmp/slow-paths.re
-          changed="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)"
+          changed="$(git diff --name-only "$base" HEAD)"
           if printf '%s\n' "$changed" | grep -E -q -f /tmp/slow-paths.re; then
             echo "slow=true" >> "$GITHUB_OUTPUT"
           else

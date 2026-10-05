@@ -9,6 +9,8 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  # The merge queue tests each batch before it reaches main.
+  merge_group:
   schedule:
     - cron: "27 3 * * 1"
 
