@@ -40,6 +40,7 @@ async def _close_module(module: Audition) -> None:
             try:
                 await task
             except asyncio.CancelledError:
+                # Expected: the task was cancelled just above.
                 pass
 
 
@@ -265,29 +266,29 @@ def test_matches_state_shape_rejects_bad_inner_shapes():
     model = AuditoryForwardModel(feature_dim=8, units=4)
     good = model.state_dict()
 
-    def variant(mutate):
-        state = copy.deepcopy(good)
-        mutate(state["layers"])
-        return state
-
-    # Output layer reads a wider hidden layer than this model has.
-    assert not model.matches_state_shape(
-        variant(lambda ls: ls[-1].update(weight=[row + [0.0] for row in ls[-1]["weight"]]))
-    )
+    # The output layer reads a wider hidden layer than this model has.
+    wider_hidden = copy.deepcopy(good)
+    wider_hidden["layers"][-1]["weight"] = [row + [0.0] for row in good["layers"][-1]["weight"]]
     # Bias lengths.
-    assert not model.matches_state_shape(variant(lambda ls: ls[0].update(bias=ls[0]["bias"] + [0.0])))
-    assert not model.matches_state_shape(variant(lambda ls: ls[-1].update(bias=ls[-1]["bias"][:-1])))
+    long_bias = copy.deepcopy(good)
+    long_bias["layers"][0]["bias"] = good["layers"][0]["bias"] + [0.0]
+    short_bias = copy.deepcopy(good)
+    short_bias["layers"][-1]["bias"] = good["layers"][-1]["bias"][:-1]
     # A ragged weight row.
-    assert not model.matches_state_shape(
-        variant(lambda ls: ls[0]["weight"].__setitem__(1, ls[0]["weight"][1][:-1]))
-    )
-    # A non-numeric value and a missing bias.
-    assert not model.matches_state_shape(
-        variant(lambda ls: ls[0]["weight"][0].__setitem__(0, "x"))
-    )
-    assert not model.matches_state_shape(variant(lambda ls: ls[0].pop("bias")))
+    ragged = copy.deepcopy(good)
+    ragged["layers"][0]["weight"][1] = good["layers"][0]["weight"][1][:-1]
+    # A non-numeric value, and a missing bias.
+    non_numeric = copy.deepcopy(good)
+    non_numeric["layers"][0]["weight"][0][0] = "x"
+    missing_bias = copy.deepcopy(good)
+    del missing_bias["layers"][0]["bias"]
     # An extra layer.
-    assert not model.matches_state_shape(variant(lambda ls: ls.append(copy.deepcopy(ls[-1]))))
+    extra_layer = copy.deepcopy(good)
+    extra_layer["layers"].append(copy.deepcopy(good["layers"][-1]))
+
+    for bad in (wider_hidden, long_bias, short_bias, ragged, non_numeric, missing_bias, extra_layer):
+        assert not model.matches_state_shape(bad)
+    assert model.matches_state_shape(good)
 
 
 @pytest.mark.asyncio
