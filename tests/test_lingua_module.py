@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -21,7 +22,9 @@ from kaine.modules.lingua import (
     IntentExpressionLog,
     Lingua,
 )
+from kaine.modules.lingua.context import PERSONA_TEMPLATE_VERSION
 from kaine.workspace.volition import SPEAK
+from tests._fakes import wait_for
 
 
 async def _publish_intent(bus: AsyncBus, kind: str, about: str) -> None:
@@ -256,7 +259,7 @@ async def test_lingua_realizes_speak_intent(bus: AsyncBus, tmp_path: Path):
         # system prompt (the language organ is conditioned, not a bare chatbot).
         req = lingua.chat_client.requests[-1]
         assert "how are you?" in req.prompt
-        assert "What I am aware of right now" in req.prompt
+        assert "How I feel and what I notice" in req.prompt
         assert req.system  # persona is set (was None before conditioning)
         # External speech carries the user input for the A/B divergence observer.
         assert payload["user_input"] == "how are you?"
@@ -642,3 +645,280 @@ async def test_realization_failed_record_is_counted_by_ignition_audit(
 
     report = classify_realizations([], [], [record])
     assert report.realization_failed_count == 1
+
+
+# --- intent-expression log: redaction and new record fields -------------------
+
+
+def _records(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+async def _wait_for_entry_count(bus: AsyncBus, stream: str, n: int, *, timeout_s: float = 2.0):
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    while asyncio.get_event_loop().time() < deadline:
+        entries = await bus.client.xrange(stream)
+        if len(entries) >= n:
+            return entries
+        await asyncio.sleep(0.02)
+    return await bus.client.xrange(stream)
+
+
+@pytest.mark.asyncio
+async def test_heard_speech_redacted_when_about_kind_is_heard(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        marker = "UNIQUE_MARKER_HEARD_123"
+        snap = WorkspaceSnapshot(
+            tick_index=1,
+            selected_events=[
+                (
+                    "aud1",
+                    Event(
+                        source="audition",
+                        type="audition.transcription",
+                        payload={"text": marker},
+                        salience=0.9,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+            ],
+            inhibited=False,
+            is_experiential=True,
+        )
+        lingua._latest_snapshot = snap
+        event = Event(
+            source="volition",
+            type="intent.speak",
+            payload={
+                "kind": "speak",
+                "about": marker,
+                "entry_id": "e1",
+                "about_kind": "heard",
+            },
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await lingua._dispatch_intent(event)
+        entries = await _wait_for_entries(bus, EXTERNAL_STREAM)
+        assert entries
+        rec = _records(lingua.intent_log.path)[0]
+        whole = json.dumps(rec)
+        assert marker not in whole
+        assert "[heard speech]" in whole
+        assert rec["intent_entry_id"] == "e1"
+        assert rec["intent_origin"] is None
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_heard_speech_redacted_when_about_kind_missing(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        marker = "UNIQUE_MARKER_UNMARKED_456"
+        event = Event(
+            source="volition",
+            type="intent.speak",
+            payload={"kind": "speak", "about": marker, "entry_id": "e2"},
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await lingua._dispatch_intent(event)
+        await _wait_for_entries(bus, EXTERNAL_STREAM)
+        rec = _records(lingua.intent_log.path)[0]
+        whole = json.dumps(rec)
+        assert marker not in whole
+        assert "[heard speech]" in whole
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_felt_about_logged_verbatim(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        about = "I feel curious."
+        event = Event(
+            source="volition",
+            type="intent.speak",
+            payload={
+                "kind": "speak",
+                "about": about,
+                "entry_id": "e3",
+                "about_kind": "felt",
+                "origin": "nous",
+            },
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await lingua._dispatch_intent(event)
+        await _wait_for_entries(bus, EXTERNAL_STREAM)
+        rec = _records(lingua.intent_log.path)[0]
+        assert about in rec["prompt"]
+        assert "[heard speech]" not in rec["prompt"]
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_intent_log_record_has_all_required_fields(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["generated"])
+    await lingua.initialize()
+    try:
+        event = Event(
+            source="volition",
+            type="intent.speak",
+            payload={
+                "kind": "speak",
+                "about": "hi",
+                "entry_id": "e4",
+                "origin": "nous",
+                "about_kind": "felt",
+            },
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await lingua._dispatch_intent(event)
+        await _wait_for_entries(bus, EXTERNAL_STREAM)
+        rec = _records(lingua.intent_log.path)[0]
+        assert len(rec["record_id"]) == 32
+        assert all(c in "0123456789abcdef" for c in rec["record_id"])
+        assert rec["intent_entry_id"] == "e4"
+        assert rec["intent_origin"] == "nous"
+        assert "sleep_index" in rec
+        assert len(rec["system_digest"]) == 64
+        assert all(c in "0123456789abcdef" for c in rec["system_digest"])
+        req = lingua.chat_client.requests[-1]
+        expected = hashlib.sha256(req.system.encode("utf-8")).hexdigest()
+        assert rec["system_digest"] == expected
+        assert "seed" in rec
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_bus_payload_carries_record_id(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["generated"])
+    await lingua.initialize()
+    try:
+        event = Event(
+            source="volition",
+            type="intent.speak",
+            payload={"kind": "speak", "about": "hello", "entry_id": "e5"},
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await lingua._dispatch_intent(event)
+        entries = await _wait_for_entries(bus, EXTERNAL_STREAM)
+        payload = json.loads(entries[0][1]["payload"])
+        rec = _records(lingua.intent_log.path)[0]
+        assert payload["record_id"] == rec["record_id"]
+    finally:
+        await lingua.shutdown()
+
+
+def test_probe_conditions_reports_persona_template_version(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path)
+    conditions = lingua.probe_conditions()
+    assert conditions["persona_template_version"] == PERSONA_TEMPLATE_VERSION
+
+
+@pytest.mark.asyncio
+async def test_sleep_index_read_from_hypnos_out(bus: AsyncBus, tmp_path: Path):
+    lingua = _make_lingua(bus, tmp_path, responses=["first", "second"])
+    await lingua.initialize()
+    try:
+        # Before any hypnos event, sleep_index is unknown (None).
+        await _publish_intent(bus, "speak", "first")
+        await _wait_for_entries(bus, EXTERNAL_STREAM)
+        recs = _records(lingua.intent_log.path)
+        assert recs[0]["sleep_index"] is None
+
+        # Hypnos publishes a completed sleep with index 3.
+        await bus.publish(
+            Event(
+                source="hypnos",
+                type="hypnos.consolidation_divergence",
+                payload={"sleep_index": 3, "records_scanned": 0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        await wait_for(lambda: lingua._sleep_index == 3, timeout_s=2.0)
+
+        # The next utterance records that sleep index.
+        await _publish_intent(bus, "speak", "second")
+        await _wait_for_entry_count(bus, EXTERNAL_STREAM, 2)
+        recs = _records(lingua.intent_log.path)
+        second_rec = [r for r in recs if r["generated_text"] == "second"][0]
+        assert second_rec["sleep_index"] == 3
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_sleep_index_backfilled_at_initialize_takes_the_latest(bus: AsyncBus, tmp_path: Path):
+    """Sleeps published before Lingua starts are picked up at initialize, and
+    the latest value wins over a larger earlier one (a restarted Hypnos counts
+    from zero again)."""
+    for idx in (5, 1):
+        await bus.publish(
+            Event(
+                source="hypnos",
+                type="hypnos.consolidation_divergence",
+                payload={"sleep_index": idx, "records_scanned": 0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+    lingua = _make_lingua(bus, tmp_path, responses=["only"])
+    await lingua.initialize()
+    try:
+        assert lingua._sleep_index == 1
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncBus, tmp_path: Path):
+    """The heard text may no longer be in the snapshot Lingua uses when it
+    speaks; the intent's about_kind alone must keep it out of the log."""
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        marker = "UNIQUE_MARKER_MOVED_ON_789"
+        lingua._latest_snapshot = WorkspaceSnapshot(
+            tick_index=2,
+            selected_events=[
+                (
+                    "soma1",
+                    Event(
+                        source="soma",
+                        type="soma.report",
+                        payload={"wellness": 0.8, "alerts": []},
+                        salience=0.5,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+            ],
+            inhibited=False,
+            is_experiential=True,
+        )
+        event = Event(
+            source="volition",
+            type="intent.speak",
+            payload={"kind": "speak", "about": marker, "about_kind": "heard"},
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await lingua._dispatch_intent(event)
+        await _wait_for_entries(bus, EXTERNAL_STREAM)
+        whole = json.dumps(_records(lingua.intent_log.path)[0])
+        assert marker not in whole
+        assert "[heard speech]" in whole
+    finally:
+        await lingua.shutdown()

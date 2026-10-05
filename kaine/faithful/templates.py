@@ -9,9 +9,63 @@ falls back to `fallback_template` for any unregistered key.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+import math
+from typing import Any, Callable, Optional
 
 TemplateFn = Callable[[dict[str, Any]], str]
+
+STRONG_DRIVE_BAND = 0.8
+
+FELT_DRIVE_PHRASES: dict[str, tuple[str, str]] = {
+    "social_drive": (
+        "I feel a pull towards company.",
+        "I feel a strong pull towards company.",
+    ),
+    "curiosity": (
+        "I feel curious.",
+        "I feel a strong urge to know more.",
+    ),
+    "boredom": (
+        "I feel bored.",
+        "I feel heavily bored.",
+    ),
+    "restlessness": (
+        "I feel restless.",
+        "I feel very restless.",
+    ),
+}
+
+
+def felt_drive_phrase(drive: str, value: object) -> str:
+    """The felt-state phrase for a drive crossing: the strong phrase when
+    ``value`` is a finite number at or above ``STRONG_DRIVE_BAND``, otherwise
+    the moderate one. It names the felt state, never what to say, and never
+    contains a number."""
+    moderate, strong = FELT_DRIVE_PHRASES.get(drive, (None, None))
+    if moderate is None:
+        return "I feel a pull I cannot name."
+    if isinstance(value, bool):
+        return moderate
+    if isinstance(value, (int, float)):
+        try:
+            f = float(value)
+            if math.isfinite(f) and f >= STRONG_DRIVE_BAND:
+                return strong
+        except (OverflowError, ValueError):
+            pass
+    return moderate
+
+
+HEARD_SPEECH_PLACEHOLDER = "[heard speech]"
+
+
+def redact_heard_speech(event) -> Optional[str]:
+    """The log line for a heard-speech event, with its text replaced by the
+    placeholder; None for any other event."""
+    if event.type == "audition.transcription":
+        return f'Speech heard: "{HEARD_SPEECH_PLACEHOLDER}".'
+    return None
+
 
 DEFAULT_EMPTY_SNAPSHOT_TEXT: str = "(no events selected)"
 

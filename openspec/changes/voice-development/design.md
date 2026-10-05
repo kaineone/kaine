@@ -90,6 +90,15 @@ The external trainer:
   - **Stage 2:** a simulated listener whose replies depend on a hidden feature; the pipeline must learn that feature and nothing else, pass both vetoes and stay in the diversity band.
 - Voice alignment stays off in studies until all three stages pass (V5).
 
+### D10. Stage 0 details fixed at implementation
+
+- **What the `about` is.** A Volition intent carries `about_kind`: `heard` (the text of heard speech), `felt` (a drive's felt-state phrase) or `event` (a summary of another coalition event). Lingua treats an `about` as heard unless its kind is `felt` or `event`, so an unmarked intent, or a direct `speak()`/`think()` call, is redacted in the log. Failing closed is deliberate (V4).
+- **The input heading follows the kind.** Heard input stays under "What was just said to me". A felt or event `about` in external mode goes under "What moves me to speak", because a drive is not something said to the entity. Internal mode keeps "What is prompting me to think".
+- **Redaction keeps the organ's view.** The logged rendering picks the same events, in the same order and within the same budget, as the rendering the organ saw. Only each heard-speech line's text becomes `[heard speech]`. Heard speech means every `audition.transcription` in the coalition, whatever its source label.
+- **`sleep_index`.** This is the number of sleeps Hypnos has completed since it started, which is the same count the maturation gate reads, and Hypnos stamps it on its bus events. Lingua records the latest value it has seen on `hypnos.out`, or `null` before it has seen one. `null` means unknown, never 0. The count is not durable across restarts, so the corpus (D5) must not rely on it alone to name files. Making it durable would change what the maturation gate reads, so that is left to a separate change.
+- **`record_id` on the bus.** Lingua's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
+- **`seed`** is the sampling seed of the organ request. Ordinary utterances set none, so it is `null` until Stage 2 sets one.
+
 ## Risks
 
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.

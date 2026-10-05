@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
@@ -17,13 +18,14 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
+from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER
 from kaine.modules.base import BaseModule
 from kaine.modules.lingua.client import (
     ChatClient,
     ChatRequest,
     OpenAIChatClient,
 )
-from kaine.modules.lingua.context import ContextAssembler
+from kaine.modules.lingua.context import PERSONA_TEMPLATE_VERSION, ContextAssembler
 from kaine.modules.lingua.intent_log import IntentExpressionLog
 from kaine.storage import resolve
 from kaine.workspace.volition import SPEAK, THINK, VOLITION_STREAM
@@ -154,6 +156,9 @@ class Lingua(BaseModule):
         self._alert_salience = float(alert_salience)
         self._intent_stream = intent_stream
         self._intent_cursor = "0-0"
+        # Latest Hypnos sleep index observed on hypnos.out (None until seen).
+        self._sleep_index: Optional[int] = None
+        self._hypnos_cursor = "0-0"
         # The single in-flight generation, held as a cancellable task so an
         # urgent (interrupt-marked) speak intent can preempt it mid-stream
         # instead of the loop awaiting it to completion (interruptible-utterance
@@ -256,6 +261,42 @@ class Lingua(BaseModule):
                     # no stop signal yet; keep polling the stream
                     pass
 
+    async def _hypnos_cache_loop(self) -> None:
+        """Cache the latest completed sleep index published on hypnos.out.
+
+        The index is the number of sleeps Hypnos has completed since it
+        started, stamped on its hypnos.out events. Lingua records the latest
+        value it has seen, or None before any such event (unknown, never 0).
+        """
+        cursor = self._hypnos_cursor
+        while not self._stopped.is_set():
+            try:
+                entries, last_scanned = await self._bus.read_entries(
+                    "hypnos.out", last_id=cursor, count=32, block_ms=0
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                try:
+                    await asyncio.wait_for(self._stopped.wait(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    pass
+                continue
+            if last_scanned is not None:
+                cursor = last_scanned
+                self._hypnos_cursor = cursor
+                for _entry_id, ev in entries:
+                    idx = ev.payload.get("sleep_index")
+                    if isinstance(idx, int) and not isinstance(idx, bool):
+                        # The latest value, not the largest: a restarted Hypnos
+                        # counts from zero again, and the record must say so.
+                        self._sleep_index = idx
+            else:
+                try:
+                    await asyncio.wait_for(self._stopped.wait(), timeout=0.1)
+                except asyncio.TimeoutError:
+                    pass
+
     async def _snapshot_cache_loop(self) -> None:
         """Passively cache the latest conscious coalition for prompt assembly.
 
@@ -312,6 +353,38 @@ class Lingua(BaseModule):
             if isinstance(entry_id, bytes):
                 entry_id = entry_id.decode()
             self._intent_cursor = entry_id
+
+        # Seed the Hypnos sleep-index cursor from the stream tail, then scan
+        # the most recent events to catch the latest sleep_index published
+        # before boot. Never use "$": a non-blocking read from "$" never returns.
+        try:
+            latest_hypnos = await self._bus.client.xrevrange("hypnos.out", count=1)
+        except Exception:
+            latest_hypnos = []
+        if latest_hypnos:
+            entry_id = latest_hypnos[0][0]
+            if isinstance(entry_id, bytes):
+                entry_id = entry_id.decode()
+            self._hypnos_cursor = entry_id
+        try:
+            recent_hypnos = await self._bus.client.xrevrange("hypnos.out", count=200)
+        except Exception as exc:
+            log.debug("hypnos sleep_index backfill failed: %s", exc)
+            recent_hypnos = []
+        # xrevrange is newest first: the first sleep_index found is the latest.
+        for _entry_id, fields in recent_hypnos:
+            raw = fields.get("payload", fields.get(b"payload"))
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", errors="replace")
+            try:
+                hypnos_payload = json.loads(raw) if raw else {}
+            except (TypeError, ValueError):
+                continue
+            idx = hypnos_payload.get("sleep_index") if isinstance(hypnos_payload, dict) else None
+            if isinstance(idx, int) and not isinstance(idx, bool):
+                self._sleep_index = idx
+                break
+
         await super().initialize()
         self._tasks.append(asyncio.create_task(self._intent_loop(), name=f"{self.name}-intent"))
         self._tasks.append(
@@ -319,6 +392,9 @@ class Lingua(BaseModule):
         )
         self._tasks.append(
             asyncio.create_task(self._self_model_cache_loop(), name=f"{self.name}-self-model-cache")
+        )
+        self._tasks.append(
+            asyncio.create_task(self._hypnos_cache_loop(), name=f"{self.name}-hypnos-cache")
         )
 
     async def shutdown(self) -> None:
@@ -353,6 +429,7 @@ class Lingua(BaseModule):
             "temperature": self._temperature,
             "think": self._think,
             "persona_digest": self._persona_digest,
+            "persona_template_version": PERSONA_TEMPLATE_VERSION,
         }
 
     def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
@@ -382,6 +459,8 @@ class Lingua(BaseModule):
         snapshot: Optional[WorkspaceSnapshot] = None,
         *,
         origin: Optional[Any] = None,
+        intent_entry_id: Optional[str] = None,
+        about_kind: Optional[str] = None,
     ) -> str:
         # `about` is the triggering input (a user utterance for external speech);
         # the LLM prompt is assembled from it plus the conscious workspace.
@@ -391,6 +470,8 @@ class Lingua(BaseModule):
             mode="external",
             stream=EXTERNAL_STREAM,
             origin=origin,
+            intent_entry_id=intent_entry_id,
+            about_kind=about_kind,
         )
 
     async def think(
@@ -399,6 +480,8 @@ class Lingua(BaseModule):
         snapshot: Optional[WorkspaceSnapshot] = None,
         *,
         origin: Optional[Any] = None,
+        intent_entry_id: Optional[str] = None,
+        about_kind: Optional[str] = None,
     ) -> str:
         return await self._produce(
             about=about,
@@ -406,6 +489,8 @@ class Lingua(BaseModule):
             mode="internal",
             stream=INTERNAL_STREAM,
             origin=origin,
+            intent_entry_id=intent_entry_id,
+            about_kind=about_kind,
         )
 
     async def _intent_loop(self) -> None:
@@ -451,6 +536,8 @@ class Lingua(BaseModule):
         kind = str(event.payload.get("kind") or "")
         about = str(event.payload.get("about") or "")
         origin = event.payload.get("origin")
+        entry_id = event.payload.get("entry_id")
+        about_kind = event.payload.get("about_kind")
         if kind == "rest":
             log.debug("ignoring rest intent")
             return
@@ -471,24 +558,36 @@ class Lingua(BaseModule):
                 await self._settle_gen_task()
         self._gen_mode = "external" if kind == SPEAK else "internal"
         self._gen_task = asyncio.create_task(
-            self._realize_intent(kind, about, origin), name=f"{self.name}-gen"
+            self._realize_intent(
+                kind, about, origin, intent_entry_id=entry_id, about_kind=about_kind
+            ),
+            name=f"{self.name}-gen",
         )
 
-    async def _realize_intent(self, kind: str, about: str, origin: Optional[Any] = None) -> None:
+    async def _realize_intent(
+        self,
+        kind: str,
+        about: str,
+        origin: Optional[Any] = None,
+        *,
+        intent_entry_id: Optional[str] = None,
+        about_kind: Optional[str] = None,
+    ) -> None:
         """Produce one utterance. Runs as the held ``_gen_task``; a preempting
         interrupt cancels it, which propagates ``CancelledError`` out of the
         in-flight ``complete()`` call (the natural cancellation point)."""
         try:
+            kwargs: dict[str, Any] = {}
+            if origin is not None:
+                kwargs["origin"] = origin
+            if intent_entry_id is not None:
+                kwargs["intent_entry_id"] = intent_entry_id
+            if about_kind is not None:
+                kwargs["about_kind"] = about_kind
             if kind == SPEAK:
-                if origin is None:
-                    await self.speak(about)
-                else:
-                    await self.speak(about, origin=origin)
+                await self.speak(about, **kwargs)
             elif kind == THINK:
-                if origin is None:
-                    await self.think(about)
-                else:
-                    await self.think(about, origin=origin)
+                await self.think(about, **kwargs)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -586,6 +685,8 @@ class Lingua(BaseModule):
         mode: str,
         stream: str,
         origin: Optional[Any] = None,
+        intent_entry_id: Optional[str] = None,
+        about_kind: Optional[str] = None,
     ) -> str:
         """Wrap _produce_inner with in-flight bookkeeping."""
         self._produce_in_flight += 1
@@ -596,6 +697,8 @@ class Lingua(BaseModule):
                 mode=mode,
                 stream=stream,
                 origin=origin,
+                intent_entry_id=intent_entry_id,
+                about_kind=about_kind,
             )
         finally:
             self._produce_in_flight -= 1
@@ -609,15 +712,33 @@ class Lingua(BaseModule):
         mode: str,
         stream: str,
         origin: Optional[Any] = None,
+        intent_entry_id: Optional[str] = None,
+        about_kind: Optional[str] = None,
     ) -> str:
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest conscious coalition.
         snap = snapshot if snapshot is not None else self._latest_snapshot
+
+        # Heard speech is anything that came from an audition.transcription in
+        # the coalition, plus any unmarked about (fail-closed: felt/event must
+        # be explicitly tagged).
+        heard_texts: set[str] = set()
+        if snap is not None:
+            for _entry_id, event in snap.selected_events:
+                if event.type == "audition.transcription":
+                    text = str(event.payload.get("text") or "").strip()
+                    if text:
+                        heard_texts.add(text)
+        about_is_heard = (
+            about_kind not in ("felt", "event") or about.strip() in heard_texts
+        )
+
         ctx = self._assembler.assemble(
             about=about,
             snapshot=snap,
             self_model=self._self_model(),
             mode=mode,
+            about_is_heard=about_is_heard,
         )
         request = ChatRequest(
             prompt=ctx.prompt,
@@ -626,30 +747,56 @@ class Lingua(BaseModule):
             temperature=self._temperature,
             max_tokens=self._max_tokens,
             think=self._think,
+            seed=None,
         )
         response = await self._chat_client.complete(request)
-        # The same rendered working memory that conditioned the prompt is logged
-        # for the A/B comparison (only when a real coalition was present).
-        faithful = ctx.working_memory if snap is not None else None
+
+        # The log is the training corpus of the being's own utterances. Heard
+        # speech never reaches it: prompt and faithful rendering are redacted.
+        logged_prompt = ctx.logged_prompt
+        logged_faithful = ctx.logged_working_memory if snap is not None else None
+        for heard in heard_texts:
+            if len(heard) >= 3:
+                logged_prompt = logged_prompt.replace(heard, HEARD_SPEECH_PLACEHOLDER)
+                if logged_faithful is not None:
+                    logged_faithful = logged_faithful.replace(
+                        heard, HEARD_SPEECH_PLACEHOLDER
+                    )
+        if logged_prompt != ctx.logged_prompt or (
+            logged_faithful is not None and logged_faithful != ctx.logged_working_memory
+        ):
+            log.warning("heard speech placeholder applied to residual text in log")
+
+        record_id = uuid.uuid4().hex
+        system_digest = hashlib.sha256(ctx.system.encode("utf-8")).hexdigest()
         try:
             self._intent_log.append(
                 mode=mode,
-                prompt=ctx.prompt,
+                prompt=logged_prompt,
                 generated_text=response.text,
                 model=response.model,
-                faithful_rendering=faithful,
+                faithful_rendering=logged_faithful,
                 prompt_tokens=response.prompt_tokens,
                 completion_tokens=response.completion_tokens,
                 latency_ms=response.latency_ms,
+                record_id=record_id,
+                intent_entry_id=intent_entry_id,
+                intent_origin=origin,
+                sleep_index=self._sleep_index,
+                system_digest=system_digest,
+                seed=request.seed,
             )
         except Exception:
             log.exception("intent log append failed")
+
+        # Bus payloads remain unredacted; they are transient.
         payload: dict[str, Any] = {
             "text": response.text,
             "mode": mode,
             "model": response.model,
             "prompt_length": len(ctx.prompt),
             "latency_ms": response.latency_ms,
+            "record_id": record_id,
         }
         # Carry the realized intent's origin when present (content-free).
         if origin is not None:
@@ -659,6 +806,7 @@ class Lingua(BaseModule):
         # never the user-facing conversation surface.
         if mode == "external" and about:
             payload["user_input"] = about
+        faithful = ctx.working_memory if snap is not None else None
         if faithful is not None:
             payload["faithful_rendering"] = faithful
         # Publish directly to the mode-specific stream (bypassing the
