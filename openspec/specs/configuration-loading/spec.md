@@ -75,3 +75,10 @@ The organ chat URL default, the model-server API key lookup and the free-disk fl
 #### Scenario: No stray copies of the organ port
 - **WHEN** the source tree under `kaine/` is scanned
 - **THEN** the literal `11434` appears only in `kaine/net.py` and `kaine/defaults.py`
+
+### Requirement: Empatheia operator sources are checked when the config loads
+Config loading SHALL refuse a `[empatheia].operator_sources` that is not a list of strings, naming the key, before the boot opens any resource.
+
+#### Scenario: A string instead of a list
+- **WHEN** `[empatheia].operator_sources` is the string `"live_mic"`
+- **THEN** loading the config fails with a shape error naming `empatheia.operator_sources`

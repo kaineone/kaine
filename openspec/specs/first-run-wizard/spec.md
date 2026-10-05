@@ -152,7 +152,7 @@ media. When `mode` is `playlist` (decodes media) or `live` (opens devices),
 microphone deps). When `mode` is `seeded` (pure-numpy synthesis) it SHALL add
 neither. The returned extras list SHALL be de-duplicated. The aggregate
 `perception` extra SHALL pull both `audio` and `vision`, and the installer
-(`scripts/install.sh` and `scripts/install.py`) SHALL provide a `--research` flag
+(`scripts/install.sh`) SHALL provide a `--research` flag
 that runs a real `pip install -e .[perception]` after the lean base install, with
 the default install left unchanged.
 
@@ -176,8 +176,7 @@ the default install left unchanged.
 
 #### Scenario: The research install provisions the perception extras
 
-- **WHEN** an operator runs `scripts/install.sh --research` (or its `install.py`
-  port) on a fresh machine
+- **WHEN** an operator runs `scripts/install.sh --research` on a fresh machine
 - **THEN** after the lean base install it runs a real `pip install -e .[perception]`
   (audio + vision, including PyAV) and reports what it installed, while a default
   install without `--research` stays lean

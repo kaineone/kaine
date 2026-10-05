@@ -79,7 +79,7 @@ disallowed per the boundary requirement above.
 - **THEN** it contains `KAINE_REDIS_URL` pointing to `kaine-redis:6379/0`
 
 ### Requirement: Quadlet Qdrant healthcheck uses only tools in the image
-`quadlet/kaine-qdrant.container` SHALL use a `bash /dev/tcp/127.0.0.1/6333` readiness probe, because the `qdrant:v1.18.0` image ships neither `curl` nor `wget`.
+`quadlet/kaine-qdrant.container` SHALL use a `bash /dev/tcp/127.0.0.1/6333` readiness probe, because the pinned Qdrant image ships neither `curl` nor `wget`.
 
 #### Scenario: Qdrant healthcheck does not invoke curl
 - **WHEN** `quadlet/kaine-qdrant.container` is inspected
