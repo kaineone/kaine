@@ -7,6 +7,15 @@
 - **GPU:** whichever device has room per the residency fit report. It is small: 4B at Q4_K_M is about 3 GB, 0.8B at Q8_0 about 0.8 GB.
 - **Lifecycle:** started with the entity's services only when `[decision].enabled = true`, and stopped with them. Nothing runs without an entity.
 
+## Residency
+The decision server is a second resident model, and residency must know about it.
+- **Rungs.** The rung catalogue (`module-residency-and-speech-tiers`, D5) gains a `decision` organ with the rungs `k1-jev-4b` (Q4_K_M, about 3 GB) and `k1-jev-0.8b` (Q8_0, about 0.8 GB). The footprint catalogue records their measured peaks through the calibration command.
+- **Fit report.** When `[decision].enabled = true`, the fit report counts the decision server's footprint. A small host sees its cost and can pick the 0.8B rung, run it on demand (sleep-idle), or leave it off.
+- **Tier ladder.** Each tier profile names the decision rung, or `off`, with the other rungs fixed before launch and recorded in `RunContext.model_rungs`.
+
+## Independent of the organ's sleep window
+The Hypnos organ window stops the language-organ server to free memory for voice-alignment training. The decision server is a separate process, and the window SHALL NOT stop it: the refusal veto's second judge (`instrument-graders-v2`) needs it while the organ is unloaded. The window's own code touches only the organ service (`OrganServerController`), and a test pins that no decision-server stop is issued during an organ window. When residency multiplexes memory on a small host, the decision server is a separate background-class rung, and the manager decides whether it may be resident during training. The organ window never decides that.
+
 ## Client (`kaine/decision/client.py`)
 - **Dependencies:** standard library plus `httpx`, and `kaine.decision.schema`. No import of `kaine.modules`, `kaine.evaluation`, `kaine.cycle` or `kaine.nexus`. This is the boundary-neutral home the integrator registers.
 - `DecisionConfig.from_section([decision])` reads:

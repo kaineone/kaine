@@ -13,3 +13,15 @@ The client SHALL return no answer on any transport error, non-success status, ma
 #### Scenario: Server unreachable
 - **WHEN** the decision server cannot be reached
 - **THEN** `ask` returns no answer and a content-free error is logged at most once per minute per kind
+
+### Requirement: The decision server is independent of the organ's sleep window and known to residency
+The Hypnos organ window SHALL NOT stop the decision server, so the decision model stays available while the organ is unloaded for training. The decision server SHALL be a `decision` organ in the residency rung and footprint catalogues, counted by the fit report when enabled, with its rung (or `off`) named per tier and recorded in the run manifest.
+
+#### Scenario: The organ window leaves the decision server running
+- **WHEN** the organ window stops the language-organ server for voice-alignment training
+- **THEN** the decision server keeps running and the client keeps answering
+
+#### Scenario: A small host sees the decision server's cost
+- **WHEN** `[decision].enabled = true` on a host whose budget is tight
+- **THEN** the fit report counts the decision rung's footprint and names it in the plan
+
