@@ -1,17 +1,17 @@
 ## 0. Gates
 - [ ] 0.1 Integrator design check of this change.
 - [x] 0.2a Operator decided provenance (2026-10-05): Claude drafts the spec text, operator reviews; no cloud-model text in any example; a local stock Qwen3.5-9B generates every example.
-- [ ] 0.2b Operator approves `schema-v1.md` (definitions and seeds). No data is generated before this.
+- [x] 0.2b Operator approved `schema-v1.md` as written on 2026-10-05 at 15:18 PDT: commit `ba99506284d895510a16561ba6cd7a309672d643`, file SHA-256 `e3a42d935054c5b9b724ce5df748da9a24747eea8e6a19258848b3878484ae87`. Any later edit to the instructions, definitions, options or seeds needs a fresh operator approval, recorded here, before data is generated from it.
 
 ## 1. Schema and template
-- [ ] 1.1 `kaine/decision/__init__.py`, `kaine/decision/schema.py`: the 14 question templates, options, definitions, examples, near-miss categories, `SCHEMA_VERSION = 1`, and a function that builds the `/v1/systemone` `questions` object for a list of question ids.
-- [ ] 1.2 `kaine/decision/systemone.jinja` and a renderer that produces a training prompt and its answer letter.
-- [ ] 1.3 Tests: every question has at least three examples of each kind; option letters are single tokens for the Qwen3.5 tokenizer (skipped with a reason when the tokenizer is absent); rendering is deterministic; state comes before the question in the prompt.
+- [x] 1.1 `kaine/decision/__init__.py`, `kaine/decision/schema.py`: the 14 question templates, options, definitions, examples, near-miss categories, `SCHEMA_VERSION = 1`, and a function that builds the `/v1/systemone` `questions` object for a list of question ids.
+- [x] 1.2 `kaine/decision/systemone.jinja` and a renderer that produces a training prompt and its answer letter.
+- [x] 1.3 Tests: every question has at least three examples of each kind; option letters are single tokens for the Qwen3.5 tokenizer (skipped with a reason when the tokenizer is absent); rendering is deterministic; state comes before the question in the prompt.
 
 ## 2. Gold items and labelling page (early)
 - [ ] 2.1 `scripts/k1jev/build_data.py gold`: about 420 items from a separate generation run, near-miss share of at least 40% per question, written outside the repository.
-- [ ] 2.2 `scripts/k1jev/label_server.py` per design section 5.
-- [ ] 2.3 Tests: bind address other than 127.0.0.1 refused; requests without the token or with a foreign Host header get 403; the page never contains the generated label; answers are fsynced and resumable; the default label path is git-ignored.
+- [x] 2.2 `scripts/k1jev/label_server.py` per design section 5.
+- [x] 2.3 Tests: bind address other than 127.0.0.1 refused; requests without the token or with a foreign Host header get 403; the page never contains the generated label; answers are fsynced and resumable; the default label path is git-ignored.
 - [ ] 2.4 Tell the integrator the page is ready, with the item count, so the operator can be scheduled.
 
 ## 3. Training data
