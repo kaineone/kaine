@@ -21,7 +21,7 @@ returning a fixed/centre fovea.
 - [x] 0.4 **Fovea size is arousal-driven** — the distinct visual coupling
       (Easterbrook narrowing default, sign tunable), NOT the Syneidesis salience
       window. (Flag 4)
-- [ ] 0.5 Phase 3 native region capture: build or defer — decide after the Phase 1
+- [ ] 0.5 **Deferred (operator decision):** Phase 3 native region capture: build or defer — decide after the Phase 1
       benchmark. (Flag 5)
       *Deferred: an operator decision, not code. The Phase 1 benchmark (task 1.7)
       shows the native single-grab crop fits the tick with ~61 ms headroom; whether
@@ -74,14 +74,14 @@ returning a fixed/centre fovea.
 
 ## 3. Phase 3 — saccadic native fovea
 
-- [ ] 3.1 A second native-resolution region capture pinned to the fovea, re-pinned
+- [ ] 3.1 **Deferred (gated on operator decision 0.5):** a second native-resolution region capture pinned to the fovea, re-pinned
       only on a saccade (threshold + dwell); no per-tick reconfiguration.
       *Deferred pending operator decision 0.5 (build or defer). This is a live,
       OS-level capture (x11grab/gdigrab region reconfiguration) that cannot be
       exercised without a real display/GPU, so it is not built speculatively — the
       Phase 1 native single-grab crop is the shipped foveal source until the
       operator elects to add the second capture.*
-- [ ] 3.2 Frame foveation as explicit active inference: Nous selects saccades by
+- [ ] 3.2 **Deferred (belongs to active-vision work; needs 3.1 and a Nous integration):** frame foveation as explicit active inference: Nous selects saccades by
       expected free energy (epistemic value of looking there).
       *Deferred: gated on 3.1 and a cross-module Nous action-selection integration
       (expected-free-energy saccade valuation). Belongs to an active-vision change,
@@ -89,7 +89,7 @@ returning a fixed/centre fovea.
 
 ## 4. Phase 4 — embodiment tie-in
 
-- [ ] 4.1 Route the fovea target (normalized 2-D + size) into the future Mundus
+- [ ] 4.1 **Deferred (belongs to embodiment work):** route the fovea target (normalized 2-D + size) into the future Mundus
       "gaze direction decoupled from the body" control scalar, so screen gaze and
       camera gaze share one mechanism.
       *Deferred: the fovea is already published in the Mundus-consumable form the
@@ -110,8 +110,10 @@ returning a fixed/centre fovea.
       and the report fields; plus `[topos]` config rows, the `foveation.py` key-file
       entry, the foveated-`topos.report` payload note, and the two foveation test
       rows.)
-- [ ] 5.2 Note the attention-schema realization and active-vision framing for the
+- [x] 5.2 Note the attention-schema realization and active-vision framing for the
       paper's future-work / §5 indicator update (paper change, not code).
-      *Deferred: an explicit paper change requiring the lead's review before it
-      lands (per the review-before-publishing convention), out of scope for this
-      code PR.*
+      *Done 2026-10-05: the paper's Topos paragraph (§3) already describes the
+      forward-modelled fovea as an attention-schema construct (Graziano and Webb
+      2015); the active-vision framing is filed as future work in the paper
+      repository's `REVISION-NOTES.md` (section 6), stating that saccade
+      selection by expected free energy is not built.*
