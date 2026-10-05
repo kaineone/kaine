@@ -14,16 +14,14 @@ import json
 import subprocess
 
 from kaine import organ_probe
-from kaine.setup import organ
-from kaine.setup.organ import (
+from kaine.organ_server.served import (
     ORGAN_GGUF_REPO,
     ORGAN_SAFETENSORS_REPO,
-    OrganDownloadResult,
     detect_organ_backend,
-    plan_organ_download,
-    run_organ_download,
     verify_served_alias,
 )
+from kaine.setup import organ
+from kaine.setup.organ import OrganDownloadResult, plan_organ_download, run_organ_download
 
 # --- backend detection -------------------------------------------------------
 

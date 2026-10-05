@@ -4,7 +4,8 @@
 """Organ checks the runtime needs: the content gate and the revision reader.
 
 They live here, not in ``kaine.setup``, so the boot and cycle packages can use
-them without importing install-time code. ``kaine.setup.organ`` re-exports them.
+them without importing install-time code. ``kaine.setup.organ`` writes the revision
+state the reader reads.
 """
 
 from __future__ import annotations

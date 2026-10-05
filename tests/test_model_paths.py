@@ -42,7 +42,8 @@ def test_weight_paths_default_under_local_state_models(monkeypatch):
     monkeypatch.delenv(MODELS_DIR_ENV_VAR, raising=False)
 
     from kaine.modules.topos import internvideo_next_loader
-    from kaine.setup import abliteration_gate, organ
+    from kaine.organ_server import served as organ
+    from kaine.setup import abliteration_gate
 
     assert organ.ORGAN_GGUF_DIR == Path("state/models/Qwen3.5-4B-abliterated-GGUF")
     assert (
@@ -63,7 +64,7 @@ def test_weight_paths_follow_container_models_root(monkeypatch):
     # off /models, so the model server's -m path and the loader agree.
     monkeypatch.setenv(MODELS_DIR_ENV_VAR, "/models")
 
-    organ = importlib.reload(importlib.import_module("kaine.setup.organ"))
+    organ = importlib.reload(importlib.import_module("kaine.organ_server.served"))
     loader = importlib.reload(
         importlib.import_module("kaine.modules.topos.internvideo_next_loader")
     )
@@ -79,7 +80,7 @@ def test_weight_paths_follow_container_models_root(monkeypatch):
         # Restore the module-level constants to the default-env values so import
         # order cannot leak the override into other tests.
         monkeypatch.delenv(MODELS_DIR_ENV_VAR, raising=False)
-        importlib.reload(importlib.import_module("kaine.setup.organ"))
+        importlib.reload(importlib.import_module("kaine.organ_server.served"))
         importlib.reload(
             importlib.import_module("kaine.modules.topos.internvideo_next_loader")
         )

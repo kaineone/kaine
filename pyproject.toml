@@ -260,6 +260,8 @@ source_modules = [
     "kaine.model_paths",
     "kaine.speech_manifest",
     "kaine.net",
+    "kaine.organ_probe",
+    "kaine.organ_server",
     "kaine.organ_window_state",
     "kaine.perception_preview",
     "kaine.perception_preview_server",
@@ -396,10 +398,9 @@ forbidden_modules = ["kaine.modules"]
 # workspace packages never import install, setup, transfer, distributed, remote
 # or research-export code directly. The remote bridge is the one declared
 # exception until the boot-phase refactor moves it into an optional phase.
-# Indirect chains are allowed for now: they all run through the organ's setup
-# modules (the Hypnos organ window's server control, preboot's device map, and
-# the Nexus health served-alias check), which move out of kaine.setup together
-# in a follow-up. The sherpa speech checks no longer reach setup.
+# Indirect imports count too: the organ's runtime pieces (server lifecycle,
+# served-model checks, device map) live in kaine.organ_server, so no chain from
+# the core reaches install-time tooling.
 [[tool.importlinter.contracts]]
 name = "Core runtime stays clear of edge features"
 type = "forbidden"
@@ -414,7 +415,7 @@ forbidden_modules = [
     "kaine.research.claude_science_export",
 ]
 ignore_imports = ["kaine.cycle.__main__ -> kaine.remote.bridge"]
-allow_indirect_imports = true
+allow_indirect_imports = false
 
 # Each module factory stands alone: a factory maps one TOML table to one
 # module's constructor and never reaches into another factory.

@@ -252,7 +252,7 @@ def test_provisioned_weights_land_where_the_services_read_them():
     # provisioned model weights must be written to the shared kaine-models volume
     # (not the ephemeral /app/state), and the services that consume them must read
     # from that same volume at the same paths.
-    from kaine.setup.organ import ORGAN_GGUF_DIR, ORGAN_GGUF_FILE
+    from kaine.organ_server.served import ORGAN_GGUF_DIR, ORGAN_GGUF_FILE
 
     doc = _load_compose()
 
