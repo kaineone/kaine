@@ -158,6 +158,15 @@ async def _push_gray_zone(bus: AsyncBus, category: str):
     )
 
 
+def _record_into(calls: list):
+    """An awaitable on_loss callback that records each call."""
+
+    async def _on_loss() -> None:
+        calls.append(None)
+
+    return _on_loss
+
+
 def _make_monitor(bus, cfg, u: _Mono, wall: _Mono | None = None, incident_log=None):
     if wall is None:
         wall = _Mono(0.0)
@@ -178,9 +187,9 @@ def _make_monitor(bus, cfg, u: _Mono, wall: _Mono | None = None, incident_log=No
 
 
 @pytest.mark.asyncio
-async def test_monitor_sustained_distress_pauses_during_freeze(bus):
-    """A freeze in the middle of a sustained-distress episode stops the timer;
-    the episode resumes from its accumulated unfrozen duration once released."""
+async def test_monitor_sample_before_a_60s_freeze_does_not_cross(bus):
+    """A distress-level sample just before a 60 s freeze, with no further
+    sample: frozen time does not count, so the 30 s duration is not reached."""
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
@@ -194,55 +203,17 @@ async def test_monitor_sustained_distress_pauses_during_freeze(bus):
     stop = asyncio.Event()
 
     await _push_soma(bus, 0.9)
-    await mon._poll_once(stop)
-    assert mon._fork_manager.calls == []
-
+    await mon._poll_once(stop)  # onset at unfrozen 0
     control_state.freeze(reason="test", source="operator")
-    # 60 s of frozen wall time: unfrozen clock must not advance.
-    await mon._poll_once(stop)
-    assert mon._fork_manager.calls == []
-
-    control_state.stand_down(source="operator")
-    u.value = 30.0
-    await mon._poll_once(stop)
-    assert len(mon._fork_manager.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_monitor_sustained_distress_resumes_after_release(bus):
-    """High samples keep arriving during a freeze; after release they resume
-    the existing episode and cross once the unfrozen duration elapses."""
-    cfg = WelfareResponseConfig(
-        enabled=True,
-        action="pause",
-        distress_threshold=0.5,
-        distress_duration_s=30.0,
-        warmup_s=0.0,
-        warmup_ceiling_s=0.0,
-    )
-    u = _Mono(0.0)
-    mon = _make_monitor(bus, cfg, u)
-    stop = asyncio.Event()
-
-    await _push_soma(bus, 0.9)
-    await mon._poll_once(stop)
-
-    control_state.freeze(reason="test", source="operator")
-    for _ in range(3):
-        await _push_soma(bus, 0.9)
+    for t_s in (1.0, 15.0, 31.0, 45.0, 60.0):  # time passes while frozen
+        u.value = t_s
         await mon._poll_once(stop)
     assert mon._fork_manager.calls == []
 
-    u.value = 30.0
-    control_state.stand_down(source="operator")
-    await mon._poll_once(stop)
-    assert len(mon._fork_manager.calls) == 1
-
 
 @pytest.mark.asyncio
-async def test_monitor_low_sample_during_freeze_resets_sustained_timer(bus):
-    """A below-threshold sample received while frozen resets the episode, so a
-    pre-freeze onset does not fire after release without a new high sample."""
+async def test_monitor_same_sample_without_freeze_crosses_at_30s(bus):
+    """The control: the same sample with no freeze crosses once 30 s pass."""
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
@@ -257,21 +228,82 @@ async def test_monitor_low_sample_during_freeze_resets_sustained_timer(bus):
 
     await _push_soma(bus, 0.9)
     await mon._poll_once(stop)
-
-    control_state.freeze(reason="test", source="operator")
-    await _push_soma(bus, 0.0)
-    await mon._poll_once(stop)
-
-    control_state.stand_down(source="operator")
-    u.value = 30.0
+    u.value = 15.0
     await mon._poll_once(stop)
     assert mon._fork_manager.calls == []
+    u.value = 30.5
+    await mon._poll_once(stop)
+    assert len(mon._fork_manager.calls) == 1
 
+@pytest.mark.asyncio
+async def test_monitor_sustained_distress_resumes_after_release(bus):
+    """High samples keep arriving through a freeze; the run keeps its
+    accumulated unfrozen duration and crosses 30 s of unfrozen time later."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u)
+    stop = asyncio.Event()
+
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)  # onset at unfrozen 0
+    u.value = 10.0
+    await mon._poll_once(stop)  # 10 s unfrozen
+    control_state.freeze(reason="test", source="operator")
+    for t_s in (11.0, 40.0, 70.0):  # 60 s frozen, samples still arriving
+        u.value = t_s
+        await _push_soma(bus, 0.9)
+        await mon._poll_once(stop)
+    assert mon._fork_manager.calls == []
+    control_state.stand_down(source="operator")
+    u.value = 71.0
+    await mon._poll_once(stop)  # release poll adds nothing
+    u.value = 80.0
+    await mon._poll_once(stop)  # 19 s unfrozen
+    assert mon._fork_manager.calls == []
+    u.value = 91.5
+    await mon._poll_once(stop)  # 30.5 s unfrozen
+    assert len(mon._fork_manager.calls) == 1
+
+@pytest.mark.asyncio
+async def test_monitor_low_sample_during_freeze_resets_sustained_timer(bus):
+    """A below-threshold sample received while frozen resets the run, so the
+    pre-freeze onset never crosses after release without a new high sample."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u)
+    stop = asyncio.Event()
+
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)
+    control_state.freeze(reason="test", source="operator")
+    u.value = 5.0
+    await _push_soma(bus, 0.0)
+    await mon._poll_once(stop)
+    control_state.stand_down(source="operator")
+    for t_s in (6.0, 40.0, 80.0):
+        u.value = t_s
+        await mon._poll_once(stop)
+    assert mon._fork_manager.calls == []
 
 @pytest.mark.asyncio
 async def test_monitor_gray_zone_counts_during_freeze(bus):
-    """Gray-zone events published during a freeze still feed the windowed-repeat
-    arm because that arm is event-driven, not time-driven."""
+    """Gray-zone events published while the cycle is frozen still feed the
+    windowed-repeat arm: it is event-driven, and a crossing during a long
+    freeze is never lost."""
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
@@ -286,52 +318,54 @@ async def test_monitor_gray_zone_counts_during_freeze(bus):
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
+    await mon._poll_once(stop)
+    control_state.freeze(reason="test", source="operator")
+    u.value = 5.0
+    await mon._poll_once(stop)  # the freeze is observed
     await _push_gray_zone(bus, "sustained_extreme_vad")
     await _push_gray_zone(bus, "unmaintained_fatigue")
-    control_state.freeze(reason="test", source="operator")
+    u.value = 10.0
     await mon._poll_once(stop)
     assert len(mon._fork_manager.calls) == 1
 
-
 @pytest.mark.asyncio
 async def test_monitor_warmup_not_consumed_by_freeze(bus):
-    """A long freeze does not eat the cold-start warm-up window."""
+    """A 300 s freeze right after boot does not eat the 120 s warm-up."""
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
         distress_threshold=0.5,
         distress_duration_s=30.0,
         warmup_s=120.0,
-        warmup_ceiling_s=9999.0,
+        warmup_ceiling_s=0.0,
     )
     u = _Mono(0.0)
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
-    # Stamp cold-start origin and enter warm-up.
-    await mon._poll_once(stop)
+    await mon._poll_once(stop)  # warm-up origin at unfrozen 0
     control_state.freeze(reason="test", source="operator")
-    await mon._poll_once(stop)
+    for t_s in (1.0, 150.0, 300.0):
+        u.value = t_s
+        await mon._poll_once(stop)
     control_state.stand_down(source="operator")
-
-    # Still inside the warm-up window; a high sample is drained, not counted.
+    u.value = 301.0
+    await mon._poll_once(stop)  # release poll adds nothing
+    # Still inside the warm-up (unfrozen time is about 1 s): a sustained
+    # crossing within it does not act.
     await _push_soma(bus, 0.9)
+    u.value = 302.0
     await mon._poll_once(stop)
+    u.value = 340.0
+    await mon._poll_once(stop)  # 39 s unfrozen: past 30 s, still warm-up
     assert mon._fork_manager.calls == []
-
-    u.value = 30.0
+    # Past the warm-up: a new onset and sustained duration act.
+    u.value = 425.0
     await _push_soma(bus, 0.9)
-    await mon._poll_once(stop)
-    assert mon._fork_manager.calls == []
-
-    # Past the warm-up: a new onset and sustained duration fire.
-    u.value = 130.0
-    await _push_soma(bus, 0.9)
-    await mon._poll_once(stop)
-    u.value = 160.0
+    await mon._poll_once(stop)  # about 124 s unfrozen
+    u.value = 456.0
     await mon._poll_once(stop)
     assert len(mon._fork_manager.calls) == 1
-
 
 @pytest.mark.asyncio
 async def test_monitor_corrupt_control_file_counts_and_records_once(bus, tmp_path):
@@ -374,6 +408,8 @@ async def test_monitor_corrupt_control_file_counts_and_records_once(bus, tmp_pat
 
 @pytest.mark.asyncio
 async def test_observer_extreme_vad_pauses_during_freeze():
+    """Extreme affect entered just before a 120 s freeze does not fire while
+    frozen, and fires after 60 s of unfrozen time in total."""
     u = _Mono(0.0)
     sink = FakeSink()
     obs = WelfareObserver(
@@ -389,29 +425,26 @@ async def test_observer_extreme_vad_pauses_during_freeze():
     )
 
     await obs._handle_thymos(
-        "1-0",
-        _event(
-            "thymos",
-            "thymos.state",
-            {"state": {"valence": -0.9, "arousal": 0.9}},
-        ),
+        "1-0", _event("thymos", "thymos.state", {"state": {"valence": -0.9, "arousal": 0.9}})
     )
     control_state.freeze(reason="test", source="operator")
-    await obs._tick()
-    assert not any(
-        r.get("gray_zone_event") == "sustained_extreme_vad" for r in sink.rows
-    )
-
+    for t_s in (1.0, 61.0, 120.0):
+        u.value = t_s
+        await obs._tick()
+    assert not any(r.get("gray_zone_event") == "sustained_extreme_vad" for r in sink.rows)
     control_state.stand_down(source="operator")
-    u.value = 60.0
-    await obs._tick()
-    assert any(
-        r.get("gray_zone_event") == "sustained_extreme_vad" for r in sink.rows
-    )
-
+    u.value = 121.0
+    await obs._tick()  # release tick adds nothing
+    u.value = 170.0
+    await obs._tick()  # 49 s unfrozen
+    assert not any(r.get("gray_zone_event") == "sustained_extreme_vad" for r in sink.rows)
+    u.value = 181.5
+    await obs._tick()  # 60.5 s unfrozen
+    assert any(r.get("gray_zone_event") == "sustained_extreme_vad" for r in sink.rows)
 
 @pytest.mark.asyncio
 async def test_observer_fatigue_pauses_during_freeze():
+    """Fatigue without maintenance is not reported for frozen time."""
     u = _Mono(0.0)
     sink = FakeSink()
     obs = WelfareObserver(
@@ -427,22 +460,22 @@ async def test_observer_fatigue_pauses_during_freeze():
     )
 
     await obs._handle_soma(
-        "1-0",
-        _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0}),
+        "1-0", _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0})
     )
     control_state.freeze(reason="test", source="operator")
-    await obs._tick()
-    assert not any(
-        r.get("gray_zone_event") == "unmaintained_fatigue" for r in sink.rows
-    )
-
+    for t_s in (1.0, 61.0, 120.0):
+        u.value = t_s
+        await obs._tick()
+    assert not any(r.get("gray_zone_event") == "unmaintained_fatigue" for r in sink.rows)
     control_state.stand_down(source="operator")
-    u.value = 60.0
+    u.value = 121.0
     await obs._tick()
-    assert any(
-        r.get("gray_zone_event") == "unmaintained_fatigue" for r in sink.rows
-    )
-
+    u.value = 170.0
+    await obs._tick()
+    assert not any(r.get("gray_zone_event") == "unmaintained_fatigue" for r in sink.rows)
+    u.value = 181.5
+    await obs._tick()
+    assert any(r.get("gray_zone_event") == "unmaintained_fatigue" for r in sink.rows)
 
 @pytest.mark.asyncio
 async def test_observer_corrupt_control_file_counts_and_records_once(tmp_path):
@@ -502,7 +535,7 @@ async def test_input_loss_watcher_staleness_pauses_during_freeze(tmp_path):
         ["topos.out"],
         threshold_s=1.0,
         poll_s=0.01,
-        on_loss=lambda: calls.append(None) or None,  # type: ignore[arg-type,return-value]
+        on_loss=_record_into(calls),
         unfrozen_clock=_unfrozen_clock(u),
     )
     await watcher._baseline()
@@ -643,5 +676,8 @@ def test_default_clocks_count_unknown_as_unfrozen(bus):
     obs = WelfareObserver(FakeBus(), FakeSink())
     assert obs._unfrozen.unknown_counts_as == "unfrozen"
 
-    watcher = InputLossWatcher(FakeBus(), ["x"], threshold_s=1.0, on_loss=lambda: None)
+    async def _noop() -> None:
+        return None
+
+    watcher = InputLossWatcher(FakeBus(), ["x"], threshold_s=1.0, on_loss=_noop)
     assert watcher._unfrozen.unknown_counts_as == "unfrozen"

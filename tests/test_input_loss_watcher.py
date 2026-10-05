@@ -33,6 +33,15 @@ def _latest_returning(entries: dict[str, tuple[str, Any]]) -> Any:
     return _latest
 
 
+def _record_into(calls: list):
+    """An awaitable on_loss callback that records each call."""
+
+    async def _on_loss() -> None:
+        calls.append(None)
+
+    return _on_loss
+
+
 @pytest.fixture
 def _watcher_factory(fake_async_bus):
     def _make(streams, threshold_s, poll_s=0.01):
@@ -63,7 +72,7 @@ async def test_fresh_streams_no_loss(fake_async_bus, monkeypatch, _watcher_facto
     )
     await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     watcher._fake_mono.value = 9.9
     assert not await watcher._poll_once(0)
@@ -79,7 +88,7 @@ async def test_all_stale_notifies_once(fake_async_bus, monkeypatch, _watcher_fac
     )
     await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     watcher._fake_mono.value = 0.9
     assert not await watcher._poll_once(0)
@@ -103,7 +112,7 @@ async def test_rearm_after_fresh_then_loss_again(fake_async_bus, monkeypatch, _w
     )
     await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     watcher._fake_mono.value = 1.1
     await watcher._poll_once(0)
@@ -129,7 +138,7 @@ async def test_empty_stream_recent_start_not_lost(fake_async_bus, monkeypatch, _
     monkeypatch.setattr(fake_async_bus, "latest", _latest_returning({}))
     await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     watcher._fake_mono.value = 9.999
     assert not await watcher._poll_once(0)
@@ -149,7 +158,7 @@ async def test_bus_error_skipped(fake_async_bus, monkeypatch, _watcher_factory):
     monkeypatch.setattr(fake_async_bus, "latest", _bad_latest)
     await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     watcher._fake_mono.value = 2.0
     assert not await watcher._poll_once(0)
@@ -162,7 +171,7 @@ async def test_run_loop_respects_stop_event(fake_async_bus, monkeypatch, _watche
         fake_async_bus, "latest", _latest_returning({"topos.out": ("1000-0", None)})
     )
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     stop = asyncio.Event()
     task = asyncio.create_task(watcher.run(stop))
@@ -185,7 +194,7 @@ async def test_entry_older_than_start_gets_the_boot_grace(
     watcher._fake_mono.value = 1.0
     await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     watcher._fake_mono.value = 10.999
     assert not await watcher._poll_once(0)

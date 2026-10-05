@@ -2,7 +2,7 @@
 
 ## The primitive
 `UnfrozenClock(read_frozen, *, unknown_counts_as, monotonic=time.monotonic, poll_s=0.25)`:
-- `read_frozen() -> bool | None` returns whether the freeze stack holds any entry. The default reads `kaine.cycle.control_state.read_control()`. `None` means the state could not be read: the file is missing, unreadable or corrupt.
+- `read_frozen() -> bool | None` returns whether the freeze stack holds any entry. The default is `kaine.cycle.control_state.read_frozen_state()`: `False` when the file is missing (no owner has ever frozen this state root) or its stack is empty, `True` when any entry is held, and `None` when the file exists but cannot be read, parsed or validated. (`read_control()` cannot serve here, because it maps a corrupt file to "not frozen".)
 - **`unknown_counts_as` is required and has no default.** It is `"unfrozen"` or `"frozen"`, and it decides how a span with an unknown state counts. **Every welfare caller passes `"unfrozen"`.** A welfare timer's safe failure is to keep counting: if it cannot tell whether the entity was frozen, it assumes it was not, so a broken control file never silently stops a sustained-distress or input-loss timer. (`LivedTimeAccumulator` makes the opposite choice for maturation, because its safe failure is to not advance.)
 - `now() -> float` returns accumulated unfrozen seconds since construction. Each call:
   1. reads `monotonic()`;
