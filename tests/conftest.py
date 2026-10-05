@@ -26,6 +26,17 @@ def _save_restore_state_encryptor():
     crypto_module._active = previous
 
 
+@pytest.fixture(autouse=True)
+def _save_restore_data_root():
+    """Save and restore the process-wide data root around each test, so a test
+    that installs one cannot redirect later tests' relative state paths."""
+    from kaine import storage
+
+    previous = storage.data_root()
+    yield
+    storage.set_data_root(previous)
+
+
 @pytest.fixture
 def bus_config_with_password() -> BusConfig:
     return BusConfig(password="test-password", audit_required=False)
