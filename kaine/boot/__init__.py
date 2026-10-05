@@ -59,6 +59,7 @@ from kaine.boot.factories.hypnos import (  # noqa: F401 - re-exported
     _resolve_trainer,
     _validate_backend_pairing,
     make_hypnos,
+    voice_alignment_config_from_section,
 )
 from kaine.boot.factories.lingua import (  # noqa: F401 - re-exported
     make_lingua,
