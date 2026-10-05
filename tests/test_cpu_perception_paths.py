@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
+import importlib.util
 import io
 import logging
 import wave
@@ -11,7 +12,11 @@ import pytest
 
 import kaine.hardware
 import kaine.storage
-from kaine.modules.audition.emotion import CATEGORIES, Emotion2vecClassifier
+from kaine.modules.audition.emotion import (
+    CATEGORIES,
+    DEFAULT_EMOTION_MODEL_ID,
+    Emotion2vecClassifier,
+)
 from kaine.modules.topos.encoder import InternVideoNextEncoder
 from kaine.setup.internvideo_next import internvideo_next_download_cmd
 
@@ -29,6 +34,16 @@ def _tone_wav(frequency: int = 220, duration_s: int = 1, sample_rate: int = 1600
     return buf.getvalue()
 
 
+def _emotion_model_cached() -> bool:
+    """Whether the default emotion2vec+ weights are in the local HF cache."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except ImportError:
+        return False
+    found = try_to_load_from_cache(DEFAULT_EMOTION_MODEL_ID, "model.pt")
+    return isinstance(found, str)
+
+
 @pytest.mark.asyncio
 async def test_emotion2vec_cpu_load_and_classify():
     import torch
@@ -44,7 +59,12 @@ async def test_emotion2vec_cpu_load_and_classify():
     finally:
         torch.set_default_dtype(previous)
     if not clf.funasr_available:
-        pytest.skip("funasr not installed or model not available locally")
+        # Skip only when the prerequisites are genuinely absent. With funasr
+        # installed and the weights cached, a failed load (for example a
+        # failed float32 cast) is the bug this test exists to catch.
+        if importlib.util.find_spec("funasr") is None or not _emotion_model_cached():
+            pytest.skip("funasr not installed or model not available locally")
+        pytest.fail("emotion2vec+ failed to load on CPU with funasr and the weights present")
     audio = _tone_wav()
     result = await clf.classify(audio, sample_rate=16000)
     assert "inference_failed" not in result.raw
@@ -108,3 +128,13 @@ def test_topos_loads_float32_on_cpu(monkeypatch):
     with pytest.raises(RuntimeError, match="captured"):
         asyncio.run(enc.load())
     assert seen["torch_dtype"] == torch.float32
+
+
+def test_internvideo_next_download_cmd_reads_models_dir_at_call_time(tmp_path, monkeypatch):
+    """KAINE_MODELS_DIR set after import (as in the container) must reach the
+    setup fetch, not the import-time default."""
+    target = tmp_path / "models-volume"
+    monkeypatch.setenv("KAINE_MODELS_DIR", str(target))
+    cmd = internvideo_next_download_cmd()
+    local_dir = cmd[cmd.index("--local-dir") + 1]
+    assert local_dir.startswith(str(target))

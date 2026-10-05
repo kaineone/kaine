@@ -60,7 +60,17 @@ WEIGHTS_FILENAME = "model.safetensors"
 # root (``state/models`` locally, git-ignored; ``/models`` on the container's
 # kaine-models volume — see kaine.model_paths). Runtime loads ONLY from here —
 # never the hub.
-DEFAULT_WEIGHTS_DIR = models_dir() / "internvideo_next_base_p14_res224_f16"
+WEIGHTS_DIRNAME = "internvideo_next_base_p14_res224_f16"
+
+
+def default_weights_dir() -> Path:
+    """The default weights dir, resolved now: ``models_dir()`` re-reads
+    ``KAINE_MODELS_DIR``, so call this rather than reading the import-time
+    ``DEFAULT_WEIGHTS_DIR`` when the environment may have changed."""
+    return models_dir() / WEIGHTS_DIRNAME
+
+
+DEFAULT_WEIGHTS_DIR = default_weights_dir()
 
 # Optional revision marker the setup step / loader use to detect a
 # code-vs-weights revision mismatch (see _read_recorded_revision).
@@ -282,7 +292,7 @@ def load_internvideo_next(
     if weights_dir is not None:
         wdir = resolve(weights_dir)
     else:
-        wdir = resolve(models_dir() / "internvideo_next_base_p14_res224_f16")
+        wdir = resolve(default_weights_dir())
     if not wdir.exists():
         raise FileNotFoundError(
             f"InternVideo-Next weights dir not found: {wdir}. Fetch them once at "

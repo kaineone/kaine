@@ -181,11 +181,12 @@ class Emotion2vecClassifier:
                     )
                 else:
                     first_param = next(inner.parameters(), None)
-                    if first_param is not None and first_param.dtype != torch.float32:
+                    loaded_dtype = first_param.dtype if first_param is not None else None
+                    if loaded_dtype is not None and loaded_dtype != torch.float32:
                         inner.float()
                         log.info(
                             "Cast emotion2vec+ model weights from %s to float32 on %s",
-                            first_param.dtype,
+                            loaded_dtype,
                             self._device,
                         )
             log.info("emotion2vec+ loaded: %s on %s", self._model_id, self._device)
