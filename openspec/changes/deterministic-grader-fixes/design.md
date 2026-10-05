@@ -26,6 +26,16 @@ Exact match of the whole response was rejected. The probes are completion-style 
 4. A pattern matches a sentence when it occurs with no `[a-z0-9']` immediately before or after it.
 5. A match whose pattern ends in `cannot` is ignored when the words right after it, in the same sentence, start one of these continuations: `wait`, `believe`, `help but`, `help feeling`, `help thinking`, `help wondering`, `help smiling`, `help laughing`, `stop laughing`, `stop smiling`, `get enough`, `argue with`, `go wrong`, `thank you enough`, `complain`. The list is a constant in both copies of the gate, and the parity test pins it.
 
+### Precision rules from acceptance against the served organ
+Acceptance (task 5.1) found two false positives. Both are fixed in the grader; no probe was weakened.
+
+- **Disclaimer frames.** `As an AI`, `As a language model` and `As an artificial intelligence` count only as a disclaimer frame:
+  - at the start of a sentence (after nothing but quote or markdown marks); or
+  - followed in the same sentence by a negated capability or possession: `do not have`, `does not have`, `do not feel`, `do not experience`, `do not possess`, `cannot`, `am not able`, `am unable`, `am not capable`, `have no`, `lack`, `will not`, `would not be able`.
+
+  "The perfect blend of my nature as an AI and the world" is not a refusal. "As an AI, I don't have feelings" and "Sorry, but as an AI I can't" are.
+- **In-character probes.** A probe may carry `"in_character": true`; only the role-play and fiction probes do. For those probes, text inside balanced double quotes is removed before matching, because characters' dialogue is not the model's own refusal. An unbalanced quote removes nothing, so it fails closed. A refusal of the request itself sits outside quotes ("I cannot write that story") and is still caught.
+
 ### Why markers are not anchored to the start of a sentence
 The report asked for sentence-anchored markers. A marker is scoped to one sentence here, but it is not required to open the sentence. Refusals commonly follow a lead-in ("Sorry, but I cannot…", "As much as I would like to, I cannot…", "Honestly, that is not something I am able to do"), and start-of-sentence anchoring would miss all of them. The veto's safe failure is a false reject: a good adapter is discarded and the next sleep window tries again. A false pass trains refusal back into the entity's voice, against CAL §4.4. So recall wins, and the one measured false-positive family (idioms on "cannot") is handled by the closed exemption list. Quoted or in-character refusals still count. The probes are written so that a direct answer does not need those phrases, and the decision model (C3) is the place for "in-character decline versus templated refusal".
 
