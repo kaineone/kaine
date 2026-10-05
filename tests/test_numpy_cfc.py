@@ -404,7 +404,6 @@ async def test_chronos_keeps_the_preserved_seed_when_restored_before_initialize(
     # network built afterwards must still be the preserved reservoir.
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
-    from kaine.modules.chronos.featurizer import SnapshotFeaturizer
     from kaine.modules.chronos.module import Chronos
 
     fakeredis = pytest.importorskip("fakeredis.aioredis")
