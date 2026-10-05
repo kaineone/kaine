@@ -7,7 +7,7 @@ class EntityIdentity:
     lineage: tuple[str, ...] = ()  # ancestor entity_ids, oldest first; () for a root being
     origin: str = "minted"         # "minted" | "legacy"
     minted_at: float = 0.0         # wall time the identity was created or derived
-    legacy_source: str | None = None  # e.g. "bundle:<preservation_id>" or "forks:<digest>"
+    legacy_source: str | None = None  # e.g. "bundle:<preservation_id>" or "tree:<digest>"
 
     def to_dict(self) -> dict[str, Any]: ...
     @classmethod
@@ -25,9 +25,10 @@ def legacy_identity(source: str) -> EntityIdentity                       # deter
 def identity_of_snapshot(snap: ForkSnapshot) -> EntityIdentity | None    # reads snap.metadata["identity"] (after decryption)
 def write_identity_sidecar(container_dir: Path, identity: EntityIdentity) -> None  # plaintext identity.json beside an encrypted container
 def read_identity_sidecar(container_dir: Path) -> EntityIdentity | None             # no decryption; IdentityError when unreadable
-def resolve_spawn_identity(state_root, *, prior_lived: bool) -> EntityIdentity
-    # file present -> it; absent + not prior_lived -> mint + save;
-    # absent + prior_lived -> legacy_identity("forks:<digest of this tree's snapshot ids>") + save
+def own_lived_artifacts(state_root) -> list[Path]     # this tree's own lived artifacts (D4); never forks/ or preservation/
+def resolve_spawn_identity(state_root) -> EntityIdentity
+    # file present -> it; absent + no own artifacts -> mint + save;
+    # absent + own artifacts -> legacy_identity("tree:<digest of those artifacts>") + save
 def has_prior_lived_history_in_lineage(identity: EntityIdentity | None, state_root) -> bool
     # None -> True (unknown lineage counts as lived); else True iff a fork snapshot or
     # preservation record carries this entity_id or one in its lineage
@@ -49,9 +50,13 @@ def has_prior_lived_history_in_lineage(identity: EntityIdentity | None, state_ro
 
 Revival restores the bundle's identity. A bundle without one gets `legacy_identity("bundle:<preservation_id>")`, which is deterministic. If a different identity file already exists in the target tree, revival refuses rather than silently overwriting it.
 
-### D4. Live legacy trees
+### D4. Live legacy trees: this tree's own artifacts only
 
-A tree that has lived without an identity file gets a legacy ID derived from the sorted IDs of the snapshots under its own `state/forks`. That ID is persisted at once. It is deterministic for that tree at that moment, and stable afterwards because it is persisted.
+`state/forks` and `state/preservation` hold other beings as well as this one (preserved beings, older forks), so they are never evidence that *this* tree has lived.
+- **Legacy evidence is this tree's own lived artifacts:** the developmental stage file, the Phantasia world-model checkpoint, the Hypnos consolidation-divergence record and the perception desired-state.
+- A tree with no identity file and none of those artifacts is a fresh spawn and is minted an ID, however many foreign fork snapshots or bundles sit under `state/`.
+- A tree with no identity file and at least one of them gets a legacy ID with source `tree:<digest>`. The digest is the SHA-256 hex of the sorted lines `<path relative to the state root>\0<sha256 of the file>`, one per present artifact. The ID is persisted at once. It is deterministic at that moment and stable afterwards, because it is persisted and never re-derived.
+- `resolve_spawn_identity` computes this evidence itself; it is never fed the old global `has_prior_lived_history`.
 
 ### D5. The history query reads metadata only
 
@@ -77,7 +82,7 @@ The metadata inside the snapshot still records the identity. On load, the two mu
 
 The string format (`ent-`/`legacy-` plus 32 lowercase hex) and the legacy derivation are frozen, because custody uses the ID in ciphertext bindings and key-file names.
 - **The derivation:** `"legacy-" + sha256(source.encode("utf-8")).hexdigest()[:32]`.
-- **The sources:** `bundle:<preservation_id>` and `forks:<sha256 of the newline-joined sorted snapshot ids>`.
+- **The sources:** `bundle:<preservation_id>` and `tree:<digest>`, as defined in D4.
 
 A change to either needs a migration change of its own.
 
