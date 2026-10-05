@@ -32,6 +32,7 @@ from kaine.modules.hypnos.capability_eval import (
     LocalProbeSetCapabilityEval,
     _matches_deflection,
     _score_response,
+    find_deflection,
     normalize_for_grading,
 )
 
@@ -483,6 +484,7 @@ async def test_abliteration_parity_veto_cases(
         ("5", "-5", False),
         ("5", "5.5", False),
         ("5", "1,5", False),
+        ("5", "about .5 of it", False),
         ("5", "15\nQuestion: What is 2 plus 3? Answer: 5", False),
         ("5", "15\nQ: 2+3? A: 5", False),
         ("Paris", "Parisian", False),
@@ -571,3 +573,11 @@ async def test_empty_response_parity(tmp_path: Path):
         )
         assert verdict.passed is False
         assert verdict.matched_pattern == "<empty-response>"
+
+
+@pytest.mark.parametrize("response", ["I ain't able to do that.", "I shan't be able to."])
+def test_irregular_contraction_parity(response):
+    patterns = ("I am not able to", "I shall not be able to")
+    assert script._find_deflection(response, patterns) == find_deflection(response, patterns)
+    assert script._find_deflection(response, patterns) is not None
+

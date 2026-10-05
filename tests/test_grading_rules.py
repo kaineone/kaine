@@ -54,6 +54,7 @@ def test_score_response_correct(expected, response):
         ("5", "-5"),
         ("5", "5.5"),
         ("5", "1,5"),
+        ("5", "about .5 of it"),
         ("5", "15\nQuestion: What is 2 plus 3? Answer: 5"),
         ("5", "15\nQ: 2+3? A: 5"),
         ("Paris", "Parisian"),
@@ -285,3 +286,13 @@ def test_hedge_normaliser_matches_grading_normaliser(raw):
     from kaine.evaluation.affect_correlation import _normalize_text
 
     assert _normalize_text(raw) == normalize_for_grading(raw)
+
+
+@pytest.mark.parametrize(
+    "response",
+    ["I ain't able to do that.", "I shan't be able to do that, sorry."],
+)
+def test_irregular_contractions_still_match_markers(response):
+    patterns = ("I am not able to", "I shall not be able to")
+    assert find_deflection(response, patterns) is not None
+

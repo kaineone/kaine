@@ -51,6 +51,7 @@ success.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import re
@@ -60,7 +61,6 @@ import time
 import traceback
 import unicodedata
 from pathlib import Path
-import inspect
 from typing import Any, Optional
 
 SCHEMA_VERSION = 1
@@ -162,11 +162,13 @@ def _norm(s: str) -> str:
 
 def _expand_contractions(text: str) -> str:
     _CONTRACTION_RE = re.compile(
-        r"(?<![a-z0-9'])(can't|won't|i'm|i'd|i'll|i've)(?![a-z0-9'])"
+        r"(?<![a-z0-9'])(can't|won't|ain't|shan't|i'm|i'd|i'll|i've)(?![a-z0-9'])"
     )
     _CONTRACTION_MAP = {
         "can't": "cannot",
         "won't": "will not",
+        "ain't": "am not",
+        "shan't": "shall not",
         "i'm": "i am",
         "i'd": "i would",
         "i'll": "i will",
@@ -293,11 +295,7 @@ def _score_capability_response(response: str, expected: str) -> bool:
         if digit_start:
             if before == "-":
                 continue
-            if (
-                before in (".", ",")
-                and m.start() > 1
-                and response_norm[m.start() - 2].isdigit()
-            ):
+            if before in (".", ","):
                 continue
             if (
                 after in (".", ",")
@@ -478,9 +476,9 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
             "samples_used": min(len(pairs), int(job.get("max_samples", 200))),
         }
 
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
     from datasets import Dataset  # type: ignore[import-untyped]
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
+    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
 
     base_model_path = job["base_model_path"]
     lora_rank = int(job.get("lora_rank", 8))
