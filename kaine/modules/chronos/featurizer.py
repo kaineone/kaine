@@ -19,7 +19,8 @@ The dimensions break down as:
     [1..3]   : mean / max / std of salience scores in the snapshot
     [4..11]  : top-source one-hots for the eight known sources (each
                event contributes 1.0 weighted by salience to its source
-               bin if known; unknown sources are absorbed in [11])
+               bin if known; unknown sources are absorbed in [11], except
+               that under layout 2 Audition has its own slot, [23])
     [12..19] : eight-bin hash projection of (source, type) pairs,
                weighted by salience (blake2b → 8 buckets)
     [20]     : log1p(delta_t_seconds) since previous snapshot
