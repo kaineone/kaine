@@ -136,8 +136,13 @@ async def preserve_live(
     stage_path: Path | None = None,
     individuation_root: Path | None = None,
     identity: EntityIdentity | None = None,
+    identity_unreadable: str | None = None,
 ) -> PreservationResult:
     """Preserve the whole individual from a LIVE registry. Read-only; fail-loud.
+
+    ``identity_unreadable`` carries a reason string when the running identity
+    could not be read; the snapshot metadata stores the reason, while the
+    plaintext manifest only records that identity was unreadable.
 
     Steps:
       1. Capture every module's state (serialize + async preservation exports).
@@ -254,6 +259,11 @@ async def preserve_live(
             # The being this bundle preserves (entity-identity); absent for
             # callers that run without an identity.
             **({"identity": identity.to_dict()} if identity is not None else {}),
+            **(
+                {"identity_unreadable": identity_unreadable}
+                if identity_unreadable is not None
+                else {}
+            ),
         },
     )
     # Snapshot json+encrypt+write is synchronous disk/crypto work; run it off the
@@ -456,6 +466,9 @@ async def preserve_live(
                 "entity_id": identity.entity_id,
                 "lineage": list(identity.lineage),
             }
+        if identity_unreadable is not None:
+            # The manifest is plaintext; never put the reason text here.
+            manifest["identity_unreadable"] = True
         manifest_path = bundle_dir / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
         _chmod_quietly(manifest_path, 0o600)
