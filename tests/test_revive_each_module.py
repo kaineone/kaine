@@ -117,6 +117,10 @@ class _FakeForwardModel:
     def buffer_summary(self) -> dict[str, Any]:
         return {"size": 0}
 
+    def matches_state_shape(self, data: dict[str, Any]) -> bool:
+        # The fake has no tensor shapes; any dict it produced fits it.
+        return isinstance(data, dict)
+
 
 class _FakeNetwork:
     def __init__(self, units: int = 4) -> None:
