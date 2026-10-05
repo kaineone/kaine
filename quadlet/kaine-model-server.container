@@ -22,7 +22,7 @@ SecurityLabelDisable=true
 PodmanArgs=--entrypoint=/bin/sh
 Environment=KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS=${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS}
 Exec=-c 's="$${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}"; if ! echo "$$s" | grep -Eqx -- "-1|[0-9]+"; then echo "KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS must be an integer of -1 or more" >&2; exit 64; fi; exec /app/llama-server --model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds "$$s"'
-HealthCmd=curl -fsS http://127.0.0.1:8080/v1/models
+HealthCmd=curl -fsS http://127.0.0.1:8080/health
 HealthInterval=15s
 HealthRetries=10
 

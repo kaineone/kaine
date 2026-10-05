@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import httpx
 
 from kaine.config import require_known_keys
-from kaine.defaults import DEFAULT_CHAT_URL
+from kaine.defaults import DEFAULT_CHAT_URL, model_server_api_key
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.shared_services import match_shared_service, shared_services
 from kaine.state_io import write_json_atomic
@@ -179,12 +179,17 @@ def _server_resident_models(url: str, timeout_s: float) -> list[str]:
     Report-only: the single-resident backend (Studio / llama-server) has no
     unload API, so this informs the operator what is holding VRAM on KAINE's
     side; nothing is evicted. [] on any failure.
+
+    Sends the model-server bearer key when one is configured, because keyed
+    llama-server builds refuse /v1/models without it.
     """
     base = url.rstrip("/")
     if not base.endswith("/v1"):
         base = base + "/v1"
     try:
-        resp = httpx.get(f"{base}/models", timeout=timeout_s)
+        api_key = model_server_api_key(None)
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        resp = httpx.get(f"{base}/models", headers=headers, timeout=timeout_s)
         resp.raise_for_status()
         data = resp.json().get("data") or []
         return [str(m.get("id")) for m in data if m.get("id")]
