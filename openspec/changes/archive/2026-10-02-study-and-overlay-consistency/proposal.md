@@ -12,7 +12,7 @@ It also collects small corrections the same audit found, none of which changes b
 - `kaine/config.py` says the Nexus readers all go through `load_kaine_config`, but the `[nexus]` section has its own reader;
 - `tests/test_setup_storage_step.py` fails whenever a real KAINE cycle runs on the host, because `relocate()` checks the host's process table.
 
-Research impact: none. The running MoC7 study is unaffected (pinned image, started in its data root).
+Research impact: none. The running module-ignition study is unaffected (pinned image, started in its data root).
 
 ## What changes
 - `run`, `status` and `analyse` resolve `--study-dir` under the data root exactly as `init` does.

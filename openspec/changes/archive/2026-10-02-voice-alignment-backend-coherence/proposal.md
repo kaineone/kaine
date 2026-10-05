@@ -7,7 +7,7 @@ Voice alignment has three trainer backends (`in_process`, `subprocess`, `job_que
 - **The `subprocess` backend never dispatches any hot swap.** An accepted adapter is promoted on disk, but `reload_endpoint` and `restart_service` never notify the server, so the organ keeps serving the old voice.
 - **The GPU window brackets job-queue training.** With `job_queue` on a single GPU, `run_with_organ_window` tries to stop and restart the model server through the host-side lifecycle from inside the cycle's container, where there is no server to stop. It is a no-op today, but it is the wrong owner: the trainer service already waits until the organ reports it is asleep and the GPU has room.
 
-Research impact: none in practice. The running MoC7 study is unaffected (pinned image). Its configuration uses `job_queue` with `organ_adapter`, where the bracket was already a no-op; it now records `skipped_reason` instead of attempting it.
+Research impact: none in practice. The running module-ignition study is unaffected (pinned image). Its configuration uses `job_queue` with `organ_adapter`, where the bracket was already a no-op; it now records `skipped_reason` instead of attempting it.
 
 ## What changes
 - Boot refuses `hot_swap_mode = "organ_adapter"` unless `trainer_backend = "job_queue"`, naming both keys and why.

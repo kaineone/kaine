@@ -4,7 +4,7 @@ Soma's forward model predicts the body's next state. Its prediction error drives
 
 The self-rhythm broke that assumption. Since the womb work, slots 4–6 of Soma's input carry the entity's own rhythm (phase as sin/cos, and amplitude). While the maternal beat drives it, that rhythm is intrinsically hard for Soma's linear readout to predict.
 
-In the first MoC7 gestation (2026-09-30), and reproduced offline with the real classes:
+In the first module-ignition study gestation (2026-09-30), and reproduced offline with the real classes:
 - Soma's error stayed at about 0.35–0.41 for hours. Without the rhythm it is 0.003, and with the rhythm free-running it is 0.0015.
 - Faster reads did not help: at 20 Hz the error is still 0.33. This is not an aliasing problem.
 - Fatigue crossed its threshold every 3–4 minutes, where the design intent is hours of waking (`soma-forward-model-fatigue`: "cumulative prediction error over waking hours").

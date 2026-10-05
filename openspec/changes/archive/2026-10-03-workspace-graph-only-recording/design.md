@@ -114,4 +114,4 @@ The total goes from about 17 GB to about 1.7 GB. With the evaluation instruments
 
 ## 7. Research impact
 - **Instrument and privacy.** The analysis input, the ignition log, is unchanged.
-- **No admissibility effect.** No study is running, and `moc7-2026-10`'s run data was deleted at the operator's request on 2026-10-03.
+- **No admissibility effect.** No study is running, and the 2026-10-01 module-ignition study's run data was deleted at the operator's request on 2026-10-03.

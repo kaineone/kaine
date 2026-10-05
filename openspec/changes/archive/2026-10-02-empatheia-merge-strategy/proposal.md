@@ -5,7 +5,7 @@
 
 The spec also says the merged profile "SHALL be persisted to Qdrant before the merge completes". A merge runs offline over two snapshots and produces a third snapshot; there is no live Empatheia store to write to, and writing to the running entity's collection would be wrong. `apply_merged_state`, written for that purpose, is called from nowhere. The merged profiles reach the store the way any fork's do: the merged snapshot carries them, `deserialize` loads them into the store's cache when the snapshot is restored, `get` and `all_profiles` read the cache first, and the next update of a profile writes it to Qdrant.
 
-Research impact: none. Studies do not merge forks, and the running MoC7 study uses a pinned image.
+Research impact: none. Studies do not merge forks, and the running module-ignition study uses a pinned image.
 
 ## What changes
 - The strategy and its profile-merge helper move to `kaine/lifecycle/strategies.py`, beside the other module strategies, so the lifecycle layer keeps not importing `kaine.modules`. `default_strategies()` maps `"empatheia"` to it.

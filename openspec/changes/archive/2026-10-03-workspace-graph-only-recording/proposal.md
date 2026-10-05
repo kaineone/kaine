@@ -5,7 +5,7 @@ A study records far more than the research needs, and part of what it records is
 
 **The plan.** A run saves the global workspace graph, meaning what competed, what ignited, and when. The paper analysis uses it, and later a future module or Phantasia uses it as training data for the world model. Then it is deleted. That is the operator's statement of 2026-10-03, and it matches the paper: Phantasia is "trained on accumulated workspace trajectories" (the paper's Phantasia description; `docs/02-architecture/README.md:220` says the same). No surviving spec says it. The spring conversations where it was first stated no longer exist, so this change writes it down.
 
-**What studies record today.** Measured on study `moc7-2026-10` (gestation, about 29 h):
+**What studies record today.** Measured on the 2026-10-01 module-ignition study (gestation, about 29 h):
 
 | Record | Per day | What it holds |
 |---|---|---|
@@ -21,7 +21,7 @@ A study records far more than the research needs, and part of what it records is
 
 **Nothing depends on the excess.** No code in `kaine/` or `scripts/` reads the Nexus record or the workspace trajectory; only tests do. The ignition-study analysis reads only the ignition log and the evaluation streams (`kaine/research/ignition_study/analysis.py`).
 
-Research impact: **instrument and privacy.** The ignition log, which the analysis reads, is unchanged. The data a study keeps shrinks from about 13 GB to about 1.4 GB a day. Of that, the graph is about 0.27 GB; the rest is the evaluation instruments and safety records, which are unchanged. No run is active. Study `moc7-2026-10`'s data was deleted at the operator's request, so no earlier run has records to match.
+Research impact: **instrument and privacy.** The ignition log, which the analysis reads, is unchanged. The data a study keeps shrinks from about 13 GB to about 1.4 GB a day. Of that, the graph is about 0.27 GB; the rest is the evaluation instruments and safety records, which are unchanged. No run is active. The 2026-10-01 module-ignition study's data was deleted at the operator's request, so no earlier run has records to match.
 
 ## What changes
 - **The ignition log is the workspace-graph record.** It is kept at full rate, one row per broadcast, because ignitions are discrete events and a sample would miss them. It stays payload-free and is never deleted automatically.

@@ -1,6 +1,6 @@
 ## Why
 
-The operator's goal is the full entity, every module running, by the end of the MoC7 study, and Hypnos voice alignment is part of it. The operator decided (2026-09-30) that the study enables voice alignment only on its final full-entity step, the last accumulate step. Studies must be pre-registered: nothing may change mid-study, so the mechanism must exist in the image before launch.
+The operator's goal is the full entity, every module running, by the end of the module-ignition study, and Hypnos voice alignment is part of it. The operator decided (2026-09-30) that the study enables voice alignment only on its final full-entity step, the last accumulate step. Studies must be pre-registered: nothing may change mid-study, so the mechanism must exist in the image before launch.
 
 Voice alignment cannot run where the study runs, inside the `kaine:cuda` container. Verified on main at 459db59:
 
