@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-from kaine.evaluation.affect_correlation import output_characteristics, _normalize_text
+from kaine.evaluation.affect_correlation import _normalize_text, output_characteristics
 
 
 def test_no_hedge_in_substrings():
