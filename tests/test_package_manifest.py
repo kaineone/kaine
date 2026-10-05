@@ -9,6 +9,7 @@ the source tree and compares it with the tree itself.
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -46,13 +47,13 @@ def wheel_names(tmp_path_factory) -> set[str]:
         PACKAGE_ROOT, src / "kaine", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
     out = tmp_path_factory.mktemp("wheel")
-    proc = subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", str(src), "--no-deps",
-         "--no-build-isolation", "--quiet", "-w", str(out)],
-        capture_output=True, text=True, timeout=600,
-    )
-    if proc.returncode != 0 and "No module named" in proc.stderr:
-        pytest.skip(f"wheel build tooling unavailable: {proc.stderr.strip()[-200:]}")
+    cmd = [sys.executable, "-m", "pip", "wheel", str(src), "--no-deps", "--quiet", "-w", str(out)]
+    # Build offline with the installed setuptools when there is one; otherwise let
+    # pip fetch the build backend (CI has network). Never skip: a packaging gap
+    # must fail the suite wherever it runs.
+    if importlib.util.find_spec("setuptools") is not None:
+        cmd.append("--no-build-isolation")
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert proc.returncode == 0, proc.stderr[-2000:]
     wheels = list(out.glob("kaine-*.whl"))
     assert len(wheels) == 1, wheels
