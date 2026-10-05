@@ -193,6 +193,7 @@ def test_required_suite_always_starts_for_pull_requests_and_the_merge_queue() ->
     on = _workflow_on_block()
     assert "merge_group" in on, "Workflow is missing the merge_group trigger"
     for trigger in ("pull_request", "merge_group"):
+        assert trigger in on, f"Workflow is missing the {trigger} trigger"
         assert "paths" not in (on.get(trigger) or {}), (
             f"{trigger} must not be path-filtered"
         )
