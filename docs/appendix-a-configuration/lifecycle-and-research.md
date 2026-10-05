@@ -78,7 +78,7 @@ Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module
 | `max_tokens` | integer | `160` | Maximum tokens per probe answer. |
 | `alpha_total` | float | `0.05` | Lifetime false-positive budget across looks, spent by an alpha-spending schedule. |
 | `b_max` | integer | `2000000` | Permutation ceiling for the stratified energy-distance p-value. |
-| `effect_min` | float | `0.0` | Minimum effect size H before a look can be called significant. Stays at 0 until a real-organ smoke test calibrates it. |
+| `effect_min` | float | `0.0` | Minimum effect size H before a look can be called significant. Set it to the 95th percentile of H from the real-organ smoke test's real-data null before enabling the producer; see [Calibrating before first use](../11-preservation.md#calibrating-before-first-use). |
 | `sleep_settle_s` | float | `120.0` | Seconds after a sleep before a look is attempted. |
 | `daily_s` | float | `86400.0` | Seconds between daily look attempts. |
 | `min_look_interval_s` | float | `21600.0` | Minimum seconds between scored looks. |

@@ -48,7 +48,7 @@ python -m kaine.research.ignition_study init \
 
 `init` creates `studies/<study-id>/` containing `study.json`, the step directories `gestation/`, `branch/<k>/`, `repeat/` and `accumulate/`. Inside each step directory it creates a `config/` with symlinks to `config/kaine.toml` and `config/profiles`. It does not create `steps.jsonl`; that file is written when the first step is appended.
 
-The study directory is resolved under `[storage].data_root` or `KAINE_DATA_ROOT` by `init`; `run`, `status` and `analyse` resolve `--study-dir` relative to the current working directory. Pass an absolute path if the data root is elsewhere.
+All four commands (`init`, `run`, `status`, `analyse`) load the config, install the data root (`[storage].data_root` or `KAINE_DATA_ROOT`), and resolve a relative `--study-dir` under it. An absolute path is used as given. When no config can be loaded, paths stay relative to the working directory, and the command prints a note on stderr.
 
 `init` accepts:
 

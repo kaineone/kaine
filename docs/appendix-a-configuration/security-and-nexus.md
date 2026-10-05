@@ -106,4 +106,4 @@ Supply 32 raw bytes, or base64/hex encoding of 32 bytes. Never commit the key. T
 | `key_env_var` | string | `"KAINE_STATE_KEY"` | Environment variable that holds the key. |
 | `algorithm` | string | `"aes-256-gcm"` | Encryption algorithm. Only `"aes-256-gcm"` is supported; any other value raises `CryptoConfigError` at boot ([`kaine/security/crypto.py`](../../kaine/security/crypto.py)). |
 
-On-disk framing is `KAINE_MAGIC || nonce(12 bytes) || ciphertext+tag`, base64-encoded. The magic prefix lets the reader distinguish encrypted blobs from legacy plaintext, so a disabled reader transparently passes plaintext through.
+On-disk framing is the magic prefix `KAINEgcm1:`, then the 12-byte nonce, then the ciphertext and tag, with the whole blob base64-encoded. The magic prefix lets the reader distinguish encrypted blobs from legacy plaintext, so a disabled reader transparently passes plaintext through.
