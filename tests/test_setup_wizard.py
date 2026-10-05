@@ -873,6 +873,8 @@ def test_compose_messages_go_to_the_output(tmp_path: Path, monkeypatch):
     from kaine.setup import __main__ as setup_main_mod
 
     monkeypatch.chdir(tmp_path)
+    # The wizard reads its profiles relative to the working directory.
+    (tmp_path / "config").symlink_to(REPO_ROOT / "config", target_is_directory=True)
     (tmp_path / "compose").mkdir()
     (tmp_path / "compose" / ".env").write_text("")
     (tmp_path / "compose" / "kaine.yml").write_text("")
