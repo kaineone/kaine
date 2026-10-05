@@ -195,3 +195,14 @@ def _scrub(
         ]
 
     return copy.deepcopy(value)
+
+
+def strip_vectors(payload: Any) -> Any:
+    """Strip vector fields and long numeric lists from *payload*.
+
+    This is the one vector rule shared by the diagnostics surface and Mnemos
+    memory text: it removes every named vector field (``VECTOR_FIELDS``) and
+    any numeric list of ``VECTOR_BACKSTOP_MIN_LEN`` or more items, but keeps
+    all content keys intact.
+    """
+    return _scrub(payload, frozenset(), vector_fields=VECTOR_FIELDS)

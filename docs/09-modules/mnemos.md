@@ -83,7 +83,7 @@ Mnemos manages four named collections:
 flowchart TD
     WS[workspace.broadcast] --> SER[serialize snapshot to text]
     SER --> COOL{recall enabled\nand cooldown due?}
-    COOL -- yes --> RECALL[search short_term by\nsubstring score]
+    COOL -- yes --> RECALL[search short_term by\ncosine similarity]
     RECALL --> PUB_REC[publish mnemos.recall\nno memory content]
     COOL -- no --> STORE
     PUB_REC --> STORE[store text + affect tag\ninto short_term]
@@ -91,7 +91,7 @@ flowchart TD
     OVR -- yes --> EVICT[evict oldest → episodic\nvia embedder + backend]
 ```
 
-Recall is throttled by `recall_cooldown_s` (default 5 s) to avoid flooding the bus. On the hot path, recall searches only the in-process `short_term` buffer with substring scoring; it does not call the embedder or touch episodic storage. When `short_term` fills, the oldest entry is embedded and moved to `episodic`.
+Recall is throttled by `recall_cooldown_s` (default 5 s) to avoid flooding the bus. On the hot path, recall searches only the in-process `short_term` buffer by cosine similarity to the embedded query. Storing stays embedder-free: each short-term entry is embedded at most once, in memory only, on its first recall. When `short_term` fills, the oldest entry is embedded and moved to `episodic`.
 
 ### Embedder
 
@@ -159,7 +159,7 @@ await mnemos.replay_engine.close_window()
 
 ## Zero-persistence note
 
-`mnemos.recall` and `mnemos.replay` payloads contain **no raw sense data**. The stored `text` field is a deterministic serialization of the tick, the active and inhibited event lists, and `{source}:{type}@{entry_id}={event.payload}` for each workspace entry. The raw perceptual payloads `audition.transcription` and `mundus.visual.raw` are replaced by the literal `<raw-perceptual omitted>`; everything else is the full event payload, not salience values. Affect tags are plain floats. The `redact_content = true` default strips even that serialized text from observer/sidecar replay payloads.
+`mnemos.recall` and `mnemos.replay` payloads contain **no raw sense data**. The stored `text` field is a deterministic content view of the snapshot: it names the active/inhibited state first, then `{source}:{type}={stripped_payload}` for each selected workspace event. Before serialization each payload passes through `kaine.privacy_filter.strip_vectors`, which removes named vector fields and any numeric list of 16 or more items while keeping content keys intact. The raw perceptual payloads `audition.transcription` and `mundus.visual.raw` are replaced by the literal `<raw-perceptual omitted>`; everything else is the stripped event payload, not salience values. Affect tags are plain floats. The `tick_index` is kept in the stored payload but is not repeated in the text; bus entry IDs are omitted from the text because they are meaningless after the stream is trimmed. The `redact_content = true` default strips even that serialized text from observer/sidecar replay payloads.
 
 `Mnemos.serialize()` emits only `short_term_size`, `collection_prefix`, and `embedding_space` — no memory content. Full memory contents are exported through `export_preservation_state` instead; see [Preservation and the safety net](../11-preservation.md).
 

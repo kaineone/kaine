@@ -25,6 +25,7 @@ from kaine.modules.mnemos.storage import (
     SqliteVecStorage,
     StorageError,
 )
+from kaine.privacy_filter import strip_vectors
 from kaine.text_embedding import (
     DEFAULT_LATENT_DIM,
     Embedder,
@@ -198,10 +199,12 @@ class Mnemos(BaseModule):
         # cooldown and is NOT gated on snapshot.inhibited — recall is internal
         # cognition (like storing), not an outward effector action.
         #
-        # Performance: the hot-path spontaneous recall searches short-term only,
-        # which uses cheap substring matching and produces zero embedder calls.
-        # Embedding is deferred to eviction/consolidation (short_term -> episodic)
-        # or to explicit episodic recall from other modules.
+        # Performance: storing stays embedder-free on the hot path. The
+        # spontaneous recall searches short-term only and embeds the query plus
+        # any short-term entries whose embeddings are not yet cached; a second
+        # recall with no new entries embeds only the query. Embedding is still
+        # deferred to eviction/consolidation (short_term -> episodic) and to
+        # explicit episodic recall from other modules.
         if self._recall_on_workspace and self._recall_cooldown_due():
             await self.recall(text, collection="short_term")
             self._last_recall_monotonic = self._clock.now()
@@ -628,14 +631,21 @@ _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
 
 
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
+    """Serialize the snapshot to the text Mnemos stores and recalls against.
+
+    The content view keeps each selected event's source and type with its
+    stripped payload. It drops the tick index and bus entry IDs (both are
+    either stored in the payload or meaningless after stream trimming). Each
+    payload is passed through ``strip_vectors`` so memory text never carries
+    perceptual embeddings.
+    """
     pieces: list[str] = []
-    pieces.append(f"tick={snapshot.tick_index}")
     pieces.append("inhibited" if snapshot.inhibited else "active")
-    for entry_id, event in snapshot.selected_events or []:
+    for _entry_id, event in snapshot.selected_events or []:
         if event.type in _RAW_PERCEPTUAL_EVENT_TYPES:
             # Record that a raw-perceptual event was in the workspace, but never
             # its verbatim payload (raw sense data must not persist into memory).
-            pieces.append(f"{event.source}:{event.type}@{entry_id}=<raw-perceptual omitted>")
+            pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
             continue
-        pieces.append(f"{event.source}:{event.type}@{entry_id}={event.payload}")
+        pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
     return " | ".join(pieces) if pieces else ""
