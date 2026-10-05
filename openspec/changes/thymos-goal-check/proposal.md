@@ -14,7 +14,7 @@ The entity does have concerns: its four Thymos drives (curiosity, boredom, socia
   - With no drive above zero, goal significance is 0.0.
 - **Explicit goals still count when there are any.** When the ledger holds active goals, the score is the larger of the drive score and the ledger score. The ledger score is `relevance × 2 − 1`, so an unrelated goal reads as mild obstruction rather than a constant.
 - **The constant −0.2 offset is removed.**
-- **Honest disclosure.** `goal_significance_method` reports `drive_relevance_v1`, `drive_relevance_v1+token_overlap_v1` when active goals contributed, or `unavailable` when no drive table was injected (unit construction). In the `unavailable` case the score is 0.0.
+- **Honest disclosure.** `goal_significance_method` reports `drive_relevance_v1`, `drive_relevance_v1+token_overlap_v1` when active goals contributed, `token_overlap_v1` when no drive table was injected (unit construction) but active goals were scored, or `unavailable` when neither exists, with a score of 0.0.
 
 ## Capabilities
 
