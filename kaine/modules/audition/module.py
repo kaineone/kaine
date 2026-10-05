@@ -50,6 +50,7 @@ log = logging.getLogger(__name__)
 class Audition(BaseModule):
     name: ClassVar[str] = "audition"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "social_drive"})
+    _HYPNOS_STREAM: ClassVar[str] = "hypnos.out"
 
     def holds_external_resources(self) -> bool:
         return True
@@ -200,6 +201,15 @@ class Audition(BaseModule):
         # workspace; None → widest window.
         self._arousal_provider: Optional[Callable[[], float]] = None
 
+        # Hypnos sleep suspension state.
+        self._in_hypnos: bool = False
+        self._hypnos_cursor: str = "$"
+
+        # Carried-forward acoustic forward-model snapshots for encoders that are
+        # not currently running. They are keyed by encoder model_id and never
+        # contain raw audio or embeddings.
+        self._acoustic_states_carried: dict[str, Any] = {}
+
     @property
     def stt_client(self) -> STTClient:
         return self._stt_client
@@ -252,6 +262,8 @@ class Audition(BaseModule):
         embedding = await asyncio.to_thread(self._acoustic_encoder.embed, audio_bytes, sample_rate)
         change = cosine_change(embedding, self._prev_acoustic_embedding)
         self._prev_acoustic_embedding = embedding
+        # Pause adaptation during Hypnos sleep, mirroring Topos.
+        self._acoustic_forward_model.suspended = self._in_hypnos
         prediction_error = self._acoustic_forward_model.step(embedding)
         self._acoustic_errors.append(prediction_error)
         # Normalise the error against its rolling mean (Chronos/Topos convention):
@@ -324,8 +336,62 @@ class Audition(BaseModule):
             return None
         return getattr(stream, "delivered_position", None)
 
+    async def _hypnos_tail_cursor(self) -> str:
+        """The id of the newest ``hypnos.out`` entry, or ``"0-0"`` for an empty
+        stream, so the consumer reads only sleep events published after boot."""
+        latest = await self._bus.client.xrevrange(self._HYPNOS_STREAM, count=1)
+        if not latest:
+            return "0-0"
+        entry_id = latest[0][0]
+        return entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
+
+    async def _hypnos_loop(self) -> None:
+        """Subscribe to hypnos.out to gate adaptation during sleep."""
+        try:
+            while not self._stopped.is_set():
+                try:
+                    entries, last_scanned = await self._bus.read_entries(
+                        self._HYPNOS_STREAM,
+                        last_id=self._hypnos_cursor,
+                        count=64,
+                        block_ms=0,
+                    )
+                    if last_scanned is not None:
+                        self._hypnos_cursor = last_scanned
+                        for _, event in entries:
+                            if event.type == "hypnos.sleep.started":
+                                self._in_hypnos = True
+                                if self._forward_model is not None:
+                                    self._forward_model.suspended = True
+                                if self._acoustic_forward_model is not None:
+                                    self._acoustic_forward_model.suspended = True
+                                log.debug("audition: adaptation suspended (hypnos sleep started)")
+                            elif event.type == "hypnos.sleep.completed":
+                                self._in_hypnos = False
+                                if self._forward_model is not None:
+                                    self._forward_model.suspended = False
+                                if self._acoustic_forward_model is not None:
+                                    self._acoustic_forward_model.suspended = False
+                                log.debug("audition: adaptation resumed (hypnos sleep completed)")
+                    else:
+                        await asyncio.sleep(0.05)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("audition hypnos consumer iteration failed")
+                    await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            raise
+
     async def initialize(self) -> None:
         await super().initialize()
+        # Start the sleep consumer at the stream's current tail. A literal "$"
+        # cursor never advances under a non-blocking XREAD, so the consumer
+        # would never see a sleep event.
+        self._hypnos_cursor = await self._hypnos_tail_cursor()
+        self._tasks.append(
+            asyncio.create_task(self._hypnos_loop(), name=f"{self.name}-hypnos-consumer")
+        )
         if self._live_mic is not None:
             try:
                 await self._live_mic.initialize()
@@ -468,6 +534,8 @@ class Audition(BaseModule):
             mean_energy=mean_energy,
         )
 
+        # Pause adaptation during Hypnos sleep, mirroring Topos.
+        self._forward_model.suspended = self._in_hypnos
         prediction_error = self._forward_model.step(feature_vec)
         self._prediction_errors.append(prediction_error)
         error_window = list(self._prediction_errors)
@@ -690,19 +758,66 @@ class Audition(BaseModule):
         )
 
     def serialize(self) -> dict[str, Any]:
-        return {
+        state: dict[str, Any] = {
             "stt_model": self._stt_model,
             "emotion_model_id": self._emotion_classifier.model_id,
             "forward_model": self._forward_model.state_dict(),
             "auditory_buffer_summary": self._forward_model.buffer_summary(),
         }
+        # Carry forward snapshots for any encoders that are not currently running.
+        acoustic_models = dict(self._acoustic_states_carried)
+        # Persist the running acoustic forward model, keyed by encoder model_id.
+        if (
+            self._general_audition
+            and self._acoustic_forward_model is not None
+            and self._acoustic_encoder is not None
+        ):
+            acoustic_models[self._acoustic_encoder.model_id] = {
+                "state_dict": self._acoustic_forward_model.state_dict(),
+                "buffer_summary": self._acoustic_forward_model.buffer_summary(),
+            }
+        state["acoustic_forward_models"] = acoustic_models
+        return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "forward_model" in state:
-            try:
-                self._forward_model.load_state_dict(state["forward_model"])
-            except Exception:
-                log.warning("audition: failed to restore forward model weights", exc_info=True)
+            fm_state = state["forward_model"]
+            if self._forward_model.matches_state_shape(fm_state):
+                self._forward_model.load_state_dict(fm_state)
+            else:
+                log.warning(
+                    "audition: discarding speech-path forward-model checkpoint — "
+                    "its tensor shapes do not match the running model; the online "
+                    "forward model will re-learn from scratch"
+                )
+
+        acoustic_models = state.get("acoustic_forward_models")
+        if isinstance(acoustic_models, dict):
+            running_id = (
+                self._acoustic_encoder.model_id
+                if self._general_audition and self._acoustic_encoder is not None
+                else None
+            )
+            for encoder_id, entry in acoustic_models.items():
+                if encoder_id == running_id:
+                    if self._acoustic_forward_model is None:
+                        continue
+                    if not isinstance(entry, dict) or not self._acoustic_forward_model.matches_state_shape(
+                        entry.get("state_dict", {})
+                    ):
+                        log.warning(
+                            "audition: discarding acoustic forward-model checkpoint "
+                            "for encoder %r — its tensor shapes do not match the "
+                            "running encoder embedding_dim %d; the online acoustic "
+                            "forward model will re-learn from scratch",
+                            encoder_id,
+                            self._acoustic_forward_model.feature_dim,
+                        )
+                        continue
+                    self._acoustic_forward_model.load_state_dict(entry["state_dict"])
+                else:
+                    # Carry forward snapshots for encoders that are not running now.
+                    self._acoustic_states_carried[encoder_id] = entry
 
 
 def _estimate_energy(audio_bytes: bytes) -> float:

@@ -128,19 +128,19 @@ still-unbuilt foveation Phase 3–4._
 
 ## 5. Selectable encoder and persisted forward model (amendment 2026-10-05, A1)
 
-- [ ] 5.1 `[audition].acoustic_encoder` (`spectral` default) resolved through a
+- [x] 5.1 `[audition].acoustic_encoder` (`spectral` default) resolved through a
       registry in the factory and added to its allowed keys. An unknown or
       unprovisioned encoder raises `ConfigurationError`.
-- [ ] 5.2 Plugin seam `audition.acoustic_encoder` in `INJECTABLE_SEAMS`
+- [x] 5.2 Plugin seam `audition.acoustic_encoder` in `INJECTABLE_SEAMS`
       (integrator pinged first), honoured by the factory through
       `_check_injections`. A filled seam plus a non-default
       `acoustic_encoder` is a configuration error.
-- [ ] 5.3 `serialize()`/`deserialize()` carry `acoustic_forward_models` keyed by
+- [x] 5.3 `serialize()`/`deserialize()` carry `acoustic_forward_models` keyed by
       encoder `model_id`: load on matching shapes, discard on a mismatch with a
       warning, carry other encoders' entries forward untouched.
-- [ ] 5.4 A `hypnos.out` consumer suspends adaptation of both forward models during
+- [x] 5.4 A `hypnos.out` consumer suspends adaptation of both forward models during
       sleep, as Topos does.
-- [ ] 5.5 Tests: config selection, the plugin seam (honoured, conflict, recorded),
+- [x] 5.5 Tests: config selection, the plugin seam (honoured, conflict, recorded),
       a persistence round-trip through `serialize`/`deserialize` in a fresh
       instance, the mismatch discard, encoder switch-and-back, sleep suspension
       through decoded `hypnos.out` events, and the zero-persistence test over the

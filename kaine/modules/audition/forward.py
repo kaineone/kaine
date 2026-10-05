@@ -313,6 +313,31 @@ class AuditoryForwardModel:
                     module.bias.copy_(bias)
                 layer_idx += 1
 
+    def matches_state_shape(self, state: dict[str, Any]) -> bool:
+        """Whether a ``state_dict()`` snapshot's tensor shapes fit this model.
+
+        A checkpoint sized to a different encoder ``feature_dim`` (input
+        ``2*feature_dim`` → hidden ``units`` → output ``feature_dim``) must be
+        detected BEFORE any ``copy_``, so a mismatch is discarded rather than
+        raising. Returns False on any malformed/short layer list too.
+        """
+        layers = state.get("layers")
+        if not isinstance(layers, list) or len(layers) < 2:
+            return False
+        try:
+            first_w = layers[0]["weight"]
+            last_w = layers[-1]["weight"]
+            in_units = len(first_w)
+            in_dim = len(first_w[0])
+            out_dim = len(last_w)
+        except (KeyError, TypeError, IndexError):
+            return False
+        return (
+            in_units == self._units
+            and in_dim == 2 * self._feature_dim
+            and out_dim == self._feature_dim
+        )
+
     def buffer_summary(self) -> dict[str, Any]:
         """Return a statistical descriptor of the auditory buffer.
 
