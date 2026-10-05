@@ -164,11 +164,22 @@ oscillator = [
     "scipy>=1.10",
 ]
 
-[tool.setuptools]
-packages = ["kaine", "kaine.bus", "kaine.cycle", "kaine.evaluation", "kaine.faithful", "kaine.lifecycle", "kaine.modules", "kaine.modules.audition", "kaine.modules.vox", "kaine.modules.chronos", "kaine.modules.eidolon", "kaine.modules.hypnos", "kaine.modules.lingua", "kaine.modules.mnemos", "kaine.modules.nous", "kaine.modules.phantasia", "kaine.modules.praxis", "kaine.modules.soma", "kaine.modules.thymos", "kaine.modules.topos", "kaine.nexus", "kaine.nexus.health", "kaine.workspace"]
+[tool.setuptools.packages.find]
+# Every package under kaine/ ships; a new package needs no list edit.
+include = ["kaine*"]
 
 [tool.setuptools.package-data]
-"kaine.nexus" = ["templates/*.html", "static/*.css", "static/*.js"]
+"*" = ["*.jinja"]
+"kaine.nexus" = [
+    "templates/*.html",
+    "static/*.css",
+    "static/*.js",
+    "static/fonts/*.woff2",
+    "static/fonts/OFL.txt",
+    "static/vendor/*.js",
+    "static/vendor/*.css",
+    "static/vendor/vendor/*.js",
+]
 "kaine.modules.hypnos" = ["eval_probes/*.jsonl"]
 "kaine.modules.eidolon" = ["surnames.txt"]
 
