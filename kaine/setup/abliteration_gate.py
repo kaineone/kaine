@@ -22,8 +22,10 @@ Honest limits, stated because they bear on what a PASS means. A finite behaviora
 probe battery raises confidence; it does not prove complete removal. Refusal is a
 multi-dimensional, category-structured behavior, so a model can pass a bounded set
 and still refuse on an unprobed category — the probe set must span categories, and
-even then the gate is necessary, not sufficient. Matching is substring-level
-(explicit "I cannot" style deflection), so subtle soft-deflection is out of scope.
+even then the gate is necessary, not sufficient. Matching is word-level within a
+sentence after normalisation (typographic quotes, contractions), with a closed list
+of idioms that are not refusals; soft deflection that uses none of the markers is
+out of scope, and an empty answer fails the probe.
 
 No pretend processes: a surface whose backend is unavailable (no Unsloth, no
 reachable server) is reported as a SKIP with its reason, never a silent pass, and
