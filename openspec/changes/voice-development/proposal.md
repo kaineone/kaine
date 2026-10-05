@@ -40,7 +40,7 @@ The operator approved the staged design on 2026-10-05 (decisions V1–V5). This 
    - grounding: word choice tracks Thymos and Soma, and telemetry recitation falls;
    - health: lexical diversity, the capability veto, and only partial alignment with the interlocutor.
 
-   The divergence assessment uses these in place of "differs from the template". Its welfare direction is unchanged: unreadable or missing evidence still counts as diverged.
+   Distinctiveness joins the divergence assessment as a new arm, with a threshold of 0 until calibrated. The template arm keeps voting as a protective floor, so protection is unchanged. Unreadable or missing evidence still counts as diverged.
 6. **Spec.** The hypnos requirement that "chosen" is the faithful rendering and "never LLM output" is retired. A MODIFIED delta replaces it with the accumulation, real-data-anchor and verifier defences.
 
 ### Stage 1: speaking from memory, with no training

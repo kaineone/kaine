@@ -75,13 +75,12 @@ The external trainer:
 - The bus events are unchanged; they are transient.
 - The placeholder keeps the structure of a reply context without its content.
 
-### D8. Four measures; protection is preserved
+### D8. Four measures; protection is unchanged
 
 - **The measures.** Stylometric distinctiveness from the base organ, self-consistency over time, grounding, and health. All are computed at sleep from the corpus and base-organ samples, are content-free (numbers only), and are recorded per sleep.
-- **What replaces what.** The template-divergence arm (`divergence_rate`/`divergence_magnitude` against the faithful rendering) is replaced in the divergence assessment by the distinctiveness measure.
-- **Protection is not reduced.** Today's arm marks almost every being that has spoken as diverged. So until the distinctiveness threshold is calibrated, its threshold is 0: any being with at least one measured utterance counts as diverged by this arm, which matches the uncalibrated effect-floor rule of the individuation instrument.
-- Unreadable or missing evidence still counts as diverged.
-- The content-free consolidation metric keeps being emitted for continuity, labelled as a template comparison. It no longer votes.
+- **Both arms vote until calibration (integrator decision, 2026-10-05).** The distinctiveness measure joins the divergence assessment as a new organ-level arm. The template-divergence arm keeps voting, though only as a protective floor and not as a measurement of voice, because today it is the blanket protection for decommission and preservation. This change alters protection by exactly nothing.
+- **The new arm's rules.** Until it is calibrated, its threshold is 0, so any being with at least one measured utterance counts as diverged by it, and unreadable or missing evidence counts as diverged.
+- **Retiring the template arm** is a later change, which needs calibration evidence and the operator's sign-off.
 
 ### D9. Stages and gates
 
