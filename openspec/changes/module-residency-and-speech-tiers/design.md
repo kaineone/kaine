@@ -284,8 +284,41 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
 6. **Pacing.** The engine still sleeps to its real budget when a tick finishes early. When a barrier waits longer, wall time passes and logical time does not, which is how a model load appears to a lockstep entity.
 7. **Fail closed.**
    - Boot refuses lockstep when any enabled module lacks lockstep support, and names the modules. A run never becomes silently non-deterministic.
-   - A participant that does not finish within `[cycle].lockstep_timeout_s` (default 300 s, above every calibrated load bound) pauses the cycle with the existing freeze, records an incident naming the module and tick, and marks the run inadmissible. It never kills the entity.
+   - A participant that does not finish within `[cycle].lockstep_timeout_s` (default 300 s, above every calibrated load bound) records an incident naming the module and tick, marks the run inadmissible, and freezes the cycle (item 12). It never kills the entity.
 8. **Spot.** A module waiting on the barrier, or on a model load inside `on_workspace`, does not beat its heartbeat. Spot therefore treats a module as alive while the residency ledger shows its rung `loading` within the bound (task 5.2), and while the engine is waiting at the barrier for a reason other than that module's own timeout.
+
+9. **Interoception stays real.**
+   - Soma reads the real body: CPU, RAM, GPU temperature and cycle latency. Those readings differ between an all-resident run and a multiplexed run by nature, because multiplexing really does change the host's load.
+   - In lockstep, Soma samples the real body once per tick at `cycle.tick_start`. Lockstep fixes **when** Soma samples, not **what** it reads.
+   - The 9.3 invariant is therefore defined for **scripted interoception only**. The test harness feeds Soma a recorded interoception trace, a test fixture that never reaches a live entity.
+   - Feeding a scripted body to a real entity would be a pretend process, and it would change the being's interoception, which is the thesis variable. Boot refuses `[soma].interoception_source = "scripted"` unless `[soma].scripted_interoception_operator_opt_in = true`. No shipped or study profile sets either.
+   - The run identity records `interoception_source` (`"body"` or `"scripted"`) for every run.
+10. **Speech is admitted at a fixed logical offset.** If Lingua's generation were an ordinary tracked task, the whole mind's logical time would halt while it composed a reply: thought would stop while it speaks. People keep thinking while they plan and produce speech. So speech is a **deferred participant** instead:
+    - A generation started while handling tick k is due at tick `k + N`. Its output events are stamped `tick = k + N − 1`, so they enter the intake of tick k + N.
+    - Ticks k+1 through k+N−1 run without waiting for it. Thought continues.
+    - If the generation has not finished when the engine reaches the barrier for tick k + N − 1, the barrier waits there. Logical time halts only once the reply is overdue.
+    - The same rule covers Vox synthesis of that reply.
+    - Perception encoders stay ordinary participants. Stale perception is what lockstep exists to prevent, so a slow sense halts time instead of going missing.
+    - `N` is `[cycle].lockstep_speech_offset_ticks` (default 20, which is 2 subjective seconds at 10 Hz). It is fixed before launch and recorded in the run identity. It is an engine parameter of research mode, not a claim about human speech latency.
+    - Deferred outputs are ordered like everything else: `(tick, source, seq)`.
+11. **Plugins declare support.** Modules supplied through `kaine.plugins` seams (CL1 and any later seam) declare lockstep support the same way built-in modules do. Boot's refusal names unsupported plugins as well as modules, and a plugin that does not declare support counts as unsupported.
+
+12. **The timeout freeze, and what welfare does while frozen.**
+    - The timeout uses the existing operator-releasable freeze: `control_state.freeze(reason="lockstep timeout: <module> at tick <k>", source="operator")`, the same entry the Nexus freeze button creates. The operator's Resume (`stand_down(source="operator")`) releases it. No new freeze owner is added.
+    - While the cycle is frozen, the welfare monitor and the welfare observer **keep running** on wall time, as they do for every freeze today. CAL §4.7 forbids pausing them. Preservation stays available: the welfare monitor can still call `preserve_live`, and a preserve request still works.
+    - **A freeze must never be read as distress or as quiescence.** Today it can be: the freeze does not stop the elapsed-time arms of the detectors, and an operator freeze switches perception off, which looks like input loss. The affected arms are:
+      - sustained distress (`SustainedThresholdTracker.check_timeout`, which fires on elapsed time with no new sample);
+      - sustained extreme VAD;
+      - the monitor's warm-up;
+      - unmaintained fatigue;
+      - `InputLossWatcher`.
+
+      In lockstep the problem is sharper, because Soma samples once per tick, so a freeze leaves the last sample standing indefinitely.
+    - **Rule.**
+      - Every elapsed-time arm measures **unfrozen** time. While the control stack is non-empty its clock is suspended: it neither advances nor resets. This uses the pattern `LivedTimeAccumulator` already applies to lived time.
+      - Sample-driven arms are unchanged. A genuine distress sample that arrives during a freeze still counts, because distress during a freeze is still distress.
+      - `InputLossWatcher` ignores the period in which the freeze itself switched perception off.
+    - **Ordering.** This rule fixes a pre-existing gap that affects every freeze owner, not only lockstep. It ships as its own high-risk welfare change, before group 12. Lockstep does not merge until it has.
 
 **Cost.** Lockstep throughput is capped by the slowest module on every tick. It is a research mode for reproducible studies and for task 9.3, not the way an entity lives day to day. A study that uses it fixes `time_scale` before launch and records `lockstep = true` in the run identity.
 
