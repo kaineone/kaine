@@ -82,8 +82,13 @@ def test_cross_engine_learned_state_interchange() -> None:
     from kaine.modules.nous.engine import PymdpEngine
 
     model = build_generative_model()
-    numpy_engine = NumpyActiveInferenceEngine(model)
-    pymdp_engine = PymdpEngine(model)
+    # This compares the engines' learning, not their planning deadline. At the
+    # default 250 ms, a step slowed by parallel load (JAX compiles on first use)
+    # times out, keeps the last posterior and skips learning, so the two engines
+    # diverge for a reason unrelated to interchange.
+    no_deadline_ms = 60_000.0
+    numpy_engine = NumpyActiveInferenceEngine(model, efe_timeout_ms=no_deadline_ms)
+    pymdp_engine = PymdpEngine(model, efe_timeout_ms=no_deadline_ms)
 
     sequence = [
         [0, 1, 2, 3],
@@ -91,8 +96,8 @@ def test_cross_engine_learned_state_interchange() -> None:
         [0, 1, 1, 3],
     ]
     for obs in sequence:
-        numpy_engine.infer(obs)
-        pymdp_engine.infer(obs)
+        assert not numpy_engine.infer(obs).timed_out
+        assert not pymdp_engine.infer(obs).timed_out
 
     # NumPy -> pymdp
     state = numpy_engine.learned_state()
@@ -106,7 +111,7 @@ def test_cross_engine_learned_state_interchange() -> None:
 
     # pymdp -> NumPy
     state2 = pymdp_engine.learned_state()
-    numpy_engine2 = NumpyActiveInferenceEngine(model)
+    numpy_engine2 = NumpyActiveInferenceEngine(model, efe_timeout_ms=no_deadline_ms)
     assert numpy_engine2.load_learned_state(state2)
 
     r_numpy2 = numpy_engine2.infer(probe_obs)

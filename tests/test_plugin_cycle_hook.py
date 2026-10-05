@@ -226,13 +226,16 @@ async def test_no_observer_publishes_identical_events():
         await cycle1.tick()
         await cycle2.tick()
 
-    entries1 = await bus1.read("cycle.tick", last_id="0")
-    entries2 = await bus2.read("cycle.tick", last_id="0")
-    payloads1 = [event.payload for _, event in entries1]
-    payloads2 = [event.payload for _, event in entries2]
+    # The bus routes by source: tick events land on cycle.out, typed cycle.tick.
+    entries1 = await bus1.read("cycle.out", last_id="0")
+    entries2 = await bus2.read("cycle.out", last_id="0")
+    payloads1 = [event.payload for _, event in entries1 if event.type == "cycle.tick"]
+    payloads2 = [event.payload for _, event in entries2 if event.type == "cycle.tick"]
 
     await bus1.close()
     await bus2.close()
+
+    assert len(payloads1) == 3, "the comparison must cover every published tick"
 
     assert payloads1 == payloads2
 
