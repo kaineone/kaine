@@ -229,6 +229,7 @@ def _fake_trainer_class(*, hot_swap_ok: bool):
 def test_main_fails_when_hot_swap_failed(monkeypatch, capsys):
     mod = _load_test_lora()
 
+    monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")
     monkeypatch.setattr(mod, "load_kaine_config", lambda _config, _operator: _kaine_config_for_main())
     monkeypatch.setattr(
         mod,
@@ -248,6 +249,7 @@ def test_main_fails_when_hot_swap_failed(monkeypatch, capsys):
 def test_main_succeeds(monkeypatch, capsys):
     mod = _load_test_lora()
 
+    monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")
     monkeypatch.setattr(mod, "load_kaine_config", lambda _config, _operator: _kaine_config_for_main())
     monkeypatch.setattr(
         mod,
@@ -287,6 +289,7 @@ async def _async_return(value):
 def test_main_fails_when_active_adapter_is_not_ours(monkeypatch, capsys):
     mod = _load_test_lora()
 
+    monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")
     monkeypatch.setattr(mod, "load_kaine_config", lambda _config, _operator: _kaine_config_for_main())
     monkeypatch.setattr(
         mod,
@@ -315,6 +318,25 @@ def test_main_fails_when_active_adapter_is_not_ours(monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is False
     assert out["reason"] == "the organ's active adapter is not the one this run trained"
+
+
+def test_main_refuses_without_operator_approval(monkeypatch, capsys):
+    mod = _load_test_lora()
+
+    monkeypatch.delenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", raising=False)
+    monkeypatch.setattr(
+        mod,
+        "_resolve_job_queue_trainer",
+        lambda cfg, kc: (_ for _ in ()).throw(AssertionError("trainer must not be built")),
+    )
+    monkeypatch.setattr(mod, "load_kaine_config", lambda _config, _operator: _kaine_config_for_main())
+
+    rc = mod.main(["--config", "x.toml", "--operator-config", "y.toml"])
+    assert rc == 2
+
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False
+    assert "operator approval not granted" in out["reason"]
 
 
 def test_chosen_answers_are_on_topic():

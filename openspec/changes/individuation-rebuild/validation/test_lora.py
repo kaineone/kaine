@@ -39,7 +39,7 @@ from kaine.modules.hypnos.organ_adapter import (
     organ_root_url,
     read_manifest,
 )
-from kaine.modules.hypnos.voice_alignment import DPOPair
+from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPair, operator_approved
 
 PAIRS_TEXT: list[tuple[str, str]] = [
     (
@@ -345,6 +345,10 @@ async def resolve_lora_field(
 
 
 async def _main_async(args: argparse.Namespace) -> int:
+    if not operator_approved():
+        print(json.dumps({"ok": False, "reason": f"operator approval not granted (set {OPERATOR_APPROVED_ENV}=1)"}))
+        return 2
+
     operator_path = Path(args.operator_config) if args.operator_config else OPERATOR_CONFIG_PATH
     kaine_config = load_kaine_config(Path(args.config), operator_path)
 
