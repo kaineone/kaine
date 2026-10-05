@@ -41,7 +41,15 @@ from pathlib import Path
 from typing import Any
 
 from kaine.lifecycle import preservation as _preservation
+from kaine.lifecycle.identity import (
+    EntityIdentity,
+    IdentityError,
+    check_sidecar_agrees,
+    identity_of_snapshot,
+    legacy_identity,
+)
 from kaine.lifecycle.preservation import read_bundle_stage
+from kaine.lifecycle.snapshot import ForkSnapshot
 from kaine.lifecycle.stage import StageState, write_stage
 from kaine.storage import resolve
 
@@ -59,6 +67,10 @@ class RevivePlan:
     bundle: Path
     preservation_id: str | None
     stage: dict | None
+    # The being this bundle revives (entity-identity): the snapshot's own
+    # identity, else the manifest's, else the deterministic legacy identity of
+    # a bundle written before identities existed. Never freshly minted.
+    identity: EntityIdentity
 
 
 def prepare_revive(bundle: str | Path) -> RevivePlan:
@@ -112,11 +124,56 @@ def prepare_revive(bundle: str | Path) -> RevivePlan:
                 f"bundle stage is invalid: {type(exc).__name__}: {exc}"
             ) from exc
 
+    identity = _plan_identity(bundle, members, preservation_id)
+
     return RevivePlan(
         bundle=bundle,
         preservation_id=preservation_id,
         stage=stage,
+        identity=identity,
     )
+
+
+def _plan_identity(
+    bundle: Path, members: dict, preservation_id: str | None
+) -> EntityIdentity:
+    """The identity a revive of ``bundle`` restores.
+
+    The snapshot's identity (inside the possibly encrypted bundle) must agree
+    with the plaintext manifest's. The snapshot's full identity wins; a bundle
+    with only a manifest identity carries that ID; a bundle with neither, written
+    before identities existed, gets ``legacy_identity("bundle:<preservation_id>")``.
+    Raises :class:`ReviveRefused` before anything is written.
+    """
+    try:
+        snap = ForkSnapshot.from_dict(json.loads(members["snapshot.json"]))
+        snap_identity = identity_of_snapshot(snap)
+        manifest_identity = _preservation._manifest_identity(bundle)
+        check_sidecar_agrees(manifest_identity, snap_identity)
+    except (IdentityError, ValueError) as exc:
+        raise ReviveRefused(f"bundle identity is unreadable or inconsistent: {exc}") from exc
+    if snap_identity is not None:
+        return snap_identity
+    if manifest_identity is not None:
+        entity_id, lineage = manifest_identity
+        legacy = entity_id.startswith("legacy-")
+        if legacy and not preservation_id:
+            raise ReviveRefused("bundle has a legacy identity but no preservation_id")
+        try:
+            return EntityIdentity(
+                entity_id=entity_id,
+                lineage=lineage,
+                origin="legacy" if legacy else "minted",
+                legacy_source=f"manifest:{preservation_id}" if legacy else None,
+            )
+        except IdentityError as exc:
+            raise ReviveRefused(f"bundle identity is malformed: {exc}") from exc
+    if not preservation_id:
+        raise ReviveRefused(
+            "bundle has no identity and no preservation_id; cannot derive a "
+            "deterministic identity"
+        )
+    return legacy_identity(f"bundle:{preservation_id}")
 
 
 async def revive_into(plan: RevivePlan, registry: Any) -> list[str]:

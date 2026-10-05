@@ -16,6 +16,15 @@ if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult
 
 from kaine.lifecycle._merge_base import AdapterMerger, FakeAdapterMerger
+from kaine.lifecycle.identity import (
+    EntityIdentity,
+    check_sidecar_agrees,
+    fork_identity,
+    identity_of_snapshot,
+    mint_identity,
+    read_identity_sidecar,
+    write_identity_sidecar,
+)
 from kaine.lifecycle.snapshot import (
     ARTIFACTS_DIRNAME,
     ForkSnapshot,
@@ -100,6 +109,7 @@ class ForkManager:
         strategies: dict[str, MergeStrategy] | None = None,
         default_strategy: MergeStrategy | None = None,
         adapter_merger: AdapterMerger | None = None,
+        identity_source: Callable[[], EntityIdentity | None] | None = None,
     ) -> None:
         self._root = Path(root)
         self._root.mkdir(parents=True, exist_ok=True)
@@ -114,10 +124,22 @@ class ForkManager:
         # `merger_from_name` from `[lifecycle]` config (or pass one directly)
         # override this.
         self._adapter_merger: AdapterMerger = adapter_merger or merger_from_name("auto")
+        # Reads the running being's identity (entity-identity D11). None means
+        # snapshots carry no identity, as for tools and tests.
+        self._identity_source = identity_source
 
     @property
     def root(self) -> Path:
         return self._root
+
+    def _write_sidecar_or_discard(self, snapshot_id: str, identity: EntityIdentity) -> None:
+        """Write the plaintext identity sidecar; a snapshot that cannot carry one
+        is removed rather than left behind unattributable."""
+        try:
+            write_identity_sidecar(snapshot_dir(self._root, snapshot_id), identity)
+        except Exception:
+            shutil.rmtree(snapshot_dir(self._root, snapshot_id), ignore_errors=True)
+            raise
 
     def snapshot(
         self,
@@ -128,6 +150,10 @@ class ForkManager:
         parent_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ForkSnapshot:
+        identity: EntityIdentity | None = None
+        if self._identity_source is not None:
+            identity = self._identity_source()
+
         modules: dict[str, dict[str, Any]] = {}
         for module in registry.all_modules():
             try:
@@ -135,13 +161,16 @@ class ForkManager:
             except Exception as exc:
                 log.warning("module %s serialize failed: %s", module.name, exc)
                 modules[module.name] = {"_serialize_error": str(exc)}
+        snap_meta = dict(metadata or {})
+        if identity is not None:
+            snap_meta["identity"] = identity.to_dict()
         snap = ForkSnapshot(
             parent_id=parent_id,
             label=label,
             timestamp=time.time(),
             modules=modules,
             adapters=list(adapters or []),
-            metadata=dict(metadata or {}),
+            metadata=snap_meta,
         )
         records: dict[str, Any] = {}
         for module in registry.all_modules():
@@ -174,6 +203,8 @@ class ForkManager:
         except Exception:
             shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
             raise
+        if identity is not None:
+            self._write_sidecar_or_discard(snap.id, identity)
         return snap
 
     def restore(self, snapshot_id: str, registry: _RegistryLike) -> ForkSnapshot:
@@ -201,19 +232,39 @@ class ForkManager:
         metadata: dict[str, Any] | None = None,
     ) -> ForkSnapshot:
         parent = load_snapshot(self._root, parent_id)
+        parent_identity = identity_of_snapshot(parent)
+        if parent_identity is not None:
+            check_sidecar_agrees(
+                read_identity_sidecar(snapshot_dir(self._root, parent.id)),
+                parent_identity,
+            )
+
+        if parent_identity is not None:
+            child_identity = fork_identity(parent_identity)
+        else:
+            child_identity = mint_identity()
+
         shed_set = set(shed)
         modules = {
             name: copy.deepcopy(state)
             for name, state in parent.modules.items()
             if name not in shed_set
         }
+        child_meta = {
+            **parent.metadata,
+            **(metadata or {}),
+            "shed": sorted(shed_set),
+        }
+        child_meta["identity"] = child_identity.to_dict()
+        if parent_identity is None:
+            child_meta["forked_from_unidentified"] = parent.id
         child = ForkSnapshot(
             parent_id=parent.id,
             label=label,
             timestamp=time.time(),
             modules=modules,
             adapters=list(parent.adapters),
-            metadata={**parent.metadata, **(metadata or {}), "shed": sorted(shed_set)},
+            metadata=child_meta,
         )
         parent_artifacts_root = snapshot_dir(self._root, parent.id) / ARTIFACTS_DIRNAME
         copied_names: list[str] = []
@@ -240,6 +291,7 @@ class ForkManager:
                 metadata={**child.metadata, "artifacts_from_parent": sorted(copied_names)},
             )
         save_snapshot(self._root, child)
+        self._write_sidecar_or_discard(child.id, child_identity)
         return child
 
     def merge(
@@ -257,6 +309,19 @@ class ForkManager:
             raise ValueError("world_model_from must be 'a', 'b', or None")
         snap_a = load_snapshot(self._root, snapshot_a_id)
         snap_b = load_snapshot(self._root, snapshot_b_id)
+        a_identity = identity_of_snapshot(snap_a)
+        b_identity = identity_of_snapshot(snap_b)
+        if a_identity is not None:
+            check_sidecar_agrees(
+                read_identity_sidecar(snapshot_dir(self._root, snap_a.id)),
+                a_identity,
+            )
+        if b_identity is not None:
+            check_sidecar_agrees(
+                read_identity_sidecar(snapshot_dir(self._root, snap_b.id)),
+                b_identity,
+            )
+
         a_ph_dir = artifacts_dir(self._root, snap_a.id, "phantasia")
         b_ph_dir = artifacts_dir(self._root, snap_b.id, "phantasia")
         a_has = a_ph_dir.is_dir() and not a_ph_dir.is_symlink()
@@ -336,6 +401,11 @@ class ForkManager:
             **adapter_meta,
             **(metadata or {}),
         }
+        if a_identity is not None:
+            combined_meta["identity"] = a_identity.to_dict()
+            if b_identity is not None:
+                combined_meta["merged_from_entity"] = b_identity.entity_id
+
         merged = ForkSnapshot(
             parent_id=f"{snap_a.id}+{snap_b.id}",
             label=label,
@@ -377,6 +447,8 @@ class ForkManager:
                 metadata={**merged.metadata, "artifact_sources": sources},
             )
         save_snapshot(self._root, merged)
+        if a_identity is not None:
+            self._write_sidecar_or_discard(merged.id, a_identity)
         return merged
 
     async def preserve_live(
@@ -400,6 +472,7 @@ class ForkManager:
         """
         from kaine.lifecycle.preservation import preserve_live as _preserve_live
 
+        identity = self._identity_source() if self._identity_source else None
         return await _preserve_live(
             registry,
             fork_root=self._root,
@@ -408,6 +481,7 @@ class ForkManager:
             reason=reason,
             label=label,
             require_encryption=require_encryption,
+            identity=identity,
         )
 
     async def revive(self, bundle: Path | str, registry: _RegistryLike) -> ForkSnapshot:

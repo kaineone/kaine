@@ -38,7 +38,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from kaine.storage import resolve
 
@@ -425,14 +425,17 @@ def resolve_spawn_identity(
 
 
 def has_prior_lived_history_in_lineage(
-    identity: EntityIdentity | None, state_root: Path | str = "state"
+    identity: EntityIdentity | None,
+    state_root: Path | str = "state",
+    bundle_roots: Iterable[Path | str] = (),
 ) -> bool:
     """Return whether this tree holds prior lived history for ``identity``'s lineage.
 
     ``None`` counts as lived (unknown lineage). Otherwise, the query reads only
-    plaintext metadata: fork sidecars and preservation manifests. Records without
-    an identity, or unreadable/broken foreign records, are skipped with a warning.
-    This function never raises because of a foreign or broken record.
+    plaintext metadata: fork sidecars, preservation manifests, and any
+    configured bundle-root manifests. Records without an identity, or
+    unreadable/broken foreign records, are skipped with a warning. This function
+    never raises because of a foreign or broken record.
     """
     if identity is None:
         return True
@@ -467,33 +470,32 @@ def has_prior_lived_history_in_lineage(
     except OSError as exc:
         log.warning("Cannot enumerate fork snapshots under %s: %s", forks_root, exc)
 
-    preservation_root = root / "preservation"
-    try:
-        if preservation_root.is_dir():
-            for entry in preservation_root.iterdir():
-                manifest_path = entry / "manifest.json"
-                try:
-                    if not manifest_path.is_file():
-                        continue
-                    raw = json.loads(manifest_path.read_text())
-                    if not isinstance(raw, dict):
-                        continue
-                    identity_obj = raw.get("identity")
-                    if not isinstance(identity_obj, dict):
-                        continue
-                    record_id = identity_obj.get("entity_id")
-                    if not isinstance(record_id, str):
-                        continue
-                    if record_id in target_ids:
-                        return True
-                except (OSError, json.JSONDecodeError) as exc:
-                    log.warning(
-                        "Skipping unreadable preservation manifest %s: %s",
-                        manifest_path,
-                        exc,
-                    )
+    # Preservation bundles: the legacy in-tree location plus every configured
+    # bundle root (preservation out_roots default to ``backups/``).
+    for bundle_root in [root / "preservation", *(resolve(r) for r in bundle_roots)]:
+        try:
+            if not bundle_root.is_dir():
+                continue
+            entries = list(bundle_root.iterdir())
+        except OSError as exc:
+            log.warning("Cannot enumerate preservation bundles under %s: %s", bundle_root, exc)
+            continue
+        for entry in entries:
+            manifest_path = entry / "manifest.json"
+            try:
+                if not manifest_path.is_file():
                     continue
-    except OSError as exc:
-        log.warning("Cannot enumerate preservation bundles under %s: %s", preservation_root, exc)
+                raw = json.loads(manifest_path.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                log.warning("Skipping unreadable preservation manifest %s: %s", manifest_path, exc)
+                continue
+            if not isinstance(raw, dict):
+                continue
+            identity_obj = raw.get("identity")
+            if not isinstance(identity_obj, dict):
+                continue
+            record_id = identity_obj.get("entity_id")
+            if isinstance(record_id, str) and record_id in target_ids:
+                return True
 
     return False
