@@ -29,11 +29,16 @@ class DomainFit:
     budget_bytes: int | None
     need_bytes: int
     status: str
+    # How far the whole set is from co-residing (need - budget); 0 when it
+    # co-resides.
     shortfall_bytes: int
     pinned: str | None
     multiplexed: tuple[str, ...]
     rungs: dict[str, str]
     feel: str
+    # For "does-not-fit": how far the largest single organ is from fitting on
+    # its own (largest - budget). 0 otherwise.
+    single_shortfall_bytes: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +51,7 @@ class DomainFit:
             "multiplexed": list(self.multiplexed),
             "rungs": dict(self.rungs),
             "feel": self.feel,
+            "single_shortfall_bytes": self.single_shortfall_bytes,
         }
 
 
@@ -238,9 +244,10 @@ def fit_report(
             )
         else:
             status = "does-not-fit"
+            single_shortfall = largest - budget_bytes
             feel = (
                 "even one at a time this domain is short by "
-                f"{_fmt_gib(largest - budget_bytes)} GiB"
+                f"{_fmt_gib(single_shortfall)} GiB"
             )
 
         domain_fits.append(
@@ -254,6 +261,9 @@ def fit_report(
                 multiplexed=tuple(multiplexed),
                 rungs=rungs,
                 feel=feel,
+                single_shortfall_bytes=(
+                    largest - budget_bytes if status == "does-not-fit" else 0
+                ),
             )
         )
 

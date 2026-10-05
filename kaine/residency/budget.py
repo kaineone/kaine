@@ -208,10 +208,15 @@ def derive_budgets(
 
     # Available: pool.available, clamped by cgroup headroom
     available = physical_available
-    if available is not None and cgroup.limit_bytes is not None and cgroup.usage_bytes is not None:
-        available = min(available, cgroup.limit_bytes - cgroup.usage_bytes)
-    elif available is None and cgroup.limit_bytes is not None and cgroup.usage_bytes is not None:
-        available = cgroup.limit_bytes - cgroup.usage_bytes
+    if cgroup.limit_bytes is not None:
+        # With usage known, headroom is limit - usage; with usage unknown, the
+        # limit itself is still an upper bound on what this process can use.
+        cap = (
+            cgroup.limit_bytes - cgroup.usage_bytes
+            if cgroup.usage_bytes is not None
+            else cgroup.limit_bytes
+        )
+        available = cap if available is None else min(available, cap)
 
     budget = None if available is None else max(0, available - system_reserve)
 
@@ -293,7 +298,9 @@ def current_budgets(*, reserve_bytes: int | None = None) -> tuple[Domain, ...]:
     accelerators: list[tuple[str, MemoryClassification]] = []
     try:
         import torch  # type: ignore[import]
-    except Exception:
+    except Exception as exc:
+        # Torch-free hosts are supported: budget on system memory only.
+        logger.debug("no torch (%s); no accelerator domains", type(exc).__name__)
         torch = None  # type: ignore[misc]
 
     if torch is not None and torch.cuda.is_available():

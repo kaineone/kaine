@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+from kaine.hostmem import Pool
 from kaine.residency.budget import Domain
 from kaine.residency.fit import Need, fit_report
 
@@ -213,6 +214,15 @@ def test_does_not_fit_reports_largest_single_shortfall():
     )
     fit = fit_report((budget,), needs).domains[0]
     assert fit.status == "does-not-fit"
-    assert fit.shortfall_bytes == 2 * GIB
+    assert fit.shortfall_bytes == 2 * GIB  # the whole set: 6 GiB needed, 4 GiB budget
+    assert fit.single_shortfall_bytes == 1 * GIB  # the largest organ alone: 5 - 4
     assert "short by 1.00 GiB" in fit.feel
+
+
+def test_cgroup_limit_without_usage_still_caps_available():
+    pool = Pool(kind="system", total_bytes=64 * GIB, available_bytes=40 * GIB, provenance="t", unknown_reason=None)
+    from kaine.residency.budget import CgroupMemory, derive_budgets
+
+    domains = derive_budgets(system_pool=pool, cgroup=CgroupMemory(8 * GIB, None, "t"))
+    assert domains[0].available_bytes == 8 * GIB
 
