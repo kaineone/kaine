@@ -50,3 +50,21 @@ The lineage-scoped history query SHALL report prior lived history when any fork 
 #### Scenario: Unknown identity
 - **WHEN** the query is asked about a being with no determinable identity
 - **THEN** it reports prior history
+
+### Requirement: The identity is readable without decryption
+Every encrypted container of a being's state SHALL have a plaintext identity record beside it holding the being's `entity_id` and `lineage`: a fork snapshot's `identity.json`, a preservation bundle's and a decommission backup's `manifest.json`, and a forked-being job's payload. Reading it SHALL NOT require decryption. When the container is opened, the in-container identity SHALL agree with the plaintext record, or loading SHALL fail.
+
+#### Scenario: Sidecar without decryption
+- **WHEN** a being's fork snapshot is saved with state encryption enabled
+- **THEN** its directory holds a plaintext `identity.json` with the being's `entity_id` and `lineage`
+
+#### Scenario: Disagreement fails
+- **WHEN** a snapshot's plaintext identity record names a different `entity_id` from the identity inside the snapshot
+- **THEN** loading raises an identity error
+
+### Requirement: The identity format and legacy derivation are frozen
+An `entity_id` SHALL be `ent-` or `legacy-` followed by 32 lowercase hexadecimal characters. A legacy ID SHALL be `legacy-` followed by the first 32 hexadecimal characters of the SHA-256 of its UTF-8 source string. The sources SHALL be `bundle:<preservation_id>`, and `forks:` followed by the SHA-256 hex of the newline-joined, sorted snapshot IDs of the tree.
+
+#### Scenario: Golden value
+- **WHEN** the legacy identity of source `bundle:abc` is derived
+- **THEN** its `entity_id` is `legacy-` followed by the first 32 hex characters of SHA-256 of `bundle:abc`

@@ -22,7 +22,9 @@ def save_identity(identity: EntityIdentity, path: Path = IDENTITY_PATH) -> None 
 def mint_identity() -> EntityIdentity                                   # new root identity; pure
 def fork_identity(parent: EntityIdentity) -> EntityIdentity              # new id, lineage = parent.lineage + (parent.entity_id,)
 def legacy_identity(source: str) -> EntityIdentity                       # deterministic: same source -> same entity_id
-def identity_of_snapshot(snap: ForkSnapshot) -> EntityIdentity | None    # reads snap.metadata["identity"]
+def identity_of_snapshot(snap: ForkSnapshot) -> EntityIdentity | None    # reads snap.metadata["identity"] (after decryption)
+def write_identity_sidecar(container_dir: Path, identity: EntityIdentity) -> None  # plaintext identity.json beside an encrypted container
+def read_identity_sidecar(container_dir: Path) -> EntityIdentity | None             # no decryption; IdentityError when unreadable
 def resolve_spawn_identity(state_root, *, prior_lived: bool) -> EntityIdentity
     # file present -> it; absent + not prior_lived -> mint + save;
     # absent + prior_lived -> legacy_identity("forks:<digest of this tree's snapshot ids>") + save
@@ -60,3 +62,32 @@ The query reads snapshot metadata and bundle manifests, and never decrypts entit
 ### D6. Merges
 
 A merged snapshot keeps the target being's identity, the parent in `merge(parent_id, fork_id)`. The merged-in fork's ID is appended to its lineage record as `merged_from` in the metadata, not as an ancestor.
+
+### D7. Plaintext sidecars beside every encrypted container (agreed with key custody)
+
+Key custody must learn which being's key opens a container *before* decrypting it, so the identity inside an encrypted snapshot cannot be the only copy. Every encrypted container gets a plaintext sidecar holding `entity_id` and `lineage` only:
+- fork snapshots: `state/forks/<snapshot_id>/identity.json`;
+- preservation bundles: the plaintext `manifest.json` gains an `identity` object;
+- decommission backups: their plaintext `manifest.json` gains the same object;
+- forked-being batch jobs: the job payload carries the fork's identity next to `fork_snapshot_id`.
+
+The metadata inside the snapshot still records the identity. On load, the two must agree; a mismatch is an `IdentityError`. Custody additionally binds `entity_id` as AEAD associated data, so a swapped sidecar fails closed.
+
+### D8. Frozen formats
+
+The string format (`ent-`/`legacy-` plus 32 lowercase hex) and the legacy derivation are frozen, because custody uses the ID in ciphertext bindings and key-file names.
+- **The derivation:** `"legacy-" + sha256(source.encode("utf-8")).hexdigest()[:32]`.
+- **The sources:** `bundle:<preservation_id>` and `forks:<sha256 of the newline-joined sorted snapshot ids>`.
+
+A change to either needs a migration change of its own.
+
+### D9. What this change touches in the lifecycle code
+
+- `ForkManager.snapshot`, `ForkManager.fork` and `ForkManager.merge` gain identity metadata and the sidecar.
+- `preserve_live` and `revive` gain identity metadata and restore it.
+- `capture_backup` adds the identity to its manifest.
+- `fork_being` job payloads add the identity.
+
+Artifact copying in `fork()` is unchanged. Re-encrypting a fork's artifacts under the child's key belongs to `entity-key-custody`.
+
+Custody keeps its own metadata in its own files, keyed by `entity_id`. `entity.json` never holds custody fields.
