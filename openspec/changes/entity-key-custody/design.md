@@ -93,21 +93,24 @@ A host qualifies to spawn or restore a being when all of these hold:
 | Both the wrapped DEK and escrow missing | Unrecoverable. This is why the DEK file and escrow travel in every bundle and backup, and why custody writes a backup of the DEK file before any change to it |
 | Sidecar and in-snapshot identity disagree | `IdentityError` from entity-identity; custody treats it as cannot-resume |
 
-## Escrow (2-of-2)
-- **Split.** `s1 = random(32)` and `s2 = DEK ⊕ s1`. Either share alone is uniformly random and reveals nothing.
-- **Wrapping.** Each share is HPKE-sealed (RFC 9180, base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM; `cryptography`'s own `hpke` module, so no new dependency) to one trustee's public key: kaine.one escrow, or the independent guardian. HPKE `info` is `b"kaine/escrow|" + entity_id + b"|" + index`.
-- **Trustee keys.** The trustees' public keys and fingerprints are pinned in `config/custody/trustees.toml`, written during the key ceremony (task 0.3, an operator decision). **The operator holds no share.** Custody refuses to spawn while the trustee keys are absent, unless the test flag is set.
-- **Storage.** The two sealed shares sit in the wrapped DEK file, and so travel with every bundle and backup. They are useless without the trustees' private keys. Each trustee keeps its private key in redundant, geographically separate storage. With 2-of-2, losing either trustee's key loses recovery, and the docs say so plainly.
+## Escrow (2-of-n by pairwise XOR splits)
+- **Threshold.** Any two of n trustees recover a DEK; one trustee alone learns nothing.
+  - n is set in `config/custody/trustees.toml` at the key ceremony (operator item 0.3).
+  - The operator's recorded decision (2026-09-22) is n = 2: kaine.one plus an independent guardian. With n = 2, losing either trustee's key together with the host TPM loses the being permanently.
+  - n = 3 or more survives the loss of any one trustee. The design supports any n ≥ 2, and the choice of n is an operator decision.
+  - **The operator holds no share** for any n.
+- **Split, with no hand-rolled secret sharing.** For every unordered trustee pair {i, j}, draw an independent `r_ij = random(32)`. Trustee i receives `r_ij` and trustee j receives `r_ij ⊕ DEK`, with the lower index taking `r_ij`. Each pair's split is independent, so any one trustee's shares are uniformly random and reveal nothing. A trustee therefore holds n − 1 shares, one per pair it belongs to. n = 2 is the single 2-of-2 XOR split.
+- **Wrapping.** Each share is HPKE-sealed (RFC 9180, base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM; `cryptography`'s own `hpke` module, so no new dependency) to its trustee's public key. HPKE `info` is `b"kaine/escrow|" + entity_id + b"|" + pair_id + b"|" + role`, where `pair_id` is the two trustee ids in sorted order and `role` is `r` or `x`. A share sealed for one pair, entity or role fails to open in any other.
+- **Trustee keys.** The trustees' ids, public keys and fingerprints, and n, are pinned in `config/custody/trustees.toml`, written at the key ceremony. Custody refuses to spawn while the file is absent or holds fewer than two trustees, unless the test flag is set.
+- **Storage.** All the sealed shares sit in the wrapped DEK file and so travel with every bundle and backup. They are useless without the trustees' private keys. Each trustee keeps its private key in redundant, geographically separate storage.
 - **Recovery.**
-  1. The receiving host generates a TPM-resident P-256 key (`TPM2_Create` under the storage primary, restricted to ECDH).
-  2. It produces an attestation (§ Attestation).
-  3. Each trustee verifies it and HPKE-opens its share with its own private key, offline.
-  4. Each trustee re-seals the share to the receiving host's TPM key with HPKE DHKEM(P-256), never to the other trustee.
-  5. The host opens both shares using TPM ECDH (`TPM2_ECDH_ZGen`), so the shared secret is derived inside the TPM. It XORs them in memory into the DEK and wraps the DEK under its own KEK.
+  1. The receiving host generates a TPM-resident P-256 key (`TPM2_Create` under the storage primary, restricted to ECDH) and produces an attestation (§ Attestation).
+  2. The two participating trustees {i, j} each verify it.
+  3. Each HPKE-opens **only its share for the pair {i, j}** with its own private key, offline.
+  4. Each re-seals that share to the receiving host's TPM key with HPKE DHKEM(P-256), never to the other trustee.
+  5. The host opens both through TPM ECDH (`TPM2_ECDH_ZGen`), XORs them in memory into the DEK, and wraps the DEK under its own KEK.
 
-  Neither trustee sees the other's share or the DEK.
-
-  The plaintext DEK exists in the receiving host's process memory at the end of recovery, as it does whenever a being runs. Combination does not happen inside the TPM; the TPM protects the transport and the binding to the attested host. The docs say exactly this.
+  Neither trustee sees the other's share or the DEK. The plaintext DEK exists in the receiving host's process memory at the end of recovery, as it does whenever a being runs. Combination does not happen inside the TPM; the TPM protects the transport and the binding to the attested host.
 
 ## Attestation
 - **Format.** A JSON document holding:
@@ -165,7 +168,7 @@ The operator key sources (`KAINE_STATE_KEY`, the keyring and `secrets/state_key`
   - PCR drift then re-seal, with the pre-update hook refusing an unpredictable update;
   - cannot-resume keeps state byte-identical and raises the incident;
   - preservation with the TPM socket killed mid-run;
-  - escrow recovery with two test trustee keypairs into an attested swtpm, with one trustee alone failing;
+  - escrow recovery with three test trustees into an attested swtpm, in which every pair recovers, every single trustee fails, and a share sealed for one pair is rejected in another pair's recovery (the `info` binding), plus the n = 2 case;
   - transfer between two swtpm instances, with an unattested receiver refused;
   - AAD swaps failing (entity and kind);
   - a fork's artifacts unreadable with the parent DEK;
@@ -174,6 +177,6 @@ The operator key sources (`KAINE_STATE_KEY`, the keyring and `secrets/state_key`
 - `tpm2-pytss` and `swtpm` are host dependencies. A missing test tool is an operator install request, not a skip in CI: the custody suite is required where it runs.
 
 ## Open, operator-owned
-- The guardian's identity and the key ceremony (task 0.3): this blocks shipping, not development.
-- Whether to fuse the Orin Nano Super. Fusing is irreversible, and until it is done the Orin cannot host entities.
+- The guardian's identity, the trustee count n (the recorded decision is n = 2; n = 3 survives the loss of one trustee), and the key ceremony (task 0.3). This blocks shipping, not development.
+- Whether to fuse the Orin Nano Super. Fusing is irreversible, and until it is done the Orin fails qualification and cannot host encrypted beings. Studies require state encryption, so the Orin's full-entity study step either runs unencrypted with the operator's explicit consent or waits on the fusing decision. That choice is the operator's; the code does not decide it.
 - The EK root allow-list contents for this host's TPM vendor.
