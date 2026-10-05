@@ -15,6 +15,7 @@ import json
 import logging
 import math
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,35 @@ HEDGE_WORDS = frozenset(
 )
 
 
+def _normalize_text(text: str) -> str:
+    """NFKC, typographic quotes to straight ones, case-folded, whitespace collapsed."""
+    text = text or ""
+    text = unicodedata.normalize("NFKC", text)
+    text = (
+        text.replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201b", "'")
+        .replace("\u2032", "'")
+        .replace("\u0060", "'")
+        .replace("\u00b4", "'")
+    )
+    text = (
+        text.replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u201e", '"')
+        .replace("\u2033", '"')
+    )
+    text = text.casefold()
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+HEDGE_PATTERNS = tuple(
+    re.compile(r"(?<![a-z0-9'])" + re.escape(phrase) + r"(?![a-z0-9'])")
+    for phrase in HEDGE_WORDS
+)
+
+
 def output_characteristics(text: str, *, latency_ms: float | None = None) -> dict[str, Any]:
     """Pure-function feature extraction. Used by the observer at log
     time AND by the batch correlator at analysis time."""
@@ -56,8 +86,8 @@ def output_characteristics(text: str, *, latency_ms: float | None = None) -> dic
     length_tokens = len(tokens)
     distinct_tokens = len(set(tokens))
     lexical_diversity = distinct_tokens / length_tokens if length_tokens > 0 else 0.0
-    lowered = text.lower()
-    hedge_count = sum(1 for w in HEDGE_WORDS if w in lowered)
+    norm_text = _normalize_text(text)
+    hedge_count = sum(1 for pattern in HEDGE_PATTERNS if pattern.search(norm_text))
     return {
         "length_chars": length_chars,
         "length_tokens": length_tokens,
