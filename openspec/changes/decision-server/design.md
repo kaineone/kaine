@@ -1,0 +1,32 @@
+# Design: decision server
+
+## Server
+- **Image:** the organ's pinned llama.cpp build (by digest), so `/v1/systemone` and the keyed-endpoint behaviour match.
+- **Command:** `--model /models/<k1-jev gguf> --alias k1-jev --host 0.0.0.0 --port 8080 --sleep-idle-seconds 600 --parallel 2 --ctx-size 4096`, with the API key from the env file (never on argv), `-ngl` pinned and `--fit off` (per the D4 pinning work), `--cache-ram` small (512 MiB), and no slot saving.
+- **Port:** 127.0.0.1:11436 on the host. The container network name is `kaine-decision-model:8080`.
+- **GPU:** whichever device has room per the residency fit report. It is small: 4B at Q4_K_M is about 3 GB, 0.8B at Q8_0 about 0.8 GB.
+- **Lifecycle:** started with the entity's services only when `[decision].enabled = true`, and stopped with them. Nothing runs without an entity.
+
+## Client (`kaine/decision/client.py`)
+- **Dependencies:** standard library plus `httpx`, and `kaine.decision.schema`. No import of `kaine.modules`, `kaine.evaluation`, `kaine.cycle` or `kaine.nexus`. This is the boundary-neutral home the integrator registers.
+- `DecisionConfig.from_section([decision])` reads:
+  - `enabled` (False);
+  - `url` (`http://127.0.0.1:11436`);
+  - `model` (`k1-jev`);
+  - `timeout_s` (5.0);
+  - `thresholds_path` (empty: no thresholds; `noul` answers are then reported only as probabilities).
+
+  The API key comes from `KAINE_DECISION_SERVER_API_KEY` in the environment, never from config text.
+- `DecisionClient.ask(utterance, context, question_ids) -> dict[str, Answer] | None`:
+  - builds `state_text` and `systemone_questions`;
+  - POSTs `/v1/systemone`;
+  - parses each answer into `Answer(question_id, type, probabilities, choice, score, noul, decided)`, where `decided` applies the sidecar threshold for `noul` questions (`noul >= threshold`) and is `None` when there is no threshold;
+  - verifies the response's schema version against the sidecar's.
+
+  Any transport error, non-200, malformed body, missing answer or schema mismatch returns `None` and logs once per kind per minute (content-free: the question ids and the error kind, never the utterance).
+- **Thresholds sidecar.** A JSON file written by the K1-Jev export: `{"schema_version": 1, "schema_digest": "...", "thresholds": {"wishes_to_stop": 0.31, ...}}`. A digest that differs from `kaine.decision.schema.schema_digest()` refuses to load. The client then runs without thresholds and logs the mismatch.
+- **Privacy:** the client never logs or persists the utterance, the context or the answers. Callers decide what they record.
+
+## What callers may assume
+- `None` means "no answer". It never means "false".
+- The welfare caller (`welfare-expressed-preference-signals`) is raise-only: only a positive `decided` opens a Gray Zone Event.
