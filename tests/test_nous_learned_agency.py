@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 import numpy as np
 import pytest
@@ -169,7 +170,17 @@ def test_load_learned_state_rejects_invalid_pB_and_changes_nothing():
 
 @pytestmark_real
 def test_timeout_leaves_learning_and_prior_unchanged():
-    engine = PymdpEngine(efe_timeout_ms=0.001)
+    # A tiny deadline alone races the clock: warm inference can finish before the
+    # waiting thread resumes. Hold the step past a 10 ms deadline instead, as
+    # tests/test_nous_engine.py does.
+    engine = PymdpEngine(efe_timeout_ms=10)
+    infer = engine._infer
+
+    def slow_infer(obs):
+        time.sleep(0.2)
+        return infer(obs)
+
+    engine._infer = slow_infer
     try:
         initial_prior = [np.asarray(p).copy() for p in engine._prior]
         result = engine.infer(_default_obs(None, 2))
