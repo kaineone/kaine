@@ -410,7 +410,7 @@ The seven steps above guarantee:
 - dashboard content exposure stays gated on any shared network;
 - the procedure remains platform-general.
 
-The single source of truth for these invariants is the openspec capability `headless-host-operations` (`openspec/changes/headless-host-operations/specs/headless-host-operations/spec.md`). This runbook is operator procedure only.
+The single source of truth for these invariants is the openspec capability `headless-host-operations` (`openspec/specs/headless-host-operations/spec.md`). This runbook is operator procedure only.
 
 ## Verification checklist after a power cut
 
