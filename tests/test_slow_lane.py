@@ -181,11 +181,31 @@ def test_workflow_triggers_include_schedule_and_pull_request() -> None:
 
 def test_workflow_path_filters_include_slow_paths_file() -> None:
     on = _workflow_on_block()
-    for trigger in ("push", "pull_request"):
-        paths = on.get(trigger, {}).get("paths", [])
-        assert ".github/slow-test-paths.txt" in paths, (
-            f"{trigger} path filter is missing .github/slow-test-paths.txt"
+    paths = on.get("push", {}).get("paths", [])
+    assert ".github/slow-test-paths.txt" in paths, (
+        "push path filter is missing .github/slow-test-paths.txt"
+    )
+
+
+def test_required_suite_always_starts_for_pull_requests_and_the_merge_queue() -> None:
+    # pytest is a required check. A required check that a path filter never
+    # starts would leave the pull request, or its merge-queue batch, waiting.
+    on = _workflow_on_block()
+    assert "merge_group" in on, "Workflow is missing the merge_group trigger"
+    for trigger in ("pull_request", "merge_group"):
+        assert trigger in on, f"Workflow is missing the {trigger} trigger"
+        assert "paths" not in (on.get(trigger) or {}), (
+            f"{trigger} must not be path-filtered"
         )
+
+
+def test_slow_lane_diffs_a_merge_queue_batch_against_its_base() -> None:
+    steps = _load_workflow().get("jobs", {}).get("pytest", {}).get("steps", [])
+    lane = next((s for s in steps if s.get("id") == "lane"), None)
+    assert lane is not None, "Missing the slow-lane step (id: lane)"
+    assert "github.event.merge_group.base_sha" in lane.get("run", ""), (
+        "The slow lane does not diff a merge-queue batch against its base"
+    )
 
 
 def test_workflow_offline_step_excludes_slow_tests() -> None:

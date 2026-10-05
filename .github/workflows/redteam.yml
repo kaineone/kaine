@@ -19,6 +19,8 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  # The merge queue tests each batch before it reaches main.
+  merge_group:
 
 permissions:
   contents: read
