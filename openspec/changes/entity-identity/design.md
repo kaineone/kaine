@@ -24,7 +24,7 @@ def fork_identity(parent: EntityIdentity) -> EntityIdentity              # new i
 def legacy_identity(source: str) -> EntityIdentity                       # deterministic: same source -> same entity_id
 def identity_of_snapshot(snap: ForkSnapshot) -> EntityIdentity | None    # reads snap.metadata["identity"] (after decryption)
 def write_identity_sidecar(container_dir: Path, identity: EntityIdentity) -> None  # plaintext identity.json beside an encrypted container
-def read_identity_sidecar(container_dir: Path) -> EntityIdentity | None             # no decryption; IdentityError when unreadable
+def read_identity_sidecar(container_dir: Path) -> tuple[str, tuple[str, ...]] | None  # (entity_id, lineage); no decryption; IdentityError when unreadable
 def own_lived_artifacts(state_root) -> list[Path]     # this tree's own lived artifacts (D4); never forks/ or preservation/
 def resolve_spawn_identity(state_root) -> EntityIdentity
     # file present -> it; absent + no own artifacts -> mint + save;
@@ -84,7 +84,7 @@ The string format (`ent-`/`legacy-` plus 32 lowercase hex) and the legacy deriva
 - **The derivation:** `"legacy-" + sha256(source.encode("utf-8")).hexdigest()[:32]`.
 - **The sources:** `bundle:<preservation_id>` and `tree:<digest>`, as defined in D4.
 
-A change to either needs a migration change of its own.
+A change to either needs a migration change of its own. Carrying an existing ID is not a derivation: a legacy ID read from a bundle manifest keeps its value, and its `legacy_source` records where it was read from (`manifest:<preservation_id>`).
 
 ### D9. What this change touches in the lifecycle code
 

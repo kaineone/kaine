@@ -372,6 +372,10 @@ def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
     """
     root = resolve(state_root)
     lines: list[str] = []
+    # A top-level artifact that is a symlink is followed: operators relocate a
+    # being's data (for example to bulk storage) by linking it, and the data is
+    # still this being's own. Symlinks inside a directory artifact are skipped so
+    # the walk cannot loop or leave the artifact.
     for artifact in artifacts:
         try:
             if artifact.is_dir():
@@ -465,7 +469,9 @@ def has_prior_lived_history_in_lineage(
                     continue
                 if sidecar is None:
                     continue
-                if sidecar[0] in target_ids:
+                # Its own or an ancestor's record, or a descendant's: a fork
+                # whose lineage names this being proves this being lived.
+                if sidecar[0] in target_ids or identity.entity_id in sidecar[1]:
                     return True
     except OSError as exc:
         log.warning("Cannot enumerate fork snapshots under %s: %s", forks_root, exc)
@@ -496,6 +502,9 @@ def has_prior_lived_history_in_lineage(
                 continue
             record_id = identity_obj.get("entity_id")
             if isinstance(record_id, str) and record_id in target_ids:
+                return True
+            record_lineage = identity_obj.get("lineage")
+            if isinstance(record_lineage, list) and identity.entity_id in record_lineage:
                 return True
 
     return False

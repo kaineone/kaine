@@ -457,3 +457,18 @@ def test_tree_digest_unreadable_artifact_stops_derivation(tmp_path):
         assert not (tmp_path / "identity" / "entity.json").exists()
     finally:
         stage.chmod(0o600)
+
+
+def test_history_descendant_fork_counts(tmp_path):
+    me = mint_identity()
+    child = fork_identity(me)
+    fork_dir = tmp_path / "forks" / "c"
+    fork_dir.mkdir(parents=True)
+    write_identity_sidecar(fork_dir, child)
+    assert has_prior_lived_history_in_lineage(me, tmp_path) is True
+    bundle = tmp_path / "preservation" / "b"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text(
+        json.dumps({"identity": {"entity_id": fork_identity(child).entity_id, "lineage": [me.entity_id, child.entity_id]}})
+    )
+    assert has_prior_lived_history_in_lineage(mint_identity(), tmp_path) is False

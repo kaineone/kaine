@@ -235,7 +235,7 @@ Each being has one identity, kept in plaintext at `state/identity/entity.json` (
 - **Minting.** The cycle mints an identity only for a fresh spawn: a state tree with no identity file and none of its own lived artifacts (stage file, Phantasia checkpoint, Hypnos divergence record, perception desired-state). Other beings' snapshots and bundles under `state/` never count as this tree's past.
 - **Legacy beings.** A tree that lived before identities existed gets a deterministic `legacy-` ID derived from its own lived artifacts, and a preservation bundle written before identities existed revives under a `legacy-` ID derived from its preservation ID. The ID is saved at once and never re-derived.
 - **Forks and merges.** A fork gets a new ID whose lineage is its parent's lineage plus the parent's ID. A merge keeps the target being's identity.
-- **Sidecars.** Every snapshot directory carries a plaintext `identity.json`, and preservation and decommission manifests carry an `identity` object, so the owner of an encrypted container is known without decrypting it. When the container is opened, the two must agree.
+- **Sidecars.** Every snapshot directory carries a plaintext `identity.json`, and preservation and decommission manifests carry an `identity` object, so the owner of an encrypted container is known without decrypting it. When both records exist and the container is opened, they must agree, or loading fails.
 - **Refusals.** An unreadable identity, or a revive into a tree that already holds a different being, stops the boot with exit code `11` before anything is changed.
 
 ## Divergence gate at merge
