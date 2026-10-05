@@ -5,7 +5,7 @@
 
 ## 2. Snapshots, forks and preservation
 
-- [ ] 2.1 `ForkManager.snapshot` and `preserve_live` record the identity in metadata. `fork` records the child's forked identity. `merge` keeps the target's identity and records `merged_from`.
+- [ ] 2.1 `ForkManager.snapshot` and `preserve_live` record the identity in metadata. `fork` records the child's forked identity. `merge` keeps the target's identity and records `merged_from_entity`.
 - [ ] 2.2 Revive restores the bundle's identity, derives the legacy identity for a bundle without one, and refuses a conflicting identity file.
 - [ ] 2.2a Plaintext identity sidecars (design D7): `state/forks/<id>/identity.json`, the preservation and decommission `manifest.json`, and forked-being job payloads. Loading checks that the sidecar agrees with the in-snapshot identity.
 - [ ] 2.2b Every `IdentityError` is raised before any state is modified, and revive never writes to the bundle (D10). Test: a conflicting revive leaves the target tree and the bundle byte-identical.

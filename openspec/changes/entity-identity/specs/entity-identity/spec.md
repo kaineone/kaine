@@ -27,7 +27,7 @@ The cycle SHALL mint a new identity only when the state tree has no identity fil
 - **THEN** a minted identity is saved and the being resolves to gestation
 
 ### Requirement: Snapshots carry the identity and forks record lineage
-Fork and preservation snapshots SHALL record the being's identity in their metadata. A fork SHALL receive a newly minted `entity_id` whose lineage is the parent's lineage followed by the parent's `entity_id`. A merge SHALL keep the target being's identity and record the merged-in being's `entity_id` as `merged_from`.
+Fork and preservation snapshots SHALL record the being's identity in their metadata. A fork SHALL receive a newly minted `entity_id` whose lineage is the parent's lineage followed by the parent's `entity_id`. A merge SHALL keep the target being's identity and record the merged-in being's `entity_id` as `merged_from_entity`.
 
 #### Scenario: Fork lineage
 - **WHEN** a being with lineage `[a]` and ID `b` is forked
