@@ -10,7 +10,7 @@ A documentation audit against the code found configuration keys that boot accept
 - `[logging].level` is read by nothing; the cycle always logs at INFO.
 - `expose_<name>` keys under `[mundus.<adapter>]` all land in the symbolic action-family map, so continuous channels cannot be exposed from configuration, and a misspelled key is accepted.
 
-Research impact: none for the running MoC7 study (its image is pinned) and none for future runs that keep the shipped values, which equal the defaults the code already used (1800 s, 16, the pinned revision, INFO). Runs that set different values get the behaviour they asked for.
+Research impact: none for the running module-ignition study (its image is pinned) and none for future runs that keep the shipped values, which equal the defaults the code already used (1800 s, 16, the pinned revision, INFO). Runs that set different values get the behaviour they asked for.
 
 ## What changes
 - `make_hypnos` passes `requested_rest_min_interval_s` to `Hypnos` (validated: a number greater than 0).

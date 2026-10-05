@@ -1,6 +1,6 @@
 # Design: earned entrainment of the self-rhythm
 
-Status: design accepted by the operator 2026-10-02; decisions in section 8. The sources are in `references.bib`; each entry notes what it supports and whether it was read in full or only as an abstract. The design was researched after study `moc7-2026-10` showed the birth-gate marker `entrain_then_autonomy` cannot be met (see the study's `ENDED-NOTE.md`).
+Status: design accepted by the operator 2026-10-02; decisions in section 8. The sources are in `references.bib`; each entry notes what it supports and whether it was read in full or only as an abstract. The design was researched after the 2026-10-01 module-ignition study showed the birth-gate marker `entrain_then_autonomy` cannot be met (see the study's `ENDED-NOTE.md`).
 
 ## 0. Current state (verified)
 
@@ -133,7 +133,7 @@ Each condition runs 96 h simulated, with 5 seeds, the real probe schedule, and o
 
 ## 7. Research impact and admissibility
 
-- Study `moc7-2026-10` is inadmissible for any entrainment claim. A fresh study is required, and the birth record must state the self-rhythm version.
+- The 2026-10-01 module-ignition study is inadmissible for any entrainment claim. A fresh study is required, and the birth record must state the self-rhythm version.
 - Preserved beings with `self_rhythm_enabled = false` are unaffected, bit for bit (test).
 - Any being with the self-rhythm enabled sees a different distribution in Soma's forward-model input slots 4-6, and its v1 oscillator state is reset. Treat it as a new cohort.
 

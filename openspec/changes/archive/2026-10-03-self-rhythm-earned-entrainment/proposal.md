@@ -1,14 +1,14 @@
 # The self-rhythm can earn entrainment to the maternal beat, and the readout measures it honestly
 
 ## Why
-Study `moc7-2026-10` could not complete gestation. The birth gate's C1 needs the marker `entrain_then_autonomy`, which was false in every readout for 27 hours, and an offline replica of the study's own code shows it could never pass (`design.md` section 0; the study's `ENDED-NOTE.md`). Two independent defects caused it:
+The 2026-10-01 module-ignition study could not complete gestation. The birth gate's C1 needs the marker `entrain_then_autonomy`, which was false in every readout for 27 hours, and an offline replica of the study's own code shows it could never pass (`design.md` section 0; the study's `ENDED-NOTE.md`). Two independent defects caused it:
 
 - **No mechanism.** The self-rhythm is 16 uncoupled LIF units firing at 5-10 Hz, driven by Soma's salience. The 1.17 Hz maternal beat is a small additive input with no way to pull that rhythm. Nothing in the oscillator learns.
 - **A wrong measurement.** `phase()` takes the Hilbert phase of the last of about 20 unfiltered samples, so the readout follows the fast intrinsic rhythm. Filtering to the beat band, by contrast, reports an evoked response (PLV about 0.9) that the literature says must not be mistaken for entrainment (Duecker 2021; Zoefel 2018).
 
 The literature also shows the old threshold was arbitrary: fetal–maternal heart coupling is weak and contested (Van Leeuwen 2003, 2009), and no study reports sustained 1:1 PLV ≥ 0.5. A slower infant rhythm, breathing, is the one the caregiver's heartbeat demonstrably influences (Natale 1988; Bloch-Salisbury 2014).
 
-Research impact: **behaviour.** This changes the developmental substrate and the birth criterion. Study `moc7-2026-10` is inadmissible for entrainment claims; a fresh study, with the self-rhythm version recorded in the birth record, is required. Preserved beings without the self-rhythm are unaffected bit for bit.
+Research impact: **behaviour.** This changes the developmental substrate and the birth criterion. The 2026-10-01 module-ignition study is inadmissible for entrainment claims; a fresh study, with the self-rhythm version recorded in the birth record, is required. Preserved beings without the self-rhythm are unaffected bit for bit.
 
 ## What changes
 (Operator decisions of 2026-10-02 are in `design.md` section 8.)

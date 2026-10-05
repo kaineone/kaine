@@ -12,4 +12,4 @@
 - Code: `kaine/cycle/__main__.py` (`main`, `_boot_and_run`).
 - Tests: a regression test that runs `main()` with `--profile` and no `KAINE_PROFILE`, and checks that the configuration `_boot_and_run` boots is the same object the gates evaluated, carrying the selected profile.
 - Specs: `configuration-loading` gains a requirement that the cycle boots the configuration its gates evaluated.
-- The running MoC7 study is unaffected: it runs through `kaine.research.ignition_study`, from a pinned image.
+- The running module-ignition study is unaffected: it runs through `kaine.research.ignition_study`, from a pinned image.

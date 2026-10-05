@@ -8,7 +8,7 @@ A documentation audit against the code found two evaluation instruments that nev
 
 A third audit item was checked and is not a bug: the raw bus archive and Nexus diagnostics follow `lingua.out`, which Lingua does publish as a mirror of every utterance. Only a comment in `raw_bus_archive_consumer.py` says otherwise; it is corrected.
 
-Research impact: instrument only. The entity's behaviour does not change. Runs from this version on record complete voice-alignment outcomes (earlier runs' records of this observer are null, never wrong), and can record the live ablation when a run enables it. The running MoC7 study is unaffected (pinned image).
+Research impact: instrument only. The entity's behaviour does not change. Runs from this version on record complete voice-alignment outcomes (earlier runs' records of this observer are null, never wrong), and can record the live ablation when a run enables it. The running module-ignition study is unaffected (pinned image).
 
 ## What changes
 - `VoiceAlignmentDivergenceObserver` reads the summary as Hypnos writes it: the gate outcome (`accepted`, `capability_loss`, `samples_used`, and a fixed outcome category derived from `reason`: `accepted`, `no_pairs`, `vetoed_abliteration`, `vetoed_capability` or `failed`) from the `voice_alignment` sub-dictionary. The free-text reason is never recorded: these records go into the metrics-only research bundle, and reasons can contain exception text and local paths, and the training metrics (`dpo_loss`, capability scores before and after, similarity means before and after) from the top level. It writes no record when the voice-alignment phase was skipped by its gates (the phase result carries `skipped`), and still writes one when the phase ran and found no pairs.

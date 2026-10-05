@@ -5,7 +5,7 @@ Voice alignment promotes a trained adapter only if two checks pass: the ablitera
 
 The same gap in the merged-adapter checks was closed by `merge-veto-fails-closed`, which added `LocalProbeSetCapabilityEval(require_probes=True)` and `EmptyCapabilityProbeSetError`.
 
-Research impact: none for the running MoC7 study. It uses the bundled 12-probe set at a pinned image, so its gate is intact. For future runs the behaviour changes only when the probe set is empty or missing: boot refuses, where today it starts with a capability veto that always passes.
+Research impact: none for the running module-ignition study. It uses the bundled 12-probe set at a pinned image, so its gate is intact. For future runs the behaviour changes only when the probe set is empty or missing: boot refuses, where today it starts with a capability veto that always passes.
 
 ## What changes
 - **Boot.** Every trainer backend (`in_process`, `subprocess`, `job_queue`) checks, beside the existing abliteration check, that the capability probe set has at least one usable probe, and raises `EmptyCapabilityProbeSetError` with the path otherwise.

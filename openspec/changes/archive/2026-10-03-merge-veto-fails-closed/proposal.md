@@ -8,7 +8,7 @@ Three more defects sit on the same path:
 - The veto calls `asyncio.run`, and Nexus calls the synchronous `ForkManager.merge` directly inside its async request handler. On that thread a loop is already running, so `asyncio.run` raises; the veto would catch that and accept.
 - Hypnos never promotes a trained adapter without the welfare-load-bearing abliteration veto (no refusal conditioning re-introduced through training). A TIES/DARE merge changes the organ's weights just as training does, yet a merged adapter gets no abliteration check at all.
 
-Research impact: none. Studies do not merge forks, and the running MoC7 study uses a pinned image.
+Research impact: none. Studies do not merge forks, and the running module-ignition study uses a pinned image.
 
 ## What changes
 - **Checks on every merged adapter.** After a successful backend merge, `TiesDareAdapterMerger` loads each parent adapter and the merged adapter on the base model, runs the capability evaluator on all of them and the abliteration scorer on the merged adapter, and keeps the merge only when the capability loss is within `capability_loss_threshold` AND the abliteration verdict passes. Each loaded model is released before the next load.

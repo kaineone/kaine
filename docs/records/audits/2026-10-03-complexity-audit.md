@@ -82,7 +82,7 @@ Each table below lists the items in recommended order. The "Op." column says whe
 **W2. The individuation trigger has no runtime producer.**
 
 - `lifecycle/divergence.py:112` reads the newest `data/evaluation/individuation/*.jsonl`.
-- The only code that constructs `IndividuationTest` is the CLI runner, `evaluation/benchmarks/individuation_runner.py:136`. So in a live run, the individuation p-value trigger can fire only if someone ran that CLI by hand. The fallback signals (self-model drift, consolidation, adapters) still work, and they are probably what produced the MoC7 preservation bundle.
+- The only code that constructs `IndividuationTest` is the CLI runner, `evaluation/benchmarks/individuation_runner.py:136`. So in a live run, the individuation p-value trigger can fire only if someone ran that CLI by hand. The fallback signals (self-model drift, consolidation, adapters) still work, and they are probably what produced the preservation bundle from the 2026-10-01 module-ignition study.
 - The welfare net should not depend on a manual step. Write an OpenSpec proposal with two options:
   - (a) The preservation monitor runs the test on a schedule while `[preservation.divergence_monitor]` is enabled.
   - (b) Document that the trigger is CLI-fed only, and show that state on Nexus.
