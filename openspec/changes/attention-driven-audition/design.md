@@ -69,3 +69,66 @@ differ.
 - **Phase 3** — spatial auditory localization (a content-free direction), and the
   embodiment tie-in (shared "gaze/attention direction" with vision, per the
   foveation Mundus note).
+
+## Amendment (2026-10-05): encoder selection, persistence and the self-supervised encoders
+
+### Flag decisions locked by the lead (2026-10-05)
+
+1. **Encoder:** selectable. `spectral` remains the shipped default and the Tier 0 encoder. The thesis-profile default is the winner of the offline bake-off between `spectral`, `dasheng` and `wavjepa`. The paper keeps naming the encoder class vendor-neutrally.
+2. **Attention granularity:** (a), a single attended window. Stream and source separation, (b), is a separate future change. It needs its own separation model and its own design, and is deferred with that reason.
+3. **Speech gating:** keep the explicit voice-activity detector. Driving the gate from general salience would let a loud non-speech onset trigger the speech path. The detector is cheap and its thresholds are reviewable.
+
+### Selection and the plugin seam
+
+- The factory resolves `acoustic_encoder` through a small registry: name → constructor.
+- The SSL constructors check that their pinned weights are present before building, and raise a `ConfigurationError` naming the setup command when they are absent.
+- The plugin seam `audition.acoustic_encoder` passes an `AcousticEncoder` object into the constructor, exactly as `chronos.network` does. The loader's existing rules apply: declared seams only, one owner per seam, recorded in the manifest.
+
+### Persistence keyed by encoder
+
+`serialize()` adds `acoustic_forward_models`, a mapping from encoder `model_id` to `{state_dict, buffer_summary}`.
+- On restore, the running encoder's entry is loaded if its shapes match; otherwise it is discarded with a warning.
+- Entries for other encoders are carried forward untouched. Switching encoder therefore never deletes what the being learned under another one.
+- There are at most as many entries as encoders the being has used.
+- A snapshot from before this change has no entry, so the acoustic model starts fresh, which is today's behaviour.
+
+The buffer summary stays a statistical descriptor. No raw audio or raw embedding is ever serialized, and the zero-persistence test covers the new key.
+
+### Sleep
+
+Audition gains the same `hypnos.out` consumer Topos has. It sets `suspended` on both forward models while asleep. Inference continues and only adaptation pauses.
+
+### Self-supervised encoders
+
+**Windowing.** A RAM-only rolling sample buffer feeds the encoder.
+- WavJEPA takes exactly 32,160 samples (2.01 s at 16 kHz).
+- Dasheng takes a rolling context whose length (1–2 s) the bake-off chooses.
+- Both run on a 0.5 s hop.
+- The buffer is released as it ages and is covered by the zero-persistence test.
+
+**Pooling.** Each encoder's frame tokens are mean-pooled to one 768-dimension embedding per hop.
+
+**Normalisation.** The bake-off decides whether to L2-normalise. The Topos precedent is not to; the spectral encoder does today.
+
+**Energy channel.** RMS level in dBFS, computed on the same window, is published on `audition.perception` as `energy_dbfs`. It is a scalar, not a vector, so the privacy filter is unaffected.
+
+**Code hygiene.**
+- WavJEPA's upstream code calls `eval()` on a config string and ships a `types.py` that shadows the standard library. The vendored copy replaces the `eval()` with a literal parse and renames the module.
+- The default runtime path loads only the student encoder. The teacher and predictor are loaded only by the offline MMN experiment.
+
+**Export.**
+- A thin segment module per encoder is exported to ONNX, because the Hugging Face wrapper is not export-safe as written.
+- Dynamic int8 quantisation is applied to the export.
+- A parity test checks the ONNX output against torch on the real weights: fp32 within 1e-4, int8 within a tolerance the bake-off records.
+
+**Licences.** Dasheng-base: code and Hugging Face weights Apache-2.0. WavJEPA-base: code BSD-3-Clause, weights MIT by Hugging Face tag. Both get `NOTICE` and licence-appendix entries.
+
+### Bake-off
+
+`scripts/bench_audition_encoders.py` runs offline. It never boots an entity and never touches entity data. It replays the seeded, playlist and womb feeds through each encoder and Audition's own salience path, and reports:
+1. how well the normalised error separates true acoustic events (onsets, scene changes, the seeded surprises) from steady state, as ROC AUC against the feed's event marks;
+2. false alerts per minute under stationary noise;
+3. CPU and GPU latency per hop;
+4. resident memory.
+
+The GPU runs take the host GPU lock. The record goes under `docs/records/`. The winner becomes the thesis-profile default after salience recalibration on the same feeds.

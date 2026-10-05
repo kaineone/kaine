@@ -96,3 +96,36 @@ unchanged.
 - **WHEN** the shipped configuration is used without enabling general auditory
   perception
 - **THEN** Audition behaves exactly as the existing speech pipeline
+
+### Requirement: The acoustic encoder is selectable
+Audition SHALL select its acoustic encoder from `[audition].acoustic_encoder`, with `spectral` as the default. An unknown encoder name, or an encoder whose pinned weights are not provisioned on the host, SHALL raise a configuration error at boot and SHALL NOT fall back to another encoder. A plugin MAY supply the encoder through the `audition.acoustic_encoder` seam; a filled seam together with a non-default `acoustic_encoder` value SHALL be a configuration error.
+
+#### Scenario: Default encoder
+- **WHEN** general audition is on and `acoustic_encoder` is not set
+- **THEN** Audition encodes with the spectral encoder and `audition.perception` carries its `encoder_model_id`
+
+#### Scenario: Unknown encoder
+- **WHEN** `acoustic_encoder` names an encoder the registry does not know
+- **THEN** building Audition raises a configuration error naming the value
+
+#### Scenario: Plugin encoder
+- **WHEN** an enabled plugin fills `audition.acoustic_encoder` and `acoustic_encoder` is unset
+- **THEN** Audition encodes with the plugin's encoder
+
+### Requirement: Self-supervised encoders load offline from pinned, vendored code
+A self-supervised acoustic encoder SHALL load from code vendored under `external/` with an `UPSTREAM` file naming its source, pinned revision and licence, and from weights fetched at setup time at that pinned revision. Loading SHALL use local files only, with the Hugging Face hub offline, and SHALL NOT execute remote code. Its rolling sample window SHALL exist in memory only.
+
+#### Scenario: No network at load
+- **WHEN** a self-supervised encoder is constructed with the hub offline and its weights provisioned
+- **THEN** it loads without any network access and without remote code
+
+#### Scenario: Window never persists
+- **WHEN** Audition is serialized while a self-supervised encoder holds a rolling window
+- **THEN** the serialized state contains no samples and no embeddings from that window
+
+### Requirement: Loudness is a separate channel
+`audition.perception` SHALL carry `energy_dbfs`, the RMS level of the perceived window in dBFS, computed independently of the acoustic encoder, so that salience can use loudness whichever encoder is selected.
+
+#### Scenario: Loudness survives a loudness-normalising encoder
+- **WHEN** two windows differ only in gain and are perceived through an encoder that normalises loudness
+- **THEN** their `energy_dbfs` values differ by the gain difference
