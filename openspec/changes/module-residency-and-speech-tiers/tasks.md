@@ -8,10 +8,10 @@
 
 ## 2. Measure first: calibration and the fit report
 
-- [ ] 2.1 Residency budget: available system memory (`hostmem.system_memory_pool`), clamped by any cgroup limit, minus a reserve (default `max(1 GiB, 10% of physical RAM)`). On discrete hosts, per-device free memory for accelerator-resident rungs. Unified versus discrete comes from `hostmem.classify_accelerator_memory`. No board or product-name branches.
+- [x] 2.1 Residency budget: available system memory (`hostmem.system_memory_pool`), clamped by any cgroup limit, minus a reserve (default `max(1 GiB, 10% of physical RAM)`). On discrete hosts, per-device free memory for accelerator-resident rungs. Unified versus discrete comes from `hostmem.classify_accelerator_memory`. No board or product-name branches.
 - [ ] 2.2 `python -m kaine.setup.footprint`: with consent, load each enabled component's configured backend in isolation, run one representative inference, and measure peak resident memory (in-process RSS; the server process's RSS for external services; device memory on discrete hosts). Skip and name absent models; never download.
-- [ ] 2.3 Footprint catalogue at `state/residency/footprints.json`: component, backend, model id, bytes, whether the weights are mapped, host class, timestamp, KAINE version; content-free; refreshed by live observations.
-- [ ] 2.4 Fit report as a pure function (budget, catalogue, enabled set, ladders → co-resides or plan with shortfall, pinned organ, multiplexed organs, rung per organ, expected feel), shown by the calibration command, `scripts/probe-host` and the wizard.
+- [x] 2.3 Footprint catalogue at `state/residency/footprints.json`: component, backend, model id, bytes, whether the weights are mapped, host class, timestamp, KAINE version; content-free; refreshed by live observations.
+- [ ] 2.4 Fit report as a pure function (budget, catalogue, enabled set, ladders → co-resides or plan with shortfall, pinned organ, multiplexed organs, rung per organ, expected feel), shown by the calibration command, `scripts/probe-host` and the wizard. (The pure function is built in `kaine/residency/fit.py`; the three surfaces come with 2.2 and 8.2.)
 - [ ] 2.5 Operator step: run calibration on this desktop, the Orin Nano Super and the Pixel 6a, and commit the results under `docs/benchmarks/`. Use them to set the defaults in 3.x (reserve, TTLs, pin, which organs route through the manager first), and record any published figure they contradict.
 
 ## 3. Reversible unload
