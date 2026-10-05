@@ -155,17 +155,39 @@ class Emotion2vecClassifier:
         import asyncio
 
         def _load_sync():
+            kwargs = {"disable_update": True}
+            if not self._device.startswith("cuda"):
+                kwargs["fp16"] = False
+                kwargs["bf16"] = False
             return funasr.AutoModel(
                 model=self._model_id,
                 device=self._device,
                 hub=self._hub,
-                disable_update=True,
+                **kwargs,
             )
 
         try:
             self._model = await asyncio.to_thread(_load_sync)
             self._funasr = funasr
             self._funasr_available = True
+            if not self._device.startswith("cuda"):
+                import torch
+
+                inner = getattr(self._model, "model", None)
+                if inner is None:
+                    log.debug(
+                        "funasr AutoModel has no .model attribute; "
+                        "skipping float32 parameter check"
+                    )
+                else:
+                    first_param = next(inner.parameters(), None)
+                    if first_param is not None and first_param.dtype != torch.float32:
+                        inner.float()
+                        log.info(
+                            "Cast emotion2vec+ model weights from %s to float32 on %s",
+                            first_param.dtype,
+                            self._device,
+                        )
             log.info("emotion2vec+ loaded: %s on %s", self._model_id, self._device)
         except Exception:
             log.exception("emotion2vec+ load failed; degrading to neutral")

@@ -280,34 +280,37 @@ def _resolve_unrestricted(
     try:
         _validate_device_string(preferred)
     except ValueError as exc:
-        log.warning("invalid device %r: %s; falling back to %s", preferred, exc, fallback)
-        return _safe_fallback(fallback)
+        resolved = _safe_fallback(fallback)
+        log.warning("invalid device %r: %s; falling back to %s", preferred, exc, resolved)
+        return resolved
     m = _CUDA_INDEXED_RE.match(preferred)
     if m:
         idx = int(m.group(1))
         count = _cuda_device_count()
         if idx < count:
             return preferred
+        resolved = _safe_fallback(fallback)
         log.warning(
             "device %s requested but only %d CUDA device(s) available; falling back to %s",
             preferred,
             count,
-            fallback,
+            resolved,
         )
-        return _safe_fallback(fallback)
+        return resolved
     mx = _XPU_INDEXED_RE.match(preferred)
     if mx:
         idx = int(mx.group(1))
         count = _xpu_device_count()
         if idx < count:
             return preferred
+        resolved = _safe_fallback(fallback)
         log.warning(
             "device %s requested but only %d XPU device(s) available; falling back to %s",
             preferred,
             count,
-            fallback,
+            resolved,
         )
-        return _safe_fallback(fallback)
+        return resolved
     if preferred == "cuda":
         if _cuda_device_count() > 0:
             return "cuda:0"
