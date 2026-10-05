@@ -25,34 +25,13 @@ from kaine.text_embedding import (
 log = logging.getLogger(__name__)
 
 
-def make_hypnos(
-    bus: AsyncBus,
-    section: dict[str, Any],
-    *,
-    mnemos: Optional[BaseModule] = None,
-    nous_process: Optional[Any] = None,
-    thymos: Optional[BaseModule] = None,
-    phantasia: Optional[BaseModule] = None,
+def voice_alignment_config_from_section(
+    voice_cfg_section: dict[str, Any],
     kaine_config: Optional[dict[str, Any]] = None,
-    entity_clock: Optional[EntityClock] = None,
-    embedder: Optional[Embedder] = None,
-) -> BaseModule:
-    from kaine.modules.hypnos.module import Hypnos
+) -> Optional["VoiceAlignmentConfig"]:
+    """Parse [hypnos.voice_alignment] into a VoiceAlignmentConfig (None when the table is empty)."""
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 
-    allowed = {
-        "interval_seconds",
-        "max_deferral_seconds",
-        "per_defer_seconds",
-        "nous_step_burst",
-        "baseline_salience",
-        "alert_salience",
-        "requested_rest_min_interval_s",
-        "voice_alignment",  # nested sub-table
-        "consolidation",  # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
-    }
-    _require_keys(section, allowed)
-    voice_cfg_section = section.get("voice_alignment") or {}
     voice_config: Optional[VoiceAlignmentConfig] = None
     if voice_cfg_section:
         base_model_path_raw = voice_cfg_section.get("base_model_path", "")
@@ -119,6 +98,39 @@ def make_hypnos(
                 )
             ),
         )
+    return voice_config
+
+
+def make_hypnos(
+    bus: AsyncBus,
+    section: dict[str, Any],
+    *,
+    mnemos: Optional[BaseModule] = None,
+    nous_process: Optional[Any] = None,
+    thymos: Optional[BaseModule] = None,
+    phantasia: Optional[BaseModule] = None,
+    kaine_config: Optional[dict[str, Any]] = None,
+    entity_clock: Optional[EntityClock] = None,
+    embedder: Optional[Embedder] = None,
+) -> BaseModule:
+    from kaine.modules.hypnos.module import Hypnos
+
+    allowed = {
+        "interval_seconds",
+        "max_deferral_seconds",
+        "per_defer_seconds",
+        "nous_step_burst",
+        "baseline_salience",
+        "alert_salience",
+        "requested_rest_min_interval_s",
+        "voice_alignment",  # nested sub-table
+        "consolidation",  # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
+    }
+    _require_keys(section, allowed)
+    voice_cfg_section = section.get("voice_alignment") or {}
+    voice_config: Optional[VoiceAlignmentConfig] = voice_alignment_config_from_section(
+        voice_cfg_section, kaine_config
+    )
     if voice_config is not None:
         _validate_backend_pairing(voice_config)
         effective = _effective_hot_swap_mode(voice_config.hot_swap_mode, kaine_config)

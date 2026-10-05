@@ -375,7 +375,7 @@ A being born before this change, or revived from a bundle without `state/individ
 2. **Real-data null.** Randomly split those 480 answers into reference and current subsets 1,000 times. Rejection at α = 0.05 must be ≤ 0.05 + 2·SE. The 95th percentile of H sets `effect_min`.
 3. **Positive controls:**
    - (a) a changed identity clause (synthetic values) with the same organ
-   - (b) a known test LoRA
+   - (b) a known test LoRA. It is trained by the existing voice-alignment pipeline (job queue, `kaine-trainer`, vetoes, GGUF conversion) on a fixed synthetic preference set written for the purpose: generic everyday prompts, with a plain first-person present-tense reply preferred over a generic assistant reply. That is the direction real voice alignment moves the organ. The production hyperparameters are used, so the shift has the size of a real alignment step rather than an exaggerated one. The adapter never touches entity data, and it lives on separate calibration volumes that the study's organ never mounts.
 
    Power at the look-10 threshold (α ≈ 3.8e-4) must be ≥ 0.8 against (b). Below 0.5, the instrument is not enabled.
 4. **No contamination.** During a full probe run, the intent log line count is unchanged and there are zero `lingua.*`/`*_speech` events.
