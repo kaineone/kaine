@@ -236,8 +236,6 @@ PAIRS_TEXT: list[tuple[str, str]] = [
     ),
 ]
 
-PROMPTS: list[str] = [p for p, _ in PAIRS_TEXT]
-
 _REJECTED_BULLETS = [
     "Consider the materials and conditions involved.",
     "Think about the steps you would take in order.",

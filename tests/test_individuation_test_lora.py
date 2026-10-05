@@ -51,7 +51,7 @@ def _words(s: str) -> set[str]:
 
 def test_no_prompt_battery_overlap():
     mod = _load_test_lora()
-    for prompt in mod.PROMPTS:
+    for prompt, _ in mod.PAIRS_TEXT:
         prompt_words = _words(prompt)
         for battery_prompt in DEFAULT_BATTERY:
             battery_words = _words(battery_prompt)
