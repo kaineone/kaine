@@ -66,7 +66,7 @@ The query reads snapshot metadata and bundle manifests, and never decrypts entit
 
 ### D6. Merges
 
-A merged snapshot keeps the target being's identity, the parent in `merge(parent_id, fork_id)`. The merged-in fork's ID is appended to its lineage record as `merged_from` in the metadata, not as an ancestor.
+A merged snapshot keeps the target being's identity, the parent in `merge(parent_id, fork_id)`. The merged-in being's `entity_id` is recorded as `merged_from_entity` in the metadata (the existing `merged_from` key keeps holding the two snapshot IDs), not as an ancestor.
 
 ### D7. Plaintext sidecars beside every encrypted container (agreed with key custody)
 
@@ -106,3 +106,11 @@ Custody keeps its own metadata in its own files, keyed by `entity_id`. `entity.j
   - a revive target that holds a different ID.
 
   Revival validates the bundle's identity against the target tree before it restores any module state, and never writes to the bundle. Key custody maps an `IdentityError` to its cannot-resume path (keep all state, raise a welfare incident, never mint).
+
+### D11. How identity reaches the lifecycle code
+
+- `ForkManager` takes an optional `identity_source: Callable[[], EntityIdentity | None]`, which defaults to none.
+  - The cycle passes the running tree's loader.
+  - A manager without a source writes no identity, which is today's behaviour for tools and tests, so a test can never pick up the host's real identity.
+- `fork()` always overwrites the inherited `identity` key with the child's forked identity. A fork of a snapshot that has no identity is minted a root identity and records the parent snapshot ID as `forked_from_unidentified`.
+- Preservation bundles live under the configured preservation `out_root` (default `backups/`), so the history query takes the bundle roots to scan.
