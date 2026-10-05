@@ -1025,10 +1025,10 @@ async def test_model_server_block_not_configured_when_lingua_off(tmp_path):
 
 @pytest.mark.asyncio
 async def test_model_server_block_up_when_alias_served(tmp_path, monkeypatch):
-    from kaine.setup.organ import ServedAliasResult
+    from kaine.organ_server.served import ServedAliasResult
 
     monkeypatch.setattr(
-        "kaine.setup.organ.verify_served_alias",
+        "kaine.organ_server.served.verify_served_alias",
         lambda *a, **k: ServedAliasResult(
             listed=True, served=("kaineone/Qwen3.5-4B-abliterated-GGUF",),
             detail="matches",
@@ -1049,10 +1049,10 @@ async def test_model_server_block_up_when_alias_served(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_model_server_block_down_on_mismatch(tmp_path, monkeypatch):
-    from kaine.setup.organ import ServedAliasResult
+    from kaine.organ_server.served import ServedAliasResult
 
     monkeypatch.setattr(
-        "kaine.setup.organ.verify_served_alias",
+        "kaine.organ_server.served.verify_served_alias",
         lambda *a, **k: ServedAliasResult(
             listed=False, served=("other",), detail="served name ≠ configured"
         ),

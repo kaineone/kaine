@@ -37,7 +37,7 @@ from kaine.setup.abliteration_gate import (
     gate_initial_abliteration,
     write_abliteration_verdict,
 )
-from kaine.setup.organ import ORGAN_SAFETENSORS_REPO
+from kaine.organ_server.served import ORGAN_SAFETENSORS_REPO
 
 
 def _resolve(config: dict[str, Any]) -> dict[str, Any]:

@@ -72,7 +72,7 @@ The gate classifies each host's accelerator memory as known-discrete, known-unif
 
 ### Organ idle unload
 
-The model server can unload the organ after it has been idle for `[lingua].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. This frees the organ's VRAM after the configured idle period. The setting is passed to the model server as `--sleep-idle-seconds`. For the exact wiring see [`kaine/setup/model_server.py`](../../kaine/setup/model_server.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
+The model server can unload the organ after it has been idle for `[lingua].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. This frees the organ's VRAM after the configured idle period. The setting is passed to the model server as `--sleep-idle-seconds`. For the exact wiring see [`kaine/organ_server/lifecycle.py`](../../kaine/organ_server/lifecycle.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
 
 ## Supporting services and their footprint (Path B)
 

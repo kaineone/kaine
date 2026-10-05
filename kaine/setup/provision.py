@@ -37,17 +37,13 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from kaine.organ_server.served import detect_organ_backend
 from kaine.setup.internvideo_next import (
     INTERNVIDEO_NEXT_REPO,
     internvideo_next_download_cmd,
     run_internvideo_next_download,
 )
-from kaine.setup.organ import (
-    OrganDownloadResult,
-    detect_organ_backend,
-    plan_organ_download,
-    run_organ_download,
-)
+from kaine.setup.organ import OrganDownloadResult, plan_organ_download, run_organ_download
 from kaine.storage import install_data_root
 from kaine.text_embedding import resolve_embedding_config
 

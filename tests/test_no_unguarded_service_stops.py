@@ -10,7 +10,7 @@ from pathlib import Path
 
 ALLOWED_STOP_SITES = {
     # Guarded by is_shared(config, "model_server"); returns early when shared.
-    ("kaine/setup/model_server.py", "cmd_stop"),
+    ("kaine/organ_server/lifecycle.py", "cmd_stop"),
     # Only reached when hot_swap_mode="restart_service"; make_hypnos forces
     # hot_swap_mode to "manual" whenever the model server is shared.
     ("kaine/modules/hypnos/hot_swap.py", "_do_restart_service"),

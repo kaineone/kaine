@@ -11,7 +11,7 @@ not expected to speak — this brackets the trainer call:
     quiesce consumers → unload organ → train → gpu-preflight → reload → resume
 
 Every step is REAL (no pretend swap): the unload actually stops the served
-``llama-server`` (reusing :mod:`kaine.setup.model_server` — the same lifecycle
+``llama-server`` (reusing :mod:`kaine.organ_server.lifecycle` — the same lifecycle
 the bootstrap owns), the gpu-preflight (:mod:`kaine.cycle.preflight`) really runs
 before the reload, and the reload actually starts the server (with the accepted
 adapter applied via ``--lora`` when training produced one). A failure at ANY step
@@ -137,7 +137,7 @@ def _default_host_describer() -> dict[str, Any]:
 class OrganServerController:
     """Real unload/reload of the served organ, reusing the model-server lifecycle.
 
-    Thin adapter over :mod:`kaine.setup.model_server` (``cmd_stop`` /
+    Thin adapter over :mod:`kaine.organ_server.lifecycle` (``cmd_stop`` /
     ``cmd_start``) so the bracket does not invent a parallel mechanism. The
     reload applies an accepted adapter via the server's ``--lora`` flag (a real
     serving flag) by exporting it as an env override the launch-cmd builder
@@ -166,7 +166,7 @@ class OrganServerController:
     def _stop(self) -> int:
         if self._stop_fn is not None:
             return int(self._stop_fn(self._config))
-        from kaine.setup.model_server import cmd_stop
+        from kaine.organ_server.lifecycle import cmd_stop
 
         return int(cmd_stop(self._config, out=lambda s: log.info("model-server stop: %s", s.rstrip())))
 
@@ -175,7 +175,7 @@ class OrganServerController:
             return int(self._start_fn(self._config, adapter_path=adapter_path))
         import os
 
-        from kaine.setup.model_server import LORA_ADAPTER_ENV, cmd_start
+        from kaine.organ_server.lifecycle import LORA_ADAPTER_ENV, cmd_start
 
         # Apply the accepted adapter via the server's --lora flag (real serving
         # flag) by exporting the env override the launch-cmd builder honors;
@@ -227,7 +227,7 @@ class OrganServerController:
             except Exception:
                 return False
         try:
-            from kaine.setup.model_server import cmd_status
+            from kaine.organ_server.lifecycle import cmd_status
 
             return cmd_status(self._config, out=lambda s: None) == 0
         except Exception:

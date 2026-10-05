@@ -6,14 +6,14 @@
 import stat
 from pathlib import Path
 
-from kaine.setup import wizard as wizard_module
-from kaine.setup.device_map import (
+from kaine.organ_server.device_map import (
     check_agreement,
     compose_gpu_env,
     cuda_index,
     native_organ_env,
     write_env_values,
 )
+from kaine.setup import wizard as wizard_module
 from kaine.setup.steps import Step
 
 

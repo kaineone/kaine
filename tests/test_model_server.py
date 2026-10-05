@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from kaine.setup import model_server as ms
-from kaine.setup.model_server import (
+from kaine.organ_server import lifecycle as ms
+from kaine.organ_server.lifecycle import (
     SERVER_BIN_ENV,
     build_launch_cmd,
     choose_supervision,
@@ -26,7 +26,7 @@ from kaine.setup.model_server import (
     render_systemd_unit,
     sleep_idle_seconds_from_config,
 )
-from kaine.setup.organ import ServedAliasResult
+from kaine.organ_server.served import ServedAliasResult
 
 # --- binary discovery --------------------------------------------------------
 
@@ -251,7 +251,7 @@ def test_cmd_start_idempotent_when_already_serving(monkeypatch, tmp_path):
     monkeypatch.setattr(ms, "locate_binary", lambda *a, **k: tmp_path / "srv")
     (tmp_path / "srv").write_text("x")
     monkeypatch.setattr(
-        "kaine.setup.organ.verify_served_alias",
+        "kaine.organ_server.served.verify_served_alias",
         lambda *a, **k: ServedAliasResult(listed=True, served=("x",), detail="matches"),
     )
     out_lines = []
@@ -275,7 +275,7 @@ def test_cmd_start_missing_gguf_fails_honestly(monkeypatch, tmp_path):
 
 def test_cmd_status_up(monkeypatch):
     monkeypatch.setattr(
-        "kaine.setup.organ.verify_served_alias",
+        "kaine.organ_server.served.verify_served_alias",
         lambda *a, **k: ServedAliasResult(listed=True, served=("x",), detail="ok"),
     )
     out_lines = []
@@ -285,7 +285,7 @@ def test_cmd_status_up(monkeypatch):
 
 def test_cmd_status_down(monkeypatch):
     monkeypatch.setattr(
-        "kaine.setup.organ.verify_served_alias",
+        "kaine.organ_server.served.verify_served_alias",
         lambda *a, **k: ServedAliasResult(listed=False, served=(), detail="down"),
     )
     out_lines = []

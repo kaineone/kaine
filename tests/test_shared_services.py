@@ -10,7 +10,7 @@ import pytest
 
 from kaine.boot import _effective_hot_swap_mode, make_hypnos
 from kaine.config import ConfigShapeError, load_kaine_config
-from kaine.setup.model_server import cmd_stop
+from kaine.organ_server.lifecycle import cmd_stop
 from kaine.shared_services import (
     KNOWN_PROCESS_NAMES,
     is_shared,
@@ -46,7 +46,7 @@ def test_shared_services_shared_true_default_patterns():
 
 def test_cmd_stop_loads_config_when_none_and_respects_shared(monkeypatch):
     monkeypatch.setattr(
-        "kaine.setup.model_server._load_config",
+        "kaine.organ_server.lifecycle._load_config",
         lambda: {"services": {"model_server": {"shared": True}}},
     )
     runner_calls = []
@@ -58,7 +58,7 @@ def test_cmd_stop_loads_config_when_none_and_respects_shared(monkeypatch):
         return None
 
     monkeypatch.setattr(
-        "kaine.setup.model_server.os.kill",
+        "kaine.organ_server.lifecycle.os.kill",
         lambda *args, **kwargs: kill_calls.append((args, kwargs)),
     )
     result = cmd_stop(
