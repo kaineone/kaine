@@ -347,12 +347,12 @@ async def test_chronos_ignores_undecodable_user_input_then_updates(bus, tmp_path
         await bus.client.xadd(
             "user_input.out",
             {
-                "source": "user",
-                "type": "input.text",
+                "source": "audition",
+                "type": "audition.emotion",
                 "salience": "0.5",
                 "timestamp": datetime.fromtimestamp(1000.0, tz=timezone.utc).isoformat(),
                 "causal_parent": "",
-                "payload": "{}",
+                "payload": "{\"source_label\": \"live_mic\"}",
             },
         )
 
