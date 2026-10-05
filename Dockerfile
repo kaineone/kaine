@@ -6,7 +6,7 @@
 # web UI) — same image, different CMD. The accelerator-correct PyTorch wheel is
 # selected at BUILD time from a FLAVOR build-arg that reuses kaine.wheel_index's
 # single source of truth (its `--image-index <flavor>` table, run standalone
-# from a copy before the package is installed), never re-derived here. See openspec/changes/containerize-deployment/design.md §3.
+# from a copy before the package is installed), never re-derived here. See openspec/changes/archive/2026-10-05-containerize-deployment/design.md §3.
 #
 #   FLAVOR=cuda  (default, published)     nvidia/cuda devel→runtime bases
 #   FLAVOR=cpu   (published, always-works) python:3.12-slim base
