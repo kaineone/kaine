@@ -143,6 +143,12 @@ Verify the alias is served:
 curl -s http://127.0.0.1:11434/v1/models | python3 -m json.tool
 ```
 
+A keyed organ (the containerized one when `KAINE_MODEL_SERVER_API_KEY` is set) answers 401 without the key, so send it as a bearer header:
+
+```bash
+curl -s -H "Authorization: Bearer $KAINE_MODEL_SERVER_API_KEY" http://127.0.0.1:11434/v1/models | python3 -m json.tool
+```
+
 ### Mute-organ gate
 
 The cycle refuses to boot if the organ returns no content. Set `KAINE_ALLOW_MUTE_ORGAN=1` to override that gate.

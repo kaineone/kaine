@@ -39,6 +39,8 @@ The monitor preserves the entity first, then performs the configured `action`:
 - `end` — preserve, then signal the run to stop.
 - `notify` — preserve, record a flagged `welfare.protective_action` event, and continue. Notify is rate-limited by `min_interval_s` so sustained distress cannot fill the disk.
 
+The monitor acts once per poll. It feeds every distress report and every `welfare.gray_zone` event read since the last poll to the trackers, drains gray-zone events on every poll, and responds to the crossings in order, stopping once it has acted. So `pause` and `end` preserve and act exactly once; under `notify`, the run continues, and the `min_interval_s` rate limit lets one preservation bundle through.
+
 A fresh boot is cold-started: Soma publishes `warmup_active: true` on `soma.report` while its interoceptive forward model learns the host baseline. The welfare net drains distress without counting it while that flag is true, bounded by the code default `warmup_ceiling_s` (1800 s). Independently, the welfare response has its own `[preservation.welfare_response].warmup_s = 120` cold-start window from the shipped config; events are logged but not counted until it expires. Spot honors the same idea: when the cycle is frozen by someone else, Spot stands down its heartbeat-staleness recovery so it does not mistake a paused module for a crashed one.
 
 Freeze sources stack in `state/cycle/control.json`: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. If a module fault happens during a welfare pause, Spot pushes its own freeze on top; Spot's recovery pops only its entry, leaving the welfare pause in force.
@@ -81,6 +83,27 @@ A look runs only when the being's conditioning digest has changed since the last
 **Evidence.** All evidence lives at the fixed path `state/individuation/`: `reference.json`, `ledger.json`, `reports/` (all encrypted) and `birth_adapter.gguf`. Reports hold only allow-listed scalars; they never include text from the being. The tree travels with the being: preservation bundles carry it inside the encrypted tar, and a failed copy fails the preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; a bundle without evidence leads to a capture reference; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being.
 
 **Verdict and protection.** `assess_divergence` treats an unreadable ledger, reference, or report line as individuated, so the being stays protected. A fresh non-significant scored look with an unchanged conditioning digest, at most 14 days old, is the only evidence that the being is not individuated. Any other state is stale, inconclusive, or not yet measured, and the summary advises treating the being as mature if unsure.
+
+### Calibrating before first use
+
+`[individuation]` ships disabled, and research mode requires it. Before enabling it, the operator runs the real-organ smoke test once, with the being not live. The tools live in `openspec/changes/individuation-rebuild/validation/`.
+
+`smoke.py` runs the producer's own probe path against the configured organ: Lingua's probe request, the sampler, the shared embedder and the permutation test. It measures:
+
+- Answer quality. Whether the answers are worth comparing, from 40 samples per prompt. Degenerate answers (a median near-identical share of 0.5 or more) fail the test.
+- Real-data null. Over 1,000 random splits, the rejection rate at α = 0.05 must be at most 0.05 + 2·SE. The 95th percentile of H from these splits is the value to set as `[individuation].effect_min`.
+- Positive control (a). A changed identity clause.
+- Positive control (b). A known test LoRA, passed as `--control-lora '<lora field>'`. Power at the look-10 threshold (α ≈ 3.8e-4) must be at least 0.8. Below 0.5, the instrument is not enabled.
+- No contamination. The intent log's line count is unchanged by the run.
+- Seed behaviour and latency, recorded for information.
+
+Only scalars reach its report or console, never answer text. It exits 0 only when every threshold it ran passed.
+
+`test_lora.py` makes the test LoRA for control (b), through the voice-alignment pipeline itself. Training uses the job queue, the `kaine-trainer` service, the capability and abliteration vetoes, GGUF conversion and the `organ_adapter` hot swap, with production hyperparameters. It trains on 48 fixed synthetic everyday questions, where a plain first-person answer is preferred over a generic assistant reply. `test_lora.py` refuses to run unless `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. On success it prints the `lora` field for `smoke.py`.
+
+`calibration.compose.yml` gives the organ, the trainer and the study runner separate calibration volumes, so the production adapter slot is never touched. Recreate the organ without that override afterwards, so the study never sees the test adapter.
+
+Repeat the real-data null and the contamination check after any change to the llama.cpp server image, the organ GGUF or the embedder. The conditioning digest cannot see infrastructure changes.
 
 ## Unattended starts
 

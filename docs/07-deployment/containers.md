@@ -12,13 +12,15 @@ With no profile selected, the loader applies the base-thesis `thesis_test` profi
 |---|---|---|---|
 | `kaine-redis` | event bus (Redis Streams) | `127.0.0.1:6479` | no |
 | `kaine-qdrant` | memory + social vectors | `127.0.0.1:6533` | no |
-| `kaine-model-server` | OpenAI-compatible language organ | `127.0.0.1:11434` | card 0 |
+| `kaine-model-server` | OpenAI-compatible language organ | `127.0.0.1:11434` (`KAINE_MODEL_SERVER_HOST_PORT`) | card 0 |
 | `kaine-speaches` | speech-to-text (distil-Whisper) | `127.0.0.1:8000` | **CPU** |
 | `kaine-chatterbox` | text-to-speech | `127.0.0.1:8883` | card 1 |
 | `kaine-nexus` | web UI (uvicorn) | `127.0.0.1:8088` | no |
 | `kaine-cycle` | the cognitive runtime (the entity) | none | card 1 |
 | `kaine-study` | the module-ignition study runner (`--profile study`) | none | card 1 |
 | `kaine-trainer` | voice-alignment trainer service (DPO+QLoRA → GGUF) | none | the organ's GPU |
+
+Inside the Compose network, services reach the organ at `http://kaine-model-server:8080/v1`. Set `KAINE_MODEL_SERVER_HOST_PORT` in `compose/.env` when something else on the host, such as a system Ollama, already holds port 11434.
 
 By default `kaine-chatterbox` uses the image `kaine-chatterbox:local` and has no upstream image. A plain `docker compose -f compose/kaine.yml up` fails unless you build the image first or set `KAINE_CHATTERBOX_IMAGE` to an available image.
 
@@ -78,11 +80,11 @@ CPU-only or single-GPU hosts overlay a profile file:
 # CPU-only
 KAINE_FLAVOR=cpu docker compose -f compose/kaine.yml -f compose/kaine.cpu.yml up -d
 
-# Single GPU (organ + vision + TTS share card 0)
+# Single GPU (organ + vision + TTS + study runner share card 0)
 docker compose -f compose/kaine.yml -f compose/kaine.single-gpu.yml up -d
 ```
 
-The device map is `[hardware.devices]`, written by `python -m kaine.setup`. It produces `KAINE_ORGAN_GPU` and `KAINE_VISION_GPU`. `KAINE_TRAINER_GPU` is a Compose default that falls back to the organ card, not part of the setup-written map. `kaine.cpu.yml` and `kaine.single-gpu.yml` do not override `kaine-study` or `kaine-trainer`, so both still reserve card `${KAINE_VISION_GPU:-1}`; disable or adjust them if that card does not exist.
+The device map is `[hardware.devices]`, written by `python -m kaine.setup`. It produces `KAINE_ORGAN_GPU` and `KAINE_VISION_GPU`. `KAINE_TRAINER_GPU` is a Compose default that falls back to the organ card, not part of the setup-written map. `compose/kaine.cpu.yml` drops the GPU reservation from `kaine-study`, which uses the CPU image there, and from `kaine-trainer`; the trainer's own device check refuses to train on a CPU host, and the reservation is dropped only so the stack renders. `compose/kaine.single-gpu.yml` pins the organ, vision, TTS and the study runner all to card 0.
 
 ## Start the cognitive cycle
 
@@ -109,9 +111,23 @@ nvidia-ctk cdi generate --output=$HOME/.config/cdi/nvidia.yaml
 
 ## Where the organ runs
 
-By default the organ runs inside `kaine-model-server`, using `docker/organ-launcher.sh` as its entrypoint, for true one-command bring-up. The in-container organ unloads after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds (default 600) and reloads on the next request. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
+By default the organ runs inside `kaine-model-server`, using `docker/organ-launcher.sh` as its entrypoint, for true one-command bring-up. In both the Compose service and the Quadlet unit, the `kaine-model-server` healthcheck curls `http://127.0.0.1:8080/health` and needs no API key; it returns 503 while the model loads and 200 once serving. It does not wake a sleeping organ; the service is reported healthy while asleep. The in-container organ unloads after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds (default 600) and reloads on the next request. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
 
-Voice alignment can still run in the `kaine-trainer` service, so an in-container organ and a containerized trainer can work together without a host-native server. For `hot_swap_mode = "organ_adapter"` — replacing the active LoRA without restarting the organ — mount `kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`). This mode is only available in Compose; the Quadlet model-server unit does not use the launcher or adapters.
+The organ image comes from `KAINE_MODEL_SERVER_IMAGE`; its default is `ghcr.io/ggml-org/llama.cpp:server-cuda`, a floating tag that Docker does not re-pull on its own. Pin the image by digest in `compose/.env` for a study:
+
+```bash
+KAINE_MODEL_SERVER_IMAGE=ghcr.io/ggml-org/llama.cpp@sha256:<digest>
+```
+
+A run whose system changes mid-study is not admissible. After changing the image, check that the flags KAINE passes still exist in the new build's `--help` (`--sleep-idle-seconds`, `--lora-scaled`, `--no-cache-prompt`, `--alias`), then re-run `python -m kaine.preboot`.
+
+Read a pulled image's digest with:
+
+```bash
+docker image inspect ghcr.io/ggml-org/llama.cpp:server-cuda --format '{{index .RepoDigests 0}}'
+```
+
+Voice alignment can still run in the `kaine-trainer` service, so an in-container organ and a containerized trainer can work together without a host-native server. For `hot_swap_mode = "organ_adapter"`, mount `kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`). When an activation bumps the adapter generation, the launcher restarts `llama-server` inside the same container with the adapter loaded at scale 0: requests without a `lora` field get the base organ, requests with one apply the adapter, and prompt caching is off while any adapter is loaded. This mode is only available in Compose; the Quadlet model-server unit does not use the launcher or adapters.
 
 To use a host-native Unsloth server that shares one process for inference and training, overlay `compose/kaine.organ-host.yml` and point `[lingua].chat_url` at `http://host.docker.internal:11434/v1` (use `host.containers.internal` on Podman). When `model_server` is declared as a shared service, KAINE forces `[hypnos.voice_alignment].hot_swap_mode = "manual"` because the cycle cannot orchestrate a foreign server's LoRA lifecycle. A host-native server used on its own does not trigger that override.
 
