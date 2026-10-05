@@ -224,7 +224,7 @@ Captures per-sleep-cycle voice-alignment stats: pairs processed, pairs above thr
 - **Toggle:** `[evaluation].affect_correlation` (default `true`)
 - **Output:** `data/evaluation/affect_correlation/affect_correlation-<YYYY-MM-DD>.jsonl`
 
-Logs paired Thymos state and Lingua output characteristics (length, lexical diversity, hedge-word count, latency) for every external-speech event. An offline batch correlator in the same module runs during Hypnos sleep, or on demand via the Nexus tab, and produces a correlation matrix across Thymos dimensions and output features.
+Logs paired Thymos state and Lingua output characteristics (length, lexical diversity, hedge-word count, latency) for every external-speech event. The hedge-word count is the number of distinct hedge phrases that occur as whole phrases after normalisation, so "mighty" does not count as "might". An offline batch correlator in the same module runs during Hypnos sleep, or on demand via the Nexus tab, and produces a correlation matrix across Thymos dimensions and output features.
 
 ### `ABDivergenceObserver`
 
