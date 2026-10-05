@@ -34,9 +34,8 @@ def _format_key(key: str) -> str:
 
 
 def _format_str(value: str) -> str:
-    # Basic string: escape backslash, double-quote, and the control chars TOML
-    # requires escaped. Sufficient for the identifiers/paths/emails the wizard
-    # writes; round-trips through tomllib.
+    # Basic string: escape backslash, double-quote and every control character
+    # TOML requires escaped, so any value round-trips through tomllib.
     out = []
     for ch in value:
         if ch == "\\":
@@ -49,6 +48,9 @@ def _format_str(value: str) -> str:
             out.append("\\t")
         elif ch == "\r":
             out.append("\\r")
+        elif ord(ch) < 0x20 or ord(ch) == 0x7F:
+            # TOML forbids every other control character in a basic string.
+            out.append(f"\\u{ord(ch):04X}")
         else:
             out.append(ch)
     return '"' + "".join(out) + '"'

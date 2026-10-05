@@ -630,11 +630,12 @@ def main(
         write(f"The following keys will change in {operator_path}:\n")
         for key in sorted(changed):
             write(f"  {key}\n")
+        write("Comments in the operator file are not preserved.\n")
     else:
-        write(f"No wizard-owned keys to change in {operator_path}.\n")
-    write("Comments in the operator file are not preserved.\n")
+        # Nothing to change: leave the file, and its comments, exactly as it is.
+        write(f"No wizard-owned keys to change in {operator_path}; the file is left as it is.\n")
 
-    if not args.defaults:
+    if changed and not args.defaults:
         suffix = " [Y/n]: "
         raw = (_input(f"Write these changes to {operator_path}?{suffix}") or "").strip().lower()
         if not raw:
@@ -645,8 +646,9 @@ def main(
             write("Not writing changes.\n")
             return 0
 
-    operator_path.parent.mkdir(parents=True, exist_ok=True)
-    operator_path.write_text(tomlwriter.dumps(merged))
+    if changed:
+        operator_path.parent.mkdir(parents=True, exist_ok=True)
+        operator_path.write_text(tomlwriter.dumps(merged))
 
     compose_env_path = Path("compose/.env")
     devmap = device_map(merged)
@@ -654,9 +656,10 @@ def main(
         gpu_env = compose_gpu_env(devmap)
         if gpu_env:
             write_env_values(compose_env_path, gpu_env)
-            out(
+            write(
                 "wrote compose GPU variables: "
                 + ", ".join(f"{k}={v}" for k, v in sorted(gpu_env.items()))
+                + "\n"
             )
 
     data_root = merged.get("storage", {}).get("data_root")
@@ -664,7 +667,7 @@ def main(
         _, msg = write_volume_override(
             Path(data_root), Path("compose"), existing=existing_volumes()
         )
-        out(msg)
+        write(msg + "\n")
 
     # Offer the implied extras install.
     _install_extras(

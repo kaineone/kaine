@@ -851,3 +851,49 @@ def test_nexus_token_too_short_env_is_reported(tmp_path: Path) -> None:
     assert status == "too_short"
     assert not (tmp_path / "secrets.toml").exists()
     assert "tiny" not in out.getvalue()
+
+
+def test_rerun_with_nothing_to_change_leaves_file_and_comments(tmp_path: Path):
+    """A re-run that changes no wizard-owned key must not rewrite the operator
+    file: a rewrite drops the operator's comments."""
+    op = tmp_path / "kaine.operator.toml"
+    args = ["--defaults", "--operator-path", str(op)]
+    assert setup_main(args, input_fn=lambda _p: "", out=io.StringIO()) == 0
+    op.write_text("# operator note\n" + op.read_text())
+    before = op.read_bytes()
+    out = io.StringIO()
+    assert setup_main(args, input_fn=lambda _p: "", out=out) == 0
+    assert op.read_bytes() == before
+    assert "left as it is" in out.getvalue()
+
+
+def test_compose_messages_go_to_the_output(tmp_path: Path, monkeypatch):
+    """The compose GPU and volume messages are written to the output stream
+    (an earlier version called the stream like a function and crashed)."""
+    from kaine.setup import __main__ as setup_main_mod
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "compose").mkdir()
+    (tmp_path / "compose" / ".env").write_text("")
+    (tmp_path / "compose" / "kaine.yml").write_text("")
+    op = tmp_path / "op.toml"
+    op.write_text(f'[storage]\ndata_root = "{tmp_path / "data"}"\n')
+    monkeypatch.setattr(setup_main_mod, "device_map", lambda _cfg: {"lingua": "cuda:0"})
+    monkeypatch.setattr(setup_main_mod, "compose_gpu_env", lambda _m: {"KAINE_ORGAN_GPU": "0"})
+    monkeypatch.setattr(setup_main_mod, "write_env_values", lambda *_a, **_k: None)
+    monkeypatch.setattr(setup_main_mod, "existing_volumes", lambda: [])
+    monkeypatch.setattr(
+        setup_main_mod,
+        "write_volume_override",
+        lambda *_a, **_k: (None, "volume override written"),
+    )
+    out = io.StringIO()
+    rc = setup_main(
+        ["--defaults", "--operator-path", str(op), "--config-path", str(SHIPPED)],
+        input_fn=lambda _p: "",
+        out=out,
+    )
+    assert rc == 0, out.getvalue()[-500:]
+    text = out.getvalue()
+    assert "wrote compose GPU variables: KAINE_ORGAN_GPU=0" in text
+    assert "volume override written" in text

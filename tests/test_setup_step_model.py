@@ -112,6 +112,32 @@ def test_owned_keys_are_within_allowlist():
         reason="test",
         memory_budget_gb=16.0,
     )
+    # full entity with the voice-alignment trainer recorded (the trainer step
+    # writes config directly, not through declarative fields)
+    trainer_answers = _Answers(list(full_answers))
+
+    def _trainer_input(prompt: str) -> str:
+        if "voice-alignment trainer" in prompt:
+            trainer_answers.prompts.append(prompt)
+            return "y"
+        return trainer_answers(prompt)
+
+    result = run_wizard(
+        input_fn=_trainer_input,
+        out=lambda _s: None,
+        host=_host(cuda=2),
+        shipped_config=_shipped(),
+        probe_services=lambda: {
+            "served_models": ["full-model"],
+            "voices": ["full-voice.wav"],
+            "stt_models": ["full-stt"],
+        },
+        probe_trainer=lambda *_a, **_k: (True, "/opt/trainer/bin/python"),
+    )
+    assert result.acknowledged is True
+    assert result.config["hypnos"]["voice_alignment"]["trainer_python"] == "/opt/trainer/bin/python"
+    assert_owned(owned_changes({}, result.config))
+
     custom_answers = [ACK_PHRASE, "", "", "y", "y", "c"]
     for m in MODULE_ORDER:
         custom_answers.append("y" if m in ("soma", "lingua", "vox", "audition") else "n")
@@ -296,3 +322,12 @@ def test_nothing_is_probed_before_the_acknowledgement():
     )
     assert result.acknowledged is False
     assert probed == []
+
+
+def test_format_str_escapes_every_control_character():
+    """Every control character round-trips through tomllib, so a rewrite of the
+    operator file can never produce invalid TOML."""
+    for code in list(range(0x20)) + [0x7F]:
+        value = f"a{chr(code)}b"
+        text = tomlwriter.dumps({"section": {"key": value}})
+        assert tomllib.loads(text)["section"]["key"] == value, hex(code)
