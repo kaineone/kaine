@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import tomllib
+import webbrowser
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
@@ -26,6 +27,7 @@ from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env
 from kaine.setup import tomlwriter
 from kaine.setup.steps import OWNED_KEYS, assert_owned, owned_changes
 from kaine.setup.storage_step import existing_volumes, write_volume_override
+from kaine.setup.web import create_setup_app, serve
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
 
@@ -513,6 +515,82 @@ def _print_next_steps(
     line("Recommended first: KAINE_FIRST_BOOT_OPERATOR_PRESENT=1 scripts/first-boot.sh")
 
 
+def _launch_redirect_file(url: str) -> Path:
+    """Write a private HTML page that redirects to ``url`` and return its path.
+
+    The directory and file are created owner-only (0700/0600), so the launch
+    token never appears in any process's command line.
+    """
+    import html
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="kaine-setup-"))
+    os.chmod(directory, 0o700)
+    target = directory / "open-setup.html"
+    escaped = html.escape(url, quote=True)
+    body = (
+        "<!doctype html><meta charset=\"utf-8\">"
+        f'<meta http-equiv="refresh" content="0;url={escaped}">'
+        f'<title>KAINE setup</title><a href="{escaped}">Continue setup</a>'
+    )
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    return target
+
+
+def _run_web(
+    args: argparse.Namespace,
+    host: dict[str, Any],
+    storage_old_root: Path,
+) -> int:
+    """Start the loopback browser setup server."""
+    # The running-cycle guard must look at the real state directory; if it
+    # cannot be resolved, refuse to start rather than guard the wrong place.
+    try:
+        from kaine.storage import resolve
+
+        state_root = Path(resolve("state"))
+    except Exception as exc:
+        print(f"setup cannot start: the state directory cannot be resolved ({exc})", file=sys.stderr)
+        return 1
+
+    try:
+        app = create_setup_app(
+            state_root=state_root,
+            operator_path=args.operator_path,
+            shipped_config_path=args.config_path,
+            host=host,
+            probe_services=probe_services,
+            probe_trainer=_probe_trainer,
+            recommend_tier_fn=recommend_tier,
+            device_consumers_fn=device_consumers,
+            services_up_fn=lambda: {
+                name: port_listening(port) for name, port in SERVICE_PORTS.items()
+            },
+            storage_old_root=storage_old_root,
+        )
+    except ValueError as exc:
+        # A malformed operator file is never silently replaced.
+        print(f"setup cannot start: {exc}", file=sys.stderr)
+        return 1
+
+    token = app.state.setup.store.issue()
+
+    def on_ready(url: str) -> None:
+        # The URL carries the single-use launch token, so it goes only to this
+        # terminal. The browser is pointed at a private redirect file instead:
+        # a browser's command line is visible to every local user.
+        print(f"Open this address to continue setup: {url}", file=sys.stderr)
+        try:
+            webbrowser.open(_launch_redirect_file(url).as_uri())
+        except Exception:
+            pass
+
+    serve("127.0.0.1", 0, app=app, setup_token=token, on_ready=on_ready)
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -546,6 +624,11 @@ def main(
         default=None,
         help="secrets file that receives a generated Nexus token (default: config/secrets.toml)",
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="start the loopback browser setup server",
+    )
     args = parser.parse_args(argv)
 
     sink: TextIO = out or sys.stdout
@@ -560,17 +643,6 @@ def main(
     except FileNotFoundError:
         write(f"shipped config not found at {args.config_path}\n")
         return 2
-
-    # Load the existing operator file (if any) for pre-fill and merge-on-save.
-    existing_raw: dict[str, Any] = {}
-    try:
-        with args.operator_path.open("rb") as fh:
-            existing_raw = tomllib.load(fh)
-    except FileNotFoundError:
-        existing_raw = {}
-    except Exception as exc:
-        write(f"could not read existing operator file at {args.operator_path}: {exc}\n")
-        return 1
 
     # Install the process data root from the shipped+operator overlay before any
     # provisioning writes.
@@ -589,6 +661,20 @@ def main(
         storage_old_root = Path(configured_data_root) if configured_data_root else Path.cwd()
     except Exception:
         storage_old_root = Path.cwd()
+
+    if args.web:
+        return _run_web(args, host, storage_old_root)
+
+    # Load the existing operator file (if any) for pre-fill and merge-on-save.
+    existing_raw: dict[str, Any] = {}
+    try:
+        with args.operator_path.open("rb") as fh:
+            existing_raw = tomllib.load(fh)
+    except FileNotFoundError:
+        existing_raw = {}
+    except Exception as exc:
+        write(f"could not read existing operator file at {args.operator_path}: {exc}\n")
+        return 1
 
     result: WizardResult = run_wizard(
         input_fn=_input,
