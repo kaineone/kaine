@@ -18,6 +18,15 @@ from typing import Any, Mapping
 from kaine.defaults import DEFAULT_MIN_FREE_GB  # noqa: F401
 
 DATA_ROOT_ENV = "KAINE_DATA_ROOT"
+MODELS_DIR_ENV = "KAINE_MODELS_DIR"
+
+# Paths that are resolved under $KAINE_MODELS_DIR when they start with
+# ``state/models``, falling back to the data root.
+MODEL_PATH_KEYS: tuple[tuple[str, ...], ...] = (
+    ("topos", "encoder_local_dir"),
+    ("audition", "sherpa_model_dir"),
+    ("vox", "sherpa_model_dir"),
+)
 
 GROWING_DATA_KEYS: tuple[tuple[str, ...], ...] = (
     ("lifecycle", "snapshots_path"),
@@ -47,9 +56,6 @@ GROWING_DATA_KEYS: tuple[tuple[str, ...], ...] = (
     ("evaluation", "paths", "evaluation_logs"),
     ("evaluation", "individuation", "output_dir"),
     ("ignition_log", "directory"),
-    ("topos", "encoder_local_dir"),
-    ("audition", "sherpa_model_dir"),
-    ("vox", "sherpa_model_dir"),
     ("preboot", "state_root"),
     ("preboot", "data_root"),
     ("preboot", "extra_disk_paths"),
@@ -95,19 +101,87 @@ def resolve_under(root: Path | None, value: str) -> str:
     return str(root / value)
 
 
+def _models_dir_from_env(env: Mapping[str, str]) -> Path | None:
+    value = env.get(MODELS_DIR_ENV)
+    if value is not None and value.strip():
+        return Path(value).expanduser().resolve()
+    return None
+
+
+def _resolve_model_path(root: Path | None, value: str, env: Mapping[str, str]) -> str:
+    """Resolve a model path under ``$KAINE_MODELS_DIR`` when appropriate.
+
+    Relative values that start with ``state/models`` are mapped onto
+    ``$KAINE_MODELS_DIR/<rest>`` when the variable is set and non-empty.
+    All other values (absolute paths, or relative paths with a different
+    layout) are resolved under the data root exactly as before.
+    """
+    if value == "":
+        return value
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return value
+    parts = path.parts
+    if len(parts) >= 2 and parts[0] == "state" and parts[1] == "models":
+        models_root = _models_dir_from_env(env)
+        if models_root is not None:
+            rest = parts[2:]
+            return str(models_root.joinpath(*rest) if rest else models_root)
+    return str(root / value) if root is not None else value
+
+
+def _apply_model_paths(
+    merged: dict[str, Any], root: Path | None, env: Mapping[str, str]
+) -> None:
+    """Resolve the :data:`MODEL_PATH_KEYS` values in *merged* in place."""
+    for key_path in MODEL_PATH_KEYS:
+        parent: Any = merged
+        for key in key_path[:-1]:
+            child = parent.get(key)
+            if not isinstance(child, dict):
+                parent = None
+                break
+            parent = child
+        if parent is None:
+            continue
+
+        leaf = key_path[-1]
+        if leaf not in parent:
+            continue
+        value = parent[leaf]
+
+        if isinstance(value, str):
+            parent[leaf] = _resolve_model_path(root, value, env)
+        elif isinstance(value, list):
+            parent[leaf] = [
+                _resolve_model_path(root, item, env)
+                if isinstance(item, str)
+                else item
+                for item in value
+            ]
+
+
 def normalize_storage_paths(
     config: dict[str, Any], env: Mapping[str, str] | None = None
 ) -> dict[str, Any]:
-    """Rewrite all configured growing-data paths under the chosen data root.
+    """Rewrite configured growing-data and model paths under their roots.
 
-    If no data root is configured, returns the original *config* object
-    unchanged. Otherwise returns a deep copy in which present growing-data
-    strings (and lists of strings) are resolved under the root, and
-    ``storage.data_root`` is set to the absolute root path.
+    If neither a data root nor ``$KAINE_MODELS_DIR`` is configured, returns the
+    original *config* object unchanged. With only ``$KAINE_MODELS_DIR``, a copy
+    is returned with just the model paths mapped. Otherwise returns a deep copy in which present growing-data
+    strings (and lists of strings) are resolved under the data root, model paths
+    that start with ``state/models`` are resolved under ``$KAINE_MODELS_DIR``
+    when set, and ``storage.data_root`` is set to the absolute data root path.
     """
     root = configured_data_root(config, env)
+    env_or_default = env if env is not None else os.environ
     if root is None:
-        return config
+        if _models_dir_from_env(env_or_default) is None:
+            return config
+        # No data root, but the weights live under $KAINE_MODELS_DIR.
+        merged = copy.deepcopy(config)
+        _apply_model_paths(merged, None, env_or_default)
+        return merged
 
     merged = copy.deepcopy(config)
 
@@ -135,7 +209,9 @@ def normalize_storage_paths(
                 for item in value
             ]
 
-    raw_env = (env if env is not None else os.environ).get(DATA_ROOT_ENV, "")
+    _apply_model_paths(merged, root, env_or_default)
+
+    raw_env = env_or_default.get(DATA_ROOT_ENV, "")
     if raw_env.strip() and "storage" not in merged:
         merged["storage"] = {}
 

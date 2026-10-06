@@ -341,19 +341,25 @@ def load_internvideo_next(
     # fallback section above). With flash_attn present this is skipped entirely.
     if force_eager:
         _force_eager_attention(config)
+    # Never pass torch_dtype to from_pretrained: transformers briefly sets the
+    # process-wide default dtype while constructing the model, which races with
+    # other modules (e.g., emotion2vec) loading concurrently. We load in the
+    # default dtype and cast afterwards.
     model = model_cls.from_pretrained(
         str(wdir),
         config=config,
         local_files_only=True,
         trust_remote_code=False,
-        torch_dtype=torch_dtype,
     )
 
     # Frozen contract (unchanged from DINOv2): eval + no grad; Topos never trains it.
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
-    model.to(device)
+    if torch_dtype is not None:
+        model.to(device=device, dtype=torch_dtype)
+    else:
+        model.to(device)
     log.info(
         "InternVideo-Next encoder loaded offline from %s on %s (revision %s, "
         "trust_remote_code=False)",

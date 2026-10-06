@@ -321,14 +321,16 @@ class InternVideoNextEncoder:
             if _model is not None:
                 model = _model
             else:
+                from kaine.hardware import resolve_dtype
                 from kaine.modules.topos.internvideo_next_loader import (
                     load_internvideo_next,
                 )
 
-                # fp16 only on CUDA. On CPU half precision is slow, and loading
-                # with torch_dtype switches the process-wide default dtype while
-                # it runs, which other modules loading at the same time inherit.
-                dtype = torch.float16 if str(self._device).startswith("cuda") else torch.float32
+                # fp16 on CUDA/XPU, float32 on CPU. The loader casts after
+                # construction; from_pretrained never receives torch_dtype, so it
+                # cannot switch the process-wide default dtype while other modules
+                # load.
+                dtype = resolve_dtype(self._device)
                 model = load_internvideo_next(
                     weights_dir=self._weights_dir,
                     device=self._device,

@@ -787,6 +787,22 @@ TIER2_MIN_BUDGET_GB = 16.0
 #: :data:`TIER2_MIN_BUDGET_GB` the host is still Tier 2, with residency guidance.
 RESIDENCY_MIN_BUDGET_GB = 6.0
 
+
+def resolve_dtype(device: str) -> Any:
+    """Return the default floating-point dtype for *device*.
+
+    fp16 on CUDA and XPU (GPU-like accelerators); float32 on CPU, MPS, and
+    everywhere else. The Topos loader applies this dtype after model
+    construction, so ``from_pretrained`` never receives a ``torch_dtype`` and
+    cannot perturb the process-wide default dtype.
+    """
+    import torch
+
+    if str(device).startswith(("cuda", "xpu")):
+        return torch.float16
+    return torch.float32
+
+
 #: Nominal size vs. reported-usable size on every accelerator/host platform.
 #: A "16 GB" card or Jetson reports ~15.3 GiB usable because firmware and the
 #: kernel reserve a slice. Comparing the *reported* budget against the nominal

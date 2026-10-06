@@ -175,20 +175,36 @@ class Emotion2vecClassifier:
 
                 inner = getattr(self._model, "model", None)
                 if inner is None:
-                    log.debug(
+                    log.warning(
                         "funasr AutoModel has no .model attribute; "
-                        "skipping float32 parameter check"
+                        "cannot verify float32 weights on %s",
+                        self._device,
                     )
                 else:
-                    first_param = next(inner.parameters(), None)
-                    loaded_dtype = first_param.dtype if first_param is not None else None
-                    if loaded_dtype is not None and loaded_dtype != torch.float32:
-                        inner.float()
-                        log.info(
-                            "Cast emotion2vec+ model weights from %s to float32 on %s",
-                            loaded_dtype,
+                    # Unconditionally cast every floating-point parameter and
+                    # buffer to float32, then verify no half/bfloat16 state remains.
+                    # This closes the default-dtype race with other modules that
+                    # load with torch_dtype=float16 at the same time.
+                    inner.float()
+                    non_float32 = [
+                        (name, p.dtype)
+                        for name, p in inner.named_parameters()
+                        if p.dtype.is_floating_point and p.dtype != torch.float32
+                    ] + [
+                        (name, b.dtype)
+                        for name, b in inner.named_buffers()
+                        if b.dtype.is_floating_point and b.dtype != torch.float32
+                    ]
+                    if non_float32:
+                        log.error(
+                            "emotion2vec+ model still contains non-float32 tensors "
+                            "after .float() on %s: %s; treating load as failed",
                             self._device,
+                            non_float32,
                         )
+                        self._funasr_available = False
+                        self._model = None
+                        return
             log.info("emotion2vec+ loaded: %s on %s", self._model_id, self._device)
         except Exception:
             log.exception("emotion2vec+ load failed; degrading to neutral")
