@@ -10,16 +10,26 @@ from pathlib import Path
 
 import pytest
 
+from kaine.bus.client import AsyncBus
+from kaine.bus.config import BusConfig
 from kaine.research.submission import DENY_PATTERNS
 from tests.test_voice_corpus_protection import (
     DPOPairBuilder,
     _make_hypnos,
     _plaintext_encryptor,  # noqa: F401
     _voice_alignment_opt_in,  # noqa: F401
-    bus,  # noqa: F401
     intent_record_paths,
     read_consolidation_divergence,
 )
+
+
+@pytest.fixture
+async def bus():
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    client = fakeredis.FakeRedis(decode_responses=True)
+    bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    yield bus
+    await bus.close()
 
 
 def _record(index: int, *, divergent: bool) -> dict:
