@@ -337,6 +337,11 @@ class AsyncBus:
         (legacy/malformed) entries returns no decoded events, the cursor never
         moves, and the consumer re-reads the same poison batch forever.
         """
+        if last_id == "$" and not block_ms:
+            raise ValueError(
+                f"non-blocking read of {stream!r} from '$' never returns entries; "
+                "seed the cursor with last_entry_id() first"
+            )
         response = await self._client.xread({stream: last_id}, count=count, block=block_ms or None)
         if not response:
             return [], None
@@ -375,6 +380,12 @@ class AsyncBus:
         """
         if not streams:
             return {}, {}
+        for stream, cursor in streams.items():
+            if cursor == "$" and not block_ms:
+                raise ValueError(
+                    f"non-blocking read of {stream!r} from '$' never returns entries; "
+                    "seed the cursor with last_entry_id() first"
+                )
         response = await self._client.xread(streams, count=count, block=block_ms or None)
         entries_by_stream: dict[str, list[tuple[str, Event]]] = {stream: [] for stream in streams}
         last_by_stream: dict[str, Optional[str]] = {stream: None for stream in streams}
