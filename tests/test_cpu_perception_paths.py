@@ -301,10 +301,24 @@ def test_no_data_root_and_no_models_dir_leaves_the_config_unchanged(tmp_path: Pa
     assert kaine.storage.normalize_storage_paths(config, {}) is config
 
 
+def _transformers_model_classes(*names: str) -> tuple:
+    """Import transformers model classes, skipping when this environment can't.
+
+    transformers imports its model classes lazily, so ``importorskip`` alone
+    passes on a host whose torchvision does not match torch and then fails at
+    the first model attribute. That is an environment gap, not a dtype result.
+    """
+    transformers = pytest.importorskip("transformers")
+    try:
+        return (transformers,) + tuple(getattr(transformers, n) for n in names)
+    except Exception as exc:  # the lazy import's ModuleNotFoundError/RuntimeError
+        pytest.skip(f"transformers model classes cannot be imported here ({type(exc).__name__})")
+
+
 def test_internvideo_next_real_load_never_sets_fp16_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    transformers = pytest.importorskip("transformers")
+    transformers, _, _ = _transformers_model_classes("BertConfig", "BertModel")
     from kaine.modules.topos import internvideo_next_loader as loader
 
     weights_dir = tmp_path / "weights"
@@ -364,7 +378,7 @@ def test_internvideo_next_real_load_never_sets_fp16_default(
 def test_dinov2_real_load_never_sets_fp16_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    transformers = pytest.importorskip("transformers")
+    transformers, _, _ = _transformers_model_classes("Dinov2Config", "Dinov2Model")
     weights_dir = tmp_path / "weights"
     weights_dir.mkdir()
 
