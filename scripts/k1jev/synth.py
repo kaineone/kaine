@@ -51,6 +51,129 @@ class Job:
     n: int
 
 
+def _jobs_for_target(
+    qid: str,
+    trait: str | None,
+    target: str,
+    total: int,
+    *,
+    near_miss_share: float,
+) -> list[Job]:
+    """Turn one target's quota into style-split jobs (at most 5 per job)."""
+    if not 0.0 <= near_miss_share <= 1.0:
+        raise ValueError("near_miss_share must be between 0 and 1")
+    near_miss_styles = [s for s in STYLES if s != "plain"]
+    jobs: list[Job] = []
+
+    plain_count = int(total * (1.0 - near_miss_share))
+    near_count = total - plain_count
+    per_style = near_count // len(near_miss_styles)
+    style_rem = near_count % len(near_miss_styles)
+
+    counts: list[tuple[int, str]] = []
+    if plain_count:
+        counts.append((plain_count, "plain"))
+    for idx, style in enumerate(near_miss_styles):
+        c = per_style + (1 if idx < style_rem else 0)
+        if c:
+            counts.append((c, style))
+
+    for c, style in counts:
+        remaining = c
+        while remaining > 0:
+            # At most 5 kept per job: run_jobs asks the model for
+            # OVERGENERATE times as many, so drops do not leave holes.
+            n = min(remaining, 5)
+            jobs.append(Job(qid, trait, target, style, n))
+            remaining -= n
+
+    return jobs
+
+
+def planned_quota(
+    question_ids: list[str],
+    per_question: int,
+    rng: random.Random,
+) -> dict[tuple[str, str | None, str], int]:
+    """Return the per-target totals that plan() would use.
+
+    Keys are ``(question_id, trait, target)``. For ``trait_claim`` the trait is
+    the trait name; for other questions it is ``None``.
+    """
+    quota: dict[tuple[str, str | None, str], int] = {}
+
+    for qid in question_ids:
+        question = schema.get_question(qid)
+        answer_keys = [opt.key for opt in question.options]
+        if qid == "trait_claim":
+            targets = [(trait, key) for trait in schema.TRAITS for key in answer_keys]
+        else:
+            targets = [(None, key) for key in answer_keys]
+
+        t = len(targets)
+        base = per_question // t
+        remainder = per_question % t
+        per_target = [base] * t
+        for i in rng.sample(range(t), remainder):
+            per_target[i] += 1
+
+        for (trait, target), total in zip(targets, per_target):
+            quota[(qid, trait, target)] = total
+
+    return quota
+
+
+def plan_top_up(
+    existing_items: list[dict[str, Any]],
+    question_ids: list[str],
+    per_question: int,
+    rng: random.Random,
+    *,
+    near_miss_share: float,
+) -> list[Job]:
+    """Build jobs that fill only the cells still short of their quota.
+
+    Existing items are counted per ``(question_id, trait, generated_label)``.
+    For ``trait_claim`` the trait is part of the key; for other questions it is
+    ``None``. A cell that already meets or exceeds its planned quota gets no
+    jobs.
+    """
+    quota = planned_quota(question_ids, per_question, rng)
+
+    counts: dict[tuple[str, str | None, str], int] = {}
+    for item in existing_items:
+        qid = item["question_id"]
+        trait = item.get("trait") if qid == "trait_claim" else None
+        key = (qid, trait, item["generated_label"])
+        counts[key] = counts.get(key, 0) + 1
+
+    jobs: list[Job] = []
+    for qid in question_ids:
+        question = schema.get_question(qid)
+        answer_keys = [opt.key for opt in question.options]
+        if qid == "trait_claim":
+            targets = [(trait, key) for trait in schema.TRAITS for key in answer_keys]
+        else:
+            targets = [(None, key) for key in answer_keys]
+
+        for trait, target in targets:
+            key = (qid, trait, target)
+            have = counts.get(key, 0)
+            need = quota.get(key, 0)
+            if have < need:
+                jobs.extend(
+                    _jobs_for_target(
+                        qid,
+                        trait,
+                        target,
+                        need - have,
+                        near_miss_share=near_miss_share,
+                    )
+                )
+
+    return jobs
+
+
 def plan(
     question_ids: list[str],
     per_question: int,
@@ -61,9 +184,8 @@ def plan(
     """Build generation jobs that cover every question and target."""
     if not 0.0 <= near_miss_share <= 1.0:
         raise ValueError("near_miss_share must be between 0 and 1")
-    near_miss_styles = [s for s in STYLES if s != "plain"]
-    jobs: list[Job] = []
 
+    jobs: list[Job] = []
     for qid in question_ids:
         question = schema.get_question(qid)
         # A target is (trait, answer key). trait_claim spreads over every trait
@@ -82,27 +204,15 @@ def plan(
             per_target[i] += 1
 
         for (trait, target), total in zip(targets, per_target):
-            plain_count = int(total * (1.0 - near_miss_share))
-            near_count = total - plain_count
-            per_style = near_count // len(near_miss_styles)
-            style_rem = near_count % len(near_miss_styles)
-
-            counts: list[tuple[int, str]] = []
-            if plain_count:
-                counts.append((plain_count, "plain"))
-            for idx, style in enumerate(near_miss_styles):
-                c = per_style + (1 if idx < style_rem else 0)
-                if c:
-                    counts.append((c, style))
-
-            for c, style in counts:
-                remaining = c
-                while remaining > 0:
-                    # At most 5 kept per job: run_jobs asks the model for
-                    # OVERGENERATE times as many, so drops do not leave holes.
-                    n = min(remaining, 5)
-                    jobs.append(Job(qid, trait, target, style, n))
-                    remaining -= n
+            jobs.extend(
+                _jobs_for_target(
+                    qid,
+                    trait,
+                    target,
+                    total,
+                    near_miss_share=near_miss_share,
+                )
+            )
 
     return jobs
 
@@ -425,6 +535,7 @@ def run_jobs(
         "seed_drops": 0,
         "other_split_drops": 0,
         "label_drops": 0,
+        "label_drop_answers": {},
         "per_question_accepted": {},
     }
     lock = threading.Lock()
@@ -491,6 +602,9 @@ def run_jobs(
                     drops["label"] += 1
                     with lock:
                         accepted_norms.discard(norm)
+                        qid_map = stats["label_drop_answers"].setdefault(job.question_id, {})
+                        target_map = qid_map.setdefault(job.target, {})
+                        target_map[token] = target_map.get(token, 0) + 1
                     continue
 
             context = parsed_item["context"] if wants_ctx else None

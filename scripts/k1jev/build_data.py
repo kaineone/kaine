@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import datetime
 import importlib.util
 import json
 import os
 import random
+import shutil
 import subprocess
 import sys
 import types
@@ -232,21 +234,155 @@ def _cmd_gold(args: argparse.Namespace) -> int:
     out_items = _refuse_protected(args.out_items or _default_labels_path())
     out_items.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
 
+    api_key = os.environ.get(args.api_key_env)
+    endpoint = synth.Endpoint(args.chat_url, api_key)
+
+    if args.top_up:
+        if not out_items.exists():
+            print(f"top-up requires an existing items file: {out_items}", file=sys.stderr)
+            return 2
+
+        original_stats_path = _refuse_protected(out_items.with_suffix(".stats.json"))
+        if not original_stats_path.exists():
+            print(f"top-up requires original stats file: {original_stats_path}", file=sys.stderr)
+            return 2
+        with original_stats_path.open(encoding="utf-8") as f:
+            original_stats = json.load(f)
+
+        original_seed = original_stats.get("seed")
+        if original_seed is None:
+            print("top-up: original stats file has no seed", file=sys.stderr)
+            return 2
+
+        seed = args.seed if args.seed is not None else original_seed + 1
+        if seed == original_seed:
+            print(
+                f"top-up seed {seed} must differ from original seed {original_seed}",
+                file=sys.stderr,
+            )
+            return 2
+
+        original_per_question = original_stats.get("per_question")
+        if original_per_question is None:
+            print("top-up: original stats file has no per_question", file=sys.stderr)
+            return 2
+        if args.per_question is not None and args.per_question != original_per_question:
+            print(
+                f"top-up: --per-question {args.per_question} differs from original {original_per_question}",
+                file=sys.stderr,
+            )
+            return 2
+        per_question = original_per_question
+
+        existing_items: list[dict[str, Any]] = []
+        existing_ids: set[str] = set()
+        existing_norms: set[str] = set()
+        with out_items.open(encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                existing_items.append(item)
+                existing_ids.add(item["item_id"])
+                existing_norms.add(_normalise(item["utterance"]))
+
+        # The quota is fixed by the original plan; the top-up seed is only for
+        # generation.
+        rng = random.Random(original_seed)
+        question_ids = _all_question_ids()
+        jobs = synth.plan_top_up(
+            existing_items, question_ids, per_question, rng, near_miss_share=0.5
+        )
+        if not jobs:
+            print("every cell is already at quota; nothing to top up", file=sys.stderr)
+            return 0
+
+        items, stats = synth.run_jobs(
+            endpoint,
+            jobs,
+            master_seed=seed,
+            existing_norms=existing_norms | _schema_seed_norms(),
+            label_check=True,
+            concurrency=4,
+        )
+
+        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S") + "Z"
+
+        if not items:
+            print("top-up: no new items accepted", file=sys.stderr)
+            topup_stats = {
+                "seed": seed,
+                "original_seed": original_seed,
+                "per_question": per_question,
+                "original_per_question": per_question,
+                "plan": [dataclasses.asdict(j) for j in jobs],
+                "stats": _stats_serializable(stats),
+                "added": {},
+            }
+            topup_stats_path = _refuse_protected(
+                out_items.with_suffix(f".topup-{timestamp}.stats.json")
+            )
+            _atomic_write_json(topup_stats_path, topup_stats)
+            return 0
+
+        new_ids = {i["item_id"] for i in items}
+        if new_ids & existing_ids:
+            print("refusing top-up: new item_id collides with an existing item_id", file=sys.stderr)
+            return 3
+
+        backup_path = _refuse_protected(
+            out_items.with_name(out_items.name + f".pre-topup-{timestamp}")
+        )
+        shutil.copy2(out_items, backup_path)
+        backup_path.chmod(0o600)
+
+        _atomic_write_jsonl(out_items, existing_items + items)
+
+        # Nested by question, then label: JSON object keys must be strings.
+        added: dict[str, dict[str, int]] = {}
+        for i in items:
+            per_q = added.setdefault(i["question_id"], {})
+            per_q[i["generated_label"]] = per_q.get(i["generated_label"], 0) + 1
+        topup_stats = {
+            "seed": seed,
+            "original_seed": original_seed,
+            "per_question": per_question,
+            "original_per_question": per_question,
+            "plan": [dataclasses.asdict(j) for j in jobs],
+            "stats": _stats_serializable(stats),
+            "added": added,
+        }
+        topup_stats_path = _refuse_protected(
+            out_items.with_suffix(f".topup-{timestamp}.stats.json")
+        )
+        _atomic_write_json(topup_stats_path, topup_stats)
+
+        if work_root is not None:
+            norms_path = work_root / "gold_norms.json"
+            all_norms: set[str] = set()
+            if norms_path.exists():
+                all_norms.update(_load_norms(norms_path))
+            all_norms.update(_normalise(i["utterance"]) for i in items)
+            _atomic_write_json(norms_path, sorted(all_norms))
+
+        return 0
+
+    # Non-top-up (original behaviour).
     if out_items.exists():
         print(f"refusing to overwrite existing items: {out_items}", file=sys.stderr)
         return 2
 
-    rng = random.Random(args.seed)
+    seed = args.seed if args.seed is not None else 20261005
+    rng = random.Random(seed)
     question_ids = _all_question_ids()
     existing_norms = _schema_seed_norms()
 
-    api_key = os.environ.get(args.api_key_env)
-    endpoint = synth.Endpoint(args.chat_url, api_key)
-    jobs = synth.plan(question_ids, args.per_question, rng, near_miss_share=0.5)
+    per_question = args.per_question if args.per_question is not None else 30
+    jobs = synth.plan(question_ids, per_question, rng, near_miss_share=0.5)
     items, stats = synth.run_jobs(
         endpoint,
         jobs,
-        master_seed=args.seed,
+        master_seed=seed,
         existing_norms=existing_norms,
         label_check=True,
         concurrency=4,
@@ -256,8 +392,8 @@ def _cmd_gold(args: argparse.Namespace) -> int:
     stats_out = {
         "plan": [dataclasses.asdict(j) for j in jobs],
         "stats": _stats_serializable(stats),
-        "seed": args.seed,
-        "per_question": args.per_question,
+        "seed": seed,
+        "per_question": per_question,
     }
     _atomic_write_json(out_items.with_suffix(".stats.json"), stats_out)
 
@@ -526,8 +662,9 @@ def main(argv: list[str] | None = None) -> int:
 
     gold_p = sub.add_parser("gold", parents=[common])
     gold_p.add_argument("--out-items", type=str, default=None)
-    gold_p.add_argument("--per-question", type=int, default=30)
-    gold_p.add_argument("--seed", type=int, default=20261005)
+    gold_p.add_argument("--per-question", type=int, default=None, help="default 30")
+    gold_p.add_argument("--seed", type=int, default=None)
+    gold_p.add_argument("--top-up", action="store_true")
 
     gen_p = sub.add_parser("generate", parents=[common])
     gen_p.add_argument("--split", choices=["train", "dev"], required=True)

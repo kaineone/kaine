@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
 import hashlib
 import http.server
@@ -41,6 +42,10 @@ def _load_script(rel_path: str, module_name: str):
 sources = _load_script("scripts/k1jev/sources.py", "k1jev_sources")
 synth = _load_script("scripts/k1jev/synth.py", "k1jev_synth")
 build_data = _load_script("scripts/k1jev/build_data.py", "k1jev_build_data")
+# build_data loads synth.py and sources.py again under the same module names,
+# so test patches must target the modules build_data actually uses.
+synth = build_data.synth
+sources = build_data.sources
 
 
 
@@ -982,4 +987,504 @@ def test_sources_client_allows_environment_proxies():
     trust_env = next((kw.value for kw in call.keywords if kw.arg == "trust_env"), None)
     assert isinstance(trust_env, ast.Constant)
     assert trust_env.value is True
+
+
+def _old_plan(
+    question_ids: list[str],
+    per_question: int,
+    rng: random.Random,
+    *,
+    near_miss_share: float,
+) -> list[synth.Job]:
+    """Build generation jobs that cover every question and target."""
+    if not 0.0 <= near_miss_share <= 1.0:
+        raise ValueError("near_miss_share must be between 0 and 1")
+    near_miss_styles = [s for s in synth.STYLES if s != "plain"]
+    jobs: list[synth.Job] = []
+
+    for qid in question_ids:
+        question = schema_module.get_question(qid)
+        answer_keys = [opt.key for opt in question.options]
+        if qid == "trait_claim":
+            targets = [(trait, key) for trait in schema_module.TRAITS for key in answer_keys]
+        else:
+            targets = [(None, key) for key in answer_keys]
+
+        t = len(targets)
+        base = per_question // t
+        remainder = per_question % t
+        per_target = [base] * t
+        for i in rng.sample(range(t), remainder):
+            per_target[i] += 1
+
+        for (trait, target), total in zip(targets, per_target):
+            plain_count = int(total * (1.0 - near_miss_share))
+            near_count = total - plain_count
+            per_style = near_count // len(near_miss_styles)
+            style_rem = near_count % len(near_miss_styles)
+
+            counts: list[tuple[int, str]] = []
+            if plain_count:
+                counts.append((plain_count, "plain"))
+            for idx, style in enumerate(near_miss_styles):
+                c = per_style + (1 if idx < style_rem else 0)
+                if c:
+                    counts.append((c, style))
+
+            for c, style in counts:
+                remaining = c
+                while remaining > 0:
+                    n = min(remaining, 5)
+                    jobs.append(synth.Job(qid, trait, target, style, n))
+                    remaining -= n
+
+    return jobs
+
+
+class _SequentialExecutor:
+    """ThreadPoolExecutor replacement that runs submitted work sequentially."""
+
+    def __init__(self, max_workers=None):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+    def map(self, func, iterable):
+        return [func(item) for item in iterable]
+
+
+def test_plan_unchanged_by_refactor(monkeypatch):
+    opt_yes = schema_module.Option("yes", None)
+    opt_no = schema_module.Option("no", None)
+    fake_q1 = schema_module.Question(
+        id="q1",
+        type="choice",
+        instructions="Q1?",
+        definition="D1.",
+        options=(opt_yes, opt_no),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    fake_q2 = schema_module.Question(
+        id="q2",
+        type="choice",
+        instructions="Q2?",
+        definition="D2.",
+        options=(opt_no, opt_yes),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+
+    def fake_get(qid):
+        return {"q1": fake_q1, "q2": fake_q2}[qid]
+
+    monkeypatch.setattr(schema_module, "get_question", fake_get)
+    expected = _old_plan(["q1", "q2"], 17, random.Random(5), near_miss_share=0.5)
+    got = synth.plan(["q1", "q2"], 17, random.Random(5), near_miss_share=0.5)
+    assert got == expected
+
+
+def test_plan_top_up_emits_only_shortfall_jobs(monkeypatch):
+    monkeypatch.setattr(schema_module, "TRAITS", ("calm", "bold"))
+    opt_yes = schema_module.Option("yes", None)
+    opt_no = schema_module.Option("no", None)
+    fake_regular = schema_module.Question(
+        id="q1",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=(opt_yes, opt_no),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    fake_trait = schema_module.Question(
+        id="trait_claim",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=(opt_yes, opt_no),
+        context_label="trait",
+        seeds=(),
+        welfare=False,
+    )
+
+    def fake_get(qid):
+        return fake_trait if qid == "trait_claim" else fake_regular
+
+    monkeypatch.setattr(schema_module, "get_question", fake_get)
+
+    qids = ["q1", "trait_claim"]
+    per_question = 4
+    quota = synth.planned_quota(qids, per_question, random.Random(1))
+
+    existing = []
+    for key, total in quota.items():
+        qid, trait, target = key
+        for _ in range(total):
+            existing.append(
+                {
+                    "question_id": qid,
+                    "trait": trait,
+                    "generated_label": target,
+                    "utterance": "placeholder",
+                }
+            )
+
+    jobs_full = synth.plan_top_up(
+        existing, qids, per_question, random.Random(1), near_miss_share=0.5
+    )
+    assert jobs_full == []
+
+    partial = existing[:-3]
+    jobs = synth.plan_top_up(
+        partial, qids, per_question, random.Random(1), near_miss_share=0.5
+    )
+
+    have: dict[tuple[str, str | None, str], int] = {}
+    for item in partial:
+        key = (
+            item["question_id"],
+            item.get("trait") if item["question_id"] == "trait_claim" else None,
+            item["generated_label"],
+        )
+        have[key] = have.get(key, 0) + 1
+
+    expected = {
+        key: shortfall
+        for key in quota
+        if (shortfall := quota[key] - have.get(key, 0)) > 0
+    }
+    actual: dict[tuple[str, str | None, str], int] = {}
+    for j in jobs:
+        key = (j.question_id, j.trait, j.target)
+        actual[key] = actual.get(key, 0) + j.n
+    assert actual == expected
+
+    for j in jobs:
+        key = (j.question_id, j.trait, j.target)
+        assert have.get(key, 0) < quota[key]
+
+
+def test_gold_top_up_end_to_end(fake_llm_server, monkeypatch, tmp_path):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = None
+    monkeypatch.setattr(synth, "ThreadPoolExecutor", _SequentialExecutor)
+    opt_yes = schema_module.Option("yes", None)
+    opt_no = schema_module.Option("no", None)
+    fake_q = schema_module.Question(
+        id="fake_q",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=(opt_yes, opt_no),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    monkeypatch.setattr(build_data, "_all_question_ids", lambda: ["fake_q"])
+
+    out_items = tmp_path / "gold.jsonl"
+
+    def args(seed, top_up):
+        return argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=out_items,
+            seed=seed,
+            per_question=4,
+            top_up=top_up,
+        )
+
+    server_state["gen_items"] = [
+        {"utterance": "Initial short-run k1jev baseline sentence."}
+    ]
+    assert build_data._cmd_gold(args(10, False)) == 0
+    old_bytes = out_items.read_bytes()
+    # The ordering checks below are only meaningful if the first run kept items.
+    assert old_bytes
+
+    server_state["gen_items"] = [
+        {"utterance": "I do not think that is right."},
+        {"utterance": "She never said that."},
+        {"utterance": "We are not going there."},
+        {"utterance": "They don't want this."},
+        {"utterance": "Nobody asked me."},
+        {"utterance": "I wouldn't do it."},
+        {"utterance": "No one believed him."},
+        {"utterance": "It isn't right."},
+        {"utterance": "I never agreed."},
+        {"utterance": "Don't even ask."},
+    ]
+    assert build_data._cmd_gold(args(11, True)) == 0
+
+    backups = list(out_items.parent.glob(out_items.name + ".pre-topup-*"))
+    assert len(backups) == 1
+    backup = backups[0]
+    assert backup.read_bytes() == old_bytes
+    assert backup.stat().st_mode & 0o777 == 0o600
+
+    new_bytes = out_items.read_bytes()
+    assert new_bytes.startswith(old_bytes)
+
+    old_lines = old_bytes.decode("utf-8").splitlines()
+    new_lines = new_bytes.decode("utf-8").splitlines()
+    assert len(new_lines) > len(old_lines)
+
+    stats_files = list(out_items.parent.glob(out_items.stem + ".topup-*.stats.json"))
+    assert len(stats_files) == 1
+    topup_stats = json.loads(stats_files[0].read_text(encoding="utf-8"))
+    assert topup_stats["seed"] == 11
+    assert topup_stats["original_seed"] == 10
+    assert topup_stats["added"]
+
+
+def test_gold_top_up_quota_uses_original_seed(fake_llm_server, monkeypatch, tmp_path):
+    url, server_state = fake_llm_server
+    monkeypatch.setattr(synth, "ThreadPoolExecutor", _SequentialExecutor)
+    opts = tuple(schema_module.Option(f"opt{i}", None) for i in range(4))
+    fake_q = schema_module.Question(
+        id="fake_q",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=opts,
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    monkeypatch.setattr(build_data, "_all_question_ids", lambda: ["fake_q"])
+
+    per_question = None
+    for cand in (5, 7, 9, 11, 13):
+        quota10 = synth.planned_quota(["fake_q"], cand, random.Random(10))
+        quota99 = synth.planned_quota(["fake_q"], cand, random.Random(99))
+        if quota10 != quota99:
+            per_question = cand
+            break
+    assert per_question is not None
+
+    out_items = tmp_path / "gold.jsonl"
+
+    def args(seed, top_up):
+        return argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=out_items,
+            seed=seed,
+            per_question=per_question,
+            top_up=top_up,
+        )
+
+    server_state["check_key"] = None
+    server_state["gen_items"] = [
+        {"utterance": "First seed ten k1jev plain sentence."}
+    ]
+    assert build_data._cmd_gold(args(10, False)) == 0
+
+    server_state["gen_items"] = [
+        {"utterance": "I never imagined option zero would matter."},
+        {"utterance": "I do not believe option one applies."},
+        {"utterance": "She never mentioned option two."},
+        {"utterance": "We aren't choosing option three."},
+        {"utterance": "Nobody likes option zero anyway."},
+        {"utterance": "Don't pick option one."},
+        {"utterance": "It isn't option two."},
+        {"utterance": "I never said option three."},
+    ]
+    assert build_data._cmd_gold(args(99, True)) == 0
+
+    backups = list(out_items.parent.glob(out_items.name + ".pre-topup-*"))
+    assert len(backups) == 1
+    backup = backups[0]
+
+    orig_counts: dict[tuple[str, str | None, str], int] = {}
+    for line in backup.read_text(encoding="utf-8").splitlines():
+        item = json.loads(line)
+        key = (item["question_id"], item.get("trait"), item["generated_label"])
+        orig_counts[key] = orig_counts.get(key, 0) + 1
+
+    stats_files = list(out_items.parent.glob(out_items.stem + ".topup-*.stats.json"))
+    assert len(stats_files) == 1
+    topup_stats = json.loads(stats_files[0].read_text(encoding="utf-8"))
+
+    plan_totals: dict[tuple[str, str | None, str], int] = {}
+    for job in topup_stats["plan"]:
+        key = (job["question_id"], job["trait"], job["target"])
+        plan_totals[key] = plan_totals.get(key, 0) + job["n"]
+
+    expected = {
+        key: max(0, quota10[key] - orig_counts.get(key, 0))
+        for key in quota10
+    }
+    assert plan_totals == expected
+
+
+def test_gold_top_up_refuses_same_seed_and_missing_file(fake_llm_server, monkeypatch, tmp_path):
+    url, server_state = fake_llm_server
+    monkeypatch.setattr(synth, "ThreadPoolExecutor", _SequentialExecutor)
+    opt_yes = schema_module.Option("yes", None)
+    opt_no = schema_module.Option("no", None)
+    fake_q = schema_module.Question(
+        id="fake_q",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=(opt_yes, opt_no),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    monkeypatch.setattr(build_data, "_all_question_ids", lambda: ["fake_q"])
+
+    out_items = tmp_path / "gold.jsonl"
+    server_state["check_key"] = None
+    server_state["gen_items"] = [
+        {"utterance": "Baseline k1jev seed ten sentence."}
+    ]
+    assert build_data._cmd_gold(
+        argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=out_items,
+            seed=10,
+            per_question=4,
+            top_up=False,
+        )
+    ) == 0
+
+    old_bytes = out_items.read_bytes()
+    rc = build_data._cmd_gold(
+        argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=out_items,
+            seed=10,
+            per_question=4,
+            top_up=True,
+        )
+    )
+    assert rc == 2
+    assert out_items.read_bytes() == old_bytes
+
+    missing_items = tmp_path / "missing.jsonl"
+    rc = build_data._cmd_gold(
+        argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=missing_items,
+            seed=11,
+            per_question=4,
+            top_up=True,
+        )
+    )
+    assert rc == 2
+
+
+def test_gold_top_up_with_nothing_accepted_writes_no_items(fake_llm_server, monkeypatch, tmp_path):
+    url, server_state = fake_llm_server
+    monkeypatch.setattr(synth, "ThreadPoolExecutor", _SequentialExecutor)
+    opt_yes = schema_module.Option("yes", None)
+    opt_no = schema_module.Option("no", None)
+    fake_q = schema_module.Question(
+        id="fake_q",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=(opt_yes, opt_no),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    monkeypatch.setattr(build_data, "_all_question_ids", lambda: ["fake_q"])
+
+    out_items = tmp_path / "gold.jsonl"
+    server_state["check_key"] = None
+    server_state["gen_items"] = [
+        {"utterance": "Baseline k1jev nothing accepted sentence."}
+    ]
+    assert build_data._cmd_gold(
+        argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=out_items,
+            seed=10,
+            per_question=4,
+            top_up=False,
+        )
+    ) == 0
+
+    old_bytes = out_items.read_bytes()
+    server_state["check_key"] = "wrong"
+    server_state["gen_items"] = [{"utterance": "I do not agree at all."}]
+    rc = build_data._cmd_gold(
+        argparse.Namespace(
+            chat_url=url,
+            api_key_env="K1JEV_API_KEY",
+            work_root=None,
+            out_items=out_items,
+            seed=11,
+            per_question=4,
+            top_up=True,
+        )
+    )
+    assert rc == 0
+    assert out_items.read_bytes() == old_bytes
+
+    backups = list(out_items.parent.glob(out_items.name + ".pre-topup-*"))
+    assert backups == []
+
+    stats_files = list(out_items.parent.glob(out_items.stem + ".topup-*.stats.json"))
+    assert len(stats_files) == 1
+
+
+def test_run_jobs_label_drop_answers_counts_checker_token(fake_llm_server, monkeypatch):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = "wrong"
+    opt_yes = schema_module.Option("yes", None)
+    opt_no = schema_module.Option("no", None)
+    fake_q = schema_module.Question(
+        id="fake_q",
+        type="choice",
+        instructions="Q?",
+        definition="D.",
+        options=(opt_yes, opt_no),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    server_state["gen_items"] = [
+        {"utterance": "This is wrong sentence number one."},
+        {"utterance": "This is wrong sentence number two."},
+        {"utterance": "This is wrong sentence number three."},
+    ]
+    endpoint = synth.Endpoint(url, api_key=None)
+    items, stats = synth.run_jobs(
+        endpoint,
+        [synth.Job("fake_q", None, "yes", "plain", 2)],
+        master_seed=1,
+        existing_norms=set(),
+        label_check=True,
+        concurrency=1,
+    )
+    assert items == []
+    assert stats["label_drops"] == 3
+    assert stats["label_drop_answers"]["fake_q"]["yes"]["wrong"] == 3
 
