@@ -99,9 +99,17 @@ def _redact_fields(value, fields_to_redact):
         if isinstance(node, dict):
             out = {}
             for k, v in node.items():
-                if k in fields_to_redact and isinstance(v, str) and v.strip():
-                    out[k] = HEARD_SPEECH_PLACEHOLDER
-                    replaced = True
+                if k in fields_to_redact:
+                    if isinstance(v, str) and v.strip():
+                        out[k] = HEARD_SPEECH_PLACEHOLDER
+                        replaced = True
+                    elif isinstance(v, (dict, list, tuple)):
+                        redacted = _replace_text_leaves(v)
+                        out[k] = redacted
+                        if redacted != v:
+                            replaced = True
+                    else:
+                        out[k] = v
                 else:
                     out[k] = walk(v)
             return out
