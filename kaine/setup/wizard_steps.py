@@ -630,7 +630,11 @@ def research_opt_in_step() -> Step:
         if answers.get("opt_in"):
             ctx.extra["research_opted_in"] = True
         else:
-            ctx.config.setdefault("research_submission", {})["enabled"] = False
+            # Turn off a submission an earlier run turned on; on a fresh run
+            # there is nothing to write (the shipped default is off).
+            existing = ctx.extra.get("existing_config") or {}
+            if _existing(existing, "research_submission.enabled", False):
+                ctx.config.setdefault("research_submission", {})["enabled"] = False
 
     return Step(
         id="research-opt-in",

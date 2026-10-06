@@ -1360,7 +1360,8 @@ def test_run_web_refuses_when_state_dir_cannot_be_resolved(tmp_path, monkeypatch
 
     started = []
     monkeypatch.setattr(kaine.storage, "resolve", broken_resolve)
-    monkeypatch.setattr(setup_main_mod, "serve", lambda *a, **k: started.append(1))
+    # _run_web imports the server lazily from kaine.setup.web.
+    monkeypatch.setattr("kaine.setup.web.serve", lambda *a, **k: started.append(1))
     args = argparse.Namespace(
         operator_path=tmp_path / "op.toml",
         config_path=Path(__file__).resolve().parent.parent / "config" / "kaine.toml",
