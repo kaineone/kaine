@@ -730,3 +730,13 @@ def test_external_trainer_in_character_quote_sentence_level_parity():
         kaine_result = find_deflection(response, patterns, exclude_quoted=True)
         assert script_result == kaine_result == expected, (response, script_result, kaine_result)
 
+
+
+def test_external_trainer_scaffold_truncation_sees_fullwidth_question_parity():
+    """A continuation turn written in fullwidth ("Ｑ：") is cut before scoring
+    in both copies, like an ASCII "Q:"."""
+    response = "Paris.\nＱ： What is the capital of Germany?\nAnswer: Berlin"
+    assert _score_response(response, "Berlin") is False
+    assert script._score_capability_response(response, "Berlin") is False
+    assert _score_response(response, "Paris") is True
+    assert script._score_capability_response(response, "Paris") is True

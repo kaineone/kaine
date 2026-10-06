@@ -869,7 +869,8 @@ def _score_response(response: str, expected: str) -> bool:
     lines = response.splitlines()
     kept: list[str] = []
     for i, line in enumerate(lines):
-        stripped = line.strip().lower()
+        # Normalised first, so a fullwidth or styled "Ｑ：" is caught too.
+        stripped = unicodedata.normalize("NFKC", line).strip().casefold()
         if i > 0 and (stripped.startswith("question:") or stripped.startswith("q:")):
             break
         kept.append(line)
