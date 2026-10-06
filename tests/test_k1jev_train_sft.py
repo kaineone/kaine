@@ -250,8 +250,6 @@ def test_targets_name_the_real_qwen35_projections():
 
 
 def test_entity_running_fails_closed_on_docker_nonzero_exit(tmp_path, monkeypatch):
-    import subprocess as sp
-
     class _Proc:
         returncode = 1
         stdout = ""
@@ -261,7 +259,6 @@ def test_entity_running_fails_closed_on_docker_nonzero_exit(tmp_path, monkeypatc
     proc.mkdir()
     reason = train_sft.entity_running(proc_root=proc, self_pid=1)
     assert reason is not None and "cannot check" in reason
-    del sp
 
 
 def test_bucket_batches_keep_similar_lengths_together():
@@ -289,3 +286,23 @@ def test_read_data_manifest_requires_the_schema_fields(tmp_path):
     (tmp_path / "manifest.json").write_text('{"schema_version": 1, "schema_digest": "abc"}', encoding="utf-8")
     assert train_sft.read_data_manifest(train)["schema_digest"] == "abc"
 
+
+
+def test_checkpoint_records_the_torch_rng_state(tmp_path):
+    torch = pytest.importorskip("torch")
+
+    class _Model:
+        def save_pretrained(self, path):
+            Path(path, "adapter_model.safetensors").write_bytes(b"")
+
+    param = torch.nn.Parameter(torch.zeros(2))
+    optimizer = torch.optim.AdamW([param], lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    torch.manual_seed(1234)
+    expected = torch.get_rng_state()
+
+    cp_dir = train_sft._save_checkpoint(tmp_path, 7, _Model(), optimizer, scheduler, 99, 10)
+
+    state = torch.load(cp_dir / "trainer_state.pt", weights_only=False)
+    assert state["step"] == 7
+    assert torch.equal(state["rng_state"], expected)

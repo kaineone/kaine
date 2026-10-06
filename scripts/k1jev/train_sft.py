@@ -316,6 +316,8 @@ def _save_checkpoint(
 ) -> Path:
     import shutil
 
+    import torch
+
     cp_dir = out / "checkpoints" / f"step-{step}"
     if cp_dir.exists():
         shutil.rmtree(cp_dir, ignore_errors=True)
@@ -330,15 +332,8 @@ def _save_checkpoint(
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict(),
         "random_state": random.getstate(),
-        "rng_state": None,
+        "rng_state": torch.get_rng_state(),
     }
-    try:
-        import torch
-
-        state["rng_state"] = torch.get_rng_state()
-    except Exception:
-        pass
-
     torch.save(state, cp_dir / "trainer_state.pt")
     _prune_old_checkpoints(out, keep=2)
     return cp_dir
@@ -457,10 +452,7 @@ def train(
                 set_peft_model_state_dict(model, adapter_weights, adapter_name="default")
 
             optimizer.load_state_dict(state["optimizer"])
-            scheduler_state = state.get("scheduler")
-            if scheduler_state is not None:
-                # scheduler is created below; load its state then.
-                pass
+            # The scheduler is created below and loads its state there.
 
             if "random_state" in state:
                 random.setstate(state["random_state"])
