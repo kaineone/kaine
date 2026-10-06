@@ -9,7 +9,7 @@ KAINE's hardware needs split into two paths. Reproducing results offline (Path A
 | | Path A — offline reproduction | Path B — live entity boot |
 |---|---|---|
 | GPU | None required | One GPU recommended for the language organ; CPU-only works (slower) |
-| VRAM | — | Enough for the served organ and enabled modules; the shipped config budgets about 3 GB for the 4B organ |
+| VRAM | — | Enough for the served organ and enabled modules; the shipped config budgets about 4.1 GB for the 4B organ |
 | Supporting services | None | Redis, model server, Qdrant (voice services only if Audition/Vox are enabled) |
 | Python | 3.12 recommended (3.11+ required) | 3.12 recommended (3.11+ required) |
 | What runs | Test suite + offline runners/benchmarks | The full cognitive cycle |
@@ -34,7 +34,7 @@ Several workloads stay on CPU even when a GPU is present: the Chronos CfC tempor
 
 ### Language organ
 
-The published KAINE abliterated organ (`kaineone/Qwen3.5-4B-abliterated-GGUF`, served by a local OpenAI-compatible model server) is the largest single consumer. The shipped config budgets about 3 GB of VRAM for the served 4B organ (actual usage is unverified). If you have more VRAM, you can configure a larger organ locally.
+The published KAINE abliterated organ (`kaineone/Qwen3.5-4B-abliterated-GGUF`, served by a local OpenAI-compatible model server) is the largest single consumer. The served 4B organ uses about 4.1 GB of VRAM with the pinned settings (a 32,768-token context across 4 slots, f16 KV cache). If you have more VRAM, you can configure a larger organ locally.
 
 ### Vision
 
@@ -81,7 +81,7 @@ A live boot expects these local services. Voice services are only needed when Au
 | Service | Role | Footprint |
 |---|---|---|
 | Redis | Event bus (Redis Streams) | Light; CPU/RAM only |
-| Model server | Language organ inference (Lingua) | The served organ's VRAM (about 3 GB in the shipped config) when loaded |
+| Model server | Language organ inference (Lingua) | The served organ's VRAM (about 4.1 GB in the shipped config) when loaded |
 | Qdrant | Vector memory (Mnemos, Empatheia) | Light; grows with stored memories |
 | Speaches (optional) | Speech-to-text (Audition) | CPU with `medium.en`; must not run on GPU |
 | Chatterbox (optional) | Voice synthesis (Vox) | GPU-served TTS; can share the secondary GPU |

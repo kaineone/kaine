@@ -146,6 +146,7 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     assert read_desired() == written_desired
 
 
+@pytest.mark.no_data_root
 def test_no_data_root_writes_under_cwd(tmp_path):
     # The autouse fixture has already chdir'd to tmp_path/cwd and reset root.
     control = CycleControl()

@@ -77,7 +77,7 @@ Chronos models event rhythm across the bus with a small CfC network and publishe
 | `rumination_bucket_resolution` | float | `0.25` | Bucket width (seconds) for discretizing event timestamps in the rumination detector. |
 | `user_input_streams` | list of strings | `["audition.out"]` | Streams Chronos monitors for user-input timing. |
 | `interaction_event_types` | list of strings | `["audition.transcription", "audition.emotion"]` | Event types on those streams that count as an interaction when they come from an operator channel. |
-| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head. Disabled by default; enable per-install. |
+| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head. Disabled by default in the shipped file; enabled in the default `thesis_test` profile. |
 | `prediction_error_window` | integer | `32` | Rolling-window size (ticks) for normalizing the temporal prediction error signal. |
 
 ## Topos
@@ -154,7 +154,7 @@ Section: `[topos]` foveation keys.
 | `peripheral_height` | integer | `180` | Height of the downsampled peripheral gist. |
 | `foveal_size` | integer | `224` | Side length of the square foveal crop encoded at native detail. |
 
-Foveation no longer requires `encoder_backend = "dinov2"`; it composes with the default InternVideo-Next clip encoder. Enable it only after the host benchmark (`scripts/bench_foveation.py`) confirms two encodes plus native capture fit the tick budget.
+Foveation works with `encoder_backend = "internvideo_next"` (the default) or `"dinov2"`; it composes with the default InternVideo-Next clip encoder. Enable it only after the host benchmark (`scripts/bench_foveation.py`) confirms two encodes plus native capture fit the tick budget.
 
 ## Nous
 

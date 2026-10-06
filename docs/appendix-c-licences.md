@@ -83,7 +83,7 @@ The optional substrate plugin in `plugins/kaine-cl1` (a separate distribution, n
 |---|---|---|---|
 | Redis 7.2 | BSD-3-Clause | Yes | `redis:7.2-alpine` image in [`compose/kaine.yml`](../compose/kaine.yml) |
 | Qdrant | Apache-2.0 | Yes | |
-| llama.cpp server (`ghcr.io/ggml-org/llama.cpp:server-*`) | MIT | Yes | Shipped LLM inference host ([`compose/kaine.yml`](../compose/kaine.yml)) |
+| llama.cpp server (`ghcr.io/ggml-org/llama.cpp`, pinned by digest, build b11382) | MIT | Yes | Shipped LLM inference host ([`compose/kaine.yml`](../compose/kaine.yml)) |
 | Speaches | MIT | Yes | STT host service; serves faster-Whisper |
 
 ## Trainer image
@@ -123,6 +123,8 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | DreamerV3 RSSM | [`external/dreamerv3/`](../external/dreamerv3/) | MIT | Clean-room re-implementation of the world-model core only; full upstream license text in `external/dreamerv3/UPSTREAM` |
 | OpenNARS-for-Applications | [`external/archive/`](../external/archive/) | MIT | Archived; not imported at runtime |
 | InternVideo-Next modeling code | [`external/internvideo_next/`](../external/internvideo_next/) | MIT | Verbatim vendor |
+| Dasheng modeling code | [`external/dasheng/`](../external/dasheng/) | Apache-2.0 | Verbatim vendor; frozen self-supervised acoustic encoder (Audition, selectable) |
+| WavJEPA modeling code | [`external/wavjepa/`](../external/wavjepa/) | MIT (per the upstream Hugging Face model tag; the repository carries no LICENSE file) | Vendored with three safety changes; frozen self-supervised acoustic encoder (Audition, selectable, student path only) |
 | jlens | [`external/jlens/`](../external/jlens/) | Apache-2.0 | |
 | Nexus front-end assets | [`kaine/nexus/static/`](../kaine/nexus/static/) | mixed | JavaScript libraries in `vendor/`; fonts in `fonts/`. Includes three.js, uPlot, and `viz.js` (GPL-3.0-or-later). See [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). |
 

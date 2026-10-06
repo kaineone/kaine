@@ -21,6 +21,7 @@ def test_main_root_prints_configured_data_root(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == str(tmp_path)
 
 
+@pytest.mark.no_data_root
 def test_main_root_prints_nothing_when_unset(monkeypatch, capsys):
     monkeypatch.setattr("kaine.config.load_kaine_config", lambda: {})
     assert main(["root"]) == 0
