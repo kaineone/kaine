@@ -15,8 +15,8 @@ from kaine.bus.schema import WORKSPACE_STREAM, module_stream
 
 # --- Workspace, cycle and action selection --------------------------------
 
-#: The conscious broadcast, written by Syneidesis.
-WORKSPACE_STREAM = WORKSPACE_STREAM
+# WORKSPACE_STREAM (imported above) is the conscious broadcast, written by
+# Syneidesis.
 #: Tick, rate and time-scale events from the cycle engine.
 CYCLE_STREAM = "cycle.out"
 #: Intents chosen by Volition.
@@ -105,3 +105,37 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
         WELFARE_STREAM,
     }
 )
+
+__all__ = [
+    "AUDITION_STREAM",
+    "CHRONOS_STREAM",
+    "CYCLE_STREAM",
+    "ECHO_STREAM",
+    "EIDOLON_STREAM",
+    "EMPATHEIA_STREAM",
+    "GESTATION_STREAM",
+    "HYPNOS_STREAM",
+    "INDIVIDUATION_STREAM",
+    "KNOWN_STREAMS",
+    "LIFECYCLE_STREAM",
+    "LINGUA_EXTERNAL_STREAM",
+    "LINGUA_INTERNAL_STREAM",
+    "LINGUA_STREAM",
+    "MNEMOS_STREAM",
+    "MODULE_STREAMS",
+    "MUNDUS_STREAM",
+    "NOUS_STREAM",
+    "PERCEPTION_STREAM",
+    "PHANTASIA_STREAM",
+    "PRAXIS_STREAM",
+    "PRESERVATION_STREAM",
+    "SOMA_STREAM",
+    "SPOT_STREAM",
+    "THYMOS_STREAM",
+    "TOPOS_STREAM",
+    "VOLITION_FEEDBACK_STREAM",
+    "VOLITION_STREAM",
+    "VOX_STREAM",
+    "WELFARE_STREAM",
+    "WORKSPACE_STREAM",
+]
