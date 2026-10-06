@@ -66,17 +66,6 @@ async def spied_bus():
     await bus.close()
 
 
-async def _close(module) -> None:
-    """Shut the module down; some revive doubles (Mundus's adapter) cannot be
-    closed, so fall back to cancelling the module's own tasks."""
-    try:
-        await module.shutdown()
-    except AttributeError:
-        for task in list(getattr(module, "_tasks", [])):
-            task.cancel()
-        await asyncio.gather(*getattr(module, "_tasks", []), return_exceptions=True)
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name", sorted(_BUILDERS))
 async def test_module_never_reads_from_dollar_without_blocking(
@@ -88,6 +77,6 @@ async def test_module_never_reads_from_dollar_without_blocking(
         # Let every background loop poll a few times.
         await asyncio.sleep(0.4)
     finally:
-        await _close(module)
+        await module.shutdown()
     bad = [(stream, cursor) for stream, cursor, block in calls if cursor == "$" and not block]
     assert not bad, f"{name} reads {bad} from '$' without blocking"

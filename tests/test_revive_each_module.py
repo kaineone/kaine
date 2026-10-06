@@ -190,6 +190,9 @@ class _FakeAdapter:
 
         return _Caps()
 
+    async def close(self) -> None:
+        """Mundus closes its adapter on shutdown; the double has nothing to release."""
+
 
 def _json_roundtrip(obj: Any) -> Any:
     return json.loads(json.dumps(obj))
