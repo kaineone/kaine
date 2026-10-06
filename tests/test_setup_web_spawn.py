@@ -419,15 +419,21 @@ def test_spawn_confirm_lock_serializes(tmp_path, monkeypatch, spawn_fakes):
         r1 = _spawn_post(client)
         nonce = _extract_nonce(r1.text)
 
-        lock = app.state.spawn_lock
-        asyncio.get_event_loop().run_until_complete(lock.acquire())
+        class _HeldLock:
+            """A spawn already in progress: the route must refuse at once."""
+
+            def locked(self) -> bool:
+                return True
+
+        real_lock = app.state.spawn_lock
+        app.state.spawn_lock = _HeldLock()
         try:
             r2 = _confirm_post(client, nonce)
             assert r2.status_code == 409
             assert "already in progress" in r2.text.lower()
             assert len(spawn_fakes) == 0
         finally:
-            lock.release()
+            app.state.spawn_lock = real_lock
 
 
 def test_spawn_confirm_expired_nonce(tmp_path, monkeypatch, spawn_fakes):
