@@ -12,6 +12,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -33,6 +34,19 @@ __all__ = [
 ]
 
 
+LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "kaine-decision-model"})
+
+
+def check_local_url(url: str) -> None:
+    """Raise ValueError unless *url* is plain http to a host in LOCAL_HOSTS."""
+    parsed = urlsplit(url)
+    if parsed.scheme != "http" or (parsed.hostname or "") not in LOCAL_HOSTS:
+        raise ValueError(
+            "decision server url must be http on loopback or the compose service "
+            f"(one of {sorted(LOCAL_HOSTS)}); refusing {parsed.scheme}://{parsed.hostname}"
+        )
+
+
 @dataclass(frozen=True)
 class DecisionConfig:
     enabled: bool = False
@@ -44,6 +58,11 @@ class DecisionConfig:
     _KNOWN_KEYS = frozenset(
         {"enabled", "url", "model", "timeout_s", "thresholds_path"}
     )
+
+    def __post_init__(self) -> None:
+        # The client sends the server key and the entity's external speech.
+        # Both stay on this host: only loopback or the compose service name.
+        check_local_url(self.url)
 
     @classmethod
     def from_section(cls, section: dict | None) -> "DecisionConfig":
@@ -141,6 +160,9 @@ class DecisionClient:
         http_client: httpx.Client | None = None,
         clock=time.monotonic,
     ):
+        # Re-check here too: the key and the utterance must never leave the host,
+        # however the config was built.
+        check_local_url(config.url)
         self._config = config
         self._clock = clock
         self._api_key = os.environ.get("KAINE_DECISION_SERVER_API_KEY", "")

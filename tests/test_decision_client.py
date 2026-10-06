@@ -420,7 +420,7 @@ def test_config_from_section():
     cfg = DecisionConfig.from_section(
         {
             "enabled": True,
-            "url": "http://example",
+            "url": "http://127.0.0.1:11999",
             "model": "m",
             "timeout_s": 2.0,
             "thresholds_path": "/tmp/t.json",
@@ -428,7 +428,7 @@ def test_config_from_section():
     )
     assert cfg == DecisionConfig(
         enabled=True,
-        url="http://example",
+        url="http://127.0.0.1:11999",
         model="m",
         timeout_s=2.0,
         thresholds_path="/tmp/t.json",
@@ -567,3 +567,47 @@ def test_ask_never_raises_on_an_unexpected_error():
         assert client.ask("hello", None, ["no_such_question"]) is None
     finally:
         client.close()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com:11436",
+        "https://127.0.0.1:11436",
+        "http://10.0.0.5:11436",
+        "http://127.0.0.1.evil.example:11436",
+    ],
+)
+def test_non_local_urls_are_refused(url):
+    with pytest.raises(ValueError):
+        DecisionConfig(enabled=True, url=url)
+    with pytest.raises(ValueError):
+        DecisionConfig.from_section({"enabled": True, "url": url})
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://127.0.0.1:11436", "http://localhost:11436", "http://[::1]:11436", "http://kaine-decision-model:8080"],
+)
+def test_local_urls_are_accepted(url):
+    assert DecisionConfig(enabled=True, url=url).url == url
+
+
+def test_a_non_local_url_never_sends_the_key_or_the_utterance(monkeypatch):
+    """Even if a config with a remote URL is forced past DecisionConfig, the
+    client refuses at construction: no request, so neither the key nor the
+    entity's speech leaves the process."""
+    import dataclasses
+
+    import httpx
+
+    sent = []
+    transport = httpx.MockTransport(lambda request: sent.append(request) or httpx.Response(200, json={}))
+    monkeypatch.setenv("KAINE_DECISION_SERVER_API_KEY", "k-secret-marker")
+    cfg = DecisionConfig(enabled=True)
+    object.__setattr__(cfg, "url", "http://attacker.example:80")  # bypass __post_init__
+    with pytest.raises(ValueError):
+        DecisionClient(cfg, http_client=httpx.Client(transport=transport))
+    assert sent == []
+    del dataclasses
+
