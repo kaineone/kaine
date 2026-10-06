@@ -130,24 +130,14 @@ def test_registry_invariants():
     assert "lingua.out" in canonical_module_streams()
 
 
-def test_diagnostics_streams_are_known_or_allowlisted():
-    """Every stream the nexus diagnostics monitor tails is either a canonical
-    stream in ``kaine.bus.streams.KNOWN_STREAMS`` or an explicit allowlist
-    entry with a documented reason.
-    """
+def test_diagnostics_streams_are_known():
+    """Every stream the Nexus diagnostics monitor tails is a canonical stream
+    in ``kaine.bus.streams.KNOWN_STREAMS``."""
     from kaine.bus import streams
     from kaine.evaluation.stream_registry import diagnostics_streams
 
-    allowlist: dict[str, str] = {}
-    unknown = [
-        s
-        for s in diagnostics_streams()
-        if s not in streams.KNOWN_STREAMS and s not in allowlist
-    ]
-    assert not unknown, (
-        "diagnostics streams not in KNOWN_STREAMS or allowlist: " + ", ".join(unknown)
-    )
-
+    unknown = sorted(set(diagnostics_streams()) - streams.KNOWN_STREAMS)
+    assert not unknown, "diagnostics streams not in KNOWN_STREAMS: " + ", ".join(unknown)
 
 
 def test_module_streams_are_exactly_the_modules():

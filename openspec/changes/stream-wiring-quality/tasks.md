@@ -8,13 +8,13 @@
 
 - [x] 2.1 Add a canonical stream-constants module or extend `kaine/bus/schema.py` to export known stream names; verify `module_stream()` is used by consumers.
 - [ ] 2.2 Replace hard-coded stream literals in `kaine/modules/`, `kaine/nexus/conversation.py`, `kaine/evaluation/observers/`, and `kaine/evaluation/benchmarks/` with canonical imports.
-- [x] 2.3 Add boot-time validation in `kaine/boot.py` that warns on unknown `[bus.per_stream_maxlen]` keys.
-- [x] 2.4 Extend `tests/test_stream_registry_drift.py` to assert observer stream constants match `stream_registry` outputs.
+- [x] 2.3 Warn at boot on unknown `[bus.per_stream_maxlen]` keys. `kaine/boot.py` no longer exists; the warning lives in the preflight bus budget (`kaine/preboot.py`), which every boot runs.
+- [x] 2.4 Extend `tests/test_stream_registry_drift.py`: every diagnostics stream from `stream_registry` is a known stream, and `MODULE_STREAMS` is exactly one stream per declared module. The observers still define their own stream literals, so checking those constants against the registry is part of 2.2, when they import the canonical names.
 
 ## 3. Import-boundary completeness
 
 - [x] 3.1 Add `kaine.preboot`, `kaine.backend_state`, `kaine.model_paths`, `kaine.organ_window_state`, `kaine.perception_preview`, and `kaine.perception_preview_server` to contract 1's `source_modules` in `pyproject.toml`.
-- [x] 3.2 Add a CI cross-check or test that verifies the setuptools `packages` list and import-linter source lists cover the same top-level packages.
+- [x] 3.2 Add a test that every top-level `kaine` module and package is classified by an import contract (`tests/test_import_contract_coverage.py`). Setuptools now ships every `kaine*` package through `packages.find`, so there is no package list left to compare against.
 - [x] 3.3 Run `lint-imports` and verify all contracts still pass.
 
 ## 4. Ruff enforcement
