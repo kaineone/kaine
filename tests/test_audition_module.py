@@ -567,7 +567,10 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "encoder_model_id",
             "attended_window",
             "alert",
+            "energy_dbfs",
         }
+        # The energy channel is a single number, never samples.
+        assert isinstance(perc.payload["energy_dbfs"], float)
         # numeric metadata only — no audio bytes anywhere in the payload
         for v in perc.payload.values():
             assert not isinstance(v, (bytes, bytearray))
