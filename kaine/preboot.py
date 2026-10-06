@@ -64,6 +64,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -94,7 +95,9 @@ from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
+from kaine.net import port_listening
 from kaine.nexus import health
+from kaine.nexus.config import load_nexus_config
 from kaine.nexus.health import load_health_prober
 from kaine.organ_probe import verify_organ_generates
 from kaine.security.crypto import CryptoConfigError, install_from_section
@@ -193,6 +196,40 @@ async def check_services(
         results.append(CheckResult(GROUP_SERVICES, name, mapped, dep.get("detail", "")))
     if not results:
         results.append(CheckResult(GROUP_SERVICES, "(no dependencies probed)", SKIP, ""))
+
+    try:
+        nexus_cfg = load_nexus_config(
+            kaine_toml or SHIPPED_CONFIG_PATH, operator_path=OPERATOR_CONFIG_PATH
+        )
+        port = nexus_cfg.port
+        if port_listening(port):
+            results.append(
+                CheckResult(
+                    GROUP_SERVICES,
+                    "Nexus (live)",
+                    PASS,
+                    f"listening on port {port}",
+                )
+            )
+        else:
+            results.append(
+                CheckResult(
+                    GROUP_SERVICES,
+                    "Nexus (live)",
+                    FAIL,
+                    f"Nexus is not running on port {port}; start it (setup finish page \"Start Nexus\", or python -m kaine.nexus) before spawning",
+                )
+            )
+    except Exception as exc:
+        results.append(
+            CheckResult(
+                GROUP_SERVICES,
+                "Nexus (live)",
+                FAIL,
+                f"Nexus configuration could not be read ({type(exc).__name__})",
+            )
+        )
+
     return results
 
 
@@ -1364,7 +1401,12 @@ def main(argv: list[str] | None = None) -> int:
             "boots the entity itself."
         ),
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit a single JSON report object to stdout instead of the table",
+    )
+    args = parser.parse_args(argv)
 
     from kaine.storage import install_data_root
 
@@ -1386,9 +1428,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     results += check_config_sanity(config)
 
-    print(render_table(results))
-    print()
-    print(verdict_line(results))
+    if args.json:
+        payload = {
+            "ok": report_ok(results),
+            "verdict": verdict_line(results),
+            "results": [
+                {
+                    "group": r.group,
+                    "name": r.name,
+                    "status": r.status,
+                    "detail": (r.detail or "").splitlines()[0] if r.detail else "",
+                }
+                for r in results
+            ],
+        }
+        sys.stdout.write(json.dumps(payload) + "\n")
+    else:
+        print(render_table(results))
+        print()
+        print(verdict_line(results))
 
     return 0 if report_ok(results) else 1
 

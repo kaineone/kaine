@@ -128,6 +128,26 @@ be appended to a local record with its time and text version.
 - **WHEN** the setup server exits or times out after a successful spawn
 - **THEN** the cycle and Nexus processes keep running
 
+#### Scenario: Double submit
+
+- **WHEN** the operator submits the spawn confirmation twice with the same nonce
+- **THEN** the second submission starts nothing
+- **AND** the page says the confirmation has expired or was already used
+
+#### Scenario: Containerized install
+
+- **WHEN** spawn is requested on a host that looks like a compose install
+- **THEN** the entity is not started
+- **AND** the page names the compose start command: ``docker compose up kaine-cycle``
+
+#### Scenario: Private log
+
+- **WHEN** the cycle starts from the browser spawn
+- **THEN** its log file is created with mode 0600
+- **AND** the log directory is 0700
+- **AND** the default log level is WARNING unless the operator opts in to INFO
+
 #### Scenario: Terminal and browser agree on readiness
+
 - **WHEN** the pre-boot check runs from the browser and from the terminal on the same machine
 - **THEN** both run the same checks and reach the same result

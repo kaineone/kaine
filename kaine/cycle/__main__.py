@@ -2723,7 +2723,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--profile", default=None)
     parser.add_argument("--revive", default=None)
+    parser.add_argument("--log-file", default=None)
+    parser.add_argument(
+        "--log-level",
+        choices=_LOG_LEVELS,
+        default=None,
+    )
     known, _ = parser.parse_known_args(argv)
+
+    from pathlib import Path
+
+    from kaine.private_log import install_private_log_file
+
+    if known.log_file is not None:
+        install_private_log_file(Path(known.log_file))
 
     # Load config early enough to decide the boot mode. A run is EITHER
     # operator-present OR research-safety-net-verified, never neither. The
@@ -2747,6 +2760,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         return 1
+
+    if known.log_level is not None:
+        logging.getLogger().setLevel(getattr(logging, known.log_level))
 
     root = install_data_root(config)
     if root is not None:

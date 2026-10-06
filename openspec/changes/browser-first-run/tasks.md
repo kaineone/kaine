@@ -43,7 +43,7 @@
 ## 5. Finish page and docs
 
 - [x] 5.1 Service status lights, "Start Nexus", and "Show sign-in token".
-- [ ] 5.2 Spawn action:
+- [x] 5.2 Spawn action:
   - welfare acknowledgement appended to the local record;
   - the full pre-boot check must pass;
   - separate confirmation;
@@ -51,8 +51,8 @@
   - detached (`start_new_session`);
   - refuse when a cycle is already running;
   - hand-off to Nexus.
-- [ ] 5.2a Extend the shared preflight (`kaine.cycle.preflight` / `scripts/first-boot.sh`) with any listed check it lacks, such as perception reaching the senses and the welfare net armed. The browser only calls it.
-- [ ] 5.3 Tests:
+- [x] 5.2a Extend the shared preflight (`kaine.cycle.preflight` / `scripts/first-boot.sh`) with any listed check it lacks, such as perception reaching the senses and the welfare net armed. The browser only calls it.
+- [x] 5.3 Tests:
   - Each unmet gate refuses spawn.
   - A passing run starts exactly one cycle.
   - A second spawn is refused.
