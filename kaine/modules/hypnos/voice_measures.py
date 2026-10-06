@@ -65,7 +65,7 @@ FUNCTION_WORDS: tuple[str, ...] = (
     "once",
     "again",
     "also",
-    "I",
+    "i",
     "me",
     "my",
     "mine",
@@ -127,6 +127,9 @@ FUNCTION_WORDS: tuple[str, ...] = (
     "on",
     "at",
 )
+# Tokens are lowercased before counting, so every entry must be lowercase
+# or it can never match.
+assert all(w == w.lower() for w in FUNCTION_WORDS)
 
 _FUNCTION_INDEX = {w: i for i, w in enumerate(FUNCTION_WORDS)}
 _WORD_RE = re.compile(r"\b\w+\b", re.UNICODE)

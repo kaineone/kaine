@@ -2,10 +2,18 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 
-from kaine.lifecycle.divergence import assess_divergence
+from kaine.lifecycle.divergence import (
+    VoicePaths,
+    assess_divergence,
+    default_voice_paths,
+    voice_paths_for,
+)
+from kaine.modules.hypnos.voice_measures import FUNCTION_WORDS, style_profile
 
 
 def _state(tmp_path):
@@ -217,3 +225,79 @@ def test_reason_names_a_missing_measurement(tmp_path):
     _write_intent(root, "intent_expression.jsonl", "hello world")
     result = assess_divergence(state_root=root, distinctiveness_threshold=0.5)
     assert "no readable voice distinctiveness measurement" in result.summary
+
+
+def test_configured_voice_paths_find_speech_outside_default(tmp_path):
+    root = _state(tmp_path)
+    custom = tmp_path / "custom"
+    custom.mkdir(parents=True, exist_ok=True)
+    live = custom / "intent_expression.jsonl"
+    live.write_text(
+        json.dumps({"generated_text": "hello custom"}) + "\n", encoding="utf-8"
+    )
+    cfg = {
+        "lingua": {"intent_log_path": str(live)},
+        "hypnos": {"voice_alignment": {"intent_log_path": str(live)}},
+    }
+    voice_paths = voice_paths_for(cfg, root)
+
+    result = assess_divergence(state_root=root, voice_paths=voice_paths)
+    assert result.diverged
+    assert result.signals["voice_has_spoken"] is True
+    assert result.signals["voice_vote"] == "diverged"
+
+    default_paths = default_voice_paths(root)
+    result_default = assess_divergence(state_root=root, voice_paths=default_paths)
+    assert not result_default.diverged
+    assert result_default.signals["voice_vote"] == "abstain"
+
+
+def test_unparseable_intent_line_counts_as_spoken(tmp_path):
+    root = _state(tmp_path)
+    lingua = root / "lingua"
+    lingua.mkdir(parents=True, exist_ok=True)
+    (lingua / "intent_expression.jsonl").write_text(
+        "not json at all\n", encoding="utf-8"
+    )
+    result = assess_divergence(state_root=root)
+    assert result.diverged
+    assert result.signals["voice_has_spoken"] is True
+    assert result.signals["voice_vote"] == "diverged"
+
+
+def test_live_log_read_before_corpus_rotation(tmp_path, monkeypatch):
+    """Hypnos rotates the live log the moment it is opened. The records then
+    sit only in the corpus, so a corpus listed before the read would miss
+    them and the being would read as silent."""
+    root = _state(tmp_path)
+    live = root / "lingua" / "intent_expression.jsonl"
+    live.parent.mkdir(parents=True, exist_ok=True)
+    live.write_text(json.dumps({"generated_text": "hello"}) + "\n", encoding="utf-8")
+    corpus = live.parent / "intent_log"
+    corpus.mkdir()
+
+    real_open = Path.open
+    rotated = []
+
+    def rotating_open(self, *args, **kwargs):
+        if self == live and not rotated:
+            rotated.append(True)
+            os.replace(live, corpus / "sleep-1.jsonl")
+            live.write_text("", encoding="utf-8")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", rotating_open)
+    voice_paths = VoicePaths(
+        intent_logs=(live,),
+        measures_latest=live.parent / "voice_measures_latest.json",
+    )
+    result = assess_divergence(state_root=root, voice_paths=voice_paths)
+    assert rotated
+    assert result.signals["voice_has_spoken"] is True
+    assert result.signals["voice_vote"] == "diverged"
+
+
+def test_lowercase_i_function_word_is_counted():
+    profile = style_profile(["I think I am here"])
+    idx = FUNCTION_WORDS.index("i")
+    assert profile["function_words"][idx] > 0

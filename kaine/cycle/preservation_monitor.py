@@ -56,6 +56,7 @@ from kaine.experiment.run_context import get_run_context
 from kaine.lifecycle.divergence import (
     DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
+    VoicePaths,
     assess_divergence,
 )
 from kaine.lifecycle.manager import ForkManager
@@ -439,6 +440,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
         distinctiveness_threshold: float = 0.0,
         consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+        voice_paths: VoicePaths | None = None,
         adapter_output_dir: Path | None = None,
     ) -> None:
         super().__init__(
@@ -454,6 +456,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         self._consolidation_rate_threshold = consolidation_rate_threshold
         self._distinctiveness_threshold = float(distinctiveness_threshold)
         self._consolidation_magnitude_threshold = consolidation_magnitude_threshold
+        self._voice_paths = voice_paths
         self._adapter_output_dir = adapter_output_dir
         # Boot settle: no assessment until boot_settle_s after construction,
         # so state loading can finish.
@@ -517,6 +520,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             consolidation_magnitude_threshold=self._consolidation_magnitude_threshold,
             distinctiveness_threshold=self._distinctiveness_threshold,
             adapter_output_dir=self._adapter_output_dir,
+            voice_paths=self._voice_paths,
         )
         arms = _active_arms(assessment)
         new_arms = arms - self._last_arms

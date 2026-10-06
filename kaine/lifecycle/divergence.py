@@ -154,6 +154,62 @@ def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
 
 
 @dataclass(frozen=True)
+class VoicePaths:
+    intent_logs: tuple[Path, ...]      # live logs, each with its sibling intent_log/ corpus dir
+    measures_latest: Path
+
+
+def default_voice_paths(state_root: Path) -> VoicePaths:
+    return VoicePaths(
+        intent_logs=(state_root / "lingua" / "intent_expression.jsonl",),
+        measures_latest=state_root / "lingua" / "voice_measures_latest.json",
+    )
+
+
+def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
+    """Return configured voice data paths, or the default.
+
+    Reads ``[lingua].intent_log_path`` and
+    ``[hypnos.voice_alignment].intent_log_path``. A missing or empty value, or
+    the canonical default ``state/lingua/intent_expression.jsonl``, maps to the
+    default under ``state_root``; any other value is resolved to an absolute
+    path. The returned ``intent_logs`` are de-duplicated, with the Lingua path
+    first. ``measures_latest`` is the Hypnos intent-log's sibling
+    ``voice_measures_latest.json``. Pure and fail-closed: any error returns the
+    default.
+    """
+    default = default_voice_paths(state_root)
+    try:
+        cfg = config or {}
+        lingua_value = (cfg.get("lingua") or {}).get("intent_log_path")
+        hypnos_value = (
+            ((cfg.get("hypnos") or {}).get("voice_alignment") or {})
+            .get("intent_log_path")
+        )
+
+        def _resolve_path(value: Any) -> Path:
+            if not value:
+                return default.intent_logs[0]
+            stripped = str(value).strip()
+            if stripped == "state/lingua/intent_expression.jsonl":
+                return default.intent_logs[0]
+            return resolve(Path(value))
+
+        lingua_path = _resolve_path(lingua_value)
+        hypnos_path = _resolve_path(hypnos_value)
+
+        logs: list[Path] = [lingua_path]
+        if hypnos_path not in logs:
+            logs.append(hypnos_path)
+        return VoicePaths(
+            intent_logs=tuple(logs),
+            measures_latest=hypnos_path.parent / "voice_measures_latest.json",
+        )
+    except Exception:
+        return default
+
+
+@dataclass(frozen=True)
 class DivergenceAssessment:
     """Result of :func:`assess_divergence`.
 
@@ -363,52 +419,62 @@ def _to_float(value: Any) -> float | None:
     return out if math.isfinite(out) else None
 
 
-def _has_spoken(state_root: Path) -> bool:
-    """True if any intent log / corpus file contains a non-empty generated_text.
-
-    An unreadable file counts as spoken, failing protective. Pure and guarded.
-    """
-    paths: list[Path] = [state_root / "lingua" / "intent_expression.jsonl"]
-    intent_log_dir = state_root / "lingua" / "intent_log"
-    try:
-        if intent_log_dir.is_dir():
-            paths.extend(intent_log_dir.glob("*.jsonl"))
-    except Exception:
-        return True
-
-    for p in paths:
-        try:
-            if not p.is_file():
+def _file_shows_speech(path: Path) -> bool:
+    """True if ``path`` holds a non-empty ``generated_text`` or any line that
+    cannot be read as a record. A missing file shows nothing. Raises on an I/O
+    error so the caller can fail protective."""
+    if not path.is_file():
+        return False
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
                 continue
-            with p.open("r", encoding="utf-8") as fh:
-                for line in fh:
-                    if not line.strip():
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except Exception:
-                        continue
-                    if not isinstance(rec, dict):
-                        continue
-                    generated = rec.get("generated_text")
-                    if isinstance(generated, str) and generated.strip():
-                        return True
+            try:
+                rec = json.loads(line)
+            except Exception:
+                return True
+            if not isinstance(rec, dict):
+                return True
+            generated = rec.get("generated_text")
+            if isinstance(generated, str) and generated.strip():
+                return True
+    return False
+
+
+def _has_spoken(intent_logs: tuple[Path, ...]) -> bool:
+    """True if any intent log or its corpus holds a non-empty generated_text.
+
+    Any non-blank line that is unreadable or does not parse into a dict counts
+    as spoken, and so does any error reading or listing the files (failing
+    protective). Pure and guarded.
+    """
+    for live in intent_logs:
+        try:
+            # Read the live log BEFORE listing its corpus. Hypnos may rotate the
+            # live log into intent_log/ at any moment; a corpus listed first
+            # would miss a file rotated in while the live log was being read.
+            if _file_shows_speech(live):
+                return True
+            corpus_dir = live.parent / "intent_log"
+            corpus = sorted(corpus_dir.glob("*.jsonl")) if corpus_dir.is_dir() else []
+            for p in corpus:
+                if _file_shows_speech(p):
+                    return True
         except Exception:
             return True
     return False
 
 
-def _read_voice_measures_latest(state_root: Path) -> dict[str, Any] | None:
+def _read_voice_measures_latest(measures_latest: Path) -> dict[str, Any] | None:
     """Read the latest voice measures record Hypnos persisted, or None.
 
     Pure and guarded; missing / unreadable / malformed records return None so
     the protective arm treats a spoken-but-unmeasured being as diverged.
     """
     try:
-        p = state_root / "lingua" / "voice_measures_latest.json"
-        if not p.is_file():
+        if not measures_latest.is_file():
             return None
-        data = json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(measures_latest.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return None
         return data
@@ -428,6 +494,7 @@ def assess_divergence(
     distinctiveness_threshold: float = 0.0,
     now: datetime | None = None,
     max_report_age_s: float = DEFAULT_MAX_REPORT_AGE_S,
+    voice_paths: VoicePaths | None = None,
     adapter_output_dir: Path | None = None,
 ) -> DivergenceAssessment:
     """Classify whether an entity has individuated. Pure reads; never raises.
@@ -454,8 +521,14 @@ def assess_divergence(
     max_report_age_s:
         Maximum age in seconds for a non-significant scored individuation report
         to be considered current before it becomes stale.
+    voice_paths:
+        Where the live intent logs (each with its sibling ``intent_log/``
+        corpus) and ``voice_measures_latest.json`` live, from
+        :func:`voice_paths_for`. ``None`` selects the defaults under
+        ``state_root``.
     """
     state_root = resolve(state_root)
+    voice_paths = voice_paths or default_voice_paths(state_root)
     if now is None:
         now = datetime.now(timezone.utc)
 
@@ -509,14 +582,14 @@ def assess_divergence(
     # D8/D13: a being that has spoken is diverged when its distinctiveness is
     # at/above threshold, or when measurement is missing/unreadable/null.
     # A silent being abstains; abstention never blocks another arm.
-    voice_has_spoken = _has_spoken(state_root)
+    voice_has_spoken = _has_spoken(voice_paths.intent_logs)
     voice_vote: bool | None = None
     voice_distinctiveness: float | None = None
     voice_measures_found = False
     voice_self_consistency: float | None = None
     voice_grounding: float | None = None
     if voice_has_spoken:
-        vm = _read_voice_measures_latest(state_root)
+        vm = _read_voice_measures_latest(voice_paths.measures_latest)
         voice_measures_found = vm is not None
         if vm is not None:
             voice_distinctiveness = _to_float(vm.get("distinctiveness"))

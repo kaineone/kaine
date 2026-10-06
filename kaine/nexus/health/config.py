@@ -341,10 +341,13 @@ def load_health_prober(
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
         voice_alignment_thresholds_from_config,
+        voice_paths_for,
     )
 
     consolidation_thresholds = voice_alignment_thresholds_from_config(cfg)
-    adapter_output_dir = adapter_dir_for(cfg, resolve(Path("state")))
+    state_root = resolve(Path("state"))
+    adapter_output_dir = adapter_dir_for(cfg, state_root)
+    voice_paths = voice_paths_for(cfg, state_root)
 
     # Evaluation JSONL rollup root (for the welfare-counter row) and the
     # autonomous safety-net incident path (for the preservation panel backfill).
@@ -369,6 +372,7 @@ def load_health_prober(
         model_server_cfg=model_server_cfg,
         consolidation_thresholds=consolidation_thresholds,
         adapter_output_dir=adapter_output_dir,
+        voice_paths=voice_paths,
         probe_timeout_s=probe_timeout_s,
         cache_ttl_s=cache_ttl_s,
         evaluation_logs_path=evaluation_logs_path,
