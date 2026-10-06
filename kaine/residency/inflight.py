@@ -111,7 +111,7 @@ class InflightGate:
         def wrapper() -> Any:
             with lock:
                 if state["abandoned"]:
-                    return
+                    return None
                 state["started"] = True
             try:
                 return fn(*args)
