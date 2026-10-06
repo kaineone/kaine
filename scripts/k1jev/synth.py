@@ -513,8 +513,14 @@ def run_jobs(
     existing_norms: set[str] | None = None,
     label_check: bool = True,
     concurrency: int = 4,
+    job_indices: list[int] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Run generation jobs concurrently, filter and label-check items."""
+    """Run generation jobs concurrently, filter and label-check items.
+
+    ``job_indices`` are the jobs' positions in the full plan (a shard runs a
+    slice of it), so each job's generation seed is the same however the plan
+    is sharded. Defaults to ``range(len(jobs))``.
+    """
     # Seeds of every question in the schema and of every question the jobs
     # name; utterances already in another split (gold, train, dev) are kept
     # apart so the stats say which rule dropped an item.
@@ -635,7 +641,10 @@ def run_jobs(
         return len(parsed), local_items, drops
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        results = list(pool.map(lambda iv: _process(iv[0], iv[1]), enumerate(jobs)))
+        indices = list(job_indices) if job_indices is not None else list(range(len(jobs)))
+        if len(indices) != len(jobs):
+            raise ValueError("job_indices must have one index per job")
+        results = list(pool.map(lambda iv: _process(iv[0], iv[1]), zip(indices, jobs)))
 
     for parsed_count, local_items, drops in results:
         items.extend(local_items)

@@ -204,6 +204,77 @@ def _all_question_ids() -> list[str]:
     return [q.id for q in schema.QUESTIONS]
 
 
+def _parse_shard(value: str) -> tuple[int, int]:
+    """Parse ``K/N`` with ``1 <= K <= N``."""
+    if value.count("/") != 1:
+        raise ValueError("expected K/N")
+    k_str, n_str = value.split("/")
+    if not k_str or not n_str:
+        raise ValueError("expected K/N")
+    try:
+        k = int(k_str)
+        n = int(n_str)
+    except ValueError as exc:
+        raise ValueError(f"non-integer shard component: {exc}") from exc
+    if n < 1:
+        raise ValueError("N must be at least 1")
+    if k < 1 or k > n:
+        raise ValueError("K must satisfy 1 <= K <= N")
+    return k, n
+
+
+def _merge_shard_stats(shard_stats_list: list[dict[str, Any]]) -> dict[str, Any]:
+    """Sum the numeric ``stats`` objects from shard stats files and keep metadata."""
+    first = shard_stats_list[0]
+    merged_stats: dict[str, Any] = {
+        "total_requested": 0,
+        "total_parsed": 0,
+        "total_accepted": 0,
+        "style_drops": 0,
+        "duplicate_drops": 0,
+        "seed_drops": 0,
+        "other_split_drops": 0,
+        "label_drops": 0,
+        "label_drop_answers": {},
+        "per_question_accepted": {},
+    }
+    for shard_stats in shard_stats_list:
+        stats = shard_stats.get("stats", {})
+        for key in (
+            "total_requested",
+            "total_parsed",
+            "total_accepted",
+            "style_drops",
+            "duplicate_drops",
+            "seed_drops",
+            "other_split_drops",
+            "label_drops",
+        ):
+            merged_stats[key] += stats.get(key, 0)
+
+        for qid, styles in stats.get("label_drop_answers", {}).items():
+            merged_styles = merged_stats["label_drop_answers"].setdefault(qid, {})
+            for style, answers in styles.items():
+                merged_answers = merged_styles.setdefault(style, {})
+                for answer, count in answers.items():
+                    merged_answers[answer] = merged_answers.get(answer, 0) + count
+
+        for qid, styles in stats.get("per_question_accepted", {}).items():
+            merged_styles = merged_stats["per_question_accepted"].setdefault(qid, {})
+            for style, count in styles.items():
+                merged_styles[style] = merged_styles.get(style, 0) + count
+
+    return {
+        "seed": first.get("seed"),
+        "per_question": first.get("per_question"),
+        "near_miss_share": first.get("near_miss_share"),
+        "split": first.get("split"),
+        "plan": first.get("plan"),
+        "stats": merged_stats,
+        "shards": shard_stats_list,
+    }
+
+
 def _cmd_fetch(args: argparse.Namespace) -> int:
     if not args.work_root:
         print("fetch requires --work-root", file=sys.stderr)
@@ -411,6 +482,16 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     work_root = _refuse_protected(args.work_root)
     work_root.mkdir(parents=True, mode=0o700, exist_ok=True)
 
+    try:
+        shard_k, shard_n = _parse_shard(args.shard)
+    except ValueError as exc:
+        print(f"invalid --shard {args.shard!r}: {exc}", file=sys.stderr)
+        return 2
+
+    if args.concurrency < 1:
+        print("--concurrency must be at least 1", file=sys.stderr)
+        return 2
+
     gold_norms_path = work_root / "gold_norms.json"
     if not args.no_gold and not gold_norms_path.exists():
         print("missing gold norms; run gold first or use --no-gold", file=sys.stderr)
@@ -425,39 +506,134 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         if norms_path.exists():
             existing.update(_load_norms(norms_path))
 
+    out_dir = work_root / "synthetic"
+    out_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+
+    # Earlier shards of the same split must already exist so deduplication is
+    # never partial.
+    for k in range(1, shard_k):
+        shard_norms_path = out_dir / f"{args.split}.shard-{k}-of-{shard_n}_norms.json"
+        if not shard_norms_path.exists():
+            print(
+                f"missing earlier shard norms: {shard_norms_path}; "
+                f"run shards in order 1..{shard_k - 1} first",
+                file=sys.stderr,
+            )
+            return 3
+        existing.update(_load_norms(shard_norms_path))
+
     rng = random.Random(args.seed)
     question_ids = _all_question_ids()
-    jobs = synth.plan(
+    full_jobs = synth.plan(
         question_ids, args.per_question, rng, near_miss_share=args.near_miss_share
     )
+    job_indices = [i for i, _ in enumerate(full_jobs) if i % shard_n == shard_k - 1]
+    shard_jobs = [full_jobs[i] for i in job_indices]
+
+    if shard_n == 1:
+        jsonl_path = out_dir / f"{args.split}.jsonl"
+        stats_path = out_dir / f"{args.split}.stats.json"
+        norms_path = out_dir / f"{args.split}_norms.json"
+    else:
+        jsonl_path = out_dir / f"{args.split}.shard-{shard_k}-of-{shard_n}.jsonl"
+        stats_path = out_dir / f"{args.split}.shard-{shard_k}-of-{shard_n}.stats.json"
+        norms_path = out_dir / f"{args.split}.shard-{shard_k}-of-{shard_n}_norms.json"
+
+        if jsonl_path.exists():
+            print(f"refusing to overwrite existing shard file: {jsonl_path}", file=sys.stderr)
+            return 2
 
     api_key = os.environ.get(args.api_key_env)
     endpoint = synth.Endpoint(args.chat_url, api_key)
     items, stats = synth.run_jobs(
         endpoint,
-        jobs,
+        shard_jobs,
         master_seed=args.seed,
         existing_norms=existing,
         label_check=True,
-        concurrency=4,
+        concurrency=args.concurrency,
+        job_indices=job_indices,
     )
 
-    out_dir = work_root / "synthetic"
-    out_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
-    _atomic_write_jsonl(out_dir / f"{args.split}.jsonl", items)
+    _atomic_write_jsonl(jsonl_path, items)
     stats_out = {
-        "plan": [dataclasses.asdict(j) for j in jobs],
+        "plan": [dataclasses.asdict(j) for j in full_jobs],
         "stats": _stats_serializable(stats),
         "seed": args.seed,
         "per_question": args.per_question,
         "near_miss_share": args.near_miss_share,
         "split": args.split,
     }
-    _atomic_write_json(out_dir / f"{args.split}.stats.json", stats_out)
-    _atomic_write_json(
-        out_dir / f"{args.split}_norms.json",
-        sorted({_normalise(i["utterance"]) for i in items}),
-    )
+    if shard_n > 1:
+        stats_out["shard"] = shard_k
+        stats_out["of"] = shard_n
+        stats_out["job_indices"] = job_indices
+        stats_out["job_count"] = len(job_indices)
+    _atomic_write_json(stats_path, stats_out)
+    _atomic_write_json(norms_path, sorted({_normalise(i["utterance"]) for i in items}))
+    return 0
+
+
+def _cmd_merge_shards(args: argparse.Namespace) -> int:
+    if not args.work_root:
+        print("merge-shards requires --work-root", file=sys.stderr)
+        return 2
+    work_root = _refuse_protected(args.work_root)
+    out_dir = work_root / "synthetic"
+
+    shard_files: list[Path] = []
+    shard_stats_files: list[Path] = []
+    for k in range(1, args.of_n + 1):
+        jsonl_path = out_dir / f"{args.split}.shard-{k}-of-{args.of_n}.jsonl"
+        stats_path = out_dir / f"{args.split}.shard-{k}-of-{args.of_n}.stats.json"
+        if not jsonl_path.exists():
+            print(f"missing shard file: {jsonl_path}", file=sys.stderr)
+            return 3
+        if not stats_path.exists():
+            print(f"missing shard stats file: {stats_path}", file=sys.stderr)
+            return 3
+        shard_files.append(jsonl_path)
+        shard_stats_files.append(stats_path)
+
+    merged_jsonl_path = out_dir / f"{args.split}.jsonl"
+    if merged_jsonl_path.exists():
+        print(f"refusing to overwrite existing {merged_jsonl_path}", file=sys.stderr)
+        return 2
+
+    all_items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_norms: set[str] = set()
+    for jsonl_path in shard_files:
+        with jsonl_path.open(encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                item_id = item["item_id"]
+                norm = _normalise(item["utterance"])
+                if item_id in seen_ids:
+                    print(f"duplicate item_id across shards: {item_id}", file=sys.stderr)
+                    return 3
+                if norm in seen_norms:
+                    print(
+                        f"duplicate normalised utterance across shards: {norm[:80]!r}",
+                        file=sys.stderr,
+                    )
+                    return 3
+                seen_ids.add(item_id)
+                seen_norms.add(norm)
+                all_items.append(item)
+
+    shard_stats_list = []
+    for stats_path in shard_stats_files:
+        with stats_path.open(encoding="utf-8") as f:
+            shard_stats_list.append(json.load(f))
+
+    merged_stats = _merge_shard_stats(shard_stats_list)
+
+    _atomic_write_jsonl(merged_jsonl_path, all_items)
+    _atomic_write_json(out_dir / f"{args.split}_norms.json", sorted(seen_norms))
+    _atomic_write_json(out_dir / f"{args.split}.stats.json", merged_stats)
     return 0
 
 
@@ -672,6 +848,12 @@ def main(argv: list[str] | None = None) -> int:
     gen_p.add_argument("--seed", type=int, required=True)
     gen_p.add_argument("--near-miss-share", type=float, default=0.5)
     gen_p.add_argument("--no-gold", action="store_true")
+    gen_p.add_argument("--shard", type=str, default="1/1")
+    gen_p.add_argument("--concurrency", type=int, default=4)
+
+    merge_p = sub.add_parser("merge-shards", parents=[common])
+    merge_p.add_argument("--split", choices=["train", "dev"], required=True)
+    merge_p.add_argument("--of", type=int, required=True, dest="of_n")
 
     asm_p = sub.add_parser("assemble", parents=[common])
     asm_p.add_argument("--seed", type=int, default=20261005)
@@ -690,6 +872,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_gold(args)
         if args.command == "generate":
             return _cmd_generate(args)
+        if args.command == "merge-shards":
+            return _cmd_merge_shards(args)
         if args.command == "assemble":
             return _cmd_assemble(args)
         print(f"unknown command: {args.command}", file=sys.stderr)

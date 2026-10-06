@@ -11,6 +11,8 @@ PORT=11450
 DEVICE=0
 IMAGE=""
 GGUF=""
+PARALLEL=4
+CTX_SIZE=16384
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +32,14 @@ while [[ $# -gt 0 ]]; do
             DEVICE="$2"
             shift 2
             ;;
+        --parallel)
+            PARALLEL="$2"
+            shift 2
+            ;;
+        --ctx-size)
+            CTX_SIZE="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1" >&2
             exit 2
@@ -44,6 +54,14 @@ if [[ "$COMMAND" == "start" ]]; then
     fi
     if [[ -z "$GGUF" ]]; then
         echo "missing --gguf" >&2
+        exit 2
+    fi
+    if ! [[ "$PARALLEL" =~ ^[1-9][0-9]*$ ]]; then
+        echo "--parallel must be a positive integer, got $PARALLEL" >&2
+        exit 2
+    fi
+    if ! [[ "$CTX_SIZE" =~ ^[1-9][0-9]*$ ]]; then
+        echo "--ctx-size must be a positive integer, got $CTX_SIZE" >&2
         exit 2
     fi
 
@@ -73,8 +91,8 @@ if [[ "$COMMAND" == "start" ]]; then
         "$IMAGE" \
         --model "/models/$(basename "$GGUF")" \
         --alias qwen3.5-9b-generator \
-        --ctx-size 16384 \
-        --parallel 4 \
+        --ctx-size "$CTX_SIZE" \
+        --parallel "$PARALLEL" \
         --host 0.0.0.0 \
         --port 8080
 

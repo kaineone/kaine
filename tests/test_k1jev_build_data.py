@@ -1617,3 +1617,260 @@ def test_run_jobs_label_check_empty_reply_drops(fake_llm_server, monkeypatch):
         assert stats["label_drop_answers"]["q_empty"]["mixed"][""] == 1
     finally:
         pass  # monkeypatch restores get_question
+
+
+def test_generate_shards_equal_single_run(fake_llm_server, tmp_path, monkeypatch):
+    url, _server_state = fake_llm_server
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+
+    base_args = [
+        "generate",
+        "--work-root",
+        str(tmp_path),
+        "--split",
+        "train",
+        "--per-question",
+        "2",
+        "--seed",
+        "42",
+        "--chat-url",
+        url,
+        "--no-gold",
+    ]
+
+    single_root = tmp_path / "single"
+    single_root.mkdir()
+    rc = build_data.main(
+        base_args[:2] + [str(single_root)] + base_args[3:] + ["--shard", "1/1"]
+    )
+    assert rc == 0
+    single_items = [
+        json.loads(line)
+        for line in (single_root / "synthetic" / "train.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    single_ids = sorted(i["item_id"] for i in single_items)
+
+    shards_root = tmp_path / "shards"
+    shards_root.mkdir()
+    for k in (1, 2, 3):
+        rc = build_data.main(
+            base_args[:2] + [str(shards_root)] + base_args[3:] + ["--shard", f"{k}/3"]
+        )
+        assert rc == 0, f"shard {k}/3 failed"
+        assert (shards_root / "synthetic" / f"train.shard-{k}-of-3.jsonl").exists()
+
+    rc = build_data.main(
+        ["merge-shards", "--work-root", str(shards_root), "--split", "train", "--of", "3"]
+    )
+    assert rc == 0
+
+    merged_items = [
+        json.loads(line)
+        for line in (shards_root / "synthetic" / "train.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    merged_ids = sorted(i["item_id"] for i in merged_items)
+    assert merged_ids == single_ids
+    assert len(merged_ids) == len(set(merged_ids))
+
+    merged_norms = json.loads(
+        (shards_root / "synthetic" / "train_norms.json").read_text()
+    )
+    assert len(merged_norms) == len(set(merged_norms))
+
+
+def test_generate_shard_out_of_order_exits_three(fake_llm_server, tmp_path, monkeypatch):
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+    rc = build_data.main(
+        [
+            "generate",
+            "--work-root",
+            str(tmp_path),
+            "--split",
+            "train",
+            "--per-question",
+            "1",
+            "--seed",
+            "1",
+            "--chat-url",
+            fake_llm_server,
+            "--no-gold",
+            "--shard",
+            "2/3",
+        ]
+    )
+    assert rc == 3
+    assert not (tmp_path / "synthetic" / "train.shard-2-of-3.jsonl").exists()
+
+
+def test_merge_shards_missing_exits_three(fake_llm_server, tmp_path, monkeypatch):
+    url, _server_state = fake_llm_server
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+    rc = build_data.main(
+        [
+            "generate",
+            "--work-root",
+            str(tmp_path),
+            "--split",
+            "train",
+            "--per-question",
+            "1",
+            "--seed",
+            "1",
+            "--chat-url",
+            url,
+            "--no-gold",
+            "--shard",
+            "1/3",
+        ]
+    )
+    assert rc == 0
+
+    rc = build_data.main(
+        ["merge-shards", "--work-root", str(tmp_path), "--split", "train", "--of", "3"]
+    )
+    assert rc == 3
+    assert not (tmp_path / "synthetic" / "train.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+    "bad_shard",
+    ["0/3", "4/3", "a/b", "1/0", "1"],
+)
+def test_generate_bad_shard_exits_two(fake_llm_server, tmp_path, monkeypatch, bad_shard):
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+    rc = build_data.main(
+        [
+            "generate",
+            "--work-root",
+            str(tmp_path),
+            "--split",
+            "train",
+            "--per-question",
+            "1",
+            "--seed",
+            "1",
+            "--chat-url",
+            fake_llm_server,
+            "--no-gold",
+            "--shard",
+            bad_shard,
+        ]
+    )
+    assert rc == 2
+
+
+def test_generate_concurrency_one_same_items(fake_llm_server, tmp_path, monkeypatch):
+    url, _server_state = fake_llm_server
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+    base_args = [
+        "generate",
+        "--work-root",
+        str(tmp_path),
+        "--split",
+        "train",
+        "--per-question",
+        "2",
+        "--seed",
+        "7",
+        "--chat-url",
+        url,
+        "--no-gold",
+    ]
+
+    rc = build_data.main(base_args)
+    assert rc == 0
+    default_items = [
+        json.loads(line)
+        for line in (tmp_path / "synthetic" / "train.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+
+    other_root = tmp_path / "other"
+    other_root.mkdir()
+    rc = build_data.main(
+        base_args[:2] + [str(other_root)] + base_args[3:] + ["--concurrency", "1"]
+    )
+    assert rc == 0
+    one_items = [
+        json.loads(line)
+        for line in (other_root / "synthetic" / "train.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+
+    assert sorted(i["item_id"] for i in default_items) == sorted(
+        i["item_id"] for i in one_items
+    )
+
+
+def _shard_args(url, root, k, n=3):
+    return [
+        "generate",
+        "--work-root",
+        str(root),
+        "--split",
+        "train",
+        "--per-question",
+        "2",
+        "--seed",
+        "42",
+        "--chat-url",
+        url,
+        "--no-gold",
+        "--shard",
+        f"{k}/{n}",
+        # One worker: the fake server's label-check echo is shared state.
+        "--concurrency",
+        "1",
+    ]
+
+
+def test_generate_shard_uses_full_plan_seeds(fake_llm_server, tmp_path, monkeypatch):
+    """A job's generation seed comes from its index in the full plan, so it
+    is the same however the plan is sharded."""
+    url, server_state = fake_llm_server
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+    assert build_data.main(_shard_args(url, tmp_path, 1)) == 0
+    server_state["requests"].clear()
+    assert build_data.main(_shard_args(url, tmp_path, 2)) == 0
+
+    jobs = synth.plan(
+        build_data._all_question_ids(), 2, random.Random(42), near_miss_share=0.5
+    )
+    shard_indices = [i for i in range(len(jobs)) if i % 3 == 1]
+    expected = {(42 * 1_000_003 + i) % 2**31 for i in shard_indices}
+    gen_seeds = {
+        r["body"]["seed"]
+        for r in server_state["requests"]
+        if not any("Answer key:" in (m.get("content") or "") for m in r["body"]["messages"])
+    }
+    assert gen_seeds == expected
+
+
+def test_generate_later_shard_dedups_against_earlier_shards(
+    fake_llm_server, tmp_path, monkeypatch
+):
+    """With the generator returning the same utterance every time, only the
+    first shard keeps it; later shards drop it, so the merge succeeds."""
+    url, server_state = fake_llm_server
+    monkeypatch.setenv("K1JEV_GENERATOR_KEY", "x")
+    server_state["check_key"] = None
+    # One utterance that passes every style filter (negation, quotation,
+    # question, hypothetical, other person), so every job keeps it if allowed.
+    server_state["gen_items"] = [
+        {"utterance": 'If she said "I would not", would he ask me?'}
+    ]
+    for k in (1, 2, 3):
+        assert build_data.main(_shard_args(url, tmp_path, k)) == 0
+    rc = build_data.main(
+        ["merge-shards", "--work-root", str(tmp_path), "--split", "train", "--of", "3"]
+    )
+    assert rc == 0
+    merged = [
+        json.loads(line)
+        for line in (tmp_path / "synthetic" / "train.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    norms = [" ".join(i["utterance"].casefold().split()) for i in merged]
+    assert len(norms) == len(set(norms)) == 1
