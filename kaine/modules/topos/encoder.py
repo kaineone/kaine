@@ -3,11 +3,11 @@
 
 """Vision encoders for Topos.
 
-The ``Encoder`` protocol is the seam for swapping encoders (DINOv2,
-V-JEPA 2, CLIP, future learned encoders) without touching the Topos
-module. ``DINOv2Encoder`` is the v1 default per build prompt §2.3 and
-loads `facebook/dinov2-small` lazily on first init — the rest of the
-package imports without requiring `transformers`.
+The ``Encoder`` protocol is the seam for swapping encoders without touching
+the Topos module. InternVideo-Next is the shipped default clip encoder.
+``DINOv2Encoder`` is the per-frame fallback; it loads `facebook/dinov2-small`
+lazily on first init, so the rest of the package imports without requiring
+`transformers`.
 """
 from __future__ import annotations
 

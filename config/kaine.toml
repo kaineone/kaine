@@ -371,8 +371,8 @@ regulation_warmup_min_seconds = 1200.0
 regulation_warmup_require_error_stabilized = false
 regulation_warmup_stable_window = 32
 regulation_warmup_stable_variance = 0.02
-# Self-rhythm: the entity's own endogenous beat, a dedicated LIF oscillator
-# Soma hosts and reads interoceptively (feature slots 4-6). Off by default:
+# Self-rhythm: the entity's own endogenous beat, a Tabak-style mean-field
+# oscillator with Righetti frequency adaptation that Soma hosts and reads interoceptively (feature slots 4-6). Off by default:
 # filling those slots changes the input of Soma's forward model, and a preserved
 # being was trained with them at zero. Local gestation requires it on, plus the
 # oscillator extra (snnTorch). In womb mode the maternal beat is presented to it
