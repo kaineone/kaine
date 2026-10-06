@@ -17,7 +17,7 @@ from starlette.responses import PlainTextResponse, Response
 from kaine.bus.config import load_bus_config, load_bus_endpoint
 from kaine.bus.cycle_presence import cycle_on_bus
 from kaine.bus.errors import BusConfigError
-from kaine.lifecycle.liveness import cycle_process_running
+from kaine.lifecycle.liveness import cycle_process_state
 
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -242,8 +242,14 @@ def cycle_running_with_reason(
     if running is True:
         return (True, reason)
 
-    if cycle_process_running():
+    proc_state = cycle_process_state()
+    if proc_state is True:
         return (True, "a kaine.cycle process is running on this host")
+    if proc_state is None:
+        return (
+            True,
+            "the host's process list could not be fully read; cannot rule out a running entity",
+        )
 
     return _bus_reason(path)
 

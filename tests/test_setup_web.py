@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import os
 import re
+import socket
 import threading
 import time
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from kaine.bus.config import load_bus_config, load_bus_endpoint
+from kaine.bus.errors import BusConfigError
 from kaine.config import SHIPPED_CONFIG_PATH
 from kaine.hardware import describe_host
 from kaine.setup.web import create_setup_app, guard, serve
@@ -61,7 +64,7 @@ def _isolated_guard(monkeypatch):
     monkeypatch.setattr(
         guard, "cycle_on_bus", lambda *a, **k: (False, "stub: no cycle on the bus")
     )
-    monkeypatch.setattr(guard, "cycle_process_running", lambda: False)
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: False)
 
 
 def _session_client(app, base_url="http://127.0.0.1:8000"):
@@ -1366,8 +1369,6 @@ def test_run_web_refuses_when_state_dir_cannot_be_resolved(tmp_path, monkeypatch
     assert "state directory cannot be resolved" in capsys.readouterr().err
 
 
-import socket
-
 
 def test_cycle_running_bus_config_error_means_not_running_when_bus_refused(
     tmp_path, monkeypatch
@@ -1438,7 +1439,7 @@ def test_cycle_running_process_scan_detects_live_cycle_before_bus(
         called.append("cycle_on_bus")
         raise RuntimeError("should not be consulted")
 
-    monkeypatch.setattr(guard, "cycle_process_running", lambda: True)
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: True)
     monkeypatch.setattr(guard, "cycle_on_bus", crashing_on_bus)
     running, reason = guard.cycle_running_with_reason(tmp_path)
     assert running is True
@@ -1605,3 +1606,81 @@ def test_non_utf8_form_body_returns_400_with_session(tmp_path):
     )
     assert r2.status_code == 400
     assert "valid UTF-8" in r2.text
+
+
+def test_process_positive_wins_over_refused_bus(monkeypatch, tmp_path):
+    bus_calls = []
+
+    def raising_load_bus_config(*args, **kwargs):
+        bus_calls.append((args, kwargs))
+        raise BusConfigError("stub: no bus config")
+
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: True)
+    monkeypatch.setattr(guard, "load_bus_config", raising_load_bus_config)
+    monkeypatch.setattr(
+        guard, "load_bus_endpoint", lambda *a, **k: ("127.0.0.1", 6379)
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda *a, **k: False)
+
+    running, reason = guard.cycle_running_with_reason(tmp_path / "state")
+    assert running is True
+    assert "kaine.cycle process is running" in reason
+    assert bus_calls == []
+
+
+def test_unknown_process_state_refuses(monkeypatch, tmp_path):
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: None)
+
+    running, reason = guard.cycle_running_with_reason(tmp_path / "state")
+    assert running is True
+    assert reason is not None
+    assert "process list" in reason
+
+
+def test_bus_endpoint_matches_cycle_bus_config(tmp_path):
+    from urllib.parse import urlsplit
+
+    kaine_toml = tmp_path / "kaine.toml"
+    kaine_toml.write_text("[redis]\nhost = 'h1'\nport = 1111\n")
+    operator_toml = tmp_path / "kaine.operator.toml"
+    operator_toml.write_text("[redis]\nport = 2222\n")
+    secrets_toml = tmp_path / "secrets.toml"
+    secrets_toml.write_text("[redis]\npassword = 'pw'\n")
+
+    endpoint = load_bus_endpoint(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env={},
+        operator_toml=operator_toml,
+    )
+    cfg = load_bus_config(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env={},
+        operator_toml=operator_toml,
+    )
+    assert endpoint == (cfg.host, cfg.port) == ("h1", 2222)
+
+    env = {"KAINE_REDIS_URL": "redis://u:pw@x:4321/0"}
+    endpoint2 = load_bus_endpoint(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env=env,
+        operator_toml=operator_toml,
+    )
+    cfg2 = load_bus_config(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env=env,
+        operator_toml=operator_toml,
+    )
+    assert endpoint2 == ("x", 4321)
+    parsed = urlsplit(cfg2.url_override)
+    assert (parsed.hostname, parsed.port) == ("x", 4321)
+
+
+def test_non_ascii_token_exchange_never_raises(tmp_path):
+    app = _mk_app(tmp_path)
+    # A real token must be outstanding, or compare_digest is never reached.
+    app.state.setup.store.issue()
+    assert app.state.setup.store.exchange("é" * 43) is None

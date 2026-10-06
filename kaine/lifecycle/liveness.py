@@ -21,21 +21,27 @@ def argv_is_cycle(args: list[bytes]) -> bool:
     return False
 
 
-def cycle_process_running() -> bool:
-    """True if another process on this host is running ``kaine.cycle``.
+def cycle_process_state(proc_root: str = "/proc") -> bool | None:
+    """Return whether a ``kaine.cycle`` process is visible under ``proc_root``.
 
-    Scans ``/proc/*/cmdline`` and uses :func:`argv_is_cycle` to recognise a
-    cycle by its argv.  This only sees processes on this host (and, from the
-    host, in its containers); the bus client check covers other containers.
-    All reads are guarded; never raises.
+    * ``True`` if any scanned ``cmdline`` matches :func:`argv_is_cycle`.
+    * ``None`` if the process list cannot be read completely (including any
+      ``cmdline`` read that raises an ``OSError`` other than the process
+      having just exited).  ``None`` means "unknown; fail closed".
+    * ``False`` if the directory was readable and no cycle was found.
+
+    ``FileNotFoundError`` and ``ProcessLookupError`` are treated as a process
+    that exited during the scan and are skipped.
     """
-    if not os.path.isdir("/proc"):
+    root = Path(proc_root)
+    if not root.is_dir():
         return False
     self_pid = os.getpid()
+    unknown = False
     try:
-        proc_entries = os.listdir("/proc")
-    except Exception:
-        return False
+        proc_entries = os.listdir(root)
+    except OSError:
+        return None
     for name in proc_entries:
         if not name.isdigit():
             continue
@@ -46,11 +52,28 @@ def cycle_process_running() -> bool:
         except ValueError:
             continue
         try:
-            raw = (Path("/proc") / name / "cmdline").read_bytes()
+            raw = (root / name / "cmdline").read_bytes()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        except OSError:
+            unknown = True
+            continue
         except Exception:
+            unknown = True
             continue
         if not raw:
             continue
         if argv_is_cycle(raw.split(b"\0")):
             return True
-    return False
+    return None if unknown else False
+
+
+def cycle_process_running() -> bool:
+    """True if another process on this host is running ``kaine.cycle``.
+
+    Scans ``/proc/*/cmdline`` and uses :func:`argv_is_cycle` to recognise a
+    cycle by its argv.  This only sees processes on this host (and, from the
+    host, in its containers); the bus client check covers other containers.
+    All reads are guarded; never raises.
+    """
+    return cycle_process_state() is True
