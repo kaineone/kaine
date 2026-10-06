@@ -4,17 +4,20 @@
 """Host/Origin validation and the running-cycle check for the setup server."""
 from __future__ import annotations
 
+import errno
 import json
 import os
+import socket
 from pathlib import Path
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import PlainTextResponse, Response
 
-from kaine.bus.config import load_bus_config
+from kaine.bus.config import load_bus_config, load_bus_endpoint
 from kaine.bus.cycle_presence import cycle_on_bus
 from kaine.bus.errors import BusConfigError
+from kaine.lifecycle.liveness import cycle_process_state
 
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -140,12 +143,58 @@ def _runtime_file_reason(path: Path) -> tuple[bool | None, str | None]:
     return (None, None)
 
 
+def _probe_endpoint(host: str, port: int) -> bool | None:
+    """Return ``True`` if the endpoint is listening, ``False`` if the
+    connection was refused, or ``None``/raise when the state is unknown.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=1.0):
+            pass
+    except ConnectionRefusedError:
+        return False
+    except OSError as exc:
+        if exc.errno == errno.ECONNREFUSED:
+            return False
+        raise
+    except Exception:
+        raise
+    return True
+
+
 def _bus_reason(path: Path) -> tuple[bool, str | None]:
     """Ask the bus when the runtime file says the local entity is not running."""
     try:
         bus_cfg = load_bus_config()
     except BusConfigError:
-        return (False, None)
+        try:
+            host, port = load_bus_endpoint()
+        except Exception as exc:
+            return (
+                True,
+                f"the bus configuration cannot be read here ({type(exc).__name__}); "
+                "cannot rule out a running entity, so saving is refused",
+            )
+        try:
+            listening = _probe_endpoint(host, port)
+        except Exception as exc:
+            return (
+                True,
+                f"the bus could not be probed ({type(exc).__name__}); "
+                "cannot rule out a running entity",
+            )
+        if listening is False:
+            return (False, None)
+        if listening is True:
+            return (
+                True,
+                "the bus is running but its credentials are not available to this shell; "
+                "cannot rule out a running entity. Run setup where config/secrets.toml "
+                "holds the bus password, or stop the entity first",
+            )
+        return (
+            True,
+            "the bus could not be probed (unknown); cannot rule out a running entity",
+        )
     except Exception as exc:
         return (
             True,
@@ -170,9 +219,11 @@ def cycle_running_with_reason(
 
     The check reads ``state/cycle/runtime.json`` first (resolved via
     ``kaine.storage.resolve`` when no ``state_root`` is supplied).  When the
-    runtime file says the entity is not running, the shared bus is also
-    queried so that containerized cycles are detected.  A recycled PID is
-    rejected if ``/proc/<pid>/cmdline`` does not contain ``kaine.cycle``.
+    runtime file says the entity is not running, the host is also scanned for a
+    live ``kaine.cycle`` process (which is visible from the host even for
+    containerized cycles).  Finally, the shared bus is queried so that cycles
+    in other containers are detected.  A recycled PID is rejected if
+    ``/proc/<pid>/cmdline`` does not contain ``kaine.cycle``.
 
     Fail-closed: any doubt counts as running, because a running entity must
     never have its config rewritten.
@@ -190,6 +241,15 @@ def cycle_running_with_reason(
     running, reason = _runtime_file_reason(path)
     if running is True:
         return (True, reason)
+
+    proc_state = cycle_process_state()
+    if proc_state is True:
+        return (True, "a kaine.cycle process is running on this host")
+    if proc_state is None:
+        return (
+            True,
+            "the host's process list could not be fully read; cannot rule out a running entity",
+        )
 
     return _bus_reason(path)
 

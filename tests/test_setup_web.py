@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import os
 import re
+import socket
 import threading
 import time
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from kaine.bus.config import load_bus_config, load_bus_endpoint
+from kaine.bus.errors import BusConfigError
 from kaine.config import SHIPPED_CONFIG_PATH
 from kaine.hardware import describe_host
 from kaine.setup.web import create_setup_app, guard, serve
@@ -53,6 +56,15 @@ def _mk_app(tmp_path: Path, **overrides) -> object:
     }
     kwargs.update(overrides)
     return create_setup_app(**kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_guard(monkeypatch):
+    monkeypatch.setattr(guard, "load_bus_config", lambda *a, **k: object())
+    monkeypatch.setattr(
+        guard, "cycle_on_bus", lambda *a, **k: (False, "stub: no cycle on the bus")
+    )
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: False)
 
 
 def _session_client(app, base_url="http://127.0.0.1:8000"):
@@ -1090,15 +1102,23 @@ def test_cycle_running_falls_back_to_bus_when_runtime_missing(tmp_path, monkeypa
     assert guard.cycle_running(tmp_path) is False
 
 
-def test_cycle_running_bus_config_error_counts_as_not_running(tmp_path, monkeypatch):
+def test_cycle_running_bus_config_error_refuses_when_the_bus_is_up(tmp_path, monkeypatch):
     from kaine.bus.errors import BusConfigError
 
     monkeypatch.setattr(
         guard,
         "load_bus_config",
-        lambda: (_ for _ in ()).throw(BusConfigError("no bus config")),
+        lambda *a, **k: (_ for _ in ()).throw(BusConfigError("no bus config")),
     )
-    assert guard.cycle_running(tmp_path) is False
+    monkeypatch.setattr(
+        guard,
+        "load_bus_endpoint",
+        lambda *a, **k: ("127.0.0.1", 6479),
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda h, p: True)
+    running, reason = guard.cycle_running_with_reason(tmp_path)
+    assert running is True
+    assert "credentials" in reason
 
 
 def test_save_refused_when_cycle_on_bus(tmp_path, monkeypatch):
@@ -1347,3 +1367,320 @@ def test_run_web_refuses_when_state_dir_cannot_be_resolved(tmp_path, monkeypatch
     assert rc == 1
     assert not started
     assert "state directory cannot be resolved" in capsys.readouterr().err
+
+
+
+def test_cycle_running_bus_config_error_means_not_running_when_bus_refused(
+    tmp_path, monkeypatch
+):
+    from kaine.bus.errors import BusConfigError
+
+    monkeypatch.setattr(
+        guard,
+        "load_bus_config",
+        lambda *a, **k: (_ for _ in ()).throw(BusConfigError("no bus config")),
+    )
+    monkeypatch.setattr(
+        guard,
+        "load_bus_endpoint",
+        lambda *a, **k: ("127.0.0.1", 6479),
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda h, p: False)
+    assert guard.cycle_running(tmp_path) is False
+
+
+def test_cycle_running_bus_config_error_means_running_when_probe_unknown(
+    tmp_path, monkeypatch
+):
+    from kaine.bus.errors import BusConfigError
+
+    monkeypatch.setattr(
+        guard,
+        "load_bus_config",
+        lambda *a, **k: (_ for _ in ()).throw(BusConfigError("no bus config")),
+    )
+    monkeypatch.setattr(
+        guard,
+        "load_bus_endpoint",
+        lambda *a, **k: ("127.0.0.1", 6479),
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda h, p: None)
+    running, reason = guard.cycle_running_with_reason(tmp_path)
+    assert running is True
+    assert "probed" in reason
+
+
+def test_cycle_running_bus_config_error_means_running_when_endpoint_unreadable(
+    tmp_path, monkeypatch
+):
+    from kaine.bus.errors import BusConfigError
+
+    monkeypatch.setattr(
+        guard,
+        "load_bus_config",
+        lambda *a, **k: (_ for _ in ()).throw(BusConfigError("no bus config")),
+    )
+    monkeypatch.setattr(
+        guard,
+        "load_bus_endpoint",
+        lambda *a, **k: (_ for _ in ()).throw(BusConfigError("bad endpoint")),
+    )
+    running, reason = guard.cycle_running_with_reason(tmp_path)
+    assert running is True
+    assert "cannot be read here" in reason
+
+
+def test_cycle_running_process_scan_detects_live_cycle_before_bus(
+    tmp_path, monkeypatch
+):
+    called = []
+
+    def crashing_on_bus(_cfg):
+        called.append("cycle_on_bus")
+        raise RuntimeError("should not be consulted")
+
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: True)
+    monkeypatch.setattr(guard, "cycle_on_bus", crashing_on_bus)
+    running, reason = guard.cycle_running_with_reason(tmp_path)
+    assert running is True
+    assert "kaine.cycle process is running" in reason
+    assert called == []
+
+
+def test_save_refused_when_bus_config_missing_and_bus_is_up(
+    tmp_path, monkeypatch
+):
+    from kaine.bus.errors import BusConfigError
+
+    app = _mk_app(tmp_path)
+    _drive_web(app, {})
+
+    monkeypatch.setattr(
+        guard,
+        "load_bus_config",
+        lambda *a, **k: (_ for _ in ()).throw(BusConfigError("no bus config")),
+    )
+    monkeypatch.setattr(
+        guard,
+        "load_bus_endpoint",
+        lambda *a, **k: ("127.0.0.1", 6479),
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda h, p: True)
+
+    sid = list(app.state.setup.store.sessions.keys())[0]
+    client = _session_client(app)
+    client.cookies["setup_session"] = sid
+
+    r = client.post(
+        "/save",
+        data={},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 409
+    assert "credentials" in r.text
+    assert not app.state.setup.operator_path.exists()
+
+
+def test_probe_endpoint_reports_listening_and_refused():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    _host, port = sock.getsockname()[:2]
+    assert guard._probe_endpoint("127.0.0.1", port) is True
+    sock.close()
+
+    sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock2.bind(("127.0.0.1", 0))
+    free_port = sock2.getsockname()[1]
+    sock2.close()
+    assert guard._probe_endpoint("127.0.0.1", free_port) is False
+
+
+def test_load_bus_endpoint_reads_host_without_password(tmp_path):
+    kaine_toml = tmp_path / "kaine.toml"
+    kaine_toml.write_text('[redis]\nhost = "h"\nport = 1234\n')
+    endpoint = guard.load_bus_endpoint(
+        kaine_toml=kaine_toml,
+        secrets_toml=tmp_path / "missing-secrets.toml",
+        env={},
+        operator_toml=tmp_path / "missing-op.toml",
+    )
+    assert endpoint == ("h", 1234)
+
+
+def test_load_bus_endpoint_reads_url_override_without_exposing_password(
+    tmp_path,
+):
+    kaine_toml = tmp_path / "kaine.toml"
+    kaine_toml.write_text("[redis]\n")
+    env = {"KAINE_REDIS_URL": "redis://u:p@x:4321/0"}
+    endpoint = guard.load_bus_endpoint(
+        kaine_toml=kaine_toml,
+        secrets_toml=tmp_path / "missing-secrets.toml",
+        env=env,
+        operator_toml=tmp_path / "missing-op.toml",
+    )
+    assert endpoint == ("x", 4321)
+
+
+def test_validate_fields_rejects_empty_multichoice(tmp_path):
+    from kaine.setup.hardware_steps import consent_step
+    from kaine.setup.steps import StepContext
+    from kaine.setup.web.driver import validate_fields
+
+    ctx = StepContext(host={"cpu_count": 4}, config={}, extra={"consumers": []})
+    fields = consent_step.fields(ctx)
+    _answers, errors = validate_fields(
+        fields, {"_step_id": "hardware-consent", "allowed_devices": ""}
+    )
+    assert errors.get("allowed_devices") == "at least one choice is required"
+
+
+def _consent_step_index(app) -> int:
+    for idx, step in enumerate(app.state.setup.steps):
+        if step.id == "hardware-consent":
+            return idx
+    raise AssertionError("hardware-consent step not found")
+
+
+def test_multichoice_empty_submission_requires_one_choice(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    r, _token = _exchange_token(client, app)
+    assert r.status_code in (302, 303)
+    sid = client.cookies["setup_session"]
+    app.state.setup.store.sessions[sid]["step_index"] = _consent_step_index(app)
+
+    r2 = client.get(
+        "/step", headers={"Host": "127.0.0.1:8000"}, follow_redirects=False
+    )
+    assert r2.status_code == 200
+    assert '<input type="hidden" name="allowed_devices" value="">' in r2.text
+
+    r3 = client.post(
+        "/step",
+        data={
+            "_step_id": "hardware-consent",
+            "allowed_devices": "",
+            "cpu_threads": "1",
+        },
+        headers={"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r3.status_code == 400  # a validation error re-renders the step
+    assert "at least one choice is required" in r3.text
+    sess = app.state.setup.store.sessions[sid]
+    assert "hardware" not in sess["config"]
+
+
+def test_non_ascii_token_is_rejected_with_403(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    r = client.get(
+        "/?token=é",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
+
+
+def test_non_utf8_form_body_returns_400_with_session(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    r, _token = _exchange_token(client, app)
+    assert r.status_code in (302, 303)
+
+    r2 = client.post(
+        "/step",
+        content=b"\xff\xfe",
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        follow_redirects=False,
+    )
+    assert r2.status_code == 400
+    assert "valid UTF-8" in r2.text
+
+
+def test_process_positive_wins_over_refused_bus(monkeypatch, tmp_path):
+    bus_calls = []
+
+    def raising_load_bus_config(*args, **kwargs):
+        bus_calls.append((args, kwargs))
+        raise BusConfigError("stub: no bus config")
+
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: True)
+    monkeypatch.setattr(guard, "load_bus_config", raising_load_bus_config)
+    monkeypatch.setattr(
+        guard, "load_bus_endpoint", lambda *a, **k: ("127.0.0.1", 6379)
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda *a, **k: False)
+
+    running, reason = guard.cycle_running_with_reason(tmp_path / "state")
+    assert running is True
+    assert "kaine.cycle process is running" in reason
+    assert bus_calls == []
+
+
+def test_unknown_process_state_refuses(monkeypatch, tmp_path):
+    monkeypatch.setattr(guard, "cycle_process_state", lambda: None)
+
+    running, reason = guard.cycle_running_with_reason(tmp_path / "state")
+    assert running is True
+    assert reason is not None
+    assert "process list" in reason
+
+
+def test_bus_endpoint_matches_cycle_bus_config(tmp_path):
+    from urllib.parse import urlsplit
+
+    kaine_toml = tmp_path / "kaine.toml"
+    kaine_toml.write_text("[redis]\nhost = 'h1'\nport = 1111\n")
+    operator_toml = tmp_path / "kaine.operator.toml"
+    operator_toml.write_text("[redis]\nport = 2222\n")
+    secrets_toml = tmp_path / "secrets.toml"
+    secrets_toml.write_text("[redis]\npassword = 'pw'\n")
+
+    endpoint = load_bus_endpoint(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env={},
+        operator_toml=operator_toml,
+    )
+    cfg = load_bus_config(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env={},
+        operator_toml=operator_toml,
+    )
+    assert endpoint == (cfg.host, cfg.port) == ("h1", 2222)
+
+    env = {"KAINE_REDIS_URL": "redis://u:pw@x:4321/0"}
+    endpoint2 = load_bus_endpoint(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env=env,
+        operator_toml=operator_toml,
+    )
+    cfg2 = load_bus_config(
+        kaine_toml=kaine_toml,
+        secrets_toml=secrets_toml,
+        env=env,
+        operator_toml=operator_toml,
+    )
+    assert endpoint2 == ("x", 4321)
+    parsed = urlsplit(cfg2.url_override)
+    assert (parsed.hostname, parsed.port) == ("x", 4321)
+
+
+def test_non_ascii_token_exchange_never_raises(tmp_path):
+    app = _mk_app(tmp_path)
+    # A real token must be outstanding, or compare_digest is never reached.
+    app.state.setup.store.issue()
+    assert app.state.setup.store.exchange("é" * 43) is None
