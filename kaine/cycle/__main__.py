@@ -2300,6 +2300,20 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
         )
 
 
+async def _start_utterance_outcome(ctx: BootContext) -> None:
+    """Start the content-free utterance-outcome observer if Lingua is enabled.
+
+    Kept separate from `_phase_watchers` so a malformed reply-window value is
+    handled inside the observer's guarded starter and never aborts boot.
+    """
+    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+        ctx.utterance_outcome = await start_utterance_outcome_observer(
+            ctx.bus,
+            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
+            lingua_section=ctx.kaine_config.get("lingua"),
+        )
+
+
 async def _phase_watchers(ctx: BootContext) -> int | None:
     """Start the preserve watcher and the programme-end watcher."""
 
@@ -2316,16 +2330,7 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
         stop_event=ctx.stop_event,
     )
-    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
-        ctx.utterance_outcome = await start_utterance_outcome_observer(
-            ctx.bus,
-            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
-            reply_window_s=float(
-                ctx.kaine_config.get("lingua", {}).get(
-                    "outcome_reply_window_s", 30.0
-                )
-            ),
-        )
+    await _start_utterance_outcome(ctx)
 
 
 _BOOT_PHASES = (

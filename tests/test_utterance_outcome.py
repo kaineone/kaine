@@ -538,3 +538,117 @@ async def test_write_record_runs_off_event_loop(bus, tmp_path, monkeypatch):
         call[0] == "_write_record_sync" and call[1][0]["record_id"] == R1
         for call in calls
     )
+
+
+@pytest.mark.parametrize(
+    "section,expected,should_warn,expected_type",
+    [
+        (None, 30.0, False, None),
+        ("text", 30.0, False, None),
+        ({}, 30.0, False, None),
+        ({"outcome_reply_window_s": "abc"}, 30.0, True, "str"),
+        ({"outcome_reply_window_s": float("nan")}, 30.0, True, "float"),
+        ({"outcome_reply_window_s": float("inf")}, 30.0, True, "float"),
+        ({"outcome_reply_window_s": 0}, 30.0, True, "int"),
+        ({"outcome_reply_window_s": -5}, 30.0, True, "int"),
+        ({"outcome_reply_window_s": True}, 30.0, True, "bool"),
+        ({"outcome_reply_window_s": [1]}, 30.0, True, "list"),
+        ({"outcome_reply_window_s": 12.5}, 12.5, False, None),
+        ({"outcome_reply_window_s": "12.5"}, 12.5, False, None),
+    ],
+)
+def test_reply_window_from_lingua(
+    section, expected, should_warn, expected_type, caplog
+):
+    from kaine.cycle.utterance_outcome import reply_window_from_lingua
+
+    caplog.set_level(logging.WARNING)
+    result = reply_window_from_lingua(section)
+    assert result == expected
+    warns = [r for r in caplog.records if r.levelno == logging.WARNING]
+    if should_warn:
+        assert len(warns) == 1
+        msg = warns[0].getMessage()
+        assert "outcome_reply_window_s must be a finite number > 0" in msg
+        assert f"got {expected_type}" in msg
+        assert "using 30 s" in msg
+        if isinstance(section, dict) and isinstance(
+            section["outcome_reply_window_s"], str
+        ):
+            assert section["outcome_reply_window_s"] not in msg
+    else:
+        assert not warns
+
+
+async def test_phase_utterance_outcome_boots_despite_bad_reply_window(
+    tmp_path, monkeypatch
+):
+    import types
+
+    from kaine.cycle.__main__ import _start_utterance_outcome
+
+    monkeypatch.chdir(tmp_path)
+
+    class FakeBus:
+        async def last_entry_id(self, stream):
+            return "0-0"
+
+        async def read_entries(self, stream, *, last_id, count, block_ms):
+            return ([], None)
+
+    for lingua in ({"outcome_reply_window_s": "abc"}, None):
+        ctx = types.SimpleNamespace(
+            kaine_config={"modules": {"lingua": True}, "lingua": lingua},
+            bus=FakeBus(),
+            utterance_outcome=None,
+        )
+        await _start_utterance_outcome(ctx)
+        assert isinstance(ctx.utterance_outcome, UtteranceOutcomeObserver)
+        assert ctx.utterance_outcome._reply_window_s == 30.0
+        await ctx.utterance_outcome.stop()
+
+
+async def test_phase_utterance_outcome_disabled_skips_observer(monkeypatch):
+    import types
+
+    from kaine.cycle.__main__ import _start_utterance_outcome
+
+    calls = []
+
+    async def recorder(*args, **kwargs):
+        calls.append((args, kwargs))
+        return None
+
+    monkeypatch.setattr(
+        "kaine.cycle.__main__.start_utterance_outcome_observer", recorder
+    )
+    ctx = types.SimpleNamespace(
+        kaine_config={
+            "modules": {"lingua": False},
+            "lingua": {"outcome_reply_window_s": 10},
+        },
+        bus=None,
+        utterance_outcome=None,
+    )
+    await _start_utterance_outcome(ctx)
+    assert ctx.utterance_outcome is None
+    assert calls == []
+
+
+async def test_invalid_record_id_log_does_not_emit_value(bus, tmp_path, caplog):
+    caplog.set_level(logging.DEBUG)
+    path = tmp_path / "outcomes.jsonl"
+    observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=0.01)
+    await observer.start()
+    try:
+        t0 = datetime.now(timezone.utc)
+        await _xadd_external_speech(bus, "zz<script>", t0)
+        await asyncio.sleep(0.2)
+    finally:
+        await observer.stop()
+
+    assert _read_records(path) == []
+    assert not path.exists()
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("invalid record_id" in m for m in messages)
+    assert all("<script>" not in m for m in messages)
