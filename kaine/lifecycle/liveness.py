@@ -21,27 +21,25 @@ def argv_is_cycle(args: list[bytes]) -> bool:
     return False
 
 
-def cycle_process_state(proc_root: str = "/proc") -> bool | None:
-    """Return whether a ``kaine.cycle`` process is visible under ``proc_root``.
+def cycle_process_details(
+    proc_root: str = "/proc",
+) -> tuple[bool | None, int | None, list[str] | None]:
+    """Return details about a visible ``kaine.cycle`` process.
 
-    * ``True`` if any scanned ``cmdline`` matches :func:`argv_is_cycle`.
-    * ``None`` if the process list cannot be read completely (including any
-      ``cmdline`` read that raises an ``OSError`` other than the process
-      having just exited).  ``None`` means "unknown; fail closed".
-    * ``False`` if the directory was readable and no cycle was found.
-
-    ``FileNotFoundError`` and ``ProcessLookupError`` are treated as a process
-    that exited during the scan and are skipped.
+    Returns ``(state, pid, argv)`` where ``state`` has the same meaning as
+    :func:`cycle_process_state`, ``pid`` is the pid of the first matching
+    process, and ``argv`` is its decoded command line.  When no cycle is
+    found, ``pid`` and ``argv`` are ``None``.
     """
     root = Path(proc_root)
     if not root.is_dir():
-        return False
+        return (False, None, None)
     self_pid = os.getpid()
     unknown = False
     try:
         proc_entries = os.listdir(root)
     except OSError:
-        return None
+        return (None, None, None)
     for name in proc_entries:
         if not name.isdigit():
             continue
@@ -64,8 +62,28 @@ def cycle_process_state(proc_root: str = "/proc") -> bool | None:
         if not raw:
             continue
         if argv_is_cycle(raw.split(b"\0")):
-            return True
-    return None if unknown else False
+            argv = [
+                a.decode("utf-8", "replace")
+                for a in raw.split(b"\0")
+                if a
+            ]
+            return (True, pid, argv)
+    return (None, None, None) if unknown else (False, None, None)
+
+
+def cycle_process_state(proc_root: str = "/proc") -> bool | None:
+    """Return whether a ``kaine.cycle`` process is visible under ``proc_root``.
+
+    * ``True`` if any scanned ``cmdline`` matches :func:`argv_is_cycle`.
+    * ``None`` if the process list cannot be read completely (including any
+      ``cmdline`` read that raises an ``OSError`` other than the process
+      having just exited).  ``None`` means "unknown; fail closed".
+    * ``False`` if the directory was readable and no cycle was found.
+
+    ``FileNotFoundError`` and ``ProcessLookupError`` are treated as a process
+    that exited during the scan and are skipped.
+    """
+    return cycle_process_details(proc_root)[0]
 
 
 def cycle_process_running() -> bool:

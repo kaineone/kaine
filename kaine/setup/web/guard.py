@@ -17,7 +17,7 @@ from starlette.responses import PlainTextResponse, Response
 from kaine.bus.config import load_bus_config, load_bus_endpoint
 from kaine.bus.cycle_presence import cycle_on_bus
 from kaine.bus.errors import BusConfigError
-from kaine.lifecycle.liveness import cycle_process_state
+from kaine.lifecycle.liveness import cycle_process_details
 
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -179,7 +179,7 @@ def _bus_reason(path: Path) -> tuple[bool, str | None]:
         except Exception as exc:
             return (
                 True,
-                f"the bus could not be probed ({type(exc).__name__}); "
+                f"the bus at {host}:{port} could not be probed ({type(exc).__name__}); "
                 "cannot rule out a running entity",
             )
         if listening is False:
@@ -187,13 +187,14 @@ def _bus_reason(path: Path) -> tuple[bool, str | None]:
         if listening is True:
             return (
                 True,
-                "the bus is running but its credentials are not available to this shell; "
+                f"the bus at {host}:{port} is running but its credentials are not available to this shell; "
                 "cannot rule out a running entity. Run setup where config/secrets.toml "
-                "holds the bus password, or stop the entity first",
+                "holds the bus password, or export KAINE_REDIS_PASSWORD "
+                "(for a compose install, its value is in compose/.env), or stop the entity first",
             )
         return (
             True,
-            "the bus could not be probed (unknown); cannot rule out a running entity",
+            f"the bus at {host}:{port} could not be probed (unknown); cannot rule out a running entity",
         )
     except Exception as exc:
         return (
@@ -210,6 +211,11 @@ def _bus_reason(path: Path) -> tuple[bool, str | None]:
             detail or "bus probe could not determine cycle state; failing closed",
         )
     return (False, None)
+
+
+def _process_check() -> tuple[bool | None, int | None, list[str] | None]:
+    """The host process scan, as ``(state, pid, argv)``."""
+    return cycle_process_details()
 
 
 def cycle_running_with_reason(
@@ -242,9 +248,19 @@ def cycle_running_with_reason(
     if running is True:
         return (True, reason)
 
-    proc_state = cycle_process_state()
+    proc_state, proc_pid, proc_argv = _process_check()
     if proc_state is True:
-        return (True, "a kaine.cycle process is running on this host")
+        if proc_pid is not None and proc_argv:
+            argv_text = " ".join(proc_argv)
+            if len(argv_text) > 200:
+                argv_text = argv_text[:200] + "..."
+            reason = (
+                f"a kaine.cycle process is running on this host "
+                f"(pid {proc_pid}: {argv_text})"
+            )
+        else:
+            reason = "a kaine.cycle process is running on this host"
+        return (True, reason)
     if proc_state is None:
         return (
             True,
