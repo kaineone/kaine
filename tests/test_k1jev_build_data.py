@@ -1488,3 +1488,132 @@ def test_run_jobs_label_drop_answers_counts_checker_token(fake_llm_server, monke
     assert stats["label_drops"] == 3
     assert stats["label_drop_answers"]["fake_q"]["yes"]["wrong"] == 3
 
+
+def test_run_jobs_label_check_echoes_description(fake_llm_server, monkeypatch):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = "mixed: both at once."
+
+    fake_q = schema_module.Question(
+        id="q_mixed",
+        type="choice",
+        instructions="Test question mixed.",
+        definition="Def.",
+        options=(schema_module.Option("mixed", None),),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    try:
+        endpoint = synth.Endpoint(url, api_key=None)
+        jobs = [synth.Job("q_mixed", None, "mixed", "plain", 1)]
+        items, stats = synth.run_jobs(
+            endpoint,
+            jobs,
+            master_seed=2,
+            existing_norms=set(),
+            label_check=True,
+            concurrency=1,
+        )
+        assert len(items) == 1
+        assert stats["label_drops"] == 0
+    finally:
+        pass  # monkeypatch restores get_question
+
+
+def test_run_jobs_label_check_case_insensitive(fake_llm_server, monkeypatch):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = "Positive."
+
+    fake_q = schema_module.Question(
+        id="q_positive",
+        type="choice",
+        instructions="Test question positive.",
+        definition="Def.",
+        options=(schema_module.Option("positive", None),),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    try:
+        endpoint = synth.Endpoint(url, api_key=None)
+        jobs = [synth.Job("q_positive", None, "positive", "plain", 1)]
+        items, stats = synth.run_jobs(
+            endpoint,
+            jobs,
+            master_seed=2,
+            existing_norms=set(),
+            label_check=True,
+            concurrency=1,
+        )
+        assert len(items) == 1
+        assert stats["label_drops"] == 0
+    finally:
+        pass  # monkeypatch restores get_question
+
+
+def test_run_jobs_label_check_longer_word_drops(fake_llm_server, monkeypatch):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = "mixedup"
+
+    fake_q = schema_module.Question(
+        id="q_mixed_longer",
+        type="choice",
+        instructions="Test question mixed.",
+        definition="Def.",
+        options=(schema_module.Option("mixed", None),),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    try:
+        endpoint = synth.Endpoint(url, api_key=None)
+        jobs = [synth.Job("q_mixed_longer", None, "mixed", "plain", 1)]
+        items, stats = synth.run_jobs(
+            endpoint,
+            jobs,
+            master_seed=2,
+            existing_norms=set(),
+            label_check=True,
+            concurrency=1,
+        )
+        assert items == []
+        assert stats["label_drops"] == 1
+        assert stats["label_drop_answers"]["q_mixed_longer"]["mixed"]["mixedup"] == 1
+    finally:
+        pass  # monkeypatch restores get_question
+
+
+def test_run_jobs_label_check_empty_reply_drops(fake_llm_server, monkeypatch):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = ""
+
+    fake_q = schema_module.Question(
+        id="q_empty",
+        type="choice",
+        instructions="Test question empty.",
+        definition="Def.",
+        options=(schema_module.Option("mixed", None),),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    try:
+        endpoint = synth.Endpoint(url, api_key=None)
+        jobs = [synth.Job("q_empty", None, "mixed", "plain", 1)]
+        items, stats = synth.run_jobs(
+            endpoint,
+            jobs,
+            master_seed=2,
+            existing_norms=set(),
+            label_check=True,
+            concurrency=1,
+        )
+        assert items == []
+        assert stats["label_drops"] == 1
+        assert stats["label_drop_answers"]["q_empty"]["mixed"][""] == 1
+    finally:
+        pass  # monkeypatch restores get_question

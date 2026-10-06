@@ -594,9 +594,12 @@ def run_jobs(
                     seed=gen_seed,
                 )
                 token = ""
-                stripped = check_text.strip()
-                if stripped:
-                    token = stripped.split()[0].casefold()
+                stripped = check_text.strip().casefold()
+                for ch in stripped:
+                    if ("a" <= ch <= "z") or ("0" <= ch <= "9") or ch == "_":
+                        token += ch
+                    else:
+                        break
                 target = job.target.casefold()
                 if token != target:
                     drops["label"] += 1
