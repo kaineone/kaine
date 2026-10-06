@@ -126,7 +126,8 @@ Section `[audition]` in `config/kaine.toml`. For the full reference see [Module 
 | `arousal_window_max` | `1.0` | Widest auditory attentional window (at low arousal) |
 | `acoustic_change_alert_factor` | `2.0` | Ratio of current acoustic change to the rolling mean that, together with `acoustic_change_alert_threshold`, raises `audition.perception` to `alert_salience` |
 | `acoustic_change_alert_threshold` | `0.35` | Floor on raw cosine-change before `audition.perception` can be raised to `alert_salience` |
-| `acoustic_encoder` | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"` (default, numpy, no download). A plugin may also fill the `audition.acoustic_encoder` seam; setting a non-default value together with a filled seam is a configuration error. |
+| `acoustic_encoder` | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"` (default, numpy, no download), `"dasheng"` (Dasheng-base, Apache-2.0) or `"wavjepa"` (WavJEPA-base, MIT). The two self-supervised encoders need their weights fetched once (`python -m kaine.setup.audio_ssl dasheng --yes`, or `wavjepa`). A plugin may also fill the `audition.acoustic_encoder` seam; setting a non-default value together with a filled seam is a configuration error. |
+| `acoustic_device` | `"cpu"` | Device for the self-supervised encoders, resolved like other module devices. |
 
 ## Deterministic auditory feed
 
@@ -176,11 +177,13 @@ graph TD
 
 When `general_audition` is enabled, `process_audio()` first calls `_perceive_acoustic()` (in `kaine/modules/audition/module.py`, backed by `kaine/modules/audition/acoustic.py`) before the speech path:
 
-1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim) and represents speech, music, and environmental sound in one space. A stronger frozen self-supervised audio encoder plugs in through the same protocol; the encoder is frozen (only the forward model adapts). Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
+1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim) and represents speech, music, and environmental sound in one space. Two frozen self-supervised encoders are selectable through the same protocol, both 768-d at 16 kHz: Dasheng-base (`dasheng`) and WavJEPA-base (`wavjepa`, student path only). They load offline from the vendored code under `external/` and the weights fetched at setup, and keep only a RAM rolling window (2 s by default) of recent audio for context. The encoder is frozen; only the forward model adapts. Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
 
 A plugin can replace the encoder through the `audition.acoustic_encoder` seam. The plugin returns an object satisfying the `AcousticEncoder` protocol (`embedding_dim`, `model_id`, and `embed(audio_bytes, sample_rate)`). When the seam is filled, `[audition].acoustic_encoder` must be unset or `spectral`; any other value together with a filled seam is a configuration error.
 
 The acoustic forward model persists with the being under `acoustic_forward_models`, keyed by the encoder's `model_id`. Switching encoders carries the old encoder's checkpoint forward, so returning to it restores what was learned. A checkpoint whose tensor shapes do not match the running encoder is discarded with a warning. The serialised form contains no raw audio, no raw embeddings, and no buffers beyond a per-feature mean/variance summary.
+
+Every `audition.perception` event also carries `energy_dbfs`, the window's RMS level in dB full scale (floored at -120), computed independently of the encoder.
 
 Both forward models suspend adaptation from `hypnos.sleep.started` to `hypnos.sleep.completed`. Perception and prediction-error inference continue; only online learning pauses.
 2. **Salience** — `cosine_change()` scores acoustic novelty against the previous embedding, and a dedicated `AuditoryForwardModel` over the embedding contributes a prediction error normalised against its rolling mean (Chronos/Topos convention). The window is `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when the normalised acoustic prediction error is ≥ 2.0; otherwise `baseline_salience` — so a novel or sudden sound is salient whether or not it is a voice.
