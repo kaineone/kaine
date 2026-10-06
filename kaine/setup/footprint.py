@@ -15,13 +15,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime
 import functools
 import io
+import ipaddress
 import math
 import multiprocessing
 import os
+import re
 import resource
+import signal
+import subprocess
 import sys
+import time
 import urllib.parse
 import wave
 from dataclasses import dataclass
@@ -48,7 +54,6 @@ from kaine.storage import install_data_root
 from kaine.text_embedding import resolve_embedding_config
 from kaine.text_embedding_numpy import resolve_model_dir
 
-_GiB = 1 << 30
 _MiB = 1 << 20
 
 
@@ -106,6 +111,71 @@ def _fmt_mib(value: int) -> str:
     return f"{value / _MiB:.1f}"
 
 
+def _positive_finite_float(value: str) -> float:
+    try:
+        f = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}") from exc
+    if not math.isfinite(f) or f <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a finite number > 0")
+    return f
+
+
+def _is_loopback_host(host: str) -> bool:
+    host = host.lower()
+    if host == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_loopback
+    except ValueError:
+        return False
+
+
+def _is_loopback_url(url: str | None) -> bool:
+    if not url:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return False
+    if parsed.hostname is None:
+        return False
+    return _is_loopback_host(parsed.hostname)
+
+
+def _apply_child_env_allowlist() -> None:
+    """Reduce os.environ to a known-safe allowlist in spawned children."""
+    allowed_names = frozenset(
+        {
+            "PATH",
+            "HOME",
+            "LANG",
+            "TMPDIR",
+            "CUDA_VISIBLE_DEVICES",
+            "HF_HOME",
+            "HF_HUB_CACHE",
+            "TRANSFORMERS_CACHE",
+            "KAINE_MODELS_DIR",
+            "KAINE_DATA_ROOT",
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "LD_LIBRARY_PATH",
+            "PYTHONPATH",
+        }
+    )
+    allowed_prefixes = ("LC_",)
+
+    kept: dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key in allowed_names or key.startswith(allowed_prefixes):
+            kept[key] = value
+
+    os.environ.clear()
+    os.environ.update(kept)
+
+
 def _read_proc_status_kb(key: str) -> int | None:
     try:
         with open("/proc/self/status", "r", encoding="utf-8") as fh:
@@ -114,6 +184,7 @@ def _read_proc_status_kb(key: str) -> int | None:
                     parts = line.split()
                     return int(parts[1])
     except Exception:
+        # /proc/self/status may be unreadable in restricted environments.
         return None
     return None
 
@@ -125,6 +196,7 @@ def _read_baseline_bytes() -> int:
     try:
         return psutil.Process().memory_info().rss
     except Exception:
+        # Fall back to a zero baseline if psutil also fails.
         return 0
 
 
@@ -189,6 +261,7 @@ def _hf_cached(model_id: str, *, cache_dir: str | Path | None = None) -> bool:
                 return True
         return False
     except Exception:
+        # The cache layout is not the standard Hugging Face structure.
         return False
 
 
@@ -235,30 +308,56 @@ def _select_components(
                 )
             )
         else:
-            components.append(
-                ComponentInfo(
-                    name="lingua",
-                    kind="external",
-                    backend=backend or "openai",
-                    model_id=model_id,
-                    url=section.get("chat_url", ""),
+            url = section.get("chat_url", "")
+            if not _is_loopback_url(url):
+                components.append(
+                    ComponentInfo(
+                        name="lingua",
+                        kind="not_measured",
+                        backend=backend or "openai",
+                        model_id=model_id,
+                        message="not measured: remote_endpoint",
+                        url=url,
+                    )
                 )
-            )
+            else:
+                components.append(
+                    ComponentInfo(
+                        name="lingua",
+                        kind="external",
+                        backend=backend or "openai",
+                        model_id=model_id,
+                        url=url,
+                    )
+                )
 
     if _is_enabled(modules, "audition"):
         audition = config.get("audition", {})
         if audition.get("transcription_enabled", False):
             backend = audition.get("backend", "speaches")
             if backend == "speaches":
-                components.append(
-                    ComponentInfo(
-                        name="audition.stt",
-                        kind="external",
-                        backend="speaches",
-                        model_id="medium.en",
-                        url=audition.get("speaches_url", "http://127.0.0.1:8000"),
+                url = audition.get("speaches_url", "http://127.0.0.1:8000")
+                if not _is_loopback_url(url):
+                    components.append(
+                        ComponentInfo(
+                            name="audition.stt",
+                            kind="not_measured",
+                            backend="speaches",
+                            model_id="medium.en",
+                            message="not measured: remote_endpoint",
+                            url=url,
+                        )
                     )
-                )
+                else:
+                    components.append(
+                        ComponentInfo(
+                            name="audition.stt",
+                            kind="external",
+                            backend="speaches",
+                            model_id="medium.en",
+                            url=url,
+                        )
+                    )
             elif backend == "sherpa_onnx":
                 model_id = audition.get("sherpa_model_id") or default_stt
                 model_dir = audition.get("sherpa_model_dir")
@@ -297,15 +396,28 @@ def _select_components(
         vox = config.get("vox", {})
         backend = vox.get("backend", "chatterbox")
         if backend == "chatterbox":
-            components.append(
-                ComponentInfo(
-                    name="vox.tts",
-                    kind="external",
-                    backend="chatterbox",
-                    model_id="chatterbox",
-                    url=vox.get("chatterbox_url", "http://127.0.0.1:8883"),
+            url = vox.get("chatterbox_url", "http://127.0.0.1:8883")
+            if not _is_loopback_url(url):
+                components.append(
+                    ComponentInfo(
+                        name="vox.tts",
+                        kind="not_measured",
+                        backend="chatterbox",
+                        model_id="chatterbox",
+                        message="not measured: remote_endpoint",
+                        url=url,
+                    )
                 )
-            )
+            else:
+                components.append(
+                    ComponentInfo(
+                        name="vox.tts",
+                        kind="external",
+                        backend="chatterbox",
+                        model_id="chatterbox",
+                        url=url,
+                    )
+                )
         elif backend == "sherpa_onnx":
             model_id = vox.get("sherpa_model_id") or default_tts
             model_dir = vox.get("sherpa_model_dir")
@@ -613,6 +725,7 @@ def _target_embedding(task: _ChildTask) -> dict[str, Any]:
             else:
                 embedder.unload()
         except Exception:
+            # Unload is best-effort; a failure should not hide a valid measurement.
             pass
 
     return {"mapped": mapped}
@@ -750,9 +863,39 @@ def _task_for_component(
 
 
 def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
+    # Put the child in its own process group so a timeout in the parent can
+    # terminate the whole subtree together.
+    if hasattr(os, "setsid"):
+        os.setsid()
+
+    # Restrict the child to a small allowlist before any model code runs. This
+    # prevents secrets and proxy vars from leaking into downloaded weights'
+    # subprocesses or logs.
+    _apply_child_env_allowlist()
     _set_offline_env()
+
     try:
         baseline = _read_baseline_bytes()
+
+        # Import torch here so we can snapshot per-device memory before the
+        # model code runs. On CPU-only hosts this is a no-op.
+        torch: Any | None = None
+        try:
+            import torch  # type: ignore[import]
+        except Exception:
+            # Torch is not installed or cannot be imported in this child.
+            torch = None
+
+        device_snapshots: dict[int, int] = {}
+        if torch is not None and torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                try:
+                    free, total = torch.cuda.mem_get_info(i)
+                    device_snapshots[i] = total - free
+                except Exception:
+                    # Device may be unreachable; skip it.
+                    pass
+
         result = target_fn()
         peak = _read_peak_bytes()
 
@@ -775,14 +918,29 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
         device_bytes: int | None = None
         mapped = bool(result.get("mapped", False)) if isinstance(result, dict) else False
 
-        if "torch" in sys.modules:
-            import torch  # type: ignore[import]
-
+        if torch is not None and device_snapshots:
             if torch.cuda.is_available():
-                reserved = int(torch.cuda.max_memory_reserved())
-                if reserved > 0:
-                    device = f"cuda:{torch.cuda.current_device()}"
-                    device_bytes = reserved
+                # Pick the device the component actually used: the one with the
+                # most torch-allocated memory after the run.
+                allocations = [
+                    (i, torch.cuda.memory_allocated(i))
+                    for i in device_snapshots
+                ]
+                actual_device, allocated = max(allocations, key=lambda x: x[1])
+                if allocated > 0:
+                    device = f"cuda:{actual_device}"
+                    reserved = int(torch.cuda.max_memory_reserved(actual_device))
+                    try:
+                        free_after, total_after = torch.cuda.mem_get_info(actual_device)
+                        used_after = total_after - free_after
+                        delta = used_after - device_snapshots.get(actual_device, 0)
+                        if delta < 0:
+                            delta = 0
+                        device_bytes = max(reserved, delta)
+                    except Exception:
+                        # Fall back to torch's allocator figure if the device
+                        # query fails.
+                        device_bytes = reserved
 
         conn.send(
             {
@@ -809,7 +967,38 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
         try:
             conn.close()
         except Exception:
+            # The parent may have closed its end of the pipe already.
             pass
+
+
+def _validate_child_record(data: Any) -> tuple[bool, str]:
+    """Validate a result record from a child process.
+
+    Returns (True, "") for a valid record, otherwise (False, error_message).
+    """
+    if not isinstance(data, dict):
+        return False, f"invalid child record: expected dict, got {type(data).__name__}"
+    if data.get("ok") is not True:
+        return False, f"invalid child record: ok={data.get('ok')!r}"
+    peak = data.get("peak_bytes")
+    if isinstance(peak, bool) or not isinstance(peak, int) or peak <= 0:
+        return False, f"invalid child record: peak_bytes={peak!r}"
+    device = data.get("device")
+    if device is not None:
+        if not isinstance(device, str) or not re.fullmatch(r"cuda:\d+", device):
+            return False, f"invalid child record: device={device!r}"
+    device_bytes = data.get("device_bytes")
+    if device_bytes is not None:
+        if (
+            isinstance(device_bytes, bool)
+            or not isinstance(device_bytes, int)
+            or device_bytes <= 0
+        ):
+            return False, f"invalid child record: device_bytes={device_bytes!r}"
+    mapped = data.get("mapped")
+    if not isinstance(mapped, bool):
+        return False, f"invalid child record: mapped={mapped!r}"
+    return True, ""
 
 
 def _measure_callable_in_child(
@@ -821,51 +1010,104 @@ def _measure_callable_in_child(
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     process = ctx.Process(target=_child_wrapper, args=(child_conn, target_fn))
     process.start()
+    # Close the parent's copy of the child's connection immediately so a crash
+    # or exit in the child is visible as EOF on the receive end.
+    child_conn.close()
+
+    def _stop_group(pgid: int) -> None:
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.05)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
     try:
-        if parent_conn.poll(timeout):
-            data = parent_conn.recv()
-            process.join(timeout=30)
+        try:
+            ready = parent_conn.poll(timeout)
+        except OSError as exc:
+            return (False, None, None, None, False, f"child poll failed: {exc}")
+
+        if ready:
+            try:
+                data = parent_conn.recv()
+            except EOFError:
+                return (
+                    False,
+                    None,
+                    None,
+                    None,
+                    False,
+                    "child closed connection without result",
+                )
+            except OSError as exc:
+                return (False, None, None, None, False, f"child recv failed: {exc}")
+            except Exception as exc:
+                # PicklingError and other deserialization problems land here.
+                return (
+                    False,
+                    None,
+                    None,
+                    None,
+                    False,
+                    f"child result unreadable: {exc}",
+                )
+
+            ok, err = _validate_child_record(data)
+            if not ok:
+                process.join(timeout=30)
+                if process.is_alive():
+                    _stop_group(process.pid)
+                    process.join(timeout=2)
+                return (False, None, None, None, False, err)
+
             note = ""
+            process.join(timeout=30)
             if process.is_alive():
                 # The child reported and then failed to exit: stop it, but the
                 # measurement it sent stands. Say so, so it is never mistaken
                 # for a crash.
-                process.terminate()
-                process.join(timeout=5)
-                if process.is_alive():
-                    process.kill()
-                    process.join(timeout=5)
+                _stop_group(process.pid)
+                process.join(timeout=2)
                 note = "the child was stopped after reporting; the measurement stands"
 
-            if not data.get("ok"):
-                return (False, None, None, None, False, data.get("error", "failed"))
             return (
                 True,
-                data.get("peak_bytes"),
-                data.get("device_bytes"),
-                data.get("device"),
-                data.get("mapped", False),
+                data["peak_bytes"],
+                data["device_bytes"],
+                data["device"],
+                data["mapped"],
                 note,
             )
 
+        # Timeout: the child is still running.
         if process.is_alive():
-            process.terminate()
-            process.join(timeout=5)
-            if process.is_alive():
-                process.kill()
-                process.join(timeout=5)
+            _stop_group(process.pid)
+            process.join(timeout=2)
             return (False, None, None, None, False, "timed out")
 
-        return (False, None, None, None, False, f"child exited with code {process.exitcode}")
+        return (
+            False,
+            None,
+            None,
+            None,
+            False,
+            f"child exited with code {process.exitcode}",
+        )
     finally:
         parent_conn.close()
         if process.is_alive():
-            process.terminate()
-            process.join(timeout=1)
-            if process.is_alive():
-                process.kill()
-                process.join(timeout=1)
+            _stop_group(process.pid)
+            process.join(timeout=2)
 
 
 def _measure_component(
@@ -887,8 +1129,113 @@ def _process_peak_bytes(proc: psutil.Process) -> int:
                 if line.startswith("VmHWM:"):
                     return int(line.split()[1]) * 1024
     except OSError:
+        # The process may have exited between listing and reading status.
         pass
     return proc.memory_info().rss
+
+
+def _listener_root_pid(url: str) -> int | None:
+    """Return the root listener PID for a local service URL, if any."""
+    parsed = urllib.parse.urlparse(url)
+    port = parsed.port
+    if port is None:
+        return None
+    try:
+        connections = psutil.net_connections(kind="inet")
+    except Exception:
+        # psutil may need elevated privileges to list connections.
+        return None
+
+    pids = sorted(
+        {
+            c.pid
+            for c in connections
+            if c.status == psutil.CONN_LISTEN
+            and c.laddr.port == port
+            and c.pid is not None
+        }
+    )
+    if not pids:
+        return None
+    return pids[0]
+
+
+def _nvidia_smi_gpu_memory(pid: int) -> tuple[str | None, int | None]:
+    """Return (cuda_device, bytes) for PID from nvidia-smi, or (None, None)."""
+    try:
+        # Map GPU name to CUDA index. The index reported by nvidia-smi usually
+        # matches the CUDA runtime index for the same physical GPU.
+        idx_proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if idx_proc.returncode != 0:
+            return None, None
+        name_to_index: dict[str, int] = {}
+        for line in idx_proc.stdout.strip().splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 2:
+                try:
+                    index = int(parts[0])
+                except ValueError:
+                    continue
+                name = parts[1]
+                name_to_index.setdefault(name, index)
+
+        apps_proc = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=pid,used_memory,gpu_name",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if apps_proc.returncode != 0:
+            return None, None
+
+        for line in apps_proc.stdout.strip().splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 3:
+                continue
+            try:
+                line_pid = int(parts[0])
+            except ValueError:
+                continue
+            if line_pid != pid:
+                continue
+            try:
+                used_mib = int(parts[1])
+            except ValueError:
+                continue
+            gpu_name = parts[2]
+            index = name_to_index.get(gpu_name)
+            device = f"cuda:{index}" if index is not None else None
+            return device, used_mib * (1 << 20)
+        return None, None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        # nvidia-smi is absent, slow, or unsupported on this host.
+        return None, None
+
+
+def _service_gpu_memory(url: str) -> tuple[str | None, int | None]:
+    """Return (device, bytes) for a local service's listener, if measurable."""
+    root_pid = _listener_root_pid(url)
+    if root_pid is None:
+        return None, None
+    try:
+        root = psutil.Process(root_pid)
+        name = root.name()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return None, None
+    if name != "llama-server":
+        return None, None
+    return _nvidia_smi_gpu_memory(root_pid)
 
 
 def _measure_service(url: str) -> int | None:
@@ -907,6 +1254,7 @@ def _measure_service(url: str) -> int | None:
     try:
         connections = psutil.net_connections(kind="inet")
     except Exception:
+        # psutil may need elevated privileges to list connections.
         return None
 
     pids = sorted(
@@ -963,13 +1311,19 @@ def _needs_for(
     entries: list[Entry],
     components: list[ComponentInfo],
     host: str,
+    budgets: tuple[Any, ...] | list[Any],
 ) -> list[Need]:
-    """Build fit-report needs from catalogue entries that match this rung."""
+    """Build fit-report needs from catalogue entries that match this rung.
+
+    Every enabled component is represented. Components without a matching
+    catalogue entry are emitted as uncalibrated so the fit report cannot
+    falsely claim a clean fit.
+    """
     interactive_components = {"lingua", "audition.stt", "vox.tts"}
+    budget_domains = {b.name for b in budgets}
     needs: list[Need] = []
     for info in components:
-        if info.kind not in ("in_process", "external"):
-            continue
+        rung = f"{info.backend}:{info.model_id}"
         matches = [
             e
             for e in entries
@@ -979,30 +1333,56 @@ def _needs_for(
             and e.host_class == host
         ]
         if not matches:
-            continue
-        max_entry = max(matches, key=lambda e: e.bytes)
-        rung = f"{info.backend}:{info.model_id}"
-        needs.append(
-            Need(
-                component=info.name,
-                domain="system",
-                footprint_bytes=max_entry.bytes,
-                interactive=info.name in interactive_components,
-                rung=rung,
-            )
-        )
-        device_matches = [e for e in matches if e.device_bytes is not None]
-        if device_matches:
-            max_device = max(device_matches, key=lambda e: e.device_bytes)
             needs.append(
                 Need(
                     component=info.name,
-                    domain=max_device.device,
-                    footprint_bytes=max_device.device_bytes,
+                    domain="system",
+                    footprint_bytes=None,
                     interactive=info.name in interactive_components,
                     rung=rung,
                 )
             )
+            continue
+
+        max_entry = max(matches, key=lambda e: e.bytes)
+        system_need = Need(
+            component=info.name,
+            domain="system",
+            footprint_bytes=max_entry.bytes,
+            interactive=info.name in interactive_components,
+            rung=rung,
+        )
+        needs.append(system_need)
+
+        device_matches = [e for e in matches if e.device_bytes is not None]
+        if device_matches:
+            max_device = max(device_matches, key=lambda e: e.device_bytes)
+            if max_device.device in budget_domains:
+                needs.append(
+                    Need(
+                        component=info.name,
+                        domain=max_device.device,
+                        footprint_bytes=max_device.device_bytes,
+                        interactive=info.name in interactive_components,
+                        rung=rung,
+                    )
+                )
+            else:
+                # Unified-memory hosts have no cuda:N budget domain; fold the
+                # device footprint into the system need.
+                if (
+                    system_need.footprint_bytes is not None
+                    and max_device.device_bytes is not None
+                ):
+                    folded = Need(
+                        component=info.name,
+                        domain="system",
+                        footprint_bytes=system_need.footprint_bytes
+                        + max_device.device_bytes,
+                        interactive=system_need.interactive,
+                        rung=system_need.rung,
+                    )
+                    needs[-1] = folded
     return needs
 
 
@@ -1041,7 +1421,7 @@ def main(
     )
     parser.add_argument(
         "--timeout",
-        type=float,
+        type=_positive_finite_float,
         default=600.0,
         help="per-component measurement timeout in seconds",
     )
@@ -1092,6 +1472,8 @@ def main(
         err(f"error: failed to load config: {exc}")
         return 2
 
+    install_data_root(config)
+
     only_set = set(args.only) if args.only else None
     components = _select_components(config, only=only_set)
     if not components:
@@ -1137,21 +1519,27 @@ def main(
         err(f"error: failed to probe budgets: {exc}")
         return 2
 
-    if args.catalogue is None:
-        install_data_root(config)
-        catalogue_path = None
-    else:
-        catalogue_path = args.catalogue
+    catalogue_path = args.catalogue
 
     # load_catalogue never raises: an unreadable file reads as empty. Say so
     # before it is replaced, so earlier measurements are not lost silently.
     entries = load_catalogue(catalogue_path)
     existing = _catalogue_file(catalogue_path)
     if not entries and existing.is_file() and existing.stat().st_size > 0:
-        err(
-            f"warning: the existing footprint catalogue at {existing} could not be "
-            "read; it will be replaced by this run's measurements"
-        )
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+        backup = existing.with_name(f"{existing.name}.bak-{stamp}")
+        try:
+            existing.rename(backup)
+            err(
+                f"warning: the existing footprint catalogue at {existing} was "
+                f"corrupt or unreadable and was moved to {backup}"
+            )
+        except OSError as move_exc:
+            err(
+                f"warning: the existing footprint catalogue at {existing} is "
+                f"corrupt or unreadable but could not be moved ({move_exc}); "
+                "it will be replaced by this run's measurements"
+            )
 
     measured_entries: list[Entry] = []
     had_failure = False
@@ -1164,6 +1552,12 @@ def main(
             continue
 
         if info.kind == "external":
+            parsed = urllib.parse.urlparse(info.url)
+            if not _is_loopback_host(parsed.hostname):
+                # Remote endpoints are never measured locally.
+                out(f"{info.name}: not measured: {info.url} is not a loopback endpoint")
+                continue
+
             try:
                 peak_bytes = service_fn(info.url)
             except ServiceNotMeasurable as exc:
@@ -1174,18 +1568,26 @@ def main(
                     f"{info.name}: not measured: {info.url} is not running or not visible to this user; start it and rerun"
                 )
                 continue
+
+            device = None
+            device_bytes = None
+            if peak_bytes is not None:
+                device, device_bytes = _service_gpu_memory(info.url)
+
             entry = Entry(
                 component=info.name,
                 backend=info.backend,
                 model_id=info.model_id,
                 bytes=peak_bytes,
-                device=None,
-                device_bytes=None,
+                device=device,
+                device_bytes=device_bytes,
                 mapped=False,
                 host_class=host,
             )
             measured_entries.append(entry)
             out(f"{info.name}: {_fmt_mib(peak_bytes)} MiB (external)")
+            if device_bytes:
+                out(f"{info.name}: device {device} {_fmt_mib(device_bytes)} MiB")
             continue
 
         # in_process
@@ -1227,7 +1629,7 @@ def main(
             )
             return 1
 
-    needs = _needs_for(entries, components, host)
+    needs = _needs_for(entries, components, host, budgets)
 
     try:
         report = fit_report(budgets, needs, pin="lingua")
@@ -1236,6 +1638,13 @@ def main(
     except Exception as exc:
         err(f"error: failed to render fit report: {exc}")
         return 2
+
+    if report.uncalibrated:
+        uncalibrated_list = ", ".join(report.uncalibrated)
+        err(
+            f"error: result is partial; uncalibrated components: {uncalibrated_list}"
+        )
+        return 3
 
     return 1 if had_failure else 0
 
