@@ -121,6 +121,8 @@ The launch flags are explicit:
 - the KV cache is f16;
 - slot saving is never enabled, because it would write sensory-derived KV cache to disk.
 
+Because fitting is off, the organ's reload after idle sleep fails if another process holds the VRAM it needs. Keep the GPU free of other models while an entity runs.
+
 A run whose system changes mid-study is not admissible. After changing the image, check that the flags KAINE passes still exist in the new build's `--help` (`--sleep-idle-seconds`, `--lora-scaled`, `--no-cache-prompt`, `--alias`), then re-run `python -m kaine.preboot`.
 
 Voice alignment can still run in the `kaine-trainer` service, so an in-container organ and a containerized trainer can work together without a host-native server. For `hot_swap_mode = "organ_adapter"`, mount `kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`). When an activation bumps the adapter generation, the launcher restarts `llama-server` inside the same container with the adapter loaded at scale 0: requests without a `lora` field get the base organ, requests with one apply the adapter, and prompt caching is off while any adapter is loaded. This mode is only available in Compose; the Quadlet model-server unit does not use the launcher or adapters.
