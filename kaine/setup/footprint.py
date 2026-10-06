@@ -1137,16 +1137,31 @@ def _measure_component(
 
 
 def _process_peak_bytes(proc: psutil.Process) -> int:
+    """Peak resident memory (VmHWM) of ``proc``.
+
+    The current RSS is never used instead: it can be far below the peak, and
+    an under-estimate is the unsafe direction. Raises ``psutil.NoSuchProcess``
+    when the process has exited and ``ServiceNotMeasurable`` when its peak
+    cannot be read.
+    """
     status_path = Path(f"/proc/{proc.pid}/status")
     try:
         with status_path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 if line.startswith("VmHWM:"):
                     return int(line.split()[1]) * 1024
-    except OSError:
-        # The process may have exited between listing and reading status.
-        pass
-    return proc.memory_info().rss
+    except FileNotFoundError:
+        if Path("/proc/self/status").exists():
+            # /proc works, so the process exited after it was listed.
+            raise psutil.NoSuchProcess(proc.pid) from None
+        raise ServiceNotMeasurable(
+            "this platform does not report peak process memory (VmHWM)"
+        ) from None
+    except OSError as exc:
+        raise ServiceNotMeasurable(
+            f"the peak memory of pid {proc.pid} could not be read ({exc})"
+        ) from None
+    raise ServiceNotMeasurable(f"pid {proc.pid} reports no peak memory (VmHWM)")
 
 
 def _listener_root_pid(url: str) -> int | None:
@@ -1173,6 +1188,16 @@ def _listener_root_pid(url: str) -> int | None:
     if not pids:
         return None
     return pids[0]
+
+
+def _bare_gpu_uuid(value: str) -> str:
+    """A GPU UUID without nvidia-smi's ``GPU-`` prefix, lower-cased.
+
+    nvidia-smi prints ``GPU-<uuid>``; torch's ``device_properties.uuid``
+    prints the bare uuid in some versions and the prefixed form in others.
+    """
+    value = value.strip().lower()
+    return value[4:] if value.startswith("gpu-") else value
 
 
 def _nvidia_smi_usage(
@@ -1237,14 +1262,13 @@ def _nvidia_smi_usage(
     for i in range(device_count):
         try:
             props = torch_module.cuda.get_device_properties(i)
-            canonical = ("GPU-" + str(props.uuid)).lower()
-            uuid_to_index[canonical] = i
+            uuid_to_index[_bare_gpu_uuid(str(props.uuid))] = i
         except Exception:
             continue
 
     result: dict[str, int] = {}
     for gpu_uuid, bytes_ in per_uuid.items():
-        index = uuid_to_index.get(gpu_uuid.lower())
+        index = uuid_to_index.get(_bare_gpu_uuid(gpu_uuid))
         if index is None:
             # Unknown UUID: we cannot map this usage to a torch device.
             return None
@@ -1354,7 +1378,10 @@ def _measure_service(url: str) -> int | None:
                 "the service cannot be measured unambiguously"
             )
 
-    name = root.name()
+    try:
+        name = root.name()
+    except psutil.NoSuchProcess:
+        return None  # the service exited after the port scan
     if name in _PORT_PROXIES:
         raise ServiceNotMeasurable(
             "the service runs behind a container port forwarder; measure it from inside the container"
@@ -1364,11 +1391,20 @@ def _measure_service(url: str) -> int | None:
             f"the listener on port {port} is {name!r}, not a known model server; measure the service directly"
         )
 
-    total = _process_peak_bytes(root)
-    for child in root.children(recursive=True):
+    try:
+        total = _process_peak_bytes(root)
+        children = root.children(recursive=True)
+    except psutil.NoSuchProcess:
+        return None  # the service exited after the port scan
+    except psutil.AccessDenied as exc:
+        raise ServiceNotMeasurable(
+            f"the service's process tree could not be read ({exc})"
+        ) from None
+    for child in children:
         try:
             total += _process_peak_bytes(child)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess:
+            # An exited child no longer holds memory.
             continue
     return total
 

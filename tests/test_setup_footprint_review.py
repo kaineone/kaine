@@ -58,6 +58,18 @@ def _fake_budgets():
     )
 
 
+def _cpu_torch():
+    """A torch stand-in on a host without CUDA."""
+
+    class _Cuda:
+        is_available = staticmethod(lambda: False)
+
+    class _Torch:
+        cuda = _Cuda()
+
+    return _Torch()
+
+
 def _fake_measure(mapping):
     calls = []
 
@@ -105,14 +117,14 @@ def _run(
         kwargs["measure_fn"] = measure
     if service is not None:
         kwargs["service_fn"] = service
-    if budgets_fn is not None:
-        kwargs["budgets_fn"] = budgets_fn
+    # Hermetic by default: a CPU-only, system-only host, whatever this
+    # machine has.
+    kwargs["budgets_fn"] = budgets_fn if budgets_fn is not None else _fake_budgets
     if input_fn is not None:
         kwargs["input_fn"] = input_fn
     if stdin_isatty is not None:
         kwargs["stdin_isatty"] = stdin_isatty
-    if torch_module is not None:
-        kwargs["torch_module"] = torch_module
+    kwargs["torch_module"] = torch_module if torch_module is not None else _cpu_torch()
 
     code = main(full_argv, **kwargs)
     captured = capsys.readouterr()
@@ -923,3 +935,18 @@ def test_service_gpu_memory_unknown_paths_on_a_device_host(monkeypatch):
     monkeypatch.setattr("kaine.setup.footprint._listener_root_pid", lambda url: 42)
     monkeypatch.setattr("kaine.setup.footprint.psutil.Process", no_access)
     assert _service_gpu_memory("http://127.0.0.1:1", device_host, None) is None
+
+
+def test_nvidia_smi_usage_maps_prefixed_torch_uuids(monkeypatch):
+    """torch versions that print the uuid with a GPU- prefix still map."""
+    fake_torch = _make_fake_torch(["GPU-aaaa"])
+
+    def fake_run(cmd, **kwargs):
+        class Proc:
+            returncode = 0
+            stdout = "42, 1000, GPU-AAAA\n"
+
+        return Proc()
+
+    monkeypatch.setattr("kaine.setup.footprint.subprocess.run", fake_run)
+    assert _nvidia_smi_usage({42}, fake_torch) == {"cuda:0": 1000 * (1 << 20)}

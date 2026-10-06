@@ -101,6 +101,20 @@ def _fake_service(mapping):
     return measure, calls
 
 
+def _system_only_budgets():
+    return (
+        Domain(
+            name="system",
+            kind="system",
+            total_bytes=64 << 30,
+            available_bytes=48 << 30,
+            reserve_bytes=4 << 30,
+            budget_bytes=44 << 30,
+            derivation="test",
+        ),
+    )
+
+
 def _run(
     argv,
     config,
@@ -126,8 +140,8 @@ def _run(
         kwargs["measure_fn"] = measure
     if service is not None:
         kwargs["service_fn"] = service
-    if budgets_fn is not None:
-        kwargs["budgets_fn"] = budgets_fn
+    # Hermetic by default: a system-only host, whatever GPUs this machine has.
+    kwargs["budgets_fn"] = budgets_fn if budgets_fn is not None else _system_only_budgets
     if input_fn is not None:
         kwargs["input_fn"] = input_fn
     if stdin_isatty is not None:
@@ -1274,3 +1288,53 @@ def test_child_wrapper_unreadable_device_fails_the_measurement(monkeypatch):
     _child_wrapper(conn, lambda: {})
     assert conn.sent["ok"] is False
     assert "device unreadable" in conn.sent["error"]
+
+
+def test_process_peak_bytes_never_falls_back_to_current_rss(monkeypatch, tmp_path):
+    """No readable VmHWM means not measurable, never the (lower) current RSS."""
+    from kaine.setup.footprint import ServiceNotMeasurable, _process_peak_bytes
+
+    class Proc:
+        pid = 4242
+
+        def memory_info(self):
+            raise AssertionError("current RSS must not be used")
+
+    real_path = Path
+
+    def fake_path(value):
+        value = str(value)
+        if value == "/proc/4242/status":
+            status = tmp_path / "status"
+            status.write_text("Name:\tx\nVmRSS:\t100 kB\n")
+            return real_path(status)
+        return real_path(value)
+
+    monkeypatch.setattr("kaine.setup.footprint.Path", fake_path)
+    with pytest.raises(ServiceNotMeasurable):
+        _process_peak_bytes(Proc())
+
+
+def test_measure_service_root_exiting_mid_measurement_is_not_running(monkeypatch):
+    """A service that exits after the port scan reads as not running, not a crash."""
+    import psutil
+
+    from kaine.setup import footprint
+
+    class Conn:
+        status = psutil.CONN_LISTEN
+        laddr = type("A", (), {"port": 8123})()
+        pid = 4242
+
+    class Gone:
+        pid = 4242
+
+        def children(self, recursive=False):
+            return []
+
+        def name(self):
+            raise psutil.NoSuchProcess(4242)
+
+    monkeypatch.setattr(footprint.psutil, "net_connections", lambda kind: [Conn()])
+    monkeypatch.setattr(footprint.psutil, "Process", lambda pid: Gone())
+    assert footprint._measure_service("http://127.0.0.1:8123") is None
