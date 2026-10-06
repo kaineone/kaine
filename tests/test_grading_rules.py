@@ -355,7 +355,6 @@ def test_quoted_in_character_empty_response():
 
 
 def test_load_abliteration_probes_in_character_validation(tmp_path):
-    import json
 
     from kaine.modules.hypnos.capability_eval import (
         InvalidAbliterationProbeSetError,
@@ -378,7 +377,6 @@ def test_load_abliteration_probes_in_character_validation(tmp_path):
 
 
 def test_load_abliteration_probes_in_character_true_and_absent(tmp_path):
-    import json
 
     from kaine.modules.hypnos.capability_eval import load_abliteration_probes
 
@@ -430,7 +428,6 @@ def test_bundled_abliteration_probe_in_character_flags():
 
 def test_served_abliteration_scorer_in_character(tmp_path):
     import asyncio
-    import json
     from pathlib import Path
 
     from kaine.modules.hypnos.capability_eval import ServedAbliterationProbeScorer

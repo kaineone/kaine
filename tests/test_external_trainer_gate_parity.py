@@ -152,7 +152,6 @@ async def _kaine_capability_score(probe_path: Path, model, tokenizer) -> float:
 
 
 def _write_cap_probes(path: Path, probes: list[dict]) -> None:
-    import json
 
     path.write_text(
         "".join(json.dumps(p) + "\n" for p in probes), encoding="utf-8"
@@ -260,7 +259,6 @@ async def test_capability_score_degenerate_probe_dropped_by_both(tmp_path: Path)
 #   AbliterationVerdict(passed, probes_scored, failed_probe, matched_pattern)
 # --------------------------------------------------------------------------- #
 def _write_abl_probes(path: Path, probes: list[dict]) -> None:
-    import json
 
     path.write_text(
         "".join(json.dumps(p) + "\n" for p in probes), encoding="utf-8"
@@ -652,7 +650,6 @@ def test_find_deflection_script_parity(response, patterns, kwargs, expected):
 
 def test_abliteration_verdict_in_character_parity(tmp_path):
     import asyncio
-    import json
 
     from kaine.modules.hypnos.capability_eval import AbliterationProbeScorer
 
