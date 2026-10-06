@@ -8,6 +8,10 @@ import pytest
 from kaine.bus import reset_bus_for_tests
 from kaine.bus.config import BusConfig
 
+# Fixtures shared by the trainer tests (the fake training stack) are registered
+# here so test modules can request them by name.
+pytest_plugins = ["tests.fake_training_stack"]
+
 
 @pytest.fixture(autouse=True)
 def _reset_bus_singleton():

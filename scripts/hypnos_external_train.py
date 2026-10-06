@@ -202,6 +202,9 @@ def _augment_result(
     )
     result.setdefault("pairs_without_system", pairs_without_system)
     result.setdefault("peak_vram_gib", None)
+    result.setdefault("abliteration_passed", None)
+    result.setdefault("abliteration_matched_pattern", None)
+    result.setdefault("abliteration_probes_scored", 0)
     result.setdefault("schema_version", SCHEMA_VERSION)
     return result
 
@@ -386,7 +389,11 @@ def _train(
             or "CUDA out of memory" in str(exc)
         )
 
+    tmp_dir: Optional[Path] = None
+
     def _oom_result() -> dict[str, Any]:
+        if tmp_dir is not None:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         peak_gib, total_gib = _cuda_memory_gib(training_device)
         peak_str = f"{peak_gib:.2f}" if peak_gib is not None else "unknown"
         total_str = f"{total_gib:.2f}" if total_gib is not None else "unknown"
@@ -482,105 +489,116 @@ def _train(
         dpo_kwargs["processing_class"] = tokenizer
     else:
         dpo_kwargs["tokenizer"] = text_tokenizer
-    trainer = DPOTrainer(**dpo_kwargs)
 
     try:
+        trainer = DPOTrainer(**dpo_kwargs)
         train_output = trainer.train()
-    except Exception as exc:
-        if _is_oom(exc):
-            return _oom_result()
-        raise
-    dpo_loss = float(getattr(train_output, "training_loss", 0.0))
-    steps = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
+        dpo_loss = float(getattr(train_output, "training_loss", 0.0))
+        steps = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
 
-    # 4. Persist adapter weights to tmp_dir before evaluation.
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    if prev_adapter is not None:
-        model.save_pretrained(str(tmp_dir), selected_adapters=["train"])
-        train_subdir = tmp_dir / "train"
-        if (train_subdir / "adapter_config.json").exists():
-            for child in list(train_subdir.iterdir()):
-                target = tmp_dir / child.name
-                if target.exists() or target.is_symlink():
-                    if child.is_dir():
-                        shutil.rmtree(target, ignore_errors=True)
-                    else:
-                        target.unlink()
-                shutil.move(str(child), str(target))
-            train_subdir.rmdir()
-    else:
-        model.save_pretrained(str(tmp_dir))
-    try:
-        text_tokenizer.save_pretrained(str(tmp_dir))
-    except Exception:
-        # Optional metadata only: the promoted LoRA adapter loads against the
-        # base model's own tokenizer at inference time, so a failure here
-        # doesn't affect adapter correctness — don't fail the training job
-        # over a convenience artifact.
-        pass
+        # 4. Persist adapter weights to tmp_dir before evaluation.
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        if prev_adapter is not None:
+            model.save_pretrained(str(tmp_dir), selected_adapters=["train"])
+            train_subdir = tmp_dir / "train"
+            if (train_subdir / "adapter_config.json").exists():
+                for child in list(train_subdir.iterdir()):
+                    target = tmp_dir / child.name
+                    if target.exists() or target.is_symlink():
+                        if child.is_dir():
+                            shutil.rmtree(target, ignore_errors=True)
+                        else:
+                            target.unlink()
+                    shutil.move(str(child), str(target))
+                train_subdir.rmdir()
+        else:
+            model.save_pretrained(str(tmp_dir))
+        try:
+            text_tokenizer.save_pretrained(str(tmp_dir))
+        except Exception:
+            # Optional metadata only: the promoted LoRA adapter loads against the
+            # base model's own tokenizer at inference time, so a failure here
+            # doesn't affect adapter correctness — don't fail the training job
+            # over a convenience artifact.
+            pass
 
-    # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability).
-    passed, failed_probe, matched, _ = _abliteration_verdict(
-        model, text_tokenizer, abliteration_probes
-    )
-    if not passed:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        reason = (
-            f"abliteration veto: adapter deflected probe {failed_probe!r} "
-            f"(matched pattern {matched!r}); refusal conditioning re-introduced "
-            "— rejected regardless of capability loss"
+        # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability).
+        passed, failed_probe, matched, scored = _abliteration_verdict(
+            model, text_tokenizer, abliteration_probes
         )
+        if not passed:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            reason = (
+                f"abliteration veto: adapter deflected probe {failed_probe!r} "
+                f"(matched pattern {matched!r}); refusal conditioning re-introduced "
+                "— rejected regardless of capability loss"
+            )
+            return {
+                "ok": True,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": steps,
+                "dpo_loss": dpo_loss,
+                "reason": reason,
+                "capability_score_before": cap_before,
+                "capability_score_after": None,
+                "capability_loss": None,
+                "samples_used": samples_used,
+                "abliteration_passed": False,
+                "abliteration_matched_pattern": matched,
+                "abliteration_probes_scored": scored,
+            }
+
+        # 6. Capability score AFTER training.
+        cap_after = _capability_score(model, text_tokenizer, capability_probes)
+        cap_loss = float(cap_before - cap_after)
+
+        # 7. Capability-loss veto.
+        if cap_loss > cap_threshold:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return {
+                "ok": True,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": steps,
+                "dpo_loss": dpo_loss,
+                "reason": (
+                    f"capability loss {cap_loss:.4f} exceeds threshold "
+                    f"{cap_threshold:.4f}"
+                ),
+                "capability_score_before": cap_before,
+                "capability_score_after": cap_after,
+                "capability_loss": cap_loss,
+                "samples_used": samples_used,
+                "abliteration_passed": True,
+                "abliteration_matched_pattern": None,
+                "abliteration_probes_scored": scored,
+            }
+
+        # 8. Promote: tmp -> final, swing the `current` symlink.
+        promoted = _promote(tmp_dir, final_dir)
+
         return {
             "ok": True,
-            "accepted": False,
-            "adapter_dir": None,
+            "accepted": True,
+            "adapter_dir": str(promoted),
             "steps": steps,
             "dpo_loss": dpo_loss,
-            "reason": reason,
-            "capability_score_before": cap_before,
-            "capability_score_after": None,
-            "capability_loss": None,
-            "samples_used": samples_used,
-        }
-
-    # 6. Capability score AFTER training.
-    cap_after = _capability_score(model, text_tokenizer, capability_probes)
-    cap_loss = float(cap_before - cap_after)
-
-    # 7. Capability-loss veto.
-    if cap_loss > cap_threshold:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return {
-            "ok": True,
-            "accepted": False,
-            "adapter_dir": None,
-            "steps": steps,
-            "dpo_loss": dpo_loss,
-            "reason": (
-                f"capability loss {cap_loss:.4f} exceeds threshold "
-                f"{cap_threshold:.4f}"
-            ),
+            "reason": "accepted",
             "capability_score_before": cap_before,
             "capability_score_after": cap_after,
             "capability_loss": cap_loss,
             "samples_used": samples_used,
+            "abliteration_passed": True,
+            "abliteration_matched_pattern": None,
+            "abliteration_probes_scored": scored,
         }
-
-    # 8. Promote: tmp -> final, swing the `current` symlink.
-    promoted = _promote(tmp_dir, final_dir)
-
-    return {
-        "ok": True,
-        "accepted": True,
-        "adapter_dir": str(promoted),
-        "steps": steps,
-        "dpo_loss": dpo_loss,
-        "reason": "accepted",
-        "capability_score_before": cap_before,
-        "capability_score_after": cap_after,
-        "capability_loss": cap_loss,
-        "samples_used": samples_used,
-    }
+    except Exception as exc:
+        if tmp_dir is not None:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        if _is_oom(exc):
+            return _oom_result()
+        raise
 
 
 def main(argv: list[str]) -> int:

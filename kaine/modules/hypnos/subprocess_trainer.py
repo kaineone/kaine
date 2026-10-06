@@ -57,6 +57,7 @@ from kaine.modules.hypnos.voice_alignment import (
     TrainingResult,
     VoiceAlignmentConfig,
 )
+from kaine.modules.hypnos.voice_audit import append_voice_audit
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +121,33 @@ def trainer_env(base: Optional[dict[str, str]] = None) -> dict[str, str]:
         }
     )
     return env
+
+
+def audit_abliteration_from_result(adapter_output_dir: Path | str, result: dict[str, Any]) -> None:
+    """Write the abliteration-veto verdict to the voice-alignment audit trail.
+
+    Best-effort: failures are logged but never converted into training errors.
+    """
+    passed = result.get("abliteration_passed")
+    if passed is None:
+        return
+    matched = result.get("abliteration_matched_pattern")
+    scored = result.get("abliteration_probes_scored", 0)
+    if passed:
+        reason = "abliteration veto passed"
+    else:
+        reason = str(result.get("reason", "abliteration veto rejected"))
+    try:
+        append_voice_audit(
+            adapter_output_dir,
+            event="abliteration_veto",
+            accepted=bool(passed),
+            reason=reason,
+            matched_pattern=matched,
+            probes_scored=int(scored) if scored is not None else 0,
+        )
+    except Exception:
+        log.exception("failed to append abliteration verdict to voice audit trail")
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -358,6 +386,7 @@ class SubprocessVoiceTrainer:
                 samples_used=len(pairs),
                 adapter_root=Path(config.adapter_output_dir),
             )
+            audit_abliteration_from_result(Path(config.adapter_output_dir), result)
         finally:
             scrub_job_inputs(job_dir)
 
@@ -561,8 +590,15 @@ class SubprocessVoiceTrainer:
             ) from exc
 
         if rc != 0:
+            # The script writes a crash result before returning non-zero;
+            # carry its reason so the failure is diagnosable.
+            reason = "no result.json"
+            try:
+                reason = str(_read_result(job_dir).get("reason") or reason)
+            except Exception:
+                pass
             raise SubprocessTrainerError(
-                f"in-process trainer exited {rc} (job {job_dir})"
+                f"in-process trainer exited {rc} (job {job_dir}): {reason}"
             )
 
         result = _read_result(job_dir)

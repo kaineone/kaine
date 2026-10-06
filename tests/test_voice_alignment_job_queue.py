@@ -393,9 +393,10 @@ async def test_subprocess_backend_does_not_block_event_loop(tmp_path):
         """
         import time
         time.sleep(0.5)
-        adapter = job_dir / 'adapter_out'
+        adapter = Path(job['adapter_output_dir']) / 'accepted_adapter'
         adapter.mkdir(parents=True, exist_ok=True)
         (adapter / 'adapter_model.safetensors').write_text('fake-weights')
+        (adapter / 'adapter_config.json').write_text('{}')
         result = {
             'ok': True,
             'accepted': True,

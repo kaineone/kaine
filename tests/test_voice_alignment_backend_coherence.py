@@ -79,7 +79,8 @@ def _accepted_stub(tmp_path: Path) -> Path:
     return _write_stub(
         tmp_path,
         """
-        adapter = job_dir / 'adapter_out'
+        # The real script promotes inside the adapter output dir.
+        adapter = Path(job['adapter_output_dir']) / 'adapter_out'
         adapter.mkdir(parents=True, exist_ok=True)
         (adapter / 'adapter_model.safetensors').write_text('fake-weights')
         result = {

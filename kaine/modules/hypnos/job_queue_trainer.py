@@ -108,6 +108,9 @@ class JobQueueVoiceTrainer:
                 f"{result.get('reason', 'no reason given')} (job {job_dir})"
             )
 
+        from kaine.modules.hypnos.subprocess_trainer import audit_abliteration_from_result
+        audit_abliteration_from_result(out_dir, result)
+
         if not result.get("accepted"):
             return result_to_training_result(
                 result,
