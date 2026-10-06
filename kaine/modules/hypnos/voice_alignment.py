@@ -329,7 +329,8 @@ class DPOPairBuilder:
         expected to be chronological (oldest file first), and is scanned NEWEST
         FIRST — files in reverse order and lines within each file in reverse
         order — so that ``max_records_scanned`` keeps the most recent speech
-        under evaluation. Missing files are skipped.
+        under evaluation. The returned ``pairs`` are in chronological order.
+        Missing files are skipped.
         """
         paths: list[Path]
         if isinstance(path, (str, Path)):
@@ -381,6 +382,8 @@ class DPOPairBuilder:
                         },
                     )
                 )
+        # The scan ran newest first; hand the kept pairs back in log order.
+        pairs.reverse()
         return pairs, scanned, usable
 
 
