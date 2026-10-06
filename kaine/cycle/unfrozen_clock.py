@@ -108,7 +108,7 @@ class UnfrozenClock:
     ) -> "UnfrozenClock":
         """Build a welfare clock that counts unknown spans as unfrozen."""
         return cls(
-            lambda: control_state.read_frozen_state(),
+            control_state.read_frozen_state,
             unknown_counts_as="unfrozen",
             monotonic=monotonic,
         )
