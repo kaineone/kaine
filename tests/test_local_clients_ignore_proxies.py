@@ -28,7 +28,6 @@ SCANNED_ROOTS = ("kaine", "scripts")
 ALLOWED_PROXY_CAPABLE = {
     "kaine/setup/speech_models.py": "downloads public speech models at setup",
     "kaine/wheel_index.py": "fetches public wheel indexes at setup",
-    "scripts/k1jev/sources.py": "fetches pinned public datasets and the generator GGUF",
 }
 
 HTTPX_CALLS = {"Client", "AsyncClient", "get", "post", "put", "patch", "delete", "request", "stream"}
@@ -83,45 +82,58 @@ def _builds_proxyless_opener(node: ast.Call) -> bool:
     return False
 
 
+def _file_violations(rel: str, source: str) -> list[str]:
+    tree = ast.parse(source, filename=rel)
+    allowed = rel in ALLOWED_PROXY_CAPABLE
+    found: list[str] = []
+
+    for node in ast.walk(tree):
+        # Only the plain `import httpx` and `import websockets` forms are
+        # scanned below, so the forms that would hide a client from the scan
+        # are refused for both libraries.
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "httpx" and alias.asname not in (None, "httpx"):
+                    found.append(f"{rel}:{node.lineno} httpx imported under an alias")
+                if alias.name == "websockets" and alias.asname not in (None, "websockets"):
+                    found.append(f"{rel}:{node.lineno} websockets imported under an alias")
+                if alias.name.split(".")[0] == "requests" and not allowed:
+                    found.append(f"{rel}:{node.lineno} requests follows proxy settings")
+        if isinstance(node, ast.ImportFrom) and node.module:
+            top = node.module.split(".")[0]
+            if top == "httpx":
+                found.append(f"{rel}:{node.lineno} from-import of httpx (use httpx.<name>)")
+            if top == "websockets":
+                found.append(f"{rel}:{node.lineno} from-import of websockets (use websockets.<name>)")
+            if top == "requests" and not allowed:
+                found.append(f"{rel}:{node.lineno} requests follows proxy settings")
+        if not isinstance(node, ast.Call):
+            continue
+        if _is_httpx_call(node):
+            # Allowlisted downloaders must say on purpose that they use the
+            # environment; everything else must refuse it.
+            wanted = True if allowed else False
+            if not _keyword_is_constant(node, "trust_env", wanted):
+                found.append(f"{rel}:{node.lineno} httpx call without trust_env={wanted}")
+        if _call_name(node) == "connect" and _is_websockets_call(node):
+            if not _keyword_is_constant(node, "proxy", None):
+                found.append(f"{rel}:{node.lineno} websockets connect without proxy=None")
+        name = _call_name(node)
+        if name == "urlopen" and rel not in ALLOWED_PROXY_CAPABLE:
+            found.append(f"{rel}:{node.lineno} urlopen follows proxy settings")
+        if name == "build_opener" and rel not in ALLOWED_PROXY_CAPABLE:
+            if not _builds_proxyless_opener(node):
+                found.append(f"{rel}:{node.lineno} build_opener without ProxyHandler({{}})")
+
+    return found
+
+
 def _violations() -> list[str]:
     found: list[str] = []
     for root in SCANNED_ROOTS:
         for path in sorted((REPO / root).rglob("*.py")):
             rel = path.relative_to(REPO).as_posix()
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
-            allowed = rel in ALLOWED_PROXY_CAPABLE
-            for node in ast.walk(tree):
-                # Only the plain `import httpx` form is scanned below, so the
-                # forms that would hide a client from the scan are refused.
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.name == "httpx" and alias.asname not in (None, "httpx"):
-                            found.append(f"{rel}:{node.lineno} httpx imported under an alias")
-                        if alias.name.split(".")[0] == "requests" and not allowed:
-                            found.append(f"{rel}:{node.lineno} requests follows proxy settings")
-                if isinstance(node, ast.ImportFrom) and node.module:
-                    top = node.module.split(".")[0]
-                    if top == "httpx":
-                        found.append(f"{rel}:{node.lineno} from-import of httpx (use httpx.<name>)")
-                    if top == "requests" and not allowed:
-                        found.append(f"{rel}:{node.lineno} requests follows proxy settings")
-                if not isinstance(node, ast.Call):
-                    continue
-                if _is_httpx_call(node):
-                    # Allowlisted downloaders must say on purpose that they use the
-                    # environment; everything else must refuse it.
-                    wanted = True if allowed else False
-                    if not _keyword_is_constant(node, "trust_env", wanted):
-                        found.append(f"{rel}:{node.lineno} httpx call without trust_env={wanted}")
-                if _call_name(node) == "connect" and _is_websockets_call(node):
-                    if not _keyword_is_constant(node, "proxy", None):
-                        found.append(f"{rel}:{node.lineno} websockets connect without proxy=None")
-                name = _call_name(node)
-                if name == "urlopen" and rel not in ALLOWED_PROXY_CAPABLE:
-                    found.append(f"{rel}:{node.lineno} urlopen follows proxy settings")
-                if name == "build_opener" and rel not in ALLOWED_PROXY_CAPABLE:
-                    if not _builds_proxyless_opener(node):
-                        found.append(f"{rel}:{node.lineno} build_opener without ProxyHandler({{}})")
+            found.extend(_file_violations(rel, path.read_text(encoding="utf-8")))
     return found
 
 
@@ -133,6 +145,30 @@ def test_every_runtime_http_call_ignores_proxy_settings():
 def test_allowlisted_files_are_named_exactly():
     for rel in ALLOWED_PROXY_CAPABLE:
         assert "*" not in rel and rel.endswith(".py"), rel
+        assert (REPO / rel).is_file(), rel
+
+
+def test_guard_refuses_hidden_import_forms(tmp_path):
+    def case(source: str) -> list[str]:
+        sample = tmp_path / "sample.py"
+        sample.write_text(source, encoding="utf-8")
+        return _file_violations("kaine/x.py", sample.read_text(encoding="utf-8"))
+
+    assert case("import httpx as hx\n") == ["kaine/x.py:1 httpx imported under an alias"]
+    assert case("from httpx import AsyncClient\n") == [
+        "kaine/x.py:1 from-import of httpx (use httpx.<name>)"
+    ]
+    assert case("import websockets as ws\n") == [
+        "kaine/x.py:1 websockets imported under an alias"
+    ]
+    assert case("from websockets.asyncio.client import connect\n") == [
+        "kaine/x.py:1 from-import of websockets (use websockets.<name>)"
+    ]
+    assert case("import websockets\nwebsockets.connect('ws://x', proxy=None)\n") == []
+    assert case("import httpx\nhttpx.AsyncClient(trust_env=False)\n") == []
+    assert case("import httpx\nhttpx.AsyncClient()\n") == [
+        "kaine/x.py:2 httpx call without trust_env=False"
+    ]
 
 
 def test_lingua_client_reaches_a_local_server_with_a_proxy_set(monkeypatch):
