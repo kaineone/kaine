@@ -425,22 +425,23 @@ def test_history_foreign_records_only(tmp_path):
     assert has_prior_lived_history_in_lineage(me, tmp_path) is False
 
 
-def test_history_record_without_identity(tmp_path):
+def test_history_record_without_identity_counts_as_lived(tmp_path):
+    """An unidentified bundle is ambiguous, and every ambiguity resolves to lived."""
     me = mint_identity(now=lambda: 1.0)
     pres_dir = tmp_path / "preservation" / "bundle1"
     pres_dir.mkdir(parents=True)
     (pres_dir / "manifest.json").write_text(json.dumps({"other": "data"}))
-    assert has_prior_lived_history_in_lineage(me, tmp_path) is False
+    assert has_prior_lived_history_in_lineage(me, tmp_path) is True
 
 
-def test_history_corrupt_sidecar_no_raise(tmp_path, caplog):
+def test_history_corrupt_sidecar_counts_as_lived_without_raising(tmp_path, caplog):
     me = mint_identity(now=lambda: 1.0)
     forks_dir = tmp_path / "forks" / "snap1"
     forks_dir.mkdir(parents=True)
     (forks_dir / SIDECAR_NAME).write_text("not json")
 
     with caplog.at_level(logging.WARNING):
-        assert has_prior_lived_history_in_lineage(me, tmp_path) is False
+        assert has_prior_lived_history_in_lineage(me, tmp_path) is True
     assert "identity" in caplog.text.lower() or "unreadable" in caplog.text.lower()
 
 

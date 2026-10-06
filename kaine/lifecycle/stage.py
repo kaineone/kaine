@@ -37,9 +37,12 @@ import re
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Iterable
 
 from kaine.state_io import write_json_atomic
+
+if TYPE_CHECKING:
+    from kaine.lifecycle.identity import EntityIdentity
 from kaine.storage import resolve
 
 # Per-fork developmental-stage file. Under the per-fork state root, like other
@@ -57,52 +60,34 @@ def _now_iso() -> str:
 
 
 def has_prior_lived_history(
+    identity: "EntityIdentity | None" = None,
     state_root: Path | str = "state",
-    stage_path: Path | None = None,
+    bundle_roots: Iterable[Path | str] = (),
 ) -> bool:
-    """Detect whether a being has already lived on this fork.
+    """Detect whether this being has already lived.
 
-    A genuinely fresh entity has no stage file and no other durable lived-state
-    or preservation artifact. A being with any of the following is treated as
-    already-lived and defaults to ``embodied`` (never regressed into a womb):
+    A genuinely fresh entity has a known identity, no own lived artifacts in
+    this tree, and no fork/preservation/bundle record naming it or one of its
+    ancestors.
 
-      - any fork snapshot under ``state/forks/``,
-      - any preservation bundle under ``state/preservation/``,
-      - a Phantasia world-model checkpoint,
-      - a Hypnos consolidation-divergence record,
-      - an operator-commanded perception desired-state.
+    A being is treated as already-lived when:
 
-    The stage file itself is excluded: its absence is the signal that lets
-    :func:`resolve_boot_stage` apply the preserved-being invariant.
+      * its identity is unknown (``None``) — lineage is unavailable, so the
+        non-regressing answer is ``True``;
+      * any of this tree's own lived artifacts exist (lifecycle stage file,
+        Phantasia checkpoint, Hypnos divergence record, perception
+        desired-state) — these prove the *current* tree has lived regardless
+        of sidecars;
+      * a fork sidecar, preservation manifest, or configured bundle manifest
+        records an entity ID that matches this being or one of its ancestors.
+
+    ``forks/`` and ``preservation/`` may hold other beings; they only count
+    when their identity metadata names this lineage. The implementation is
+    imported lazily from ``kaine.lifecycle.identity`` so this module stays
+    free of an import cycle.
     """
-    root = resolve(state_root)
-    if not root.exists():
-        return False
-
-    def _any_child(path: Path) -> bool:
-        try:
-            return any(path.iterdir())
-        except OSError:
-            return False
-
-    indicators = [
-        root / "forks",
-        root / "preservation",
-        root / "phantasia" / "world_model.ckpt",
-        root / "hypnos" / "consolidation_divergence.json",
-        root / "perception" / "desired.json",
-    ]
-    stage_target = resolve(Path(stage_path) if stage_path else STAGE_PATH)
-    excluded = {stage_target.resolve()}
-    for indicator in indicators:
-        try:
-            if indicator.is_dir() and _any_child(indicator):
-                return True
-            if indicator.is_file() and indicator.resolve() not in excluded:
-                return True
-        except OSError:
-            continue
-    return False
+    from kaine.lifecycle.identity import lived_before
+    return lived_before(identity, state_root, bundle_roots)
 
 
 def _coerce_stage(value: Any) -> str:
@@ -243,13 +228,21 @@ def read_stage(path: Path | None = None) -> StageState | None:
     and it means different things for a fresh entity versus one with prior lived
     history."""
     target = resolve(path or STAGE_PATH)
-    if not target.exists():
+    try:
+        exists = target.exists()
+    except OSError:
+        # If we cannot verify whether the stage file exists, we must fail safe
+        # toward `embodied` rather than return `None` and risk regressing a
+        # possibly-lived mind into the womb.
+        return StageState(stage=EMBODIED)
+    if not exists:
         return None
     try:
         return StageState.from_dict(json.loads(target.read_text()))
-    except (json.JSONDecodeError, OSError):
-        # A corrupt stage file must fail safe toward `embodied` (never regress a
-        # possibly-lived mind into the womb), not crash boot.
+    except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        # A corrupt, malformed or unreadable stage file must fail safe toward
+        # `embodied` (never regress a possibly-lived mind into the womb), not
+        # crash boot.
         return StageState(stage=EMBODIED)
 
 
