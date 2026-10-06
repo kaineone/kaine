@@ -548,11 +548,13 @@ def test_lingua_llama_cpp_not_measured(capsys, tmp_path):
     code, out, err, cat = _run(
         ["--yes", "--only", "lingua"], config, tmp_path, capsys
     )
-    assert code == 0
+    assert code == 3
     assert (
         "not measured: in-process llama_cpp organ calibration is not implemented yet"
         in out
     )
+    assert "Uncalibrated components: lingua" in out
+    assert not cat.exists()
 
 
 def test_audition_transcription_disabled_no_stt(capsys, tmp_path, monkeypatch):
@@ -626,11 +628,12 @@ def test_service_not_running_message(capsys, tmp_path, monkeypatch):
         service=svc,
         torch_module=_fake_torch(False),
     )
-    assert code == 0
+    assert code == 3
     assert (
         "not measured: http://localhost:1234 is not running or not visible to this user; start it and rerun"
         in out
     )
+    assert "Uncalibrated components: lingua" in out
     assert not cat.exists()
 
 
@@ -658,8 +661,9 @@ def test_container_port_forwarder_not_measured(capsys, tmp_path, monkeypatch):
         service=_proxy,
         torch_module=_fake_torch(False),
     )
-    assert code == 0
+    assert code == 3
     assert "container port forwarder" in out
+    assert "Uncalibrated components: lingua" in out
     assert not cat.exists()
 
 
@@ -1146,13 +1150,14 @@ def test_child_wrapper_zero_cuda_memory_records_no_device(monkeypatch):
             "is_available": staticmethod(lambda: True),
             "device_count": staticmethod(lambda: 1),
             "current_device": staticmethod(lambda: 0),
-            "max_memory_reserved": staticmethod(lambda: 0),
-            "memory_allocated": staticmethod(lambda device: 0),
-            "mem_get_info": staticmethod(lambda device: (8 << 30, 16 << 30)),
+            "max_memory_reserved": staticmethod(lambda device=None: 0),
         },
     )()
     fake_torch = type("_Torch", (), {"cuda": fake_cuda})()
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(
+        "kaine.setup.footprint._nvidia_smi_usage", lambda pids, torch_module: {}
+    )
     monkeypatch.setattr("kaine.setup.footprint._read_baseline_bytes", lambda: 0)
     monkeypatch.setattr("kaine.setup.footprint._read_peak_bytes", lambda: 100)
     _child_wrapper(conn, lambda: {})
@@ -1219,3 +1224,53 @@ def test_main_default_measure_path_is_wired(capsys, tmp_path, monkeypatch):
     assert entry.component == "embedding"
     assert entry.bytes == 123 << 20
     assert entry.mapped is True
+
+
+def _cuda_torch(reserved):
+    """A fake torch whose devices report ``reserved`` (a callable or list)."""
+    fake_cuda = type(
+        "_Cuda",
+        (),
+        {
+            "is_available": staticmethod(lambda: True),
+            "device_count": staticmethod(lambda: 2),
+            "max_memory_reserved": staticmethod(
+                reserved if callable(reserved) else (lambda device=None: reserved[device])
+            ),
+        },
+    )()
+    return type("_Torch", (), {"cuda": fake_cuda})()
+
+
+def test_child_wrapper_records_gpu_memory_torch_did_not_reserve(monkeypatch):
+    """GPU memory used outside torch (seen only by nvidia-smi) is recorded."""
+    conn = _fake_conn()
+    monkeypatch.setitem(sys.modules, "torch", _cuda_torch([0, 0]))
+    monkeypatch.setattr(
+        "kaine.setup.footprint._nvidia_smi_usage",
+        lambda pids, torch_module: {"cuda:1": 700 << 20},
+    )
+    monkeypatch.setattr("kaine.setup.footprint._read_baseline_bytes", lambda: 0)
+    monkeypatch.setattr("kaine.setup.footprint._read_peak_bytes", lambda: 100)
+    _child_wrapper(conn, lambda: {})
+    assert conn.sent["ok"] is True
+    assert conn.sent["device"] == "cuda:1"
+    assert conn.sent["device_bytes"] == 700 << 20
+
+
+def test_child_wrapper_unreadable_device_fails_the_measurement(monkeypatch):
+    """A device whose peak cannot be read fails rather than recording no device."""
+    conn = _fake_conn()
+
+    def broken(device=None):
+        raise RuntimeError("device unreadable")
+
+    monkeypatch.setitem(sys.modules, "torch", _cuda_torch(broken))
+    monkeypatch.setattr(
+        "kaine.setup.footprint._nvidia_smi_usage", lambda pids, torch_module: {}
+    )
+    monkeypatch.setattr("kaine.setup.footprint._read_baseline_bytes", lambda: 0)
+    monkeypatch.setattr("kaine.setup.footprint._read_peak_bytes", lambda: 100)
+    _child_wrapper(conn, lambda: {})
+    assert conn.sent["ok"] is False
+    assert "device unreadable" in conn.sent["error"]

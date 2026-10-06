@@ -19,6 +19,7 @@ import datetime
 import functools
 import io
 import ipaddress
+import json
 import math
 import multiprocessing
 import os
@@ -89,6 +90,7 @@ class ComponentInfo:
     message: str | None = None
     url: str | None = None
     config_section: dict[str, Any] | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -318,6 +320,7 @@ def _select_components(
                         model_id=model_id,
                         message="not measured: remote_endpoint",
                         url=url,
+                        reason="remote_endpoint",
                     )
                 )
             else:
@@ -346,6 +349,7 @@ def _select_components(
                             model_id="medium.en",
                             message="not measured: remote_endpoint",
                             url=url,
+                            reason="remote_endpoint",
                         )
                     )
                 else:
@@ -406,6 +410,7 @@ def _select_components(
                         model_id="chatterbox",
                         message="not measured: remote_endpoint",
                         url=url,
+                        reason="remote_endpoint",
                     )
                 )
             else:
@@ -881,7 +886,7 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
     try:
         baseline = _read_baseline_bytes()
 
-        # Import torch here so we can snapshot per-device memory before the
+        # Import torch here so we can measure per-device memory after the
         # model code runs. On CPU-only hosts this is a no-op.
         torch: Any | None = None
         try:
@@ -889,21 +894,6 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
         except Exception:
             # Torch is not installed or cannot be imported in this child.
             torch = None
-
-        device_snapshots: dict[int, int] = {}
-        if torch is not None and torch.cuda.is_available():
-            try:
-                device_count = torch.cuda.device_count()
-            except Exception:
-                # The CUDA runtime reports no device-enumeration API; skip GPUs.
-                device_count = 0
-            for i in range(device_count):
-                try:
-                    free, total = torch.cuda.mem_get_info(i)
-                    device_snapshots[i] = total - free
-                except Exception:
-                    # Device may be unreachable; skip it.
-                    pass
 
         result = target_fn()
         peak = _read_peak_bytes()
@@ -925,31 +915,26 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
 
         device: str | None = None
         device_bytes: int | None = None
-        mapped = bool(result.get("mapped", False)) if isinstance(result, dict) else False
+        mapped = (
+            bool(result.get("mapped", False)) if isinstance(result, dict) else False
+        )
 
-        if torch is not None and device_snapshots:
-            if torch.cuda.is_available():
-                # Pick the device the component actually used: the one with the
-                # most torch-allocated memory after the run.
-                allocations = [
-                    (i, torch.cuda.memory_allocated(i))
-                    for i in device_snapshots
-                ]
-                actual_device, allocated = max(allocations, key=lambda x: x[1])
-                if allocated > 0:
-                    device = f"cuda:{actual_device}"
-                    reserved = int(torch.cuda.max_memory_reserved(actual_device))
-                    try:
-                        free_after, total_after = torch.cuda.mem_get_info(actual_device)
-                        used_after = total_after - free_after
-                        delta = used_after - device_snapshots.get(actual_device, 0)
-                        if delta < 0:
-                            delta = 0
-                        device_bytes = max(reserved, delta)
-                    except Exception:
-                        # Fall back to torch's allocator figure if the device
-                        # query fails.
-                        device_bytes = reserved
+        if torch is not None and torch.cuda.is_available():
+            # Per device, the larger of torch's peak reservation (survives
+            # frees) and nvidia-smi's figure for this process (includes the
+            # CUDA context and non-torch allocations). A device that cannot
+            # be read raises, so the measurement fails instead of recording
+            # "no device".
+            usage: dict[str, int] = {}
+            for i in range(torch.cuda.device_count()):
+                reserved_i = int(torch.cuda.max_memory_reserved(i))
+                if reserved_i > 0:
+                    usage[f"cuda:{i}"] = reserved_i
+            smi = _nvidia_smi_usage({os.getpid()}, torch)
+            for name, smi_bytes in (smi or {}).items():
+                usage[name] = max(usage.get(name, 0), smi_bytes)
+            if usage:
+                device, device_bytes = max(usage.items(), key=lambda item: item[1])
 
         conn.send(
             {
@@ -1071,12 +1056,24 @@ def _measure_callable_in_child(
                     f"child result unreadable: {exc}",
                 )
 
+            if isinstance(data, dict) and data.get("ok") is False:
+                child_msg = str(data.get("error") or "failed")
+                process.join(timeout=30)
+                if process.is_alive():
+                    _stop_group(process.pid)
+                    if process.is_alive():
+                        process.kill()
+                        process.join(timeout=5)
+                return (False, None, None, None, False, child_msg)
+
             ok, err = _validate_child_record(data)
             if not ok:
                 process.join(timeout=30)
                 if process.is_alive():
                     _stop_group(process.pid)
-                    process.join(timeout=2)
+                    if process.is_alive():
+                        process.kill()
+                        process.join(timeout=5)
                 return (False, None, None, None, False, err)
 
             note = ""
@@ -1086,6 +1083,9 @@ def _measure_callable_in_child(
                 # measurement it sent stands. Say so, so it is never mistaken
                 # for a crash.
                 _stop_group(process.pid)
+                if process.is_alive():
+                    process.kill()
+                    process.join(timeout=5)
                 process.join(timeout=2)
                 note = "the child was stopped after reporting; the measurement stands"
 
@@ -1101,6 +1101,9 @@ def _measure_callable_in_child(
         # Timeout: the child is still running.
         if process.is_alive():
             _stop_group(process.pid)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
             process.join(timeout=2)
             return (False, None, None, None, False, "timed out")
 
@@ -1116,6 +1119,9 @@ def _measure_callable_in_child(
         parent_conn.close()
         if process.is_alive():
             _stop_group(process.pid)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
             process.join(timeout=2)
 
 
@@ -1169,35 +1175,22 @@ def _listener_root_pid(url: str) -> int | None:
     return pids[0]
 
 
-def _nvidia_smi_gpu_memory(pid: int) -> tuple[str | None, int | None]:
-    """Return (cuda_device, bytes) for PID from nvidia-smi, or (None, None)."""
-    try:
-        # Map GPU name to CUDA index. The index reported by nvidia-smi usually
-        # matches the CUDA runtime index for the same physical GPU.
-        idx_proc = subprocess.run(
-            ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader,nounits"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if idx_proc.returncode != 0:
-            return None, None
-        name_to_index: dict[str, int] = {}
-        for line in idx_proc.stdout.strip().splitlines():
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) >= 2:
-                try:
-                    index = int(parts[0])
-                except ValueError:
-                    continue
-                name = parts[1]
-                name_to_index.setdefault(name, index)
+def _nvidia_smi_usage(
+    pids: set[int], torch_module: Any
+) -> dict[str, int] | None:
+    """Return GPU memory usage per ``cuda:i`` for ``pids``, or ``None`` if unknown.
 
-        apps_proc = subprocess.run(
+    Maps nvidia-smi GPU UUIDs to torch CUDA device indices, so identical GPU
+    names are disambiguated and the returned domain matches the torch device.
+    """
+    if not pids:
+        return {}
+
+    try:
+        proc = subprocess.run(
             [
                 "nvidia-smi",
-                "--query-compute-apps=pid,used_memory,gpu_name",
+                "--query-compute-apps=pid,used_memory,gpu_uuid",
                 "--format=csv,noheader,nounits",
             ],
             capture_output=True,
@@ -1205,46 +1198,110 @@ def _nvidia_smi_gpu_memory(pid: int) -> tuple[str | None, int | None]:
             timeout=5,
             check=False,
         )
-        if apps_proc.returncode != 0:
-            return None, None
-
-        for line in apps_proc.stdout.strip().splitlines():
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) < 3:
-                continue
-            try:
-                line_pid = int(parts[0])
-            except ValueError:
-                continue
-            if line_pid != pid:
-                continue
-            try:
-                used_mib = int(parts[1])
-            except ValueError:
-                continue
-            gpu_name = parts[2]
-            index = name_to_index.get(gpu_name)
-            device = f"cuda:{index}" if index is not None else None
-            return device, used_mib * (1 << 20)
-        return None, None
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         # nvidia-smi is absent, slow, or unsupported on this host.
+        return None
+
+    if proc.returncode != 0:
+        return None
+
+    per_uuid: dict[str, int] = {}
+    for line in proc.stdout.strip().splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 3:
+            continue
+        try:
+            line_pid = int(parts[0])
+        except ValueError:
+            continue
+        if line_pid not in pids:
+            continue
+        try:
+            used_mib = int(parts[1])
+        except ValueError:
+            # One of our processes is on a GPU but its usage is not reported
+            # (for example "[N/A]"): the total would be an under-estimate.
+            return None
+        gpu_uuid = parts[2]
+        per_uuid[gpu_uuid] = per_uuid.get(gpu_uuid, 0) + used_mib * (1 << 20)
+
+    if not per_uuid:
+        return {}
+
+    try:
+        device_count = torch_module.cuda.device_count()
+    except Exception:
+        return None
+
+    uuid_to_index: dict[str, int] = {}
+    for i in range(device_count):
+        try:
+            props = torch_module.cuda.get_device_properties(i)
+            canonical = ("GPU-" + str(props.uuid)).lower()
+            uuid_to_index[canonical] = i
+        except Exception:
+            continue
+
+    result: dict[str, int] = {}
+    for gpu_uuid, bytes_ in per_uuid.items():
+        index = uuid_to_index.get(gpu_uuid.lower())
+        if index is None:
+            # Unknown UUID: we cannot map this usage to a torch device.
+            return None
+        result[f"cuda:{index}"] = result.get(f"cuda:{index}", 0) + bytes_
+
+    return result
+
+
+def _service_gpu_memory(
+    url: str,
+    budgets: tuple[Any, ...] | list[Any],
+    torch_module: Any | None = None,
+) -> tuple[str | None, int | None] | None:
+    """Return (device, bytes) for a local service's listener, if measurable.
+
+    On a host with a ``cuda:N`` budget, returns ``None`` whenever the
+    service's GPU memory cannot be read (no listener, unreadable process
+    tree, no torch, nvidia-smi unavailable or unmappable), so the component
+    is not recorded and stays uncalibrated. ``(None, None)`` means it uses no
+    GPU, or the host has no device budget.
+    """
+    has_cuda_domain = any(
+        hasattr(b, "name") and b.name.startswith("cuda:") for b in budgets
+    )
+    if not has_cuda_domain:
+        # CPU-only or unified-memory host: there is no device budget to fill.
         return None, None
 
-
-def _service_gpu_memory(url: str) -> tuple[str | None, int | None]:
-    """Return (device, bytes) for a local service's listener, if measurable."""
+    # From here on the host has a device budget, so anything that stops us
+    # reading the service's GPU memory makes it unknown (None), never "none".
     root_pid = _listener_root_pid(url)
     if root_pid is None:
-        return None, None
+        return None
     try:
         root = psutil.Process(root_pid)
-        name = root.name()
+        descendants = {child.pid for child in root.children(recursive=True)}
     except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return None
+    pids = descendants | {root_pid}
+
+    torch = torch_module
+    if torch is None:
+        try:
+            import torch  # type: ignore[import]
+        except Exception:
+            # Without torch the GPUs cannot be mapped to budget domains.
+            return None
+    if not torch.cuda.is_available():
+        return None
+
+    usage = _nvidia_smi_usage(pids, torch)
+    if usage is None:
+        return None
+    if not usage:
         return None, None
-    if name != "llama-server":
-        return None, None
-    return _nvidia_smi_gpu_memory(root_pid)
+    device, bytes_ = max(usage.items(), key=lambda item: item[1])
+    return device, bytes_
 
 
 def _measure_service(url: str) -> int | None:
@@ -1324,11 +1381,10 @@ def _needs_for(
 ) -> list[Need]:
     """Build fit-report needs from catalogue entries that match this rung.
 
-    Components explicitly marked as ``not_measured`` are skipped, and external
-    services that were not successfully measured (no catalogue entry) are also
-    skipped because the fit report does not plan for them. Every other enabled
-    component is represented; those without a matching entry are emitted as
-    uncalibrated so the fit report cannot falsely claim a clean fit.
+    Components that run on a remote endpoint (``reason == "remote_endpoint"``)
+    are skipped because the fit report does not plan for them. Every other
+    enabled component is represented; those without a matching entry are emitted
+    as uncalibrated so the fit report cannot falsely claim a clean fit.
     """
     interactive_components = {"lingua", "audition.stt", "vox.tts"}
     budget_domains = {b.name for b in budgets}
@@ -1336,7 +1392,7 @@ def _needs_for(
     for info in components:
         rung = f"{info.backend}:{info.model_id}"
 
-        if info.kind == "not_measured":
+        if info.reason == "remote_endpoint":
             continue
 
         matches = [
@@ -1347,11 +1403,6 @@ def _needs_for(
             and e.model_id == info.model_id
             and e.host_class == host
         ]
-
-        if info.kind == "external" and not matches:
-            # The service was not measured successfully; it is not part of
-            # the host co-residency plan.
-            continue
 
         if not matches:
             needs.append(
@@ -1545,10 +1596,11 @@ def main(
     entries = load_catalogue(catalogue_path)
     existing = _catalogue_file(catalogue_path)
     if existing.is_file() and existing.stat().st_size > 0:
+        corrupt = False
         try:
             raw = json.loads(existing.read_text(encoding="utf-8"))
             corrupt = not isinstance(raw, list)
-        except Exception:
+        except (OSError, UnicodeDecodeError, ValueError):
             # Any read/parse failure means the file cannot be trusted.
             corrupt = True
         if corrupt:
@@ -1562,10 +1614,11 @@ def main(
                 )
             except OSError as move_exc:
                 err(
-                    f"warning: the existing footprint catalogue at {existing} "
-                    f"could not be read; it was moved to {backup} and will be replaced "
-                    f"(rename failed: {move_exc})"
+                    f"error: the existing footprint catalogue at {existing} "
+                    f"could not be read and could not be moved aside ({move_exc}); "
+                    f"nothing was recorded"
                 )
+                return 1
 
     measured_entries: list[Entry] = []
     had_failure = False
@@ -1578,8 +1631,7 @@ def main(
             continue
 
         if info.kind == "external":
-            parsed = urllib.parse.urlparse(info.url)
-            if not _is_loopback_host(parsed.hostname):
+            if not _is_loopback_url(info.url):
                 # Remote endpoints are never measured locally.
                 out(f"{info.name}: not measured: {info.url} is not a loopback endpoint")
                 continue
@@ -1597,8 +1649,14 @@ def main(
 
             device = None
             device_bytes = None
-            if peak_bytes is not None:
-                device, device_bytes = _service_gpu_memory(info.url)
+            gpu_result = _service_gpu_memory(info.url, budgets, torch_module)
+            if gpu_result is None:
+                out(
+                    f"{info.name}: not measured: its GPU memory could not be read; "
+                    f"it stays uncalibrated"
+                )
+                continue
+            device, device_bytes = gpu_result
 
             entry = Entry(
                 component=info.name,

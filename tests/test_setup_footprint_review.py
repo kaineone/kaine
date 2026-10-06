@@ -2,15 +2,21 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from kaine.residency.budget import Domain
+from kaine.residency.catalogue import Entry, load_catalogue, write_catalogue
 from kaine.setup.footprint import (
     ComponentInfo,
+    _child_wrapper,
     _measure_callable_in_child,
     _needs_for,
+    _nvidia_smi_usage,
     _validate_child_record,
     main,
 )
@@ -52,6 +58,28 @@ def _fake_budgets():
     )
 
 
+def _fake_measure(mapping):
+    calls = []
+
+    def measure(info, config, timeout=600.0):
+        calls.append({"info": info, "config": config, "timeout": timeout})
+        if info.name in mapping:
+            return mapping[info.name]
+        return (True, 123 << 20, None, None, False, "")
+
+    return measure, calls
+
+
+def _fake_service(mapping):
+    calls = []
+
+    def measure(url):
+        calls.append(url)
+        return mapping.get(url)
+
+    return measure, calls
+
+
 def _run(
     argv,
     config,
@@ -64,6 +92,7 @@ def _run(
     budgets_fn=None,
     input_fn=None,
     stdin_isatty=None,
+    torch_module=None,
 ):
     catalogue_path = tmp_path / "footprints.json"
     full_argv = ["--catalogue", str(catalogue_path)] + argv
@@ -82,6 +111,8 @@ def _run(
         kwargs["input_fn"] = input_fn
     if stdin_isatty is not None:
         kwargs["stdin_isatty"] = stdin_isatty
+    if torch_module is not None:
+        kwargs["torch_module"] = torch_module
 
     code = main(full_argv, **kwargs)
     captured = capsys.readouterr()
@@ -283,8 +314,6 @@ def test_non_positive_timeout_rejected(capsys, tmp_path):
 
 def test_needs_for_uncalibrated_and_device_folding():
     """_needs_for emits uncalibrated Needs and folds device bytes on unified hosts."""
-    from kaine.residency.catalogue import Entry
-
     base_entry = dict(
         component="topos.encoder",
         backend="internvideo_next",
@@ -348,3 +377,549 @@ def test_needs_for_uncalibrated_and_device_folding():
     assert len(needs) == 1
     assert needs[0].footprint_bytes is None
     assert needs[0].component == "topos.encoder"
+
+
+def test_valid_existing_catalogue_not_moved(capsys, tmp_path, monkeypatch):
+    """A valid catalogue is parsed successfully and never renamed as corrupt."""
+    _hermetic_selection(monkeypatch)
+    catalogue_path = tmp_path / "footprints.json"
+    write_catalogue(
+        [
+            Entry(
+                component="topos.encoder",
+                backend="internvideo_next",
+                model_id="internvideo_next",
+                bytes=100 << 20,
+                host_class="cpu",
+            )
+        ],
+        catalogue_path,
+    )
+
+    config = {
+        "modules": {"topos": True},
+        "topos": {"encoder_backend": "internvideo_next"},
+    }
+    code, out, err, cat = _run(
+        ["--yes", "--only", "topos.encoder"],
+        config,
+        tmp_path,
+        capsys,
+        budgets_fn=_fake_budgets,
+    )
+
+    assert code == 0
+    assert not list(tmp_path.glob("footprints.json.bak-*"))
+    entries = load_catalogue(cat)
+    assert any(e.component == "topos.encoder" for e in entries)
+
+
+def test_failed_backup_rename_returns_one_and_measures_nothing(
+    capsys, tmp_path, monkeypatch
+):
+    """A corrupt catalogue that cannot be moved aside stops before measuring."""
+    _hermetic_selection(monkeypatch)
+    catalogue_path = tmp_path / "footprints.json"
+    catalogue_path.write_text("not json {")
+    (tmp_path / "model.safetensors").write_text("x")
+
+    measure, calls = _fake_measure(
+        {"topos.encoder": (True, 100 << 20, None, None, False, "")}
+    )
+
+    def _broken_rename(self, target):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(Path, "rename", _broken_rename)
+
+    config = {
+        "modules": {"topos": True},
+        "topos": {
+            "encoder_backend": "internvideo_next",
+            "encoder_local_dir": str(tmp_path),
+        },
+    }
+    code, out, err, cat = _run(
+        ["--yes", "--only", "topos.encoder"],
+        config,
+        tmp_path,
+        capsys,
+        measure=measure,
+    )
+
+    assert code == 1
+    assert "could not be read and could not be moved aside" in err
+    assert "nothing was recorded" in err
+    assert not calls
+
+
+def _fake_conn():
+    class Conn:
+        def __init__(self):
+            self.sent = None
+
+        def send(self, obj):
+            self.sent = obj
+
+        def close(self):
+            pass
+
+    return Conn()
+
+
+def test_child_wrapper_peak_reserved_selects_device(monkeypatch):
+    """Peak torch reserved memory picks the device even after allocator frees."""
+    monkeypatch.setattr(
+        "kaine.setup.footprint._apply_child_env_allowlist", lambda: None
+    )
+    monkeypatch.setattr("kaine.setup.footprint._set_offline_env", lambda: None)
+    monkeypatch.setattr("kaine.setup.footprint._read_baseline_bytes", lambda: 0)
+    monkeypatch.setattr("kaine.setup.footprint._read_peak_bytes", lambda: 100)
+
+    class _Cuda:
+        @staticmethod
+        def is_available():
+            return True
+
+        @staticmethod
+        def device_count():
+            return 2
+
+        @staticmethod
+        def max_memory_reserved(device=None):
+            if device == 0:
+                return 0
+            if device == 1:
+                return 3 << 30
+            return 0
+
+        @staticmethod
+        def get_device_properties(i):
+            class Props:
+                uuid = f"uuid-{i}"
+
+            return Props()
+
+    fake_torch = type("_Torch", (), {"cuda": _Cuda()})()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(
+        "kaine.setup.footprint._nvidia_smi_usage", lambda pids, tm: None
+    )
+
+    conn = _fake_conn()
+    _child_wrapper(conn, lambda: {"mapped": False})
+
+    assert conn.sent["ok"] is True
+    assert conn.sent["device"] == "cuda:1"
+    assert conn.sent["device_bytes"] >= 3 << 30
+
+
+def test_child_wrapper_uses_smi_when_available(monkeypatch):
+    """Device bytes prefer the child's own nvidia-smi figure when available."""
+    monkeypatch.setattr(
+        "kaine.setup.footprint._apply_child_env_allowlist", lambda: None
+    )
+    monkeypatch.setattr("kaine.setup.footprint._set_offline_env", lambda: None)
+    monkeypatch.setattr("kaine.setup.footprint._read_baseline_bytes", lambda: 0)
+    monkeypatch.setattr("kaine.setup.footprint._read_peak_bytes", lambda: 100)
+
+    class _Cuda:
+        @staticmethod
+        def is_available():
+            return True
+
+        @staticmethod
+        def device_count():
+            return 2
+
+        @staticmethod
+        def max_memory_reserved(device=None):
+            if device == 1:
+                return 3 << 30
+            return 0
+
+        @staticmethod
+        def get_device_properties(i):
+            class Props:
+                uuid = f"uuid-{i}"
+
+            return Props()
+
+    fake_torch = type("_Torch", (), {"cuda": _Cuda()})()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    smi_bytes = int(3.5 * (1 << 30))
+    monkeypatch.setattr(
+        "kaine.setup.footprint._nvidia_smi_usage",
+        lambda pids, tm: {"cuda:1": smi_bytes},
+    )
+
+    conn = _fake_conn()
+    _child_wrapper(conn, lambda: {"mapped": False})
+
+    assert conn.sent["ok"] is True
+    assert conn.sent["device"] == "cuda:1"
+    assert conn.sent["device_bytes"] == smi_bytes
+
+
+def test_needs_for_not_measured_local_is_uncalibrated():
+    """A not_measured local organ without a catalogue entry is uncalibrated."""
+    info = ComponentInfo(
+        name="lingua",
+        kind="not_measured",
+        backend="llama_cpp",
+        model_id="qwen2.5-3b",
+    )
+    needs = _needs_for([], [info], "cpu", _fake_budgets())
+    assert len(needs) == 1
+    assert needs[0].component == "lingua"
+    assert needs[0].footprint_bytes is None
+
+
+def test_needs_for_remote_endpoint_skipped():
+    """A remote_endpoint component is skipped and produces no Need."""
+    info = ComponentInfo(
+        name="lingua",
+        kind="not_measured",
+        backend="openai",
+        model_id="gpt-4o-mini",
+        reason="remote_endpoint",
+    )
+    needs = _needs_for([], [info], "cpu", _fake_budgets())
+    assert needs == []
+
+
+def test_needs_for_external_without_entry_is_uncalibrated():
+    """A local external service that was not measured is uncalibrated."""
+    info = ComponentInfo(
+        name="lingua",
+        kind="external",
+        backend="openai",
+        model_id="gpt-4o-mini",
+        url="http://localhost:1234",
+    )
+    needs = _needs_for([], [info], "cpu", _fake_budgets())
+    assert len(needs) == 1
+    assert needs[0].component == "lingua"
+    assert needs[0].footprint_bytes is None
+
+
+def _make_fake_torch(uuids):
+    class _Cuda:
+        @staticmethod
+        def device_count():
+            return len(uuids)
+
+        @staticmethod
+        def get_device_properties(i):
+            class Props:
+                uuid = uuids[i]
+
+            return Props()
+
+    return type("_Torch", (), {"cuda": _Cuda()})()
+
+
+def test_nvidia_smi_usage_maps_identical_names_by_uuid(monkeypatch):
+    """Two same-name GPUs are distinguished by UUID, not name."""
+    fake_torch = _make_fake_torch(["aaaa", "bbbb"])
+
+    def fake_run(cmd, **kwargs):
+        class Proc:
+            returncode = 0
+            stdout = "42, 1000, GPU-aaaa\n42, 500, GPU-bbbb\n"
+
+        return Proc()
+
+    monkeypatch.setattr("kaine.setup.footprint.subprocess.run", fake_run)
+
+    result = _nvidia_smi_usage({42}, fake_torch)
+    assert result == {"cuda:0": 1000 * (1 << 20), "cuda:1": 500 * (1 << 20)}
+
+
+def test_nvidia_smi_usage_unreported_usage_for_our_pid_is_unknown(monkeypatch):
+    """Our process on a GPU with usage "[N/A]" is unknown, not zero."""
+    fake_torch = _make_fake_torch(["aaaa"])
+
+    def fake_run(cmd, **kwargs):
+        class Proc:
+            returncode = 0
+            stdout = "42, [N/A], GPU-aaaa\n7, 300, GPU-aaaa\n"
+
+        return Proc()
+
+    monkeypatch.setattr("kaine.setup.footprint.subprocess.run", fake_run)
+    assert _nvidia_smi_usage({42}, fake_torch) is None
+
+
+def test_nvidia_smi_usage_unmappable_uuid_returns_none(monkeypatch):
+    """An unknown GPU UUID makes the whole measurement unknown."""
+    fake_torch = _make_fake_torch(["aaaa"])
+
+    def fake_run(cmd, **kwargs):
+        class Proc:
+            returncode = 0
+            stdout = "42, 1000, GPU-unknown\n"
+
+        return Proc()
+
+    monkeypatch.setattr("kaine.setup.footprint.subprocess.run", fake_run)
+
+    assert _nvidia_smi_usage({42}, fake_torch) is None
+
+
+def test_nvidia_smi_usage_missing_binary_returns_none(monkeypatch):
+    """A missing nvidia-smi binary is reported as unknown."""
+    fake_torch = _make_fake_torch(["aaaa"])
+
+    def fake_run(cmd, **kwargs):
+        raise FileNotFoundError("nvidia-smi")
+
+    monkeypatch.setattr("kaine.setup.footprint.subprocess.run", fake_run)
+
+    assert _nvidia_smi_usage({42}, fake_torch) is None
+
+
+def test_nvidia_smi_usage_other_pids_empty(monkeypatch):
+    """Rows for other processes contribute nothing."""
+    fake_torch = _make_fake_torch(["aaaa"])
+
+    def fake_run(cmd, **kwargs):
+        class Proc:
+            returncode = 0
+            stdout = "99, 1000, GPU-aaaa\n"
+
+        return Proc()
+
+    monkeypatch.setattr("kaine.setup.footprint.subprocess.run", fake_run)
+
+    assert _nvidia_smi_usage({42}, fake_torch) == {}
+
+
+def test_local_service_gpu_unknown_not_recorded(capsys, tmp_path, monkeypatch):
+    """A local service whose GPU memory cannot be read is left uncalibrated."""
+    _hermetic_selection(monkeypatch)
+    svc, svc_calls = _fake_service({"http://localhost:1234": 100 << 20})
+
+    class FakeProc:
+        pid = 42
+
+        def name(self):
+            return "python"
+
+        def children(self, recursive=False):
+            return []
+
+    monkeypatch.setattr(
+        "kaine.setup.footprint._listener_root_pid", lambda url: 42
+    )
+    monkeypatch.setattr("kaine.setup.footprint.psutil.Process", lambda pid: FakeProc())
+    monkeypatch.setattr(
+        "kaine.setup.footprint._nvidia_smi_usage", lambda pids, tm: None
+    )
+
+    budgets = (
+        Domain(
+            name="system",
+            kind="system",
+            total_bytes=16 << 30,
+            available_bytes=15 << 30,
+            reserve_bytes=1 << 30,
+            budget_bytes=15 << 30,
+            derivation="test",
+        ),
+        Domain(
+            name="cuda:0",
+            kind="accelerator",
+            total_bytes=8 << 30,
+            available_bytes=7 << 30,
+            reserve_bytes=1 << 30,
+            budget_bytes=7 << 30,
+            derivation="test",
+        ),
+    )
+
+    config = {
+        "modules": {"lingua": True},
+        "lingua": {
+            "backend": "openai",
+            "model_id": "m",
+            "chat_url": "http://localhost:1234",
+        },
+    }
+    code, out, err, cat = _run(
+        ["--yes", "--only", "lingua"],
+        config,
+        tmp_path,
+        capsys,
+        service=svc,
+        budgets_fn=lambda: budgets,
+    )
+
+    assert code == 3
+    assert "http://localhost:1234" in svc_calls
+    assert (
+        "not measured: its GPU memory could not be read" in out
+    )
+    assert "Uncalibrated components: lingua" in out
+    assert not cat.exists()
+
+
+def test_child_failure_message_preserved(monkeypatch):
+    """A child's own failure message is returned verbatim."""
+
+    class FakeProcess:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        @property
+        def pid(self):
+            return 1234
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):
+            pass
+
+        def kill(self):
+            raise AssertionError("should not kill an exited process")
+
+    class FakeConn:
+        def __init__(self):
+            self.closed = False
+
+        def poll(self, timeout):
+            return True
+
+        def recv(self):
+            return {"ok": False, "error": "boom"}
+
+        def close(self):
+            self.closed = True
+
+    def fake_get_context(name):
+        class Ctx:
+            def Pipe(self, duplex=False):
+                return (FakeConn(), FakeConn())
+
+            def Process(self, *args, **kwargs):
+                return FakeProcess(*args, **kwargs)
+
+        return Ctx()
+
+    monkeypatch.setattr(
+        "kaine.setup.footprint.multiprocessing.get_context", fake_get_context
+    )
+
+    ok, peak, device_bytes, device, mapped, error = _measure_callable_in_child(
+        lambda: {}
+    )
+    assert ok is False
+    assert error == "boom"
+
+
+def test_stop_group_fallback_kills_process(monkeypatch):
+    """If os.killpg fails, the process is killed directly."""
+    from kaine.setup import footprint
+
+    killed = []
+    joined = []
+
+    class FakeProcess:
+        alive = True
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        @property
+        def pid(self):
+            return 42
+
+        def is_alive(self):
+            return self.alive
+
+        def kill(self):
+            self.alive = False
+            killed.append(True)
+
+        def join(self, timeout=None):
+            joined.append(timeout)
+
+        @property
+        def exitcode(self):
+            return 0
+
+    class FakeConn:
+        def __init__(self):
+            self.closed = False
+
+        def poll(self, timeout):
+            return False
+
+        def recv(self):
+            raise EOFError
+
+        def close(self):
+            self.closed = True
+
+    def fake_get_context(name):
+        class Ctx:
+            def Pipe(self, duplex=False):
+                return (FakeConn(), FakeConn())
+
+            def Process(self, *args, **kwargs):
+                return FakeProcess(*args, **kwargs)
+
+        return Ctx()
+
+    monkeypatch.setattr(
+        "kaine.setup.footprint.multiprocessing.get_context", fake_get_context
+    )
+    monkeypatch.setattr(
+        footprint.os,
+        "killpg",
+        lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError(pid)),
+    )
+
+    ok, peak, device_bytes, device, mapped, error = _measure_callable_in_child(
+        lambda: {}, timeout=0.01
+    )
+    assert ok is False
+    assert killed
+    assert 5 in joined
+
+
+def test_service_gpu_memory_unknown_paths_on_a_device_host(monkeypatch):
+    """With a cuda:N budget, anything that hides the service's GPU use is unknown."""
+    from kaine.setup.footprint import _service_gpu_memory
+
+    def domain(name, kind):
+        return Domain(
+            name=name,
+            kind=kind,
+            total_bytes=8 << 30,
+            available_bytes=7 << 30,
+            reserve_bytes=1 << 30,
+            budget_bytes=7 << 30,
+            derivation="test",
+        )
+
+    device_host = (domain("system", "system"), domain("cuda:0", "accelerator"))
+    cpu_host = (domain("system", "system"),)
+
+    monkeypatch.setattr("kaine.setup.footprint._listener_root_pid", lambda url: None)
+    assert _service_gpu_memory("http://127.0.0.1:1", device_host, None) is None
+    assert _service_gpu_memory("http://127.0.0.1:1", cpu_host, None) == (None, None)
+
+    def no_access(pid):
+        raise psutil.AccessDenied(pid)
+
+    monkeypatch.setattr("kaine.setup.footprint._listener_root_pid", lambda url: 42)
+    monkeypatch.setattr("kaine.setup.footprint.psutil.Process", no_access)
+    assert _service_gpu_memory("http://127.0.0.1:1", device_host, None) is None
