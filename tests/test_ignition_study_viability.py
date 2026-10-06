@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -98,7 +99,9 @@ def _create_study(
     return study_dir
 
 
-def _runner(study_dir: Path, script: Path, **kwargs: Any) -> StudyRunner:
+def _runner(
+    study_dir: Path, script: Path, wall_clock: Any = None, **kwargs: Any
+) -> StudyRunner:
     defaults = {
         "cycle_command": [sys.executable, str(script), "cycle"],
         "control_command": [sys.executable, str(script), "control"],
@@ -107,6 +110,8 @@ def _runner(study_dir: Path, script: Path, **kwargs: Any) -> StudyRunner:
         "birth_bloom_margin_seconds": 0.0,
         "flush_db": lambda url: None,
     }
+    if wall_clock is not None:
+        defaults["wall_clock"] = wall_clock
     defaults.update(kwargs)
     return StudyRunner(study_dir, **defaults)
 
@@ -431,3 +436,92 @@ def test_failed_terminate_is_retried(
 
     assert proc.terminate_calls == 2
     assert record["outcome"] == "failed:gestation_unviable"
+
+
+def test_coarse_mtime_accepted_with_slack(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A verdict whose real mtime is slightly before step start is accepted.
+
+    On kernels with coarse file timestamps the wall clock can lead the file
+    mtime by a tick. The runner tolerates this without accepting stale files.
+    """
+    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(
+        study_dir, script, wall_clock=lambda: time.time() + 0.5
+    )
+
+    class _FlakyFakeProc(_FakeProc):
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+            if self.terminate_calls == 1:
+                raise OSError("busy")
+            self.returncode = 0
+
+    monkeypatch.setattr(sys.modules[__name__], "_FakeProc", _FlakyFakeProc)
+
+    verdict = {
+        "verdict": "unviable",
+        "rule": "R1",
+        "reason": "entrainment collapsed",
+        "lived_hours": 0.5,
+        "evidence": {"loss": 0.9, "stage": "early"},
+    }
+
+    record, proc, line_dir = _run_step_capture(
+        study_dir,
+        runner,
+        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="gestation",
+        k=0,
+        modules=BASE_MODULES,
+        overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
+        run_id="run-coarse-mtime",
+        monkeypatch=monkeypatch,
+        write_viability_after_calls=2,
+        viability_payload=verdict,
+        proc_exits_after_polls=6,
+    )
+
+    assert proc.terminate_calls == 2
+    assert record["outcome"] == "failed:gestation_unviable"
+
+
+def test_stale_verdict_rejected(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A verdict written long before the step started is still treated as stale."""
+    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(
+        study_dir, script, wall_clock=lambda: time.time() + 30.0
+    )
+
+    verdict = {
+        "verdict": "unviable",
+        "rule": "R1",
+        "reason": "entrainment collapsed",
+        "lived_hours": 0.5,
+        "evidence": {"loss": 0.9, "stage": "early"},
+    }
+
+    record, proc, line_dir = _run_step_capture(
+        study_dir,
+        runner,
+        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="gestation",
+        k=0,
+        modules=BASE_MODULES,
+        overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
+        run_id="run-stale-verdict",
+        monkeypatch=monkeypatch,
+        write_viability_after_calls=2,
+        viability_payload=verdict,
+        proc_exits_after_polls=6,
+    )
+
+    assert proc.terminate_calls == 0
+    assert record["outcome"] != "failed:gestation_unviable"
