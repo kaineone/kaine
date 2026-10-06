@@ -11,6 +11,7 @@ import math
 import os
 import time
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -31,6 +32,8 @@ __all__ = [
     "Answer",
     "DecisionClient",
     "DecisionConfig",
+    "Sidecar",
+    "load_sidecar",
     "load_thresholds",
 ]
 
@@ -67,6 +70,23 @@ class DecisionConfig:
     )
 
     def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError(
+                f"decision config key 'enabled' must be a bool, got {type(self.enabled).__name__}"
+            )
+
+        if isinstance(self.timeout_s, bool) or not isinstance(self.timeout_s, (int, float)):
+            raise ValueError(
+                f"decision config key 'timeout_s' must be a finite number greater than 0, "
+                f"got {type(self.timeout_s).__name__}"
+            )
+        timeout = float(self.timeout_s)
+        if not math.isfinite(timeout) or timeout <= 0.0:
+            raise ValueError(
+                f"decision config key 'timeout_s' must be a finite number greater than 0, "
+                f"got {self.timeout_s!r}"
+            )
+
         # The client sends the server key and the entity's external speech.
         # Both stay on this host: only loopback or the compose service name.
         check_local_url(self.url)
@@ -100,7 +120,14 @@ class DecisionConfig:
         )
 
 
-def load_thresholds(path: str) -> dict[str, float] | None:
+@dataclass(frozen=True)
+class Sidecar:
+    thresholds: dict[str, float]
+    model_file: str
+    model_sha256: str | None
+
+
+def load_sidecar(path: str) -> Sidecar | None:
     """Load a K1-Jev thresholds sidecar file.
 
     Returns ``None`` (and logs a content-free warning) if the file is missing,
@@ -130,13 +157,27 @@ def load_thresholds(path: str) -> dict[str, float] | None:
         logger.warning("Decision thresholds schema digest mismatch")
         return None
 
+    model_file = data.get("model_file")
+    if not isinstance(model_file, str) or not model_file:
+        logger.warning("Decision sidecar model_file missing or empty")
+        return None
+
+    model_sha256 = data.get("model_sha256")
+    if model_sha256 is not None and not isinstance(model_sha256, str):
+        logger.warning("Decision sidecar model_sha256 is not a string")
+        return None
+
     raw_thresholds = data.get("thresholds")
     if not isinstance(raw_thresholds, dict):
-        logger.warning("Decision thresholds 'thresholds' field missing or invalid")
+        logger.warning("Decision sidecar 'thresholds' field missing or invalid")
         return None
 
     result: dict[str, float] = {}
     for qid, value in raw_thresholds.items():
+        if isinstance(value, bool):
+            logger.warning("Decision threshold for %r is not numeric", qid)
+            return None
+
         try:
             threshold = float(value)
         except Exception:
@@ -155,7 +196,20 @@ def load_thresholds(path: str) -> dict[str, float] | None:
 
         result[qid] = threshold
 
-    return result
+    return Sidecar(
+        thresholds=result,
+        model_file=model_file,
+        model_sha256=model_sha256,
+    )
+
+
+def load_thresholds(path: str) -> dict[str, float] | None:
+    """Load the thresholds mapping from a K1-Jev sidecar file.
+
+    Returns ``None`` if the sidecar is missing or does not validate.
+    """
+    sidecar = load_sidecar(path)
+    return sidecar.thresholds if sidecar is not None else None
 
 
 @dataclass(frozen=True)
@@ -179,13 +233,21 @@ class DecisionClient:
         transport: httpx.BaseTransport | None = None,
         clock=time.monotonic,
     ):
+        """Construct a client.
+
+        *transport* is test-only and must not be used in production.
+        """
         # Re-check here too: the key and the utterance must never leave the host,
         # however the config was built.
         check_local_url(config.url)
         self._config = config
         self._clock = clock
         self._api_key = os.environ.get("KAINE_DECISION_SERVER_API_KEY", "")
-        self._thresholds = load_thresholds(config.thresholds_path)
+        self._sidecar = load_sidecar(config.thresholds_path)
+        self._thresholds = (
+            self._sidecar.thresholds if self._sidecar is not None else None
+        )
+        self._identity_verified = False
         self._last_warning: dict[str, float] = {}
 
         # The owned client must never honor HTTP_PROXY / ALL_PROXY: those would
@@ -214,6 +276,47 @@ class DecisionClient:
                 question_ids,
             )
 
+    def _verify_identity(self) -> str | None:
+        """Return a warning kind on failure, or ``None`` on success.
+
+        The served model's GGUF basename must match the sidecar's model_file.
+        Never log the path itself.
+        """
+        if self._sidecar is None:
+            return "no_sidecar"
+
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+
+        url = self._config.url.rstrip("/") + "/props"
+
+        try:
+            response = self._client.get(url, headers=headers)
+        except httpx.RequestError:
+            return "identity_unavailable"
+
+        if response.status_code != 200:
+            return "identity_unavailable"
+
+        try:
+            payload = response.json()
+        except Exception:
+            return "identity_unavailable"
+
+        if not isinstance(payload, dict):
+            return "identity_unavailable"
+
+        model_path = payload.get("model_path")
+        if not isinstance(model_path, str):
+            return "identity_unavailable"
+
+        served_file = PurePosixPath(model_path).name
+        if served_file != self._sidecar.model_file:
+            return "identity_mismatch"
+
+        return None
+
     def ask(
         self,
         utterance: str,
@@ -234,6 +337,7 @@ class DecisionClient:
             return self._do_ask(utterance, context, question_ids)
         except Exception:
             self._warn("exception", question_ids)
+            self._identity_verified = False
             return None
 
     def _do_ask(
@@ -242,6 +346,10 @@ class DecisionClient:
         context: str | None,
         question_ids: list[str],
     ) -> dict[str, Answer] | None:
+        if self._sidecar is None:
+            self._warn("no_sidecar", question_ids)
+            return None
+
         body: dict[str, Any] = {
             "state": state_text(utterance, context),
             "questions": systemone_questions(question_ids),
@@ -252,25 +360,41 @@ class DecisionClient:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
+        if not self._identity_verified:
+            identity_kind = self._verify_identity()
+            if identity_kind is not None:
+                self._warn(identity_kind, question_ids)
+                self._identity_verified = False
+                return None
+            self._identity_verified = True
+
         url = self._config.url.rstrip("/") + "/v1/systemone"
 
         try:
             response = self._client.post(url, json=body, headers=headers)
         except httpx.RequestError:
             self._warn("transport", question_ids)
+            self._identity_verified = False
             return None
 
         if response.status_code != 200:
             self._warn("http_status", question_ids)
+            self._identity_verified = False
             return None
 
         try:
             payload = response.json()
         except Exception:
             self._warn("malformed_response", question_ids)
+            self._identity_verified = False
             return None
 
-        return self._parse_answers(payload, question_ids)
+        parsed = self._parse_answers(payload, question_ids)
+        if parsed is None:
+            self._identity_verified = False
+            return None
+
+        return parsed
 
     def _parse_answers(
         self,
@@ -326,6 +450,8 @@ class DecisionClient:
                 for key, value in raw_probs.items():
                     if key not in option_keys:
                         return None
+                    if isinstance(value, bool):
+                        return None
                     try:
                         prob = float(value)
                     except Exception:
@@ -365,6 +491,8 @@ class DecisionClient:
                         return None
                     if str(idx) != key or not (0 <= idx < levels):
                         return None
+                    if isinstance(value, bool):
+                        return None
                     try:
                         prob = float(value)
                     except Exception:
@@ -373,8 +501,11 @@ class DecisionClient:
                         return None
                     probabilities[key] = prob
 
+            raw_score = ans.get("score")
+            if isinstance(raw_score, bool):
+                return None
             try:
-                score = float(ans["score"])
+                score = float(raw_score)
             except Exception:
                 return None
             if not math.isfinite(score) or not (0.0 <= score <= levels - 1):
@@ -391,8 +522,11 @@ class DecisionClient:
             )
 
         if type_ == "noul":
+            raw_noul = ans.get("noul")
+            if isinstance(raw_noul, bool):
+                return None
             try:
-                noul = float(ans["noul"])
+                noul = float(raw_noul)
             except Exception:
                 return None
             if not math.isfinite(noul) or not (0.0 <= noul <= 1.0):
