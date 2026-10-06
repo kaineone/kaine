@@ -81,3 +81,4 @@ class BootContext:
     gestation_task: Any = None  # set by _phase_gestation
     preserve_task: Any = None  # set by _phase_watchers
     programme_end_task: Any = None  # set by _phase_watchers
+    utterance_outcome: Any = None  # set by _phase_watchers

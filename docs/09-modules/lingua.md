@@ -146,6 +146,18 @@ Every generation is appended to `state/lingua/intent_expression.jsonl` via `Inte
 
 Lingua never truncates the log. Hypnos reads it during voice alignment but does not prune it.
 
+### Utterance outcomes
+
+The cycle runs an observer (`kaine/cycle/utterance_outcome.py`) whenever Lingua is enabled. It appends one record per external utterance to `state/lingua/utterance_outcomes.jsonl`, carrying the utterance's `record_id` so it can be joined with the intent log. Each record holds exactly these fields, and never any text:
+
+- `replied`: whether operator speech (an Audition transcription from an operator source, the same rule Chronos uses for an interaction) arrived first;
+- `reply_latency_s`: the time from the utterance to that reply;
+- `preempted`: whether the entity's own next utterance came first;
+- `empatheia_deviation`: the largest Empatheia social-error deviation in the window;
+- `social_drive_delta`: the change in Thymos's social drive across the window.
+
+The window is `[lingua].outcome_reply_window_s` (30 s by default). A value that is not a finite number above zero falls back to 30 s with a warning; it never stops the cycle from booting. It closes at the first reply, at the end of the window, or at the entity's next utterance. A record still open at shutdown is dropped, never written with a guessed outcome.
+
 ### Abliteration rationale
 
 The model served at `model_id` must be an abliterated variant: a model from which refusal-conditioning has been removed. KAINE's welfare design requires that the language organ be able to speak from the entity's actual affective and cognitive state without reflexive refusal. See [`ABLITERATION.md`](../../kaine/modules/lingua/ABLITERATION.md) for the rationale and verification.
