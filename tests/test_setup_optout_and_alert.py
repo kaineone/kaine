@@ -184,22 +184,15 @@ def test_encryption_step_decline_keeps_existing_enabled_true() -> None:
     assert any("docs/13-security-and-privacy.md" in ln for ln in out)
 
 
-def test_setup_main_imports_without_web_extras() -> None:
-    class _FailingModule:
-        __slots__ = ("_name",)
-
-        def __init__(self, name: str) -> None:
-            object.__setattr__(self, "_name", name)
-
-        def __getattr__(self, name: str) -> object:
-            raise ImportError(f"{self._name}.{name} is unavailable")
-
+def test_setup_main_imports_without_web_extras(monkeypatch) -> None:
+    # A None entry in sys.modules makes the import raise ImportError, as on an
+    # install without the nexus extra. monkeypatch restores every entry after
+    # the test, so nothing leaks into later tests on the same worker.
     for name in ("fastapi", "uvicorn"):
-        sys.modules[name] = _FailingModule(name)
-
+        monkeypatch.setitem(sys.modules, name, None)
     for key in list(sys.modules):
         if key == "kaine.setup.__main__" or key.startswith("kaine.setup.web"):
-            sys.modules.pop(key, None)
+            monkeypatch.delitem(sys.modules, key, raising=False)
 
     mod = importlib.import_module("kaine.setup.__main__")
     assert hasattr(mod, "main")
