@@ -113,19 +113,18 @@ nvidia-ctk cdi generate --output=$HOME/.config/cdi/nvidia.yaml
 
 By default the organ runs inside `kaine-model-server`, using `docker/organ-launcher.sh` as its entrypoint, for true one-command bring-up. In both the Compose service and the Quadlet unit, the `kaine-model-server` healthcheck curls `http://127.0.0.1:8080/health` and needs no API key; it returns 503 while the model loads and 200 once serving. It does not wake a sleeping organ; the service is reported healthy while asleep. The in-container organ unloads after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds (default 600) and reloads on the next request. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
 
-The organ image comes from `KAINE_MODEL_SERVER_IMAGE`; its default is `ghcr.io/ggml-org/llama.cpp:server-cuda`, a floating tag that Docker does not re-pull on its own. Pin the image by digest in `compose/.env` for a study:
+The organ image comes from `KAINE_MODEL_SERVER_IMAGE`; its default is llama.cpp build b11382 pinned by digest (`ghcr.io/ggml-org/llama.cpp@sha256:ef08b5a98b1170f2b62177be0a4027c88a84043c55afbf190dd18b9e7cdcfebf`).
 
-```bash
-KAINE_MODEL_SERVER_IMAGE=ghcr.io/ggml-org/llama.cpp@sha256:<digest>
-```
+The launch flags are explicit:
+- all model layers are on the GPU with automatic fitting off, so a GPU that is too small fails loudly;
+- the prompt KV cache is capped in RAM (default 1024 MiB, `KAINE_MODEL_SERVER_CACHE_RAM_MIB`);
+- the context size is explicit: default 32768 tokens shared by 4 slots, set by `KAINE_MODEL_SERVER_CTX` and `KAINE_MODEL_SERVER_PARALLEL`; without it, fitting off would allocate the model's full training context and fail on the GPU;
+- the KV cache is f16;
+- slot saving is never enabled, because it would write sensory-derived KV cache to disk.
+
+Because fitting is off, the organ's reload after idle sleep fails if another process holds the VRAM it needs. Keep the GPU free of other models while an entity runs.
 
 A run whose system changes mid-study is not admissible. After changing the image, check that the flags KAINE passes still exist in the new build's `--help` (`--sleep-idle-seconds`, `--lora-scaled`, `--no-cache-prompt`, `--alias`), then re-run `python -m kaine.preboot`.
-
-Read a pulled image's digest with:
-
-```bash
-docker image inspect ghcr.io/ggml-org/llama.cpp:server-cuda --format '{{index .RepoDigests 0}}'
-```
 
 Voice alignment can still run in the `kaine-trainer` service, so an in-container organ and a containerized trainer can work together without a host-native server. For `hot_swap_mode = "organ_adapter"`, mount `kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`). When an activation bumps the adapter generation, the launcher restarts `llama-server` inside the same container with the adapter loaded at scale 0: requests without a `lora` field get the base organ, requests with one apply the adapter, and prompt caching is off while any adapter is loaded. This mode is only available in Compose; the Quadlet model-server unit does not use the launcher or adapters.
 
