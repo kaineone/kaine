@@ -31,7 +31,10 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from kaine.config import load_kaine_config
 from kaine.hardware import describe_host
+from kaine.net import SERVICE_PORTS, port_listening
+from kaine.nexus.config import NexusConfigError, load_nexus_config
 from kaine.setup import tomlwriter
+from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH, ensure_nexus_token
 from kaine.setup.steps import (
     OWNED_KEYS,
     Field,
@@ -115,6 +118,7 @@ class SetupState:
     device_consumers_fn: Callable[[], list[dict]] | None = None
     services_up_fn: Callable[[], dict[str, bool]] | None = None
     shipped_config_path: Path | None = None
+    secrets_path: Path = field(default=Path("config/secrets.toml"), repr=False)
 
 
 class _NoCacheMiddleware(BaseHTTPMiddleware):
@@ -397,6 +401,7 @@ def create_setup_app(
     shipped_config_path: Path,
     idle_seconds: float = 1800.0,
     *,
+    secrets_path: Path | None = None,
     host: dict[str, Any] | None = None,
     probe_services: Callable[[], dict[str, Any]] | None = None,
     probe_trainer: Callable[..., tuple[bool, str]] | None = None,
@@ -458,6 +463,7 @@ def create_setup_app(
         device_consumers_fn=device_consumers_fn,
         services_up_fn=services_up_fn,
         shipped_config_path=shipped_config_path,
+        secrets_path=secrets_path or DEFAULT_SECRETS_PATH,
     )
     repo_root = Path(__file__).resolve().parents[3]
     app.state.repo_root = repo_root
@@ -703,6 +709,9 @@ def create_setup_app(
         tmp_path.write_text(tomlwriter.dumps(merged))
         os.replace(tmp_path, state.operator_path)
 
+        token_note: list[str] = []
+        ensure_nexus_token(state.secrets_path, out=token_note.append)
+        sess["token_note"] = token_note
         sess["saved"] = True
         return RedirectResponse(request.url_for("jobs"), status_code=303)
 
@@ -825,6 +834,100 @@ def create_setup_app(
                 "message": "Setup finished; you can close this window.",
             },
         )
+
+    @app.get("/finish", response_class=HTMLResponse, name="finish_page")
+    async def finish_page(request: Request):
+        state = request.app.state.setup
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        services_up: dict[str, bool] = {}
+        if state.services_up_fn is not None:
+            try:
+                services_up = state.services_up_fn() or {}
+            except Exception:
+                services_up = {}
+
+        service_lights = [
+            {
+                "name": name,
+                "port": port,
+                "running": (
+                    services_up[name] if name in services_up else port_listening(port)
+                ),
+            }
+            for name, port in SERVICE_PORTS.items()
+        ]
+
+        repo_root = request.app.state.repo_root
+        nexus_port: int | None = None
+        nexus_running = False
+        nexus_available = False
+        try:
+            nexus_cfg = load_nexus_config(repo_root / "config" / "kaine.toml")
+            nexus_port = nexus_cfg.port
+            nexus_running = port_listening(nexus_port)
+            nexus_available = True
+        except NexusConfigError:
+            pass
+
+        return templates.TemplateResponse(
+            request,
+            "finish.html",
+            {
+                "service_lights": service_lights,
+                "nexus_available": nexus_available,
+                "nexus_port": nexus_port,
+                "nexus_running": nexus_running,
+                "token_note": sess.get("token_note", []),
+                "token": None,
+                "show_missing": False,
+                "secrets_path": state.secrets_path,
+            },
+        )
+
+    @app.post("/finish/token", response_class=HTMLResponse, name="finish_token")
+    async def finish_token(request: Request):
+        state = request.app.state.setup
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        repo_root = request.app.state.repo_root
+        token: str | None = None
+        try:
+            nexus_cfg = load_nexus_config(
+                repo_root / "config" / "kaine.toml", secrets_path=state.secrets_path
+            )
+            token = nexus_cfg.operator_token or None
+        except NexusConfigError:
+            pass
+
+        response = templates.TemplateResponse(
+            request,
+            "finish.html",
+            {
+                "service_lights": [],
+                "nexus_available": False,
+                "nexus_port": None,
+                "nexus_running": False,
+                "token_note": sess.get("token_note", []),
+                "token": token,
+                "show_missing": token is None,
+                "secrets_path": state.secrets_path,
+            },
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/done", response_class=HTMLResponse, name="done")
     async def done(request: Request):

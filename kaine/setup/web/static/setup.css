@@ -117,3 +117,24 @@ body {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
 }
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 50%;
+  margin-right: calc(var(--gap) / 2);
+}
+
+.status-running {
+  background: var(--accent-green);
+}
+
+.status-stopped {
+  background: var(--accent-red);
+}

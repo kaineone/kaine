@@ -42,7 +42,7 @@
 
 ## 5. Finish page and docs
 
-- [ ] 5.1 Service status lights, "Start Nexus", and "Show sign-in token".
+- [x] 5.1 Service status lights, "Start Nexus", and "Show sign-in token".
 - [ ] 5.2 Spawn action:
   - welfare acknowledgement appended to the local record;
   - the full pre-boot check must pass;
@@ -59,6 +59,6 @@
   - Setup exit leaves spawned processes running.
   - An expired or reused token is refused.
   - Reads without a session are refused.
-- [ ] 5.4 Accessibility pass: keyboard navigation, focus order, labels and contrast.
-- [ ] 5.5 `docs/04-getting-started/README.md` leads with the browser setup. The terminal wizard is documented as an alternative.
+- [x] 5.4 Accessibility pass: keyboard navigation, focus order, labels and contrast.
+- [x] 5.5 `docs/04-getting-started/README.md` leads with the browser setup. The terminal wizard is documented as an alternative.
 - [ ] 5.6 `openspec validate browser-first-run --strict` passes.
