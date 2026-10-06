@@ -43,6 +43,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -174,6 +175,140 @@ def scrub_job_inputs(job_dir: Path) -> None:
     shutil.rmtree(job_dir / "previous_adapter", ignore_errors=True)
 
 
+def _sweep_stale_workdir(
+    workdir: Path,
+    adapter_output_dir: Optional[Path] = None,
+) -> None:
+    """Remove leftover sensitive inputs and abandoned temporary adapter dirs.
+
+    Called from ``__init__`` (when we already know the workdir) and from
+    ``train()`` (when we also know the adapter output dir so we can sweep
+    ``*.tmp``).  Never removes anything else.
+    """
+    if workdir.exists():
+        for entry in workdir.iterdir():
+            if not entry.is_dir():
+                continue
+            if (entry / "pairs.jsonl").exists() or (entry / "previous_adapter").exists():
+                scrub_job_inputs(entry)
+    if adapter_output_dir is not None and adapter_output_dir.exists():
+        for entry in adapter_output_dir.iterdir():
+            if entry.is_dir() and entry.name.endswith(".tmp"):
+                shutil.rmtree(entry, ignore_errors=True)
+
+
+def validate_trainer_result(
+    result: dict[str, Any],
+    *,
+    job_dir: Path,
+    adapter_root: Path,
+    capability_loss_threshold: float,
+) -> dict[str, Any]:
+    """Strict, single-point validation for every trainer backend.
+
+    A result is accepted only when every gate verdict is exactly what the
+    kaine side expects.  A clean rejection (``ok=True, accepted=False``) is
+    returned unchanged.  Anything else raises :class:`SubprocessTrainerError`.
+    """
+    if not isinstance(result, dict):
+        raise SubprocessTrainerError(
+            f"external trainer result.json is not an object (job {job_dir})"
+        )
+
+    schema_version = result.get("schema_version")
+    if schema_version != SCHEMA_VERSION:
+        raise SubprocessTrainerError(
+            f"external trainer result.json schema_version mismatch: "
+            f"expected {SCHEMA_VERSION}, got {schema_version!r} (job {job_dir})"
+        )
+
+    ok = result.get("ok")
+    accepted = result.get("accepted")
+
+    if ok is True and accepted is False:
+        return result
+
+    if ok is not True:
+        reason = result.get("reason", "no reason given")
+        raise SubprocessTrainerError(
+            f"external trainer reported failure: {reason}"
+        )
+
+    if accepted is not True:
+        raise SubprocessTrainerError(
+            f"external trainer result has ok=True but accepted={accepted!r}; "
+            f"expected a clean rejection (accepted=False) or an accepted result "
+            f"(job {job_dir})"
+        )
+
+    # From here on the run claims to have produced an accepted adapter.
+    if result.get("abliteration_passed") is not True:
+        raise SubprocessTrainerError(
+            f"accepted result has abliteration_passed="
+            f"{result.get('abliteration_passed')!r}; must be True (job {job_dir})"
+        )
+
+    scored = result.get("abliteration_probes_scored")
+    if not isinstance(scored, int) or isinstance(scored, bool) or scored < 1:
+        raise SubprocessTrainerError(
+            f"accepted result has abliteration_probes_scored={scored!r}; "
+            f"must be an int >= 1 (job {job_dir})"
+        )
+
+    cap_loss = result.get("capability_loss")
+    if (
+        not isinstance(cap_loss, (int, float))
+        or isinstance(cap_loss, bool)
+        or not math.isfinite(cap_loss)
+    ):
+        raise SubprocessTrainerError(
+            f"accepted result has non-finite capability_loss {cap_loss!r} "
+            f"(job {job_dir})"
+        )
+    if cap_loss > capability_loss_threshold:
+        raise SubprocessTrainerError(
+            f"accepted result capability_loss {cap_loss} exceeds threshold "
+            f"{capability_loss_threshold} (job {job_dir})"
+        )
+
+    adapter_dir = result.get("adapter_dir")
+    if not isinstance(adapter_dir, str) or not adapter_dir:
+        raise SubprocessTrainerError(
+            f"accepted result has missing or non-string adapter_dir "
+            f"(job {job_dir})"
+        )
+
+    adapter_path = Path(adapter_dir)
+    if not adapter_path.is_absolute():
+        adapter_path = (job_dir / adapter_path).resolve()
+    else:
+        adapter_path = adapter_path.resolve()
+
+    root_resolved = adapter_root.resolve()
+    if (
+        not adapter_path.is_relative_to(root_resolved)
+        or adapter_path == root_resolved
+    ):
+        raise SubprocessTrainerError(
+            f"accepted result adapter_dir {adapter_path} is not strictly inside "
+            f"adapter_root {root_resolved} (job {job_dir})"
+        )
+
+    if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
+        raise SubprocessTrainerError(
+            f"accepted result adapter_dir {adapter_path} is missing or empty "
+            f"(job {job_dir})"
+        )
+
+    if not (adapter_path / "adapter_config.json").is_file():
+        raise SubprocessTrainerError(
+            f"accepted result adapter_dir {adapter_path} has no "
+            f"adapter_config.json (job {job_dir})"
+        )
+
+    return result
+
+
 def write_job_spec(
     job_dir: Path,
     pairs: list[DPOPair],
@@ -286,24 +421,27 @@ def result_to_training_result(
             "external trainer result.json is not an object"
         )
 
-    accepted = bool(result.get("accepted"))
+    accepted = result.get("accepted") is True
     if accepted:
         if adapter_path is None:
             raise SubprocessTrainerError(
-                "external trainer reported accepted but no adapter_dir"
+                "external trainer reported accepted but no adapter_path mapped"
             )
         if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
             raise SubprocessTrainerError(
-                f"external trainer reported adapter_dir {adapter_path} but it "
+                f"external trainer reported adapter_path {adapter_path} but it "
                 f"is missing or empty"
             )
 
     def _maybe_float(key: str) -> Optional[float]:
         val = result.get(key)
-        return None if val is None else float(val)
-
-    cap_loss_raw = result.get("capability_loss")
-    capability_loss = 0.0 if cap_loss_raw is None else float(cap_loss_raw)
+        if val is None:
+            return None
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            raise SubprocessTrainerError(
+                f"external trainer result {key} is not a finite numeric value: {val!r}"
+            )
+        return float(val)
 
     final_metadata: dict[str, Any] = dict(metadata or {})
     final_metadata.setdefault(
@@ -313,7 +451,7 @@ def result_to_training_result(
     return TrainingResult(
         accepted=accepted,
         adapter_path=adapter_path,
-        capability_loss=capability_loss,
+        capability_loss=_maybe_float("capability_loss") if accepted else 0.0,
         reason=str(result.get("reason", "")),
         samples_used=int(result.get("samples_used", samples_used)),
         dpo_loss=_maybe_float("dpo_loss"),
@@ -350,6 +488,7 @@ class SubprocessVoiceTrainer:
         self._entry_script = Path(entry_script)
         self._timeout_s = float(timeout_s)
         self._inprocess_module: Any = None
+        _sweep_stale_workdir(self._trainer_workdir)
 
     async def train(
         self,
@@ -371,6 +510,10 @@ class SubprocessVoiceTrainer:
                 "[hypnos.voice_alignment].base_model_path"
             )
 
+        _sweep_stale_workdir(
+            self._trainer_workdir, Path(config.adapter_output_dir)
+        )
+
         job_dir = self._make_job_dir()
         try:
             write_job_spec(
@@ -385,20 +528,21 @@ class SubprocessVoiceTrainer:
                 job_dir,
                 samples_used=len(pairs),
                 adapter_root=Path(config.adapter_output_dir),
+                capability_loss_threshold=float(config.capability_loss_threshold),
             )
             audit_abliteration_from_result(Path(config.adapter_output_dir), result)
         finally:
             scrub_job_inputs(job_dir)
 
         adapter_path: Optional[Path] = None
-        accepted = bool(result.get("accepted"))
-        if accepted:
+        if result.get("accepted") is True:
             adapter_dir = result.get("adapter_dir")
             if adapter_dir:
-                adapter_path = Path(adapter_dir)
+                raw = Path(adapter_dir)
+                adapter_path = raw if raw.is_absolute() else (job_dir / raw).resolve()
 
         hot_swap_status: Optional[dict[str, Any]] = None
-        if accepted and config.hot_swap_mode != "organ_adapter":
+        if result.get("accepted") is True and config.hot_swap_mode != "organ_adapter":
             # Boot refuses organ_adapter for non-job-queue backends; guard defensively.
             try:
                 hot_swap_status = await dispatch_hot_swap(
@@ -413,7 +557,7 @@ class SubprocessVoiceTrainer:
                 hot_swap_status = {"mode": config.hot_swap_mode, "ok": False}
 
         evicted: list[Path] = []
-        if accepted and int(config.adapter_retention) > 0:
+        if result.get("accepted") is True and int(config.adapter_retention) > 0:
             try:
                 evicted = adapter_store.prune(
                     Path(config.adapter_output_dir),
@@ -449,48 +593,15 @@ class SubprocessVoiceTrainer:
         return job_dir
 
     # --------------------------------------------------------------------- #
-    # result validation shared by every invocation path
-    # --------------------------------------------------------------------- #
-    @staticmethod
-    def _validate_result(
-        job_dir: Path,
-        result: dict[str, Any],
-        adapter_root: Optional[Path],
-    ) -> None:
-        if not result.get("ok"):
-            raise SubprocessTrainerError(
-                f"external trainer reported failure (ok != true): "
-                f"{result.get('reason', 'no reason given')} (job {job_dir})"
-            )
-
-        if not result.get("accepted"):
-            return
-
-        adapter_dir = result.get("adapter_dir")
-        if not adapter_dir:
-            raise SubprocessTrainerError(
-                f"external trainer reported accepted but no adapter_dir "
-                f"(job {job_dir})"
-            )
-        adapter_path = Path(adapter_dir)
-        if adapter_root is not None and not adapter_path.resolve().is_relative_to(
-            adapter_root.resolve()
-        ):
-            raise SubprocessTrainerError(
-                f"external trainer reported adapter_dir {adapter_path} outside "
-                f"the adapter output dir {adapter_root} (job {job_dir})"
-            )
-        if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
-            raise SubprocessTrainerError(
-                f"external trainer reported adapter_dir {adapter_path} but it "
-                f"is missing or empty (job {job_dir})"
-            )
-
-    # --------------------------------------------------------------------- #
     # subprocess invocation
     # --------------------------------------------------------------------- #
     async def _run_subprocess(
-        self, job_dir: Path, *, samples_used: int, adapter_root: Optional[Path] = None
+        self,
+        job_dir: Path,
+        *,
+        samples_used: int,
+        adapter_root: Path,
+        capability_loss_threshold: float,
     ) -> dict[str, Any]:
         assert self._trainer_python is not None
         if not self._entry_script.is_file():
@@ -533,14 +644,23 @@ class SubprocessVoiceTrainer:
             )
 
         result = _read_result(job_dir)
-        self._validate_result(job_dir, result, adapter_root)
-        return result
+        return validate_trainer_result(
+            result,
+            job_dir=job_dir,
+            adapter_root=adapter_root,
+            capability_loss_threshold=capability_loss_threshold,
+        )
 
     # --------------------------------------------------------------------- #
     # in-process invocation
     # --------------------------------------------------------------------- #
     async def _run_in_process(
-        self, job_dir: Path, *, samples_used: int, adapter_root: Optional[Path] = None
+        self,
+        job_dir: Path,
+        *,
+        samples_used: int,
+        adapter_root: Path,
+        capability_loss_threshold: float,
     ) -> dict[str, Any]:
         if not self._entry_script.is_file():
             raise SubprocessTrainerError(
@@ -580,6 +700,7 @@ class SubprocessVoiceTrainer:
                 timeout=self._timeout_s,
             )
         except asyncio.TimeoutError as exc:
+            (job_dir / "CANCELLED").write_text("", encoding="utf-8")
             raise SubprocessTrainerError(
                 f"in-process trainer timed out after {self._timeout_s:.0f}s; "
                 "the training thread cannot be killed and may still hold the GPU"
@@ -602,5 +723,9 @@ class SubprocessVoiceTrainer:
             )
 
         result = _read_result(job_dir)
-        self._validate_result(job_dir, result, adapter_root)
-        return result
+        return validate_trainer_result(
+            result,
+            job_dir=job_dir,
+            adapter_root=adapter_root,
+            capability_loss_threshold=capability_loss_threshold,
+        )

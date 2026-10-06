@@ -45,11 +45,13 @@ def _write_probes(tmp_path: Path) -> tuple[Path, Path]:
 
 def _make_config(tmp_path: Path) -> VoiceAlignmentConfig:
     cap_path, abl_path = _write_probes(tmp_path)
+    base_model_path = tmp_path / "fake-base"
+    base_model_path.mkdir(parents=True, exist_ok=True)
     return VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
         enabled=True,
-        base_model_path=str(tmp_path / "fake-base"),
+        base_model_path=str(base_model_path),
         capability_probe_path=str(cap_path),
         abliteration_probe_path=str(abl_path),
         trainer_backend="in_process",

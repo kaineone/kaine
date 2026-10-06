@@ -30,8 +30,11 @@ from kaine.modules.hypnos import adapter_store, hot_swap
 from kaine.modules.hypnos.subprocess_trainer import (
     SubprocessTrainerError,
     _read_result,
+    _sweep_stale_workdir,
+    audit_abliteration_from_result,
     result_to_training_result,
     scrub_job_inputs,
+    validate_trainer_result,
     write_job_spec,
 )
 from kaine.modules.hypnos.voice_alignment import (
@@ -64,6 +67,7 @@ class JobQueueVoiceTrainer:
         self._organ_adapters_dir = organ_adapters_dir
         self._organ_url = organ_url
         self._organ_api_key = organ_api_key
+        _sweep_stale_workdir(self._jobs_dir)
 
     async def train(
         self,
@@ -85,9 +89,11 @@ class JobQueueVoiceTrainer:
                 "[hypnos.voice_alignment].base_model_path"
             )
 
+        out_dir = Path(config.adapter_output_dir)
+        _sweep_stale_workdir(self._jobs_dir, out_dir)
+
         job_dir = self._make_job_dir()
         job_name = job_dir.name
-        out_dir = Path(config.adapter_output_dir)
 
         try:
             write_job_spec(
@@ -99,19 +105,21 @@ class JobQueueVoiceTrainer:
             )
             self._write_ready_atomic(job_dir)
             result = await self._poll_for_result(job_dir, job_name)
+            # The service stages the adapter under the job's own "out" dir
+            # (adapter_output_dir above); kaine promotes it into out_dir only
+            # after validation, so containment is checked against the stage.
+            result = validate_trainer_result(
+                result,
+                job_dir=job_dir,
+                adapter_root=job_dir / "out",
+                capability_loss_threshold=float(config.capability_loss_threshold),
+            )
         finally:
             self._delete_pairs(job_dir)
 
-        if not result.get("ok"):
-            raise SubprocessTrainerError(
-                f"external trainer reported failure (ok != true): "
-                f"{result.get('reason', 'no reason given')} (job {job_dir})"
-            )
-
-        from kaine.modules.hypnos.subprocess_trainer import audit_abliteration_from_result
         audit_abliteration_from_result(out_dir, result)
 
-        if not result.get("accepted"):
+        if result.get("accepted") is not True:
             return result_to_training_result(
                 result,
                 samples_used=len(pairs),

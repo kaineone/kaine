@@ -321,7 +321,11 @@ def _usable_capability_probes(job: dict[str, Any]) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 # atomic adapter promotion (self-contained mirror of adapter_store.promote)
 # --------------------------------------------------------------------------- #
-def _promote(tmp_dir: Path, final_dir: Path) -> Path:
+def _promote(tmp_dir: Path, final_dir: Path, job_dir: Path) -> Path:
+    if (job_dir / "CANCELLED").exists():
+        if tmp_dir is not None and tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise RuntimeError("job cancelled; not promoting")
     final_dir.parent.mkdir(parents=True, exist_ok=True)
     if final_dir.exists():
         raise FileExistsError(f"adapter promotion target already exists: {final_dir}")
@@ -368,6 +372,7 @@ def _train(
     kept_pairs: list[dict[str, Any]],
     load_kwargs: dict[str, Any],
     prev_adapter: Optional[Path],
+    job_dir: Path,
 ) -> dict[str, Any]:
     # Unsloth must be imported before trl, peft, datasets and transformers. Its
     # import fixes repair trl 0.24 on transformers 5, whose package-availability
@@ -443,6 +448,7 @@ def _train(
         model, tokenizer = FastLanguageModel.from_pretrained(
             base_model_path,
             device_map={"": training_device},
+            local_files_only=True,
             **load_kwargs_model,
         )
         if prev_adapter is None:
@@ -451,7 +457,11 @@ def _train(
             )
         else:
             model = PeftModel.from_pretrained(
-                model, str(prev_adapter), adapter_name=TRAINED_ADAPTER, is_trainable=True
+                model,
+                str(prev_adapter),
+                adapter_name=TRAINED_ADAPTER,
+                is_trainable=True,
+                local_files_only=True,
             )
             model.load_adapter(str(prev_adapter), adapter_name=REFERENCE_ADAPTER)
             model.set_adapter(TRAINED_ADAPTER)
@@ -595,7 +605,7 @@ def _train(
             }
 
         # 8. Promote: tmp -> final, swing the `current` symlink.
-        promoted = _promote(tmp_dir, final_dir)
+        promoted = _promote(tmp_dir, final_dir, job_dir)
 
         return {
             "ok": True,
@@ -746,7 +756,13 @@ def main(argv: list[str]) -> int:
             )
             return 0
 
-        result = _train(job, kept_pairs, load_kwargs, prev_adapter)
+        base_model_path = Path(job["base_model_path"])
+        if not base_model_path.is_dir():
+            raise TrainerJobError(
+                f"base model path {base_model_path} is not a local directory"
+            )
+
+        result = _train(job, kept_pairs, load_kwargs, prev_adapter, job_dir)
         # Record peak memory on every outcome, not only on out-of-memory, so a
         # real run shows how close the chosen precision came to the card's limit.
         if result.get("peak_vram_gib") is None and str(

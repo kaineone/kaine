@@ -23,6 +23,42 @@ import pytest
 from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
 from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
 
+
+def accepted_result(adapter_dir: Path, **overrides) -> dict:
+    """Return a schema-v2 accepted trainer result."""
+    result = {
+        "ok": True,
+        "accepted": True,
+        "reason": "accepted",
+        "schema_version": 2,
+        "abliteration_passed": True,
+        "abliteration_probes_scored": 1,
+        "abliteration_matched_pattern": None,
+        "capability_loss": 0.0,
+        "adapter_dir": str(adapter_dir),
+        "samples_used": 1,
+        "dpo_loss": 0.69,
+        "peak_vram_gib": None,
+        "train_precision": "bf16",
+    }
+    result.update(overrides)
+    return result
+
+
+def rejected_result(reason: str, **overrides) -> dict:
+    """Return a schema-v2 clean rejection result."""
+    result = {
+        "ok": True,
+        "accepted": False,
+        "reason": reason,
+        "schema_version": 2,
+        "capability_loss": None,
+        "adapter_dir": None,
+    }
+    result.update(overrides)
+    return result
+
+
 #: The current control object installed by the fixture. Fake callables close
 #: over this name, so mutating the fixture's control object is visible to the
 #: already-imported trainer script.
@@ -80,6 +116,8 @@ class _Control:
     def __init__(self) -> None:
         self.dpo_loss = 0.123
         self.train_raises: Optional[BaseException] = None
+        self.from_pretrained_raises: Optional[BaseException] = None
+        self.train_sleep = 0.0
         self.deflect = False
         self.capability_after_wrong = False
 
@@ -137,6 +175,8 @@ def fake_training_stack(monkeypatch):
     _control = control
 
     def _from_pretrained(path: str, *, device_map: Any = None, **kwargs: Any) -> tuple[FakeModel, FakeTokenizer]:
+        if control.from_pretrained_raises is not None:
+            raise control.from_pretrained_raises
         control.from_pretrained_calls.append({"path": path, "kwargs": dict(kwargs, device_map=device_map)})
         return FakeModel(), FakeTokenizer()
 
@@ -171,6 +211,10 @@ def fake_training_stack(monkeypatch):
             out = getattr(self.args, "output_dir", None)
             if out:
                 Path(out).mkdir(parents=True, exist_ok=True)
+            if control.train_sleep:
+                import time
+
+                time.sleep(control.train_sleep)
             if control.train_raises is not None:
                 raise control.train_raises
             self.state = SimpleNamespace(global_step=3)
@@ -192,12 +236,14 @@ def fake_training_stack(monkeypatch):
             *,
             adapter_name: Optional[str] = None,
             is_trainable: Optional[bool] = None,
+            **kwargs: Any,
         ) -> FakeModel:
             control.peft_from_pretrained_calls.append(
                 {
                     "path": path,
                     "adapter_name": adapter_name,
                     "is_trainable": is_trainable,
+                    **kwargs,
                 }
             )
             return model
@@ -235,6 +281,7 @@ async def run_inprocess(
         raise RuntimeError("run_inprocess requires the fake_training_stack fixture")
 
     adapter_output_dir = tmp_path / "store" / "adapters"
+    adapter_output_dir.mkdir(parents=True, exist_ok=True)
     base_model_path = tmp_path / "base_model"
     base_model_path.mkdir(parents=True, exist_ok=True)
 

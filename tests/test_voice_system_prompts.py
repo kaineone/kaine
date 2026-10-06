@@ -480,7 +480,7 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
     )
     seen: dict = {}
 
-    async def fake_run(self, job_dir, *, samples_used, adapter_root=None):
+    async def fake_run(self, job_dir, *, samples_used, adapter_root=None, capability_loss_threshold=0.05):
         seen["dir_mode"] = stat.S_IMODE(job_dir.stat().st_mode)
         seen["pairs_mode"] = stat.S_IMODE((job_dir / "pairs.jsonl").stat().st_mode)
         seen["job_mode"] = stat.S_IMODE((job_dir / "job.json").stat().st_mode)
@@ -538,7 +538,18 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
     def fake_run(argv, cwd, env, **kwargs):
         seen_env.update(env)
         (Path(cwd) / "result.json").write_text(
-            json.dumps({"ok": True, "accepted": True, "adapter_dir": str(outside)})
+            json.dumps({
+                "ok": True,
+                "accepted": True,
+                "schema_version": 2,
+                "abliteration_passed": True,
+                "abliteration_probes_scored": 1,
+                "capability_loss": 0.0,
+                "adapter_dir": str(outside),
+                "reason": "accepted",
+                "samples_used": 1,
+                "dpo_loss": 0.1,
+            })
         )
         return sp.CompletedProcess(argv, 0, "", "")
 
@@ -554,6 +565,6 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
         adapter_output_dir=tmp_path / "adapters",
         base_model_path=str(tmp_path / "base"),
     )
-    with pytest.raises(SubprocessTrainerError, match="outside the adapter output dir"):
+    with pytest.raises(SubprocessTrainerError, match="is not strictly inside"):
         await trainer.train([DPOPair(prompt="p", chosen="c", rejected="r", system="s")], config)
     assert "KAINE_STATE_KEY" not in seen_env
