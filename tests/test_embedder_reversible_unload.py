@@ -283,3 +283,117 @@ def test_torch_unload_in_gap_returns_ones(monkeypatch: pytest.MonkeyPatch) -> No
         assert batch == [[1.0, 1.0, 1.0, 1.0]]
 
     asyncio.run(main())
+
+
+def test_numpy_double_cancel_does_not_leak_inflight(
+    bert_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import kaine.text_embedding_numpy as ten_mod
+
+    original_forward = ten_mod.bert_forward
+
+    async def main() -> None:
+        embedder = NumpyMiniLMEmbedder(model_path=str(bert_dir))
+        loop = asyncio.get_running_loop()
+        in_worker = asyncio.Event()
+        release_thread = threading.Event()
+
+        def blocked_forward(
+            weights: dict[str, np.ndarray],
+            config: dict[str, Any],
+            input_ids: np.ndarray,
+            attention_mask: np.ndarray,
+        ) -> np.ndarray:
+            loop.call_soon_threadsafe(in_worker.set)
+            release_thread.wait()
+            return original_forward(weights, config, input_ids, attention_mask)
+
+        monkeypatch.setattr(ten_mod, "bert_forward", blocked_forward)
+
+        encode_task = asyncio.create_task(embedder.encode("hello world"))
+        try:
+            await asyncio.wait_for(in_worker.wait(), 5)
+            await embedder._load_lock.acquire()
+            encode_task.cancel()
+            await asyncio.sleep(0)
+            encode_task.cancel()
+            await asyncio.sleep(0)
+            embedder._load_lock.release()
+            release_thread.set()
+            try:
+                await asyncio.wait_for(encode_task, 2)
+            except asyncio.CancelledError:
+                pass
+            await asyncio.wait_for(embedder.unload(), 2)
+            assert embedder._inflight == 0
+        finally:
+            release_thread.set()
+
+    asyncio.run(main())
+
+
+def test_sentence_double_cancel_does_not_leak_inflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    loop_ref: asyncio.AbstractEventLoop | None = None
+    in_worker: asyncio.Event | None = None
+    release_thread: threading.Event | None = None
+
+    fake_mod = types.ModuleType("sentence_transformers")
+
+    class FakeSentenceTransformer:
+        def __init__(self, model_id: str, device: str = "cpu") -> None:
+            self.model_id = model_id
+            self.device = device
+
+        def encode(self, x, *, convert_to_numpy: bool = True, show_progress_bar: bool = False):
+            import numpy as np
+
+            if loop_ref is not None and in_worker is not None:
+                loop_ref.call_soon_threadsafe(in_worker.set())
+            if release_thread is not None:
+                release_thread.wait()
+            if isinstance(x, str):
+                return np.ones(4)
+            return np.ones((len(x), 4))
+
+        def get_sentence_embedding_dimension(self) -> int:
+            return 4
+
+    fake_mod.SentenceTransformer = FakeSentenceTransformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_mod)
+    monkeypatch.setattr("kaine.hardware.resolve_device", lambda _pref: "cpu")
+
+    async def main() -> None:
+        nonlocal loop_ref, in_worker, release_thread
+        from kaine.text_embedding import SentenceTransformerTextEmbedder
+
+        loop_ref = asyncio.get_running_loop()
+        in_worker = asyncio.Event()
+        release_thread = threading.Event()
+
+        embedder = SentenceTransformerTextEmbedder(model_id="fake/model")
+        encode_task = asyncio.create_task(embedder.encode("hello world"))
+        try:
+            await asyncio.wait_for(in_worker.wait(), 5)
+            await embedder._load_lock.acquire()
+            encode_task.cancel()
+            await asyncio.sleep(0)
+            encode_task.cancel()
+            await asyncio.sleep(0)
+            embedder._load_lock.release()
+            release_thread.set()
+            try:
+                await asyncio.wait_for(encode_task, 2)
+            except asyncio.CancelledError:
+                pass
+            await asyncio.wait_for(embedder.unload(), 2)
+            assert embedder._inflight == 0
+        finally:
+            if release_thread is not None:
+                release_thread.set()
+
+    asyncio.run(main())

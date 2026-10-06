@@ -752,7 +752,7 @@ class NumpyMiniLMEmbedder:
         self._loaded = False
         self._latent_dim = DEFAULT_LATENT_DIM
         self._load_lock: asyncio.Lock | None = None
-        self._cond: asyncio.Condition | None = None
+        self._idle: asyncio.Event | None = None
         self._inflight = 0
         self._residency: dict[str, int] = {}
 
@@ -796,14 +796,15 @@ class NumpyMiniLMEmbedder:
     def _ensure_lock(self) -> None:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._cond = asyncio.Condition(self._load_lock)
+            self._idle = asyncio.Event()
+            self._idle.set()
 
     async def ensure_loaded(self) -> None:
         """Load model weights, config and tokenizer (idempotent, serialised)."""
         if self._loaded:
             return
         self._ensure_lock()
-        async with self._cond:
+        async with self._load_lock:
             if self._loaded:
                 return
             await self._load()
@@ -922,13 +923,14 @@ class NumpyMiniLMEmbedder:
             return []
 
         self._ensure_lock()
-        async with self._cond:
+        async with self._load_lock:
             if not self._loaded:
                 await self._load()
             weights = self._weights
             config = self._config
             tokenizer = self._tokenizer
             self._inflight += 1
+            self._idle.clear()
 
         loop = asyncio.get_running_loop()
         try:
@@ -936,9 +938,9 @@ class NumpyMiniLMEmbedder:
                 None, self._encode_sync, weights, config, tokenizer, items
             )
         finally:
-            async with self._cond:
-                self._inflight -= 1
-                self._cond.notify_all()
+            self._inflight -= 1
+            if self._inflight == 0:
+                self._idle.set()
 
     @staticmethod
     def _encode_sync(
@@ -973,10 +975,10 @@ class NumpyMiniLMEmbedder:
     async def unload(self) -> None:
         """Release the model. Idempotent; waits for in-flight encoding."""
         self._ensure_lock()
-        async with self._cond:
+        async with self._load_lock:
             if not self._loaded:
                 return
-            await self._cond.wait_for(lambda: self._inflight == 0)
+            await self._idle.wait()
             self._loaded = False
             self._weights = None
             self._config = None

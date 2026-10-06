@@ -114,7 +114,7 @@ class SentenceTransformerTextEmbedder:
         self._model: Any = None
         self._latent_dim: int | None = None
         self._load_lock: asyncio.Lock | None = None
-        self._cond: asyncio.Condition | None = None
+        self._idle: asyncio.Event | None = None
         self._inflight = 0
 
     @property
@@ -154,20 +154,21 @@ class SentenceTransformerTextEmbedder:
     def _ensure_lock(self) -> None:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._cond = asyncio.Condition(self._load_lock)
+            self._idle = asyncio.Event()
+            self._idle.set()
 
     async def ensure_loaded(self) -> None:
         """Load the underlying model (idempotent, serialised)."""
         if self.loaded:
             return
         self._ensure_lock()
-        async with self._cond:
+        async with self._load_lock:
             if self.loaded:
                 return
             await self._load_locked()
 
     async def _load_locked(self) -> None:
-        """Model loading body; must be called with ``self._cond`` held."""
+        """Model loading body; must be called with ``self._load_lock`` held."""
         os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
         from kaine.hardware import resolve_device
 
@@ -198,11 +199,12 @@ class SentenceTransformerTextEmbedder:
     async def encode(self, text: str) -> list[float]:
         self._ensure_lock()
 
-        async with self._cond:
+        async with self._load_lock:
             if not self.loaded:
                 await self._load_locked()
             model = self._model
             self._inflight += 1
+            self._idle.clear()
 
         try:
             def _encode_sync() -> list[float]:
@@ -212,19 +214,20 @@ class SentenceTransformerTextEmbedder:
 
             return await asyncio.to_thread(_encode_sync)
         finally:
-            async with self._cond:
-                self._inflight -= 1
-                self._cond.notify_all()
+            self._inflight -= 1
+            if self._inflight == 0:
+                self._idle.set()
 
     async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
         items = list(texts)
         self._ensure_lock()
 
-        async with self._cond:
+        async with self._load_lock:
             if not self.loaded:
                 await self._load_locked()
             model = self._model
             self._inflight += 1
+            self._idle.clear()
 
         try:
             def _encode_sync() -> list[list[float]]:
@@ -234,9 +237,9 @@ class SentenceTransformerTextEmbedder:
 
             return await asyncio.to_thread(_encode_sync)
         finally:
-            async with self._cond:
-                self._inflight -= 1
-                self._cond.notify_all()
+            self._inflight -= 1
+            if self._inflight == 0:
+                self._idle.set()
 
     async def embed(self, text: str) -> list[float]:
         """Alias of :meth:`encode` for the lightweight ``TextEmbedder`` callers."""
@@ -245,10 +248,10 @@ class SentenceTransformerTextEmbedder:
     async def unload(self) -> None:
         """Release the model. Idempotent; waits for in-flight encoding."""
         self._ensure_lock()
-        async with self._cond:
+        async with self._load_lock:
             if not self.loaded:
                 return
-            await self._cond.wait_for(lambda: self._inflight == 0)
+            await self._idle.wait()
             self._model = None
         await asyncio.to_thread(gc.collect)
         if self._device.startswith("cuda"):
