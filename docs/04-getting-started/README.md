@@ -35,6 +35,8 @@ Open the loopback setup wizard in a browser with:
 
 The server binds to `127.0.0.1` on a free port, prints a single-use launch URL to the terminal, and opens a private redirect file in the default browser. The URL with the launch token never appears in a browser command line.
 
+Both the browser and the terminal wizard write your choices to a gitignored `config/kaine.operator.toml`. `load_kaine_config()` deep-merges that file over the shipped `config/kaine.toml` at boot, so operator values win and the committed file stays untouched. Neither wizard edits the shipped config or boots the entity.
+
 The wizard walks through the same steps as the terminal version:
 
 1. A short orientation.
@@ -49,7 +51,7 @@ The wizard walks through the same steps as the terminal version:
 10. Optional extras — offers to `pip install -e ".[…]"` the extras implied by your module choices. This step runs after the operator file is written.
 11. External dependencies — detects which services the enabled modules need and whether each is already running. For Redis and Qdrant it shows the exact bootstrap command and runs it only if you consent. For the heavy GPU services (model server, Speaches, Chatterbox) it prints the real setup steps and a docs link rather than pretending to install them.
 
-After you save the operator file, the browser wizard moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
+Saving the operator file also creates the Nexus sign-in token in `config/secrets.toml` if none exists. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
 
 The finish page shows a service status light for each known local service and for Nexus, a **Start Nexus** button when Nexus is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_NEXUS_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
 
@@ -61,7 +63,7 @@ Run the same wizard in the terminal with:
 .venv/bin/python -m kaine.setup
 ```
 
-This is useful when a browser is not available or when you prefer a text interface. Pass `--defaults` to accept safe non-interactive defaults. The terminal wizard writes the same `config/kaine.operator.toml` and generates the same Nexus sign-in token note.
+This is useful when a browser is not available or when you prefer a text interface. Pass `--defaults` to accept safe non-interactive defaults. The terminal wizard writes the same `config/kaine.operator.toml`, creates the same Nexus sign-in token, and ends with a summary of the environment gates, the service bring-up commands and how to launch.
 
 ## Prerequisites
 
