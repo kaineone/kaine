@@ -12,7 +12,14 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from kaine.setup import wizard_core as _wizard
+from kaine.setup.hardware_steps import (
+    consent_step,
+    device_step,
+    inventory_step,
+    shared_services_step,
+)
 from kaine.setup.steps import Field, Step, StepContext
+from kaine.setup.storage_step import relocation_step, storage_step
 
 
 def _existing(cfg: dict[str, Any], dotted: str, default: Any = None) -> Any:
@@ -556,19 +563,10 @@ def cl1_substrate_step() -> Step:
 
 def setup_steps(include_storage: bool) -> list[Step]:
     """Return the ordered wizard steps that run after the acknowledgement."""
-    from kaine.setup.hardware_steps import (
-        consent_step,
-        device_step,
-        inventory_step,
-        shared_services_step,
-    )
-    from kaine.setup.storage_step import relocation_step, storage_step
-    from kaine.setup.wizard import propose_device_assignments
-
     steps: list[Step] = [
         inventory_step,
         consent_step,
-        device_step(propose_device_assignments),
+        device_step(_wizard.propose_device_assignments),
         shared_services_step(),
     ]
     if include_storage:
