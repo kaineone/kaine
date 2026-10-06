@@ -44,11 +44,20 @@ def _is_httpx_call(node: ast.Call) -> bool:
     )
 
 
-def _keyword_is_false(node: ast.Call, name: str) -> bool:
+def _keyword_is_constant(node: ast.Call, name: str, value: object) -> bool:
     return any(
-        kw.arg == name and isinstance(kw.value, ast.Constant) and kw.value.value is False
+        kw.arg == name and isinstance(kw.value, ast.Constant) and kw.value.value is value
         for kw in node.keywords
     )
+
+
+def _is_websockets_call(node: ast.Call) -> bool:
+    """websockets.connect(...) or websockets.<sub>.connect(...): websockets 16
+    follows proxy settings unless the client passes proxy=None."""
+    func = node.func
+    while isinstance(func, ast.Attribute):
+        func = func.value
+    return isinstance(func, ast.Name) and func.id == "websockets"
 
 
 def _call_name(node: ast.Call) -> str | None:
@@ -80,11 +89,33 @@ def _violations() -> list[str]:
         for path in sorted((REPO / root).rglob("*.py")):
             rel = path.relative_to(REPO).as_posix()
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+            allowed = rel in ALLOWED_PROXY_CAPABLE
             for node in ast.walk(tree):
+                # Only the plain `import httpx` form is scanned below, so the
+                # forms that would hide a client from the scan are refused.
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "httpx" and alias.asname not in (None, "httpx"):
+                            found.append(f"{rel}:{node.lineno} httpx imported under an alias")
+                        if alias.name.split(".")[0] == "requests" and not allowed:
+                            found.append(f"{rel}:{node.lineno} requests follows proxy settings")
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    top = node.module.split(".")[0]
+                    if top == "httpx":
+                        found.append(f"{rel}:{node.lineno} from-import of httpx (use httpx.<name>)")
+                    if top == "requests" and not allowed:
+                        found.append(f"{rel}:{node.lineno} requests follows proxy settings")
                 if not isinstance(node, ast.Call):
                     continue
-                if _is_httpx_call(node) and not _keyword_is_false(node, "trust_env"):
-                    found.append(f"{rel}:{node.lineno} httpx call without trust_env=False")
+                if _is_httpx_call(node):
+                    # Allowlisted downloaders must say on purpose that they use the
+                    # environment; everything else must refuse it.
+                    wanted = True if allowed else False
+                    if not _keyword_is_constant(node, "trust_env", wanted):
+                        found.append(f"{rel}:{node.lineno} httpx call without trust_env={wanted}")
+                if _call_name(node) == "connect" and _is_websockets_call(node):
+                    if not _keyword_is_constant(node, "proxy", None):
+                        found.append(f"{rel}:{node.lineno} websockets connect without proxy=None")
                 name = _call_name(node)
                 if name == "urlopen" and rel not in ALLOWED_PROXY_CAPABLE:
                     found.append(f"{rel}:{node.lineno} urlopen follows proxy settings")
