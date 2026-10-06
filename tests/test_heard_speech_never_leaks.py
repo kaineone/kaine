@@ -235,3 +235,161 @@ def test_every_report_policy_branch_tags_its_intent_as_an_event():
     assert interrupt and interrupt[0].interrupt
     for intent in think + speak + interrupt:
         assert intent.about_kind == "event"
+
+
+@pytest.mark.asyncio
+async def test_mundus_chat_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+    """Other avatars' chat and their identifiers are redacted like heard
+    speech and never reach the bus or the log."""
+    sentinel = "PURPLE-HERON-4471 said this"
+    sender = "Avatar Two"
+    lingua = _make_lingua(bus, tmp_path, responses=["First reply.", "Second reply."])
+    await lingua.initialize()
+    try:
+        chat = _snapshot(
+            [("t1", _event("mundus", "mundus.chat", {"message": sentinel, "sender": sender}, 0.9))]
+        )
+        await _say(lingua, about="chat event", snapshot=chat, about_kind="event")
+        await _say(lingua, about=sentinel, snapshot=_snapshot(), about_kind="heard")
+
+        for key in await bus.client.keys("*"):
+            try:
+                entries = await bus.client.xrange(key)
+            except Exception:
+                continue
+            for payload in _payloads(entries):
+                body = json.dumps(payload)
+                assert sentinel not in body
+                assert sender not in body
+
+        records = _records(lingua.intent_log.path)
+        assert len(records) == 2
+        log_text = lingua.intent_log.path.read_text()
+        assert sentinel not in log_text
+        assert sender not in log_text
+        assert HEARD_SPEECH_PLACEHOLDER in records[0]["faithful_rendering"]
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_nested_heard_field_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+    """Heard-speech payload fields are redacted at any nesting depth."""
+    sentinel = "PURPLE-HERON-4471 nested"
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        note = _snapshot(
+            [
+                (
+                    "n1",
+                    _event(
+                        "nexus",
+                        "nexus.note",
+                        {"x": {"user_input": sentinel}, "items": [{"heard_text": sentinel}]},
+                        0.9,
+                    ),
+                )
+            ]
+        )
+        await _say(lingua, about="note", snapshot=note, about_kind="event")
+
+        for key in await bus.client.keys("*"):
+            try:
+                entries = await bus.client.xrange(key)
+            except Exception:
+                continue
+            for payload in _payloads(entries):
+                assert sentinel not in json.dumps(payload)
+
+        assert sentinel not in lingua.intent_log.path.read_text()
+    finally:
+        await lingua.shutdown()
+
+
+def test_redact_heard_speech_external_types_and_nesting():
+    sentinel = "PURPLE-HERON-4471"
+
+    chat = _event("mundus", "mundus.chat", {"message": sentinel, "sender": "Avatar Two"})
+    line = redact_heard_speech(chat)
+    assert line is not None
+    assert sentinel not in line
+    assert "Avatar Two" not in line
+    assert HEARD_SPEECH_PLACEHOLDER in line
+
+    nested = _event(
+        "nexus",
+        "nexus.note",
+        {"x": {"user_input": sentinel}, "items": [{"heard_text": sentinel}]},
+    )
+    line = redact_heard_speech(nested)
+    assert line is not None
+    assert sentinel not in line
+    assert HEARD_SPEECH_PLACEHOLDER in line
+
+    plain = _event("me", "me.utterance", {"text": "I am the being"})
+    assert redact_heard_speech(plain) is None
+
+    original = {"message": sentinel, "sender": "Avatar Two"}
+    chat2 = _event("mundus", "mundus.chat", original)
+    redact_heard_speech(chat2)
+    assert chat2.payload == original
+
+
+def test_external_input_types_single_source():
+    import kaine.faithful.external_input
+    import kaine.modules.hypnos.ignition_audit
+
+    assert (
+        kaine.modules.hypnos.ignition_audit.EXTERNAL_INPUT_TYPES
+        is kaine.faithful.external_input.EXTERNAL_INPUT_TYPES
+    )
+
+
+async def _assert_sentinel_nowhere(bus: AsyncBus, lingua, sentinel: str) -> None:
+    for key in await bus.client.keys("*"):
+        try:
+            entries = await bus.client.xrange(key)
+        except Exception:
+            continue
+        for payload in _payloads(entries):
+            assert sentinel not in json.dumps(payload)
+    assert sentinel not in lingua.intent_log.path.read_text()
+
+
+@pytest.mark.asyncio
+async def test_nested_external_input_text_makes_an_event_about_heard(
+    bus: AsyncBus, tmp_path: Path
+):
+    """An about that repeats text nested anywhere in an external-input event is
+    heard speech, even when the trigger is tagged as an event."""
+    sentinel = "PURPLE-HERON-4471 nested chat"
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        chat = _snapshot(
+            [("c1", _event("mundus", "mundus.chat", {"message": {"text": sentinel}}, 0.9))]
+        )
+        await _say(lingua, about=sentinel, snapshot=chat, about_kind="event")
+        await _assert_sentinel_nowhere(bus, lingua, sentinel)
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_nested_heard_field_value_is_scrubbed_from_an_event_about(
+    bus: AsyncBus, tmp_path: Path
+):
+    """A heard-speech field nested in any coalition event is scrubbed from the
+    logged prompt even when an event-tagged about repeats it."""
+    sentinel = "PURPLE-HERON-4471 nested field"
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        note = _snapshot(
+            [("n1", _event("nexus", "nexus.note", {"x": {"user_input": sentinel}}, 0.9))]
+        )
+        await _say(lingua, about=sentinel, snapshot=note, about_kind="event")
+        assert sentinel not in lingua.intent_log.path.read_text()
+    finally:
+        await lingua.shutdown()
