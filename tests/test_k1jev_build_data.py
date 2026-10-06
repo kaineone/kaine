@@ -957,3 +957,8 @@ def test_run_jobs_keeps_at_most_the_job_quota(fake_llm_server, monkeypatch):
     )
     assert len(items) == 2
 
+
+def test_endpoint_client_ignores_environment_proxies():
+    endpoint = synth.Endpoint("http://127.0.0.1:1/v1", "k")
+    assert endpoint.client.trust_env is False
+

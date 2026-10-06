@@ -342,6 +342,7 @@ class Endpoint:
         self.client = httpx.Client(
             timeout=httpx.Timeout(60.0),
             follow_redirects=True,
+            trust_env=False,
         )
 
     def complete(
