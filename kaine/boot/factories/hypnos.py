@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -55,6 +56,20 @@ def voice_alignment_config_from_section(
             raise VoiceAlignmentConfigError(
                 "[hypnos.voice_alignment].corpus_ceiling_gb must be non-negative; "
                 f"got {corpus_ceiling_gb}"
+            )
+        try:
+            distinctiveness_threshold = float(
+                voice_cfg_section.get("distinctiveness_threshold", 0.0)
+            )
+        except (TypeError, ValueError) as exc:
+            raise VoiceAlignmentConfigError(
+                "[hypnos.voice_alignment].distinctiveness_threshold must be a "
+                f"number; got {voice_cfg_section.get('distinctiveness_threshold')!r}"
+            ) from exc
+        if not math.isfinite(distinctiveness_threshold) or distinctiveness_threshold < 0:
+            raise VoiceAlignmentConfigError(
+                "[hypnos.voice_alignment].distinctiveness_threshold must be a "
+                f"finite, non-negative float; got {distinctiveness_threshold}"
             )
         preference_source_raw = voice_cfg_section.get("preference_source", "none")
         if not isinstance(preference_source_raw, str):
@@ -124,6 +139,7 @@ def voice_alignment_config_from_section(
             ),
             corpus_ceiling_gb=corpus_ceiling_gb,
             preference_source=preference_source,
+            distinctiveness_threshold=distinctiveness_threshold,
         )
     return voice_config
 
@@ -206,6 +222,24 @@ def make_hypnos(
         kwargs["downscale_factor"] = float(consolidation["downscale_factor"])
     if "replay_window_s" in consolidation:
         kwargs["replay_window_s"] = float(consolidation["replay_window_s"])
+
+    # Voice-measures arm needs the path of the organ GGUF so it can look up
+    # the correct base voice profile. Prefer an explicit [lingua].model_gguf_path;
+    # otherwise fall back to the deterministic served-GGUF path.
+    organ_gguf_path: Optional[Path] = None
+    try:
+        from kaine.organ_server.served import served_gguf_path
+
+        organ_gguf_path = served_gguf_path()
+    except Exception:
+        organ_gguf_path = None
+    if kaine_config:
+        raw_gguf = (
+            ((kaine_config.get("lingua") or {}).get("model_gguf_path") or "")
+        ).strip()
+        if raw_gguf:
+            organ_gguf_path = resolve(Path(raw_gguf))
+    kwargs["organ_gguf_path"] = organ_gguf_path
     if "associative_replay" in consolidation:
         kwargs["associative_replay_enabled"] = bool(consolidation["associative_replay"])
     if voice_config is not None:

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -168,12 +169,22 @@ class VoiceAlignmentConfig:
     # Stage 0 source selector. Only "none" is valid until Stage 2 adds a
     # validated preference source together with the validation gate (D9).
     preference_source: str = "none"
+    # Welfare-protective distinctiveness arm threshold. Default 0.0 means any
+    # measured spoken being counts as diverged; operator-calibrated after
+    # validation. Must be >= 0.
+    distinctiveness_threshold: float = 0.0
 
     def __post_init__(self) -> None:
         if self.preference_source not in PREFERENCE_SOURCES:
             raise ValueError(
                 f"unknown preference_source {self.preference_source!r}; "
                 f"known: {sorted(PREFERENCE_SOURCES)}"
+            )
+        threshold = float(self.distinctiveness_threshold)
+        if not math.isfinite(threshold) or threshold < 0.0:
+            raise ValueError(
+                "distinctiveness_threshold must be a finite, non-negative number; "
+                f"got {self.distinctiveness_threshold!r}"
             )
         if not float(self.corpus_ceiling_gb) >= 0.0:
             raise ValueError(

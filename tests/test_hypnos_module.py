@@ -143,6 +143,52 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_sleep_writes_voice_measures_latest(bus: AsyncBus, tmp_path: Path):
+    intent_records = [
+        {"generated_text": "hello world this is a test.", "faithful_rendering": "x"}
+        for _ in range(3)
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    summary = await hypnos.enter_sleep()
+
+    latest = tmp_path / "voice_measures_latest.json"
+    assert latest.is_file()
+    vm = summary["voice_measures"]
+    assert vm is not None
+    assert vm["utterance_count"] == 3
+    assert vm["distinctiveness"] is None  # no shipped base profile yet
+
+
+@pytest.mark.asyncio
+async def test_voice_measures_failure_does_not_break_sleep(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    def _boom(*args, **kwargs):
+        raise RuntimeError("measures boom")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.compute_sleep_measures", _boom
+    )
+    intent_records = [
+        {"generated_text": "a b c d e f g", "faithful_rendering": "x"}
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    stale_path = tmp_path / "voice_measures_latest.json"
+    stale_path.write_text(json.dumps({"distinctiveness": 0.01}), encoding="utf-8")
+    summary = await hypnos.enter_sleep()
+    assert all(p["success"] for p in summary["phases"])
+    assert summary.get("voice_measures") is None
+    assert hypnos._mnemos.consolidated == 1
+    assert hypnos._thymos.resets == 1
+    latest_path = tmp_path / "voice_measures_latest.json"
+    assert latest_path.exists()
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    assert data.get("measurement_failed") is True
+    assert "timestamp" in data
+    assert "distinctiveness" not in data
+
+
+@pytest.mark.asyncio
 async def test_sleep_rotates_intent_log(bus: AsyncBus, tmp_path: Path):
     records = [{"intent": "alpha"}, {"intent": "beta"}]
     hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
@@ -192,6 +238,63 @@ async def test_rotation_failure_does_not_break_sleep(
     assert summary["corpus"]["warned"] is False
     assert summary["corpus"]["error"] == "RuntimeError: rotation intentionally broken"
     assert "hypnos.sleep.completed" in captured
+
+
+@pytest.mark.asyncio
+async def test_rotation_failure_marks_measurement_failed(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    records = [{"intent": "alpha"}]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+
+    stale_path = tmp_path / "voice_measures_latest.json"
+    stale_path.write_text(json.dumps({"distinctiveness": 0.01}), encoding="utf-8")
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("rotation intentionally broken")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.rotate_intent_log", broken
+    )
+
+    summary = await hypnos.enter_sleep()
+
+    assert summary is not None
+    assert summary["corpus"]["rotated"] is None
+    assert summary["corpus"]["error"] == "RuntimeError: rotation intentionally broken"
+    assert summary.get("voice_measures") is None
+    latest_path = tmp_path / "voice_measures_latest.json"
+    assert latest_path.exists()
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    assert data.get("measurement_failed") is True
+    assert "timestamp" in data
+    assert "distinctiveness" not in data
+
+
+@pytest.mark.asyncio
+async def test_ceiling_failure_after_rotation_keeps_the_fresh_measurement(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    """Only a rotation that raised is a failed measurement: a corpus-ceiling
+    check failing after a good rotation must not overwrite the fresh measure."""
+    intent_records = [
+        {"generated_text": "hello world this is a test.", "faithful_rendering": "x"}
+        for _ in range(3)
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+
+    def broken_ceiling(*args, **kwargs):
+        raise RuntimeError("ceiling check intentionally broken")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.check_corpus_ceiling", broken_ceiling
+    )
+    summary = await hypnos.enter_sleep()
+
+    assert summary["corpus"]["rotated"] is not None
+    data = json.loads((tmp_path / "voice_measures_latest.json").read_text(encoding="utf-8"))
+    assert "measurement_failed" not in data
+    assert data["utterance_count"] == 3
 
 
 @pytest.mark.asyncio

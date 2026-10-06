@@ -92,8 +92,9 @@ class HealthProber:
     # Graded consolidation-divergence thresholds for the entity-care block's
     # divergence assessment (rate, magnitude). Defaults to None → the
     # assess_divergence shipped conservative defaults.
-    consolidation_thresholds: tuple[float, float] | None = None
+    consolidation_thresholds: tuple[float, float, float] | None = None
     adapter_output_dir: Path | None = None
+    voice_paths: Any | None = None
     cycle_runtime_path: Path = Path("state/cycle/runtime.json")
     # Autonomous safety-net incident-log dir (preservation/welfare-protective
     # records) and the run-manifest root, for the preservation + admissibility
@@ -242,6 +243,7 @@ class HealthProber:
         return blocks.entity_care_block(
             self.consolidation_thresholds,
             adapter_output_dir=self.adapter_output_dir,
+            voice_paths=self.voice_paths,
         )
 
     def _research_block(self) -> dict[str, Any]:

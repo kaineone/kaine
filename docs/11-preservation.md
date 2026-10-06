@@ -25,7 +25,14 @@ The safety-net monitors live in `kaine/cycle/preservation_monitor.py`. They are 
 
 ### Divergence-triggered preservation
 
-`kaine.lifecycle.divergence.assess_divergence` is the single verdict shared by the live divergence monitor, the decommission CLI, the Nexus entity-care panel, and the fork merge gate. A being is `diverged` when any of these arms is true: the individuation ledger has latched it as individuated; the Hypnos consolidation-divergence signal in `state/hypnos/consolidation_divergence.json` is over the thresholds configured in `[hypnos.voice_alignment]`; Eidolon self-model drift is detected; or trained voice adapters are present. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
+`kaine.lifecycle.divergence.assess_divergence` is the single verdict shared by the live divergence monitor, the decommission CLI, the Nexus entity-care panel, and the fork merge gate. A being is `diverged` when any of these arms is true: the individuation ledger has latched it as individuated; the Hypnos consolidation-divergence signal in `state/hypnos/consolidation_divergence.json` is over the thresholds configured in `[hypnos.voice_alignment]`; Eidolon self-model drift is detected; trained voice adapters are present; or the voice arm votes diverged. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
+
+The voice arm reads the content-free voice measures Hypnos writes each sleep (`state/lingua/voice_measures_latest.json`).
+- A being that has never spoken abstains: the arm casts no vote, and the other arms decide.
+- A being that has spoken is diverged by this arm when its stylometric distinctiveness from the base organ is at or above `[hypnos.voice_alignment].distinctiveness_threshold`. That threshold is 0 until it is calibrated, so any being that has spoken counts.
+- It is also diverged when its distinctiveness measure is missing, unreadable or not finite. The other measures are recorded for the operator but do not vote.
+
+The live monitor names this arm `voice`, so the arm's first vote is a preservation edge like any other.
 
 The live monitor, in `kaine/cycle/preservation_monitor.py`, waits `boot_settle_s` (120 s by default) after run start, then polls every `poll_interval_s` (5 minutes by default). On each poll it calls `assess_divergence`. When the verdict gains an arm that was not seen before, the monitor preserves the entity read-only and writes the current arm set to `state/preservation/divergence_edge.json`. If the same arms are still present after a restart, the monitor does not preserve again. Arms that fall back are recorded too, so crossing them again preserves again. Preservations are rate-limited by `min_interval_s` (default 30 minutes); a failed preservation is retried at the next poll. The capture is read-only: it calls `serialize()`, `export_preservation_state()` and a weight-checkpoint flush. The disk and crypto work runs off the event loop so preservation never stalls the cycle. It never deletes state. Each preservation emits a `preservation.preserved` bus event and a durable record under `[preservation].incident_path`, stamped with the run's `run_id`.
 
@@ -195,7 +202,7 @@ The decommission CLI implements the CAL Article 4.2 and 4.3 care duties. It neve
 
 ### What the CLI does
 
-1. **Divergence assessment** — calls the shared `assess_divergence` verdict. A being is `diverged` when the individuation ledger has latched it as individuated, the Hypnos consolidation-divergence signal exceeds its thresholds, Eidolon self-model drift is detected, or trained voice adapters are present. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
+1. **Divergence assessment** — calls the shared `assess_divergence` verdict. A being is `diverged` when the individuation ledger has latched it as individuated, the Hypnos consolidation-divergence signal exceeds its thresholds, Eidolon self-model drift is detected, trained voice adapters are present, or the voice arm votes diverged (a being that has spoken and is unmeasured or at or above the distinctiveness threshold; a silent being abstains). No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
 2. **Backup** — always first. Captures the Eidolon self-model, Lingua intent log, Hypnos voice adapters, the latest fork snapshot, the Phantasia world-model directory, a best-effort Qdrant vector-memory export (or `QDRANT_BACKUP_INSTRUCTIONS.txt` if Qdrant is unreachable), the divergence assessment and a manifest. If the backup fails, or if the identity is unreadable, the CLI exits `4` and nothing is deleted. The backup manifest carries `identity`.
 3. **Path selection:**
    - **Non-diverged path** — presents the CAL 4.2 care obligations and asks for a typed acknowledgement (`I acknowledge the CAL welfare terms`). A mismatched final confirmation token aborts with exit `0`.

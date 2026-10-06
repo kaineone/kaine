@@ -129,6 +129,27 @@ The external trainer:
 - **What still runs.** The consolidation-divergence metric is still computed and published on every sleep. It reads the same faithful-versus-generated pairs, and the template-divergence arm still votes as a protective floor (D8). Only their use as preferred training data is retired.
 - **The training machinery stays tested.** Training moves into a method, `_train_on_pairs(pairs)`: the organ window, the trainer call, the abliteration veto and promotion. Its tests call it directly. The phase-level tests assert that open gates without a preference source never reach the trainer. Stage 2 will call `_train_on_pairs` with its own candidates.
 
+### D13. The four measures and the distinctiveness arm, fixed at implementation (task 0.8; integrator-approved 2026-10-05)
+
+- **The base-organ profile belongs to the model, not to the being.**
+  - An offline script samples the bare organ with a fixed, checked-in neutral prompt set. It writes a content-free profile to `kaine/modules/hypnos/base_voice_profiles/<sha256 of the organ GGUF>.json`, holding:
+    - the GGUF sha256, the llama.cpp build, the sampling parameters and seed, and a digest of the prompt set;
+    - the style profile: a distribution over a fixed function-word list, plus scalar style features (mean sentence length, mean word length, type-token ratio, punctuation rates).
+  - At sleep, the running organ's GGUF is identified by its sha256, cached against path, size and mtime so it is hashed once.
+  - With no profile for that digest, distinctiveness is null, which is the protective path. A changed GGUF under the same model id (for example, after an operator-approved edit) therefore never reuses an old profile.
+  - This change ships the loader and the format. The first profile comes in a follow-up, after one announced GPU-lock job.
+- **The measures, per sleep.** They are computed from the just-rotated corpus file, using the being's own generated text only. They are appended to `state/lingua/voice_measures.jsonl`, and the latest is mirrored in `voice_measures_latest.json`.
+  - **The profile distance** used by both measures below is `0.5 × √JS₂(p, q) + 0.5 × mean(|x − y| / (|x| + |y|))`. Here JS₂ is the base-2 Jensen–Shannon divergence of the two function-word distributions; the mean runs over the scalar style features (mean sentence length, mean word length, type-token ratio and the four punctuation rates). It lies in [0, 1].
+  - **distinctiveness:** the profile distance between the being's style profile and the base profile, else null;
+  - **self_consistency:** the profile distance between this sleep's profile and the cumulative profile of earlier sleeps, else null; the cumulative profile is stored as numbers in `voice_profile_cumulative.json`;
+  - **grounding:** the fraction of utterances that share at least one content word with their redacted faithful rendering;
+  - **health:** utterance count, mean tokens, distinct-1, distinct-2, and the largest repeated-trigram fraction.
+- **Content-free.** These files hold numbers and the fixed function-word identities only, never a generated sentence. A test plants a sentinel phrase in the corpus and checks that it appears in neither the measures nor the profiles.
+- **The arm.** `[hypnos.voice_alignment].distinctiveness_threshold`, default 0.0.
+  - A being that has spoken (at least one generated utterance in the intent log or the corpus) is diverged by this arm when distinctiveness ≥ the threshold. It is also diverged when the record is missing, unreadable or null: spoken but unmeasured.
+  - A being that has never spoken has no voice to have individuated, so the arm abstains. It casts no vote either way and the other arms decide, so abstention never counts as "not diverged".
+  - Its values appear in `signals`. The template (consolidation) arm votes as before.
+
 ## Risks
 
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.

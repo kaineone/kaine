@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import asdict
@@ -39,9 +40,22 @@ from kaine.modules.hypnos.voice_alignment import (
     read_consolidation_divergence,
     write_consolidation_divergence,
 )
+from kaine.modules.hypnos.voice_measures import (
+    compute_sleep_measures,
+    load_base_profile,
+    organ_gguf_sha256,
+)
+from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 class HypnosBusyError(RuntimeError):
@@ -113,8 +127,13 @@ class Hypnos(BaseModule):
         # Minimum entity-time seconds between a sleep's end and a Nous-requested
         # rest; bounds rest requests from an exploring Nous.
         requested_rest_min_interval_s: float = 1800.0,
+        # Path to the organ GGUF served by Lingua. Used to identify the correct
+        # base voice profile for distinctiveness measurement; None means the
+        # digest is unknown and distinctiveness will be null.
+        organ_gguf_path: Optional[Path] = None,
     ) -> None:
         super().__init__(bus)
+        self._organ_gguf_path = organ_gguf_path
         if not 0.0 <= baseline_salience <= 1.0:
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
@@ -701,6 +720,11 @@ class Hypnos(BaseModule):
             "corpus_bytes": 0,
             "warned": False,
         }
+        rotated_path: Optional[Path] = None
+        # Only a rotation that raised is a failed measurement; a corpus-ceiling
+        # check failing after a good rotation must not mask a fresh measure.
+        rotation_failed = False
+        rotation_done = False
         try:
             rotated_path = await asyncio.to_thread(
                 rotate_intent_log,
@@ -708,6 +732,7 @@ class Hypnos(BaseModule):
                 self._voice_config.intent_log_path.parent / "intent_log",
                 sleep_index=self._sleep_count,
             )
+            rotation_done = True
             if rotated_path is not None:
                 corpus_summary["rotated"] = rotated_path.name
 
@@ -719,6 +744,7 @@ class Hypnos(BaseModule):
             corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
             corpus_summary["warned"] = ceiling_info["warned"]
         except Exception as exc:
+            rotation_failed = not rotation_done
             # Recorded so the summary never reads a failed rotation as "nothing
             # to rotate".
             corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
@@ -726,6 +752,87 @@ class Hypnos(BaseModule):
                 "hypnos: intent log corpus rotation/ceiling check failed",
                 exc_info=True,
             )
+
+        # --- Voice measures (content-free) ----------------------------------
+        # Computed from the freshly rotated corpus. Wrapped in try/except so a
+        # measures failure can never break sleep.
+        voice_measures: Optional[dict[str, Any]] = None
+        if rotated_path is not None:
+            try:
+                base_profiles_dir = (
+                    Path(__file__).resolve().parent / "base_voice_profiles"
+                )
+                digest = await asyncio.to_thread(
+                    organ_gguf_sha256,
+                    self._organ_gguf_path,
+                    self._voice_config.intent_log_path.parent / "organ_gguf_digest.json",
+                )
+                base_profile = await asyncio.to_thread(
+                    load_base_profile,
+                    digest,
+                    base_profiles_dir,
+                )
+                cumulative_path = (
+                    self._voice_config.intent_log_path.parent
+                    / "voice_profile_cumulative.json"
+                )
+                cumulative: Optional[dict[str, Any]] = None
+                if cumulative_path.is_file():
+                    try:
+                        cumulative = json.loads(
+                            cumulative_path.read_text(encoding="utf-8")
+                        )
+                    except Exception:
+                        cumulative = None
+                measures, new_cumulative = await asyncio.to_thread(
+                    compute_sleep_measures,
+                    rotated_path,
+                    base_profile=base_profile,
+                    cumulative=cumulative,
+                )
+                voice_measures = measures
+                await asyncio.to_thread(
+                    _append_jsonl,
+                    self._voice_config.intent_log_path.parent / "voice_measures.jsonl",
+                    measures,
+                )
+                await asyncio.to_thread(
+                    write_json_atomic,
+                    self._voice_config.intent_log_path.parent
+                    / "voice_measures_latest.json",
+                    measures,
+                )
+                await asyncio.to_thread(
+                    write_json_atomic,
+                    cumulative_path,
+                    new_cumulative,
+                )
+            except Exception:
+                log.warning(
+                    "hypnos: voice measures computation failed",
+                    exc_info=True,
+                )
+                rotation_failed = True
+                voice_measures = None
+
+        if rotation_failed:
+            try:
+                await asyncio.to_thread(
+                    write_json_atomic,
+                    self._voice_config.intent_log_path.parent
+                    / "voice_measures_latest.json",
+                    {
+                        "measurement_failed": True,
+                        "timestamp": time.strftime(
+                            "%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()
+                        ),
+                    },
+                )
+            except Exception:
+                log.warning(
+                    "hypnos: failed to write measurement_failed marker",
+                    exc_info=True,
+                )
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
@@ -768,6 +875,7 @@ class Hypnos(BaseModule):
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
         summary["corpus"] = corpus_summary
+        summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
         # Sleep-time ignition audit (change sleep-ignition-audit): runs

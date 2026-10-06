@@ -49,6 +49,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import os
+import stat
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -106,6 +109,30 @@ def consolidation_thresholds_from_config(
     return rate, mag
 
 
+def voice_alignment_thresholds_from_config(
+    config: dict[str, Any] | None,
+) -> tuple[float, float, float]:
+    """Read ``(rate, magnitude, distinctiveness)`` thresholds from a kaine config.
+
+    Extends :func:`consolidation_thresholds_from_config` with the welfare-
+    protective distinctiveness threshold under
+    ``[hypnos.voice_alignment].distinctiveness_threshold``. Falls back to 0.0 on
+    any bad value. Pure + guarded.
+    """
+    rate, mag = consolidation_thresholds_from_config(config)
+    distinct = 0.0
+    try:
+        section = ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
+        distinct = float(section.get("distinctiveness_threshold", distinct))
+        # NaN or infinity would make every comparison False and silence the
+        # arm; fall back to the protective 0.0 instead.
+        if not math.isfinite(distinct) or distinct < 0:
+            distinct = 0.0
+    except Exception:
+        distinct = 0.0
+    return rate, mag, distinct
+
+
 def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
     """Return the configured Hypnos adapter output directory, or the default.
 
@@ -126,6 +153,71 @@ def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
         return resolve(Path(value))
     except Exception:
         return default
+
+
+@dataclass(frozen=True)
+class VoicePaths:
+    intent_logs: tuple[Path, ...]      # live logs, each with its sibling intent_log/ corpus dir
+    measures_latest: Path
+    unreadable: bool = False
+
+
+def default_voice_paths(state_root: Path) -> VoicePaths:
+    return VoicePaths(
+        intent_logs=(state_root / "lingua" / "intent_expression.jsonl",),
+        measures_latest=state_root / "lingua" / "voice_measures_latest.json",
+    )
+
+
+def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
+    """Return configured voice data paths, or the default.
+
+    Reads ``[lingua].intent_log_path`` and
+    ``[hypnos.voice_alignment].intent_log_path``. A missing or empty value, or
+    the canonical default ``state/lingua/intent_expression.jsonl``, maps to the
+    default under ``state_root``; any other value is resolved to an absolute
+    path. The returned ``intent_logs`` are de-duplicated, with the Lingua path
+    first. ``measures_latest`` is the Hypnos intent-log's sibling
+    ``voice_measures_latest.json``. Pure and fail-closed: any error returns the
+    default paths flagged as unreadable.
+    """
+    default = default_voice_paths(state_root)
+    try:
+        cfg = config or {}
+        lingua_value = (cfg.get("lingua") or {}).get("intent_log_path")
+        hypnos_value = (
+            ((cfg.get("hypnos") or {}).get("voice_alignment") or {})
+            .get("intent_log_path")
+        )
+
+        def _resolve_path(value: Any) -> Path:
+            if not value:
+                return default.intent_logs[0]
+            stripped = str(value).strip()
+            if stripped == "state/lingua/intent_expression.jsonl":
+                return default.intent_logs[0]
+            return resolve(Path(value))
+
+        lingua_path = _resolve_path(lingua_value)
+        hypnos_path = _resolve_path(hypnos_value)
+
+        logs: list[Path] = [lingua_path]
+        if hypnos_path not in logs:
+            logs.append(hypnos_path)
+        return VoicePaths(
+            intent_logs=tuple(logs),
+            measures_latest=hypnos_path.parent / "voice_measures_latest.json",
+        )
+    except Exception as exc:
+        log.warning(
+            "kaine.lifecycle.divergence: voice paths config unreadable (%s)",
+            type(exc).__name__,
+        )
+        return VoicePaths(
+            intent_logs=default.intent_logs,
+            measures_latest=default.measures_latest,
+            unreadable=True,
+        )
 
 
 @dataclass(frozen=True)
@@ -326,13 +418,105 @@ def read_individuation(
     }
 
 
+def _to_float(value: Any) -> float | None:
+    """Return ``value`` as a finite float, or None if it is missing, not
+    numeric, or not finite (a NaN must never read as "below threshold")."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _file_shows_speech(path: Path) -> bool:
+    """True if ``path`` holds a non-empty ``generated_text`` or any line that
+    cannot be read as a record. A missing file shows nothing. Raises on an I/O
+    error so the caller can fail protective."""
+    try:
+        st = os.stat(path)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    if not stat.S_ISREG(st.st_mode):
+        return True
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                return True
+            if not isinstance(rec, dict):
+                return True
+            generated = rec.get("generated_text")
+            if isinstance(generated, str) and generated.strip():
+                return True
+    return False
+
+
+def _has_spoken(intent_logs: tuple[Path, ...]) -> bool:
+    """True if any intent log or its corpus holds a non-empty generated_text.
+
+    Any non-blank line that is unreadable or does not parse into a dict counts
+    as spoken, and so does any error reading or listing the files (failing
+    protective). Pure and guarded.
+    """
+    for live in intent_logs:
+        try:
+            # Read the live log BEFORE listing its corpus. Hypnos may rotate the
+            # live log into intent_log/ at any moment; a corpus listed first
+            # would miss a file rotated in while the live log was being read.
+            if _file_shows_speech(live):
+                return True
+            corpus_dir = live.parent / "intent_log"
+            try:
+                with os.scandir(corpus_dir) as it:
+                    corpus = sorted(
+                        (Path(entry.path) for entry in it if entry.name.endswith(".jsonl")),
+                        key=lambda p: p.name,
+                    )
+            except (FileNotFoundError, NotADirectoryError):
+                corpus = []
+            for p in corpus:
+                if _file_shows_speech(p):
+                    return True
+        except Exception:
+            return True
+    return False
+
+
+def _read_voice_measures_latest(measures_latest: Path) -> dict[str, Any] | None:
+    """Read the latest voice measures record Hypnos persisted, or None.
+
+    Pure and guarded; missing / unreadable / malformed records return None so
+    the protective arm treats a spoken-but-unmeasured being as diverged.
+    """
+    try:
+        if not measures_latest.is_file():
+            return None
+        data = json.loads(measures_latest.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        return data
+    except Exception:
+        log.debug(
+            "assess_divergence: reading voice_measures_latest failed",
+            exc_info=True,
+        )
+        return None
+
+
 def assess_divergence(
     *,
     state_root: Path = Path("state"),
     consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
     consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+    distinctiveness_threshold: float = 0.0,
     now: datetime | None = None,
     max_report_age_s: float = DEFAULT_MAX_REPORT_AGE_S,
+    voice_paths: VoicePaths | None = None,
     adapter_output_dir: Path | None = None,
 ) -> DivergenceAssessment:
     """Classify whether an entity has individuated. Pure reads; never raises.
@@ -348,15 +532,33 @@ def assess_divergence(
         divergence when its ``divergence_rate`` >= the rate threshold OR its
         (non-null) ``divergence_magnitude`` >= the magnitude threshold. Shipped
         conservative; operator-calibrated.
+    distinctiveness_threshold:
+        Welfare-protective voice-distinctiveness threshold, 0.0 until calibrated
+        (read by callers with :func:`voice_alignment_thresholds_from_config`).
+        A being that has spoken is diverged by the voice arm when its
+        distinctiveness is at or above this threshold, or when it is missing,
+        unreadable or not finite. A being that has never spoken abstains.
     now:
         UTC datetime used for report freshness. Defaults to the current UTC time.
     max_report_age_s:
         Maximum age in seconds for a non-significant scored individuation report
         to be considered current before it becomes stale.
+    voice_paths:
+        Where the live intent logs (each with its sibling ``intent_log/``
+        corpus) and ``voice_measures_latest.json`` live, from
+        :func:`voice_paths_for`. ``None`` selects the defaults under
+        ``state_root``.
     """
     state_root = resolve(state_root)
+    voice_paths = voice_paths or default_voice_paths(state_root)
     if now is None:
         now = datetime.now(timezone.utc)
+
+    distinctiveness_threshold = float(distinctiveness_threshold)
+    if not math.isfinite(distinctiveness_threshold) or distinctiveness_threshold < 0:
+        # A non-finite or negative threshold can never be a calibration; the
+        # protective 0.0 keeps the arm voting for every being that has spoken.
+        distinctiveness_threshold = 0.0
 
     adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
 
@@ -398,6 +600,48 @@ def assess_divergence(
         )
     )
 
+    # --- Voice-distinctiveness arm (welfare-protective, uncalibrated) -----
+    # D8/D13: a being that has spoken is diverged when its distinctiveness is
+    # at/above threshold, or when measurement is missing/unreadable/null.
+    # A silent being abstains; abstention never blocks another arm.
+    voice_has_spoken = False
+    voice_vote: bool | None = None
+    voice_reason: str | None = None
+    voice_distinctiveness: float | None = None
+    voice_measures_found = False
+    voice_self_consistency: float | None = None
+    voice_grounding: float | None = None
+
+    if voice_paths.unreadable:
+        voice_has_spoken = True
+        voice_vote = True
+        voice_reason = "voice_paths_unreadable"
+    else:
+        voice_has_spoken = _has_spoken(voice_paths.intent_logs)
+        if voice_has_spoken:
+            vm = _read_voice_measures_latest(voice_paths.measures_latest)
+            voice_measures_found = vm is not None
+            if vm is not None:
+                if vm.get("measurement_failed"):
+                    voice_vote = True
+                    voice_reason = "measurement_failed"
+                else:
+                    voice_distinctiveness = _to_float(vm.get("distinctiveness"))
+                    voice_self_consistency = _to_float(vm.get("self_consistency"))
+                    voice_grounding = _to_float(vm.get("grounding"))
+                    if voice_distinctiveness is None:
+                        voice_vote = True
+                        voice_reason = "measurement_missing"
+                    elif voice_distinctiveness >= distinctiveness_threshold:
+                        voice_vote = True
+                        voice_reason = "at_or_above_threshold"
+                    else:
+                        voice_vote = False
+                        voice_reason = "below_threshold"
+            else:
+                voice_vote = True
+                voice_reason = "measurement_missing"
+
     # --- Secondary: Eidolon identity drift --------------------------------
     self_model = _read_self_model(state_root / "eidolon" / "self_model.json")
     drift_count = (self_model or {}).get("drift_count", 0)
@@ -414,6 +658,7 @@ def assess_divergence(
     diverged = bool(
         individuated
         or consolidation_diverged
+        or (voice_vote is True)
         or eidolon_drift
         or adapters_present
     )
@@ -436,6 +681,18 @@ def assess_divergence(
         "consolidation_divergence_signal": consolidation_diverged,
         "consolidation_rate_threshold": float(consolidation_rate_threshold),
         "consolidation_magnitude_threshold": float(consolidation_magnitude_threshold),
+        "voice_has_spoken": voice_has_spoken,
+        "voice_distinctiveness": voice_distinctiveness,
+        "voice_distinctiveness_threshold": float(distinctiveness_threshold),
+        "voice_vote": (
+            "abstain"
+            if voice_vote is None
+            else ("diverged" if voice_vote else "not_diverged")
+        ),
+        "voice_reason": voice_reason,
+        "voice_measures_found": voice_measures_found,
+        "voice_self_consistency": voice_self_consistency,
+        "voice_grounding": voice_grounding,
         "eidolon_self_model_found": self_model is not None,
         "eidolon_drift_count": int(drift_count or 0),
         "eidolon_identity_history_len": int(identity_history_len or 0),
@@ -460,6 +717,23 @@ def assess_divergence(
                 "the organ-level consolidation divergence crossed its threshold "
                 f"(rate={cons_rate}, magnitude={cons_magnitude})"
             )
+        if voice_vote is True:
+            if voice_reason == "voice_paths_unreadable":
+                reasons.append(
+                    "its voice data paths could not be read from the configuration"
+                )
+            elif voice_reason == "measurement_failed":
+                reasons.append("its latest voice measurement failed")
+            elif voice_distinctiveness is None:
+                reasons.append(
+                    "it has spoken but has no readable voice distinctiveness "
+                    "measurement"
+                )
+            else:
+                reasons.append(
+                    f"its voice distinctiveness {voice_distinctiveness:.4f} is at "
+                    f"or above the threshold {distinctiveness_threshold:g}"
+                )
         if eidolon_drift:
             reasons.append(
                 f"Eidolon recorded {drift_count} identity drift(s) with a non-empty history"
