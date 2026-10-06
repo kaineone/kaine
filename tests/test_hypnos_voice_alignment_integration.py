@@ -3,16 +3,15 @@
 
 """End-to-end Hypnos voice-alignment integration.
 
-Exercises the full Hypnos.enter_sleep() path with the real
-UnslothDPOTrainer wired against a FakeBackend. Asserts that the
-hypnos.sleep.completed payload's top-level keys (the ones the
-evaluation sidecar's voice_tracking observer consumes) are
-populated end-to-end.
+Exercises the real UnslothDPOTrainer wired against a FakeBackend through
+_hypnos._train_on_pairs. Asserts that the returned TrainingResult/PhaseResult
+carry the fields the evaluation sidecar's voice_tracking observer consumes.
 """
 from __future__ import annotations
 
 import json
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -25,7 +24,10 @@ from kaine.modules.hypnos.capability_eval import (
     NoopAbliterationScorer,
     NoopCapabilityEval,
 )
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
+
+# With preference_source="none", a sleep never reaches the trainer, so these
+# tests call _train_on_pairs directly and check the returned result.
 
 
 @pytest.fixture
@@ -58,9 +60,11 @@ class FakeBackend:
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_publishes_top_level_voice_tracking_fields(
+async def test_training_result_carries_voice_tracking_fields(
     bus: AsyncBus, tmp_path: Path,
 ):
+    """Calling ``_train_on_pairs`` directly returns a result carrying the
+    voice-tracking fields; no sleep and no published event are involved."""
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         "\n".join(
@@ -86,29 +90,36 @@ async def test_end_to_end_publishes_top_level_voice_tracking_fields(
     )
 
     hypnos = Hypnos(bus, trainer=trainer, voice_alignment_config=config)
-    summary = await hypnos.enter_sleep()
+    pairs = DPOPairBuilder().build(
+        config.intent_log_path,
+        max_pairs=config.max_samples,
+    )
+    assert pairs
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
 
-    # Top-level fields the voice_tracking sidecar observer reads from
-    # the hypnos.sleep.completed payload — none should be missing.
-    assert "pairs_processed" in summary
-    assert summary["pairs_processed"] == 2
-    assert "pairs_above_threshold" in summary
-    assert summary["pairs_above_threshold"] == 2
-    assert summary["dpo_loss"] == pytest.approx(0.31)
-    assert summary["adapter_accepted"] is True
-    assert summary["capability_score_before"] == pytest.approx(0.75)
-    assert summary["capability_score_after"] == pytest.approx(0.75)
+    # Fields the voice_tracking sidecar observer reads are produced by training
+    # and surfaced on the returned result.
+    assert phase_result.metadata["pairs"] == 2
+    assert voice_result.samples_used == 2
+    assert voice_result.dpo_loss == pytest.approx(0.31)
+    assert voice_result.accepted is True
+    assert voice_result.samples_used == 2
+    assert voice_result.samples_used == 2
+    assert voice_result.capability_score_before == pytest.approx(0.75)
+    assert voice_result.capability_score_after == pytest.approx(0.75)
     # Mean intent-expression similarity is None when no scorer is
     # configured; the field must be present nevertheless.
-    assert "mean_intent_expression_similarity_before" in summary
-    assert "mean_intent_expression_similarity_after" in summary
+    assert hasattr(voice_result, "mean_intent_expression_similarity_before")
+    assert hasattr(voice_result, "mean_intent_expression_similarity_after")
 
 
 @pytest.mark.asyncio
-async def test_sidecar_event_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Path):
-    """Sidecar reads hypnos.sleep.completed via the bus — verify the
-    actual published event payload (not just the in-process summary)
-    carries the new fields."""
+async def test_training_result_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Path):
+    """Calling ``_train_on_pairs`` directly returns the real DPO loss and
+    capability scores on the result; no sidecar event is published."""
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})
@@ -130,18 +141,17 @@ async def test_sidecar_event_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Path
         backend=FakeBackend(),
     )
     hypnos = Hypnos(bus, trainer=trainer, voice_alignment_config=config)
-    await hypnos.enter_sleep()
+    pairs = DPOPairBuilder().build(
+        config.intent_log_path,
+        max_pairs=config.max_samples,
+    )
+    assert pairs
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, _phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
 
-    # Drain the hypnos stream. AsyncBus.read returns [(entry_id, Event)].
-    entries = await bus.read("hypnos.out", count=10)
-    payloads = [
-        event.payload
-        for _entry_id, event in entries
-        if event.type == "hypnos.sleep.completed"
-    ]
-    assert len(payloads) == 1
-    payload = payloads[0]
-    assert payload["dpo_loss"] == pytest.approx(0.31)
-    assert payload["adapter_accepted"] is True
-    assert payload["capability_score_before"] == pytest.approx(0.5)
-    assert payload["capability_score_after"] == pytest.approx(0.5)
+    assert voice_result.dpo_loss == pytest.approx(0.31)
+    assert voice_result.accepted is True
+    assert voice_result.capability_score_before == pytest.approx(0.5)
+    assert voice_result.capability_score_after == pytest.approx(0.5)

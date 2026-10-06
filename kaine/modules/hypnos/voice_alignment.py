@@ -19,11 +19,17 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
+
+# Stage 2 adds its source together with the validation gate (D9).
+PREFERENCE_SOURCES: frozenset[str] = frozenset({"none"})
+# The sources allowed to reach the trainer. Empty until Stage 2: the phase
+# checks membership here, so an unlisted value can never train (fail closed).
+TRAINING_SOURCES: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -127,6 +133,8 @@ class VoiceAlignmentConfig:
     # rejected regardless of its capability-loss score, protecting the
     # entity from refusal-conditioning re-introduction.
     abliteration_probe_path: Optional[str] = None
+    # Corpus disk-guard ceiling in GB.  0 disables the warning.
+    corpus_ceiling_gb: float = 10.0
     # Trainer backend selector:
     #   "in_process" (default) — run unsloth DPO in the entity-runtime venv
     #     (requires the [training] extra; the shipped, byte-for-byte-unchanged
@@ -157,8 +165,20 @@ class VoiceAlignmentConfig:
     # wait for the organ to report ready after activation. Empty defaults to
     # [lingua].chat_url from kaine_config.
     organ_url: str = ""
+    # Stage 0 source selector. Only "none" is valid until Stage 2 adds a
+    # validated preference source together with the validation gate (D9).
+    preference_source: str = "none"
 
     def __post_init__(self) -> None:
+        if self.preference_source not in PREFERENCE_SOURCES:
+            raise ValueError(
+                f"unknown preference_source {self.preference_source!r}; "
+                f"known: {sorted(PREFERENCE_SOURCES)}"
+            )
+        if not float(self.corpus_ceiling_gb) >= 0.0:
+            raise ValueError(
+                f"corpus_ceiling_gb must be a non-negative number; got {self.corpus_ceiling_gb!r}"
+            )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
 
@@ -288,7 +308,10 @@ class DPOPairBuilder:
         return pairs
 
     def build_with_counts(
-        self, path: Path | str, *, max_pairs: int
+        self,
+        path: Path | str | Sequence[Path | str],
+        *,
+        max_pairs: int,
     ) -> tuple[list[DPOPair], int, int]:
         """Build DPO pairs AND report ``(pairs, records_scanned, usable_pairs)``.
 
@@ -301,15 +324,31 @@ class DPOPairBuilder:
         ``max_pairs`` — only the returned ``pairs`` list is capped at
         ``max_pairs`` (the training budget). The two coincide whenever the log
         holds no more than ``max_pairs`` divergent records.
+
+        ``path`` may be a single file or a sequence of files. The sequence is
+        expected to be chronological (oldest file first), and is scanned NEWEST
+        FIRST — files in reverse order and lines within each file in reverse
+        order — so that ``max_records_scanned`` keeps the most recent speech
+        under evaluation. The returned ``pairs`` are in chronological order.
+        Missing files are skipped.
         """
-        p = Path(path)
-        if not p.exists():
-            return [], 0, 0
+        paths: list[Path]
+        if isinstance(path, (str, Path)):
+            paths = [Path(path)]
+        else:
+            paths = [Path(p) for p in path]
+
         pairs: list[DPOPair] = []
         scanned = 0
         usable = 0
-        with p.open("r", encoding="utf-8") as fh:
-            for line in fh:
+        for p in reversed(paths):
+            if scanned >= self._max_scanned:
+                break
+            if not p.exists():
+                continue
+            with p.open("r", encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+            for line in reversed(lines):
                 if scanned >= self._max_scanned:
                     break
                 line = line.strip()
@@ -343,6 +382,8 @@ class DPOPairBuilder:
                         },
                     )
                 )
+        # The scan ran newest first; hand the kept pairs back in log order.
+        pairs.reverse()
         return pairs, scanned, usable
 
 

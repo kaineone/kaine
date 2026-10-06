@@ -13,6 +13,11 @@ from typing import Any, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.hypnos.corpus import (
+    check_corpus_ceiling,
+    intent_record_paths,
+    rotate_intent_log,
+)
 from kaine.modules.hypnos.phases import (
     PhaseResult,
     affective_reset,
@@ -22,6 +27,7 @@ from kaine.modules.hypnos.phases import (
 )
 from kaine.modules.hypnos.scheduler import RestScheduler
 from kaine.modules.hypnos.voice_alignment import (
+    TRAINING_SOURCES,
     ConsolidationDivergence,
     DPOPairBuilder,
     FakeTrainer,
@@ -30,6 +36,7 @@ from kaine.modules.hypnos.voice_alignment import (
     VoiceAlignmentConfig,
     consolidation_magnitude,
     operator_approved,
+    read_consolidation_divergence,
     write_consolidation_divergence,
 )
 from kaine.storage import resolve
@@ -686,6 +693,40 @@ class Hypnos(BaseModule):
         voice_result, voice_phase = await self._run_voice_alignment()
         phase_results.append(voice_phase)
 
+        # Rotate the waking intent log into the per-sleep corpus now that voice
+        # alignment has consumed it.  This must never break sleep, so failures
+        # are caught and logged but do not halt the pipeline.
+        corpus_summary: dict[str, Any] = {
+            "rotated": None,
+            "corpus_bytes": 0,
+            "warned": False,
+        }
+        try:
+            rotated_path = await asyncio.to_thread(
+                rotate_intent_log,
+                self._voice_config.intent_log_path,
+                self._voice_config.intent_log_path.parent / "intent_log",
+                sleep_index=self._sleep_count,
+            )
+            if rotated_path is not None:
+                corpus_summary["rotated"] = rotated_path.name
+
+            ceiling_info = await asyncio.to_thread(
+                check_corpus_ceiling,
+                self._voice_config.intent_log_path.parent / "intent_log",
+                ceiling_gb=self._voice_config.corpus_ceiling_gb,
+            )
+            corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
+            corpus_summary["warned"] = ceiling_info["warned"]
+        except Exception as exc:
+            # Recorded so the summary never reads a failed rotation as "nothing
+            # to rotate".
+            corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
+            log.warning(
+                "hypnos: intent log corpus rotation/ceiling check failed",
+                exc_info=True,
+            )
+
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
         # audit window must start at the prior sleep (or boot), never the
@@ -726,6 +767,7 @@ class Hypnos(BaseModule):
             # Whether this cycle was fatigue-triggered
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
+        summary["corpus"] = corpus_summary
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
         # Sleep-time ignition audit (change sleep-ignition-audit): runs
@@ -900,14 +942,22 @@ class Hypnos(BaseModule):
         rejected utterance text.
         """
         self._sleep_count += 1
+        build_failed = False
         try:
-            pairs, scanned, usable = self._builder.build_with_counts(
+            paths = await asyncio.to_thread(
+                intent_record_paths,
                 self._voice_config.intent_log_path,
+                self._voice_config.intent_log_path.parent / "intent_log",
+            )
+            pairs, scanned, usable = await asyncio.to_thread(
+                self._builder.build_with_counts,
+                paths,
                 max_pairs=self._voice_config.max_samples,
             )
         except Exception:
             log.warning("consolidation divergence: pair build failed", exc_info=True)
             pairs, scanned, usable = [], 0, 0
+            build_failed = True
         rate = usable / max(1, scanned)
         magnitude, embedder_kind = await consolidation_magnitude(
             pairs, embedder=self._consolidation_embedder
@@ -926,7 +976,21 @@ class Hypnos(BaseModule):
         kwargs: dict[str, Any] = {"sleep_index": self._sleep_count}
         if self._consolidation_divergence_path is not None:
             kwargs["path"] = self._consolidation_divergence_path
-        write_consolidation_divergence(metric, **kwargs)
+        # The template arm is a protective floor (voice-development D8): a scan
+        # that failed or found nothing is no evidence, so it never overwrites an
+        # earlier record. Otherwise one bad read would un-diverge a being.
+        prior = None
+        if scanned == 0:  # also the case when the build failed
+            read_kwargs = {"path": kwargs["path"]} if "path" in kwargs else {}
+            prior = read_consolidation_divergence(**read_kwargs)
+        if prior is not None:
+            payload["record_kept"] = True
+            log.warning(
+                "consolidation divergence: %s; keeping the earlier record",
+                "pair build failed" if build_failed else "no records scanned",
+            )
+        else:
+            write_consolidation_divergence(metric, **kwargs)
         # Content-free bus event (rides the existing metric path). An
         # intermediate publish must never propagate: catch, log, continue —
         # the metric is already persisted above, and the sleep pipeline must
@@ -993,6 +1057,30 @@ class Hypnos(BaseModule):
                 elapsed_ms=time.monotonic() * 1000.0 - start_ms,
                 metadata=_meta({"skipped": skip_reason, "training_skipped": True}),
             )
+        # Stage 0 gate: training on self-generated preferences is retired until
+        # Stage 2 provides a validated preference source (D12).
+        if self._voice_config.preference_source not in TRAINING_SOURCES:
+            skip_reason = "skipped: no validated preference source (voice-development Stage 2)"
+            log.info("voice_alignment skipped: %s", skip_reason)
+            voice_result = TrainingResult(
+                accepted=False,
+                adapter_path=None,
+                capability_loss=0.0,
+                reason=skip_reason,
+                samples_used=0,
+            )
+            return voice_result, PhaseResult(
+                phase="voice_alignment",
+                success=True,
+                elapsed_ms=time.monotonic() * 1000.0 - start_ms,
+                metadata=_meta(
+                    {
+                        "skipped": "no validated preference source",
+                        "training_skipped": True,
+                        "preference_source": self._voice_config.preference_source,
+                    }
+                ),
+            )
         if not pairs:
             voice_result = TrainingResult(
                 accepted=False,
@@ -1007,6 +1095,11 @@ class Hypnos(BaseModule):
                 elapsed_ms=time.monotonic() * 1000.0 - start_ms,
                 metadata=_meta({"pairs": 0, "training_skipped": True}),
             )
+        return await self._train_on_pairs(pairs, start_ms, _meta)
+
+    async def _train_on_pairs(
+        self, pairs, start_ms, _meta
+    ) -> tuple[TrainingResult, PhaseResult]:
         window_meta: dict[str, Any] = {}
         try:
 

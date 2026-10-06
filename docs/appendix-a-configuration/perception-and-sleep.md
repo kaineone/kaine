@@ -186,6 +186,8 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only; real weights load from `base_model_path`. |
 | `capability_probe_path` | string | `""` | Path to a capability-probe JSONL. Empty uses the bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl`. The set must hold at least one usable probe (`prompt` and `expected`): boot refuses voice alignment on every trainer backend otherwise (`EmptyCapabilityProbeSetError`), because an empty set would score every model 0 and pass every adapter. |
 | `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`, with optional `probe_id` and `in_character` fields. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
+| `preference_source` | string | `"none"` | Where preferred training examples come from. Only `"none"` is accepted (the phase trains nothing) until Stage 2 adds a validated source; any other value fails at boot. |
+| `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/lingua/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
 
 #### Training knobs
 

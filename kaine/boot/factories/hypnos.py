@@ -30,7 +30,7 @@ def voice_alignment_config_from_section(
     kaine_config: Optional[dict[str, Any]] = None,
 ) -> Optional["VoiceAlignmentConfig"]:
     """Parse [hypnos.voice_alignment] into a VoiceAlignmentConfig (None when the table is empty)."""
-    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+    from kaine.modules.hypnos.voice_alignment import PREFERENCE_SOURCES, VoiceAlignmentConfig
 
     voice_config: Optional[VoiceAlignmentConfig] = None
     if voice_cfg_section:
@@ -44,6 +44,31 @@ def voice_alignment_config_from_section(
         capability_probe_path: Optional[str] = str(capability_probe_path_raw).strip() or None
         abliteration_probe_path_raw = voice_cfg_section.get("abliteration_probe_path", "")
         abliteration_probe_path: Optional[str] = str(abliteration_probe_path_raw).strip() or None
+        try:
+            corpus_ceiling_gb = float(voice_cfg_section.get("corpus_ceiling_gb", 10.0))
+        except (TypeError, ValueError) as exc:
+            raise VoiceAlignmentConfigError(
+                "[hypnos.voice_alignment].corpus_ceiling_gb must be a number; "
+                f"got {voice_cfg_section.get('corpus_ceiling_gb')!r}"
+            ) from exc
+        if not corpus_ceiling_gb >= 0:
+            raise VoiceAlignmentConfigError(
+                "[hypnos.voice_alignment].corpus_ceiling_gb must be non-negative; "
+                f"got {corpus_ceiling_gb}"
+            )
+        preference_source_raw = voice_cfg_section.get("preference_source", "none")
+        if not isinstance(preference_source_raw, str):
+            raise VoiceAlignmentConfigError(
+                f"[hypnos.voice_alignment].preference_source must be one of "
+                f"{sorted(PREFERENCE_SOURCES)}; got {type(preference_source_raw).__name__}: "
+                f"{preference_source_raw!r}"
+            )
+        preference_source = preference_source_raw.strip()
+        if preference_source not in PREFERENCE_SOURCES:
+            raise VoiceAlignmentConfigError(
+                f"[hypnos.voice_alignment].preference_source={preference_source!r} is unknown; "
+                f"known sources: {sorted(PREFERENCE_SOURCES)}"
+            )
         voice_config = VoiceAlignmentConfig(
             intent_log_path=resolve(
                 voice_cfg_section.get("intent_log_path", "state/lingua/intent_expression.jsonl")
@@ -97,6 +122,8 @@ def voice_alignment_config_from_section(
                     or ""
                 )
             ),
+            corpus_ceiling_gb=corpus_ceiling_gb,
+            preference_source=preference_source,
         )
     return voice_config
 
