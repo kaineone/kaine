@@ -301,7 +301,10 @@ native_wait_exec() {
   local i
   for i in $(seq 1 50); do
     if native_pid_is_ours "$svc" "$pid"; then return 0; fi
+    # A child that exited is gone or a zombie (kill -0 still succeeds on a
+    # zombie until it is reaped), and either way the service did not start.
     if ! kill -0 "$pid" 2>/dev/null; then return 1; fi
+    if [[ -r "/proc/$pid/stat" && "$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)" == "Z" ]]; then return 1; fi
     sleep 0.1
   done
   echo "==> kaine-${svc} (pid ${pid}) is running but has not identified itself yet" >&2

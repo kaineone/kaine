@@ -17,7 +17,7 @@ LIB = Path(__file__).resolve().parents[1] / "scripts" / "lib" / "native-services
 
 # The service name is assembled at run time so that the bash -c script text,
 # which is the child's command line until it execs, never contains it.
-_PRELUDE = f'source "{LIB}"; svc_name=redis-ser; svc_name="${{svc_name}}ver"; '
+_PRELUDE = f'LIB="{LIB}"; source "$LIB"; svc_name=redis-ser; svc_name="${{svc_name}}ver"; '
 
 
 def _bash(script: str) -> subprocess.CompletedProcess:
@@ -42,3 +42,33 @@ def test_wait_exec_waits_for_a_child_that_execs_late():
 def test_wait_exec_reports_a_child_that_died():
     r = _bash('( exit 0 ) & pid=$!; sleep 0.2; native_wait_exec redis "$pid"; echo "rc=$?"')
     assert "rc=1" in r.stdout, r.stdout + r.stderr
+
+
+
+def test_wait_exec_treats_an_unreaped_child_as_dead():
+    # A parent that never reaps leaves its exited child a zombie, and kill -0
+    # still succeeds on a zombie; the helper must call it dead.
+    import sys
+    import time
+
+    holder = subprocess.Popen(
+        [sys.executable, "-c",
+         "import os, sys, time\n"
+         "pid = os.fork()\n"
+         "if pid == 0:\n    os._exit(3)\n"
+         "print(pid, flush=True)\n"
+         "time.sleep(10)\n"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    try:
+        child = int(holder.stdout.readline())
+        for _ in range(50):
+            stat = Path(f"/proc/{child}/stat").read_text()
+            if stat.rsplit(")", 1)[1].split()[0] == "Z":
+                break
+            time.sleep(0.05)
+        r = _bash(f"native_wait_exec redis {child}; echo rc=$?")
+        assert "rc=1" in r.stdout, r.stdout + r.stderr
+    finally:
+        holder.kill()
+        holder.wait()
