@@ -355,7 +355,7 @@ def test_generation_messages_contains_required_parts():
         assert f"- {rule}" in user
     assert "- stop: wishes to stop" in user
     assert "- continue" in user
-    assert 'Write 3 different utterances whose correct answer is "stop".' in user
+    assert 'Write 6 different utterances whose correct answer is "stop".' in user
     assert "Style: Say it plainly and directly." in user
     assert 'Also write "context": the request the speaker is answering.' in user
     assert '- "I want to stop." -> stop (context: asked to choose)' in user
@@ -791,3 +791,40 @@ def test_assemble_refuses_without_gold_norms(tmp_path):
     rc = build_data.main(["assemble", "--work-root", str(work)])
     assert rc == 3
     assert not (work / "assembled").exists()
+
+
+def test_plan_trait_claim_targets_are_answer_keys_for_every_trait():
+    rng = random.Random(0)
+    jobs = synth.plan(["trait_claim"], 36, rng, near_miss_share=0.5)
+    q = schema_module.get_question("trait_claim")
+    keys = {o.key for o in q.options}
+    assert {j.target for j in jobs} == keys  # never a trait word
+    assert {j.trait for j in jobs} == set(schema_module.TRAITS)
+    assert sum(j.n for j in jobs) == 36
+    assert all(j.n <= 5 for j in jobs)
+
+
+def test_trait_claim_does_not_ask_the_generator_for_a_context():
+    q = schema_module.get_question("trait_claim")
+    msgs = synth.generation_messages(q, synth.Job("trait_claim", "calm", "claims", "plain", 2), q.seeds)
+    assert 'The trait is "calm".' in msgs[1]["content"]
+    assert '"context"' not in msgs[1]["content"]
+
+
+def test_run_jobs_keeps_at_most_the_job_quota(fake_llm_server, monkeypatch):
+    url, server_state = fake_llm_server
+    server_state["check_key"] = None
+    server_state["gen_items"] = [{"utterance": f"Distinct generated sentence number {i}."} for i in range(6)]
+    fake_q = schema_module.Question(
+        id="q_cap", type="choice", instructions="Q?", definition="D.",
+        options=(schema_module.Option("yes", None), schema_module.Option("no", None)),
+        context_label=None, seeds=(), welfare=False,
+    )
+    monkeypatch.setattr(schema_module, "get_question", lambda qid: fake_q)
+    endpoint = synth.Endpoint(url, api_key=None)
+    items, stats = synth.run_jobs(
+        endpoint, [synth.Job("q_cap", None, "yes", "plain", 2)],
+        master_seed=1, existing_norms=set(), label_check=True, concurrency=1,
+    )
+    assert len(items) == 2
+

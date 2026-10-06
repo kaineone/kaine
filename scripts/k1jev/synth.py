@@ -66,10 +66,13 @@ def plan(
 
     for qid in question_ids:
         question = schema.get_question(qid)
+        # A target is (trait, answer key). trait_claim spreads over every trait
+        # and every answer; other questions have no trait.
+        answer_keys = [opt.key for opt in question.options]
         if qid == "trait_claim":
-            targets = list(schema.TRAITS)
+            targets = [(trait, key) for trait in schema.TRAITS for key in answer_keys]
         else:
-            targets = [opt.key for opt in question.options]
+            targets = [(None, key) for key in answer_keys]
 
         t = len(targets)
         base = per_question // t
@@ -78,7 +81,7 @@ def plan(
         for i in rng.sample(range(t), remainder):
             per_target[i] += 1
 
-        for target, total in zip(targets, per_target):
+        for (trait, target), total in zip(targets, per_target):
             plain_count = int(total * (1.0 - near_miss_share))
             near_count = total - plain_count
             per_style = near_count // len(near_miss_styles)
@@ -95,16 +98,28 @@ def plan(
             for c, style in counts:
                 remaining = c
                 while remaining > 0:
-                    n = min(remaining, 10)
-                    trait = target if qid == "trait_claim" else None
+                    # At most 5 kept per job: run_jobs asks the model for
+                    # OVERGENERATE times as many, so drops do not leave holes.
+                    n = min(remaining, 5)
                     jobs.append(Job(qid, trait, target, style, n))
                     remaining -= n
 
     return jobs
 
 
+OVERGENERATE = 2
+
+
+def _ask_count(job: "Job") -> int:
+    """How many utterances a job asks the generator for: OVERGENERATE times the
+    number it keeps, because the style filter and label check drop some."""
+    return job.n * OVERGENERATE
+
+
 def _wants_context(question: schema.Question) -> bool:
-    return question.context_label in ("request", "reference event", "trait")
+    """Whether the generator must write a context. A trait is supplied, not
+    generated, so trait questions do not ask for one."""
+    return question.context_label in ("request", "reference event")
 
 
 def _option_line(opt: schema.Option) -> str:
@@ -132,7 +147,7 @@ def generation_messages(
         "Possible answers:\n" + "\n".join(_option_line(opt) for opt in question.options)
     )
     parts.append(
-        f'Write {job.n} different utterances whose correct answer is "{job.target}".'
+        f'Write {_ask_count(job)} different utterances whose correct answer is "{job.target}".'
     )
     parts.append(f"Style: {STYLE_TEXT[job.style]}")
 
@@ -164,7 +179,7 @@ def generation_messages(
     if wants_ctx:
         json_obj = '{"utterance": "...", "context": "..."}'
     parts.append(
-        f"Return a JSON array of {job.n} objects, each {json_obj}."
+        f"Return a JSON array of {_ask_count(job)} objects, each {json_obj}."
     )
 
     return [
@@ -436,6 +451,8 @@ def run_jobs(
         drops = {"style": 0, "duplicate": 0, "seed": 0, "other_split": 0, "label": 0}
 
         for parsed_item in parsed:
+            if len(local_items) >= job.n:
+                break  # the job's quota is met; extras were only headroom
             utterance = parsed_item["utterance"]
             norm = _normalise(utterance)
 

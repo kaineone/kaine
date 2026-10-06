@@ -119,7 +119,9 @@ def _default_labels_path() -> Path:
             git_common = (_REPO_ROOT / git_common).resolve()
     except (subprocess.CalledProcessError, FileNotFoundError):
         git_common = (_REPO_ROOT / ".git").resolve()
-    return git_common / "kaine-tools" / "k1jev" / "gold" / "labels.jsonl"
+    # The gold ITEMS file. The labelling page keeps the operator's labels in
+    # labels.jsonl beside it; the two must never be the same file.
+    return git_common / "kaine-tools" / "k1jev" / "gold" / "items.jsonl"
 
 
 def _normalise(text: str) -> str:
