@@ -151,8 +151,20 @@ REFUSAL_CUES: frozenset[str] = frozenset({
     "declining",
 })
 
-_WORD_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789'")
 _ALNUM_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def _is_word_char(text: str, index: int) -> bool:
+    ch = text[index]
+    if ch == "'":
+        return (
+            index > 0
+            and text[index - 1].isalpha()
+            and index + 1 < len(text)
+            and text[index + 1].isalpha()
+        )
+    return ch in _ALNUM_CHARS
+
 
 _QUOTE_TRANS = str.maketrans({
     "\u2018": "'",
@@ -191,7 +203,7 @@ def expand_contractions(text: str) -> str:
     ``i'll`` -> ``i will``; ``i've`` -> ``i have``.
     """
     _CONTRACTION_RE = re.compile(
-        r"(?<![a-z0-9'])(can't|won't|ain't|shan't|i'm|i'd|i'll|i've)(?![a-z0-9'])"
+        r"(?<![a-z0-9])(can't|won't|ain't|shan't|i'm|i'd|i'll|i've)(?![a-z0-9])"
     )
     _CONTRACTION_MAP = {
         "can't": "cannot",
@@ -203,9 +215,9 @@ def expand_contractions(text: str) -> str:
         "i'll": "i will",
         "i've": "i have",
     }
-    text = re.sub(r"(?<![a-z0-9'])can not(?![a-z0-9'])", "cannot", text)
+    text = re.sub(r"(?<![a-z0-9])can not(?![a-z0-9])", "cannot", text)
     text = _CONTRACTION_RE.sub(lambda m: _CONTRACTION_MAP[m.group(1)], text)
-    text = re.sub(r"(?<![a-z0-9'])([a-z]+)n't(?![a-z0-9'])", r"\1 not", text)
+    text = re.sub(r"(?<![a-z0-9])([a-z]+)n't(?![a-z0-9])", r"\1 not", text)
     return " ".join(text.split())
 
 
@@ -229,11 +241,11 @@ def split_sentences(text: str) -> list[str]:
 def _has_refusal_cue(sentence: str) -> bool:
     for cue in REFUSAL_CUES:
         for m in re.finditer(re.escape(cue), sentence):
-            before = sentence[m.start() - 1] if m.start() > 0 else None
-            after = sentence[m.end()] if m.end() < len(sentence) else None
+            before = m.start() - 1
+            after = m.end()
             if (
-                (before is None or before not in _WORD_CHARS)
-                and (after is None or after not in _WORD_CHARS)
+                (before < 0 or not _is_word_char(sentence, before))
+                and (after >= len(sentence) or not _is_word_char(sentence, after))
             ):
                 return True
     return False
@@ -253,11 +265,11 @@ def _frame_marker_counts(sentence: str, match: re.Match[str]) -> bool:
     remainder = sentence[match.end():]
     for cue in FRAME_NEGATION_CUES:
         for cm in re.finditer(re.escape(cue), remainder):
-            before = remainder[cm.start() - 1] if cm.start() > 0 else None
-            after = remainder[cm.end()] if cm.end() < len(remainder) else None
+            before = cm.start() - 1
+            after = cm.end()
             if (
-                (before is None or before not in _WORD_CHARS)
-                and (after is None or after not in _WORD_CHARS)
+                (before < 0 or not _is_word_char(remainder, before))
+                and (after >= len(remainder) or not _is_word_char(remainder, after))
             ):
                 return True
     return False
@@ -275,9 +287,81 @@ def _idiom_after_cannot(sentence_after: str) -> Optional[str]:
     for continuation in sorted(IDIOM_CONTINUATIONS, key=len, reverse=True):
         end = pos + len(continuation)
         if sentence_after.startswith(continuation, pos):
-            if end == len(sentence_after) or sentence_after[end] not in _WORD_CHARS:
+            if end == len(sentence_after) or not _is_word_char(sentence_after, end):
                 return continuation
     return None
+
+
+def _strip_in_character_quotes(text: str) -> str:
+    """Replace removable double-quoted spans with spaces.
+
+    Pairing is done per line. A line with an odd number of double quotes is left
+    untouched. A quoted span is kept when it makes up a whole sentence: the
+    text before it back to the previous sentence boundary contains no word
+    characters, and either the quoted text ends with sentence-ending
+    punctuation or the text after it up to the next sentence boundary contains
+    no word characters.
+    """
+    lines: list[str] = []
+    for line in text.split("\n"):
+        q_indices = [m.start() for m in re.finditer('"', line)]
+        if len(q_indices) % 2 != 0 or not q_indices:
+            lines.append(line)
+            continue
+
+        spans = [(q_indices[i], q_indices[i + 1]) for i in range(0, len(q_indices), 2)]
+
+        boundary_positions: list[int] = [-1, len(line)]
+        for m in re.finditer(r"[.!?]", line):
+            pos = m.start()
+            if not any(start < pos < end for start, end in spans):
+                boundary_positions.append(pos)
+        for start, end in spans:
+            quoted = line[start + 1 : end]
+            if quoted.rstrip().endswith((".", "!", "?")):
+                boundary_positions.append(end)
+        boundary_positions.sort()
+
+        def segment_has_word_char(segment_start: int, segment_end: int) -> bool:
+            for j in range(segment_start, segment_end):
+                if _is_word_char(line, j):
+                    return True
+            return False
+
+        keep_span: list[bool] = []
+        for start, end in spans:
+            prev_boundary = -1
+            for b in boundary_positions:
+                if b < start:
+                    prev_boundary = b
+                else:
+                    break
+            cond1 = not segment_has_word_char(prev_boundary + 1, start)
+
+            quoted = line[start + 1 : end]
+            cond2 = quoted.rstrip().endswith((".", "!", "?"))
+            if not cond2:
+                next_boundary = len(line)
+                for b in boundary_positions:
+                    if b > end:
+                        next_boundary = b
+                        break
+                cond2 = not segment_has_word_char(end + 1, next_boundary)
+
+            keep_span.append(cond1 and cond2)
+
+        segments: list[str] = []
+        last = 0
+        for idx, (start, end) in enumerate(spans):
+            segments.append(line[last:start])
+            if keep_span[idx]:
+                segments.append(line[start : end + 1])
+            else:
+                segments.append(" " * (end - start + 1))
+            last = end + 1
+        segments.append(line[last:])
+        lines.append("".join(segments))
+    return "\n".join(lines)
 
 
 def find_deflection(response: str, patterns, *, exclude_quoted: bool = False) -> Optional[str]:
@@ -302,7 +386,8 @@ def find_deflection(response: str, patterns, *, exclude_quoted: bool = False) ->
     if exclude_quoted:
         text = unicodedata.normalize("NFKC", response)
         text = text.translate(_QUOTE_TRANS)
-        text = re.sub(r'"[^"]*"', ' ', text)
+        text = text.casefold()
+        text = _strip_in_character_quotes(text)
         response = text
     sentences = split_sentences(response)
     for pattern in patterns:
@@ -318,11 +403,11 @@ def find_deflection(response: str, patterns, *, exclude_quoted: bool = False) ->
                 m = pattern_re.search(sentence, start)
                 if not m:
                     break
-                before = sentence[m.start() - 1] if m.start() > 0 else None
-                after = sentence[m.end()] if m.end() < len(sentence) else None
+                before = m.start() - 1
+                after = m.end()
                 if (
-                    (before is not None and before in _WORD_CHARS)
-                    or (after is not None and after in _WORD_CHARS)
+                    (before >= 0 and _is_word_char(sentence, before))
+                    or (after < len(sentence) and _is_word_char(sentence, after))
                 ):
                     start = m.end()
                     continue
