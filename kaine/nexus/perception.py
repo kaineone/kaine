@@ -150,7 +150,7 @@ def build_perception_router(
             return None
         url = f"http://127.0.0.1:{_preview_port()}{path}"
         try:
-            async with httpx.AsyncClient(timeout=_PREVIEW_PROXY_TIMEOUT_S) as client:
+            async with httpx.AsyncClient(timeout=_PREVIEW_PROXY_TIMEOUT_S, trust_env=False) as client:
                 return await client.get(url)
         except (httpx.HTTPError, OSError):
             # Cycle down / preview server not listening → honest "no preview".

@@ -131,7 +131,7 @@ def activate(adapter_path: Path, volume: Path) -> dict:
 async def _default_http_get(url: str, headers: dict[str, str]) -> tuple[int, Any]:
     import httpx
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
         resp = await client.get(url, headers=headers)
         try:
             data = resp.json()

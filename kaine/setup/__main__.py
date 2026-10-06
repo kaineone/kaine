@@ -61,7 +61,7 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
     # Model server (Unsloth Studio / llama.cpp): OpenAI-compatible
     # /v1/models -> {"data": [{"id": "..."}, ...]}.
     try:
-        resp = httpx.get(f"{DEFAULT_CHAT_URL}/models", timeout=timeout_s)
+        resp = httpx.get(f"{DEFAULT_CHAT_URL}/models", timeout=timeout_s, trust_env=False)
         if resp.status_code == 200:
             data = resp.json()
             result["served_models"] = [
@@ -77,7 +77,8 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
     # Chatterbox: /get_predefined_voices -> list or dict of voice ids
     try:
         resp = httpx.get(
-            "http://127.0.0.1:8883/get_predefined_voices", timeout=timeout_s
+            "http://127.0.0.1:8883/get_predefined_voices", timeout=timeout_s,
+            trust_env=False,
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -95,7 +96,7 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
 
     # Speaches: /v1/models -> {"data": [{"id": "..."}, ...]}
     try:
-        resp = httpx.get("http://127.0.0.1:8000/v1/models", timeout=timeout_s)
+        resp = httpx.get("http://127.0.0.1:8000/v1/models", timeout=timeout_s, trust_env=False)
         if resp.status_code == 200:
             data = resp.json()
             result["stt_models"] = [
