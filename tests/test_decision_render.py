@@ -91,3 +91,11 @@ def test_prompt_carries_both_message_closing_markers():
     assert "<|im_end|>\n<|im_start|>user\n" in prompt
     assert prompt.endswith("<|im_end|>\n<|im_start|>assistant\n")
 
+
+
+def test_prompt_text_is_never_html_escaped():
+    from kaine.decision.schema import get_question, state_text
+
+    prompt = render_prompt(state_text('She said "no" & <left>.'), get_question("declined"))
+    assert '\\"no\\" & <left>' in prompt  # JSON-escaped quotes, raw & and <
+    assert "&quot;" not in prompt and "&amp;" not in prompt and "&lt;" not in prompt

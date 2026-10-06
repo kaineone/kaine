@@ -19,7 +19,7 @@ from math import ceil
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from kaine.decision.schema import QUESTIONS, Option, get_question
+from kaine.decision.schema import QUESTIONS, get_question
 
 MAX_BODY = 4096
 
@@ -220,7 +220,6 @@ def _repeat_subset(item_ids: list[str], fraction: float) -> set[str]:
 def _print_report(items: list[dict], labels_path: Path, fraction: float) -> None:
     labels = _current_labels(labels_path)
     item_ids = [it["item_id"] for it in items]
-    repeat_ids = _repeat_subset(item_ids, fraction)
     counts = {q.id: 0 for q in QUESTIONS}
     unsure = 0
     for record in labels.values():
@@ -315,10 +314,8 @@ class LabelServer(HTTPServer):
         return None, progress
 
     def _move_to_end(self, queue: list[str], iid: str) -> None:
-        try:
+        if iid in queue:
             queue.remove(iid)
-        except ValueError:
-            pass
         queue.append(iid)
 
     def skip(self, iid: str) -> None:
@@ -585,7 +582,7 @@ def main(argv=None) -> int:
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        print("labelling page stopped", file=sys.stderr)
     finally:
         server.server_close()
     return 0

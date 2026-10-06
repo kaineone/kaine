@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import jinja2
+import jinja2.sandbox
 
 from kaine.decision.schema import Option, Question
 
@@ -20,9 +21,17 @@ _TEMPLATE: jinja2.Template | None = None
 def _get_template() -> jinja2.Template:
     global _TEMPLATE
     if _TEMPLATE is None:
-        env = jinja2.Environment(
+        # The template renders model prompts, not HTML: HTML-escaping would turn
+        # quotes in the state into entities and corrupt every prompt. Escaping
+        # is therefore on only for HTML/XML templates (never this one), and the
+        # sandbox keeps the template from reaching Python internals.
+        env = jinja2.sandbox.ImmutableSandboxedEnvironment(
             keep_trailing_newline=True,
-            autoescape=False,
+            autoescape=jinja2.select_autoescape(
+                enabled_extensions=("html", "htm", "xml"),
+                default_for_string=False,
+                default=False,
+            ),
             undefined=jinja2.StrictUndefined,
         )
         _TEMPLATE = env.from_string(TEMPLATE_PATH.read_text(encoding="utf-8"))
