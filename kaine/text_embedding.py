@@ -37,6 +37,7 @@ from typing import Any, Iterable, Protocol, runtime_checkable
 from kaine.embedding_defaults import DEFAULT_LATENT_DIM as DEFAULT_LATENT_DIM
 from kaine.embedding_defaults import DEFAULT_MODEL_ID as DEFAULT_MODEL_ID
 from kaine.embedding_defaults import canonical_model_id
+from kaine.residency.inflight import InflightGate
 
 log = logging.getLogger(__name__)
 
@@ -114,8 +115,7 @@ class SentenceTransformerTextEmbedder:
         self._model: Any = None
         self._latent_dim: int | None = None
         self._load_lock: asyncio.Lock | None = None
-        self._idle: asyncio.Event | None = None
-        self._inflight = 0
+        self._gate = InflightGate()
 
     @property
     def loaded(self) -> bool:
@@ -154,8 +154,6 @@ class SentenceTransformerTextEmbedder:
     def _ensure_lock(self) -> None:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
 
     async def ensure_loaded(self) -> None:
         """Load the underlying model (idempotent, serialised)."""
@@ -203,20 +201,14 @@ class SentenceTransformerTextEmbedder:
             if not self.loaded:
                 await self._load_locked()
             model = self._model
-            self._inflight += 1
-            self._idle.clear()
+            ticket = self._gate.admit()
 
-        try:
-            def _encode_sync() -> list[float]:
-                assert model is not None
-                vec = model.encode(text, convert_to_numpy=True, show_progress_bar=False)
-                return [float(x) for x in vec.tolist()]
+        def _encode_sync() -> list[float]:
+            assert model is not None
+            vec = model.encode(text, convert_to_numpy=True, show_progress_bar=False)
+            return [float(x) for x in vec.tolist()]
 
-            return await asyncio.to_thread(_encode_sync)
-        finally:
-            self._inflight -= 1
-            if self._inflight == 0:
-                self._idle.set()
+        return await self._gate.run(ticket, None, _encode_sync)
 
     async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
         items = list(texts)
@@ -226,20 +218,14 @@ class SentenceTransformerTextEmbedder:
             if not self.loaded:
                 await self._load_locked()
             model = self._model
-            self._inflight += 1
-            self._idle.clear()
+            ticket = self._gate.admit()
 
-        try:
-            def _encode_sync() -> list[list[float]]:
-                assert model is not None
-                arr = model.encode(items, convert_to_numpy=True, show_progress_bar=False)
-                return [[float(x) for x in row.tolist()] for row in arr]
+        def _encode_sync() -> list[list[float]]:
+            assert model is not None
+            arr = model.encode(items, convert_to_numpy=True, show_progress_bar=False)
+            return [[float(x) for x in row.tolist()] for row in arr]
 
-            return await asyncio.to_thread(_encode_sync)
-        finally:
-            self._inflight -= 1
-            if self._inflight == 0:
-                self._idle.set()
+        return await self._gate.run(ticket, None, _encode_sync)
 
     async def embed(self, text: str) -> list[float]:
         """Alias of :meth:`encode` for the lightweight ``TextEmbedder`` callers."""
@@ -251,7 +237,7 @@ class SentenceTransformerTextEmbedder:
         async with self._load_lock:
             if not self.loaded:
                 return
-            await self._idle.wait()
+            await self._gate.wait_idle()
             self._model = None
         await asyncio.to_thread(gc.collect)
         if self._device.startswith("cuda"):

@@ -30,6 +30,7 @@ from kaine.embedding_defaults import (
     DEFAULT_MODEL_ID,
     canonical_model_id,
 )
+from kaine.residency.inflight import InflightGate
 
 log = logging.getLogger(__name__)
 
@@ -752,8 +753,7 @@ class NumpyMiniLMEmbedder:
         self._loaded = False
         self._latent_dim = DEFAULT_LATENT_DIM
         self._load_lock: asyncio.Lock | None = None
-        self._idle: asyncio.Event | None = None
-        self._inflight = 0
+        self._gate = InflightGate()
         self._residency: dict[str, int] = {}
 
         try:
@@ -796,8 +796,6 @@ class NumpyMiniLMEmbedder:
     def _ensure_lock(self) -> None:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
 
     async def ensure_loaded(self) -> None:
         """Load model weights, config and tokenizer (idempotent, serialised)."""
@@ -929,18 +927,11 @@ class NumpyMiniLMEmbedder:
             weights = self._weights
             config = self._config
             tokenizer = self._tokenizer
-            self._inflight += 1
-            self._idle.clear()
+            ticket = self._gate.admit()
 
-        loop = asyncio.get_running_loop()
-        try:
-            return await loop.run_in_executor(
-                None, self._encode_sync, weights, config, tokenizer, items
-            )
-        finally:
-            self._inflight -= 1
-            if self._inflight == 0:
-                self._idle.set()
+        return await self._gate.run(
+            ticket, None, self._encode_sync, weights, config, tokenizer, items
+        )
 
     @staticmethod
     def _encode_sync(
@@ -978,7 +969,7 @@ class NumpyMiniLMEmbedder:
         async with self._load_lock:
             if not self._loaded:
                 return
-            await self._idle.wait()
+            await self._gate.wait_idle()
             self._loaded = False
             self._weights = None
             self._config = None
