@@ -281,6 +281,12 @@ def _normalise_model_tokens(tokens: list[str]) -> list[str]:
         if tok == "--sleep-idle-seconds" and i + 1 < len(tokens):
             out.extend([tok, "<sleep>"])
             i += 2
+        elif tok == "-ngl" and i + 1 < len(tokens):
+            out.extend([tok, "<ngl>"])
+            i += 2
+        elif tok == "--cache-ram" and i + 1 < len(tokens):
+            out.extend([tok, "<cache-ram>"])
+            i += 2
         else:
             out.append(tok)
             i += 1

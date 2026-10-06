@@ -7,28 +7,34 @@ After=kaine-redis.service
 
 [Container]
 ContainerName=kaine-model-server
-Image=ghcr.io/ggml-org/llama.cpp:server-cuda
+# llama.cpp build b11382 pinned by digest; bumps change this file, compose/kaine*.yml and the trainer converter together.
+Image=ghcr.io/ggml-org/llama.cpp@sha256:ef08b5a98b1170f2b62177be0a4027c88a84043c55afbf190dd18b9e7cdcfebf
 Network=kaine.network
 PublishPort=127.0.0.1:11434:8080
 Volume=kaine-models.volume:/models:ro
 # Rootless NVIDIA via CDI — requires `nvidia-ctk cdi generate` (see README).
 AddDevice=nvidia.com/gpu=0
 SecurityLabelDisable=true
-# The idle-unload timeout is resolved inside the container by a small sh wrapper,
-# because a unit cannot default an EMPTY variable: KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS
-# from compose/.env, 600 when it is unset or empty, -1 keeps the organ loaded,
-# and a refusal to start on anything that is not an integer of -1 or more. `$$`
-# is a literal `$` for the container shell (systemd would otherwise expand it).
+# The idle-unload timeout, GPU layer count and cache size are resolved inside the
+# container by a small sh wrapper, because a unit cannot default an EMPTY variable:
+# KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS from compose/.env, 600 when it is unset or
+# empty, -1 keeps the organ loaded, and a refusal to start on anything that is not
+# an integer of -1 or more. KAINE_MODEL_SERVER_NGL defaults to 999 and
+# KAINE_MODEL_SERVER_CACHE_RAM_MIB defaults to 1024, both refusing to start on a
+# non-integer. `$$` is a literal `$` for the container shell (systemd would
+# otherwise expand it).
 PodmanArgs=--entrypoint=/bin/sh
 Environment=KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS=${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS}
-Exec=-c 's="$${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}"; if ! echo "$$s" | grep -Eqx -- "-1|[0-9]+"; then echo "KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS must be an integer of -1 or more" >&2; exit 64; fi; exec /app/llama-server --model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds "$$s"'
+Environment=KAINE_MODEL_SERVER_NGL=${KAINE_MODEL_SERVER_NGL}
+Environment=KAINE_MODEL_SERVER_CACHE_RAM_MIB=${KAINE_MODEL_SERVER_CACHE_RAM_MIB}
+Exec=-c 's="$${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}"; if ! echo "$$s" | grep -Eqx -- "-1|[0-9]+"; then echo "KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS must be an integer of -1 or more" >&2; exit 64; fi; n="$${KAINE_MODEL_SERVER_NGL:-999}"; if ! echo "$$n" | grep -Eqx -- "[0-9]+"; then echo "KAINE_MODEL_SERVER_NGL must be a non-negative integer" >&2; exit 64; fi; c="$${KAINE_MODEL_SERVER_CACHE_RAM_MIB:-1024}"; if ! echo "$$c" | grep -Eqx -- "[0-9]+"; then echo "KAINE_MODEL_SERVER_CACHE_RAM_MIB must be a non-negative integer" >&2; exit 64; fi; exec /app/llama-server --model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds "$$s" --fit off -ngl "$$n" --cache-ram "$$c" -ctk f16 -ctv f16'
 HealthCmd=curl -fsS http://127.0.0.1:8080/health
 HealthInterval=15s
 HealthRetries=10
 
 [Service]
-# Settings for ${...} expansion (KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS);
-# maintained by the bootstrap scripts (mode 0600).
+# Settings for ${...} expansion (KAINE_MODEL_SERVER_*); maintained by the
+# bootstrap scripts (mode 0600).
 EnvironmentFile=@KAINE_ROOT@/compose/.env
 Restart=always
 
