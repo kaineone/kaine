@@ -9,7 +9,6 @@ from kaine.cycle.individuation_producer import _condition_changes
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 from tests.test_individuation_producer_core import FakeConditioning, make_core
 
-
 BASE_CONDITIONS = {
     "model_id": "model-a",
     "temperature": 0.5,
