@@ -28,7 +28,7 @@ from kaine.lifecycle.identity import (
     resolve_spawn_identity,
     write_identity_sidecar,
 )
-from kaine.storage import set_data_root
+from kaine.storage import data_root, set_data_root
 
 
 def _manifest(identity: EntityIdentity) -> dict[str, object]:
@@ -44,9 +44,7 @@ def _manifest(identity: EntityIdentity) -> dict[str, object]:
 def _data_root(root: Path) -> Iterator[None]:
     """Temporarily install ``root`` as the process data root, restoring the
     previous root afterwards so no other test inherits it."""
-    import kaine.storage as s
-
-    previous = s._PROCESS_ROOT
+    previous = data_root()
     set_data_root(root)
     try:
         yield
