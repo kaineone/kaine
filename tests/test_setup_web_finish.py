@@ -11,12 +11,24 @@ import inspect
 import re
 from types import SimpleNamespace
 
+import pytest
 from starlette.testclient import TestClient
 
 from kaine import secrets_file
 from kaine.net import SERVICE_PORTS
+from kaine.setup.web import guard
 from kaine.setup.wizard import ACK_PHRASE
 from tests.test_setup_web import _defaults_from_form, _mk_app
+
+
+@pytest.fixture(autouse=True)
+def _isolated_guard(monkeypatch):
+    """Saving goes through the running-entity guard; never probe the host."""
+    monkeypatch.setattr(guard, "load_bus_config", lambda *a, **k: object())
+    monkeypatch.setattr(guard, "cycle_on_bus", lambda *a, **k: (False, "stub"))
+    monkeypatch.setattr(
+        guard, "cycle_process_details", lambda *a, **k: (False, None, None)
+    )
 
 
 @contextlib.contextmanager
