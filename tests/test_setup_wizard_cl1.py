@@ -16,9 +16,9 @@ from kaine.setup import tomlwriter
 from kaine.setup.wizard import (
     ACK_PHRASE,
     MODULE_ORDER,
-    _cl1_substrate_step,
     run_wizard,
 )
+from kaine.setup.wizard_core import _cl1_substrate_step
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SHIPPED = REPO_ROOT / "config" / "kaine.toml"

@@ -25,25 +25,32 @@ from kaine.setup.hardware_steps import (
     shared_services_step,
 )
 from kaine.setup.steps import StepContext, run_step
-from kaine.setup.wizard_core import (  # noqa: F401  (re-exported)
+from kaine.setup.wizard_core import (
     ACK_PHRASE,
     CAL_ARTICLE_4_SUMMARY,
     FULL_ENTITY_MODULES,
     MODULE_ORDER,
     WizardResult,
-    _accel_mismatch_step,
-    _apply_device_address,
-    _ask,
-    _ask_yes_no,
-    _cl1_substrate_step,
-    _set,
-    _set_nested,
-    _trainer_provisioning_step,
     base_thesis_modules,
     implied_extras,
     propose_device_assignments,
     recommend_preset,
 )
+
+# Re-exported from wizard_core so existing imports of these names keep working.
+__all__ = [
+    "ACK_PHRASE",
+    "CAL_ARTICLE_4_SUMMARY",
+    "FULL_ENTITY_MODULES",
+    "MODULE_ORDER",
+    "WizardResult",
+    "base_thesis_modules",
+    "implied_extras",
+    "propose_device_assignments",
+    "recommend_preset",
+    "run_wizard",
+]
+
 from kaine.setup.wizard_steps import (
     accel_mismatch_step,
     ack_step,
