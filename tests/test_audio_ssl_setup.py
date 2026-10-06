@@ -40,10 +40,10 @@ def test_no_consent_runs_nothing(tmp_path, monkeypatch):
     assert not (tmp_path / "REVISION").exists()
 
 
-def test_successful_download_writes_revision(tmp_path, monkeypatch):
-    monkeypatch.setattr("kaine.setup.audio_ssl.shutil.which", lambda _bin: "/bin/hf")
-
+def _fake_runner_writing(tmp_path, content: bytes):
     def fake_runner(cmd, **kwargs):
+        (tmp_path / "model.safetensors").write_bytes(content)
+
         class R:
             returncode = 0
             stdout = ""
@@ -51,11 +51,34 @@ def test_successful_download_writes_revision(tmp_path, monkeypatch):
 
         return R()
 
-    ok, msg = run_audio_ssl_download(
-        "dasheng", consent=True, runner=fake_runner, local_dir=tmp_path
+    return fake_runner
+
+
+def test_successful_download_writes_revision(tmp_path, monkeypatch):
+    import hashlib
+
+    monkeypatch.setattr("kaine.setup.audio_ssl.shutil.which", lambda _bin: "/bin/hf")
+    content = b"pinned weights"
+    from kaine.modules.audition import ssl_encoders
+
+    monkeypatch.setitem(
+        ssl_encoders.WEIGHTS_SHA256, "dasheng", hashlib.sha256(content).hexdigest()
     )
-    assert ok is True
+    ok, msg = run_audio_ssl_download(
+        "dasheng", consent=True, runner=_fake_runner_writing(tmp_path, content), local_dir=tmp_path
+    )
+    assert ok is True, msg
     assert (tmp_path / "REVISION").read_text() == PINS["dasheng"][1]
+
+
+def test_download_with_the_wrong_hash_records_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr("kaine.setup.audio_ssl.shutil.which", lambda _bin: "/bin/hf")
+    ok, msg = run_audio_ssl_download(
+        "dasheng", consent=True, runner=_fake_runner_writing(tmp_path, b"tampered"), local_dir=tmp_path
+    )
+    assert ok is False
+    assert "sha256" in msg
+    assert not (tmp_path / "REVISION").exists()
 
 
 def test_failed_download_writes_no_revision(tmp_path, monkeypatch):

@@ -46,6 +46,56 @@ PINS: dict[str, tuple[str, str, str]] = {
 }
 
 
+# sha256 of each pinned model.safetensors, recorded when the pinned revision
+# was fetched. A REVISION file alone is only a label; the hash is the check.
+WEIGHTS_SHA256: dict[str, str] = {
+    "dasheng": "adaa439ebec13933501242364a29b7912c2695d0354061b278c873438b2736c3",
+    "wavjepa": "988546976c453353c14ebb0798f275ea5eb95270d75eed506ea455c5b49f6be0",
+}
+
+
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def verify_weights(name: str, weights_dir: Path) -> Path:
+    """Check a weights directory against its pins and return the weights path.
+
+    Fails closed: the weights file and its ``REVISION`` file must both exist,
+    ``REVISION`` must name the pinned commit, and the file's sha256 must equal
+    the pinned hash. Raises ``FileNotFoundError`` or ``ValueError`` otherwise.
+    """
+    _repo, revision, _dir = PINS[name]
+    weights_path = weights_dir / _WEIGHTS_FILENAME
+    if not weights_path.exists():
+        raise FileNotFoundError(
+            f"{weights_path} missing; fetch with: python -m kaine.setup.audio_ssl {name} --yes"
+        )
+    revision_path = weights_dir / _REVISION_FILENAME
+    if not revision_path.exists():
+        raise ValueError(
+            f"{revision_path} missing: the weights cannot be tied to the pinned revision; "
+            f"re-fetch with: python -m kaine.setup.audio_ssl {name} --yes"
+        )
+    recorded = revision_path.read_text().strip()
+    if recorded != revision:
+        raise ValueError(
+            f"{revision_path} recorded revision {recorded!r} does not match pinned {revision!r}"
+        )
+    actual = _sha256_file(weights_path)
+    if actual != WEIGHTS_SHA256[name]:
+        raise ValueError(
+            f"{weights_path} sha256 {actual} does not match the pinned {WEIGHTS_SHA256[name]}"
+        )
+    return weights_path
+
+
 def _vendored_external_root() -> Path:
     """Absolute path to the vendored ``external/`` package root."""
     return Path(__file__).resolve().parents[3] / "external"
@@ -123,22 +173,7 @@ class _SelfSupervisedAcousticEncoder:
                 if self._weights_dir is not None
                 else self._default_weights_dir()
             )
-            weights_path = weights_dir / _WEIGHTS_FILENAME
-
-            if not weights_path.exists():
-                raise FileNotFoundError(
-                    f"{weights_path} missing; fetch with: "
-                    f"python -m kaine.setup.audio_ssl {self._kind} --yes"
-                )
-
-            revision_path = weights_dir / _REVISION_FILENAME
-            if revision_path.exists():
-                recorded = revision_path.read_text().strip()
-                if recorded != self._pinned_revision:
-                    raise ValueError(
-                        f"{revision_path} recorded revision {recorded!r} "
-                        f"does not match pinned {self._pinned_revision!r}"
-                    )
+            weights_path = verify_weights(self._kind, weights_dir)
 
             self._build(weights_path)
             # Zero-persistence: once weights are loaded, do not keep the path.

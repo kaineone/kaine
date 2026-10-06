@@ -443,3 +443,25 @@ def test_factory_passes_the_resolved_device_to_the_encoder(monkeypatch):
     factory_mod.make_audition(None, section)
     assert seen == ["cuda:1"]
     assert captured == {"name": "dasheng", "device": "cuda:7"}
+
+
+def test_weights_without_revision_or_with_wrong_hash_are_refused(tmp_path, monkeypatch):
+    """Fail closed: a weights file with no REVISION, or whose sha256 is not
+    the pinned one, is never loaded."""
+    import hashlib
+
+    from kaine.modules.audition import ssl_encoders
+    from kaine.modules.audition.ssl_encoders import PINS, verify_weights
+
+    (tmp_path / "model.safetensors").write_bytes(b"weights")
+    with pytest.raises(ValueError, match="REVISION"):
+        verify_weights("dasheng", tmp_path)
+
+    (tmp_path / "REVISION").write_text(PINS["dasheng"][1])
+    with pytest.raises(ValueError, match="sha256"):
+        verify_weights("dasheng", tmp_path)
+
+    monkeypatch.setitem(
+        ssl_encoders.WEIGHTS_SHA256, "dasheng", hashlib.sha256(b"weights").hexdigest()
+    )
+    assert verify_weights("dasheng", tmp_path) == tmp_path / "model.safetensors"

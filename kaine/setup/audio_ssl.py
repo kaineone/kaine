@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.model_paths import models_dir
-from kaine.modules.audition.ssl_encoders import PINS
+from kaine.modules.audition.ssl_encoders import PINS, WEIGHTS_SHA256, _sha256_file
 from kaine.storage import resolve
 
 WEIGHTS_FILENAME = "model.safetensors"
@@ -84,6 +84,16 @@ def run_audio_ssl_download(
 
     target_dir = _resolve_dir(name, local_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
+    weights = target_dir / WEIGHTS_FILENAME
+    if not weights.exists():
+        return False, f"download reported success but {weights} is missing"
+    actual = _sha256_file(weights)
+    if actual != WEIGHTS_SHA256[name]:
+        # Leave no REVISION behind: the encoder refuses weights without one.
+        return False, (
+            f"{weights} sha256 {actual} does not match the pinned "
+            f"{WEIGHTS_SHA256[name]}; not recording it"
+        )
     (target_dir / "REVISION").write_text(PINS[name][1])
     return True, f"downloaded {WEIGHTS_FILENAME} for {name} (revision {PINS[name][1][:12]})"
 
