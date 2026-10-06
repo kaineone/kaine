@@ -2207,6 +2207,10 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
         ctx._caretaker_tasks.add(task)
         task.add_done_callback(ctx._caretaker_tasks.discard)
 
+    # One unfrozen clock shared by every welfare timer in this process.
+    from kaine.cycle.unfrozen_clock import UnfrozenClock
+    ctx.unfrozen_clock = UnfrozenClock.for_welfare()
+
     if ctx.preservation_cfg.welfare_response.enabled:
         ctx.welfare_monitor = WelfareProtectiveMonitor(
             registry=ctx.registry,
@@ -2221,6 +2225,7 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             on_end=lambda: ctx.stop_event.set(),
             require_encryption=ctx.preservation_cfg.require_encryption,
             on_response=_on_welfare_response,
+            unfrozen_clock=ctx.unfrozen_clock,
         )
 
 
@@ -2360,6 +2365,7 @@ async def _phase_caretaker(ctx: BootContext) -> int | None:
                     streams,
                     threshold_s=threshold_s,
                     on_loss=lambda: ctx.caretaker.send_event("input_lost"),
+                    unfrozen_clock=ctx.unfrozen_clock,
                 ).run(ctx.stop_event),
                 name="cycle.input_watch",
             )

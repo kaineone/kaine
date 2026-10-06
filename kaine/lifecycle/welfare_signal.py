@@ -34,6 +34,12 @@ class SustainedThresholdTracker:
     The timer also resets the instant the magnitude drops below the threshold,
     so a transient spike that dips back down never accumulates to a fire.
 
+    The elapsed duration of an episode is measured as the wall time from its
+    onset to the last at/above-threshold sample, plus the unfrozen time since
+    that last sample. A sample is evidence the state persisted: while samples
+    keep arriving (even during a freeze) the elapsed duration tracks wall time;
+    once they stop, frozen time stops counting.
+
     The caller supplies the clock (``now``) on every ``observe`` call, so the
     tracker introduces no nondeterminism of its own.
     """
@@ -41,9 +47,16 @@ class SustainedThresholdTracker:
     def __init__(self, *, threshold: float, duration_s: float) -> None:
         self.threshold = float(threshold)
         self.duration_s = float(duration_s)
-        # Wall/monotonic time when the magnitude first crossed the threshold
-        # (None = currently below threshold).
+        # Unfrozen time when the current episode began (None = below threshold).
         self._since: float | None = None
+        # Wall time when the current episode began.
+        self._since_wall: float | None = None
+        # Unfrozen time of the most recent at/above-threshold sample.
+        self._last_sample: float | None = None
+        # Wall time of the most recent at/above-threshold sample.
+        self._last_sample_wall: float | None = None
+        # Elapsed duration at the moment of the last fire (sample or timeout).
+        self.last_fire_elapsed: float = 0.0
 
     @property
     def active_since(self) -> float | None:
@@ -52,22 +65,46 @@ class SustainedThresholdTracker:
 
     def reset(self) -> None:
         self._since = None
+        self._since_wall = None
+        self._last_sample = None
+        self._last_sample_wall = None
 
-    def observe(self, magnitude: float, now: float) -> bool:
+    def elapsed(self, now: float) -> float:
+        """Unfrozen-aware elapsed duration for the current episode."""
+        if self._since is None:
+            return 0.0
+        if self._last_sample_wall is None or self._last_sample is None:
+            return now - self._since
+        return (self._last_sample_wall - self._since_wall) + (now - self._last_sample)
+
+    def observe(self, magnitude: float, now: float, *, wall_now: float | None = None) -> bool:
         """Feed one sample. Return True on a rising-edge sustained crossing.
 
         ``True`` is returned at most once per sustained episode (the timer is
         cleared on fire). A magnitude below the threshold resets the timer.
+
+        ``now`` is the unfrozen time. ``wall_now`` defaults to ``now`` so
+        callers that pass one clock behave exactly as before.
         """
+        if wall_now is None:
+            wall_now = now
+        now = float(now)
+        wall_now = float(wall_now)
         if float(magnitude) >= self.threshold:
             if self._since is None:
                 self._since = now
-            elif (now - self._since) >= self.duration_s:
+                self._since_wall = wall_now
+            # Every sample is evidence the state persisted up to this wall time.
+            self._last_sample = now
+            self._last_sample_wall = wall_now
+            elapsed = self.elapsed(now)
+            if elapsed >= self.duration_s:
                 # Sustained long enough — fire once and clear for the next episode.
-                self._since = None
+                self.last_fire_elapsed = elapsed
+                self.reset()
                 return True
         else:
-            self._since = None
+            self.reset()
         return False
 
     def check_timeout(self, now: float) -> bool:
@@ -78,9 +115,12 @@ class SustainedThresholdTracker:
         even when no further samples arrive while the magnitude stays high. Fires
         once per episode (clears the timer), exactly like :meth:`observe`.
         """
-        if self._since is not None and (now - self._since) >= self.duration_s:
-            self._since = None
-            return True
+        if self._since is not None:
+            elapsed = self.elapsed(now)
+            if elapsed >= self.duration_s:
+                self.last_fire_elapsed = elapsed
+                self.reset()
+                return True
         return False
 
 
