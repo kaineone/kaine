@@ -559,6 +559,15 @@ def create_setup_app(
         if step is None:
             return RedirectResponse(request.url_for("review"), status_code=303)
         form = await _read_form(request)
+        posted_step_id = form.get("_step_id")
+        if isinstance(posted_step_id, list):
+            posted_step_id = posted_step_id[-1] if posted_step_id else None
+        if posted_step_id != step.id:
+            return PlainTextResponse(
+                "this form is for a different step; reload the page",
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
         is_helper = step.id in _HELPER_STEP_IDS
         if is_helper:
             fields = _helper_fields(step.id)
@@ -571,8 +580,16 @@ def create_setup_app(
 
         if step.id == "welfare-acknowledgement":
             if answers.get("ack") != ACK_PHRASE:
-                return RedirectResponse(
-                    request.url_for("abort"), status_code=303
+                request.app.state.finish_shutdown = True
+                return templates.TemplateResponse(
+                    request,
+                    "done.html",
+                    {
+                        "abort": True,
+                        "message": (
+                            "Acknowledgement not given; aborting. No configuration was written."
+                        ),
+                    },
                 )
             sess["acknowledged"] = True
             _run_probes(state, sess)
@@ -644,12 +661,15 @@ def create_setup_app(
         if forbidden is not None:
             return forbidden
 
-        if guard.cycle_running(state.state_root):
-            return PlainTextResponse(
+        running, reason = guard.cycle_running_with_reason(state.state_root)
+        if running:
+            message = (
                 "A KAINE cycle is currently running; configuration cannot be "
-                "changed while it is active.",
-                status_code=409,
+                "changed while it is active."
             )
+            if reason:
+                message += f" ({reason})"
+            return PlainTextResponse(message, status_code=409)
 
         try:
             merged = tomlwriter.merge_owned(
@@ -687,7 +707,7 @@ def create_setup_app(
             },
         )
 
-    @app.get("/abort", response_class=HTMLResponse, name="abort")
+    @app.post("/abort", response_class=HTMLResponse, name="abort")
     async def abort_(request: Request):
         request.app.state.finish_shutdown = True
         return templates.TemplateResponse(

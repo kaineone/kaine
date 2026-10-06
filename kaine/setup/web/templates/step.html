@@ -19,11 +19,13 @@
     {% endif %}
   {% endif %}
   <form method="post" action="{{ request.url_for('step_post') }}" data-step-id="{{ step.id }}">
+    <input type="hidden" name="_step_id" value="{{ step.id }}">
     {% if fields %}
     <fieldset class="setup-fieldset">
       {% for f in fields %}
       <div class="setup-field setup-field--{{ f.kind }}">
         {% if f.kind == "bool" %}
+          <input type="hidden" name="{{ f.name }}" value="false">
           <input type="checkbox" id="field-{{ f.name }}" name="{{ f.name }}" value="true"
             {% if values.get(f.name, f.default) %}checked{% endif %}>
           <label for="field-{{ f.name }}">{{ f.prompt }}</label>

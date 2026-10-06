@@ -4,6 +4,7 @@
 """Tests for the browser first-run setup server (slice 2)."""
 from __future__ import annotations
 
+import copy
 import os
 import re
 import threading
@@ -218,8 +219,104 @@ def test_state_changing_requires_origin(tmp_path):
     )
     assert r3.status_code == 403
 
-    # Valid Origin.
+    # Valid Origin: include the current step id so the POST is accepted.
+    r_step = client.get(
+        "/step",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r_step.status_code == 200
+    m = re.search(r'data-step-id="([^"]+)"', r_step.text)
+    assert m
+    step_id = m.group(1)
     r4 = client.post(
+        "/step",
+        data={"_step_id": step_id},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        },
+        follow_redirects=False,
+    )
+    assert r4.status_code in (302, 303)
+
+
+def test_post_wrong_step_id_returns_409_and_leaves_session(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    r, _token = _exchange_token(client, app)
+    assert r.status_code in (302, 303)
+
+    r_orient = client.get(
+        "/step",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r_orient.status_code == 200
+    m = re.search(r'data-step-id="([^"]+)"', r_orient.text)
+    assert m
+    orientation_id = m.group(1)
+
+    r2 = client.post(
+        "/step",
+        data={"_step_id": orientation_id},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        },
+        follow_redirects=False,
+    )
+    assert r2.status_code in (302, 303)
+
+    r3 = client.get(
+        "/step",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r3.status_code == 200
+    m = re.search(r'data-step-id="([^"]+)"', r3.text)
+    assert m
+    current_id = m.group(1)
+    # A double-submit of the orientation form arrives while a later step is shown.
+    assert current_id != orientation_id
+    sid = client.cookies["setup_session"]
+    sess = app.state.setup.store.sessions[sid]
+    before_index = sess["step_index"]
+    before_config = copy.deepcopy(sess["config"])
+
+    r4 = client.post(
+        "/step",
+        data={"_step_id": orientation_id},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        },
+        follow_redirects=False,
+    )
+    assert r4.status_code == 409
+    assert "different step" in r4.text.lower()
+    assert "no-store" in r4.headers.get("cache-control", "")
+    assert sess["step_index"] == before_index
+    assert sess["config"] == before_config
+
+
+def test_post_missing_step_id_returns_409(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    r, _token = _exchange_token(client, app)
+    assert r.status_code in (302, 303)
+
+    r = client.get(
+        "/step",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    sid = client.cookies["setup_session"]
+    sess = app.state.setup.store.sessions[sid]
+    before_index = sess["step_index"]
+
+    r2 = client.post(
         "/step",
         data={},
         headers={
@@ -228,7 +325,94 @@ def test_state_changing_requires_origin(tmp_path):
         },
         follow_redirects=False,
     )
-    assert r4.status_code in (302, 303)
+    assert r2.status_code == 409
+    assert sess["step_index"] == before_index
+
+
+def test_absent_boolean_field_uses_default(tmp_path):
+    def probe_trainer(configured, backend):
+        return (True, "/fake/trainer/python3:3.12")
+
+    host = describe_host()
+    host["accelerators"] = [{"type": "cuda", "model": "Fake GPU"}]
+    host["cuda"] = True
+    host["gpu"] = True
+    host["backend"] = "cuda"
+
+    app = _mk_app(tmp_path, host=host, probe_trainer=probe_trainer)
+    client = _session_client(app)
+    _exchange_token(client, app)
+
+    for _ in range(200):
+        r = client.get(
+            "/step",
+            headers={"Host": "127.0.0.1:8000"},
+            follow_redirects=False,
+        )
+        if r.status_code in (302, 303):
+            if "/review" in r.headers.get("location", ""):
+                break
+            continue
+        assert r.status_code == 200
+        m = re.search(r'data-step-id="([^"]+)"', r.text)
+        assert m
+        step_id = m.group(1)
+
+        data = _defaults_from_form(r.text, step_id)
+        data["_step_id"] = step_id
+        if step_id == "welfare-acknowledgement":
+            data["ack"] = ACK_PHRASE
+        if step_id == "module-preset":
+            data["preset"] = "b"
+        if step_id == "trainer-provisioning":
+            data["set_up_trainer"] = "yes"
+            data.pop("record_trainer", None)
+        r2 = client.post(
+            "/step",
+            data=data,
+            headers={
+                "Host": "127.0.0.1:8000",
+                "Origin": "http://127.0.0.1:8000",
+            },
+            follow_redirects=False,
+        )
+        assert r2.status_code in (302, 303), r2.text
+        if r2.status_code in (302, 303):
+            loc = r2.headers.get("location", "")
+            if "/review" in loc or "/abort" in loc:
+                break
+    else:
+        raise AssertionError("web driver did not reach review/abort")
+
+    sid = client.cookies["setup_session"]
+    config = app.state.setup.store.sessions[sid]["config"]
+    assert (
+        config.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python")
+        == "/fake/trainer/python3"
+    )
+
+
+def test_boolean_field_values_from_the_form():
+    """Absent means the field's default; the hidden companion alone means an
+    unchecked box (false); companion plus checkbox means ticked (true)."""
+    from kaine.setup.steps import Field
+    from kaine.setup.web.driver import form_value
+
+    on_by_default = Field("enabled", "enable?", "bool", default=True)
+    off_by_default = Field("opt_in", "opt in?", "bool", default=False)
+    assert form_value({}, on_by_default) == "true"
+    assert form_value({}, off_by_default) == "false"
+    assert form_value({"enabled": ["false"]}, on_by_default) == "false"
+    assert form_value({"opt_in": ["false", "true"]}, off_by_default) == "true"
+
+
+def test_absent_choice_field_uses_its_default():
+    from kaine.setup.steps import Field
+    from kaine.setup.web.driver import form_value
+
+    field = Field("record_trainer", "record?", "choice", default="yes", choices=("yes", "no"))
+    assert form_value({}, field) == "yes"
+    assert form_value({"record_trainer": ["no"]}, field) == "no"
 
 
 def test_cache_control_no_store_on_step_page(tmp_path):
@@ -317,7 +501,9 @@ def test_review_forbidden_after_ack_but_before_finish(tmp_path):
 
 def test_save_refused_when_cycle_running(tmp_path, monkeypatch):
     app = _mk_app(tmp_path)
-    monkeypatch.setattr(guard, "cycle_running", lambda _root: True)
+    monkeypatch.setattr(
+        guard, "cycle_running_with_reason", lambda _root: (True, "a KAINE cycle is connected to the bus")
+    )
 
     client = _session_client(app)
     r, _token = _exchange_token(client, app)
@@ -441,54 +627,56 @@ def test_setup_css_uses_only_design_tokens(tmp_path):
 
 
 def _defaults_from_form(html: str, step_id: str) -> dict[str, list[str] | str]:
-    """Extract default form submission from a rendered step page."""
-    data: dict[str, list[str] | str] = {}
+    """Extract default form submission from a rendered step page.
 
-    # Bool: include only checked checkboxes.
+    Values are collected in document order so that multi-valued fields (for
+    example a bool hidden ``false`` companion followed by a checked
+    ``true`` checkbox) keep every submitted value; the driver's ``form_value``
+    uses the last one.
+    """
+    ordered: list[tuple[str, str]] = []
+
+    # Hidden inputs first (they appear before visible fields in the template).
     for m in re.finditer(
-        r'<input[^>]*type="checkbox"[^>]*name="([^"]+)"[^>]*value="true"([^>]*)>',
+        r'<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]*)"[^>]*>',
         html,
     ):
-        name = m.group(1)
-        attrs = m.group(2)
-        if "checked" in attrs:
-            data[name] = "true"
+        ordered.append((m.group(1), m.group(2)))
 
-    # Radio / single-choice: include checked value.
-    for m in re.finditer(
-        r'<input[^>]*type="radio"[^>]*name="([^"]+)"[^>]*value="([^"]+)"([^>]*)>',
-        html,
-    ):
-        attrs = m.group(3)
-        if "checked" in attrs:
-            data[m.group(1)] = m.group(2)
-
-    # Multi-choice checkboxes: include checked values.
+    # Bool checkboxes and multi-choice checkboxes.
     for m in re.finditer(
         r'<input[^>]*type="checkbox"[^>]*name="([^"]+)"[^>]*value="([^"]+)"([^>]*)>',
         html,
     ):
         attrs = m.group(3)
         if "checked" in attrs:
-            name = m.group(1)
-            val = m.group(2)
-            if name == "true":
-                # skip bool handled above
-                continue
-            existing = data.get(name)
-            if existing is None:
-                data[name] = [val]
-            elif isinstance(existing, list):
-                existing.append(val)
-            else:
-                data[name] = [existing, val]
+            ordered.append((m.group(1), m.group(2)))
 
-    # Text / number inputs: include the rendered value.
+    # Radio buttons.
+    for m in re.finditer(
+        r'<input[^>]*type="radio"[^>]*name="([^"]+)"[^>]*value="([^"]+)"([^>]*)>',
+        html,
+    ):
+        attrs = m.group(3)
+        if "checked" in attrs:
+            ordered.append((m.group(1), m.group(2)))
+
+    # Text / number inputs.
     for m in re.finditer(
         r'<input[^>]*type="(?:text|number)"[^>]*name="([^"]+)"[^>]*value="([^"]*)"[^>]*>',
         html,
     ):
-        data[m.group(1)] = m.group(2)
+        ordered.append((m.group(1), m.group(2)))
+
+    data: dict[str, list[str] | str] = {}
+    for name, val in ordered:
+        existing = data.get(name)
+        if existing is None:
+            data[name] = val
+        elif isinstance(existing, list):
+            existing.append(val)
+        else:
+            data[name] = [existing, val]
 
     return data
 
@@ -521,6 +709,7 @@ def _drive_web(app, overrides: dict[str, Any]) -> dict:
         step_id = m.group(1)
 
         data: dict[str, Any] = _defaults_from_form(r.text, step_id)
+        data["_step_id"] = step_id
         if step_id == "welfare-acknowledgement":
             data["ack"] = overrides.get("ack", ACK_PHRASE)
         if step_id == "module-preset":
@@ -700,7 +889,14 @@ def test_bool_explicit_false_is_false_and_missing_is_false():
 
 def test_trainer_step_appears_and_records_when_ticked(tmp_path):
     def probe_trainer(configured, backend):
-        return (True, "/usr/bin/python3:3.12")
+        return (True, "/fake/trainer/python3:3.12")
+
+    host = describe_host()
+    # Ensure the trainer-provisioning helper step applies regardless of the real host.
+    host["accelerators"] = [{"type": "cuda", "model": "Fake GPU"}]
+    host["cuda"] = True
+    host["gpu"] = True
+    host["backend"] = "cuda"
 
     def walk(app, client, overrides=None, seen_ids=None):
         overrides = overrides or {}
@@ -725,6 +921,7 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
             seen_ids.append(step_id)
 
             data = _defaults_from_form(r.text, step_id)
+            data["_step_id"] = step_id
             if step_id == "welfare-acknowledgement":
                 data["ack"] = ACK_PHRASE
             if step_id == "module-preset":
@@ -748,7 +945,7 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
         return app.state.setup.store.sessions[sid]["config"]
 
     # Unticked: the step is shown but trainer_python is not recorded.
-    app = _mk_app(tmp_path, probe_trainer=probe_trainer)
+    app = _mk_app(tmp_path, host=host, probe_trainer=probe_trainer)
     client = _session_client(app)
     _exchange_token(client, app)
     seen: list[str] = []
@@ -757,7 +954,7 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
     assert config_no.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python") is None
 
     # Ticked: the step records the probed interpreter.
-    app2 = _mk_app(tmp_path, probe_trainer=probe_trainer)
+    app2 = _mk_app(tmp_path, host=host, probe_trainer=probe_trainer)
     client2 = _session_client(app2)
     _exchange_token(client2, app2)
     config_yes = walk(
@@ -772,7 +969,7 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
     )
     assert (
         config_yes.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python")
-        == "/usr/bin/python3"
+        == "/fake/trainer/python3"
     )
     assert (
         config_yes.get("hypnos", {}).get("voice_alignment", {}).get("trainer_backend")
@@ -786,9 +983,58 @@ def test_wrong_acknowledgement_aborts_and_writes_no_file(tmp_path):
     r, _token = _exchange_token(client, app)
     assert r.status_code in (302, 303)
 
-    # First real step is orientation (no fields), second is the ack step.
+    # Orientation step (no fields).
+    r_orient = client.get(
+        "/step",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r_orient.status_code == 200
+    m = re.search(r'data-step-id="([^"]+)"', r_orient.text)
+    assert m
+    orientation_id = m.group(1)
     client.post(
         "/step",
+        data={"_step_id": orientation_id},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        },
+        follow_redirects=False,
+    )
+
+    # Welfare-acknowledgement step.
+    r_ack = client.get(
+        "/step",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r_ack.status_code == 200
+    m = re.search(r'data-step-id="([^"]+)"', r_ack.text)
+    assert m
+    ack_step_id = m.group(1)
+    r2 = client.post(
+        "/step",
+        data={"_step_id": ack_step_id, "ack": "wrong phrase"},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        },
+        follow_redirects=False,
+    )
+    assert r2.status_code == 200
+    assert "no configuration was written" in r2.text.lower()
+
+    assert not app.state.setup.operator_path.exists()
+
+
+def test_abort_post_same_origin_finishes_setup(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    _exchange_token(client, app)
+
+    r = client.post(
+        "/abort",
         data={},
         headers={
             "Host": "127.0.0.1:8000",
@@ -796,27 +1042,87 @@ def test_wrong_acknowledgement_aborts_and_writes_no_file(tmp_path):
         },
         follow_redirects=False,
     )
-    r2 = client.post(
-        "/step",
-        data={"ack": "wrong phrase"},
+    assert r.status_code == 200
+    assert "aborting" in r.text.lower()
+    assert app.state.finish_shutdown is True
+
+
+def test_abort_post_cross_origin_rejected(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    _exchange_token(client, app)
+
+    r = client.post(
+        "/abort",
+        data={},
+        headers={
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8001",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
+    assert not app.state.finish_shutdown
+
+
+def test_abort_get_returns_405(tmp_path):
+    app = _mk_app(tmp_path)
+    client = _session_client(app)
+    _exchange_token(client, app)
+
+    r = client.get(
+        "/abort",
+        headers={"Host": "127.0.0.1:8000"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 405
+
+
+def test_cycle_running_falls_back_to_bus_when_runtime_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(guard, "load_bus_config", lambda: object())
+    monkeypatch.setattr(guard, "cycle_on_bus", lambda cfg: (True, "cycle connected"))
+    assert guard.cycle_running(tmp_path) is True
+
+    monkeypatch.setattr(guard, "cycle_on_bus", lambda cfg: (None, "unknown"))
+    assert guard.cycle_running(tmp_path) is True
+
+    monkeypatch.setattr(guard, "cycle_on_bus", lambda cfg: (False, "not on bus"))
+    assert guard.cycle_running(tmp_path) is False
+
+
+def test_cycle_running_bus_config_error_counts_as_not_running(tmp_path, monkeypatch):
+    from kaine.bus.errors import BusConfigError
+
+    monkeypatch.setattr(
+        guard,
+        "load_bus_config",
+        lambda: (_ for _ in ()).throw(BusConfigError("no bus config")),
+    )
+    assert guard.cycle_running(tmp_path) is False
+
+
+def test_save_refused_when_cycle_on_bus(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+    monkeypatch.setattr(guard, "load_bus_config", lambda: object())
+    reason = "containerized cycle connected to bus"
+    monkeypatch.setattr(guard, "cycle_on_bus", lambda cfg: (True, reason))
+    _drive_web(app, {})
+
+    sid = list(app.state.setup.store.sessions.keys())[0]
+    client = _session_client(app)
+    client.cookies["setup_session"] = sid
+
+    r = client.post(
+        "/save",
+        data={},
         headers={
             "Host": "127.0.0.1:8000",
             "Origin": "http://127.0.0.1:8000",
         },
         follow_redirects=False,
     )
-    assert r2.status_code in (302, 303)
-    assert "/abort" in r2.headers.get("location", "")
-
-    r3 = client.get(
-        r2.headers["location"],
-        headers={"Host": "127.0.0.1:8000"},
-        follow_redirects=False,
-    )
-    assert r3.status_code == 200
-    assert "no configuration was written" in r3.text.lower()
-
-    assert not app.state.setup.operator_path.exists()
+    assert r.status_code == 409
+    assert reason in r.text
 
 
 def test_malformed_operator_file_raises_on_app_creation(tmp_path):
@@ -851,7 +1157,7 @@ def test_probes_run_only_after_acknowledgement(tmp_path):
 
     client.post(
         "/step",
-        data={},
+        data={"_step_id": "orientation"},
         headers={
             "Host": "127.0.0.1:8000",
             "Origin": "http://127.0.0.1:8000",
@@ -868,7 +1174,7 @@ def test_probes_run_only_after_acknowledgement(tmp_path):
 
     client.post(
         "/step",
-        data={"ack": ACK_PHRASE},
+        data={"ack": ACK_PHRASE, "_step_id": "welfare-acknowledgement"},
         headers={
             "Host": "127.0.0.1:8000",
             "Origin": "http://127.0.0.1:8000",
@@ -952,28 +1258,51 @@ def test_idle_shutdown_honours_activity_hold(tmp_path):
         assert server.should_exit is True
 
 
-def test_post_without_get_never_answers_a_step_that_does_not_apply(tmp_path):
-    """POST acts on the same step GET would show: a client that never fetches
-    the page cannot answer (or crash) a step the terminal would skip, such as
-    the deployment-tier step when no tier recommendation exists."""
+def test_post_naming_a_step_that_does_not_apply_is_refused(tmp_path):
+    """A POST names its step. One naming a step the terminal would skip, such
+    as the deployment-tier step when no tier recommendation exists, is refused
+    and answers nothing, and that step never appears in the flow."""
     app = _mk_app(tmp_path, recommend_tier_fn=lambda: None)
     client = _session_client(app)
     r, _token = _exchange_token(client, app)
     assert r.status_code in (302, 303)
     headers = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
 
-    client.post("/step", data={}, headers=headers, follow_redirects=False)
-    r = client.post("/step", data={"ack": ACK_PHRASE}, headers=headers, follow_redirects=False)
+    client.post("/step", data={"_step_id": "orientation"}, headers=headers, follow_redirects=False)
+    r = client.post(
+        "/step",
+        data={"ack": ACK_PHRASE, "_step_id": "welfare-acknowledgement"},
+        headers=headers,
+        follow_redirects=False,
+    )
     assert r.status_code in (302, 303)
+    sid = client.cookies["setup_session"]
+    before = dict(app.state.setup.store.sessions[sid])
 
+    refused = client.post(
+        "/step", data={"_step_id": "deployment-tier"}, headers=headers, follow_redirects=False
+    )
+    assert refused.status_code == 409
+    assert app.state.setup.store.sessions[sid]["step_index"] == before["step_index"]
+
+    seen: list[str] = []
     for _ in range(100):
-        r = client.post("/step", data={}, headers=headers, follow_redirects=False)
-        assert r.status_code != 500, r.text
-        if r.status_code in (302, 303) and "/review" in r.headers.get("location", ""):
-            break
+        page = client.get("/step", headers={"Host": "127.0.0.1:8000"}, follow_redirects=False)
+        if page.status_code in (302, 303):
+            if "/review" in page.headers.get("location", ""):
+                break
+            continue
+        step_id = re.search(r'data-step-id="([^"]+)"', page.text).group(1)
+        seen.append(step_id)
+        data = _defaults_from_form(page.text, step_id)
+        data["_step_id"] = step_id
+        if step_id == "module-preset":
+            data["preset"] = "b"
+        posted = client.post("/step", data=data, headers=headers, follow_redirects=False)
+        assert posted.status_code in (302, 303), posted.text
     else:
         raise AssertionError("never reached review")
-    sid = client.cookies["setup_session"]
+    assert "deployment-tier" not in seen
     assert app.state.setup.store.sessions[sid]["step_index"] == len(app.state.setup.steps)
 
 

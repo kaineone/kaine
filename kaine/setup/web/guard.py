@@ -12,6 +12,10 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import PlainTextResponse, Response
 
+from kaine.bus.config import load_bus_config
+from kaine.bus.cycle_presence import cycle_on_bus
+from kaine.bus.errors import BusConfigError
+
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
@@ -95,15 +99,83 @@ class HostOriginMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def cycle_running(state_root: Path | None = None) -> bool:
-    """Return ``True`` if a live ``kaine.cycle`` process is recorded.
+def _runtime_file_reason(path: Path) -> tuple[bool | None, str | None]:
+    """Check the runtime file.  Returns ``(True, reason)`` when running,
+    ``(False, None)`` when the file says not running, and ``(None, None)``
+    when the file is missing or inconclusive so the bus should be asked.
+    """
+    if not path.exists():
+        return (None, None)
 
-    The check reads ``state/cycle/runtime.json`` (resolved via
-    ``kaine.storage.resolve`` when no ``state_root`` is supplied).  A recycled
-    PID is rejected if ``/proc/<pid>/cmdline`` does not contain ``kaine.cycle``.
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return (True, "runtime file exists but cannot be read; failing closed")
 
-    Fail-closed: any doubt about a recorded runtime file counts as running,
-    because a running entity must never have its config rewritten.
+    pid = data.get("pid")
+    if not isinstance(pid, int):
+        return (True, "runtime file does not contain a valid pid; failing closed")
+
+    permission_error = False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return (None, None)
+    except PermissionError:
+        # Process exists but we cannot verify its identity; unless the
+        # cmdline positively identifies kaine.cycle we must fail closed.
+        permission_error = True
+    except (OSError, ValueError):
+        return (True, "cannot verify recorded cycle pid; failing closed")
+
+    cmdline_path = Path(f"/proc/{pid}/cmdline")
+    try:
+        cmdline = cmdline_path.read_text().replace("\x00", " ")
+    except Exception:
+        return (True, "cannot read recorded cycle cmdline; failing closed")
+
+    if "kaine.cycle" in cmdline or permission_error:
+        return (True, "runtime file shows a live kaine.cycle process")
+
+    return (None, None)
+
+
+def _bus_reason(path: Path) -> tuple[bool, str | None]:
+    """Ask the bus when the runtime file says the local entity is not running."""
+    try:
+        bus_cfg = load_bus_config()
+    except BusConfigError:
+        return (False, None)
+    except Exception as exc:
+        return (
+            True,
+            f"bus configuration could not be loaded ({type(exc).__name__})",
+        )
+
+    alive, detail = cycle_on_bus(bus_cfg)
+    if alive is True:
+        return (True, detail)
+    if alive is None:
+        return (
+            True,
+            detail or "bus probe could not determine cycle state; failing closed",
+        )
+    return (False, None)
+
+
+def cycle_running_with_reason(
+    state_root: Path | None = None,
+) -> tuple[bool, str | None]:
+    """Return ``(running, reason)`` for a live KAINE cycle.
+
+    The check reads ``state/cycle/runtime.json`` first (resolved via
+    ``kaine.storage.resolve`` when no ``state_root`` is supplied).  When the
+    runtime file says the entity is not running, the shared bus is also
+    queried so that containerized cycles are detected.  A recycled PID is
+    rejected if ``/proc/<pid>/cmdline`` does not contain ``kaine.cycle``.
+
+    Fail-closed: any doubt counts as running, because a running entity must
+    never have its config rewritten.
     """
     if state_root is not None:
         path = state_root / "cycle" / "runtime.json"
@@ -115,34 +187,13 @@ def cycle_running(state_root: Path | None = None) -> bool:
         except Exception:
             path = Path("state/cycle/runtime.json")
 
-    if not path.exists():
-        return False
+    running, reason = _runtime_file_reason(path)
+    if running is True:
+        return (True, reason)
 
-    try:
-        data = json.loads(path.read_text())
-    except Exception:
-        return True
+    return _bus_reason(path)
 
-    pid = data.get("pid")
-    if not isinstance(pid, int):
-        return True
 
-    permission_error = False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        # Process exists but we cannot verify its identity; unless the
-        # cmdline positively identifies kaine.cycle we must fail closed.
-        permission_error = True
-    except (OSError, ValueError):
-        return True
-
-    cmdline_path = Path(f"/proc/{pid}/cmdline")
-    try:
-        cmdline = cmdline_path.read_text().replace("\x00", " ")
-    except Exception:
-        return True
-
-    return "kaine.cycle" in cmdline or permission_error
+def cycle_running(state_root: Path | None = None) -> bool:
+    """Return ``True`` if a live KAINE cycle is recorded or connected."""
+    return cycle_running_with_reason(state_root)[0]

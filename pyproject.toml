@@ -181,6 +181,7 @@ include = ["kaine*"]
     "static/vendor/vendor/*.js",
 ]
 "kaine.modules.hypnos" = ["eval_probes/*.jsonl"]
+"kaine.setup.web" = ["templates/*.html", "static/*.css"]
 "kaine.modules.eidolon" = ["surnames.txt"]
 
 # ---------------------------------------------------------------------------

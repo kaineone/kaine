@@ -26,30 +26,33 @@ def form_value(form: Any, field: Field) -> str:
 
     ``form`` is either a Starlette :class:`FormData` or the dict produced by
     ``_read_form``.  A bool is true only when the LAST submitted value,
-    lower-cased, is one of ``true``, ``on``, ``1`` or ``yes``; an absent
-    field or any other submitted value (including an explicit ``false``)
-    is false.  Multi-choice checkboxes are joined with commas; everything
-    else falls back to the field default when absent.
+    lower-cased, is one of ``true``, ``on``, ``1`` or ``yes``; an explicit
+    ``false`` (or a hidden companion) is false.  An absent field falls
+    back to the field's own default for every field kind.  Multi-choice
+    checkboxes are joined with commas.
     """
+    values = _form_values(form, field.name)
+    if not values:
+        if field.kind == "bool":
+            return "true" if field.default else "false"
+        if field.kind == "multichoice":
+            if field.default:
+                return ",".join(str(v) for v in field.default)
+            return ""
+        if field.default is None:
+            return ""
+        return str(field.default)
+
+    last = values[-1]
     if field.kind == "bool":
-        values = _form_values(form, field.name)
-        if not values:
-            return "false"
-        last = values[-1].strip().lower()
-        if last in {"true", "on", "1", "yes"}:
+        if last.strip().lower() in {"true", "on", "1", "yes"}:
             return "true"
         return "false"
 
     if field.kind == "multichoice":
-        items = _form_values(form, field.name)
-        return ",".join(items)
+        return ",".join(values)
 
-    raw = form.get(field.name) if hasattr(form, "get") else None
-    if isinstance(raw, list):
-        raw = raw[-1] if raw else None
-    if raw is None:
-        return ""
-    return str(raw)
+    return last
 
 
 def validate_fields(fields, form) -> tuple[dict[str, Any], dict[str, str]]:
