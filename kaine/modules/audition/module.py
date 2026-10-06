@@ -336,15 +336,6 @@ class Audition(BaseModule):
             return None
         return getattr(stream, "delivered_position", None)
 
-    async def _hypnos_tail_cursor(self) -> str:
-        """The id of the newest ``hypnos.out`` entry, or ``"0-0"`` for an empty
-        stream, so the consumer reads only sleep events published after boot."""
-        latest = await self._bus.client.xrevrange(self._HYPNOS_STREAM, count=1)
-        if not latest:
-            return "0-0"
-        entry_id = latest[0][0]
-        return entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
-
     async def _hypnos_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""
         try:
@@ -385,10 +376,9 @@ class Audition(BaseModule):
 
     async def initialize(self) -> None:
         await super().initialize()
-        # Start the sleep consumer at the stream's current tail. A literal "$"
-        # cursor never advances under a non-blocking XREAD, so the consumer
-        # would never see a sleep event.
-        self._hypnos_cursor = await self._hypnos_tail_cursor()
+        # Seed the hypnos cursor from the stream tail before starting the loop,
+        # otherwise a literal "$" under a non-blocking XREAD never advances.
+        self._hypnos_cursor = await self._bus.last_entry_id(self._HYPNOS_STREAM)
         self._tasks.append(
             asyncio.create_task(self._hypnos_loop(), name=f"{self.name}-hypnos-consumer")
         )
