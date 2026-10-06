@@ -76,6 +76,47 @@ class SubprocessTrainerError(RuntimeError):
     into a fake success."""
 
 
+#: Environment variables the external trainer may inherit. Everything else,
+#: notably KAINE_STATE_KEY, the organ API key and operator tokens, is withheld:
+#: the trainer runs third-party code and needs none of them.
+TRAINER_ENV_ALLOW: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TMPDIR",
+    "CUDA_VISIBLE_DEVICES",
+    "CUDA_HOME",
+    "HIP_VISIBLE_DEVICES",
+    "ROCR_VISIBLE_DEVICES",
+    "LD_LIBRARY_PATH",
+    "HF_HOME",
+    "TRITON_CACHE_DIR",
+)
+
+
+def trainer_env(base: Optional[dict[str, str]] = None) -> dict[str, str]:
+    """The minimal environment for the external trainer process.
+
+    Only :data:`TRAINER_ENV_ALLOW` is passed through, and the Hugging Face
+    stack is forced offline: the runtime makes no outbound connections, and
+    the trainer loads only local weights.
+    """
+    source = os.environ if base is None else base
+    env = {k: source[k] for k in TRAINER_ENV_ALLOW if k in source}
+    env.update(
+        {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "HF_HUB_DISABLE_TELEMETRY": "1",
+        }
+    )
+    return env
+
+
 def _write_private(path: Path, text: str) -> None:
     """Write ``text`` to ``path`` readable by the owner only (0600)."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -301,7 +342,11 @@ class SubprocessVoiceTrainer:
                 base_path=base_path,
                 adapter_output_dir=str(config.adapter_output_dir.resolve()),
             )
-            result = await self._run_subprocess(job_dir, samples_used=len(pairs))
+            result = await self._run_subprocess(
+                job_dir,
+                samples_used=len(pairs),
+                adapter_root=Path(config.adapter_output_dir),
+            )
         finally:
             scrub_job_inputs(job_dir)
 
@@ -351,7 +396,7 @@ class SubprocessVoiceTrainer:
     # subprocess invocation + validation
     # --------------------------------------------------------------------- #
     async def _run_subprocess(
-        self, job_dir: Path, *, samples_used: int
+        self, job_dir: Path, *, samples_used: int, adapter_root: Optional[Path] = None
     ) -> dict[str, Any]:
         if not self._entry_script.is_file():
             raise SubprocessTrainerError(
@@ -368,6 +413,7 @@ class SubprocessVoiceTrainer:
                 subprocess.run,
                 argv,
                 cwd=str(job_dir),  # unsloth_compiled_cache/ lands in the job dir
+                env=trainer_env(),
                 capture_output=True,
                 text=True,
                 timeout=self._timeout_s,
@@ -407,6 +453,13 @@ class SubprocessVoiceTrainer:
                     f"(job {job_dir})"
                 )
             adapter_path = Path(adapter_dir)
+            if adapter_root is not None and not adapter_path.resolve().is_relative_to(
+                adapter_root.resolve()
+            ):
+                raise SubprocessTrainerError(
+                    f"external trainer reported adapter_dir {adapter_path} outside "
+                    f"the adapter output dir {adapter_root} (job {job_dir})"
+                )
             if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
                 raise SubprocessTrainerError(
                     f"external trainer reported adapter_dir {adapter_path} but it "

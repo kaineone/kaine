@@ -83,7 +83,7 @@ async def test_round_trip_accepted(tmp_path):
     stub = _write_stub(
         tmp_path,
         """
-        adapter = job_dir / 'adapter_out'
+        adapter = Path(job['adapter_output_dir']) / 'adapter_out'
         adapter.mkdir(parents=True, exist_ok=True)
         (adapter / 'adapter_model.safetensors').write_text('fake-weights')
         result = {
@@ -131,7 +131,7 @@ async def test_job_spec_written_for_external_process(tmp_path):
         f"""
         # Echo the parsed job + pair count so the test can inspect the spec.
         Path(r'{captured}').write_text(json.dumps({{'job': job, 'n_pairs': len(pairs)}}))
-        adapter = job_dir / 'a'
+        adapter = Path(job['adapter_output_dir']) / 'a'
         adapter.mkdir(parents=True, exist_ok=True)
         (adapter / 'w').write_text('x')
         (job_dir / 'result.json').write_text(json.dumps({{
@@ -259,7 +259,7 @@ async def test_accepted_but_missing_adapter_raises(tmp_path):
         """
         (job_dir / 'result.json').write_text(json.dumps({
             'ok': True, 'accepted': True,
-            'adapter_dir': str(job_dir / 'does_not_exist'),
+            'adapter_dir': str(Path(job['adapter_output_dir']) / 'does_not_exist'),
             'reason': 'accepted', 'samples_used': len(pairs),
         }))
         """,
@@ -278,7 +278,7 @@ async def test_accepted_but_empty_adapter_dir_raises(tmp_path):
     stub = _write_stub(
         tmp_path,
         """
-        adapter = job_dir / 'empty_adapter'
+        adapter = Path(job['adapter_output_dir']) / 'empty_adapter'
         adapter.mkdir(parents=True, exist_ok=True)  # exists but empty
         (job_dir / 'result.json').write_text(json.dumps({
             'ok': True, 'accepted': True, 'adapter_dir': str(adapter),

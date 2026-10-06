@@ -480,7 +480,7 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
     )
     seen: dict = {}
 
-    async def fake_run(self, job_dir, *, samples_used):
+    async def fake_run(self, job_dir, *, samples_used, adapter_root=None):
         seen["dir_mode"] = stat.S_IMODE(job_dir.stat().st_mode)
         seen["pairs_mode"] = stat.S_IMODE((job_dir / "pairs.jsonl").stat().st_mode)
         seen["job_mode"] = stat.S_IMODE((job_dir / "job.json").stat().st_mode)
@@ -501,3 +501,59 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
     assert seen["had_adapter"] is True
     assert not (seen["job_dir"] / "pairs.jsonl").exists()
     assert not (seen["job_dir"] / "previous_adapter").exists()
+
+
+def test_trainer_env_withholds_secrets_and_forces_offline():
+    from kaine.modules.hypnos.subprocess_trainer import trainer_env
+
+    env = trainer_env(
+        {
+            "PATH": "/usr/bin",
+            "KAINE_STATE_KEY": "secret",
+            "KAINE_ORGAN_API_KEY": "secret",
+            "KAINE_NEXUS_TOKEN": "secret",
+            "CUDA_VISIBLE_DEVICES": "0",
+        }
+    )
+    assert env["PATH"] == "/usr/bin"
+    assert env["CUDA_VISIBLE_DEVICES"] == "0"
+    assert not any(k.startswith("KAINE_") for k in env)
+    assert env["HF_HUB_OFFLINE"] == "1" and env["TRANSFORMERS_OFFLINE"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    from kaine.modules.hypnos.subprocess_trainer import (
+        SubprocessTrainerError,
+        SubprocessVoiceTrainer,
+    )
+
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "adapter_config.json").write_text("{}")
+    seen_env = {}
+
+    def fake_run(argv, cwd, env, **kwargs):
+        seen_env.update(env)
+        (Path(cwd) / "result.json").write_text(
+            json.dumps({"ok": True, "accepted": True, "adapter_dir": str(outside)})
+        )
+        return sp.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr("kaine.modules.hypnos.subprocess_trainer.subprocess.run", fake_run)
+    monkeypatch.setenv("KAINE_STATE_KEY", "secret")
+    script = tmp_path / "entry.py"
+    script.write_text("")
+    trainer = SubprocessVoiceTrainer(
+        trainer_python="/nonexistent/python", trainer_workdir=tmp_path / "work", entry_script=script
+    )
+    config = VoiceAlignmentConfig(
+        intent_log_path=tmp_path / "intent.jsonl",
+        adapter_output_dir=tmp_path / "adapters",
+        base_model_path=str(tmp_path / "base"),
+    )
+    with pytest.raises(SubprocessTrainerError, match="outside the adapter output dir"):
+        await trainer.train([DPOPair(prompt="p", chosen="c", rejected="r", system="s")], config)
+    assert "KAINE_STATE_KEY" not in seen_env
