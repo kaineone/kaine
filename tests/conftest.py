@@ -47,7 +47,7 @@ def _save_restore_state_encryptor():
 
 
 @pytest.fixture(autouse=True)
-def _save_restore_data_root(tmp_path_factory, monkeypatch, request):
+def _save_restore_data_root(tmp_path, monkeypatch, request):
     """Save and restore the process-wide data root around each test, so a test
     that installs one cannot redirect later tests' relative state paths."""
     from kaine import storage
@@ -59,12 +59,8 @@ def _save_restore_data_root(tmp_path_factory, monkeypatch, request):
         # repository. KAINE_DATA_ROOT keeps it when an entry point reinstalls
         # the root from config. A test may still install or clear its own;
         # tests of the no-root defaults carry @pytest.mark.no_data_root.
-        # Its own temporary directory, separate from tmp_path: tools that
-        # refuse to write under the data root (the K1-Jev builder) can still
-        # use tmp_path, and tests that check tmp_path stays empty still can.
-        test_root = tmp_path_factory.mktemp("kaine-data-root")
-        storage.set_data_root(test_root)
-        monkeypatch.setenv(storage.DATA_ROOT_ENV, str(test_root))
+        storage.set_data_root(tmp_path)
+        monkeypatch.setenv(storage.DATA_ROOT_ENV, str(tmp_path))
     yield
     storage.set_data_root(previous)
 
@@ -193,8 +189,6 @@ def _fingerprint(
                                         except OSError:
                                             continue
                             except OSError:
-                                # The directory itself is already recorded; an
-                                # unlistable one simply shows no children.
                                 pass
                         else:
                             stack.append(entry.path)
