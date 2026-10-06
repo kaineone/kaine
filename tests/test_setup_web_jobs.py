@@ -40,7 +40,8 @@ def _zombie(pid: int) -> bool:
     try:
         with open(f"/proc/{pid}/stat") as fh:
             return fh.read().rsplit(")", 1)[1].split()[0] == "Z"
-    except OSError:
+    except FileNotFoundError:
+        # Exited and reaped between the caller's kill(pid, 0) and this read.
         return True
 
 
@@ -58,10 +59,11 @@ def _wait_gone(pid: int, *, group: bool = False, timeout: float = 9.0) -> None:
                 try:
                     with open(f"/proc/{entry}/stat") as fh:
                         fields = fh.read().rsplit(")", 1)[1].split()
-                except OSError:
-                    continue
+                except FileNotFoundError:
+                    continue  # exited while the scan ran
                 if int(fields[2]) == pid:
                     members.append(fields[0])
+            # No members left means the group no longer exists.
             if all(state == "Z" for state in members):
                 return
         else:
