@@ -12,6 +12,8 @@ from kaine.bus.errors import EventValidationError, ReservedStreamError
 
 WORKSPACE_STREAM = "workspace.broadcast"
 SYNEIDESIS_SOURCE = "syneidesis"
+# Audio channels whose voices are the operator's (shared by Volition, Empatheia and Chronos).
+OPERATOR_SOURCES: tuple[str, ...] = ("live_mic", "microphone", "remote")
 
 
 class Event(BaseModel):

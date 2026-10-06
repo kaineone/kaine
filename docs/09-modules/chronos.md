@@ -33,7 +33,7 @@ Chronos subscribes to the workspace broadcast, not raw module streams:
 | Bus source | Event / mechanism | Purpose |
 |---|---|---|
 | `workspace.broadcast` | `on_workspace(snapshot)` | Primary trigger — one `chronos.report` per broadcast |
-| `user_input_streams` (default `audition.out`) | Any event | Updates the idle-time clock |
+| `user_input_streams` (default `audition.out`) | Operator speech (see below) | Updates the idle-time clock |
 | `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends / resumes forward-prediction head adaptation |
 
 ## Outputs
@@ -45,6 +45,24 @@ All events are published to the **`chronos.out`** stream.
 | `chronos.report` | `temporal_context`, `anomaly_score`, `habituation_score`, `rumination_detected`, `time_since_last_interaction_s`, `feature_vector`, `temporal_prediction_error` | `baseline_salience` (0.1) normally; `alert_salience` (0.7) when `rumination_detected` is `true` or the anomaly/prediction-error metric exceeds `anomaly_alert_threshold` |
 
 `temporal_context` is the CfC hidden-state vector (length = `cfc_units`). Downstream modules such as [Nous](../09-modules/nous.md) use it as a temporal fingerprint of the current moment.
+
+## What counts as an interaction
+
+Chronos only resets `time_since_last_interaction_s` for speech-path events on an operator channel:
+
+- The event type must be `audition.transcription` (with a non-empty `text` field) or `audition.emotion`.
+- The event's `payload.source_label` must be one of the shared operator sources (`live_mic`, `microphone`, `remote`).
+
+`audition.perception`, `audition.prosody`, and speech from seeded, playlist, womb, or screen perception feeds do not count. The social drive can build when the entity is not being addressed.
+
+## Featurizer layouts
+
+`SnapshotFeaturizer` produces a 24-dimension vector under a numbered layout:
+
+- Layout 1 (legacy, default for restored beings): eight source bins plus an overflow bucket in the last bin. Audition events share the overflow bin with Praxis and other unknown sources. Slot 23 is always `0.0`.
+- Layout 2 (default for new beings): Audition events contribute their salience to slot 23 instead of the overflow bucket. Praxis and other unknown sources still use the overflow bucket.
+
+Chronos records `featurizer_layout` in its serialized state. A snapshot without the key restores to layout 1, preserving the input semantics the network was trained on. A snapshot with an unknown layout raises an error. The CfC, forward-prediction head, and network plugin seams are unaffected because the vector length stays 24.
 
 ## Configuration
 
@@ -61,7 +79,8 @@ Section `[chronos]` in `config/kaine.toml`. For the full reference see the [modu
 | `rumination_window` | `32` | Rolling window for the recurrence detector |
 | `rumination_threshold` | `4` | Bucket-count threshold for flagging rumination |
 | `rumination_bucket_resolution` | `0.25` | Quantization step for the hidden-state fingerprint |
-| `user_input_streams` | `["audition.out"]` | Streams whose events reset the idle-time clock |
+| `user_input_streams` | `["audition.out"]` | Streams Chronos reads for interactions |
+| `interaction_event_types` | `["audition.transcription", "audition.emotion"]` | Event types that count as an interaction when they come from an operator channel |
 | `forward_prediction` | `false` | Enable the online-adapting forward-prediction head |
 | `prediction_error_window` | `32` | Rolling window (ticks) for normalising `temporal_prediction_error` salience |
 

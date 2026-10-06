@@ -267,6 +267,7 @@ def test_soma_module_restore_with_seed_rebuilds_same_reservoir():
 
 
 def test_chronos_module_logs_new_reservoir_for_old_snapshot(caplog):
+    from kaine.modules.chronos.featurizer import SnapshotFeaturizer
     from kaine.modules.chronos.module import Chronos
 
     net = CfCNetwork(backend="numpy", input_size=8, units=8, seed=1)
@@ -279,6 +280,7 @@ def test_chronos_module_logs_new_reservoir_for_old_snapshot(caplog):
     c._pred_head = head
     c._last_interaction_at = None
     c._user_input_cursors = {}
+    c._featurizer = SnapshotFeaturizer()
 
     old_state = {"pred_head": head.state_dict()}
 
@@ -289,6 +291,7 @@ def test_chronos_module_logs_new_reservoir_for_old_snapshot(caplog):
 
 
 def test_chronos_module_restore_with_seed_rebuilds_same_reservoir():
+    from kaine.modules.chronos.featurizer import SnapshotFeaturizer
     from kaine.modules.chronos.module import Chronos
 
     net1 = CfCNetwork(backend="numpy", input_size=8, units=8, seed=5)
@@ -308,6 +311,7 @@ def test_chronos_module_restore_with_seed_rebuilds_same_reservoir():
     )
     c._last_interaction_at = None
     c._user_input_cursors = {}
+    c._featurizer = SnapshotFeaturizer()
 
     c.deserialize(
         {

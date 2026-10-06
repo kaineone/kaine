@@ -90,3 +90,8 @@ drive_initiative = false
 # no-chatter novelty gate while letting genuinely new surprise about the same
 # source report again.
 sig_expiry_s = 300.0
+
+[chronos]
+# Chronos predicts the next broadcast and publishes temporal prediction errors.
+# The shipped kaine.toml keeps the forward head off.
+forward_prediction = true

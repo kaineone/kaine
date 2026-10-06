@@ -11,6 +11,7 @@ from collections import deque
 from typing import Any, ClassVar, Iterable, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.bus.schema import OPERATOR_SOURCES, Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -25,6 +26,10 @@ log = logging.getLogger(__name__)
 
 
 DEFAULT_USER_INPUT_STREAMS: tuple[str, ...] = ("audition.out",)
+DEFAULT_INTERACTION_EVENT_TYPES: tuple[str, ...] = (
+    "audition.transcription",
+    "audition.emotion",
+)
 _HYPNOS_STREAM: str = "hypnos.out"
 
 
@@ -51,6 +56,7 @@ class Chronos(BaseModule):
         rumination_threshold: int = 4,
         rumination_bucket_resolution: float = 0.25,
         user_input_streams: Iterable[str] = DEFAULT_USER_INPUT_STREAMS,
+        interaction_event_types: Iterable[str] = DEFAULT_INTERACTION_EVENT_TYPES,
         entity_clock: Optional[EntityClock] = None,
         clock: Optional[callable] = None,
         # Forward prediction config
@@ -92,6 +98,7 @@ class Chronos(BaseModule):
         self._alert_salience = float(alert_salience)
         self._anomaly_alert_threshold = float(anomaly_alert_threshold)
         self._user_input_streams = tuple(user_input_streams)
+        self._interaction_event_types = tuple(interaction_event_types)
         self._last_interaction_at: Optional[float] = None
         self._user_input_cursors: dict[str, str] = {
             stream: "$" for stream in self._user_input_streams
@@ -111,6 +118,21 @@ class Chronos(BaseModule):
     @property
     def has_network(self) -> bool:
         return self._network is not None
+
+    @property
+    def interaction_event_types(self) -> tuple[str, ...]:
+        return self._interaction_event_types
+
+    def _is_interaction(self, event: Event) -> bool:
+        if event.type not in self._interaction_event_types:
+            return False
+        source_label = event.payload.get("source_label")
+        if source_label not in OPERATOR_SOURCES:
+            return False
+        if event.type == "audition.transcription":
+            text = event.payload.get("text")
+            return isinstance(text, str) and text.strip() != ""
+        return True
 
     async def initialize(self) -> None:
         if self._network is None:
@@ -256,9 +278,13 @@ class Chronos(BaseModule):
                         drained_any = True
                         self._user_input_cursors[stream] = last_scanned
                     if entries:
-                        # Bus event stamps are wall epoch seconds; cognitive
-                        # time-since-interaction must run on the subjective clock.
-                        self._last_interaction_at = float(self._clock())
+                        # Only speech-path events on operator channels count as
+                        # an interaction. The cursor advances over every entry.
+                        for _, event in entries:
+                            if self._is_interaction(event):
+                                # Bus event stamps are wall epoch seconds; cognitive
+                                # time-since-interaction must run on the subjective clock.
+                                self._last_interaction_at = float(self._clock())
                 if not drained_any:
                     await asyncio.sleep(0.05)
         except asyncio.CancelledError:
@@ -302,6 +328,7 @@ class Chronos(BaseModule):
         state: dict[str, Any] = {
             "last_interaction_at": self._last_interaction_at,
             "user_input_cursors": dict(self._user_input_cursors),
+            "featurizer_layout": self._featurizer.layout,
         }
         if self._network is not None and hasattr(self._network, "reservoir_seed"):
             state["reservoir_seed"] = self._network.reservoir_seed
@@ -310,6 +337,18 @@ class Chronos(BaseModule):
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
+        # The layout comes first so a snapshot with an unknown layout fails
+        # before any other state is restored. A snapshot written before the
+        # layout was versioned is layout 1: a trained being keeps the input
+        # layout its network and head learned on.
+        if "featurizer_layout" in state:
+            self._featurizer.set_layout(int(state["featurizer_layout"]))
+        else:
+            self._featurizer.set_layout(1)
+            log.info(
+                "chronos: being keeps featurizer layout 1 "
+                "(Audition shares the overflow bin)"
+            )
         if "last_interaction_at" in state:
             value = state["last_interaction_at"]
             self._last_interaction_at = (
