@@ -356,10 +356,10 @@ async def test_stt_admitted_inference_survives_timed_out_close(tmp_path: Path) -
 
     await started.wait()
     for _ in range(1000):
-        if client._inflight == 2:
+        if client._gate.inflight == 2:
             break
         await asyncio.sleep(0)
-    assert client._inflight == 2
+    assert client._gate.inflight == 2
 
     await asyncio.wait_for(client.aclose(), timeout=2.0)
     block_was_set_on_close = block.is_set()
@@ -565,10 +565,10 @@ async def test_tts_admitted_inference_survives_timed_out_close(tmp_path: Path) -
 
     await started.wait()
     for _ in range(1000):
-        if client._inflight == 2:
+        if client._gate.inflight == 2:
             break
         await asyncio.sleep(0)
-    assert client._inflight == 2
+    assert client._gate.inflight == 2
 
     await asyncio.wait_for(client.aclose(), timeout=2.0)
     block_was_set_on_close = block.is_set()
@@ -591,6 +591,85 @@ async def test_tts_warm_up_after_close_raises(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.warm_up()
+
+
+# ---- Cancelled inference: unload waits for the worker thread ----------------
+
+@pytest.mark.asyncio
+async def test_stt_cancelled_inference_unload_waits_for_worker_thread(tmp_path: Path) -> None:
+    """A cancelled STT inference still holds the model until the thread finishes."""
+    d = _stt_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_stt_module(block_event=block, started_event=started)
+    client = SherpaMoonshineSTT(d, sherpa_module=fake_mod)
+
+    wav = _make_wav(16000, [0] * 1000)
+    inference = asyncio.create_task(
+        client.transcribe(wav, sample_rate=16000, model="moonshine-base-en")
+    )
+
+    unload_task: asyncio.Task[None] | None = None
+    try:
+        await started.wait()
+        inference.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await inference
+
+        unload_task = asyncio.create_task(client.unload())
+        await asyncio.sleep(0.1)
+
+        assert not unload_task.done()
+        assert client.loaded
+        assert client._gate.inflight == 1
+
+        block.set()
+        await asyncio.wait_for(unload_task, timeout=5.0)
+        assert not client.loaded
+    finally:
+        block.set()
+        if unload_task is not None and not unload_task.done():
+            try:
+                await asyncio.wait_for(unload_task, timeout=2.0)
+            except Exception:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_tts_cancelled_inference_unload_waits_for_worker_thread(tmp_path: Path) -> None:
+    """A cancelled TTS inference still holds the model until the thread finishes."""
+    d = _tts_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_tts_module(block_event=block, started_event=started)
+    client = SherpaKokoroTTS(d, sherpa_module=fake_mod)
+
+    inference = asyncio.create_task(client.synthesize(TTSRequest(text="hello world")))
+
+    unload_task: asyncio.Task[None] | None = None
+    try:
+        await started.wait()
+        inference.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await inference
+
+        unload_task = asyncio.create_task(client.unload())
+        await asyncio.sleep(0.1)
+
+        assert not unload_task.done()
+        assert client.loaded
+        assert client._gate.inflight == 1
+
+        block.set()
+        await asyncio.wait_for(unload_task, timeout=5.0)
+        assert not client.loaded
+    finally:
+        block.set()
+        if unload_task is not None and not unload_task.done():
+            try:
+                await asyncio.wait_for(unload_task, timeout=2.0)
+            except Exception:
+                pass
 
 
 # ---- Double-cancellation in-flight leak coverage -----------------------------
@@ -618,7 +697,7 @@ async def test_stt_double_cancelled_inference_releases_inflight(tmp_path: Path) 
         block.set()
 
     await asyncio.wait_for(client.unload(), timeout=2.0)
-    assert client._inflight == 0
+    assert client._gate.inflight == 0
 
     try:
         await asyncio.wait_for(inference, timeout=2.0)
@@ -646,7 +725,7 @@ async def test_tts_double_cancelled_inference_releases_inflight(tmp_path: Path) 
         block.set()
 
     await asyncio.wait_for(client.unload(), timeout=2.0)
-    assert client._inflight == 0
+    assert client._gate.inflight == 0
 
     try:
         await asyncio.wait_for(inference, timeout=2.0)

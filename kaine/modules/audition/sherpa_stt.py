@@ -23,6 +23,7 @@ import numpy as np
 
 from kaine import speech_manifest
 from kaine.modules.audition.stt_client import TranscriptionResult
+from kaine.residency.inflight import InflightGate, InflightTicket
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,7 @@ class SherpaMoonshineSTT:
 
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
-        self._inflight = 0
-        self._idle: asyncio.Event | None = None
+        self._gate = InflightGate()
 
     @property
     def base_url(self) -> str:
@@ -92,8 +92,6 @@ class SherpaMoonshineSTT:
     def _ensure_state_lock(self) -> asyncio.Lock:
         if self._state_lock is None:
             self._state_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
         return self._state_lock
 
     async def _ensure_loaded_locked(self) -> None:
@@ -137,12 +135,12 @@ class SherpaMoonshineSTT:
         """
         await self.ensure_loaded()
 
-    async def _use_model(self) -> Any:
+    async def _use_model(self) -> tuple[Any, InflightTicket]:
         """Load the model if needed and mark one in-flight inference.
 
-        This holds the state lock only long enough to load and increment the
-        in-flight counter, so unload() can wait for running inference without
-        blocking the event loop.
+        This holds the state lock only long enough to load and admit the
+        ticket, so unload() can wait for running inference without blocking
+        the event loop.
         """
         if self._closed or self._executor is None:
             raise RuntimeError("sherpa-onnx STT client is closed")
@@ -151,16 +149,8 @@ class SherpaMoonshineSTT:
                 raise RuntimeError("sherpa-onnx STT client is closed")
             await self._ensure_loaded_locked()
             recognizer = self._recognizer
-            self._inflight += 1
-            assert self._idle is not None
-            self._idle.clear()
-        return recognizer
-
-    def _release_inference(self) -> None:
-        self._inflight -= 1
-        if self._inflight == 0:
-            assert self._idle is not None
-            self._idle.set()
+            ticket = self._gate.admit()
+        return (recognizer, ticket)
 
     async def transcribe(
         self,
@@ -174,7 +164,9 @@ class SherpaMoonshineSTT:
         if self._executor is None:
             raise RuntimeError("sherpa-onnx STT client is closed")
 
-        recognizer = await self._use_model()
+        recognizer, ticket = await self._use_model()
+
+        handed = False
 
         try:
             with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
@@ -187,6 +179,7 @@ class SherpaMoonshineSTT:
                 rate = wf.getframerate()
                 nframes = wf.getnframes()
                 if nframes == 0:
+                    ticket.release()
                     return TranscriptionResult(
                         text="",
                         model=self._model_id,
@@ -207,12 +200,16 @@ class SherpaMoonshineSTT:
                 recognizer.decode_stream(stream)
                 return stream.result.text
 
-            loop = asyncio.get_running_loop()
             start = time.monotonic()
-            text = await loop.run_in_executor(self._executor, _decode)
+            # From here on the gate owns the release: the worker thread releases
+            # when the work finishes, or the gate does if it never started.
+            handed = True
+            text = await self._gate.run(ticket, self._executor, _decode)
             latency_ms = (time.monotonic() - start) * 1000.0
-        finally:
-            self._release_inference()
+        except BaseException:
+            if not handed:
+                ticket.release()
+            raise
 
         return TranscriptionResult(
             text=text.strip(),
@@ -220,11 +217,6 @@ class SherpaMoonshineSTT:
             latency_ms=latency_ms,
             raw={"sample_rate": rate, "samples": n},
         )
-
-    async def _wait_inflight(self) -> None:
-        if self._inflight > 0:
-            assert self._idle is not None
-            await self._idle.wait()
 
     async def unload(self) -> None:
         """Release the model while keeping the client usable.
@@ -238,7 +230,7 @@ class SherpaMoonshineSTT:
         async with self._ensure_state_lock():
             if self._closed or self._executor is None or self._recognizer is None:
                 return
-            await self._wait_inflight()
+            await self._gate.wait_idle()
             self._recognizer = None
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(self._executor, gc.collect)
@@ -252,7 +244,7 @@ class SherpaMoonshineSTT:
             if self._state_lock is None:
                 return
             async with self._state_lock:
-                await self._wait_inflight()
+                await self._gate.wait_idle()
                 self._recognizer = None
 
         timed_out = False

@@ -24,6 +24,7 @@ import numpy as np
 
 from kaine import speech_manifest
 from kaine.modules.vox.client import SynthesisResult, TTSRequest
+from kaine.residency.inflight import InflightGate, InflightTicket
 
 APPLIED_PROSODY = ("speed_factor",)
 
@@ -83,8 +84,7 @@ class SherpaKokoroTTS:
 
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
-        self._inflight = 0
-        self._idle: asyncio.Event | None = None
+        self._gate = InflightGate()
 
     @property
     def base_url(self) -> str:
@@ -97,8 +97,6 @@ class SherpaKokoroTTS:
     def _ensure_state_lock(self) -> asyncio.Lock:
         if self._state_lock is None:
             self._state_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
         return self._state_lock
 
     def _resolve_speed(self, speed_factor: float | int | None) -> float:
@@ -166,7 +164,7 @@ class SherpaKokoroTTS:
         """
         await self.ensure_loaded()
 
-    async def _use_model(self) -> Any:
+    async def _use_model(self) -> tuple[Any, InflightTicket]:
         """Load the model if needed and mark one in-flight inference."""
         if self._closed or self._executor is None:
             raise RuntimeError("sherpa-onnx TTS client is closed")
@@ -175,27 +173,22 @@ class SherpaKokoroTTS:
                 raise RuntimeError("sherpa-onnx TTS client is closed")
             await self._ensure_loaded_locked()
             tts = self._tts
-            self._inflight += 1
-            assert self._idle is not None
-            self._idle.clear()
-        return tts
-
-    def _release_inference(self) -> None:
-        self._inflight -= 1
-        if self._inflight == 0:
-            assert self._idle is not None
-            self._idle.set()
+            ticket = self._gate.admit()
+        return (tts, ticket)
 
     async def synthesize(self, request: TTSRequest) -> SynthesisResult:
         """Synthesize ``request.text`` to a mono 16-bit WAV."""
         if self._executor is None:
             raise RuntimeError("sherpa-onnx TTS client is closed")
 
-        tts = await self._use_model()
+        tts, ticket = await self._use_model()
+
+        handed = False
 
         try:
             text = request.text
             if text is None or text.strip() == "":
+                ticket.release()
                 raise ValueError("empty text")
 
             speed = self._resolve_speed(request.speed_factor)
@@ -203,9 +196,11 @@ class SherpaKokoroTTS:
             def _generate():
                 return tts.generate(text, sid=self._speaker_id, speed=speed)
 
-            loop = asyncio.get_running_loop()
             start = time.monotonic()
-            audio = await loop.run_in_executor(self._executor, _generate)
+            # From here on the gate owns the release: the worker thread releases
+            # when the work finishes, or the gate does if it never started.
+            handed = True
+            audio = await self._gate.run(ticket, self._executor, _generate)
             latency_ms = (time.monotonic() - start) * 1000.0
 
             samples = np.asarray(audio.samples, dtype=np.float32)
@@ -222,8 +217,10 @@ class SherpaKokoroTTS:
                 wf.setframerate(audio.sample_rate)
                 wf.writeframes(int_samples.tobytes())
             wav_bytes = buf.getvalue()
-        finally:
-            self._release_inference()
+        except BaseException:
+            if not handed:
+                ticket.release()
+            raise
 
         return SynthesisResult(
             audio=wav_bytes,
@@ -232,11 +229,6 @@ class SherpaKokoroTTS:
             output_format="wav",
             bytes_produced=len(wav_bytes),
         )
-
-    async def _wait_inflight(self) -> None:
-        if self._inflight > 0:
-            assert self._idle is not None
-            await self._idle.wait()
 
     async def unload(self) -> None:
         """Release the model while keeping the client usable.
@@ -250,7 +242,7 @@ class SherpaKokoroTTS:
         async with self._ensure_state_lock():
             if self._closed or self._executor is None or self._tts is None:
                 return
-            await self._wait_inflight()
+            await self._gate.wait_idle()
             self._tts = None
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(self._executor, gc.collect)
@@ -264,7 +256,7 @@ class SherpaKokoroTTS:
             if self._state_lock is None:
                 return
             async with self._state_lock:
-                await self._wait_inflight()
+                await self._gate.wait_idle()
                 self._tts = None
 
         timed_out = False
