@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import codecs
+import logging
 import os
 import signal
 import subprocess
@@ -28,6 +29,10 @@ class ActivityHold(Protocol):
 
 
 READY_TIMEOUT_S = 30.0
+
+BOOTSTRAP_SERVER_JOBS = frozenset({"redis", "qdrant"})
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -88,31 +93,41 @@ async def _killpg(pgid: int, sig: int) -> None:
         os.killpg(pgid, sig)
     except ProcessLookupError:
         pass
+    except PermissionError as exc:
+        _log.debug("os.killpg(%r, %r) raised PermissionError: %s", pgid, sig, exc)
 
 
-async def _terminate_then_kill_async_proc(proc: asyncio.subprocess.Process) -> None:
-    if proc.pid is None:
+def _group_alive(pgid: int) -> bool:
+    """Return True if any process in ``pgid`` is still alive.
+
+    ``PermissionError`` is treated as "still alive" so a single EPERM does not
+    abort a shutdown loop.
+    """
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError as exc:
+        _log.debug("os.killpg(%r, 0) raised PermissionError: %s", pgid, exc)
+        return True
+    return True
+
+
+async def _kill_group(pgid: int, *, grace_s: float = 5.0) -> None:
+    if pgid is None:
         return
-    await _killpg(proc.pid, signal.SIGTERM)
-    deadline = time.monotonic() + 5.0
+    await _killpg(pgid, signal.SIGTERM)
+    deadline = time.monotonic() + grace_s
     while time.monotonic() < deadline:
-        if proc.returncode is not None:
+        if not _group_alive(pgid):
             return
         await asyncio.sleep(0.1)
-    await _killpg(proc.pid, signal.SIGKILL)
-
-
-async def _terminate_then_kill_popen(popen: subprocess.Popen) -> None:
-    if popen.pid is None:
-        return
-    await _killpg(popen.pid, signal.SIGTERM)
-    deadline = time.monotonic() + 5.0
+    await _killpg(pgid, signal.SIGKILL)
+    deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
-        ret = popen.poll()
-        if ret is not None:
+        if not _group_alive(pgid):
             return
         await asyncio.sleep(0.1)
-    await _killpg(popen.pid, signal.SIGKILL)
 
 
 class JobRunner:
@@ -147,19 +162,15 @@ class JobRunner:
         return {"status": job.status, "exit_code": job.exit_code}
 
     async def start(self, name: str, spec: JobSpec) -> str:
-        running_nondetached = [
-            j
-            for j in self._jobs.values()
-            if j.status == "running" and not j.spec.detach
-        ]
-        if spec.exclusive and running_nondetached:
+        running = [j for j in self._jobs.values() if j.status == "running"]
+        if spec.exclusive and running:
             raise RuntimeError(
-                f"job {name} is exclusive; another non-detached job is already running"
+                f"job {name} is exclusive; another job is already running"
             )
         running_exclusive = [
             j for j in self._jobs.values() if j.status == "running" and j.spec.exclusive
         ]
-        if running_exclusive and not spec.detach:
+        if running_exclusive:
             raise RuntimeError(
                 f"an exclusive job is running; job {name} cannot start"
             )
@@ -251,6 +262,11 @@ class JobRunner:
                 }
                 proc = await asyncio.create_subprocess_exec(*spec.argv, **kwargs)
                 job.proc = proc
+                if spec.name in BOOTSTRAP_SERVER_JOBS:
+                    job.add_line(
+                        "cancelling this job also stops the server it starts "
+                        "(it is in the job's process group)"
+                    )
         except Exception as exc:
             job.add_line(f"could not start job: {exc}")
             job.status = "failed"
@@ -354,7 +370,9 @@ class JobRunner:
         if job.proc is None or job.proc.returncode is not None:
             return
         job._timed_out = True
-        await _terminate_then_kill_async_proc(job.proc)
+        if job.proc.pid is not None:
+            await _kill_group(job.proc.pid)
+            await job.proc.wait()
 
     async def _probe_ready(self, job: _Job) -> None:
         probe = job.spec.ready_probe
@@ -385,7 +403,9 @@ class JobRunner:
             await asyncio.sleep(0.5)
 
         # Stop it before reporting, so a finished job never leaves a process.
-        await _terminate_then_kill_popen(job.popen)
+        if job.popen.pid is not None:
+            await _kill_group(job.popen.pid)
+            job.popen.poll()
         log_ref = f"see {job.spec.log_path}" if job.spec.log_path else "no log configured"
         job.add_line(
             f"not listening within {READY_TIMEOUT_S:.0f} s; stopped it ({log_ref})"
@@ -400,21 +420,54 @@ class JobRunner:
         if job is None or job.status != "running" or job.spec.detach:
             return False
         job._cancelled = True
-        asyncio.create_task(_terminate_then_kill_async_proc(job.proc))
+
+        async def _do_cancel() -> None:
+            if job.proc is not None and job.proc.pid is not None:
+                await _kill_group(job.proc.pid)
+                await job.proc.wait()
+
+        task = asyncio.create_task(_do_cancel())
+        job._tasks.append(task)
         return True
+
+    def kill_all_sync(self) -> None:
+        """Send SIGKILL to every running non-detached job's process group.
+
+        Detached services are never touched.  This is intended for a forced
+        server exit where the normal async shutdown cannot run.
+        """
+        for job in list(self._jobs.values()):
+            if job.status != "running" or job.spec.detach:
+                continue
+            pgid = job.proc.pid if job.proc is not None else None
+            if pgid is None:
+                continue
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                pass
 
     async def shutdown(self) -> None:
         for job in list(self._jobs.values()):
             if job.status != "running" or job.spec.detach:
                 continue
             job._shutdown_killed = True
-            if job.proc is not None:
-                await _terminate_then_kill_async_proc(job.proc)
+            if job.proc is not None and job.proc.pid is not None:
+                await _kill_group(job.proc.pid)
+                await job.proc.wait()
 
-    async def events(self, job_id: str) -> AsyncIterator[str | dict[str, Any]]:
+    async def events(
+        self,
+        job_id: str,
+        shutting_down: Callable[[], bool] | None = None,
+    ) -> AsyncIterator[str | dict[str, Any]]:
         job = self._jobs[job_id]
         idx = 0
         while True:
+            if shutting_down is not None and shutting_down():
+                break
             first_held = job.total - len(job.lines)
             if idx < first_held:
                 dropped = first_held - idx
