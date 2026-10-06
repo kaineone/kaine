@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import os
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,32 @@ def test_changed_dirs_ignores_skipped_top_level_dirs(tmp_path):
 
     changed = _changed_dirs(before, after)
     assert changed == []
+
+
+def test_guard_ignores_patched_os_functions(tmp_path, monkeypatch):
+    """Directory mtimes are read through import-time real OS primitives, not
+    patched module attributes.
+    """
+    from tests.conftest import _changed_dirs, _state_fingerprint
+
+    state = tmp_path / "real" / "state"
+    subdir = state / "subdir"
+    subdir.mkdir(parents=True)
+
+    before = _state_fingerprint(str(state))
+
+    def broken_stat(*args, **kwargs):
+        raise OSError("patched stat")
+
+    def broken_scandir(*args, **kwargs):
+        raise OSError("patched scandir")
+
+    monkeypatch.setattr(os, "stat", broken_stat)
+    monkeypatch.setattr(os, "scandir", broken_scandir)
+
+    after = _state_fingerprint(str(state))
+
+    assert _changed_dirs(before, after) == []
 
 
 @pytest.mark.real_mounts

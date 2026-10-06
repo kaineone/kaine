@@ -10,9 +10,10 @@ writes and the runtime that reads agree, whether local or containerized.
 """
 from __future__ import annotations
 
-import pytest
 import importlib
 from pathlib import Path
+
+import pytest
 
 from kaine import model_paths
 from kaine.model_paths import DEFAULT_MODELS_DIR, MODELS_DIR_ENV_VAR, models_dir

@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import os
+import stat
 import warnings
 
 import pytest
@@ -12,6 +13,20 @@ from kaine.config import load_kaine_config
 from kaine.lifecycle.liveness import cycle_process_state
 from kaine.setup import storage_step
 from kaine.storage import configured_data_root
+
+# Real OS primitives captured at import time so that data-root guards keep
+# working while a test monkeypatches os.stat/os.scandir.
+_REAL_SCANDIR = os.scandir
+_REAL_STAT = os.stat
+
+
+def _REAL_ISDIR(path: str) -> bool:
+    """``os.path.isdir`` built on the captured ``os.stat``: the stdlib version
+    looks ``os.stat`` up at call time, so a test's patch would reach it."""
+    try:
+        return stat.S_ISDIR(_REAL_STAT(path).st_mode)
+    except (OSError, ValueError):
+        return False
 
 
 @pytest.fixture(autouse=True)
@@ -84,19 +99,39 @@ def _is_inside_repo(path: str) -> bool:
 def _state_fingerprint(state_root: str) -> dict[str, int]:
     """Directory mtimes under ``state_root``: any file creation, rename or
     deletion in a watched directory changes one of them. Never reads file
-    contents.
+    contents. Uses import-time OS primitives so monkeypatched ``os.stat``
+    and ``os.scandir`` do not affect the guard.
     """
     marks: dict[str, int] = {}
-    if not os.path.isdir(state_root):
+    if not _REAL_ISDIR(state_root):
         return marks
-    for root, dirs, _files in os.walk(state_root):
-        if root == state_root:
-            dirs[:] = [
-                d
-                for d in dirs
-                if d not in _STATE_SKIP and not d.startswith("_archive")
-            ]
-        marks[root] = os.stat(root).st_mtime_ns
+    try:
+        marks[state_root] = _REAL_STAT(state_root).st_mtime_ns
+    except OSError:
+        return marks
+
+    stack: list[str] = [state_root]
+    while stack:
+        current = stack.pop()
+        try:
+            with _REAL_SCANDIR(current) as it:
+                for entry in it:
+                    if current == state_root and (
+                        entry.name in _STATE_SKIP
+                        or entry.name.startswith("_archive")
+                    ):
+                        continue
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+                    try:
+                        marks[entry.path] = entry.stat(
+                            follow_symlinks=False
+                        ).st_mtime_ns
+                    except OSError:
+                        continue
+                    stack.append(entry.path)
+        except OSError:
+            continue
     return marks
 
 
@@ -120,7 +155,7 @@ def _compute_real_state_roots() -> list[str]:
 
     if cfg_root is not None:
         path = str(cfg_root)
-        if os.path.isabs(path) and os.path.isdir(path):
+        if os.path.isabs(path) and _REAL_ISDIR(path):
             real = os.path.realpath(path)
             if not _is_inside_repo(real):
                 candidates.add(real)
@@ -132,7 +167,7 @@ def _compute_real_state_roots() -> list[str]:
 
     if recommended is not None:
         path = str(recommended)
-        if os.path.isdir(path):
+        if _REAL_ISDIR(path):
             real = os.path.realpath(path)
             if not _is_inside_repo(real):
                 candidates.add(real)
@@ -140,7 +175,7 @@ def _compute_real_state_roots() -> list[str]:
     state_roots: list[str] = []
     for root in candidates:
         state_dir = os.path.join(root, "state")
-        if os.path.isdir(state_dir):
+        if _REAL_ISDIR(state_dir):
             state_roots.append(os.path.realpath(state_dir))
 
     return sorted(set(state_roots))
@@ -163,16 +198,25 @@ else:
     _REAL_STATE_ROOTS = _compute_real_state_roots()
 
 
+@pytest.fixture(scope="session")
+def _empty_mounts_path(tmp_path_factory):
+    """One empty mounts file shared by the whole test session."""
+    path = tmp_path_factory.mktemp("no-mounts") / "mounts"
+    path.write_text("")
+    return path
+
+
 @pytest.fixture(autouse=True)
-def _no_real_mounts(tmp_path, monkeypatch, request):
-    """Point the storage wizard at an empty mounts file so it cannot propose a
-    real disk as the data root. Tests of mount parsing opt out with
-    @pytest.mark.real_mounts and supply their own file, as today.
+def _no_real_mounts(_empty_mounts_path, monkeypatch, request):
+    """Point the storage wizard at the session's empty mounts file so it
+    cannot propose a real disk as the data root. Tests of mount parsing opt
+    out with @pytest.mark.real_mounts and supply their own file, as today.
     """
     if request.node.get_closest_marker("real_mounts") is None:
-        empty_mounts = tmp_path / "no-mounts"
-        empty_mounts.write_text("")
-        monkeypatch.setattr("kaine.setup.storage_step.MOUNTS_PATH", empty_mounts)
+        monkeypatch.setattr(
+            "kaine.setup.storage_step.MOUNTS_PATH",
+            _empty_mounts_path,
+        )
     yield
 
 
