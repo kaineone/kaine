@@ -97,16 +97,19 @@ async def test_missing_env_var_skips_without_calling_trainer(bus, tmp_path, monk
 
 
 @pytest.mark.asyncio
-async def test_both_gates_open_invokes_trainer(bus, tmp_path, monkeypatch):
+async def test_both_gates_open_without_preference_source_never_trains(bus, tmp_path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     trainer = RecordingTrainer()
     hypnos = _hypnos(bus, tmp_path, enabled=True, trainer=trainer)
     summary = await hypnos.enter_sleep()
-    assert len(trainer.calls) == 1
-    pair_count, _config = trainer.calls[0]
-    assert pair_count == 1
+    assert trainer.calls == []
     voice = summary["voice_alignment"]
-    assert voice["accepted"] is True
+    assert "no validated preference source" in voice["reason"]
+    assert voice["accepted"] is False
+    assert voice["samples_used"] == 0
+    assert summary["dpo_loss"] is None
+    assert summary["adapter_accepted"] is False
+    assert summary["pairs_processed"] == 0
 
 
 @pytest.mark.asyncio

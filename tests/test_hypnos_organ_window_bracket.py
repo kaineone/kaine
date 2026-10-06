@@ -5,12 +5,13 @@
 
 When an organ_window_runner is injected, the voice-alignment phase runs the
 trainer THROUGH it (unload→train→reload) and surfaces the window outcome in the
-phase metadata. A failed window still completes the sleep cycle, and the
-two-key safety gate is unchanged (the runner only runs after both gates open).
+phase metadata. A failed window still surfaces an error result, and the two-key
+safety gate is unchanged (the runner only runs after both gates open).
 """
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -18,7 +19,13 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.hypnos import Hypnos, TrainingResult, VoiceAlignmentConfig
 from kaine.modules.hypnos.organ_window import OrganWindowResult
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
+
+# @@@NOTES: bracketing and failure-path assertions moved from the whole-sleep
+# summary to the returned PhaseResult because the default preference_source="none"
+# gate now prevents _run_voice_alignment from ever reaching the trainer. We call
+# _train_on_pairs directly with pairs built by DPOPairBuilder() (no constructor
+# args) using build(path, max_pairs=...), not build_pairs().
 
 
 @pytest.fixture
@@ -77,17 +84,20 @@ async def test_runner_brackets_the_trainer_call(bus, tmp_path, monkeypatch):
         return result, OrganWindowResult(bracketed=True, organ_restored=True)
 
     hypnos = _hypnos(bus, tmp_path, trainer=trainer, runner=runner)
-    summary = await hypnos.enter_sleep()
+    cfg = hypnos._voice_config
+    pairs = DPOPairBuilder().build(cfg.intent_log_path, max_pairs=cfg.max_samples)
+    assert pairs
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
 
     assert seen == ["runner"]  # training went THROUGH the window
     assert trainer.calls == 1
-    voice = summary["voice_alignment"]
-    assert voice["accepted"] is True
-    # Window outcome surfaced in the voice_alignment phase metadata.
-    phases = {p["phase"]: p for p in summary["phases"]}
-    meta = phases["voice_alignment"]["metadata"]
-    assert meta["organ_window_bracketed"] is True
-    assert meta["organ_restored"] is True
+    assert voice_result.accepted is True
+    # Window outcome surfaced in the returned PhaseResult metadata.
+    assert phase_result.metadata["organ_window_bracketed"] is True
+    assert phase_result.metadata["organ_restored"] is True
 
 
 @pytest.mark.asyncio
@@ -102,18 +112,20 @@ async def test_failed_window_completes_other_sleep_phases(bus, tmp_path, monkeyp
         )
 
     hypnos = _hypnos(bus, tmp_path, trainer=trainer, runner=runner)
-    summary = await hypnos.enter_sleep()
+    cfg = hypnos._voice_config
+    pairs = DPOPairBuilder().build(cfg.intent_log_path, max_pairs=cfg.max_samples)
+    assert pairs
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
 
-    # The other four sleep phases still completed (sleep is not crashed).
-    phase_names = [p["phase"] for p in summary["phases"]]
-    assert "voice_alignment" in phase_names
-    assert len(phase_names) == 5  # all phases present
-    non_voice = [p for p in summary["phases"] if p["phase"] != "voice_alignment"]
-    assert all(p["success"] for p in non_voice)
-    # The voice phase reports the failure but the cycle produced a summary.
-    voice = summary["voice_alignment"]
-    assert voice["accepted"] is False
-    assert "organ window" in voice["reason"]
+    # The failure path still reports the organ-window outcome on the result.
+    assert voice_result.accepted is False
+    assert "organ window" in voice_result.reason
+    assert phase_result.success is False
+    assert phase_result.metadata["organ_window_bracketed"] is True
+    assert phase_result.metadata["organ_restored"] is True
 
 
 @pytest.mark.asyncio

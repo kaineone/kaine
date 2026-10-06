@@ -4,6 +4,16 @@ This page covers Hypnos Phase 5: the operator-approved DPO+QLoRA training pass t
 
 Related pages: [Sleep and maintenance](README.md), [Hypnos module](../09-modules/hypnos.md), [Lingua module](../09-modules/lingua.md), [Architecture](../02-architecture/README.md), [Abliteration verification](../18-verification.md)
 
+## Training is retired until Stage 2
+
+The phase trains nothing at present. Earlier versions used the faithful rendering (a readout of instrument state) as the "chosen" side of each preference pair. That taught the organ to narrate readings, not to speak in its own voice, so voice development retires it. `[hypnos.voice_alignment].preference_source` names where preferred examples come from. Its only accepted value is `"none"` until Stage 2 adds a validated source together with its offline validation gate. With `"none"`, the phase returns `skipped: no validated preference source (voice-development Stage 2)` even when both gates below are open.
+
+These still run on every sleep:
+- the consolidation-divergence metric is computed and published, and the template-divergence arm still votes as a protective floor;
+- after the phase, Hypnos moves the waking intent log into the per-sleep corpus under `state/lingua/intent_log/`. The move never overwrites, and a disk guard warns at 80% of `corpus_ceiling_gb` and never deletes.
+
+The training pipeline described below (`Hypnos._train_on_pairs`) is kept and tested for Stage 2.
+
 ## Two-layer safety gate
 
 Both gates must be open before any training fires. Missing either gate returns a clean `PhaseResult` with `metadata["skipped"]` and `training_skipped: true`; the rest of the maintenance pipeline continues normally.

@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from kaine.modules.hypnos import (
     TrainingResult,
     VoiceAlignmentConfig,
 )
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +92,7 @@ def _make_hypnos(
     *,
     intent_records: list[dict] | None = None,
     trainer: Trainer | None = None,
+    mnemos=None,
 ) -> Hypnos:
     log_path = tmp_path / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +107,7 @@ def _make_hypnos(
     )
     return Hypnos(
         bus,
-        mnemos=FakeMnemos(),
+        mnemos=mnemos or FakeMnemos(),
         nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter(), FakeResetter()],
@@ -206,23 +208,23 @@ async def test_started_and_completed_events(bus: AsyncBus, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_concurrent_sleep_rejected(bus: AsyncBus, tmp_path: Path):
-    class SlowTrainer:
-        async def train(self, pairs, config):
-            await asyncio.sleep(0.1)
-            return TrainingResult(
-                accepted=False, adapter_path=None,
-                capability_loss=0.0, reason="slow",
-            )
+    """A sleep already in progress rejects a second enter_sleep() call.
+    Determinism is provided by holding the first consolidation phase on an
+    asyncio.Event, not by relying on training to keep the sleep alive."""
+    hold = asyncio.Event()
 
-    hypnos = _make_hypnos(
-        bus, tmp_path,
-        intent_records=[{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}],
-        trainer=SlowTrainer(),
-    )
+    class SlowMnemos(FakeMnemos):
+        async def consolidate_now(self) -> int:
+            await hold.wait()
+            self.consolidated += 1
+            return 5
+
+    hypnos = _make_hypnos(bus, tmp_path, mnemos=SlowMnemos())
     first = asyncio.create_task(hypnos.enter_sleep())
     await asyncio.sleep(0.01)
     with pytest.raises(HypnosBusyError):
         await hypnos.enter_sleep()
+    hold.set()
     await first
 
 
@@ -262,11 +264,14 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
 
 @pytest.mark.asyncio
 async def test_voice_alignment_skips_when_no_pairs(bus: AsyncBus, tmp_path: Path):
+    """With the fail-closed Stage 0 gate, an empty intent log still reaches the
+    'no validated preference source' skip before the no-pairs branch."""
     hypnos = _make_hypnos(bus, tmp_path, intent_records=[])
     summary = await hypnos.enter_sleep()
     voice = summary["voice_alignment"]
     assert voice["accepted"] is False
-    assert "no usable DPO pairs" in voice["reason"]
+    assert "no validated preference source" in voice["reason"]
+    assert len(hypnos._trainer.calls) == 0
 
 
 @pytest.mark.asyncio
@@ -280,10 +285,19 @@ async def test_voice_alignment_passes_pairs_to_trainer(bus: AsyncBus, tmp_path: 
         ],
         trainer=trainer,
     )
-    await hypnos.enter_sleep()
+    pairs = DPOPairBuilder().build(
+        hypnos._voice_config.intent_log_path,
+        max_pairs=hypnos._voice_config.max_samples,
+    )
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+
     assert len(trainer.calls) == 1
     pair_count, _cfg = trainer.calls[0]
     assert pair_count == 2
+    assert phase_result.success is True
 
 
 @pytest.mark.asyncio
@@ -307,10 +321,18 @@ async def test_capability_loss_veto(bus: AsyncBus, tmp_path: Path):
         intent_records=[{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}],
         trainer=BigLossTrainer(),
     )
-    summary = await hypnos.enter_sleep()
-    voice = summary["voice_alignment"]
-    assert voice["accepted"] is False
-    assert "capability loss" in voice["reason"].lower()
+    pairs = DPOPairBuilder().build(
+        hypnos._voice_config.intent_log_path,
+        max_pairs=hypnos._voice_config.max_samples,
+    )
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+
+    assert voice_result.accepted is False
+    assert "capability loss" in voice_result.reason.lower()
+    assert phase_result.success is True
 
 
 @pytest.mark.asyncio

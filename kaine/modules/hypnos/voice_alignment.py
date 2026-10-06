@@ -25,6 +25,12 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
+# Stage 2 adds its source together with the validation gate (D9).
+PREFERENCE_SOURCES: frozenset[str] = frozenset({"none"})
+# The sources allowed to reach the trainer. Empty until Stage 2: the phase
+# checks membership here, so an unlisted value can never train (fail closed).
+TRAINING_SOURCES: frozenset[str] = frozenset()
+
 
 @dataclass(frozen=True)
 class DPOPair:
@@ -159,8 +165,16 @@ class VoiceAlignmentConfig:
     # wait for the organ to report ready after activation. Empty defaults to
     # [lingua].chat_url from kaine_config.
     organ_url: str = ""
+    # Stage 0 source selector. Only "none" is valid until Stage 2 adds a
+    # validated preference source together with the validation gate (D9).
+    preference_source: str = "none"
 
     def __post_init__(self) -> None:
+        if self.preference_source not in PREFERENCE_SOURCES:
+            raise ValueError(
+                f"unknown preference_source {self.preference_source!r}; "
+                f"known: {sorted(PREFERENCE_SOURCES)}"
+            )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
 

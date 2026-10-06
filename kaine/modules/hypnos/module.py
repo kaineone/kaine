@@ -23,6 +23,7 @@ from kaine.modules.hypnos.phases import (
 )
 from kaine.modules.hypnos.scheduler import RestScheduler
 from kaine.modules.hypnos.voice_alignment import (
+    TRAINING_SOURCES,
     ConsolidationDivergence,
     DPOPairBuilder,
     FakeTrainer,
@@ -1026,6 +1027,30 @@ class Hypnos(BaseModule):
                 elapsed_ms=time.monotonic() * 1000.0 - start_ms,
                 metadata=_meta({"skipped": skip_reason, "training_skipped": True}),
             )
+        # Stage 0 gate: training on self-generated preferences is retired until
+        # Stage 2 provides a validated preference source (D12).
+        if self._voice_config.preference_source not in TRAINING_SOURCES:
+            skip_reason = "skipped: no validated preference source (voice-development Stage 2)"
+            log.info("voice_alignment skipped: %s", skip_reason)
+            voice_result = TrainingResult(
+                accepted=False,
+                adapter_path=None,
+                capability_loss=0.0,
+                reason=skip_reason,
+                samples_used=0,
+            )
+            return voice_result, PhaseResult(
+                phase="voice_alignment",
+                success=True,
+                elapsed_ms=time.monotonic() * 1000.0 - start_ms,
+                metadata=_meta(
+                    {
+                        "skipped": "no validated preference source",
+                        "training_skipped": True,
+                        "preference_source": self._voice_config.preference_source,
+                    }
+                ),
+            )
         if not pairs:
             voice_result = TrainingResult(
                 accepted=False,
@@ -1040,6 +1065,11 @@ class Hypnos(BaseModule):
                 elapsed_ms=time.monotonic() * 1000.0 - start_ms,
                 metadata=_meta({"pairs": 0, "training_skipped": True}),
             )
+        return await self._train_on_pairs(pairs, start_ms, _meta)
+
+    async def _train_on_pairs(
+        self, pairs, start_ms, _meta
+    ) -> tuple[TrainingResult, PhaseResult]:
         window_meta: dict[str, Any] = {}
         try:
 
