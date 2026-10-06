@@ -450,7 +450,7 @@ def test_coarse_mtime_accepted_with_slack(
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(
-        study_dir, script, wall_clock=lambda: time.time() + 0.5
+        study_dir, script, wall_clock=lambda: time.time() + 1.0
     )
 
     class _FlakyFakeProc(_FakeProc):

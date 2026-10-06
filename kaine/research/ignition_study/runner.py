@@ -601,7 +601,8 @@ class StudyRunner:
         unviable_verdict: dict[str, Any] | None = None
         unviable_terminated = False
         extra_viability: dict[str, Any] | None = None
-        # A verdict file older than this step belongs to an earlier attempt.
+        # A verdict file older than this step (by more than the mtime slack)
+        # belongs to an earlier attempt.
         step_started_wall = self.wall_clock()
 
         start_clock = self.clock()
@@ -749,7 +750,18 @@ class StudyRunner:
                     if viability_path.stat().st_mtime < step_started_wall - VIABILITY_MTIME_SLACK_S:
                         raise FileNotFoundError("verdict predates this step")
                     viability_data = json.loads(viability_path.read_text())
+                except FileNotFoundError:
+                    # No verdict yet, or one left from an earlier attempt.
+                    viability_data = None
                 except Exception:
+                    # A verdict that exists but cannot be read is retried next
+                    # poll; say so instead of treating it silently as none.
+                    log.warning(
+                        "Gestation viability verdict for %s step %s could not be read",
+                        line,
+                        k,
+                        exc_info=True,
+                    )
                     viability_data = None
                 if isinstance(viability_data, dict) and viability_data.get("verdict") == "unviable":
                     unviable_verdict = viability_data
