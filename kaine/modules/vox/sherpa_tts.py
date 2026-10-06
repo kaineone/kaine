@@ -84,7 +84,7 @@ class SherpaKokoroTTS:
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
         self._inflight = 0
-        self._inflight_cv = asyncio.Condition()
+        self._idle: asyncio.Event | None = None
 
     @property
     def base_url(self) -> str:
@@ -97,6 +97,8 @@ class SherpaKokoroTTS:
     def _ensure_state_lock(self) -> asyncio.Lock:
         if self._state_lock is None:
             self._state_lock = asyncio.Lock()
+            self._idle = asyncio.Event()
+            self._idle.set()
         return self._state_lock
 
     def _resolve_speed(self, speed_factor: float | int | None) -> float:
@@ -173,14 +175,16 @@ class SherpaKokoroTTS:
                 raise RuntimeError("sherpa-onnx TTS client is closed")
             await self._ensure_loaded_locked()
             tts = self._tts
-            async with self._inflight_cv:
-                self._inflight += 1
+            self._inflight += 1
+            assert self._idle is not None
+            self._idle.clear()
         return tts
 
-    async def _release_inference(self) -> None:
-        async with self._inflight_cv:
-            self._inflight -= 1
-            self._inflight_cv.notify_all()
+    def _release_inference(self) -> None:
+        self._inflight -= 1
+        if self._inflight == 0:
+            assert self._idle is not None
+            self._idle.set()
 
     async def synthesize(self, request: TTSRequest) -> SynthesisResult:
         """Synthesize ``request.text`` to a mono 16-bit WAV."""
@@ -219,7 +223,7 @@ class SherpaKokoroTTS:
                 wf.writeframes(int_samples.tobytes())
             wav_bytes = buf.getvalue()
         finally:
-            await self._release_inference()
+            self._release_inference()
 
         return SynthesisResult(
             audio=wav_bytes,
@@ -230,9 +234,9 @@ class SherpaKokoroTTS:
         )
 
     async def _wait_inflight(self) -> None:
-        async with self._inflight_cv:
-            while self._inflight > 0:
-                await self._inflight_cv.wait()
+        if self._inflight > 0:
+            assert self._idle is not None
+            await self._idle.wait()
 
     async def unload(self) -> None:
         """Release the model while keeping the client usable.

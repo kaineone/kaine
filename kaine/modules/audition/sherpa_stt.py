@@ -79,7 +79,7 @@ class SherpaMoonshineSTT:
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
         self._inflight = 0
-        self._inflight_cv = asyncio.Condition()
+        self._idle: asyncio.Event | None = None
 
     @property
     def base_url(self) -> str:
@@ -92,6 +92,8 @@ class SherpaMoonshineSTT:
     def _ensure_state_lock(self) -> asyncio.Lock:
         if self._state_lock is None:
             self._state_lock = asyncio.Lock()
+            self._idle = asyncio.Event()
+            self._idle.set()
         return self._state_lock
 
     async def _ensure_loaded_locked(self) -> None:
@@ -149,14 +151,16 @@ class SherpaMoonshineSTT:
                 raise RuntimeError("sherpa-onnx STT client is closed")
             await self._ensure_loaded_locked()
             recognizer = self._recognizer
-            async with self._inflight_cv:
-                self._inflight += 1
+            self._inflight += 1
+            assert self._idle is not None
+            self._idle.clear()
         return recognizer
 
-    async def _release_inference(self) -> None:
-        async with self._inflight_cv:
-            self._inflight -= 1
-            self._inflight_cv.notify_all()
+    def _release_inference(self) -> None:
+        self._inflight -= 1
+        if self._inflight == 0:
+            assert self._idle is not None
+            self._idle.set()
 
     async def transcribe(
         self,
@@ -208,7 +212,7 @@ class SherpaMoonshineSTT:
             text = await loop.run_in_executor(self._executor, _decode)
             latency_ms = (time.monotonic() - start) * 1000.0
         finally:
-            await self._release_inference()
+            self._release_inference()
 
         return TranscriptionResult(
             text=text.strip(),
@@ -218,9 +222,9 @@ class SherpaMoonshineSTT:
         )
 
     async def _wait_inflight(self) -> None:
-        async with self._inflight_cv:
-            while self._inflight > 0:
-                await self._inflight_cv.wait()
+        if self._inflight > 0:
+            assert self._idle is not None
+            await self._idle.wait()
 
     async def unload(self) -> None:
         """Release the model while keeping the client usable.

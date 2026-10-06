@@ -591,3 +591,64 @@ async def test_tts_warm_up_after_close_raises(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.warm_up()
+
+
+# ---- Double-cancellation in-flight leak coverage -----------------------------
+
+@pytest.mark.asyncio
+async def test_stt_double_cancelled_inference_releases_inflight(tmp_path: Path) -> None:
+    d = _stt_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_stt_module(block_event=block, started_event=started)
+    client = SherpaMoonshineSTT(d, sherpa_module=fake_mod)
+
+    wav = _make_wav(16000, [0] * 1000)
+    inference = asyncio.create_task(
+        client.transcribe(wav, sample_rate=16000, model="moonshine-base-en")
+    )
+
+    await started.wait()
+    try:
+        async with client._ensure_state_lock():
+            inference.cancel()
+            await asyncio.sleep(0)
+            inference.cancel()
+    finally:
+        block.set()
+
+    await asyncio.wait_for(client.unload(), timeout=2.0)
+    assert client._inflight == 0
+
+    try:
+        await asyncio.wait_for(inference, timeout=2.0)
+    except asyncio.CancelledError:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_tts_double_cancelled_inference_releases_inflight(tmp_path: Path) -> None:
+    d = _tts_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_tts_module(block_event=block, started_event=started)
+    client = SherpaKokoroTTS(d, sherpa_module=fake_mod)
+
+    inference = asyncio.create_task(client.synthesize(TTSRequest(text="hello")))
+
+    await started.wait()
+    try:
+        async with client._ensure_state_lock():
+            inference.cancel()
+            await asyncio.sleep(0)
+            inference.cancel()
+    finally:
+        block.set()
+
+    await asyncio.wait_for(client.unload(), timeout=2.0)
+    assert client._inflight == 0
+
+    try:
+        await asyncio.wait_for(inference, timeout=2.0)
+    except asyncio.CancelledError:
+        pass
