@@ -150,6 +150,7 @@ async def test_sleep_rotates_intent_log(bus: AsyncBus, tmp_path: Path):
     summary = await hypnos.enter_sleep()
 
     rotated = summary["corpus"]["rotated"]
+    assert "error" not in summary["corpus"]
     assert rotated is not None
     corpus_dir = tmp_path / "intent_log"
     assert (corpus_dir / rotated).exists()
@@ -189,6 +190,7 @@ async def test_rotation_failure_does_not_break_sleep(
     assert summary is not None
     assert summary["corpus"]["rotated"] is None
     assert summary["corpus"]["warned"] is False
+    assert summary["corpus"]["error"] == "RuntimeError: rotation intentionally broken"
     assert "hypnos.sleep.completed" in captured
 
 
@@ -263,7 +265,7 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_voice_alignment_skips_when_no_pairs(bus: AsyncBus, tmp_path: Path):
+async def test_voice_alignment_skips_without_preference_source_even_with_empty_log(bus: AsyncBus, tmp_path: Path):
     """With the fail-closed Stage 0 gate, an empty intent log still reaches the
     'no validated preference source' skip before the no-pairs branch."""
     hypnos = _make_hypnos(bus, tmp_path, intent_records=[])

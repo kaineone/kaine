@@ -713,7 +713,10 @@ class Hypnos(BaseModule):
             )
             corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
             corpus_summary["warned"] = ceiling_info["warned"]
-        except Exception:
+        except Exception as exc:
+            # Recorded so the summary never reads a failed rotation as "nothing
+            # to rotate".
+            corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
             log.warning(
                 "hypnos: intent log corpus rotation/ceiling check failed",
                 exc_info=True,
