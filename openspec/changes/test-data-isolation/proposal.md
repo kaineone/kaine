@@ -24,6 +24,13 @@ Two gaps let this happen:
   A test that changes any of them fails and names the directories it changed. The real-root guard stands down, with a single warning, while a `kaine.cycle` process is running, because a live entity legitimately writes there.
 - **No change at runtime.** `MOUNTS_PATH` has the same default as today.
 
+## Residual risks
+
+- A real data root that is, or contains, the checkout (for example `data_root` set to `$HOME`) is not watched as a real root. Watching it would walk the whole checkout and its virtual environment on every test. The checkout's own `state/` and `config/` guards still apply.
+- Writes from a background thread or process after a test ends are attributed to a later test, or missed if they land after the session.
+- Symlinked directories are not followed.
+- While a `kaine.cycle` process is running, the real-root guard stands down, because a live entity writes there legitimately.
+
 ## Impact
 
 - Code:
