@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
 from pathlib import Path
 from typing import Any, Optional
+
+from kaine.persistence.encrypted_jsonl import (
+    encode_record,
+    has_plaintext_line,
+    rewrite_encrypted,
+)
 
 log = logging.getLogger(__name__)
 
@@ -23,10 +28,15 @@ class IntentExpressionLog:
 
     The log is the corpus of the being's own utterances, and it never holds
     heard speech.
+
+    When state encryption is enabled, each line is written as its own
+    AES-256-GCM envelope and the live log is migrated atomically on the first
+    write of the process.
     """
 
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
+        self._migration_checked = False
 
     @property
     def path(self) -> Path:
@@ -99,10 +109,24 @@ class IntentExpressionLog:
         self._write(record)
 
     def _write(self, record: dict[str, Any]) -> None:
+        if not self._migration_checked:
+            self._migration_checked = True
+            from kaine.security.crypto import get_state_encryptor
+
+            if get_state_encryptor().enabled:
+                try:
+                    if has_plaintext_line(self._path):
+                        rewrite_encrypted(self._path)
+                        log.info(
+                            "intent log: migrated plaintext lines to encrypted envelopes"
+                        )
+                except Exception:
+                    log.exception("intent log: plaintext migration failed")
+
         self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(self._path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(record, sort_keys=True) + "\n")
+                fh.write(encode_record(record) + "\n")
                 fh.flush()
                 os.fsync(fh.fileno())
         except Exception:

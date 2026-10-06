@@ -45,6 +45,7 @@ from kaine.modules.hypnos.voice_measures import (
     load_base_profile,
     organ_gguf_sha256,
 )
+from kaine.persistence.encrypted_jsonl import has_plaintext_line, rewrite_encrypted
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
@@ -719,6 +720,7 @@ class Hypnos(BaseModule):
             "rotated": None,
             "corpus_bytes": 0,
             "warned": False,
+            "encrypted_rewrites": 0,
         }
         rotated_path: Optional[Path] = None
         try:
@@ -730,6 +732,12 @@ class Hypnos(BaseModule):
             )
             if rotated_path is not None:
                 corpus_summary["rotated"] = rotated_path.name
+
+            corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
+            for f in sorted(corpus_dir.glob("sleep-*.jsonl")):
+                if await asyncio.to_thread(has_plaintext_line, f):
+                    if await asyncio.to_thread(rewrite_encrypted, f):
+                        corpus_summary["encrypted_rewrites"] += 1
 
             ceiling_info = await asyncio.to_thread(
                 check_corpus_ceiling,
@@ -796,11 +804,12 @@ class Hypnos(BaseModule):
                     / "voice_measures_latest.json",
                     measures,
                 )
-                await asyncio.to_thread(
-                    write_json_atomic,
-                    cumulative_path,
-                    new_cumulative,
-                )
+                if new_cumulative is not None:
+                    await asyncio.to_thread(
+                        write_json_atomic,
+                        cumulative_path,
+                        new_cumulative,
+                    )
             except Exception:
                 log.warning(
                     "hypnos: voice measures computation failed",

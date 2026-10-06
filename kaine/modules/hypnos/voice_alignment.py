@@ -346,47 +346,54 @@ class DPOPairBuilder:
         else:
             paths = [Path(p) for p in path]
 
+        from kaine.persistence.encrypted_jsonl import iter_records
+
         pairs: list[DPOPair] = []
         scanned = 0
         usable = 0
+        unreadable = 0
         for p in paths:
             if not p.exists():
                 continue
-            with p.open("r", encoding="utf-8") as fh:
-                for line in fh:
-                    if scanned >= self._max_scanned:
-                        break
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        record = json.loads(line)
-                    except Exception:
-                        continue
-                    scanned += 1
-                    chosen = (record.get("faithful_rendering") or "").strip()
-                    rejected = (record.get("generated_text") or "").strip()
-                    if not chosen or not rejected:
-                        continue
-                    if chosen == rejected:
-                        continue
-                    usable += 1
-                    if len(pairs) >= max_pairs:
-                        # Keep scanning (denominator + numerator) but stop building
-                        # pairs once the training budget is full.
-                        continue
-                    pairs.append(
-                        DPOPair(
-                            prompt=str(record.get("prompt", "")),
-                            chosen=chosen,
-                            rejected=rejected,
-                            metadata={
-                                "timestamp": record.get("timestamp"),
-                                "mode": record.get("mode"),
-                                "model": record.get("model"),
-                            },
-                        )
+            for line in iter_records(p):
+                if scanned >= self._max_scanned:
+                    break
+                if line.unreadable:
+                    # Not training data, and not counted as scanned, so the
+                    # template arm's rate is unaffected.
+                    unreadable += 1
+                    continue
+                record = line.record
+                scanned += 1
+                chosen = (record.get("faithful_rendering") or "").strip()
+                rejected = (record.get("generated_text") or "").strip()
+                if not chosen or not rejected:
+                    continue
+                if chosen == rejected:
+                    continue
+                usable += 1
+                if len(pairs) >= max_pairs:
+                    # Keep scanning (denominator + numerator) but stop building
+                    # pairs once the training budget is full.
+                    continue
+                pairs.append(
+                    DPOPair(
+                        prompt=str(record.get("prompt", "")),
+                        chosen=chosen,
+                        rejected=rejected,
+                        metadata={
+                            "timestamp": record.get("timestamp"),
+                            "mode": record.get("mode"),
+                            "model": record.get("model"),
+                        },
                     )
+                )
+        if unreadable:
+            log.warning(
+                "voice alignment: %d intent-log line(s) could not be read "
+                "(undecryptable or malformed); skipped",
+                unreadable,
+            )
         return pairs, scanned, usable
 
 
