@@ -10,6 +10,7 @@ from kaine.workspace.strategies import (
     StaticGoalScorer,
     StaticThymosModulator,
     ThymosModulator,
+    dominant_drive,
 )
 from kaine.workspace.syneidesis import Syneidesis
 
@@ -23,5 +24,6 @@ __all__ = [
     "StaticThymosModulator",
     "Syneidesis",
     "ThymosModulator",
+    "dominant_drive",
     "fingerprint",
 ]

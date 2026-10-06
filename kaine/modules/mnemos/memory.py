@@ -72,6 +72,7 @@ class MnemosCore:
         self._prefix = collection_prefix
         self._short_term_capacity = int(short_term_capacity)
         self._short_term: deque[StoredMemory] = deque()
+        self._short_term_embeddings: deque[tuple[dict[str, Any], list[float]] | None] = deque()
         self._hook = retrigger_hook or _noop_hook
         self._clock = clock
 
@@ -200,10 +201,13 @@ class MnemosCore:
         payload.setdefault("timestamp", ts)
         memory = StoredMemory(text=text, payload=payload, affect=affect, timestamp=ts)
         if collection == "short_term":
+            self._rebuild_embeddings_if_desynced()
             if len(self._short_term) >= self._short_term_capacity:
                 evicted = self._short_term.popleft()
+                self._short_term_embeddings.popleft()
                 await self._persist(evicted, "episodic")
             self._short_term.append(memory)
+            self._short_term_embeddings.append(None)
             return None
         return await self._persist(memory, collection)
 
@@ -228,7 +232,7 @@ class MnemosCore:
         if collection not in DEFAULT_COLLECTIONS:
             raise ValueError(f"unknown collection {collection!r}")
         if collection == "short_term":
-            return self._recall_short_term(query_text, k)
+            return await self._recall_short_term(query_text, k)
         vec = await self._embedder.encode(query_text)
         coll_name = self.collection_name(collection)
         results = await self._storage.search(coll_name, query_vector=vec, limit=k)
@@ -236,24 +240,49 @@ class MnemosCore:
         await self._invoke_hook(summary)
         return results, summary
 
-    def _recall_short_term(self, query_text: str, k: int) -> tuple[list[RecalledMemory], RecallSummary]:
-        # Short-term recall is linear and uses a cheap substring score so
-        # tests don't need an embedder roundtrip per query.
-        q = query_text.lower()
-        scored: list[tuple[float, StoredMemory, int]] = []
-        for idx, m in enumerate(self._short_term):
-            base = 1.0 if q in m.text.lower() else 0.0
-            scored.append((base, m, idx))
-        scored.sort(key=lambda t: (t[0], t[2]), reverse=True)
+    async def _recall_short_term(
+        self, query_text: str, k: int
+    ) -> tuple[list[RecalledMemory], RecallSummary]:
+        """Recall from the short-term buffer using cosine similarity.
+
+        The query is embedded once. Each short-term entry is embedded at most
+        once per embedding space (in practice once, since a running core's
+        embedder does not change); the embedding is held in memory only and is
+        never exported. Equal cosine scores rank the more recent entry first.
+        """
+        self._rebuild_embeddings_if_desynced()
+
+        if not self._short_term:
+            summary = _summarize([], "short_term")
+            return [], summary
+
+        query_vector = await self._embedder.encode(query_text)
+        current_space = dict(self._embedder.space)
+
+        updated: list[tuple[dict[str, Any], list[float]] | None] = []
+        for idx, memory in enumerate(self._short_term):
+            slot = self._short_term_embeddings[idx]
+            if slot is None or not same_space(slot[0], current_space):
+                vec = await self._embedder.encode(memory.text)
+                slot = (current_space, vec)
+            updated.append(slot)
+        self._short_term_embeddings = deque(updated)
+
+        scored: list[tuple[float, int, StoredMemory]] = []
+        for idx, (memory, slot) in enumerate(zip(self._short_term, self._short_term_embeddings)):
+            score = _cosine_similarity(query_vector, slot[1])
+            scored.append((score, idx, memory))
+        scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+
         results: list[RecalledMemory] = []
-        for score, m, idx in scored[: max(0, int(k))]:
+        for score, idx, memory in scored[: max(0, int(k))]:
             results.append(
                 RecalledMemory(
                     point_id=f"short_term:{idx}",
-                    score=score,
-                    text=m.text,
-                    payload=dict(m.payload),
-                    affect=dict(m.affect) if m.affect else None,
+                    score=float(score),
+                    text=memory.text,
+                    payload=dict(memory.payload),
+                    affect=dict(memory.affect) if memory.affect else None,
                 )
             )
         summary = _summarize(results, "short_term")
@@ -261,11 +290,22 @@ class MnemosCore:
         # episodic re-experience semantics.
         return results, summary
 
+    def _rebuild_embeddings_if_desynced(self) -> None:
+        if len(self._short_term_embeddings) != len(self._short_term):
+            log.warning(
+                "mnemos: short_term_embeddings length (%d) differs from short_term length (%d); resetting embeddings cache",
+                len(self._short_term_embeddings),
+                len(self._short_term),
+            )
+            self._short_term_embeddings = deque([None] * len(self._short_term))
+
     async def consolidate_now(self) -> int:
         """Flush every short-term entry into episodic. Returns count moved."""
+        self._rebuild_embeddings_if_desynced()
         moved = 0
         while self._short_term:
             entry = self._short_term.popleft()
+            self._short_term_embeddings.popleft()
             await self._persist(entry, "episodic")
             moved += 1
         return moved
@@ -367,6 +407,7 @@ class MnemosCore:
 
         # Rebuild short-term only after persisted replaces succeed.
         self._short_term.clear()
+        self._short_term_embeddings.clear()
         for entry in state.get("short_term") or []:
             affect = entry.get("affect")
             self._short_term.append(
@@ -377,6 +418,7 @@ class MnemosCore:
                     timestamp=float(entry.get("timestamp", 0.0)),
                 )
             )
+            self._short_term_embeddings.append(None)
 
         for name, points in persisted.items():
             if name not in mapping:
@@ -394,6 +436,19 @@ class MnemosCore:
             await self._hook(summary)
         except Exception:
             log.warning("emotional retrigger hook raised", exc_info=True)
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):
+        # Both vectors come from the same embedding space; a length mismatch
+        # is a bug, never something to score by truncation.
+        raise ValueError(f"cannot compare embeddings of length {len(a)} and {len(b)}")
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 def _summarize(results: Iterable[RecalledMemory], collection: str) -> RecallSummary:

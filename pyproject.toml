@@ -181,6 +181,7 @@ include = ["kaine*"]
     "static/vendor/vendor/*.js",
 ]
 "kaine.modules.hypnos" = ["eval_probes/*.jsonl"]
+"kaine.setup.web" = ["templates/*.html", "static/*.css"]
 "kaine.modules.eidolon" = ["surnames.txt"]
 
 # ---------------------------------------------------------------------------
@@ -301,6 +302,15 @@ source_modules = [
     "kaine.setup",
     "kaine.transfer",
     "kaine.workspace",
+    "kaine.accel_selftest",
+    "kaine.cfc_numpy",
+    "kaine.embedding_defaults",
+    "kaine.extras",
+    "kaine.install_target",
+    "kaine.secrets_file",
+    "kaine.torch_stack",
+    "kaine.wheel_data",
+    "kaine.residency",
 ]
 forbidden_modules = ["kaine.evaluation"]
 ignore_imports = [
@@ -370,6 +380,7 @@ source_modules = [
     "kaine.experiment",
     "kaine.privacy_filter",
     "kaine.text_embedding",
+    "kaine.text_embedding_numpy",
     "kaine.lifecycle.welfare_signal",
     # Cross-cutting stdlib-only primitives shared by core, the modules, and the
     # evaluation sidecar alike (atomic JSON state writer, local-service port
@@ -381,6 +392,9 @@ source_modules = [
     "kaine.net",
     "kaine.memory_kinds",
     "kaine.defaults",
+    # The K1-Jev decision schema, prompt renderer and local client: the runtime
+    # and the evaluation-side graders both consult the decision model.
+    "kaine.decision",
 ]
 forbidden_modules = [
     "kaine.cycle",

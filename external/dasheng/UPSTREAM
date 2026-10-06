@@ -1,0 +1,23 @@
+Upstream project: Dasheng (Deep Audio-Signal Holistic Embeddings), base
+Repository:       https://huggingface.co/mispeech/dasheng-base
+Pinned commit:    d29a721c75b996ffa49e2a1f985349d191a4ae5e
+Retrieved:        2026-10-05
+License:          Apache-2.0 (Copyright 2023-2024 Xiaomi Corporation and HuggingFace Inc. team)
+SPDX-License-Identifier: Apache-2.0
+Paper:            Dinkel et al., "Scaling up masked audio encoder learning for
+                  general audio classification", Interspeech 2024
+
+Source: the Hugging Face repository above, never the Zenodo copy (which is
+distributed under a different licence).
+
+Vendoring: a literal, verbatim copy of the upstream modeling source at the pinned
+commit. The model is loaded from these files with trust_remote_code=False,
+local_files_only=True and HF_HUB_OFFLINE=1; no code is fetched or executed from
+the hub. Weights are fetched once at setup time, pinned to the same commit.
+
+Vendored files (byte-identical to the pinned revision; sha256 as retrieved):
+  b9ff40da4167dd776cb2fe084c9a80c0fdd6568c3b995e0255b46a9d435e7b80  config.json
+  7a524b9d37c0e0392b75bbfb0fe5e2d1f60f62a8f2c46917bb186b638580966b  configuration_dasheng.py
+  78139c9219ff9bc48f9c5f86fb3fba9e727cb765679a92db69066d5caeb9875c  feature_extraction_dasheng.py
+  6d2a548ed05ee216ed5f70dcf2f4586c5d2c0c1a730011db8e9347eab36143d9  modeling_dasheng.py
+  16b23e7bd7eb867d288aa4cea8a9a9531f5ebb60534b14154feaaad10dc34f6c  preprocessor_config.json

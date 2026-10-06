@@ -5,6 +5,7 @@ import ast
 from pathlib import Path
 
 from kaine.cycle.__main__ import (
+    IDENTITY_REFUSED_EXIT,
     INDIVIDUATION_REFUSED_EXIT,
     ORGAN_GATE_REFUSED_EXIT,
     WELFARE_PRODUCER_REFUSED_EXIT,
@@ -27,9 +28,10 @@ def test_boot_refusal_exit_codes_are_distinct_and_documented():
         WELFARE_PRODUCER_REFUSED_EXIT,
         ORGAN_GATE_REFUSED_EXIT,
         INDIVIDUATION_REFUSED_EXIT,
+        IDENTITY_REFUSED_EXIT,
         70,
     }
-    assert len(codes) == 11, f"Expected 11 distinct codes, got {codes}"
+    assert len(codes) == 12, f"Expected 12 distinct codes, got {codes}"
 
     repo_root = Path(__file__).resolve().parents[1]
     # The boot runs as phases (tests/_boot_sequence.py walks them in order);

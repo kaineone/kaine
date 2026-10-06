@@ -68,7 +68,7 @@ class HTTPBareInferenceClient:
         # Bearer auth for a keyed server (e.g. Unsloth Studio); omitted for a
         # keyless server. Same key the organ uses.
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
-        self._client = httpx.AsyncClient(timeout=timeout_s, headers=headers)
+        self._client = httpx.AsyncClient(timeout=timeout_s, headers=headers, trust_env=False)
 
     def _body(self, user_text: str, *, think: Optional[bool]) -> dict:
         body: dict = {

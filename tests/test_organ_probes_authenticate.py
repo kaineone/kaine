@@ -21,7 +21,9 @@ class _FakeResp:
 
 
 def _make_fake_get(captured):
-    def fake_get(url, headers=None, timeout=None):
+    def fake_get(url, headers=None, timeout=None, trust_env=True):
+        # The probe talks to the local organ, so it must ignore proxy settings.
+        assert trust_env is False
         captured["url"] = url
         captured["headers"] = headers
         return _FakeResp({"data": [{"id": "m1"}]})

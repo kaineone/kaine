@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Callable, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -113,7 +113,14 @@ class SpectralAcousticEncoder:
     ``2 * n_bands``-dimensional and represents the spectral profile of *any* sound,
     so cosine change over it tracks acoustic novelty (a new sound, not a new word)."""
 
-    def __init__(self, *, n_bands: int = 32, frame_ms: float = 25.0, hop_ms: float = 10.0) -> None:
+    def __init__(
+        self,
+        *,
+        n_bands: int = 32,
+        frame_ms: float = 25.0,
+        hop_ms: float = 10.0,
+        **_ignored,
+    ) -> None:
         self._n_bands = int(n_bands)
         self._frame_ms = float(frame_ms)
         self._hop_ms = float(hop_ms)
@@ -158,20 +165,33 @@ class SpectralAcousticEncoder:
         return emb.astype(float).tolist()
 
 
-ACOUSTIC_ENCODERS: dict[str, Callable[[], AcousticEncoder]] = {
+def _dasheng_encoder_factory(**kwargs: Any) -> AcousticEncoder:
+    from kaine.modules.audition import ssl_encoders
+
+    return ssl_encoders.DashengAcousticEncoder(**kwargs)
+
+
+def _wavjepa_encoder_factory(**kwargs: Any) -> AcousticEncoder:
+    from kaine.modules.audition import ssl_encoders
+
+    return ssl_encoders.WavJEPAAcousticEncoder(**kwargs)
+
+
+ACOUSTIC_ENCODERS: dict[str, Callable[..., AcousticEncoder]] = {
     "spectral": SpectralAcousticEncoder,
-    # dasheng and wavjepa are registered in section 6.
+    "dasheng": _dasheng_encoder_factory,
+    "wavjepa": _wavjepa_encoder_factory,
 }
 
 
-def build_acoustic_encoder(name: str) -> AcousticEncoder:
+def build_acoustic_encoder(name: str, **kwargs: Any) -> AcousticEncoder:
     """Resolve an encoder name to a fresh ``AcousticEncoder`` instance."""
     key = name.strip().lower()
     ctor = ACOUSTIC_ENCODERS.get(key)
     if ctor is None:
         known = ", ".join(sorted(ACOUSTIC_ENCODERS))
         raise ValueError(f"unknown acoustic encoder {name!r}; known: {known}")
-    return ctor()
+    return ctor(**kwargs)
 
 
 class FakeAcousticEncoder:
@@ -216,6 +236,21 @@ def arousal_to_window(arousal: float, *, window_range: tuple[float, float] = (0.
     lo, hi = window_range
     a = float(np.clip(arousal, 0.0, 1.0))
     return hi - (hi - lo) * a
+
+
+def energy_dbfs(audio_bytes: bytes) -> float:
+    """RMS energy of the window in dB full scale, floored at -120.0 dB.
+
+    Content-free: a single scalar, computed independently of the encoder.
+    """
+    x = _decode_audio(audio_bytes)
+    if x.size == 0:
+        return -120.0
+    rms = float(np.sqrt(np.mean(x * x)))
+    if rms <= 0.0 or not np.isfinite(rms):
+        return -120.0
+    db = 20.0 * math.log10(rms)
+    return db if db > -120.0 else -120.0
 
 
 def detect_speech(

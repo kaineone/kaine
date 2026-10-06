@@ -55,6 +55,23 @@ InternVideo-Next (video encoder modeling code, vendored verbatim)
   Note:      Byte-identical to the upstream modeling files at the pinned revision
              ff2659b9be360a6b1e94b1eb381778a960da6019.
 
+Dasheng (audio encoder modeling code, vendored verbatim)
+  Location:  external/dasheng/
+  Upstream:  Xiaomi Corporation, Dasheng (Hugging Face mispeech/dasheng-base)
+  License:   Apache-2.0 — see external/dasheng/UPSTREAM.
+  Note:      Byte-identical to the upstream modeling files at the pinned revision
+             d29a721c75b996ffa49e2a1f985349d191a4ae5e. Taken from Hugging Face,
+             never the Zenodo copy.
+
+WavJEPA (audio encoder modeling code, vendored with three safety changes)
+  Location:  external/wavjepa/
+  Upstream:  Hugging Face labhamlet/wavjepa-base
+  License:   MIT (Hugging Face model tag; the repository carries no LICENSE file)
+             — see external/wavjepa/UPSTREAM.
+  Note:      Pinned revision 6be4a5093f6c9adbbd55e00b6e5b8f067aa03345. Two eval()
+             calls are replaced by a literal-only parser and a direct computation,
+             and types.py is renamed wavjepa_types.py; UPSTREAM lists the changes.
+
 Jacobian lens (jlens)
   Location:  external/jlens/
   Upstream:  anthropics/jacobian-lens

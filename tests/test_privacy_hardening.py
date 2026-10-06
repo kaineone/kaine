@@ -67,12 +67,85 @@ def test_dinov2_encoder_source_sets_env(monkeypatch):
 
     from kaine.modules.topos.encoder import DINOv2Encoder
 
-    src = inspect.getsource(DINOv2Encoder.load)
+    src = inspect.getsource(DINOv2Encoder._ensure_loaded_locked)
     assert "HF_HUB_DISABLE_TELEMETRY" in src, (
-        "DINOv2Encoder.load() source must contain HF_HUB_DISABLE_TELEMETRY"
+        "DINOv2Encoder._ensure_loaded_locked() source must contain HF_HUB_DISABLE_TELEMETRY"
     )
     assert "setdefault" in src, (
-        "DINOv2Encoder.load() must use os.environ.setdefault for HF_HUB_DISABLE_TELEMETRY"
+        "DINOv2Encoder._ensure_loaded_locked() must use os.environ.setdefault for HF_HUB_DISABLE_TELEMETRY"
+    )
+
+    # Every public load/encode path must reach the guarded loader.
+    load_src = inspect.getsource(DINOv2Encoder.load)
+    assert "ensure_loaded" in load_src, (
+        "DINOv2Encoder.load() must delegate to ensure_loaded()"
+    )
+
+    ensure_src = inspect.getsource(DINOv2Encoder.ensure_loaded)
+    assert "_ensure_loaded_locked" in ensure_src, (
+        "DINOv2Encoder.ensure_loaded() must call _ensure_loaded_locked()"
+    )
+
+    encode_src = inspect.getsource(DINOv2Encoder.encode)
+    assert "_ensure_loaded_locked" in encode_src, (
+        "DINOv2Encoder.encode() must call _ensure_loaded_locked()"
+    )
+
+
+def test_dinov2_load_disables_telemetry_before_from_pretrained(monkeypatch):
+    """Behavioural guard: telemetry is disabled before transformers sees a request."""
+    import sys
+    from types import SimpleNamespace
+
+    import torch
+
+    from kaine.modules.topos.encoder import DINOv2Encoder
+
+    monkeypatch.delenv("HF_HUB_DISABLE_TELEMETRY", raising=False)
+
+    recorded_telemetry: list[str | None] = []
+
+    class FakeProcessor:
+        def __call__(self, *, images, return_tensors):
+            return {"pixel_values": torch.zeros(1, 3, 224, 224)}
+
+    class FakeAutoImageProcessor:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeProcessor()
+
+    class FakeModel:
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def parameters(self):
+            return iter(())
+
+        def __call__(self, **kwargs):
+            return SimpleNamespace(last_hidden_state=torch.randn(1, 197, 384))
+
+    class FakeAutoModel:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            recorded_telemetry.append(os.environ.get("HF_HUB_DISABLE_TELEMETRY"))
+            return FakeModel()
+
+    fake_transformers = SimpleNamespace(
+        AutoImageProcessor=FakeAutoImageProcessor,
+        AutoModel=FakeAutoModel,
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    encoder = DINOv2Encoder(device_preference="cpu")
+    asyncio.run(encoder.ensure_loaded())
+
+    assert recorded_telemetry, "AutoModel.from_pretrained was never called"
+    assert recorded_telemetry[0] == "1", (
+        f"HF_HUB_DISABLE_TELEMETRY must be '1' when from_pretrained runs; "
+        f"got {recorded_telemetry[0]!r}"
     )
 
 

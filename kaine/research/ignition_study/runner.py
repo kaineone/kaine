@@ -34,6 +34,12 @@ from kaine.research.ignition_study.toml_writer import dumps
 
 log = logging.getLogger(__name__)
 
+#: Slack for file mtimes, which on many kernels come from a coarse clock and
+#: can trail the wall clock by up to a tick. A verdict left over from an
+#: earlier step is minutes or hours older, so a 2 s window still rejects stale
+#: files while accepting recently-written verdicts.
+VIABILITY_MTIME_SLACK_S = 2.0
+
 #: The key that names the study owning a bus database on the Redis server.
 STUDY_OWNER_KEY = "kaine:study:owner"
 
@@ -595,8 +601,9 @@ class StudyRunner:
         unviable_verdict: dict[str, Any] | None = None
         unviable_terminated = False
         extra_viability: dict[str, Any] | None = None
-        # A verdict file older than this step belongs to an earlier attempt.
-        step_started_wall = time.time()
+        # A verdict file older than this step (by more than the mtime slack)
+        # belongs to an earlier attempt.
+        step_started_wall = self.wall_clock()
 
         start_clock = self.clock()
         budget = (
@@ -740,10 +747,21 @@ class StudyRunner:
             if step_kind == "gestation" and unviable_verdict is None and not timeout_requested and not birth_requested and not disk_low_requested:
                 viability_path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
                 try:
-                    if viability_path.stat().st_mtime < step_started_wall:
+                    if viability_path.stat().st_mtime < step_started_wall - VIABILITY_MTIME_SLACK_S:
                         raise FileNotFoundError("verdict predates this step")
                     viability_data = json.loads(viability_path.read_text())
+                except FileNotFoundError:
+                    # No verdict yet, or one left from an earlier attempt.
+                    viability_data = None
                 except Exception:
+                    # A verdict that exists but cannot be read is retried next
+                    # poll; say so instead of treating it silently as none.
+                    log.warning(
+                        "Gestation viability verdict for %s step %s could not be read",
+                        line,
+                        k,
+                        exc_info=True,
+                    )
                     viability_data = None
                 if isinstance(viability_data, dict) and viability_data.get("verdict") == "unviable":
                     unviable_verdict = viability_data

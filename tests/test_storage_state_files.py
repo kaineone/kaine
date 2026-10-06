@@ -64,7 +64,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def test_state_files_round_trip_under_data_root(tmp_path):
+def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     root = tmp_path / "root"
     set_data_root(root)
     cwd = tmp_path / "cwd"
@@ -91,7 +91,9 @@ def test_state_files_round_trip_under_data_root(tmp_path):
     assert (root / PRESERVE_REQUEST_PATH).is_file()
     assert read_request() == preserve_req
 
-    # lifecycle stage
+    # lifecycle stage: restore the relative default the conftest fixture
+    # replaces, so its resolution under the data root is what is tested.
+    monkeypatch.setattr(stage_module, "STAGE_PATH", stage_module.DEFAULT_STAGE_PATH)
     stage = stage_module.StageState(stage=stage_module.EMBODIED)
     stage_module.write_stage(stage)
     assert (root / stage_module.STAGE_PATH).is_file()
