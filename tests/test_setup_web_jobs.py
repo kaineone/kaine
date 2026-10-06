@@ -40,8 +40,9 @@ def _zombie(pid: int) -> bool:
     try:
         with open(f"/proc/{pid}/stat") as fh:
             return fh.read().rsplit(")", 1)[1].split()[0] == "Z"
-    except FileNotFoundError:
-        # Exited and reaped between the caller's kill(pid, 0) and this read.
+    except (FileNotFoundError, ProcessLookupError):
+        # Exited and reaped between the caller's kill(pid, 0) and this read
+        # (a /proc read of a vanishing task can fail with ESRCH).
         return True
 
 
@@ -59,8 +60,8 @@ def _wait_gone(pid: int, *, group: bool = False, timeout: float = 9.0) -> None:
                 try:
                     with open(f"/proc/{entry}/stat") as fh:
                         fields = fh.read().rsplit(")", 1)[1].split()
-                except FileNotFoundError:
-                    continue  # exited while the scan ran
+                except (FileNotFoundError, ProcessLookupError):
+                    continue  # exited while the scan ran (ENOENT or ESRCH)
                 if int(fields[2]) == pid:
                     members.append(fields[0])
             # No members left means the group no longer exists.
