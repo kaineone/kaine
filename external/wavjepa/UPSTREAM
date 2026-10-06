@@ -2,7 +2,8 @@ Upstream project: WavJEPA (waveform Joint-Embedding Predictive Architecture), ba
 Repository:       https://huggingface.co/labhamlet/wavjepa-base
 Pinned commit:    6be4a5093f6c9adbbd55e00b6e5b8f067aa03345
 Retrieved:        2026-10-05
-License:          MIT
+License:          MIT, per the Hugging Face model tag. The repository carries no
+                  LICENSE file; the upstream training code on GitHub is BSD-3-Clause.
 SPDX-License-Identifier: MIT
 Paper:            arXiv:2509.23238
 

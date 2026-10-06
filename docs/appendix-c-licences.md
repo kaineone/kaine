@@ -106,6 +106,8 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 |---|---|---|
 | Published KAINE organ — GGUF (`kaineone/Qwen3.5-4B-abliterated-GGUF`) and safetensors (`kaineone/Qwen3.5-4B-abliterated`) | Apache-2.0 | KAINE's abliteration of Qwen3.5-4B; GGUF served via the local model server, safetensors is the Stage-2 trainer base |
 | InternVideo-Next base (`revliter/internvideo_next_base_p14_res224_f16`, OpenGVLab) | MIT | Frozen temporally-native visual encoder (Topos, shipped default). Modeling code vendored in [`external/internvideo_next/`](../external/internvideo_next/); weights fetched at setup. Off Meta. |
+| Dasheng base (`mispeech/dasheng-base`, Xiaomi) | Apache-2.0 | Frozen self-supervised acoustic encoder (Audition, selectable). Modeling code vendored in [`external/dasheng/`](../external/dasheng/); weights fetched at setup. |
+| WavJEPA base (`labhamlet/wavjepa-base`) | MIT (per the HF model tag; no LICENSE file in the repo) | Frozen self-supervised acoustic encoder (Audition, selectable; student path only). Modeling code vendored in [`external/wavjepa/`](../external/wavjepa/) with three safety changes; weights fetched at setup. |
 | `facebook/dinov2-small` | Apache-2.0 | Frozen ViT-S/14 visual encoder (Topos, selectable non-default fallback) |
 | emotion2vec+ (`emotion2vec/emotion2vec_plus_base`) | Apache-2.0 | Loaded via funasr from HuggingFace hub |
 | `all-MiniLM-L6-v2` | Apache-2.0 | Sentence-transformers memory embedder (Mnemos) |
