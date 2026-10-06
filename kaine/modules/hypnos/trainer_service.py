@@ -475,7 +475,10 @@ def _default_organ_probe(cfg: Any) -> Callable[[], bool]:
             req = urllib.request.Request(url, method="GET")
             if api_key:
                 req.add_header("Authorization", f"Bearer {api_key}")
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
+            # An empty ProxyHandler: this probe talks to the local organ and
+            # must never follow proxy settings.
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=10.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             return bool(data.get("is_sleeping"))
         except Exception:  # noqa: BLE001

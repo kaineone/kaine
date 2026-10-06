@@ -44,6 +44,7 @@ from __future__ import annotations
 from typing import Callable, Iterable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.templates import felt_drive_phrase
 from kaine.workspace.volition import (
     OWN_EXTERNAL_SPEECH_SOURCE,
     OWN_EXTERNAL_SPEECH_TYPE,
@@ -205,7 +206,8 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
             if name == "social_drive":
                 return Intent(
                     kind=SPEAK,
-                    about=f"social_drive (value={event.payload.get('value')})",
+                    about=felt_drive_phrase(name, event.payload.get("value")),
+                    about_kind="felt",
                     entry_id=entry_id or None,
                 )
         return None
@@ -219,7 +221,8 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
             if name is not None and DRIVE_INTENT_KINDS[name] == THINK:
                 return Intent(
                     kind=THINK,
-                    about=f"{name} (value={event.payload.get('value')})",
+                    about=felt_drive_phrase(name, event.payload.get("value")),
+                    about_kind="felt",
                     entry_id=entry_id or None,
                 )
         return None

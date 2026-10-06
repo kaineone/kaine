@@ -95,9 +95,26 @@ Any drive that crosses its `threshold` and has not already fired emits a `thymos
 |---|---|
 | **Novelty** | Variance of salience scores across selected events |
 | **Intrinsic pleasantness** | Mean salience, scaled to `[-1,1]` |
-| **Goal significance** | Token overlap of event payload with active `GoalLedger` entries |
+| **Goal significance** | Dominant homeostatic drive, signed by salience-weighted source match; active `GoalLedger` entries still contribute by token overlap when present |
 | **Coping potential** | `state.valence + (0.5 - state.arousal)` |
 | **Norm compatibility** | `0.0` (pending Eidolon integration) |
+
+### Goal-significance check
+
+The goal/need-relevance check (Scherer 2009, "The dynamic architecture of emotion", the component process model the paper cites) scores the selected events against the entity's current homeostatic drives, which build from its own state. The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration; the table maps each Thymos drive to the event sources whose content tends to relieve it.
+
+With dominant drive value `v > 0` and `f` the salience-weighted share of selected events whose source relieves that drive, the drive score is `v × (2f − 1)`. Content serving the pressing need is goal-conducive (`+v` when every selected event serves it); content that does not is obstructive (`−v` when no selected event serves it). If no drive is above zero, the drive score is `0.0`.
+
+When the `GoalLedger` holds active goals, their token-overlap score (`relevance × 2 − 1`) is also computed, and the check returns the larger of the drive score and the ledger score. The ledger API and events are unchanged; in the running system nothing currently adds goals outside tests, so the method flag reports whether goals actually contributed.
+
+`goal_significance_method` in the published `thymos.emotion` event discloses the computation:
+
+| Method | Meaning |
+|---|---|
+| `drive_relevance_v1` | Scored against the dominant drive only |
+| `drive_relevance_v1+token_overlap_v1` | Both the dominant-drive score and active ledger goals contributed; the result is their max |
+| `token_overlap_v1` | No drive-to-source table was injected (e.g., unit-construction tests) but active ledger goals were scored |
+| `unavailable` | Neither source exists; the score is `0.0` |
 
 The five scores map to a categorical emotion (`joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, `neutral`) via a rule-based `classify()`. On category change, Thymos publishes a `thymos.emotion` event. The state is then nudged:
 

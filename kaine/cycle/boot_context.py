@@ -24,6 +24,7 @@ class BootContext:
     supervision_mode: Any = None  # parameter
     gate_checks: Any = None  # parameter
     revive: Any = None  # parameter
+    identity: Any = None  # set by _phase_stage
     kaine_config: Any = None  # parameter
     fresh_gestation: Any = None  # set by _phase_stage
     stage_state: Any = None  # set by _phase_stage
@@ -62,6 +63,7 @@ class BootContext:
     stop_event: Any = None  # set by _phase_signals
     spot: Any = None  # set by _phase_spot
     divergence_monitor: Any = None  # set by _phase_safety_net
+    unfrozen_clock: Any = None  # set by _phase_safety_net; one per process, shared by the welfare timers
     welfare_monitor: Any = None  # set by _phase_safety_net
     caretaker: Any = None  # set by _phase_safety_net
     _caretaker_tasks: Any = None  # set by _phase_safety_net

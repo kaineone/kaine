@@ -15,7 +15,7 @@ from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.defaults import lingua_section_api_key
 from kaine.modules.registry import ModuleRegistry
 from kaine.storage import resolve
-from kaine.workspace.strategies import build_drive_sources
+from kaine.workspace.strategies import build_drive_sources, dominant_drive
 
 log = logging.getLogger(__name__)
 
@@ -326,6 +326,19 @@ def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
     effectors = sorted(getattr(praxis, "enabled_effectors", ()) or ())
     engine.set_whitelist_commands(effectors)
     log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
+
+
+def _wire_thymos_drive_relevance(registry: ModuleRegistry) -> None:
+    """Give Thymos the drive-to-source table its goal-significance check scores
+    against: the same table the salience goal factor builds from each registered
+    module's ``relieves_drives`` declaration, with the dominant-drive rule handed
+    in so Thymos never imports the workspace. Re-run by ``rewire_module`` so a
+    restarted Thymos, or a restarted module that changes the table, is re-wired."""
+    if "thymos" not in registry:
+        return
+    thymos = registry.get("thymos")
+    thymos.set_drive_relevance(drive_sources_for(registry), dominant_drive)
+    log.info("wired thymos goal significance to the drive-to-source table")
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:

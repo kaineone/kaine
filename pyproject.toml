@@ -392,6 +392,9 @@ source_modules = [
     "kaine.net",
     "kaine.memory_kinds",
     "kaine.defaults",
+    # The K1-Jev decision schema, prompt renderer and local client: the runtime
+    # and the evaluation-side graders both consult the decision model.
+    "kaine.decision",
 ]
 forbidden_modules = [
     "kaine.cycle",

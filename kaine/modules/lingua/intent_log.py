@@ -20,6 +20,9 @@ class IntentExpressionLog:
     The "chosen" side is the `faithful_rendering` field; the "rejected"
     side (when applicable) is the `generated_text`. Mode and metadata
     let Hypnos partition the training data.
+
+    The log is the corpus of the being's own utterances, and it never holds
+    heard speech.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -41,6 +44,12 @@ class IntentExpressionLog:
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         latency_ms: float = 0.0,
+        record_id: Optional[str] = None,
+        intent_entry_id: Optional[str] = None,
+        intent_origin: Optional[str] = None,
+        sleep_index: Optional[int] = None,
+        system_digest: Optional[str] = None,
+        seed: Optional[int] = None,
         extra: Optional[dict[str, Any]] = None,
     ) -> None:
         record: dict[str, Any] = {
@@ -52,6 +61,12 @@ class IntentExpressionLog:
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "latency_ms": latency_ms,
+            "record_id": record_id,
+            "intent_entry_id": intent_entry_id,
+            "intent_origin": intent_origin,
+            "sleep_index": sleep_index,
+            "system_digest": system_digest,
+            "seed": seed,
         }
         if faithful_rendering is not None:
             record["faithful_rendering"] = faithful_rendering

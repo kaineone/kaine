@@ -103,6 +103,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |
 | `9` | Organ content gate: the served language organ returned no content (unless `KAINE_ALLOW_MUTE_ORGAN=1`) |
 | `10` | Individuation: `[individuation]` is misconfigured, or is enabled without the `lingua` module |
+| `11` | Entity identity: the identity file is unreadable, or a revive targets a state tree that already holds a different being |
 
 A running cycle can also halt with exit code `70` when Spot escalates. Every boot gate in the table has its own exit code.
 

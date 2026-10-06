@@ -71,7 +71,13 @@ def test_lingua_probe_conditions(tmp_path: Path):
     )
     cond1 = l1.probe_conditions()
     cond2 = l2.probe_conditions()
-    assert set(cond1.keys()) == {"model_id", "temperature", "think", "persona_digest"}
+    assert set(cond1.keys()) == {
+        "model_id",
+        "temperature",
+        "think",
+        "persona_digest",
+        "persona_template_version",
+    }
     expected = hashlib.sha256(
         json.dumps([None, "alpha", None]).encode("utf-8")
     ).hexdigest()[:16]

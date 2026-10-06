@@ -70,6 +70,7 @@ class ChatterboxClient:
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=self._timeout_s,
+                trust_env=False,
             )
         return self._client
 

@@ -70,11 +70,11 @@ async def test_empty_snapshot_is_noop(bus: AsyncBus):
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:
-        # An inhibited empty snapshot still serializes to "tick=0 inhibited"
-        # so it counts as a store; verify behavior with explicitly empty.
+        # An empty snapshot still serializes to "active"/"inhibited" so it
+        # counts as a store; verify behavior with explicitly empty.
         snap = WorkspaceSnapshot(tick_index=0, selected_events=[], inhibited=False)
         await mnemos.on_workspace(snap)
-        # The serialized text is non-empty (tick=0 active), so one entry stored.
+        # The serialized text is non-empty ("active"), so one entry stored.
         assert mnemos.core.short_term_size == 1
     finally:
         await mnemos.shutdown()
@@ -274,11 +274,14 @@ def test_serialize_snapshot_omits_raw_perceptual_payload():
     assert secret not in text
     assert "RAWPIXELS" not in text
     assert "<raw-perceptual omitted>" in text
-    # The metadata (source:type@id) is still recorded for both perceptual events.
-    assert "audition:audition.transcription@e_audio" in text
-    assert "mundus:mundus.visual.raw@e_vis" in text
+    # The metadata (source:type) is still recorded for both perceptual events,
+    # but the bus entry IDs and tick index are omitted from the memory text.
+    assert "audition:audition.transcription" in text
+    assert "mundus:mundus.visual.raw" in text
+    assert "tick=" not in text
+    assert "@" not in text
     # The ordinary event's payload survives.
-    assert "soma:soma.report@e_soma={'x': 1}" in text
+    assert "soma:soma.report={'x': 1}" in text
 
 
 @pytest.mark.asyncio
@@ -364,16 +367,19 @@ async def test_recall_cooldown_negative_rejected(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_hot_path_recall_uses_short_term_no_embedder_calls(bus: AsyncBus):
-    """Spontaneous on_workspace recall searches short-term only, so the hot
-    path produces zero embedder invocations while no eviction happens."""
+async def test_hot_path_store_never_embeds_and_recall_embeds_query_and_new_entries(bus: AsyncBus):
+    """Storing into short_term never embeds; spontaneous on_workspace recall
+    embeds the query plus each uncached entry once, so after 100 ticks with no
+    eviction the total encode_count is 2 per tick after the first."""
     mnemos = await _new_mnemos(bus, capacity=128, recall_cooldown_s=0.0)
     await mnemos.initialize()
     try:
         for i in range(100):
             await mnemos.on_workspace(_snapshot([_event(eid=f"e{i}")]))
         assert mnemos.core.short_term_size == 100
-        assert mnemos.core.embedder.encode_count == 0
+        # Tick 0: empty short_term, no embedding. Ticks 1..99: one query embed
+        # plus one embed for the entry stored in the previous tick.
+        assert mnemos.core.embedder.encode_count == 2 * 99
         recalls = await _recall_events(bus)
         assert len(recalls) == 100
         # Every spontaneous recall reports the short_term collection.
@@ -385,8 +391,9 @@ async def test_hot_path_recall_uses_short_term_no_embedder_calls(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_embedding_deferred_to_eviction(bus: AsyncBus):
     """Only when the short-term buffer overflows and a trace moves to episodic
-    does the embedder run."""
-    mnemos = await _new_mnemos(bus, capacity=4, recall_cooldown_s=0.0)
+    does the embedder run; spontaneous recall is suppressed so it does not add
+    embed calls here."""
+    mnemos = await _new_mnemos(bus, capacity=4, recall_cooldown_s=60.0)
     await mnemos.initialize()
     try:
         for i in range(6):
