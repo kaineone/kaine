@@ -27,14 +27,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from kaine.storage import resolve
+from kaine.storage import MODELS_DIR_ENV, resolve
 
 # Historical default: model weights sit beside the entity's state on a local
 # checkout. The container overrides this with KAINE_MODELS_DIR=/models so weights
 # land on the shared read-mostly volume rather than the entity-state volume.
 DEFAULT_MODELS_DIR = Path("state/models")
 
-MODELS_DIR_ENV_VAR = "KAINE_MODELS_DIR"
+MODELS_DIR_ENV_VAR = MODELS_DIR_ENV
 
 
 def models_dir() -> Path:

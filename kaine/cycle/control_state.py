@@ -130,6 +130,30 @@ def read_control(path: Path | None = None) -> CycleControl:
         return CycleControl()
 
 
+def read_frozen_state(path: Path | None = None) -> bool | None:
+    """Return whether the freeze stack currently holds any entry.
+
+    Returns ``True`` if the stack is non-empty or the legacy ``frozen`` flag is
+    true, ``False`` if the file is missing or the stack is empty, and ``None``
+    if the file exists but cannot be read or parsed. A corrupt file is treated
+    as unknown so callers that fail open can keep counting the span.
+    """
+    target = resolve(path or CONTROL_PATH)
+    if not target.exists():
+        return False
+    try:
+        data = json.loads(target.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    try:
+        control = CycleControl.from_dict(data)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return None
+    if control.stack:
+        return True
+    return bool(control.frozen)
+
+
 def write_control(state: CycleControl, path: Path | None = None) -> None:
     target = resolve(path or CONTROL_PATH)
     _atomic_write(target, state.to_dict())

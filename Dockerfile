@@ -206,8 +206,8 @@ CMD ["python", "-m", "kaine.cycle"]
 # =========================================================================
 FROM build-base AS trainer-build
 ARG FLAVOR
-ARG LLAMA_CPP_TAG=b9976
-ARG LLAMA_CPP_SHA256=d54ff9d66fb07b8c295f1d0fd01ce267392409d05cc5c5c89bf83d7d4debd130
+ARG LLAMA_CPP_TAG=b11382
+ARG LLAMA_CPP_SHA256=ec72df2bfc334138cabd54ef77211882040827639e8caf17bc1648fe0b9ffdab
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \

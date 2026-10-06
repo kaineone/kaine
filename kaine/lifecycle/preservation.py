@@ -44,6 +44,12 @@ from pathlib import Path
 from typing import Any
 
 from kaine.experiment.run_context import _utc_iso, get_run_context
+from kaine.lifecycle.identity import (
+    EntityIdentity,
+    IdentityError,
+    check_sidecar_agrees,
+    identity_of_snapshot,
+)
 from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 from kaine.storage import resolve
 
@@ -129,8 +135,14 @@ async def preserve_live(
     require_encryption: bool = False,
     stage_path: Path | None = None,
     individuation_root: Path | None = None,
+    identity: EntityIdentity | None = None,
+    identity_unreadable: str | None = None,
 ) -> PreservationResult:
     """Preserve the whole individual from a LIVE registry. Read-only; fail-loud.
+
+    ``identity_unreadable`` carries a reason string when the running identity
+    could not be read; the snapshot metadata stores the reason, while the
+    plaintext manifest only records that identity was unreadable.
 
     Steps:
       1. Capture every module's state (serialize + async preservation exports).
@@ -244,6 +256,14 @@ async def preserve_live(
             "preservation_id": preservation_id,
             "run_id": run_id,
             "world_model_captured": world_model_captured,
+            # The being this bundle preserves (entity-identity); absent for
+            # callers that run without an identity.
+            **({"identity": identity.to_dict()} if identity is not None else {}),
+            **(
+                {"identity_unreadable": identity_unreadable}
+                if identity_unreadable is not None
+                else {}
+            ),
         },
     )
     # Snapshot json+encrypt+write is synchronous disk/crypto work; run it off the
@@ -439,6 +459,16 @@ async def preserve_live(
                 "ForkManager.revive(bundle_dir, registry)."
             ),
         }
+        if identity is not None:
+            # Plaintext, so key custody can find the being's key before
+            # decrypting anything (entity-identity D7).
+            manifest["identity"] = {
+                "entity_id": identity.entity_id,
+                "lineage": list(identity.lineage),
+            }
+        if identity_unreadable is not None:
+            # The manifest is plaintext; never put the reason text here.
+            manifest["identity_unreadable"] = True
         manifest_path = bundle_dir / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
         _chmod_quietly(manifest_path, 0o600)
@@ -490,6 +520,14 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
         )
 
     snap = ForkSnapshot.from_dict(json.loads(members["snapshot.json"]))
+
+    # The plaintext manifest's identity must agree with the snapshot's before
+    # any module is restored (entity-identity D7, D10); revive never writes to
+    # the bundle.
+    try:
+        check_sidecar_agrees(_manifest_identity(bundle), identity_of_snapshot(snap))
+    except IdentityError as exc:
+        raise ReviveError(f"bundle identity is inconsistent or malformed: {exc}") from exc
 
     by_name = {m.name: m for m in registry.all_modules()}
 
@@ -604,6 +642,39 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
         snap.metadata.get("world_model_captured"),
     )
     return snap
+
+
+def _manifest_identity(bundle: Path) -> tuple[str, tuple[str, ...]] | None:
+    """The plaintext manifest's identity as ``(entity_id, lineage)``, or ``None``
+    when the bundle has no manifest or no identity. Raises :class:`IdentityError`
+    when either is unreadable or malformed."""
+    manifest_path = Path(bundle) / "manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise IdentityError(f"cannot read bundle manifest: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise IdentityError("bundle manifest is not an object")
+    identity_obj = manifest.get("identity")
+    if identity_obj is None:
+        return None
+    if not isinstance(identity_obj, dict) or set(identity_obj) != {"entity_id", "lineage"}:
+        raise IdentityError("bundle manifest identity must hold exactly entity_id and lineage")
+    entity_id = identity_obj["entity_id"]
+    lineage = identity_obj["lineage"]
+    if not isinstance(lineage, list):
+        raise IdentityError("bundle manifest identity lineage must be a list")
+    is_legacy = isinstance(entity_id, str) and entity_id.startswith("legacy-")
+    # Constructing the identity validates the frozen ID format (D8).
+    EntityIdentity(
+        entity_id=entity_id,
+        lineage=tuple(lineage),
+        origin="legacy" if is_legacy else "minted",
+        legacy_source="manifest" if is_legacy else None,
+    )
+    return entity_id, tuple(lineage)
 
 
 def _extract_stage_from_bundle(bundle: Path) -> bytes | None:

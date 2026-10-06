@@ -255,6 +255,7 @@ class SelfInitiatedReportPolicy:
                     about=f"{top_event.source} (surprise={surprise:.3f})",
                     entry_id=top_entry_id or None,
                     interrupt=True,
+                    about_kind="event",
                 )
             ]
 
@@ -275,6 +276,7 @@ class SelfInitiatedReportPolicy:
                     kind=SPEAK,
                     about=f"{top_event.source} (surprise={surprise:.3f})",
                     entry_id=top_entry_id or None,
+                    about_kind="event",
                 )
             ]
 
@@ -293,6 +295,7 @@ class SelfInitiatedReportPolicy:
                     kind=THINK,
                     about=f"{top_event.source} (surprise={surprise:.3f})",
                     entry_id=top_entry_id or None,
+                    about_kind="event",
                 )
             ]
 

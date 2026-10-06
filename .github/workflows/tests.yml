@@ -88,7 +88,13 @@ jobs:
             TV_VERSION=$(python -c "import torchvision; print(torchvision.__version__)")
             printf "torch==%s\ntorchvision==%s\n" "${TORCH_MIN}" "${TV_VERSION}" > /tmp/torch-constraints.txt
           else
-            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+            # torchvision from the same CPU index as torch, pinned for the package
+            # install below: a PyPI torchvision built against another torch breaks
+            # transformers' lazy model imports (torchvision::nms does not exist).
+            python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+            TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
+            TV_VERSION=$(python -c "import torchvision; print(torchvision.__version__)")
+            printf "torch==%s\ntorchvision==%s\n" "${TORCH_VERSION}" "${TV_VERSION}" > /tmp/torch-constraints.txt
           fi
 
       - name: Install package (editable) + the extras the suite exercises

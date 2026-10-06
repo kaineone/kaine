@@ -94,6 +94,42 @@ def test_think_intent_is_internal_not_external():
     assert [i.kind for i in intents] == [THINK]
 
 
+# --- drive about is a felt-state phrase --------------------------------------
+
+
+def test_social_drive_about_is_felt_phrase_with_no_digits():
+    policy = DriveBiasedActionSelectionPolicy()
+    intents = policy(_snapshot([_drive("social_drive", 0.9)]))
+    assert intents[0].about_kind == "felt"
+    assert "value=" not in intents[0].about
+    assert not any(ch.isdigit() for ch in intents[0].about)
+    assert intents[0].about == "I feel a strong pull towards company."
+
+
+@pytest.mark.parametrize("name", ["curiosity", "boredom", "restlessness"])
+def test_deliberative_drive_about_is_felt_phrase_with_no_digits(name):
+    policy = DriveBiasedActionSelectionPolicy()
+    intents = policy(_snapshot([_drive(name, 0.9)]))
+    assert intents[0].about_kind == "felt"
+    assert "value=" not in intents[0].about
+    assert not any(ch.isdigit() for ch in intents[0].about)
+
+
+@pytest.mark.parametrize("name, strong, moderate", [
+    ("social_drive", "I feel a strong pull towards company.", "I feel a pull towards company."),
+    ("curiosity", "I feel a strong urge to know more.", "I feel curious."),
+    ("boredom", "I feel heavily bored.", "I feel bored."),
+    ("restlessness", "I feel very restless.", "I feel restless."),
+])
+def test_drive_intensity_selects_strong_or_moderate_phrase(name, strong, moderate):
+    policy = DriveBiasedActionSelectionPolicy()
+    strong_intent = policy(_snapshot([_drive(name, 0.9)]))[0]
+    assert strong_intent.about == strong
+    # A fresh policy: the first intent arms the in-flight guard.
+    moderate_intent = DriveBiasedActionSelectionPolicy()(_snapshot([_drive(name, 0.5)]))[0]
+    assert moderate_intent.about == moderate
+
+
 # --- 3.3 inhibited snapshot → no intent (via Volition gate) ----------------
 
 
@@ -263,3 +299,12 @@ def test_disabled_drive_initiative_matches_default_on_user_utterance():
     assert len(d_intents) == 1 and len(b_intents) == 1
     assert d_intents[0].kind == b_intents[0].kind == SPEAK
     assert d_intents[0].about == b_intents[0].about == "how are you?"
+
+
+def test_user_response_intent_is_marked_heard():
+    policy = DriveBiasedActionSelectionPolicy()
+    intents = policy(_snapshot([_transcription("hello there")]))
+    speak = [i for i in intents if i.kind == SPEAK][0]
+    assert speak.about == "hello there"
+    assert speak.about_kind == "heard"
+    assert speak.to_event_payload()["about_kind"] == "heard"

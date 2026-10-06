@@ -108,10 +108,10 @@ def test_persona_includes_situation_fact_after_identity():
         about="q", snapshot=None, self_model=self_model, mode="external"
     )
 
-    assert "You value a." in ctx.system
+    assert "I value a." in ctx.system
     assert "You are periodically assessed for your own protection." in ctx.system
-    assert ctx.system.index("You value a.") < ctx.system.index(
-        "Facts about your situation:"
+    assert ctx.system.index("I value a.") < ctx.system.index(
+        "Facts about my situation:"
     )
 
     identity_only = _identity_clause(self_model)
