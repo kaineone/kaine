@@ -451,7 +451,9 @@ def result_to_training_result(
     return TrainingResult(
         accepted=accepted,
         adapter_path=adapter_path,
-        capability_loss=_maybe_float("capability_loss") if accepted else 0.0,
+        # The measured loss is reported on every outcome (a rejection's
+        # evidence); an accepted result was already validated as finite.
+        capability_loss=_maybe_float("capability_loss") or 0.0,
         reason=str(result.get("reason", "")),
         samples_used=int(result.get("samples_used", samples_used)),
         dpo_loss=_maybe_float("dpo_loss"),
