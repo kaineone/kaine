@@ -61,6 +61,7 @@ from kaine.cycle.ignition_log import (
 )
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
+from kaine.cycle.utterance_outcome import start_utterance_outcome_observer
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.defaults import (
     lingua_section_api_key,
@@ -235,8 +236,14 @@ async def _run_individuation(runtime, stop_event: asyncio.Event) -> None:
 def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner, staging_enabled, caretaker):
     """Build the individuation runtime from the cycle's live objects."""
     from kaine.boot import _effective_hot_swap_mode, shared_embedder
-    from kaine.cycle.individuation_runtime import build_runtime
+    from kaine.cycle.individuation_runtime import ServedOrganIdentity, build_runtime
+    from kaine.defaults import (
+        DEFAULT_CHAT_URL,
+        lingua_section_api_key,
+        model_server_api_key,
+    )
     from kaine.evaluation.preference_battery import load_battery, validate_battery
+    from kaine.organ_probe import read_revision_state
     from kaine.organ_window_state import organ_unloaded
 
     battery = load_battery(cfg.battery_path or None)
@@ -263,6 +270,13 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
 
     from kaine.lifecycle.individuation_store import DEFAULT_ROOT
 
+    lingua_section = kaine_config.get("lingua") or {}
+    served_identity = ServedOrganIdentity(
+        chat_url=lingua_section.get("chat_url") or DEFAULT_CHAT_URL,
+        api_key=lingua_section_api_key(lingua_section) or model_server_api_key(None),
+        revision_reader=read_revision_state,
+    )
+
     return build_runtime(
         config=cfg,
         battery=battery,
@@ -282,6 +296,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         is_gestating=lambda: bool(staging_enabled and gate_runner.stage.is_gestating),
         bus=bus,
         notify=caretaker.send_event if caretaker is not None else None,
+        served_identity=served_identity,
         entity_name="",
     )
 
@@ -1049,6 +1064,30 @@ def _preservation_bundle_roots(config: dict[str, Any]) -> list[str]:
         if out_root not in roots:
             roots.append(out_root)
     return roots
+
+
+def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
+    """Resolve the entity identity for this boot before any module starts.
+
+    When reviving, the bundle's identity is returned but not yet persisted: it is
+    written to disk only after the revive lands. A target tree that already holds
+    a different identity is refused before any state is modified.
+    """
+    path = resolve(state_root) / "identity" / "entity.json"
+    if revive is not None:
+        existing = load_identity(path)
+        if existing is not None and existing.entity_id != revive.plan.identity.entity_id:
+            raise IdentityError(
+                f"refusing revive into tree with identity {existing.entity_id!r}; "
+                f"bundle identity is {revive.plan.identity.entity_id!r}"
+            )
+        return revive.plan.identity
+    return resolve_spawn_identity(state_root)
+
+
+def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
+    """Persist a revived identity once the revive has successfully landed."""
+    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
 
 
 # Effectors that have nothing to act on in the womb: Mundus has no world and
@@ -2246,6 +2285,10 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
         ctx._caretaker_tasks.add(task)
         task.add_done_callback(ctx._caretaker_tasks.discard)
 
+    # One unfrozen clock shared by every welfare timer in this process.
+    from kaine.cycle.unfrozen_clock import UnfrozenClock
+    ctx.unfrozen_clock = UnfrozenClock.for_welfare()
+
     if ctx.preservation_cfg.welfare_response.enabled:
         ctx.welfare_monitor = WelfareProtectiveMonitor(
             registry=ctx.registry,
@@ -2260,6 +2303,7 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             on_end=lambda: ctx.stop_event.set(),
             require_encryption=ctx.preservation_cfg.require_encryption,
             on_response=_on_welfare_response,
+            unfrozen_clock=ctx.unfrozen_clock,
         )
 
 
@@ -2399,6 +2443,7 @@ async def _phase_caretaker(ctx: BootContext) -> int | None:
                     streams,
                     threshold_s=threshold_s,
                     on_loss=lambda: ctx.caretaker.send_event("input_lost"),
+                    unfrozen_clock=ctx.unfrozen_clock,
                 ).run(ctx.stop_event),
                 name="cycle.input_watch",
             )
@@ -2423,6 +2468,20 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
         )
 
 
+async def _start_utterance_outcome(ctx: BootContext) -> None:
+    """Start the content-free utterance-outcome observer if Lingua is enabled.
+
+    Kept separate from `_phase_watchers` so a malformed reply-window value is
+    handled inside the observer's guarded starter and never aborts boot.
+    """
+    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+        ctx.utterance_outcome = await start_utterance_outcome_observer(
+            ctx.bus,
+            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
+            lingua_section=ctx.kaine_config.get("lingua"),
+        )
+
+
 async def _phase_watchers(ctx: BootContext) -> int | None:
     """Start the preserve watcher and the programme-end watcher."""
 
@@ -2439,6 +2498,7 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
         stop_event=ctx.stop_event,
     )
+    await _start_utterance_outcome(ctx)
 
 
 _BOOT_PHASES = (
@@ -2597,6 +2657,11 @@ async def _shutdown(ctx: BootContext) -> None:
             pass  # expected: we just cancelled it
         except Exception:
             log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
+    if ctx.utterance_outcome is not None:
+        try:
+            await ctx.utterance_outcome.stop()
+        except Exception:
+            log.warning("utterance outcome observer stop failed", exc_info=True)
     if ctx.preview_server is not None:
         try:
             await ctx.preview_server.stop()

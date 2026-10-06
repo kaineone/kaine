@@ -103,6 +103,8 @@ class IndividuationState:
     last_attempt_at: str | None = None
     inconclusive_since: str | None = None
     inconclusive_alerted: bool = False
+    conditions_alerted_reference: str | None = None
+    last_inconclusive_reason: str | None = None
     ledger_readable: bool = True
 
 
@@ -467,7 +469,7 @@ class IndividuationScheduler:
             self._look_due_at = m + self._settings.blocked_retry_s
             self._note_skip(reason)
             if self._core_look_due():
-                await self._mark_inconclusive()
+                await self._mark_inconclusive(reason=reason)
             return
 
         self._flush_lived()
@@ -517,7 +519,7 @@ class IndividuationScheduler:
                     last_outcome="error",
                     last_reason=type(exc).__name__,
                 )
-                await self._mark_inconclusive()
+                await self._mark_inconclusive(reason="error")
             return
         else:
             if outcome.outcome == "scored":
@@ -525,7 +527,7 @@ class IndividuationScheduler:
             elif outcome.outcome == "inconclusive":
                 end = self._monotonic()
                 self._look_due_at = end + self._settings.inconclusive_retry_s
-                await self._mark_inconclusive()
+                await self._mark_inconclusive(reason=outcome.reason)
             elif outcome.outcome == "skipped":
                 self._look_due_at = None
 
@@ -545,7 +547,7 @@ class IndividuationScheduler:
         except Exception:
             return True
 
-    async def _mark_inconclusive(self) -> None:
+    async def _mark_inconclusive(self, reason: str | None = None) -> None:
         try:
             ledger = load_ledger(self._paths)
         except LedgerUnreadable:
@@ -553,21 +555,34 @@ class IndividuationScheduler:
         if ledger is None:
             return
 
+        updates: dict[str, Any] = {}
+
+        if reason is not None:
+            updates["last_inconclusive_reason"] = reason
+
         if ledger.inconclusive_since is None:
+            updates["inconclusive_since"] = self._now_dt().isoformat()
+
+        current_since = updates.get("inconclusive_since", ledger.inconclusive_since)
+
+        if (
+            reason == "conditions_changed"
+            and ledger.conditions_alerted_reference != ledger.reference_id
+        ):
             try:
-                save_ledger(
-                    self._paths,
-                    dataclasses.replace(
-                        ledger, inconclusive_since=self._now_dt().isoformat()
-                    ),
+                await self._alert(
+                    {
+                        "kind": "individuation_conditions_changed",
+                        "reference_id": ledger.reference_id,
+                    }
                 )
-            except IndividuationStoreError as exc:
-                log.warning("failed to mark inconclusive start: %s", exc)
-            self._refresh_state()
-            return
+            except Exception:
+                log.warning("individuation conditions-changed alert failed")
+            else:
+                updates["conditions_alerted_reference"] = ledger.reference_id
 
         try:
-            since = datetime.fromisoformat(ledger.inconclusive_since)
+            since = datetime.fromisoformat(current_since)
             elapsed = (self._now_dt() - since).total_seconds()
         except Exception:
             # An unparseable start must not silence the operator alert.
@@ -576,28 +591,31 @@ class IndividuationScheduler:
         if (
             elapsed >= self._settings.inconclusive_alert_s
             and not ledger.inconclusive_alerted
-            and ledger.inconclusive_since != self._alerted_since
+            and current_since != self._alerted_since
         ):
+            last_reason = updates.get(
+                "last_inconclusive_reason", ledger.last_inconclusive_reason
+            )
             try:
                 await self._alert(
                     {
                         "kind": "individuation_inconclusive",
-                        "inconclusive_since": ledger.inconclusive_since,
+                        "inconclusive_since": current_since,
                         "days": round(elapsed / 86400.0, 1),
+                        "last_reason": last_reason,
                     }
                 )
             except Exception:
                 log.warning("individuation inconclusive alert failed")
-                self._refresh_state()
-                return
-            self._alerted_since = ledger.inconclusive_since
+            else:
+                self._alerted_since = current_since
+                updates["inconclusive_alerted"] = True
+
+        if updates:
             try:
-                save_ledger(
-                    self._paths,
-                    dataclasses.replace(ledger, inconclusive_alerted=True),
-                )
+                save_ledger(self._paths, dataclasses.replace(ledger, **updates))
             except IndividuationStoreError as exc:
-                log.warning("failed to mark inconclusive alert: %s", exc)
+                log.warning("failed to save inconclusive ledger updates: %s", exc)
 
         self._refresh_state()
 

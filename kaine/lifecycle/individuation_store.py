@@ -331,6 +331,8 @@ class Ledger:
     inconclusive_since: str | None = None
     inconclusive_alerted: bool = False
     last_look_at: str | None = None
+    conditions_alerted_reference: str | None = None
+    last_inconclusive_reason: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -346,6 +348,8 @@ class Ledger:
             "inconclusive_since": self.inconclusive_since,
             "inconclusive_alerted": self.inconclusive_alerted,
             "last_look_at": self.last_look_at,
+            "conditions_alerted_reference": self.conditions_alerted_reference,
+            "last_inconclusive_reason": self.last_inconclusive_reason,
         }
 
     @classmethod
@@ -396,6 +400,8 @@ class Ledger:
             "latched_report_id",
             "inconclusive_since",
             "last_look_at",
+            "conditions_alerted_reference",
+            "last_inconclusive_reason",
         ):
             value = d.get(key)
             if value is not None and not isinstance(value, str):
@@ -500,6 +506,8 @@ INCONCLUSIVE_REASONS: frozenset[str] = frozenset(
         "no_reference",
         "ledger_missing",
         "battery_changed",
+        "conditions_changed",
+        "conditions_unreadable",
         "alpha_unresolvable",
         "conditioning_changed_mid_run",
         "embedding_failed",

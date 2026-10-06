@@ -176,7 +176,7 @@ async def test_wire_lingua_self_model_noop_without_eidolon(bus, tmp_path):
 
     req = lingua.chat_client.requests[-1]
     assert req.system  # non-empty minimal invariant
-    assert "KAINE entity" in req.system
+    assert "I am this being" in req.system
 
 
 @pytest.mark.asyncio

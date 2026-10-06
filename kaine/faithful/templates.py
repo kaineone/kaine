@@ -9,9 +9,142 @@ falls back to `fallback_template` for any unregistered key.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+import math
+from typing import Any, Callable, Optional
+
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
 
 TemplateFn = Callable[[dict[str, Any]], str]
+
+STRONG_DRIVE_BAND = 0.8
+
+FELT_DRIVE_PHRASES: dict[str, tuple[str, str]] = {
+    "social_drive": (
+        "I feel a pull towards company.",
+        "I feel a strong pull towards company.",
+    ),
+    "curiosity": (
+        "I feel curious.",
+        "I feel a strong urge to know more.",
+    ),
+    "boredom": (
+        "I feel bored.",
+        "I feel heavily bored.",
+    ),
+    "restlessness": (
+        "I feel restless.",
+        "I feel very restless.",
+    ),
+}
+
+
+def felt_drive_phrase(drive: str, value: object) -> str:
+    """The felt-state phrase for a drive crossing: the strong phrase when
+    ``value`` is a finite number at or above ``STRONG_DRIVE_BAND``, otherwise
+    the moderate one. It names the felt state, never what to say, and never
+    contains a number."""
+    moderate, strong = FELT_DRIVE_PHRASES.get(drive, (None, None))
+    if moderate is None:
+        return "I feel a pull I cannot name."
+    if isinstance(value, bool):
+        return moderate
+    if isinstance(value, (int, float)):
+        try:
+            f = float(value)
+            if math.isfinite(f) and f >= STRONG_DRIVE_BAND:
+                return strong
+        except (OverflowError, ValueError):
+            pass
+    return moderate
+
+
+HEARD_SPEECH_PLACEHOLDER = "[heard speech]"
+
+HEARD_TEXT_FIELDS = frozenset({
+    "text",
+    "user_input",
+    "user_text",
+    "transcription",
+    "heard_text",
+    "faithful_rendering",
+})
+"""Field names that may contain heard speech.
+`text` is treated as heard speech only for `audition.transcription`; for every
+other event type it is not. `faithful_rendering` is included because a rendering
+can embed earlier heard lines.
+
+External-input event types (``audition.transcription`` and ``mundus.chat``) are
+redacted wholesale by type; on all other types, these fields are redacted at
+any depth.
+"""
+
+
+def _replace_text_leaves(value):
+    if isinstance(value, str):
+        return HEARD_SPEECH_PLACEHOLDER if value.strip() else value
+    if isinstance(value, dict):
+        return {k: _replace_text_leaves(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_replace_text_leaves(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_replace_text_leaves(v) for v in value)
+    return value
+
+
+def _redact_fields(value, fields_to_redact):
+    replaced = False
+
+    def walk(node):
+        nonlocal replaced
+        if isinstance(node, dict):
+            out = {}
+            for k, v in node.items():
+                if k in fields_to_redact:
+                    if isinstance(v, str) and v.strip():
+                        out[k] = HEARD_SPEECH_PLACEHOLDER
+                        replaced = True
+                    elif isinstance(v, (dict, list, tuple)):
+                        redacted = _replace_text_leaves(v)
+                        out[k] = redacted
+                        if redacted != v:
+                            replaced = True
+                    else:
+                        out[k] = v
+                else:
+                    out[k] = walk(v)
+            return out
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        if isinstance(node, tuple):
+            return tuple(walk(item) for item in node)
+        return node
+
+    return walk(value), replaced
+
+
+def redact_heard_speech(event) -> Optional[str]:
+    """Return a rendering of an event with any heard-speech payload field
+    replaced by the placeholder, or None when the event carries no heard speech.
+    """
+    if event.type == "audition.transcription":
+        return f'Speech heard: "{HEARD_SPEECH_PLACEHOLDER}".'
+
+    payload = event.payload if isinstance(event.payload, dict) else {}
+
+    if event.type in EXTERNAL_INPUT_TYPES:
+        redacted_payload = _replace_text_leaves(payload)
+        return fallback_template(event.source, event.type, redacted_payload)
+
+    heard_fields = HEARD_TEXT_FIELDS - {"text"}
+    redacted_payload, has_heard = _redact_fields(payload, heard_fields)
+    if not has_heard:
+        return None
+
+    template_fn = TEMPLATES.get((event.source, event.type))
+    if template_fn is None:
+        return fallback_template(event.source, event.type, redacted_payload)
+    return template_fn(redacted_payload)
+
 
 DEFAULT_EMPTY_SNAPSHOT_TEXT: str = "(no events selected)"
 

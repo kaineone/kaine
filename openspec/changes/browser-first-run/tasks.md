@@ -14,28 +14,28 @@
 
 ## 3. Setup server
 
-- [ ] 3.1 Add `kaine/setup/web/` (FastAPI app and templates), binding loopback only.
-- [ ] 3.1a Nexus brand and styling:
+- [x] 3.1 Add `kaine/setup/web/` (FastAPI app and templates), binding loopback only.
+- [x] 3.1a Nexus brand and styling:
   - mount `kaine/nexus/static` read-only;
   - a setup base template mirroring Nexus's `_base.html` rail and wordmark;
   - `setup.css` limited to Nexus tokens;
   - tests: the stylesheet is byte-identical to Nexus's, and `setup.css` has no literal colours or new fonts.
-- [ ] 3.2 Access control:
+- [x] 3.2 Access control:
   - the launch token is single-use with a two-minute expiry, exchanged for a session cookie;
   - the session is required on every request;
   - Host and Origin checks on changes;
   - `no-store` on secret-bearing responses;
-  - idle and finish shutdown, with running jobs counting as activity;
+  - idle and finish shutdown, with running jobs counting as activity (the server's activity hold is in place; the job runner in 4.1 sets it);
   - saving is refused while a cycle runs.
-- [ ] 3.3 Step pages rendered from the step model, with server-side validation.
-- [ ] 3.4 A parity test: the same answers through the web driver and the terminal driver give identical config.
-- [ ] 3.5 `python -m kaine.setup --web` opens the browser and prints the URL.
+- [x] 3.3 Step pages rendered from the step model, with server-side validation.
+- [x] 3.4 A parity test: the same answers through the web driver and the terminal driver give identical config.
+- [x] 3.5 `python -m kaine.setup --web` opens the browser and prints the URL.
 
 ## 4. Jobs
 
-- [ ] 4.1 A job runner with argument-list subprocesses, a Server-Sent Events progress stream and plain status lines.
-- [ ] 4.2 Jobs for the organ download (with progress), extras install, Redis and Qdrant bootstraps, and "Start Nexus".
-- [ ] 4.3 Tests:
+- [x] 4.1 A job runner with argument-list subprocesses, a Server-Sent Events progress stream and plain status lines.
+- [x] 4.2 Jobs for the organ download (with progress), extras install, Redis and Qdrant bootstraps, and "Start Nexus".
+- [x] 4.3 Tests:
   - A job never starts without its POST.
   - Failures are reported and setup continues.
   - Only the spawn route can start `kaine.cycle`.

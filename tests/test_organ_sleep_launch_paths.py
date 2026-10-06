@@ -21,7 +21,7 @@ def test_compose_command_defaults_sleep_idle_seconds():
     data = yaml.safe_load(text)
     command = data["services"]["kaine-model-server"]["command"]
     assert "${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}" in command
-    assert command.endswith("--sleep-idle-seconds ${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}}")
+    assert "--sleep-idle-seconds ${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}" in command
 
 
 def test_quadlet_has_entrypoint_and_env():

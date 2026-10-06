@@ -1,0 +1,80 @@
+{% extends "_setup_base.html" %}
+{% block title %}Setup jobs — KAINE Setup{% endblock %}
+{% block content %}
+<h1>Setup jobs</h1>
+<p>Run each task when you are ready. Output streams live below each job.</p>
+
+<table class="job-table">
+  <tbody>
+  {% for job in jobs %}
+    <tr class="job-row" data-job-name="{{ job.spec.name }}">
+      <td class="job-info">
+        <div class="job-title">{{ job.spec.title }}</div>
+        <div class="job-status" id="status-{{ job.spec.name }}">
+          {% if job.status %}{{ job.status.status }}{% else %}not started{% endif %}
+        </div>
+        {% if job.job_id %}
+        <pre class="job-log" id="log-{{ job.job_id }}"></pre>
+        {% endif %}
+        <details>
+          <summary>Details</summary>
+          <pre><code>{{ job.spec.details }}</code></pre>
+        </details>
+      </td>
+      <td class="job-actions">
+        <form method="post" action="{{ request.url_for('job_start', name=job.spec.name) }}">
+          <button type="submit" class="btn"
+            {% if job.status and job.status.status == 'running' %}disabled{% endif %}>
+            Start
+          </button>
+        </form>
+        {% if job.status and job.status.status == 'running' %}
+        <form method="post" action="{{ request.url_for('job_cancel', job_id=job.job_id) }}" class="cancel-form">
+          <button type="submit" class="btn btn-danger">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<form method="post" action="{{ request.url_for('finish') }}" class="setup-actions">
+  <button type="submit" class="btn">Finish setup</button>
+</form>
+
+<script>
+(function () {
+  function listen(jobId) {
+    var pre = document.getElementById('log-' + jobId);
+    if (!pre) return;
+    var source = new EventSource('/jobs/' + jobId + '/events');
+    source.addEventListener('message', function (e) {
+      var line = document.createElement('div');
+      line.textContent = e.data;
+      pre.appendChild(line);
+      pre.scrollTop = pre.scrollHeight;
+    });
+    source.addEventListener('done', function (e) {
+      source.close();
+      try {
+        var status = JSON.parse(e.data);
+        var statusEl = pre.parentElement.querySelector('.job-status');
+        if (statusEl) {
+          var extra = status.exit_code != null ? ' (exit ' + status.exit_code + ')' : '';
+          statusEl.textContent = status.status + extra;
+        }
+      } catch (_) {}
+    });
+    source.addEventListener('error', function () {
+      source.close();
+    });
+  }
+
+  document.querySelectorAll('.job-log').forEach(function (pre) {
+    var id = pre.id.replace('log-', '');
+    listen(id);
+  });
+})();
+</script>
+{% endblock %}

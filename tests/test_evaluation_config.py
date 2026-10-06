@@ -59,6 +59,7 @@ def test_load_missing_file_returns_defaults(tmp_path):
     assert c == EvaluationConfig()
 
 
+@pytest.mark.no_data_root
 def test_shipped_kaine_toml_has_evaluation_block():
     from pathlib import Path
 
@@ -198,6 +199,7 @@ def test_loaders_apply_operator_override(tmp_path):
     assert rl.log_dir == "/ssd/re"
 
 
+@pytest.mark.no_data_root
 def test_loaders_without_override_use_shipped(tmp_path):
     shipped = tmp_path / "kaine.toml"
     shipped.write_text('[evaluation.paths]\ntrajectory_dir = "data/wt"\n')

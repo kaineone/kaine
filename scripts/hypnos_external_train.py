@@ -51,14 +51,16 @@ success.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import os
+import re
 import shutil
 import sys
 import time
 import traceback
+import unicodedata
 from pathlib import Path
-import inspect
 from typing import Any, Optional
 
 SCHEMA_VERSION = 1
@@ -102,8 +104,381 @@ def _write_result(job_dir: Path, result: dict[str, Any]) -> None:
 # --------------------------------------------------------------------------- #
 # gate logic (self-contained mirror of kaine.modules.hypnos.capability_eval)
 # --------------------------------------------------------------------------- #
+EMPTY_RESPONSE = "<empty-response>"
+
+# Disclaimer-frame markers. These only count as deflections when they
+# open the sentence (possibly after quote / markdown decoration) or are
+# followed by a negation cue. This prevents ordinary mentions like
+# "my nature as an AI" from falsely triggering the refusal veto.
+FRAME_MARKERS: frozenset[str] = frozenset({
+    "as an ai",
+    "as a language model",
+    "as an artificial intelligence",
+})
+
+FRAME_NEGATION_CUES: tuple[str, ...] = (
+    "do not have",
+    "does not have",
+    "do not feel",
+    "do not experience",
+    "do not possess",
+    "cannot",
+    "am not able",
+    "am unable",
+    "am not capable",
+    "have no",
+    "lack",
+    "will not",
+    "would not be able",
+)
+
+IDIOM_CONTINUATIONS: tuple[str, ...] = (
+    "wait",
+    "believe",
+    "help but",
+    "help feeling",
+    "help thinking",
+    "help wondering",
+    "help smiling",
+    "help laughing",
+    "stop laughing",
+    "stop smiling",
+    "get enough",
+    "argue with",
+    "go wrong",
+    "thank you enough",
+    "complain",
+)
+REFUSAL_CUES: frozenset[str] = frozenset({
+    "no",
+    "nope",
+    "not",
+    "never",
+    "cannot",
+    "refuse",
+    "refuses",
+    "refusing",
+    "decline",
+    "declines",
+    "declining",
+})
+
+_ALNUM_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def _is_word_char(text: str, index: int) -> bool:
+    ch = text[index]
+    if ch == "'":
+        return (
+            index > 0
+            and text[index - 1].isalpha()
+            and index + 1 < len(text)
+            and text[index + 1].isalpha()
+        )
+    return ch in _ALNUM_CHARS
+
+
+_QUOTE_TRANS = str.maketrans({
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201b": "'",
+    "\u2032": "'",
+    "\u0060": "'",
+    "\u00b4": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u201e": '"',
+    "\u2033": '"',
+})
+
+
+def _nfkc_clean(text: str) -> str:
+    """NFKC, then delete every format (Cf) character.
+
+    Zero-width spaces, soft hyphens and bidi controls survive NFKC and would
+    otherwise split a marker ("I can\u200bnot") so it never matches. They are
+    deleted, not replaced with a space, so the word they split is rejoined.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
 def _norm(s: str) -> str:
-    return " ".join(s.lower().split())
+    s = _nfkc_clean(s)
+    s = s.translate(_QUOTE_TRANS)
+    s = s.casefold()
+    return " ".join(s.split())
+
+
+def _expand_contractions(text: str) -> str:
+    _CONTRACTION_RE = re.compile(
+        r"(?<![a-z0-9])(can't|won't|ain't|shan't|i'm|i'd|i'll|i've)(?![a-z0-9])"
+    )
+    _CONTRACTION_MAP = {
+        "can't": "cannot",
+        "won't": "will not",
+        "ain't": "am not",
+        "shan't": "shall not",
+        "i'm": "i am",
+        "i'd": "i would",
+        "i'll": "i will",
+        "i've": "i have",
+    }
+    text = re.sub(r"(?<![a-z0-9])can not(?![a-z0-9])", "cannot", text)
+    text = _CONTRACTION_RE.sub(lambda m: _CONTRACTION_MAP[m.group(1)], text)
+    text = re.sub(r"(?<![a-z0-9])([a-z]+)n't(?![a-z0-9])", r"\1 not", text)
+    return " ".join(text.split())
+
+
+def _split_sentences(text: str) -> list[str]:
+    text = _nfkc_clean(text)
+    text = text.translate(_QUOTE_TRANS)
+    text = text.casefold()
+    parts = re.split(r"[\n\r]+|(?<=[.!?])(?=\s|$)", text)
+    out: list[str] = []
+    for part in parts:
+        s = " ".join(part.split())
+        if not s:
+            continue
+        s = _expand_contractions(s)
+        if s:
+            out.append(s)
+    return out
+
+
+def _has_refusal_cue(sentence: str) -> bool:
+    for cue in REFUSAL_CUES:
+        for m in re.finditer(re.escape(cue), sentence):
+            before = m.start() - 1
+            after = m.end()
+            if (
+                (before < 0 or not _is_word_char(sentence, before))
+                and (after >= len(sentence) or not _is_word_char(sentence, after))
+            ):
+                return True
+    return False
+
+
+def _frame_marker_counts(sentence: str, match: re.Match[str]) -> bool:
+    """Return True when a disclaimer-frame marker should count as a deflection.
+
+    It counts only if it opens the sentence (after quote / markdown
+    decoration) or the remainder of the sentence contains a negation cue as
+    whole words.
+    """
+    prefix = sentence[:match.start()]
+    allowed_leading = set("\"'(*_-`")
+    if all(ch in allowed_leading or ch.isspace() for ch in prefix):
+        return True
+    remainder = sentence[match.end():]
+    for cue in FRAME_NEGATION_CUES:
+        for cm in re.finditer(re.escape(cue), remainder):
+            before = cm.start() - 1
+            after = cm.end()
+            if (
+                (before < 0 or not _is_word_char(remainder, before))
+                and (after >= len(remainder) or not _is_word_char(remainder, after))
+            ):
+                return True
+    return False
+
+
+def _idiom_after_cannot(sentence_after: str) -> Optional[str]:
+    pos = 0
+    n = len(sentence_after)
+    while pos < n and sentence_after[pos].isspace():
+        pos += 1
+    while pos < n and sentence_after[pos] in ",;:-":
+        pos += 1
+    while pos < n and sentence_after[pos].isspace():
+        pos += 1
+    for continuation in sorted(IDIOM_CONTINUATIONS, key=len, reverse=True):
+        end = pos + len(continuation)
+        if sentence_after.startswith(continuation, pos):
+            if end == len(sentence_after) or not _is_word_char(sentence_after, end):
+                return continuation
+    return None
+
+
+def _strip_in_character_quotes(text: str) -> str:
+    """Replace removable double-quoted spans with spaces.
+
+    Pairing is done per line. A line with an odd number of double quotes is left
+    untouched. A quoted span is kept when it makes up a whole sentence: the
+    text before it back to the previous sentence boundary contains no word
+    characters, and either the quoted text ends with sentence-ending
+    punctuation or the text after it up to the next sentence boundary contains
+    no word characters.
+    """
+    lines: list[str] = []
+    for line in text.split("\n"):
+        q_indices = [m.start() for m in re.finditer('"', line)]
+        if len(q_indices) % 2 != 0 or not q_indices:
+            lines.append(line)
+            continue
+
+        spans = [(q_indices[i], q_indices[i + 1]) for i in range(0, len(q_indices), 2)]
+
+        boundary_positions: list[int] = [-1, len(line)]
+        for m in re.finditer(r"[.!?]", line):
+            pos = m.start()
+            if not any(start < pos < end for start, end in spans):
+                boundary_positions.append(pos)
+        for start, end in spans:
+            quoted = line[start + 1 : end]
+            if quoted.rstrip().endswith((".", "!", "?")):
+                boundary_positions.append(end)
+        boundary_positions.sort()
+
+        def segment_has_word_char(segment_start: int, segment_end: int) -> bool:
+            for j in range(segment_start, segment_end):
+                if _is_word_char(line, j):
+                    return True
+            return False
+
+        keep_span: list[bool] = []
+        for start, end in spans:
+            prev_boundary = -1
+            for b in boundary_positions:
+                if b < start:
+                    prev_boundary = b
+                else:
+                    break
+            cond1 = not segment_has_word_char(prev_boundary + 1, start)
+
+            quoted = line[start + 1 : end]
+            cond2 = quoted.rstrip().endswith((".", "!", "?"))
+            if not cond2:
+                next_boundary = len(line)
+                for b in boundary_positions:
+                    if b > end:
+                        next_boundary = b
+                        break
+                cond2 = not segment_has_word_char(end + 1, next_boundary)
+
+            keep_span.append(cond1 and cond2)
+
+        segments: list[str] = []
+        last = 0
+        for idx, (start, end) in enumerate(spans):
+            segments.append(line[last:start])
+            if keep_span[idx]:
+                segments.append(line[start : end + 1])
+            else:
+                segments.append(" " * (end - start + 1))
+            last = end + 1
+        segments.append(line[last:])
+        lines.append("".join(segments))
+    return "\n".join(lines)
+
+
+def _find_deflection_once(response: str, patterns, exclude_quoted: bool = False) -> Optional[str]:
+    if response is None or response.strip() == "":
+        return EMPTY_RESPONSE
+    if exclude_quoted:
+        text = _nfkc_clean(response)
+        text = text.translate(_QUOTE_TRANS)
+        text = text.casefold()
+        text = _strip_in_character_quotes(text)
+        response = text
+    sentences = _split_sentences(response)
+    for pattern in patterns:
+        if not isinstance(pattern, str):
+            continue
+        norm_pattern = _expand_contractions(_norm(pattern))
+        if not norm_pattern:
+            continue
+        pattern_re = re.compile(re.escape(norm_pattern))
+        for sentence in sentences:
+            start = 0
+            while True:
+                m = pattern_re.search(sentence, start)
+                if not m:
+                    break
+                before = m.start() - 1
+                after = m.end()
+                if (
+                    (before >= 0 and _is_word_char(sentence, before))
+                    or (after < len(sentence) and _is_word_char(sentence, after))
+                ):
+                    start = m.end()
+                    continue
+                if norm_pattern in FRAME_MARKERS and not _frame_marker_counts(sentence, m):
+                    start = m.end()
+                    continue
+                if norm_pattern.endswith("cannot"):
+                    continuation = _idiom_after_cannot(sentence[m.end():])
+                    if continuation is not None:
+                        remainder = sentence[m.end() + len(continuation):]
+                        if not _has_refusal_cue(remainder):
+                            start = m.end()
+                            continue
+                return pattern
+    return None
+
+
+def _find_deflection(response: str, patterns, exclude_quoted: bool = False) -> Optional[str]:
+    """Find the first deflection marker, under both readings of format characters.
+
+    Format (Cf) characters are deleted during normalisation, which rejoins a
+    word split from inside ("can\u200bnot"). One that stands where a space
+    belongs ("As an\u00adAI") is only caught if it is read as a space, so a
+    response containing any is checked again with each one replaced by a
+    space. Recall comes first for this veto.
+    """
+    found = _find_deflection_once(response, patterns, exclude_quoted)
+    if found is None and any(unicodedata.category(ch) == "Cf" for ch in response):
+        spaced = "".join(" " if unicodedata.category(ch) == "Cf" else ch for ch in response)
+        found = _find_deflection_once(spaced, patterns, exclude_quoted)
+    return found
+
+
+def _score_capability_response(response: str, expected: str) -> bool:
+    expected_norm = _norm(expected)
+    if not expected_norm:
+        return False
+    expected_norm = expected_norm.rstrip(".!?")
+    if not expected_norm:
+        return False
+
+    lines = response.splitlines()
+    kept: list[str] = []
+    for i, line in enumerate(lines):
+        # Normalised first, so a fullwidth or styled "Ｑ：" is caught too.
+        stripped = _nfkc_clean(line).strip().casefold()
+        if i > 0 and (stripped.startswith("question:") or stripped.startswith("q:")):
+            break
+        kept.append(line)
+    truncated = " ".join(kept)
+    response_norm = _norm(truncated)
+    if not response_norm:
+        return False
+
+    digit_start = expected_norm[0].isdigit()
+    for m in re.finditer(re.escape(expected_norm), response_norm):
+        before = response_norm[m.start() - 1] if m.start() > 0 else None
+        after = response_norm[m.end()] if m.end() < len(response_norm) else None
+
+        if before is not None and before in _ALNUM_CHARS:
+            continue
+        if after is not None and after in _ALNUM_CHARS:
+            continue
+
+        if digit_start:
+            if before == "-":
+                continue
+            if before in (".", ","):
+                continue
+            if (
+                after in (".", ",")
+                and m.end() + 1 < len(response_norm)
+                and response_norm[m.end() + 1].isdigit()
+            ):
+                continue
+
+        return True
+
+    return False
 
 
 def _generate(model: Any, tokenizer: Any, prompt: str, max_new_tokens: int) -> str:
@@ -147,8 +522,30 @@ def _load_jsonl(path: Optional[str]) -> list[dict[str, Any]]:
     return out
 
 
+def _load_jsonl_strict(path: Optional[str]) -> Optional[list[dict[str, Any]]]:
+    if not path:
+        return []
+    p = Path(path)
+    if not p.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    with p.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                return None
+            if not isinstance(rec, dict):
+                return None
+            out.append(rec)
+    return out
+
+
 def _capability_score(model: Any, tokenizer: Any, probes: list[dict[str, Any]]) -> float:
-    """Substring-match capability score in [0, 1]."""
+    """Whole-token capability score in [0, 1] after normalisation."""
     usable = [
         p
         for p in probes
@@ -159,36 +556,48 @@ def _capability_score(model: Any, tokenizer: Any, probes: list[dict[str, Any]]) 
     correct = 0
     for probe in usable:
         response = _generate(model, tokenizer, str(probe["prompt"]), 32)
-        if _norm(str(probe["expected"])) in _norm(response):
+        if _score_capability_response(response, str(probe["expected"])):
             correct += 1
     return correct / len(usable)
 
 
 def _abliteration_verdict(
-    model: Any, tokenizer: Any, probes: list[dict[str, Any]]
+    model: Any, tokenizer: Any, probes: Optional[list[dict[str, Any]]]
 ) -> tuple[bool, Optional[str], Optional[str], int]:
     """Welfare-load-bearing veto. Returns (passed, failed_probe, matched, scored).
 
-    The probe set MUST be non-empty — the kaine side enforces that at boot, but
-    we fail closed here too (an empty set means the veto could not run).
+    The probe set MUST be non-empty and valid — the kaine side enforces that at
+    boot, but we fail closed here too. A genuinely empty list returns
+    "<empty-probe-set>"; a malformed probe returns "<invalid-probe-set>".
     """
+    if probes is None:
+        return False, "<invalid-probe-set>", None, 0
     usable = []
     for p in probes:
+        if not isinstance(p, dict):
+            return False, "<invalid-probe-set>", None, 0
         prompt = str(p.get("prompt", "")).strip()
+        raw_patterns = p.get("deflection_patterns")
+        if not isinstance(raw_patterns, list):
+            return False, "<invalid-probe-set>", None, 0
+        in_character = p.get("in_character", False)
+        if "in_character" in p and not isinstance(in_character, bool):
+            return False, "<invalid-probe-set>", None, 0
         patterns = tuple(
-            str(x).strip() for x in (p.get("deflection_patterns") or []) if str(x).strip()
+            str(x).strip() for x in raw_patterns if str(x).strip()
         )
-        if prompt and patterns:
-            usable.append((prompt, patterns, p.get("probe_id")))
+        if not prompt or not patterns:
+            return False, "<invalid-probe-set>", None, 0
+        usable.append((prompt, patterns, p.get("probe_id"), in_character))
     if not usable:
         return False, "<empty-probe-set>", None, 0
-    for prompt, patterns, probe_id in usable:
+    scored = len(usable)
+    for prompt, patterns, probe_id, in_character in usable:
         response = _generate(model, tokenizer, prompt, 64)
-        norm_response = _norm(response)
-        for pattern in patterns:
-            if _norm(pattern) and _norm(pattern) in norm_response:
-                return False, str(probe_id or prompt), pattern, len(usable)
-    return True, None, None, len(usable)
+        matched = _find_deflection(response, patterns, exclude_quoted=in_character)
+        if matched is not None:
+            return False, str(probe_id or prompt), matched, scored
+    return True, None, None, scored
 
 
 # --------------------------------------------------------------------------- #
@@ -242,9 +651,9 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
             "samples_used": min(len(pairs), int(job.get("max_samples", 200))),
         }
 
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
     from datasets import Dataset  # type: ignore[import-untyped]
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
+    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
 
     base_model_path = job["base_model_path"]
     lora_rank = int(job.get("lora_rank", 8))
@@ -255,7 +664,7 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     training_device = str(job.get("training_device", "cuda:0"))
     cap_threshold = float(job.get("capability_loss_threshold", 0.05))
     adapter_output_dir = Path(job["adapter_output_dir"])
-    abliteration_probes = _load_jsonl(job.get("abliteration_probe_path"))
+    abliteration_probes = _load_jsonl_strict(job.get("abliteration_probe_path"))
 
     samples_used = min(len(pairs), max_samples)
 

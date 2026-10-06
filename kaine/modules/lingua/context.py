@@ -20,8 +20,14 @@ from typing import Any, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful import FaithfulRenderer
+from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, redact_heard_speech
 
-AWARENESS_HEADING = "## What I am aware of right now"
+# Bump whenever the default persona or the prompt headings change, so an
+# individuation reference captured under one persona is never compared with
+# another.
+PERSONA_TEMPLATE_VERSION = "2"
+
+AWARENESS_HEADING = "## How I feel and what I notice"
 EMPTY_AWARENESS = "Nothing in particular stands out to me right now."
 
 _INPUT_HEADING = {
@@ -30,19 +36,18 @@ _INPUT_HEADING = {
 }
 
 DEFAULT_PERSONA_EXTERNAL = (
-    "You are the language faculty of a KAINE entity. Your role is to put the "
-    "system's current internal state — the module readings given below — into "
-    "plain words, in the first person as the system's own report. Report only "
-    "what the readings actually contain. Do not roleplay a character, do not "
-    "invent feelings, sensations, or experiences that are not in the readings, "
-    "and do not add literary or dramatic description. Be concrete and brief; if "
-    "the state is unremarkable, say so plainly."
+    "I am this being, speaking in my own words. "
+    "What follows under \"How I feel and what I notice\" is my own state and perception. "
+    "I speak from it and do not claim feelings or perceptions it does not contain. "
+    "I am not a narrator of instrument measurements. "
+    "I keep it brief."
 )
 DEFAULT_PERSONA_INTERNAL = (
-    "You are the language faculty of a KAINE entity, rendering its current "
-    "internal state to itself. Put the module readings given below into plain "
-    "first-person words. Report only what the readings contain — do not roleplay, "
-    "invent feelings, or embellish."
+    "I am thinking to myself in my own words, from my own state and perception. "
+    "What follows under \"How I feel and what I notice\" is my own state and perception. "
+    "I think from it and do not invent feelings or perceptions that are not there. "
+    "I am not a narrator of instrument measurements. "
+    "I keep it brief."
 )
 
 # Prompt-injection guard: the awareness block can contain transcribed speech and
@@ -58,7 +63,9 @@ _AWARENESS_GUARD = (
 class AssembledContext:
     system: str
     prompt: str
-    working_memory: str  # the rendered awareness block (also used for the eval log)
+    working_memory: str  # the rendered awareness block the organ saw
+    logged_prompt: str  # redacted prompt written to the intent-expression log
+    logged_working_memory: str  # redacted rendering written to the log
 
 
 def _name_from(self_model: dict[str, Any]) -> Optional[str]:
@@ -76,10 +83,10 @@ def _identity_clause(self_model: dict[str, Any]) -> Optional[str]:
     parts: list[str] = []
     values = self_model.get("values") or []
     if isinstance(values, list) and values:
-        parts.append("You value " + ", ".join(str(v) for v in values[:5]) + ".")
+        parts.append("I value " + ", ".join(str(v) for v in values[:5]) + ".")
     norms = self_model.get("behavioral_norms") or []
     if isinstance(norms, list) and norms:
-        parts.append("You hold to: " + "; ".join(str(n) for n in norms[:5]) + ".")
+        parts.append("I hold to: " + "; ".join(str(n) for n in norms[:5]) + ".")
     return " ".join(parts) if parts else None
 
 
@@ -87,7 +94,7 @@ def _situation_clause(self_model: dict[str, Any]) -> Optional[str]:
     """Build a short situation-facts clause, if any are recorded."""
     facts = (self_model or {}).get("situation_facts") or []
     if isinstance(facts, list) and facts:
-        return "Facts about your situation: " + " ".join(str(f) for f in facts)
+        return "Facts about my situation: " + " ".join(str(f) for f in facts)
     return None
 
 
@@ -118,6 +125,7 @@ class ContextAssembler:
         snapshot: Optional[WorkspaceSnapshot],
         self_model: Optional[dict[str, Any]] = None,
         mode: str = "external",
+        about_is_heard: bool = True,
     ) -> AssembledContext:
         working_memory = (
             self._renderer.render_snapshot_bounded(
@@ -126,9 +134,36 @@ class ContextAssembler:
             if snapshot is not None
             else EMPTY_AWARENESS
         )
+        logged_working_memory = (
+            self._renderer.render_snapshot_bounded(
+                snapshot,
+                max_events=self._max_events,
+                char_budget=self._char_budget,
+                redact=redact_heard_speech,
+            )
+            if snapshot is not None
+            else EMPTY_AWARENESS
+        )
         system = self._persona(mode, self_model or {})
-        prompt = self._build_prompt(about=about, working_memory=working_memory, mode=mode)
-        return AssembledContext(system=system, prompt=prompt, working_memory=working_memory)
+        prompt = self._build_prompt(
+            about=about,
+            working_memory=working_memory,
+            mode=mode,
+            about_is_heard=about_is_heard,
+        )
+        logged_prompt = self._build_prompt(
+            about=HEARD_SPEECH_PLACEHOLDER if about_is_heard else about,
+            working_memory=logged_working_memory,
+            mode=mode,
+            about_is_heard=about_is_heard,
+        )
+        return AssembledContext(
+            system=system,
+            prompt=prompt,
+            working_memory=working_memory,
+            logged_prompt=logged_prompt,
+            logged_working_memory=logged_working_memory,
+        )
 
     def _persona(self, mode: str, self_model: dict[str, Any]) -> str:
         if mode == "internal":
@@ -138,7 +173,7 @@ class ContextAssembler:
         parts: list[str] = []
         name = self._persona_name or _name_from(self_model)
         if name:
-            parts.append(f"Your name is {name}.")
+            parts.append(f"My name is {name}.")
         parts.append(base)
         identity = _identity_clause(self_model)
         if identity:
@@ -149,8 +184,24 @@ class ContextAssembler:
         parts.append(_AWARENESS_GUARD)
         return " ".join(parts)
 
-    def _build_prompt(self, *, about: str, working_memory: str, mode: str) -> str:
-        input_heading = _INPUT_HEADING.get(mode, _INPUT_HEADING["external"])
+    def _build_prompt(
+        self,
+        *,
+        about: str,
+        working_memory: str,
+        mode: str,
+        about_is_heard: bool,
+    ) -> str:
+        if mode == "external":
+            input_heading = (
+                "## What was just said to me"
+                if about_is_heard
+                else "## What moves me to speak"
+            )
+        elif mode == "internal":
+            input_heading = _INPUT_HEADING["internal"]
+        else:
+            input_heading = _INPUT_HEADING.get(mode, _INPUT_HEADING["external"])
         body = working_memory.strip() or EMPTY_AWARENESS
         return (
             f"{AWARENESS_HEADING}\n{body}\n\n"
