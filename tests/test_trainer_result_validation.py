@@ -429,3 +429,54 @@ def test_accepted_adapter_without_adapter_config_rejected(tmp_path):
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
         )
+
+
+def test_sweep_skips_symlinked_job_dirs(tmp_path):
+    from kaine.modules.hypnos.subprocess_trainer import (
+        _sweep_stale_workdir,
+        scrub_job_inputs,
+    )
+
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    pairs = victim / "pairs.jsonl"
+    pairs.write_text("{}", encoding="utf-8")
+    prev = victim / "previous_adapter" / "x"
+    prev.parent.mkdir(parents=True)
+    prev.write_text("data", encoding="utf-8")
+
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    evil_job = jobs / "evil"
+    evil_job.symlink_to(victim, target_is_directory=True)
+
+    _sweep_stale_workdir(jobs)
+    assert pairs.exists()
+    assert prev.exists()
+
+    scrub_job_inputs(evil_job)
+    assert pairs.exists()
+    assert prev.exists()
+
+    victim2 = tmp_path / "victim2"
+    victim2.mkdir()
+    (victim2 / "file.txt").write_text("keep", encoding="utf-8")
+    adapters = tmp_path / "adapters"
+    adapters.mkdir()
+    evil_tmp = adapters / "evil.tmp"
+    evil_tmp.symlink_to(victim2, target_is_directory=True)
+
+    _sweep_stale_workdir(jobs, adapters)
+    assert (victim2 / "file.txt").exists()
+
+
+def test_failure_without_schema_keeps_its_reason(tmp_path):
+    result = {"ok": False, "reason": "cuda out of memory"}
+    with pytest.raises(SubprocessTrainerError, match="cuda out of memory") as exc_info:
+        validate_trainer_result(
+            result,
+            job_dir=tmp_path / "job",
+            adapter_root=tmp_path / "adapters",
+            capability_loss_threshold=0.05,
+        )
+    assert "schema_version" not in str(exc_info.value)

@@ -258,7 +258,6 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
                             json.dumps(
                                 {
                                     "ok": False,
-                                    "schema_version": 2,
                                     "reason": "capability gate rejected",
                                 }
                             ),
@@ -270,7 +269,7 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
         raise TimeoutError("fake service never saw READY")
 
     service_task = asyncio.create_task(fake_service())
-    with pytest.raises(SubprocessTrainerError, match="reported failure"):
+    with pytest.raises(SubprocessTrainerError, match="capability gate rejected"):
         await trainer.train(_pairs(), cfg)
     assert (await service_task) is None
 

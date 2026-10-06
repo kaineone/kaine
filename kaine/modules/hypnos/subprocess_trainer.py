@@ -167,6 +167,8 @@ def scrub_job_inputs(job_dir: Path) -> None:
     external trainer cannot import kaine to decrypt, so they are plaintext
     while it runs; they must not outlive the run.
     """
+    if job_dir.is_symlink():
+        return
     pairs_path = job_dir / "pairs.jsonl"
     try:
         pairs_path.unlink()
@@ -187,12 +189,16 @@ def _sweep_stale_workdir(
     """
     if workdir.exists():
         for entry in workdir.iterdir():
+            if entry.is_symlink():
+                continue
             if not entry.is_dir():
                 continue
             if (entry / "pairs.jsonl").exists() or (entry / "previous_adapter").exists():
                 scrub_job_inputs(entry)
     if adapter_output_dir is not None and adapter_output_dir.exists():
         for entry in adapter_output_dir.iterdir():
+            if entry.is_symlink():
+                continue
             if entry.is_dir() and entry.name.endswith(".tmp"):
                 shutil.rmtree(entry, ignore_errors=True)
 
@@ -215,6 +221,14 @@ def validate_trainer_result(
             f"external trainer result.json is not an object (job {job_dir})"
         )
 
+    ok = result.get("ok")
+
+    if ok is not True:
+        reason = result.get("reason", "no reason given")
+        raise SubprocessTrainerError(
+            f"external trainer reported failure: {reason}"
+        )
+
     schema_version = result.get("schema_version")
     if schema_version != SCHEMA_VERSION:
         raise SubprocessTrainerError(
@@ -222,17 +236,10 @@ def validate_trainer_result(
             f"expected {SCHEMA_VERSION}, got {schema_version!r} (job {job_dir})"
         )
 
-    ok = result.get("ok")
     accepted = result.get("accepted")
 
     if ok is True and accepted is False:
         return result
-
-    if ok is not True:
-        reason = result.get("reason", "no reason given")
-        raise SubprocessTrainerError(
-            f"external trainer reported failure: {reason}"
-        )
 
     if accepted is not True:
         raise SubprocessTrainerError(
