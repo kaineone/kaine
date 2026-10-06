@@ -352,16 +352,18 @@ def own_lived_artifacts(state_root: Path | str = "state") -> list[Path]:
 
     Only the indicators in :data:`OWN_LIVED_ARTIFACTS` are considered; forks/
     and preservation/ are excluded. Each artifact may be a file or a directory.
+    An artifact whose existence cannot be checked counts as present.
     """
     root = resolve(state_root)
     out: list[Path] = []
     for rel in OWN_LIVED_ARTIFACTS:
         candidate = root / rel
         try:
-            if candidate.exists():
-                out.append(candidate)
+            exists = candidate.exists()
         except OSError:
-            continue
+            exists = True
+        if exists:
+            out.append(candidate)
     return out
 
 

@@ -228,13 +228,21 @@ def read_stage(path: Path | None = None) -> StageState | None:
     and it means different things for a fresh entity versus one with prior lived
     history."""
     target = resolve(path or STAGE_PATH)
-    if not target.exists():
+    try:
+        exists = target.exists()
+    except OSError:
+        # If we cannot verify whether the stage file exists, we must fail safe
+        # toward `embodied` rather than return `None` and risk regressing a
+        # possibly-lived mind into the womb.
+        return StageState(stage=EMBODIED)
+    if not exists:
         return None
     try:
         return StageState.from_dict(json.loads(target.read_text()))
-    except (json.JSONDecodeError, OSError):
-        # A corrupt stage file must fail safe toward `embodied` (never regress a
-        # possibly-lived mind into the womb), not crash boot.
+    except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        # A corrupt, malformed or unreadable stage file must fail safe toward
+        # `embodied` (never regress a possibly-lived mind into the womb), not
+        # crash boot.
         return StageState(stage=EMBODIED)
 
 
