@@ -148,7 +148,7 @@ class DINOv2Encoder:
             from transformers import AutoImageProcessor, AutoModel
 
             processor = AutoImageProcessor.from_pretrained(self._model_id)
-            model = AutoModel.from_pretrained(self._model_id)
+            model = AutoModel.from_pretrained(self._model_id, dtype=torch.float32)
             model.eval()
             for p in model.parameters():
                 p.requires_grad_(False)
@@ -244,10 +244,7 @@ class InternVideoNextEncoder:
         pooling: str = DEFAULT_POOLING,
         clip_resolution: int = DEFAULT_CLIP_RESOLUTION,
     ) -> None:
-        from kaine.modules.topos.internvideo_next_loader import (
-            DEFAULT_WEIGHTS_DIR,
-            PINNED_REVISION,
-        )
+        from kaine.modules.topos.internvideo_next_loader import PINNED_REVISION
 
         pooling = str(pooling).strip().lower()
         if pooling not in ("attention", "mean"):
@@ -260,7 +257,7 @@ class InternVideoNextEncoder:
         self._model_id = model_id
         self._device_preference = device_preference
         self._device = "cpu"
-        self._weights_dir = weights_dir if weights_dir is not None else DEFAULT_WEIGHTS_DIR
+        self._weights_dir = weights_dir
         self._revision = PINNED_REVISION
         self._clip_len = int(clip_len)
         self._pooling = pooling
@@ -324,14 +321,19 @@ class InternVideoNextEncoder:
             if _model is not None:
                 model = _model
             else:
+                from kaine.hardware import resolve_dtype
                 from kaine.modules.topos.internvideo_next_loader import (
                     load_internvideo_next,
                 )
 
+                # fp16 on CUDA/XPU, float32 on CPU. The loader builds the model
+                # in float32 and casts after construction, so the process-wide
+                # default dtype stays float32 while other modules load.
+                dtype = resolve_dtype(self._device)
                 model = load_internvideo_next(
                     weights_dir=self._weights_dir,
                     device=self._device,
-                    torch_dtype=torch.float16,
+                    torch_dtype=dtype,
                     revision=self._revision,
                 )
             processor = _processor if _processor is not None else _load_videomae_processor()

@@ -60,7 +60,17 @@ WEIGHTS_FILENAME = "model.safetensors"
 # root (``state/models`` locally, git-ignored; ``/models`` on the container's
 # kaine-models volume — see kaine.model_paths). Runtime loads ONLY from here —
 # never the hub.
-DEFAULT_WEIGHTS_DIR = models_dir() / "internvideo_next_base_p14_res224_f16"
+WEIGHTS_DIRNAME = "internvideo_next_base_p14_res224_f16"
+
+
+def default_weights_dir() -> Path:
+    """The default weights dir, resolved now: ``models_dir()`` re-reads
+    ``KAINE_MODELS_DIR``, so call this rather than reading the import-time
+    ``DEFAULT_WEIGHTS_DIR`` when the environment may have changed."""
+    return models_dir() / WEIGHTS_DIRNAME
+
+
+DEFAULT_WEIGHTS_DIR = default_weights_dir()
 
 # Optional revision marker the setup step / loader use to detect a
 # code-vs-weights revision mismatch (see _read_recorded_revision).
@@ -282,7 +292,7 @@ def load_internvideo_next(
     if weights_dir is not None:
         wdir = resolve(weights_dir)
     else:
-        wdir = resolve(models_dir() / "internvideo_next_base_p14_res224_f16")
+        wdir = resolve(default_weights_dir())
     if not wdir.exists():
         raise FileNotFoundError(
             f"InternVideo-Next weights dir not found: {wdir}. Fetch them once at "
@@ -331,19 +341,29 @@ def load_internvideo_next(
     # fallback section above). With flash_attn present this is skipped entirely.
     if force_eager:
         _force_eager_attention(config)
+    # In transformers 5.x an omitted dtype means "auto", which reads the
+    # checkpoint's dtype and briefly sets the process-wide default dtype during
+    # model construction. For the shipped InternVideo-Next checkpoint that is
+    # float16, so we explicitly build in float32 to keep the default at float32,
+    # then apply the device dtype after load.
+    import torch
+
     model = model_cls.from_pretrained(
         str(wdir),
         config=config,
+        dtype=torch.float32,
         local_files_only=True,
         trust_remote_code=False,
-        torch_dtype=torch_dtype,
     )
 
     # Frozen contract (unchanged from DINOv2): eval + no grad; Topos never trains it.
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
-    model.to(device)
+    if torch_dtype is not None:
+        model.to(device=device, dtype=torch_dtype)
+    else:
+        model.to(device)
     log.info(
         "InternVideo-Next encoder loaded offline from %s on %s (revision %s, "
         "trust_remote_code=False)",
