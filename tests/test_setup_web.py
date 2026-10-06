@@ -697,7 +697,7 @@ def _defaults_from_form(html: str, step_id: str) -> dict[str, list[str] | str]:
     return data
 
 
-def _drive_web(app, overrides: dict[str, Any]) -> dict:
+def _drive_web(app, overrides: dict[str, Any], *, save: bool = False) -> dict:
     client = TestClient(app, base_url="http://127.0.0.1:8000")
     token = app.state.setup.store.issue()
     r = client.get(
@@ -747,7 +747,15 @@ def _drive_web(app, overrides: dict[str, Any]) -> dict:
         raise AssertionError("web driver did not reach review/abort")
 
     sid = client.cookies["setup_session"]
-    return app.state.setup.store.sessions[sid]["config"]
+    config = app.state.setup.store.sessions[sid]["config"]
+    if save:
+        r_save = client.post(
+            "/save",
+            headers={"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"},
+            follow_redirects=False,
+        )
+        assert r_save.status_code == 303, r_save.text
+    return config
 
 
 def _run_terminal(host, shipped_path, tmp_path, **overrides) -> dict:
@@ -1362,7 +1370,8 @@ def test_run_web_refuses_when_state_dir_cannot_be_resolved(tmp_path, monkeypatch
 
     started = []
     monkeypatch.setattr(kaine.storage, "resolve", broken_resolve)
-    monkeypatch.setattr(setup_main_mod, "serve", lambda *a, **k: started.append(1))
+    # _run_web imports the server lazily from kaine.setup.web.
+    monkeypatch.setattr("kaine.setup.web.serve", lambda *a, **k: started.append(1))
     args = argparse.Namespace(
         operator_path=tmp_path / "op.toml",
         config_path=Path(__file__).resolve().parent.parent / "config" / "kaine.toml",
@@ -1751,3 +1760,32 @@ def test_cycle_process_details_finds_pid_and_argv(tmp_path):
     assert state is True
     assert pid == 7
     assert argv == ["python", "-m", "kaine.cycle"]
+
+
+def test_web_cl1_decline_removes_an_earlier_cl1_setup(tmp_path):
+    """Declining CL1 in the browser removes a CL1 setup an earlier run wrote.
+
+    The session is server-side and holds the REMOVE sentinel itself, so the
+    save route's merge deletes the table instead of writing a marker string.
+    """
+    import tomllib
+
+    from kaine.setup import tomlwriter
+
+    operator_path = tmp_path / "kaine.operator.toml"
+    operator_path.write_text(
+        "[modules]\nchronos = true\nsoma = true\n\n"
+        "[plugins]\nenabled = [\"cl1\"]\n\n"
+        "[plugins.cl1.substrate]\ntarget = \"simulator\"\naccelerated_time = true\n\n"
+        "[plugins.cl1.backends]\nchronos = \"cl1\"\nsoma = \"cl1\"\n",
+        encoding="utf-8",
+    )
+    app = _mk_app(tmp_path, operator_path=operator_path)
+
+    config = _drive_web(app, {}, save=True)
+
+    assert config["plugins"]["cl1"] is tomlwriter.REMOVE
+    saved = tomllib.loads(operator_path.read_text(encoding="utf-8"))
+    assert "cl1" not in saved.get("plugins", {})
+    assert saved["plugins"]["enabled"] == []
+    assert "__kaine_remove__" not in operator_path.read_text(encoding="utf-8")

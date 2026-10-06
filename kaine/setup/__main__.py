@@ -29,7 +29,6 @@ from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH
 from kaine.setup.nexus_token import ensure_nexus_token as _ensure_nexus_token
 from kaine.setup.steps import OWNED_KEYS, assert_owned, owned_changes
 from kaine.setup.storage_step import existing_volumes, write_volume_override
-from kaine.setup.web import create_setup_app, serve
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
 
@@ -465,6 +464,8 @@ def _run_web(
     except Exception as exc:
         print(f"setup cannot start: the state directory cannot be resolved ({exc})", file=sys.stderr)
         return 1
+
+    from kaine.setup.web import create_setup_app, serve
 
     try:
         app = create_setup_app(

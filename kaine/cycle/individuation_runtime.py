@@ -250,20 +250,29 @@ class IndividuationRuntime:
         )
 
     async def alert(self, payload: dict) -> None:
+        kind = str(payload.get("kind") or "individuation_inconclusive")
+        # The scheduler and producer pass real values: an ISO string or None,
+        # and a float or None. They are published as they are.
+        inconclusive_since = payload.get("inconclusive_since")
+        days_raw = payload.get("days")
+        days = float(days_raw) if days_raw is not None else None
         await self.bus.publish(
             Event(
                 source="individuation",
                 type="individuation.alert",
                 payload={
-                    "inconclusive_since": str(payload.get("inconclusive_since")),
-                    "days": float(payload.get("days", 0.0)),
+                    "kind": kind,
+                    "reference_id": payload.get("reference_id"),
+                    "last_reason": payload.get("last_reason"),
+                    "inconclusive_since": inconclusive_since,
+                    "days": days,
                 },
                 salience=0.0,
                 timestamp=datetime.now(timezone.utc),
             )
         )
         if self.notify is not None:
-            await self.notify("individuation_inconclusive")
+            await self.notify(kind)
 
     def on_birth(self) -> None:
         log.info("individuation birth hook: writing birth marker and requesting birth capture")

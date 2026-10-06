@@ -690,7 +690,15 @@ def create_setup_app(
         if forbidden is not None:
             return forbidden
 
-        changes = owned_changes(state.existing, sess["config"])
+        # Compare against the merged result, as the terminal does, so a
+        # removal shows as the owned keys it deletes.
+        try:
+            preview = tomlwriter.merge_owned(
+                state.existing, sess["config"], OWNED_KEYS
+            )
+        except ValueError:
+            preview = sess["config"]
+        changes = owned_changes(state.existing, preview)
         return templates.TemplateResponse(
             request,
             "review.html",

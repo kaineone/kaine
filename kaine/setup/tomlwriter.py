@@ -25,6 +25,28 @@ import tomllib
 from typing import Any
 
 
+class _Remove(str):
+    """Sentinel value used in update dictionaries to request deletion of a key/table."""
+
+    def __new__(cls):
+        return super().__new__(cls, "__kaine_remove__")
+
+    def __repr__(self) -> str:
+        return "REMOVE"
+
+    def __reduce__(self) -> str:
+        return "REMOVE"
+
+    def __copy__(self) -> "_Remove":
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "_Remove":
+        return self
+
+
+REMOVE = _Remove()
+
+
 # Bare keys that need no quoting per the TOML spec (A-Za-z0-9_-).
 def _format_key(key: str) -> str:
     if key and all(c.isalnum() or c in "_-" for c in key):
@@ -57,6 +79,8 @@ def _format_str(value: str) -> str:
 
 
 def _format_scalar(value: Any) -> str:
+    if value is REMOVE:
+        raise TypeError("tomlwriter cannot serialize the REMOVE sentinel")
     # bool MUST be checked before int (bool is a subclass of int).
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -136,11 +160,51 @@ def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in data.items():
         dotted = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict):
+        if isinstance(value, dict) and value is not REMOVE:
             out.update(_flatten(value, dotted))
         else:
             out[dotted] = value
     return out
+
+
+def _is_owned_remove_path(
+    dotted: str, owned: frozenset[str], existing_flat: dict[str, Any]
+) -> bool:
+    """Whether ``dotted`` may be removed from ``existing`` under ``owned``."""
+    prefix = dotted + "."
+    owns_path = dotted in owned or any(k.startswith(prefix) for k in owned)
+    if not owns_path:
+        return False
+    return all(
+        k in owned
+        for k in existing_flat
+        if k == dotted or k.startswith(prefix)
+    )
+
+
+def _delete_dotted(cfg: dict[str, Any], dotted: str) -> None:
+    """Delete ``dotted`` from ``cfg`` and prune tables that become empty."""
+    parts = dotted.split(".")
+    cur = cfg
+    stack: list[dict[str, Any]] = [cur]
+    for p in parts[:-1]:
+        nxt = cur.get(p)
+        if not isinstance(nxt, dict):
+            return
+        stack.append(nxt)
+        cur = nxt
+    leaf = parts[-1]
+    if leaf not in cur:
+        return
+    del cur[leaf]
+    for i in range(len(parts) - 1, 0, -1):
+        parent = stack[i - 1]
+        key = parts[i - 1]
+        child = parent.get(key)
+        if isinstance(child, dict) and not child:
+            del parent[key]
+        else:
+            break
 
 
 def _validate_emittable(data: dict[str, Any], prefix: str = "") -> None:
@@ -173,7 +237,12 @@ def _validate_emittable(data: dict[str, Any], prefix: str = "") -> None:
 
 def merge_owned(existing: dict, updates: dict, owned: frozenset[str]) -> dict:
     """Return a deep copy of ``existing`` with every owned dotted key in
-    ``updates`` replaced.
+    ``updates`` replaced or removed.
+
+    A value of :data:`REMOVE` requests deletion of that dotted key (or whole
+    table).  Table removal is allowed only when the table path is owned, or when
+    every existing leaf under the table is owned and at least one owned key
+    starts with that path.
 
     Unowned keys and tables in ``existing`` are preserved untouched.  A dotted
     key in ``updates`` that is not owned raises ``ValueError``.  If the merged
@@ -184,8 +253,14 @@ def merge_owned(existing: dict, updates: dict, owned: frozenset[str]) -> dict:
         raise TypeError("merge_owned expects dicts")
 
     merged = copy.deepcopy(existing)
+    existing_flat = _flatten(existing)
 
     for dotted, value in _flatten(updates).items():
+        if value is REMOVE:
+            if not _is_owned_remove_path(dotted, owned, existing_flat):
+                raise ValueError(f"refusing to remove unowned config key: {dotted}")
+            _delete_dotted(merged, dotted)
+            continue
         if dotted not in owned:
             raise ValueError(f"refusing to write unowned config key: {dotted}")
         _set_dotted(merged, dotted, value)
