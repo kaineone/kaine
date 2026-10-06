@@ -624,6 +624,7 @@ def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
         )
 
 
+@pytest.mark.no_data_root
 def test_no_profile_is_behaviour_identical(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
     shipped.write_text('[lingua]\nbackend = "ollama"\n')
