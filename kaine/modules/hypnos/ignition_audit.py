@@ -30,8 +30,11 @@ Taxonomy:
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-# External-input (other-initiated) workspace coalition member types.
-EXTERNAL_INPUT_TYPES = frozenset({"audition.transcription", "mundus.chat"})
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
+
+# EXTERNAL_INPUT_TYPES (other-initiated coalition member types) is the shared
+# definition from kaine.faithful.external_input, also used by heard-speech
+# redaction.
 # Internal drive coalition member type.
 DRIVE_TYPE = "thymos.drive"
 # Realization markers (a realized ignition). realization_failed is NOT here.
