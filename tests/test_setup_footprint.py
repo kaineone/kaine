@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import psutil
 import pytest
 
 from kaine.config import SHIPPED_CONFIG_PATH
@@ -16,7 +17,10 @@ from kaine.residency.fit import Need, fit_report
 from kaine.setup.footprint import (
     HostClassUnknown,
     ServiceNotMeasurable,
+    _child_wrapper,
+    _hf_cached,
     _measure_callable_in_child,
+    _measure_service,
     _needs_for,
     _select_components,
     _target_audition_emotion,
@@ -33,7 +37,7 @@ def _hermetic_selection(monkeypatch: Any) -> None:
     """Make component selection independent of the machine's installed models."""
     monkeypatch.setattr(
         "kaine.setup.footprint._hf_cached",
-        lambda model_id, snapshot=None: False,
+        lambda model_id, *, cache_dir=None: False,
     )
     monkeypatch.setattr(
         "kaine.setup.footprint._sherpa_present",
@@ -259,7 +263,7 @@ def test_topos_internvideo_next_empty_dir_is_absent(tmp_path, monkeypatch):
 def test_topos_dinov2_absent_when_hf_cached_false(monkeypatch):
     _hermetic_selection(monkeypatch)
     monkeypatch.setattr(
-        "kaine.setup.footprint._hf_cached", lambda model_id, snapshot=None: False
+        "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: False
     )
     config = {
         "modules": {"topos": True},
@@ -273,7 +277,7 @@ def test_topos_dinov2_absent_when_hf_cached_false(monkeypatch):
 def test_topos_dinov2_present_when_hf_cached_true(monkeypatch):
     _hermetic_selection(monkeypatch)
     monkeypatch.setattr(
-        "kaine.setup.footprint._hf_cached", lambda model_id, snapshot=None: True
+        "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: True
     )
     config = {
         "modules": {"topos": True},
@@ -288,7 +292,7 @@ def test_audition_emotion_absent_and_present_via_hf_cached(monkeypatch):
     _hermetic_selection(monkeypatch)
     config = {"modules": {"audition": True}}
     monkeypatch.setattr(
-        "kaine.setup.footprint._hf_cached", lambda model_id, snapshot=None: False
+        "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: False
     )
     emotion_infos = [
         i for i in _select_components(config) if i.name == "audition.emotion"
@@ -296,7 +300,7 @@ def test_audition_emotion_absent_and_present_via_hf_cached(monkeypatch):
     assert emotion_infos[0].kind == "absent"
 
     monkeypatch.setattr(
-        "kaine.setup.footprint._hf_cached", lambda model_id, snapshot=None: True
+        "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: True
     )
     info = [
         i for i in _select_components(config) if i.name == "audition.emotion"
@@ -388,7 +392,7 @@ def test_recording_writes_catalogue_entries(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     (tmp_path / "model.safetensors").write_text("x")
     monkeypatch.setattr(
-        "kaine.setup.footprint._hf_cached", lambda model_id, snapshot=None: True
+        "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: True
     )
     monkeypatch.setattr(
         "kaine.setup.footprint.resolve_embedding_config",
@@ -633,7 +637,9 @@ def test_container_port_forwarder_not_measured(capsys, tmp_path, monkeypatch):
     }
 
     def _proxy(url: str) -> int:
-        raise ServiceNotMeasurable("proxy")
+        raise ServiceNotMeasurable(
+            "the service runs behind a container port forwarder; measure it from inside the container"
+        )
 
     code, out, err, cat = _run(
         ["--yes"],
@@ -678,7 +684,8 @@ def test_measure_callable_in_child_uses_result_before_join_timeout():
     )
     assert ok is True
     assert peak is not None
-    assert err == ""
+    # A deliberate stop after a valid report is named, never silent and never a crash.
+    assert "stopped after reporting" in err
 
 
 def test_emotion_degraded_load_raises():
@@ -836,7 +843,7 @@ def test_fit_report_printed(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     (tmp_path / "model.safetensors").write_text("x")
     monkeypatch.setattr(
-        "kaine.setup.footprint._hf_cached", lambda model_id, snapshot=None: True
+        "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: True
     )
     monkeypatch.setattr(
         "kaine.setup.footprint.resolve_embedding_config",
@@ -917,3 +924,263 @@ def test_embedding_target_reads_weights_residency_as_a_property(monkeypatch):
     result = footprint._target_embedding(task)
     assert result == {"mapped": True}
     assert made.encoded == ["calibration"]
+
+
+def _fake_conn():
+    class Conn:
+        def __init__(self):
+            self.sent = None
+
+        def send(self, obj):
+            self.sent = obj
+
+        def close(self):
+            pass
+
+    return Conn()
+
+
+def test_child_wrapper_invalid_peak_equal_baseline(monkeypatch):
+    conn = _fake_conn()
+    monkeypatch.setattr(
+        "kaine.setup.footprint._read_baseline_bytes", lambda: 100
+    )
+    monkeypatch.setattr(
+        "kaine.setup.footprint._read_peak_bytes", lambda: 100
+    )
+    _child_wrapper(conn, lambda: {})
+    assert conn.sent["ok"] is False
+    assert conn.sent["error"] == "invalid measurement: peak <= baseline"
+    assert conn.sent["peak_bytes"] is None
+    assert conn.sent["device"] is None
+    assert conn.sent["device_bytes"] is None
+
+
+def test_main_corrupt_catalogue_is_named_then_replaced(capsys, tmp_path, monkeypatch):
+    _hermetic_selection(monkeypatch)
+    (tmp_path / "model.safetensors").write_text("x")
+    (tmp_path / "footprints.json").write_text("not json {")
+    measure, calls = _fake_measure(
+        {"topos.encoder": (True, 100 << 20, None, None, False, "")}
+    )
+    config = {
+        "modules": {"topos": True},
+        "topos": {
+            "encoder_backend": "internvideo_next",
+            "encoder_local_dir": str(tmp_path),
+        },
+    }
+    code, out, err, cat = _run(
+        ["--yes", "--only", "topos.encoder"],
+        config,
+        tmp_path,
+        capsys,
+        measure=measure,
+        torch_module=_fake_torch(False),
+    )
+    assert code == 0
+    assert "could not be read; it will be replaced" in err
+    assert calls
+    [entry] = load_catalogue(cat)
+    assert entry.component == "topos.encoder"
+
+
+def test_main_unwritable_catalogue_says_nothing_recorded(
+    capsys, tmp_path, monkeypatch
+):
+    _hermetic_selection(monkeypatch)
+    (tmp_path / "model.safetensors").write_text("x")
+
+    def _raise(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("kaine.setup.footprint.write_catalogue", _raise)
+    measure, _ = _fake_measure(
+        {"topos.encoder": (True, 100 << 20, None, None, False, "")}
+    )
+    config = {
+        "modules": {"topos": True},
+        "topos": {
+            "encoder_backend": "internvideo_next",
+            "encoder_local_dir": str(tmp_path),
+        },
+    }
+    code, out, err, cat = _run(
+        ["--yes", "--only", "topos.encoder"],
+        config,
+        tmp_path,
+        capsys,
+        measure=measure,
+        torch_module=_fake_torch(False),
+    )
+    assert code == 1
+    assert "error: cannot write the footprint catalogue:" in err
+    assert "nothing was recorded" in err
+
+
+def _make_fake_conn(port, pid):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        status=psutil.CONN_LISTEN, laddr=SimpleNamespace(port=port), pid=pid
+    )
+
+
+class _FakeProcess:
+    def __init__(self, pid, name, children=None, rss=0):
+        self.pid = pid
+        self._name = name
+        self._children = children or []
+        self._rss = rss
+
+    def name(self):
+        return self._name
+
+    def children(self, recursive=False):
+        return self._children
+
+    def memory_info(self):
+        return type("Mem", (), {"rss": self._rss})()
+
+
+def test_service_unknown_listener_name_not_measured(monkeypatch):
+    conn = _make_fake_conn(1234, 42)
+
+    def _net_connections(*args, **kwargs):
+        return [conn]
+
+    def _process_factory(pid):
+        return _FakeProcess(pid, "socat", rss=10 << 20)
+
+    monkeypatch.setattr(
+        "kaine.setup.footprint.psutil.net_connections", _net_connections
+    )
+    monkeypatch.setattr("kaine.setup.footprint.psutil.Process", _process_factory)
+
+    with pytest.raises(
+        ServiceNotMeasurable,
+        match=r"the listener on port 1234 is 'socat', not a known model server",
+    ):
+        _measure_service("http://127.0.0.1:1234")
+
+
+def test_service_known_listener_is_measured(monkeypatch):
+    conn = _make_fake_conn(1234, 42)
+
+    def _net_connections(*args, **kwargs):
+        return [conn]
+
+    def _process_factory(pid):
+        return _FakeProcess(pid, "llama-server", rss=100 << 20)
+
+    monkeypatch.setattr(
+        "kaine.setup.footprint.psutil.net_connections", _net_connections
+    )
+    monkeypatch.setattr("kaine.setup.footprint.psutil.Process", _process_factory)
+    # Never read a real /proc/<pid>/status for a fake pid.
+    monkeypatch.setattr(
+        "kaine.setup.footprint._process_peak_bytes", lambda p: p.memory_info().rss
+    )
+
+    result = _measure_service("http://127.0.0.1:1234")
+    assert result == 100 << 20
+
+
+def test_service_unrelated_listeners_not_measured(monkeypatch):
+    def _net_connections(*args, **kwargs):
+        return [_make_fake_conn(1234, 42), _make_fake_conn(1234, 99)]
+
+    def _process_factory(pid):
+        return _FakeProcess(pid, "llama-server", rss=100 << 20)
+
+    monkeypatch.setattr(
+        "kaine.setup.footprint.psutil.net_connections", _net_connections
+    )
+    monkeypatch.setattr("kaine.setup.footprint.psutil.Process", _process_factory)
+
+    with pytest.raises(
+        ServiceNotMeasurable,
+        match=r"several unrelated processes listen on port 1234",
+    ):
+        _measure_service("http://127.0.0.1:1234")
+
+
+def test_child_wrapper_zero_cuda_memory_records_no_device(monkeypatch):
+    conn = _fake_conn()
+    fake_cuda = type(
+        "_Cuda",
+        (),
+        {
+            "is_available": staticmethod(lambda: True),
+            "current_device": staticmethod(lambda: 0),
+            "max_memory_reserved": staticmethod(lambda: 0),
+        },
+    )()
+    fake_torch = type("_Torch", (), {"cuda": fake_cuda})()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr("kaine.setup.footprint._read_baseline_bytes", lambda: 0)
+    monkeypatch.setattr("kaine.setup.footprint._read_peak_bytes", lambda: 100)
+    _child_wrapper(conn, lambda: {})
+    assert conn.sent["ok"] is True
+    assert conn.sent["peak_bytes"] == 100
+    assert conn.sent["device"] is None
+    assert conn.sent["device_bytes"] is None
+
+
+def test_hf_cached_detects_present_layout(tmp_path):
+    cache = tmp_path / "cache"
+    snap = cache / "models--org--name" / "snapshots" / "abc123"
+    snap.mkdir(parents=True)
+    (snap / "config.json").write_text("{}")
+    assert _hf_cached("org/name", cache_dir=cache) is True
+
+
+def test_hf_cached_absent(tmp_path):
+    assert _hf_cached("org/name", cache_dir=tmp_path) is False
+
+
+def test_hf_cached_empty_snapshots_dir(tmp_path):
+    cache = tmp_path / "cache"
+    (cache / "models--org--name" / "snapshots").mkdir(parents=True)
+    assert _hf_cached("org/name", cache_dir=cache) is False
+
+
+def test_main_default_measure_path_is_wired(capsys, tmp_path, monkeypatch):
+    # main() without an injected measure_fn must reach the real child path:
+    # _measure_component -> _measure_callable_in_child(partial(_run_component_target, task)).
+    from kaine.setup import footprint
+
+    calls = []
+
+    def fake_child(target, timeout=600.0):
+        calls.append((target, timeout))
+        return (True, 123 << 20, None, None, True, "")
+
+    monkeypatch.setattr(footprint, "_measure_callable_in_child", fake_child)
+    monkeypatch.setattr(footprint, "resolve_model_dir", lambda *a, **k: tmp_path)
+    catalogue = tmp_path / "c.json"
+    budget = Domain(
+        name="system",
+        kind="system",
+        total_bytes=16 << 30,
+        available_bytes=8 << 30,
+        reserve_bytes=1 << 30,
+        budget_bytes=7 << 30,
+        derivation="test",
+    )
+    code = main(
+        ["--yes", "--only", "embedding", "--catalogue", str(catalogue)],
+        config_loader=lambda: {"modules": {"chronos": True}},
+        budgets_fn=lambda: (budget,),
+        torch_module=_fake_torch(cuda_available=False),
+    )
+    assert code == 0
+    assert len(calls) == 1
+    target, timeout = calls[0]
+    assert target.func is footprint._run_component_target
+    assert target.args[0].component == "embedding"
+    assert timeout == 600.0
+    [entry] = load_catalogue(catalogue)
+    assert entry.component == "embedding"
+    assert entry.bytes == 123 << 20
+    assert entry.mapped is True

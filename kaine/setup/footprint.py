@@ -35,7 +35,13 @@ from kaine.hostmem import classify_accelerator_memory
 from kaine.model_paths import DEFAULT_STT, DEFAULT_TTS, speech_model_dir
 from kaine.modules.topos.internvideo_next_loader import default_weights_dir
 from kaine.residency.budget import current_budgets
-from kaine.residency.catalogue import Entry, load_catalogue, upsert, write_catalogue
+from kaine.residency.catalogue import (
+    DEFAULT_CATALOGUE_PATH,
+    Entry,
+    load_catalogue,
+    upsert,
+    write_catalogue,
+)
 from kaine.residency.fit import Need, fit_report
 from kaine.speech_manifest import is_installed
 from kaine.storage import install_data_root
@@ -58,6 +64,11 @@ class ServiceNotMeasurable(Exception):
 # the container, so measuring the forwarder would record a false footprint.
 _PORT_PROXIES = frozenset(
     {"docker-proxy", "rootlesskit", "slirp4netns", "pasta", "conmon", "podman"}
+)
+
+# Processes that may legitimately stand in for an external model service.
+_SERVICE_PROCESSES = frozenset(
+    {"llama-server", "ollama", "python", "python3", "uvicorn", "gunicorn"}
 )
 
 
@@ -151,19 +162,32 @@ def host_class(*, torch_module: Any | None = None) -> str:
     raise HostClassUnknown(reason)
 
 
-def _hf_cached(model_id: str, *, snapshot: Callable[..., Any] | None = None) -> bool:
-    """Check whether a Hugging Face model is available in the local cache."""
-    downloader = snapshot
-    if downloader is None:
-        try:
-            from huggingface_hub import snapshot_download
+def _hf_cached(model_id: str, *, cache_dir: str | Path | None = None) -> bool:
+    """Check whether a Hugging Face model is available in the local cache.
 
-            downloader = snapshot_download
-        except Exception:
-            return False
+    Probes the hub cache read-only: no downloader is ever invoked.
+    """
     try:
-        downloader(repo_id=model_id, local_files_only=True)
-        return True
+        if cache_dir is None:
+            from huggingface_hub import constants
+
+            cache = getattr(constants, "HF_HUB_CACHE", None)
+            if cache is None:
+                cache = getattr(constants, "HUGGINGFACE_HUB_CACHE", None)
+            if cache is None:
+                return False
+        else:
+            cache = cache_dir
+
+        cache_path = Path(cache)
+        safe_id = model_id.replace("/", "--")
+        snapshots = cache_path / f"models--{safe_id}" / "snapshots"
+        if not snapshots.is_dir():
+            return False
+        for child in snapshots.iterdir():
+            if child.is_dir() and any(child.iterdir()):
+                return True
+        return False
     except Exception:
         return False
 
@@ -172,6 +196,15 @@ def _sherpa_present(model_id: str, model_dir: str | None) -> bool:
     if model_dir:
         return Path(model_dir).is_dir()
     return is_installed(model_id)
+
+
+def _catalogue_file(path: str | Path | None) -> Path:
+    """The file the catalogue functions read and write for ``path``."""
+    if path is not None:
+        return Path(path)
+    from kaine.storage import resolve
+
+    return Path(resolve(DEFAULT_CATALOGUE_PATH))
 
 
 def _is_enabled(modules: dict[str, Any], name: str) -> bool:
@@ -722,9 +755,21 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
         baseline = _read_baseline_bytes()
         result = target_fn()
         peak = _read_peak_bytes()
+
+        if peak <= baseline:
+            conn.send(
+                {
+                    "ok": False,
+                    "peak_bytes": None,
+                    "device": None,
+                    "device_bytes": None,
+                    "mapped": False,
+                    "error": "invalid measurement: peak <= baseline",
+                }
+            )
+            return
+
         footprint = peak - baseline
-        if footprint < 0:
-            footprint = 0
 
         device: str | None = None
         device_bytes: int | None = None
@@ -734,8 +779,10 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
             import torch  # type: ignore[import]
 
             if torch.cuda.is_available():
-                device = f"cuda:{torch.cuda.current_device()}"
-                device_bytes = int(torch.cuda.max_memory_reserved())
+                reserved = int(torch.cuda.max_memory_reserved())
+                if reserved > 0:
+                    device = f"cuda:{torch.cuda.current_device()}"
+                    device_bytes = reserved
 
         conn.send(
             {
@@ -779,12 +826,17 @@ def _measure_callable_in_child(
         if parent_conn.poll(timeout):
             data = parent_conn.recv()
             process.join(timeout=30)
+            note = ""
             if process.is_alive():
+                # The child reported and then failed to exit: stop it, but the
+                # measurement it sent stands. Say so, so it is never mistaken
+                # for a crash.
                 process.terminate()
                 process.join(timeout=5)
                 if process.is_alive():
                     process.kill()
                     process.join(timeout=5)
+                note = "the child was stopped after reporting; the measurement stands"
 
             if not data.get("ok"):
                 return (False, None, None, None, False, data.get("error", "failed"))
@@ -794,7 +846,7 @@ def _measure_callable_in_child(
                 data.get("device_bytes"),
                 data.get("device"),
                 data.get("mapped", False),
-                "",
+                note,
             )
 
         if process.is_alive():
@@ -842,9 +894,10 @@ def _process_peak_bytes(proc: psutil.Process) -> int:
 def _measure_service(url: str) -> int | None:
     """Inspect a listening process for an external service footprint.
 
-    The figure is the peak resident memory of the listening process plus all
-    of its descendants. Returns None when no listener is visible; raises
-    ServiceNotMeasurable when the listener is a container port forwarder.
+    The figure is the peak resident memory of the listening process tree.
+    Returns None when no listener is visible; raises ServiceNotMeasurable
+    when the listener is a container port forwarder, an unknown process,
+    or when several unrelated processes share the port.
     """
     parsed = urllib.parse.urlparse(url)
     port = parsed.port
@@ -868,21 +921,42 @@ def _measure_service(url: str) -> int | None:
     if not pids:
         return None
 
+    root_pid = pids[0]
     try:
-        proc = psutil.Process(pids[0])
-        if proc.name() in _PORT_PROXIES:
-            raise ServiceNotMeasurable(
-                "the service runs behind a container port forwarder; measure it from inside the container"
-            )
-        total = _process_peak_bytes(proc)
-        for child in proc.children(recursive=True):
-            try:
-                total += _process_peak_bytes(child)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        return total
+        root = psutil.Process(root_pid)
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return None
+
+    try:
+        descendants = {child.pid for child in root.children(recursive=True)}
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        descendants = set()
+    descendants.add(root_pid)
+
+    for pid in pids:
+        if pid not in descendants:
+            raise ServiceNotMeasurable(
+                f"several unrelated processes listen on port {port}; "
+                "the service cannot be measured unambiguously"
+            )
+
+    name = root.name()
+    if name in _PORT_PROXIES:
+        raise ServiceNotMeasurable(
+            "the service runs behind a container port forwarder; measure it from inside the container"
+        )
+    if name not in _SERVICE_PROCESSES:
+        raise ServiceNotMeasurable(
+            f"the listener on port {port} is {name!r}, not a known model server; measure the service directly"
+        )
+
+    total = _process_peak_bytes(root)
+    for child in root.children(recursive=True):
+        try:
+            total += _process_peak_bytes(child)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return total
 
 
 def _needs_for(
@@ -1069,7 +1143,16 @@ def main(
     else:
         catalogue_path = args.catalogue
 
+    # load_catalogue never raises: an unreadable file reads as empty. Say so
+    # before it is replaced, so earlier measurements are not lost silently.
     entries = load_catalogue(catalogue_path)
+    existing = _catalogue_file(catalogue_path)
+    if not entries and existing.is_file() and existing.stat().st_size > 0:
+        err(
+            f"warning: the existing footprint catalogue at {existing} could not be "
+            "read; it will be replaced by this run's measurements"
+        )
+
     measured_entries: list[Entry] = []
     had_failure = False
 
@@ -1083,10 +1166,8 @@ def main(
         if info.kind == "external":
             try:
                 peak_bytes = service_fn(info.url)
-            except ServiceNotMeasurable:
-                out(
-                    f"{info.name}: not measured: the service runs behind a container port forwarder; measure it from inside the container"
-                )
+            except ServiceNotMeasurable as exc:
+                out(f"{info.name}: not measured: {exc}")
                 continue
             if peak_bytes is None:
                 out(
@@ -1132,11 +1213,19 @@ def main(
         )
         measured_entries.append(entry)
         out(f"{info.name}: {_fmt_mib(peak_bytes)} MiB")
+        if error:
+            out(f"{info.name}: note: {error}")
 
     if measured_entries:
         for entry in measured_entries:
             entries = upsert(entries, entry)
-        write_catalogue(entries, catalogue_path)
+        try:
+            write_catalogue(entries, catalogue_path)
+        except Exception as exc:
+            err(
+                f"error: cannot write the footprint catalogue: {type(exc).__name__}: {exc}; nothing was recorded"
+            )
+            return 1
 
     needs = _needs_for(entries, components, host)
 
