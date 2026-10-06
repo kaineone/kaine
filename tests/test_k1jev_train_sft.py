@@ -248,3 +248,44 @@ def test_targets_name_the_real_qwen35_projections():
         assert name in train_sft.TARGETS
     assert not any(t in train_sft.TARGETS for t in ("qkv", "proj", "linear_fc1", "linear_fc2"))
 
+
+def test_entity_running_fails_closed_on_docker_nonzero_exit(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    class _Proc:
+        returncode = 1
+        stdout = ""
+
+    monkeypatch.setattr(train_sft.subprocess, "run", lambda *a, **k: _Proc())
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    reason = train_sft.entity_running(proc_root=proc, self_pid=1)
+    assert reason is not None and "cannot check" in reason
+    del sp
+
+
+def test_bucket_batches_keep_similar_lengths_together():
+    lengths = [10] * 8 + [500] * 8
+    batches = train_sft.bucket_batches(lengths, batch=8, seed=3)
+    for b in batches:
+        assert len({lengths[i] for i in b}) == 1
+
+
+def test_refuse_out_path_rejects_anywhere_in_the_repository(tmp_path):
+    repo = Path(train_sft.__file__).resolve().parents[2]
+    with pytest.raises(ValueError):
+        train_sft.refuse_out_path(repo / ".git" / "kaine-tools" / "k1jev-out")
+    assert train_sft.refuse_out_path(tmp_path / "out") == (tmp_path / "out").resolve()
+
+
+def test_read_data_manifest_requires_the_schema_fields(tmp_path):
+    train = tmp_path / "train.jsonl"
+    train.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError):
+        train_sft.read_data_manifest(train)
+    (tmp_path / "manifest.json").write_text('{"schema_version": 1}', encoding="utf-8")
+    with pytest.raises(ValueError):
+        train_sft.read_data_manifest(train)
+    (tmp_path / "manifest.json").write_text('{"schema_version": 1, "schema_digest": "abc"}', encoding="utf-8")
+    assert train_sft.read_data_manifest(train)["schema_digest"] == "abc"
+

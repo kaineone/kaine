@@ -81,12 +81,17 @@ def entity_running(
     # (a) docker container named kaine-cycle
     if docker_argv_runner is None:
         def _default_docker(argv: list[str]) -> str:
-            return subprocess.run(
+            proc = subprocess.run(
                 argv,
                 capture_output=True,
                 text=True,
                 timeout=30,
-            ).stdout
+            )
+            if proc.returncode != 0:
+                # A daemon that is down or refuses us says nothing about
+                # whether an entity runs: treat it as unknown (fail closed).
+                raise RuntimeError(f"docker ps exited {proc.returncode}")
+            return proc.stdout
 
         docker_argv_runner = _default_docker
 
@@ -184,12 +189,14 @@ def bucket_batches(lengths: list[int], batch: int, seed: int) -> list[list[int]]
     for bucket in by_length.values():
         rng.shuffle(bucket)
 
-    order = []
+    # Batch in length order so each batch holds similar lengths (little
+    # padding), then shuffle the order of whole batches.
+    order: list[int] = []
     for length in sorted(by_length.keys()):
         order.extend(by_length[length])
-    rng.shuffle(order)
-
-    return [order[i : i + batch] for i in range(0, len(order), batch)]
+    batches = [order[i : i + batch] for i in range(0, len(order), batch)]
+    rng.shuffle(batches)
+    return batches
 
 
 def left_pad_batch(encoded: list[list[int]], pad_id: int) -> tuple[list[list[int]], list[list[int]]]:
@@ -229,13 +236,27 @@ def option_loss(option_logits_rows, answer_indices):
 
 
 def refuse_out_path(out: Path) -> Path:
-    """Reject output paths that fall under the repository's state/."""
+    """Reject output paths inside the repository checkout: model artifacts go
+    outside it (on the bulk data drive), and never near entity state."""
     repo_root = Path(__file__).resolve().parents[2]
-    state_dir = (repo_root / "state").resolve()
     resolved = out.resolve()
-    if resolved == state_dir or state_dir in resolved.parents:
-        raise ValueError(f"Refusing --out under state directory: {out}")
+    if resolved == repo_root or repo_root in resolved.parents:
+        raise ValueError(f"Refusing --out inside the repository: {out}")
     return resolved
+
+
+def read_data_manifest(train_path: Path) -> dict:
+    """The assembled-data manifest beside the training file. It names the
+    schema the data was built from, which the run record must carry so a
+    trained model is never served against a different schema."""
+    manifest_path = train_path.parent / "manifest.json"
+    if not manifest_path.exists():
+        raise ValueError(f"no data manifest beside {train_path} (expected {manifest_path})")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for key in ("schema_version", "schema_digest"):
+        if key not in manifest:
+            raise ValueError(f"data manifest {manifest_path} lacks {key!r}")
+    return manifest
 
 
 def _sha256_file(path: Path) -> str:
@@ -686,9 +707,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(2)
 
     try:
-        # Validate examples before touching the GPU stack.
+        # Validate examples and the data manifest before touching the GPU stack.
         _ = load_examples(train_path)
         _ = load_examples(dev_path)
+        data_manifest = read_data_manifest(train_path)
     except ValueError as exc:
         print(f"error loading examples: {exc}", file=sys.stderr)
         sys.exit(2)
@@ -756,10 +778,14 @@ def main(argv: list[str] | None = None) -> None:
             "elapsed_seconds": elapsed,
             "git_head": _git_head(repo_root),
         }
+        failed_metrics["schema_version"] = data_manifest["schema_version"]
+        failed_metrics["schema_digest"] = data_manifest["schema_digest"]
         _write_run_json(out, failed_metrics)
         print(traceback.format_exc(), file=sys.stderr)
         sys.exit(1)
 
+    metrics["schema_version"] = data_manifest["schema_version"]
+    metrics["schema_digest"] = data_manifest["schema_digest"]
     _write_run_json(out, metrics)
     # A run whose merged model could not be written is not usable for export.
     sys.exit(1 if metrics.get("status") == "merge_failed" else 0)
