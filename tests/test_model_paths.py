@@ -10,6 +10,7 @@ writes and the runtime that reads agree, whether local or containerized.
 """
 from __future__ import annotations
 
+import pytest
 import importlib
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from kaine import model_paths
 from kaine.model_paths import DEFAULT_MODELS_DIR, MODELS_DIR_ENV_VAR, models_dir
 
 
+@pytest.mark.no_data_root
 def test_default_models_dir_is_local_state_models(monkeypatch):
     monkeypatch.delenv(MODELS_DIR_ENV_VAR, raising=False)
     assert models_dir() == Path("state/models")
@@ -28,6 +30,7 @@ def test_models_dir_honors_env_override(monkeypatch):
     assert models_dir() == Path("/models")
 
 
+@pytest.mark.no_data_root
 def test_models_dir_read_per_call_not_cached(monkeypatch):
     monkeypatch.delenv(MODELS_DIR_ENV_VAR, raising=False)
     assert models_dir() == Path("state/models")
@@ -35,6 +38,7 @@ def test_models_dir_read_per_call_not_cached(monkeypatch):
     assert models_dir() == Path("/elsewhere/models")
 
 
+@pytest.mark.no_data_root
 def test_weight_paths_default_under_local_state_models(monkeypatch):
     # With no override, every weight path keeps its historical state/models
     # location (subdir names unchanged) — an existing local download is not

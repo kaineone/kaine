@@ -27,12 +27,20 @@ def _save_restore_state_encryptor():
 
 
 @pytest.fixture(autouse=True)
-def _save_restore_data_root():
+def _save_restore_data_root(tmp_path, monkeypatch, request):
     """Save and restore the process-wide data root around each test, so a test
     that installs one cannot redirect later tests' relative state paths."""
     from kaine import storage
 
     previous = storage.data_root()
+    if request.node.get_closest_marker("no_data_root") is None:
+        # Each test starts with its own data root, so any relative state/ path
+        # a module resolves lands in the test's tmp directory, never in the
+        # repository. KAINE_DATA_ROOT keeps it when an entry point reinstalls
+        # the root from config. A test may still install or clear its own;
+        # tests of the no-root defaults carry @pytest.mark.no_data_root.
+        storage.set_data_root(tmp_path)
+        monkeypatch.setenv(storage.DATA_ROOT_ENV, str(tmp_path))
     yield
     storage.set_data_root(previous)
 
@@ -50,6 +58,46 @@ def _isolate_stage_file(tmp_path, monkeypatch):
         "kaine.lifecycle.stage.STAGE_PATH",
         tmp_path / "isolated-state" / "lifecycle" / "stage.json",
     )
+
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO_STATE = os.path.join(_REPO, "state")
+# Large or operator-owned trees no test may touch anyway; skipping them keeps
+# the per-test check cheap. Preserved beings live in state/forks.
+_STATE_SKIP = {"models", "forks"}
+
+
+def _state_fingerprint() -> dict[str, int]:
+    """Directory mtimes under the repo's state/: any file a test creates,
+    renames or deletes there changes one of them."""
+    marks: dict[str, int] = {}
+    if not os.path.isdir(_REPO_STATE):
+        return marks
+    for root, dirs, _files in os.walk(_REPO_STATE):
+        if root == _REPO_STATE:
+            dirs[:] = [d for d in dirs if d not in _STATE_SKIP and not d.startswith("_archive")]
+        marks[root] = os.stat(root).st_mtime_ns
+    return marks
+
+
+@pytest.fixture(autouse=True)
+def _repo_state_untouched():
+    """Fail any test that writes into the repository's own state/ directory.
+
+    A stray stage file, perception desired-state or consolidation record there
+    is read at the next spawn from this checkout: it can mark a fresh being as
+    already lived, or hand it a test's developmental stage.
+    """
+    before = _state_fingerprint()
+    yield
+    after = _state_fingerprint()
+    if after != before:
+        changed = sorted(set(after.items()) ^ set(before.items()))
+        dirs = sorted({path for path, _ in changed})
+        pytest.fail(
+            "test wrote into the repository's state/ (use tmp_path or monkeypatch "
+            f"the default path): {dirs}"
+        )
 
 
 @pytest.fixture
