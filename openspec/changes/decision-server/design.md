@@ -23,17 +23,17 @@ The Hypnos organ window stops the language-organ server to free memory for voice
   - `url` (`http://127.0.0.1:11436`);
   - `model` (`k1-jev`);
   - `timeout_s` (5.0);
-  - `thresholds_path` (empty: no thresholds; `noul` answers are then reported only as probabilities).
+  - `thresholds_path` (required for answers: the sidecar binds the served model to the schema, so without a valid sidecar the client returns no answer).
 
   The API key comes from `KAINE_DECISION_SERVER_API_KEY` in the environment, never from config text.
 - `DecisionClient.ask(utterance, context, question_ids) -> dict[str, Answer] | None`:
   - builds `state_text` and `systemone_questions`;
   - POSTs `/v1/systemone`;
   - parses each answer into `Answer(question_id, type, probabilities, choice, score, noul, decided)`, where `decided` applies the sidecar threshold for `noul` questions (`noul >= threshold`) and is `None` when there is no threshold;
-  - checks the response against what was asked. `/v1/systemone` responses carry only `model` and `answers`, with no schema version, so the check is: the response's `model` equals the configured alias; each answer's `type` equals the requested question's type; a choice is one of that question's option keys; a score lies on its scale; every probability is finite and in [0, 1]. Schema agreement otherwise rests on the request carrying the pinned schema's question definitions, and on the thresholds sidecar's digest pin.
+  - checks the response against what was asked. `/v1/systemone` responses carry only `model` and `answers`, with no schema version, so the check is: the response's `model` equals the configured alias; each answer's `type` equals the requested question's type; a choice is one of that question's option keys; a score lies on its scale; every probability is finite and in [0, 1]. Schema agreement otherwise rests on the request carrying the pinned schema's question definitions, and on the sidecar: its digest pin, and its `model_file`, which the client compares with the basename of the server's `/props` `model_path` before the first `ask` and again after any failure. A GGUF trained on another schema version, served under the same alias, therefore gets no answers.
 
   Any transport error, non-200, malformed body, missing answer, out-of-schema answer or model mismatch returns `None` and logs once per kind per minute (content-free: the question ids and the error kind, never the utterance).
-- **Thresholds sidecar.** A JSON file written by the K1-Jev export: `{"schema_version": 1, "schema_digest": "...", "thresholds": {"wishes_to_stop": 0.31, ...}}`. A digest that differs from `kaine.decision.schema.schema_digest()` refuses to load. The client then runs without thresholds and logs the mismatch.
+- **Thresholds sidecar.** A JSON file written by the K1-Jev export: `{"schema_version": 1, "schema_digest": "...", "model_file": "<served GGUF basename>", "model_sha256": "...", "thresholds": {"wishes_to_stop": 0.31, ...}}`. A digest that differs from `kaine.decision.schema.schema_digest()`, or a missing `model_file`, refuses to load, and the client then returns no answer (content-free kind `no_sidecar`). `/props` answers while the server sleeps without waking it (verified on the pinned build), so the identity check costs no model load.
 - **Privacy:** the client never logs or persists the utterance, the context or the answers. Callers decide what they record.
 
 ## What callers may assume
