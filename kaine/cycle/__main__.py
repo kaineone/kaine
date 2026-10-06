@@ -61,6 +61,7 @@ from kaine.cycle.ignition_log import (
 )
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
+from kaine.cycle.utterance_outcome import UtteranceOutcomeObserver
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.defaults import (
     lingua_section_api_key,
@@ -2315,6 +2316,17 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
         stop_event=ctx.stop_event,
     )
+    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+        ctx.utterance_outcome = UtteranceOutcomeObserver(
+            ctx.bus,
+            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
+            reply_window_s=float(
+                ctx.kaine_config.get("lingua", {}).get(
+                    "outcome_reply_window_s", 30.0
+                )
+            ),
+        )
+        await ctx.utterance_outcome.start()
 
 
 _BOOT_PHASES = (
@@ -2473,6 +2485,11 @@ async def _shutdown(ctx: BootContext) -> None:
             pass  # expected: we just cancelled it
         except Exception:
             log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
+    if ctx.utterance_outcome is not None:
+        try:
+            await ctx.utterance_outcome.stop()
+        except Exception:
+            log.warning("utterance outcome observer stop failed", exc_info=True)
     if ctx.preview_server is not None:
         try:
             await ctx.preview_server.stop()
