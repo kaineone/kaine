@@ -42,8 +42,14 @@ def check_local_url(url: str) -> None:
     parsed = urlsplit(url)
     if parsed.scheme != "http" or (parsed.hostname or "") not in LOCAL_HOSTS:
         raise ValueError(
-            "decision server url must be http on loopback or the compose service "
+            "decision server url must be plain http on loopback or the compose service "
             f"(one of {sorted(LOCAL_HOSTS)}); refusing {parsed.scheme}://{parsed.hostname}"
+        )
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError(
+            "decision server url must be plain http on loopback or the compose service "
+            f"(one of {sorted(LOCAL_HOSTS)}) with no credentials, query, or fragment; "
+            f"refusing {parsed.scheme}://{parsed.hostname}"
         )
 
 
@@ -100,7 +106,9 @@ def load_thresholds(path: str) -> dict[str, float] | None:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception as exc:
-        logger.warning("Decision thresholds file unreadable: %s", exc)
+        logger.warning(
+            "Decision thresholds file unreadable: %s", type(exc).__name__
+        )
         return None
 
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -170,9 +178,18 @@ class DecisionClient:
         self._last_warning: dict[str, float] = {}
 
         if http_client is None:
-            self._client = httpx.Client(timeout=config.timeout_s)
+            # The owned client must never honor HTTP_PROXY / ALL_PROXY: those would
+            # route the bearer key and the entity's utterance off-host.
+            self._client = httpx.Client(
+                timeout=config.timeout_s, trust_env=False
+            )
             self._owns_client = True
         else:
+            if getattr(http_client, "trust_env", False):
+                raise ValueError(
+                    "injected http_client must disable proxy environment "
+                    "(trust_env=False)"
+                )
             self._client = http_client
             self._owns_client = False
 
@@ -354,7 +371,7 @@ class DecisionClient:
                 noul = float(ans["noul"])
             except Exception:
                 return None
-            if not math.isfinite(noul):
+            if not math.isfinite(noul) or not (0.0 <= noul <= 1.0):
                 return None
 
             probabilities = {"true": noul, "false": 1.0 - noul}

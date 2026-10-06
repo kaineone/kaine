@@ -11,6 +11,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import httpx
 import pytest
 
 from kaine.decision.client import DecisionClient, DecisionConfig, load_thresholds
@@ -599,15 +600,87 @@ def test_a_non_local_url_never_sends_the_key_or_the_utterance(monkeypatch):
     entity's speech leaves the process."""
     import dataclasses
 
-    import httpx
-
     sent = []
     transport = httpx.MockTransport(lambda request: sent.append(request) or httpx.Response(200, json={}))
     monkeypatch.setenv("KAINE_DECISION_SERVER_API_KEY", "k-secret-marker")
     cfg = DecisionConfig(enabled=True)
     object.__setattr__(cfg, "url", "http://attacker.example:80")  # bypass __post_init__
     with pytest.raises(ValueError):
-        DecisionClient(cfg, http_client=httpx.Client(transport=transport))
+        DecisionClient(cfg, http_client=httpx.Client(transport=transport, trust_env=False))
     assert sent == []
     del dataclasses
 
+
+def test_owned_client_ignores_environment_proxies(monkeypatch):
+    """HTTP_PROXY / ALL_PROXY must not reroute the key or the utterance."""
+    qid = _first_id("noul")
+    response = json.dumps(
+        {"model": "k1-jev", "answers": {qid: {"type": "noul", "noul": 0.5}}, "usage": {}}
+    ).encode()
+    url, srv, handler = _make_server(response=response)
+    client = None
+    try:
+        monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+        monkeypatch.setenv("ALL_PROXY", "http://127.0.0.1:9")
+        monkeypatch.delenv("NO_PROXY", raising=False)
+        monkeypatch.delenv("no_proxy", raising=False)
+
+        client = DecisionClient(DecisionConfig(enabled=True, url=url))
+        result = client.ask("hello", None, [qid])
+        assert result is not None
+        assert result[qid].noul == pytest.approx(0.5)
+        assert len(handler._requests) == 1
+    finally:
+        if client is not None:
+            client.close()
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_injected_client_with_trust_env_true_is_rejected():
+    cfg = DecisionConfig(enabled=True)
+    bad = httpx.Client(trust_env=True)
+    try:
+        with pytest.raises(ValueError):
+            DecisionClient(cfg, http_client=bad)
+    finally:
+        bad.close()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://u@127.0.0.1:1",
+        "http://u:p@127.0.0.1:1",
+        "http://127.0.0.1:1/?a=b",
+        "http://127.0.0.1:1/#f",
+    ],
+)
+def test_url_credentials_queries_and_fragments_are_refused(url):
+    with pytest.raises(ValueError):
+        DecisionConfig(enabled=True, url=url)
+    with pytest.raises(ValueError):
+        DecisionConfig.from_section({"enabled": True, "url": url})
+
+
+def test_load_thresholds_missing_path_does_not_leak_path(tmp_path, caplog):
+    path = tmp_path / "missing-secret-path.json"
+    with caplog.at_level("WARNING"):
+        assert load_thresholds(str(path)) is None
+    assert caplog.records
+    assert str(path) not in caplog.text
+
+
+@pytest.mark.parametrize("noul", [1.5, -0.1])
+def test_noul_out_of_bounds_is_missing(server, noul):
+    url, _srv, handler = server
+    qid = _first_id("noul")
+    handler._response = json.dumps(
+        {"model": "k1-jev", "answers": {qid: {"type": "noul", "noul": noul}}, "usage": {}}
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    try:
+        assert client.ask("x", None, [qid]) is None
+    finally:
+        client.close()
