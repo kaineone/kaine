@@ -130,6 +130,7 @@ class IndividuationCore:
         abort_reason: Callable[[], str | None],
         rng: np.random.Generator | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        refresh_conditions: Callable[[], Awaitable[None]] | None = None,
         entity_name: str = "",
     ) -> None:
         self._paths = paths
@@ -147,6 +148,7 @@ class IndividuationCore:
         self._abort_reason = abort_reason
         self._rng = rng if rng is not None else np.random.default_rng()
         self._now = now
+        self._refresh_conditions = refresh_conditions
         self._entity_name = entity_name
 
     async def capture_reference(
@@ -160,6 +162,14 @@ class IndividuationCore:
         the birth adapter is copied only for a ``birth`` reference and only after the
         reference document is safely persisted.
         """
+        if self._refresh_conditions is not None:
+            try:
+                await self._refresh_conditions()
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to refresh probe conditions before capture"
+                ) from exc
+
         if kind not in REFERENCE_KINDS:
             raise ValueError(f"Invalid reference kind {kind!r}")
 
@@ -259,6 +269,18 @@ class IndividuationCore:
         """Run one individuation look."""
         start = time.perf_counter()
 
+        if self._refresh_conditions is not None:
+            try:
+                await self._refresh_conditions()
+            except Exception:
+                report = await self._inconclusive(
+                    "conditions_unreadable",
+                    ref_id="unknown",
+                    k=None,
+                    start=start,
+                )
+                return LookOutcome("inconclusive", "conditions_unreadable", report)
+
         # 1. Ledger
         try:
             ledger = load_ledger(self._paths)
@@ -342,7 +364,7 @@ class IndividuationCore:
             return LookOutcome("inconclusive", "conditions_unreadable", report)
 
         stored_conditions = getattr(ref, "conditions", None)
-        if stored_conditions is None:
+        if not stored_conditions:
             log.warning(
                 "Reference %s has no stored probe conditions; refusing comparison",
                 ref.reference_id,
@@ -355,6 +377,20 @@ class IndividuationCore:
                 ref=ref,
             )
             return LookOutcome("inconclusive", "conditions_changed", report)
+
+        if not isinstance(stored_conditions, Mapping):
+            log.warning(
+                "Reference %s stored probe conditions are not a mapping; refusing comparison",
+                ref.reference_id,
+            )
+            report = await self._inconclusive(
+                "conditions_unreadable",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_unreadable", report)
 
         changes = _condition_changes(stored_conditions, current_conditions)
         if changes:

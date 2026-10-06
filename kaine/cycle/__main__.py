@@ -235,8 +235,14 @@ async def _run_individuation(runtime, stop_event: asyncio.Event) -> None:
 def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner, staging_enabled, caretaker):
     """Build the individuation runtime from the cycle's live objects."""
     from kaine.boot import _effective_hot_swap_mode, shared_embedder
-    from kaine.cycle.individuation_runtime import build_runtime
+    from kaine.cycle.individuation_runtime import ServedOrganIdentity, build_runtime
+    from kaine.defaults import (
+        DEFAULT_CHAT_URL,
+        lingua_section_api_key,
+        model_server_api_key,
+    )
     from kaine.evaluation.preference_battery import load_battery, validate_battery
+    from kaine.organ_probe import read_revision_state
     from kaine.organ_window_state import organ_unloaded
 
     battery = load_battery(cfg.battery_path or None)
@@ -263,6 +269,13 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
 
     from kaine.lifecycle.individuation_store import DEFAULT_ROOT
 
+    lingua_section = kaine_config.get("lingua") or {}
+    served_identity = ServedOrganIdentity(
+        chat_url=lingua_section.get("chat_url") or DEFAULT_CHAT_URL,
+        api_key=lingua_section_api_key(lingua_section) or model_server_api_key(None),
+        revision_reader=read_revision_state,
+    )
+
     return build_runtime(
         config=cfg,
         battery=battery,
@@ -282,6 +295,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         is_gestating=lambda: bool(staging_enabled and gate_runner.stage.is_gestating),
         bus=bus,
         notify=caretaker.send_event if caretaker is not None else None,
+        served_identity=served_identity,
         entity_name="",
     )
 
