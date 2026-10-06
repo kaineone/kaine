@@ -183,8 +183,9 @@ class Emotion2vecClassifier:
                 else:
                     # Unconditionally cast every floating-point parameter and
                     # buffer to float32, then verify no half/bfloat16 state remains.
-                    # This closes the default-dtype race with other modules that
-                    # load with torch_dtype=float16 at the same time.
+                    # This closes the default-dtype race with other modules whose
+                    # model construction can briefly change the process-wide
+                    # default dtype.
                     inner.float()
                     non_float32 = [
                         (name, p.dtype)

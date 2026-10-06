@@ -22,7 +22,7 @@ from kaine.modules.audition.emotion import (
     DEFAULT_EMOTION_MODEL_ID,
     Emotion2vecClassifier,
 )
-from kaine.modules.topos.encoder import InternVideoNextEncoder
+from kaine.modules.topos.encoder import DINOv2Encoder, InternVideoNextEncoder
 from kaine.modules.topos.internvideo_next_loader import load_internvideo_next
 from kaine.setup.internvideo_next import internvideo_next_download_cmd
 
@@ -256,7 +256,7 @@ def test_internvideo_next_loader_casts_dtype_after_load(tmp_path: Path):
     )
     assert _FakeModel.from_pretrained_kwargs is not None
     assert "torch_dtype" not in _FakeModel.from_pretrained_kwargs
-    assert "dtype" not in _FakeModel.from_pretrained_kwargs
+    assert _FakeModel.from_pretrained_kwargs.get("dtype") is torch.float32
     assert model.weight.dtype == torch.float16
 
 
@@ -299,3 +299,131 @@ def test_topos_encoder_local_dir_uses_models_dir_without_a_data_root(
 def test_no_data_root_and_no_models_dir_leaves_the_config_unchanged(tmp_path: Path):
     config = {"topos": {"encoder_local_dir": "state/models/x"}}
     assert kaine.storage.normalize_storage_paths(config, {}) is config
+
+
+def test_internvideo_next_real_load_never_sets_fp16_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transformers = pytest.importorskip("transformers")
+    from kaine.modules.topos import internvideo_next_loader as loader
+
+    weights_dir = tmp_path / "weights"
+    vendored_dir = tmp_path / "vendored"
+    weights_dir.mkdir()
+    vendored_dir.mkdir()
+
+    cfg = transformers.BertConfig(
+        vocab_size=16,
+        hidden_size=8,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        intermediate_size=16,
+        max_position_embeddings=16,
+    )
+    model = transformers.BertModel(cfg).half()
+    model.save_pretrained(str(weights_dir))
+    cfg.save_pretrained(str(vendored_dir))
+
+    monkeypatch.setattr(loader, "vendored_code_dir", lambda: vendored_dir)
+
+    calls: list[object] = []
+    original_set_dtype = torch.set_default_dtype
+
+    def _spy(dtype: object) -> None:
+        calls.append(dtype)
+        original_set_dtype(dtype)
+
+    monkeypatch.setattr(torch, "set_default_dtype", _spy)
+
+    # Control: prove the fixture triggers the float16 default-dtype flip.
+    transformers.BertModel.from_pretrained(str(weights_dir))
+    if torch.float16 not in calls:
+        pytest.skip(
+            "installed transformers does not flip the default dtype; "
+            "skipping real-load race test"
+        )
+    torch.set_default_dtype(torch.float32)
+    calls.clear()
+
+    loaded = load_internvideo_next(
+        weights_dir=weights_dir,
+        device="cpu",
+        torch_dtype=torch.float32,
+        _classes=(transformers.BertConfig, transformers.BertModel),
+        _telemetry_env={},
+    )
+
+    assert torch.float16 not in calls
+    assert torch.get_default_dtype() == torch.float32
+    for p in loaded.parameters():
+        assert p.dtype == torch.float32
+    assert loaded.training is False
+    assert not any(p.requires_grad for p in loaded.parameters())
+
+
+def test_dinov2_real_load_never_sets_fp16_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transformers = pytest.importorskip("transformers")
+    weights_dir = tmp_path / "weights"
+    weights_dir.mkdir()
+
+    cfg = transformers.Dinov2Config(
+        hidden_size=8,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        intermediate_size=16,
+        image_size=16,
+        patch_size=8,
+        num_channels=3,
+    )
+    model = transformers.Dinov2Model(cfg).half()
+    model.save_pretrained(str(weights_dir))
+
+    processor = transformers.BitImageProcessor(
+        do_resize=True,
+        size={"height": 16, "width": 16},
+        do_center_crop=False,
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_normalize=True,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
+    )
+    processor.save_pretrained(str(weights_dir))
+
+    calls: list[object] = []
+    original_set_dtype = torch.set_default_dtype
+
+    def _spy(dtype: object) -> None:
+        calls.append(dtype)
+        original_set_dtype(dtype)
+
+    monkeypatch.setattr(torch, "set_default_dtype", _spy)
+
+    # Control: prove the fixture triggers the float16 default-dtype flip.
+    transformers.Dinov2Model.from_pretrained(str(weights_dir))
+    if torch.float16 not in calls:
+        pytest.skip(
+            "installed transformers does not flip the default dtype; "
+            "skipping real-load race test"
+        )
+    torch.set_default_dtype(torch.float32)
+    calls.clear()
+
+    enc = DINOv2Encoder(model_id=str(weights_dir), device_preference="cpu")
+    asyncio.run(enc.load())
+    assert enc._model is not None
+
+    assert torch.float16 not in calls
+    assert torch.get_default_dtype() == torch.float32
+    for p in enc._model.parameters():
+        assert p.dtype == torch.float32
+
+
+def test_model_path_rejects_parent_segments(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = {"KAINE_MODELS_DIR": "/some/models"}
+    with pytest.raises(ValueError, match="must not contain"):
+        kaine.storage._resolve_model_path(None, "state/models/../../x", env)
+    resolved = kaine.storage._resolve_model_path(None, "state/models/a/b", env)
+    assert resolved.startswith("/some/models")

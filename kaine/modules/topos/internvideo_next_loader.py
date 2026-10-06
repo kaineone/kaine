@@ -341,13 +341,17 @@ def load_internvideo_next(
     # fallback section above). With flash_attn present this is skipped entirely.
     if force_eager:
         _force_eager_attention(config)
-    # Never pass torch_dtype to from_pretrained: transformers briefly sets the
-    # process-wide default dtype while constructing the model, which races with
-    # other modules (e.g., emotion2vec) loading concurrently. We load in the
-    # default dtype and cast afterwards.
+    # In transformers 5.x an omitted dtype means "auto", which reads the
+    # checkpoint's dtype and briefly sets the process-wide default dtype during
+    # model construction. For the shipped InternVideo-Next checkpoint that is
+    # float16, so we explicitly build in float32 to keep the default at float32,
+    # then apply the device dtype after load.
+    import torch
+
     model = model_cls.from_pretrained(
         str(wdir),
         config=config,
+        dtype=torch.float32,
         local_files_only=True,
         trust_remote_code=False,
     )

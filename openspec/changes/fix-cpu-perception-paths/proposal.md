@@ -11,7 +11,8 @@ The offline novelty replay (`novelty-content-fingerprint`, Phase 1) ran the real
 
 ## What Changes
 
-- No perception loader passes `torch_dtype=` to `from_pretrained`. Topos loads InternVideo-Next in the default dtype and casts it afterwards: fp16 on CUDA and XPU, float32 elsewhere. Nothing changes the process-wide default dtype while another module is loading.
+- Every perception `from_pretrained` (InternVideo-Next and DINOv2) passes an explicit `dtype=torch.float32`. In transformers 5.x an omitted dtype means "auto", which sets the process-wide default to the checkpoint's dtype (float16 for InternVideo-Next) during construction. Topos then casts the model to fp16 on CUDA and XPU and leaves it float32 elsewhere. Nothing changes the process-wide default dtype while another module is loading.
+- A `state/models/...` model path containing `..` is refused, so it cannot resolve outside `$KAINE_MODELS_DIR`.
 - On a non-CUDA device, emotion2vec casts every floating-point parameter and buffer to float32 after loading and verifies the result. If any tensor is still not float32, the load counts as failed and the classifier reports itself unavailable, rather than returning neutral by failure.
 - `InternVideoNextEncoder` passes `weights_dir=None` through unless one was configured, so the loader resolves the path at call time. The setup fetch resolves its default directory at call time too. `DEFAULT_WEIGHTS_DIR` stays as a constant for existing readers.
 - Model paths in config (`[topos].encoder_local_dir` and the two `sherpa_model_dir` keys) that start with `state/models` resolve under `$KAINE_MODELS_DIR` when it is set, with or without a data root, and otherwise under the data root as before.

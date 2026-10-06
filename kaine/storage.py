@@ -126,6 +126,8 @@ def _resolve_model_path(root: Path | None, value: str, env: Mapping[str, str]) -
         models_root = _models_dir_from_env(env)
         if models_root is not None:
             rest = parts[2:]
+            if ".." in rest:
+                raise ValueError(f"model path must not contain '..': {value}")
             return str(models_root.joinpath(*rest) if rest else models_root)
     return str(root / value) if root is not None else value
 

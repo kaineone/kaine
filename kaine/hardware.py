@@ -792,9 +792,10 @@ def resolve_dtype(device: str) -> Any:
     """Return the default floating-point dtype for *device*.
 
     fp16 on CUDA and XPU (GPU-like accelerators); float32 on CPU, MPS, and
-    everywhere else. The Topos loader applies this dtype after model
-    construction, so ``from_pretrained`` never receives a ``torch_dtype`` and
-    cannot perturb the process-wide default dtype.
+    everywhere else. The Topos loader builds the model with an explicit
+    float32 ``dtype``, so the process-wide default dtype never leaves float32
+    during construction; this dtype is then applied to the model after
+    construction.
     """
     import torch
 

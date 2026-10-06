@@ -148,7 +148,7 @@ class DINOv2Encoder:
             from transformers import AutoImageProcessor, AutoModel
 
             processor = AutoImageProcessor.from_pretrained(self._model_id)
-            model = AutoModel.from_pretrained(self._model_id)
+            model = AutoModel.from_pretrained(self._model_id, dtype=torch.float32)
             model.eval()
             for p in model.parameters():
                 p.requires_grad_(False)
@@ -326,10 +326,9 @@ class InternVideoNextEncoder:
                     load_internvideo_next,
                 )
 
-                # fp16 on CUDA/XPU, float32 on CPU. The loader casts after
-                # construction; from_pretrained never receives torch_dtype, so it
-                # cannot switch the process-wide default dtype while other modules
-                # load.
+                # fp16 on CUDA/XPU, float32 on CPU. The loader builds the model
+                # in float32 and casts after construction, so the process-wide
+                # default dtype stays float32 while other modules load.
                 dtype = resolve_dtype(self._device)
                 model = load_internvideo_next(
                     weights_dir=self._weights_dir,
