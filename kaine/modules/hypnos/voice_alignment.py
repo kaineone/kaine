@@ -127,6 +127,8 @@ class VoiceAlignmentConfig:
     # rejected regardless of its capability-loss score, protecting the
     # entity from refusal-conditioning re-introduction.
     abliteration_probe_path: Optional[str] = None
+    # Corpus disk-guard ceiling in GB.  0 disables the warning.
+    corpus_ceiling_gb: float = 10.0
     # Trainer backend selector:
     #   "in_process" (default) — run unsloth DPO in the entity-runtime venv
     #     (requires the [training] extra; the shipped, byte-for-byte-unchanged

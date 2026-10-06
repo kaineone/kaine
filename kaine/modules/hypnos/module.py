@@ -13,6 +13,7 @@ from typing import Any, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.hypnos.corpus import check_corpus_ceiling, rotate_intent_log
 from kaine.modules.hypnos.phases import (
     PhaseResult,
     affective_reset,
@@ -686,6 +687,37 @@ class Hypnos(BaseModule):
         voice_result, voice_phase = await self._run_voice_alignment()
         phase_results.append(voice_phase)
 
+        # Rotate the waking intent log into the per-sleep corpus now that voice
+        # alignment has consumed it.  This must never break sleep, so failures
+        # are caught and logged but do not halt the pipeline.
+        corpus_summary: dict[str, Any] = {
+            "rotated": None,
+            "corpus_bytes": 0,
+            "warned": False,
+        }
+        try:
+            rotated_path = await asyncio.to_thread(
+                rotate_intent_log,
+                self._voice_config.intent_log_path,
+                self._voice_config.intent_log_path.parent / "intent_log",
+                sleep_index=self._sleep_count,
+            )
+            if rotated_path is not None:
+                corpus_summary["rotated"] = rotated_path.name
+
+            ceiling_info = await asyncio.to_thread(
+                check_corpus_ceiling,
+                self._voice_config.intent_log_path.parent / "intent_log",
+                ceiling_gb=self._voice_config.corpus_ceiling_gb,
+            )
+            corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
+            corpus_summary["warned"] = ceiling_info["warned"]
+        except Exception:
+            log.warning(
+                "hypnos: intent log corpus rotation/ceiling check failed",
+                exc_info=True,
+            )
+
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
         # audit window must start at the prior sleep (or boot), never the
@@ -726,6 +758,7 @@ class Hypnos(BaseModule):
             # Whether this cycle was fatigue-triggered
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
+        summary["corpus"] = corpus_summary
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
         # Sleep-time ignition audit (change sleep-ignition-audit): runs

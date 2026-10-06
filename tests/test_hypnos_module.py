@@ -141,6 +141,56 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_sleep_rotates_intent_log(bus: AsyncBus, tmp_path: Path):
+    records = [{"intent": "alpha"}, {"intent": "beta"}]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+
+    summary = await hypnos.enter_sleep()
+
+    rotated = summary["corpus"]["rotated"]
+    assert rotated is not None
+    corpus_dir = tmp_path / "intent_log"
+    assert (corpus_dir / rotated).exists()
+    assert not (tmp_path / "intent.jsonl").exists()
+    assert summary["corpus"]["corpus_bytes"] > 0
+
+    # A second sleep with no new intent log writes has nothing to rotate.
+    summary2 = await hypnos.enter_sleep()
+    assert summary2["corpus"]["rotated"] is None
+
+
+@pytest.mark.asyncio
+async def test_rotation_failure_does_not_break_sleep(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    records = [{"intent": "alpha"}]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+
+    captured: list[str] = []
+
+    async def capture_publish(self, stream, data, **kwargs):
+        captured.append(stream)
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.Hypnos.publish", capture_publish
+    )
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("rotation intentionally broken")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.rotate_intent_log", broken
+    )
+
+    summary = await hypnos.enter_sleep()
+
+    assert summary is not None
+    assert summary["corpus"]["rotated"] is None
+    assert summary["corpus"]["warned"] is False
+    assert "hypnos.sleep.completed" in captured
+
+
+@pytest.mark.asyncio
 async def test_started_and_completed_events(bus: AsyncBus, tmp_path: Path):
     hypnos = _make_hypnos(bus, tmp_path)
     await hypnos.enter_sleep()

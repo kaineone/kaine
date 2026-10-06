@@ -44,6 +44,12 @@ def voice_alignment_config_from_section(
         capability_probe_path: Optional[str] = str(capability_probe_path_raw).strip() or None
         abliteration_probe_path_raw = voice_cfg_section.get("abliteration_probe_path", "")
         abliteration_probe_path: Optional[str] = str(abliteration_probe_path_raw).strip() or None
+        corpus_ceiling_gb = float(voice_cfg_section.get("corpus_ceiling_gb", 10.0))
+        if corpus_ceiling_gb < 0:
+            raise VoiceAlignmentConfigError(
+                "[hypnos.voice_alignment].corpus_ceiling_gb must be non-negative; "
+                f"got {corpus_ceiling_gb}"
+            )
         voice_config = VoiceAlignmentConfig(
             intent_log_path=resolve(
                 voice_cfg_section.get("intent_log_path", "state/lingua/intent_expression.jsonl")
@@ -97,6 +103,7 @@ def voice_alignment_config_from_section(
                     or ""
                 )
             ),
+            corpus_ceiling_gb=corpus_ceiling_gb,
         )
     return voice_config
 

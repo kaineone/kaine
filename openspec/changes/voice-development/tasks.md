@@ -4,7 +4,7 @@
 - [x] 0.2 Drive crossings as felt states (D2), through the faithful renderer's drive templates and `drive_policy`.
 - [x] 0.3 The intent-log fields (D4) and the heard-speech placeholder (D7). Test: a coalition with an `audition.transcription` produces a log record with no transcript text anywhere in it.
 - [x] 0.4 The utterance-outcome observer in `kaine/cycle/` (D4), with real-bus tests (published utterance → operator reply → record).
-- [ ] 0.5 Log rotation per sleep and the corpus (D5); disk guard warns, never deletes.
+- [x] 0.5 Log rotation per sleep and the corpus (D5); disk guard warns, never deletes.
 - [ ] 0.6 Trainer hygiene (D6): bf16, previous accepted adapter as `PeftModel` and reference, conversational format with the real system prompt, both vetoes kept. Test against the trainer's dataset builder and adapter loader without a GPU, plus one real step in the trainer image under the GPU lock.
 - [ ] 0.7 Retire telemetry-as-chosen: until Stage 2, the phase trains nothing and says so in the sleep summary (D3).
 - [ ] 0.8 The four measures (D8). Distinctiveness joins `assess_divergence` as a new arm at threshold 0 until calibrated. The template arm keeps voting as a protective floor. Tests: an untrained being that has spoken still assesses as diverged; unreadable evidence counts as diverged; the template arm still votes.
