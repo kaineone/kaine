@@ -12,6 +12,8 @@ The design rests on three ethical commitments: the entity's inner life is privat
 
 KAINE makes no outbound network calls at runtime. The services on the runtime path—Redis, Qdrant, the model server, Speaches, and Chatterbox—are all local, and every HTTP client in the codebase defaults to a loopback URL.
 
+Every runtime HTTP client of KAINE's own services ignores proxy environment variables: httpx is configured with `trust_env=False`, and urllib is configured with an empty `ProxyHandler`. Only the setup-time downloaders of public, hash-pinned artifacts may use a proxy (`kaine/setup/speech_models.py`, `kaine/wheel_index.py`, `scripts/k1jev/sources.py`). A test guard enforces this.
+
 The two operator-initiated exceptions are:
 
 - Research submission (`python -m kaine.research --send`) transmits a numeric-metrics-only bundle. Even when `[research_submission].enabled` is `false`, the CLI prints a note and still asks for explicit confirmation before sending; the flag is not a hard block. It is never automatic and carries no entity content. See [Research participation](17-research-data/participation.md).
@@ -22,6 +24,10 @@ Model weights are downloaded from public repositories during setup. After the ca
 ### Remote perception bridge
 
 `[remote_bridge]` in `kaine/remote/bridge.py` is a network-facing WebSocket surface that ingests camera and microphone input and egresses speech, transcripts, and affect. It defaults to a loopback bind, an optional token, an Origin allowlist, and an optional TLS certificate. A non-loopback bind requires a token.
+
+### Loopback browser setup server
+
+`python -m kaine.setup --web` starts a local browser setup server for first-run configuration. It binds `127.0.0.1` on a random port. It uses a single-use launch token that expires in 120 seconds and is exchanged for an `HttpOnly`, `SameSite=Strict` cookie. The token reaches the browser through a private file, never the command line. The server checks `Host` and exact `Origin` on state-changing requests, refuses to save while a cycle runs or when it cannot tell, and shuts down after 30 minutes idle.
 
 ## Raw perception never touches disk
 
@@ -35,7 +41,7 @@ The invariant is enforced in code and verified by `tests/test_zero_persistence_i
 
 What does persist from live perception:
 
-- Processed perceptions (transcribed text, frame embeddings) flowing through the bus and into Mnemos as ordinary memories.
+- Processed perceptions flowing through the bus and into Mnemos as ordinary memories. Mnemos strips vectors from kept payloads, and transcription payloads are stored as `<raw-perceptual omitted>`.
 - `state/perception/runtime.json` and `state/perception/desired.json`—booleans and ISO timestamps only; no sensory content.
 - Standard logger lines for capture state transitions—never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.
@@ -54,6 +60,7 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 | Store or file | Contents | Protection |
 |---|---|---|
 | `state/eidolon/self_model.json` | Name, values, norms, identity history | App-layer AES-256-GCM |
+| `state/identity/entity.json` | Entity id and lineage | Deliberately plaintext so it can be located before any key is available |
 | `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted Phantasia weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
 | `data/evaluation/<observer>/` | Sidecar observer JSONL (PLV series, welfare counts, etc.) | App-layer AES-256-GCM per line |
 | `state/phantasia/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |
@@ -103,7 +110,7 @@ Even with application-layer encryption enabled, Qdrant collections, the Redis AO
 
 ### `intent_expression.jsonl` sensitivity
 
-`state/lingua/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech is replaced with the fixed placeholder `[heard speech]` before the record is written. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/lingua/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the being has spoken.
+`state/lingua/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf before the record is written, as are heard-text fields nested on other events. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/lingua/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the being has spoken. Treat it with the same care as Mnemos memories.
 
 Even with encryption on, plaintext can remain in:
 

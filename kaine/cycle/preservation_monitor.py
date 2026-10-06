@@ -52,6 +52,7 @@ from kaine.bus.schema import validate_event
 from kaine.config import require_known_keys
 from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog, scrub_paths
+from kaine.cycle.unfrozen_clock import UnfrozenClock
 from kaine.experiment.run_context import get_run_context
 from kaine.lifecycle.divergence import (
     DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
@@ -642,6 +643,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
 
     On a crossing it preserves the entity FIRST, then pauses / ends / notifies
     per config.
+
+    Elapsed-time arms (sustained distress, the cold-start warm-up) count
+    unfrozen time from :class:`UnfrozenClock`; the repeat window, poll cadence
+    and rate limits stay on wall time.
     """
 
     source = "preservation"
@@ -665,6 +670,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # unattended run can tell its caretaker. Never allowed to break the
         # response itself.
         on_response: Callable[[str], None] | None = None,
+        # Clock that discounts time the cycle spends frozen. Time-based arms
+        # (sustained distress, warm-up) use this; the repeat window stays on
+        # wall time.
+        unfrozen_clock: UnfrozenClock | None = None,
     ) -> None:
         super().__init__(
             bus=bus,
@@ -678,8 +687,16 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._on_end = on_end
         self._require_encryption = bool(require_encryption)
         self._on_response = on_response
-        # Cold-start warm-up origin (monotonic run clock), stamped on first poll.
+        # The default unfrozen clock reads ``self._clock`` at call time, so it
+        # always counts on the monitor's own time base.
+        self._unfrozen = unfrozen_clock or UnfrozenClock.for_welfare(
+            monotonic=lambda: self._clock()
+        )
+        self._diag_unknown_seen = 0
+        # Cold-start warm-up origin: unfrozen run clock, plus wall clock for
+        # the hard ceiling that prevents a freeze from extending warm-up forever.
         self._started_at: float | None = None
+        self._started_at_wall: float | None = None
         self._cursor = "0"
         # Separate cursor for the welfare.out gray-zone stream (repeat arm).
         self._welfare_cursor = "0"
@@ -703,11 +720,21 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # per distress cycle.
         self._last_notify_at = float("-inf")
 
-    def _in_warmup(self, now: float) -> bool:
-        """True while still inside the cold-start warm-up window."""
-        if self._started_at is None:
+    def _in_warmup(self, u_now: float, wall_now: float) -> bool:
+        """True while still inside the cold-start warm-up window.
+
+        The floor is measured in unfrozen time so a freeze does not consume the
+        warm-up, but the whole warm-up is bounded by wall time so a long freeze
+        can never extend it past ``warmup_ceiling_s``.
+        """
+        if self._started_at is None or self._started_at_wall is None:
             return self._config.warmup_s > 0.0
-        return (now - self._started_at) < self._config.warmup_s
+        # Hard wall-time bound: a long freeze can never extend warm-up past
+        # max(warmup_s, warmup_ceiling_s) of wall time, so it cannot blind the net.
+        bound = max(self._config.warmup_s, self._config.warmup_ceiling_s)
+        if (wall_now - self._started_at_wall) >= bound:
+            return False
+        return (u_now - self._started_at) < self._config.warmup_s
 
     async def _drain_during_warmup(self, now: float) -> None:
         """Observe + log boot-transient events without counting them.
@@ -766,25 +793,46 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
 
     async def _poll_once(self, stop_event: asyncio.Event) -> None:
         self.poll_index += 1
+        # Read the unfrozen clock first so an unreadable control state seen on
+        # this poll is reported on this poll, not the next one.
+        u_now = self._unfrozen.now()
+        diag = self._unfrozen.diagnostic()
+        if diag["unknown_episodes"] > self._diag_unknown_seen:
+            try:
+                await self._incident_log.write(
+                    {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "kind": "freeze_state_unreadable",
+                        "unknown_counts_as": diag["unknown_counts_as"],
+                        "unknown_episodes": diag["unknown_episodes"],
+                        "run_id": self._run_id(),
+                    }
+                )
+                # Marked seen only once written, so a failed write is retried.
+                self._diag_unknown_seen = diag["unknown_episodes"]
+            except Exception:
+                log.warning("welfare monitor: incident log write failed", exc_info=True)
         if self._acted:
             return
         now = self._clock()
         if self._started_at is None:
-            # First poll: stamp the cold-start origin (monotonic run clock).
-            self._started_at = now
+            # First poll: stamp the cold-start origin on both clocks.
+            self._started_at = u_now
+            self._started_at_wall = now
         # Cold-start warm-up: boot transients are observed + logged but do NOT
         # count toward the repeat threshold or a sustained crossing. After the
         # window, both arms function unchanged; genuine sustained distress
         # re-accrues immediately.
         # Honor Soma's own warm-up flag past the fixed floor, but only up to
-        # warmup_ceiling_s so a stuck/stale flag cannot blind the net forever.
+        # warmup_ceiling_s of wall time, so a stuck/stale flag or a long freeze
+        # cannot blind the net forever. A ceiling of 0 means the flag never extends it.
         soma_gate = (
             self._soma_warmup_active
-            and self._started_at is not None
-            and (now - self._started_at) < self._config.warmup_ceiling_s
+            and self._started_at_wall is not None
+            and (now - self._started_at_wall) < self._config.warmup_ceiling_s
         )
-        if self._in_warmup(now) or soma_gate:
-            await self._drain_during_warmup(now)
+        if self._in_warmup(u_now, now) or soma_gate:
+            await self._drain_during_warmup(u_now)
             return
         # Drain soma.out, feeding the distress tracker.
         try:
@@ -803,8 +851,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._soma_warmup_active = bool(
                 (event.payload or {}).get("warmup_active", False)
             )
+            u_now = self._unfrozen.now()
             now = self._clock()
-            if self._distress.observe(magnitude, now):
+            if self._distress.observe(magnitude, u_now, wall_now=now):
                 reason = "sustained_distress"
                 # A sustained episode also counts toward the repeat window. A
                 # windowed-repeat crossing reclassifies as "repeated_distress"
@@ -817,8 +866,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._cursor = last_scanned
         # Timer-driven sustained crossing (episode elapses with no new sample).
         if not reasons:
+            u_now = self._unfrozen.now()
             now = self._clock()
-            if self._distress.check_timeout(now):
+            if self._distress.check_timeout(u_now):
                 reason = "sustained_distress"
                 if self._repeat.record(now):
                     reason = "repeated_distress"

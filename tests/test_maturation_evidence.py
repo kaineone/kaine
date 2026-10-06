@@ -338,8 +338,11 @@ def test_resolve_boot_stage_does_not_write_file(
     monkeypatch.setattr("kaine.lifecycle.stage.STAGE_PATH", tmp_path / "stage.json")
     monkeypatch.chdir(tmp_path)
 
+    # A fresh being has a minted identity; an unknown identity counts as lived.
+    from kaine.lifecycle.identity import mint_identity
+
     stage, staging_enabled, is_fresh = _resolve_boot_stage(
-        {"developmental_stage": {"enabled": True}}
+        {"developmental_stage": {"enabled": True}}, identity=mint_identity()
     )
     assert stage.is_gestating
     assert staging_enabled is True

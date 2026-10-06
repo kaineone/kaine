@@ -189,7 +189,7 @@ def _server_resident_models(url: str, timeout_s: float) -> list[str]:
     try:
         api_key = model_server_api_key(None)
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        resp = httpx.get(f"{base}/models", headers=headers, timeout=timeout_s)
+        resp = httpx.get(f"{base}/models", headers=headers, timeout=timeout_s, trust_env=False)
         resp.raise_for_status()
         data = resp.json().get("data") or []
         return [str(m.get("id")) for m in data if m.get("id")]

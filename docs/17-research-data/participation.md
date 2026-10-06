@@ -8,7 +8,7 @@ The default research bundle is numeric metrics only. It contains:
 
 | Included | Excluded (never) |
 |---|---|
-| A/B divergence scores (cosine divergence, numeric) | Lingua intent log (`state/lingua/intent_expression.jsonl`) — embeds user/bystander utterances and the entity's internal monologue. |
+| A/B divergence scores (cosine divergence, numeric) | Lingua intent log (`state/lingua/intent_expression.jsonl`) — the entity's prompts, utterances and internal monologue; heard speech is replaced with `[heard speech]`. |
 | Individuation evidence (encrypted welfare evidence under `state/individuation/`; whether content-free reports are exported in research bundles is an open operator decision, and those reports are not in research bundles today) | Mnemos/Qdrant memories — verbatim transcripts and episodic records. |
 | Coherence PLV time series (numeric) | Eidolon self-model (`state/eidolon/self_model.json`) — identity history. |
 | Welfare / gray-zone event counts (numeric) | Conversation content (any turn text). |

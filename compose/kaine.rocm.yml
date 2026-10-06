@@ -32,7 +32,8 @@ x-rocm-devices: &rocm-devices
 services:
   kaine-model-server:
     <<: *rocm-devices
-    image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-rocm}
+    # llama.cpp build b11382 pinned by digest; bumps change compose/kaine*.yml, quadlet and the trainer converter together.
+    image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:46583bd112bf2d62881d6aeaae52e59238d61cbf5803296521cdf518548016e6}
   kaine-chatterbox:
     <<: *rocm-devices
   kaine-nexus:

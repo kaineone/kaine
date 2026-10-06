@@ -1,0 +1,64 @@
+{% extends "_setup_base.html" %}
+{% block title %}Finish setup — KAINE Setup{% endblock %}
+{% block content %}
+<h1>Finish setup</h1>
+
+{% if token_note %}
+<section class="setup-note" aria-label="Nexus sign-in token note">
+  <p>The sign-in token step produced these notes:</p>
+  <pre>{{ "".join(token_note) }}</pre>
+</section>
+{% endif %}
+
+{% if nexus_error %}
+<section class="setup-note" aria-label="Nexus configuration error">
+  <p>{{ nexus_error }}</p>
+</section>
+{% endif %}
+
+{% if service_lights or nexus_available %}
+<section aria-label="Service status">
+  <h2>Service status</h2>
+  <ul class="status-lights">
+    {% for svc in service_lights %}
+    <li>
+      <span class="status-dot {% if svc.running %}status-running{% else %}status-stopped{% endif %}" aria-hidden="true"></span>
+      {{ svc.name }} on port {{ svc.port }}: {% if svc.running %}running{% else %}not running{% endif %}
+    </li>
+    {% endfor %}
+    {% if nexus_available %}
+    <li>
+      <span class="status-dot {% if nexus_running %}status-running{% else %}status-stopped{% endif %}" aria-hidden="true"></span>
+      Nexus on port {{ nexus_port }}: {% if nexus_running %}running{% else %}not running{% endif %}
+    </li>
+    {% endif %}
+  </ul>
+</section>
+{% endif %}
+
+{% if nexus_available and not nexus_running %}
+<form method="post" action="{{ request.url_for('job_start', name='nexus') }}">
+  <button type="submit" class="btn btn--primary">Start Nexus</button>
+</form>
+{% endif %}
+
+<form method="post" action="{{ request.url_for('finish_token') }}">
+  <button type="submit" class="btn">Show sign-in token</button>
+</form>
+
+{% if token is not none %}
+<section aria-label="Nexus sign-in token">
+  <p>Your Nexus sign-in token:</p>
+  <code id="nexus-token" role="status" tabindex="-1">{{ token }}</code>
+  <script>(function(){var t=document.getElementById('nexus-token'); if(t){t.focus();}})();</script>
+</section>
+{% elif show_missing %}
+<section aria-label="Nexus sign-in token">
+  <p>No sign-in token is set. Check <code>{{ secrets_path }}</code> for <code>[nexus] operator_token</code>.</p>
+</section>
+{% endif %}
+
+<form method="post" action="{{ request.url_for('finish') }}">
+  <button type="submit" class="btn">Close setup</button>
+</form>
+{% endblock %}

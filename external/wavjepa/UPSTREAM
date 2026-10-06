@@ -1,0 +1,35 @@
+Upstream project: WavJEPA (waveform Joint-Embedding Predictive Architecture), base
+Repository:       https://huggingface.co/labhamlet/wavjepa-base
+Pinned commit:    6be4a5093f6c9adbbd55e00b6e5b8f067aa03345
+Retrieved:        2026-10-05
+License:          MIT, per the Hugging Face model tag. The repository carries no
+                  LICENSE file; the upstream training code on GitHub is BSD-3-Clause.
+SPDX-License-Identifier: MIT
+Paper:            arXiv:2509.23238
+
+Vendoring: a copy of the upstream modeling source at the pinned commit, with
+three safety changes and nothing else:
+  1. modeling_wavjepa.py passed config.extractor_config['conv_layers_spec'] to
+     eval(). It now goes through parse_conv_layers_spec, which accepts only
+     integer tuples and lists combined with "+" and "*", and refuses anything
+     else.
+  2. audio_extractor.py called eval() on strings it had just formatted, in a
+     __repr__-style description. The products are now computed directly.
+  3. types.py, which shadows the standard library module of that name, is
+     renamed wavjepa_types.py, and its two importers are updated.
+The model is loaded with trust_remote_code=False, local_files_only=True and
+HF_HUB_OFFLINE=1. The entity's runtime path loads the student (context) encoder
+only; the teacher and predictor are loaded only by the offline bake-off's
+mismatch mode.
+
+Upstream sha256 of every file as retrieved (before the changes above):
+  e835245f5767af1b52159d0a28244df3449a5533c8aa59caeef8d5c8a853a900  audio_extractor.py
+  5892fbd80edacbe8c744d85a6795729e82dae76dbe33b7c04838103919151d00  config.json
+  2ab6f20485e0f2c507ea300fc3723f013ee4cd33912d01313a3d51c6b64f06cc  configuration_wavjepa.py
+  b7c4e924957f03fc272e3ea31d600afbb2715df7d8dead6e5456d75a9122cf6e  feature_extraction_wavjepa.py
+  2cd40ab3b0cf1991fabf1384d084dd0bb8aa8ca069b17122eda2588e8d56d88f  modeling_wavjepa.py
+  084e697736ff40e083bbcd6d102156b7a6a491e92001f11ff100af369d88ed4e  model.py
+  e1be3bd33db28b3243a03acc0e9bfa7c31186a96c27535a053db252dde1ac68a  pos_embed.py
+  cc09b7d5db568bf0ec48b9118c9d2505060801abff69935cd2b126f5109c8ed0  preprocessor_config.json
+  59079bd4f4b07977cf9953cd1af01560b2a4b0eee9f832219916d68ad9e513b3  types.py
+  0215596a3ec5226766a4cfe3ea87282e4904ce5014923e29859cd013eeb152f5  utils.py

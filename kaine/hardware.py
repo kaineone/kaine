@@ -280,34 +280,37 @@ def _resolve_unrestricted(
     try:
         _validate_device_string(preferred)
     except ValueError as exc:
-        log.warning("invalid device %r: %s; falling back to %s", preferred, exc, fallback)
-        return _safe_fallback(fallback)
+        resolved = _safe_fallback(fallback)
+        log.warning("invalid device %r: %s; falling back to %s", preferred, exc, resolved)
+        return resolved
     m = _CUDA_INDEXED_RE.match(preferred)
     if m:
         idx = int(m.group(1))
         count = _cuda_device_count()
         if idx < count:
             return preferred
+        resolved = _safe_fallback(fallback)
         log.warning(
             "device %s requested but only %d CUDA device(s) available; falling back to %s",
             preferred,
             count,
-            fallback,
+            resolved,
         )
-        return _safe_fallback(fallback)
+        return resolved
     mx = _XPU_INDEXED_RE.match(preferred)
     if mx:
         idx = int(mx.group(1))
         count = _xpu_device_count()
         if idx < count:
             return preferred
+        resolved = _safe_fallback(fallback)
         log.warning(
             "device %s requested but only %d XPU device(s) available; falling back to %s",
             preferred,
             count,
-            fallback,
+            resolved,
         )
-        return _safe_fallback(fallback)
+        return resolved
     if preferred == "cuda":
         if _cuda_device_count() > 0:
             return "cuda:0"
@@ -784,6 +787,23 @@ TIER2_MIN_BUDGET_GB = 16.0
 #: :data:`TIER2_MIN_BUDGET_GB` the host is still Tier 2, with residency guidance.
 RESIDENCY_MIN_BUDGET_GB = 6.0
 
+
+def resolve_dtype(device: str) -> Any:
+    """Return the default floating-point dtype for *device*.
+
+    fp16 on CUDA and XPU (GPU-like accelerators); float32 on CPU, MPS, and
+    everywhere else. The Topos loader builds the model with an explicit
+    float32 ``dtype``, so the process-wide default dtype never leaves float32
+    during construction; this dtype is then applied to the model after
+    construction.
+    """
+    import torch
+
+    if str(device).startswith(("cuda", "xpu")):
+        return torch.float16
+    return torch.float32
+
+
 #: Nominal size vs. reported-usable size on every accelerator/host platform.
 #: A "16 GB" card or Jetson reports ~15.3 GiB usable because firmware and the
 #: kernel reserve a slice. Comparing the *reported* budget against the nominal
@@ -829,8 +849,8 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
         "host": "single/dual-GPU workstation (the current default)",
         "summary": "full real-time multimodal (the untouched default)",
         "present": [
-            "lingua (Gemma E2B on GPU via Ollama)",
-            "topos vision (DINOv2 torch)",
+            "lingua (Qwen3.5-4B abliterated on GPU via llama-server)",
+            "topos vision (InternVideo-Next torch)",
             "vocal emotion (emotion2vec+)",
             "audio-in STT (faster-whisper, >realtime)",
             "audio-out TTS (Chatterbox, expressive)",

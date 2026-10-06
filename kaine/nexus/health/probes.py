@@ -367,7 +367,7 @@ async def probe_redis(*, host: str, port: int, password: str | None) -> tuple[st
 async def probe_qdrant(*, host: str, port: int, api_key: str | None) -> tuple[str, str]:
     url = f"http://{host}:{port}/readyz"
     headers = {"api-key": api_key} if api_key else {}
-    async with httpx.AsyncClient(timeout=1.8) as client:
+    async with httpx.AsyncClient(timeout=1.8, trust_env=False) as client:
         resp = await client.get(url, headers=headers)
     if resp.status_code == 200:
         return UP, f"/readyz ok ({host}:{port})"
@@ -386,7 +386,7 @@ async def probe_chat_llm(
     # A keyed server (Unsloth Studio) needs bearer auth or the probe 401s and
     # falsely reports degraded; keyless servers ignore the header.
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
-    async with httpx.AsyncClient(timeout=1.8, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=1.8, headers=headers, trust_env=False) as client:
         resp = await client.get(url)
         if resp.status_code != 200:
             return DEGRADED, f"/v1/models returned HTTP {resp.status_code}"
@@ -414,7 +414,7 @@ async def probe_chat_llm(
 
 async def probe_speaches(*, base_url: str) -> tuple[str, str]:
     url = base_url.rstrip("/") + "/v1/models"
-    async with httpx.AsyncClient(timeout=1.8) as client:
+    async with httpx.AsyncClient(timeout=1.8, trust_env=False) as client:
         resp = await client.get(url)
     if resp.status_code == 200:
         return UP, "/v1/models ok"
@@ -423,7 +423,7 @@ async def probe_speaches(*, base_url: str) -> tuple[str, str]:
 
 async def probe_chatterbox(*, base_url: str) -> tuple[str, str]:
     url = base_url.rstrip("/") + "/"
-    async with httpx.AsyncClient(timeout=1.8) as client:
+    async with httpx.AsyncClient(timeout=1.8, trust_env=False) as client:
         resp = await client.get(url)
     # Chatterbox's root may answer 200 or a redirect / 404 while still
     # being a live listener; any HTTP response means the port is serving.

@@ -77,7 +77,7 @@ Chronos models event rhythm across the bus with a small CfC network and publishe
 | `rumination_bucket_resolution` | float | `0.25` | Bucket width (seconds) for discretizing event timestamps in the rumination detector. |
 | `user_input_streams` | list of strings | `["audition.out"]` | Streams Chronos monitors for user-input timing. |
 | `interaction_event_types` | list of strings | `["audition.transcription", "audition.emotion"]` | Event types on those streams that count as an interaction when they come from an operator channel. |
-| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head. Disabled by default; enable per-install. |
+| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head. Disabled by default in the shipped file; enabled in the default `thesis_test` profile. |
 | `prediction_error_window` | integer | `32` | Rolling-window size (ticks) for normalizing the temporal prediction error signal. |
 
 ## Topos
@@ -154,7 +154,7 @@ Section: `[topos]` foveation keys.
 | `peripheral_height` | integer | `180` | Height of the downsampled peripheral gist. |
 | `foveal_size` | integer | `224` | Side length of the square foveal crop encoded at native detail. |
 
-Foveation no longer requires `encoder_backend = "dinov2"`; it composes with the default InternVideo-Next clip encoder. Enable it only after the host benchmark (`scripts/bench_foveation.py`) confirms two encodes plus native capture fit the tick budget.
+Foveation works with `encoder_backend = "internvideo_next"` (the default) or `"dinov2"`; it composes with the default InternVideo-Next clip encoder. Enable it only after the host benchmark (`scripts/bench_foveation.py`) confirms two encodes plus native capture fit the tick budget.
 
 ## Nous
 
@@ -447,7 +447,8 @@ For sherpa-onnx install the `speech-edge` extra and fetch models with `python -m
 | `arousal_window_max` | float | `1.0` | Upper bound of the arousal-modulated acoustic analysis window in seconds. |
 | `acoustic_change_alert_threshold` | float | `0.35` | Small absolute floor guard on the acoustic change alert. |
 | `acoustic_change_alert_factor` | float | `2.0` | Relative multiplier: an acoustic onset alerts when it reaches this factor times the rolling-window mean of change scores. |
-| `acoustic_encoder` | string | `"spectral"` | Acoustic encoder for general auditory perception. An unknown name fails at boot. A plugin may supply the encoder through the `audition.acoustic_encoder` seam instead. |
+| `acoustic_encoder` | string | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"`, `"dasheng"` or `"wavjepa"`. An unknown name fails at boot. The self-supervised encoders need their weights fetched once at setup. A plugin may supply the encoder through the `audition.acoustic_encoder` seam instead. |
+| `acoustic_device` | string | `"cpu"` | Device for the self-supervised acoustic encoders, resolved like other module devices. |
 
 The forward-model prediction-error path is always active and is the primary driver of auditory salience.
 

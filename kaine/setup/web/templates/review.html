@@ -1,0 +1,19 @@
+{% extends "_setup_base.html" %}
+{% block title %}Review changes — KAINE Setup{% endblock %}
+{% block content %}
+<h1>Review changes</h1>
+<p>The following wizard-owned keys will change in <code>{{ operator_path }}</code>:</p>
+{% if changes %}
+<ul class="review-changes">
+  {% for key in changes|sort %}
+  <li><code>{{ key }}</code></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No wizard-owned keys to change.</p>
+{% endif %}
+<p class="setup-note">Comments in the operator file are not preserved.</p>
+<form method="post" action="{{ request.url_for('save') }}">
+  <button type="submit" class="btn btn--primary">Save</button>
+</form>
+{% endblock %}

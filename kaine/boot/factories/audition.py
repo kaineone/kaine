@@ -14,6 +14,7 @@ from kaine.boot.common import _check_injections
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
+from kaine.hardware import resolve_device
 from kaine.modules.base import BaseModule
 
 log = logging.getLogger(__name__)
@@ -90,6 +91,7 @@ def make_audition(
         "acoustic_change_alert_threshold",
         "acoustic_change_alert_factor",
         "acoustic_encoder",
+        "acoustic_device",
         # Unified deterministic perception feed (unified-perception-feed). The
         # resolved top-level [perception_feed] config, injected by build_registry
         # under this reserved key. Selecting seeded/playlist supplies a
@@ -191,7 +193,10 @@ def make_audition(
         if not isinstance(name, str):
             raise ConfigurationError("[audition].acoustic_encoder must be a string")
         try:
-            kwargs["acoustic_encoder"] = build_acoustic_encoder(name)
+            kwargs["acoustic_encoder"] = build_acoustic_encoder(
+                name,
+                device=resolve_device(str(section.get("acoustic_device", "cpu"))),
+            )
         except ValueError as exc:
             raise ConfigurationError(str(exc)) from exc
     elif "acoustic_encoder" in section:

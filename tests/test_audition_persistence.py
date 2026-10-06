@@ -6,13 +6,30 @@ import logging
 import time
 from datetime import datetime, timezone
 
+import numpy as np
 import pytest
 
 from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
-from kaine.modules.audition.acoustic import FakeAcousticEncoder
+from kaine.modules.audition.acoustic import FakeAcousticEncoder, energy_dbfs
+
+
+def _make_wav_bytes(samples: np.ndarray, sample_rate: int = 16000) -> bytes:
+    """int16 mono WAV from float32 samples in [-1, 1]."""
+    import io
+    import wave
+
+    samples = np.clip(samples, -1.0, 1.0)
+    pcm = (samples * 32767.0).astype(np.int16)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm.tobytes())
+    return buf.getvalue()
 
 
 @pytest.fixture
@@ -253,6 +270,46 @@ def test_matches_state_shape_checks_each_dimension():
     assert not model.matches_state_shape(AuditoryForwardModel(feature_dim=8, units=5).state_dict())
     assert not model.matches_state_shape(AuditoryForwardModel(feature_dim=9, units=4).state_dict())
     assert not model.matches_state_shape({"layers": []})
+
+
+def test_energy_dbfs_silence_is_floored():
+    assert energy_dbfs(b"") == -120.0
+    assert energy_dbfs(b"\x00" * 1024) == -120.0
+
+
+def test_energy_dbfs_full_scale_sine():
+    import numpy as np
+
+    t = np.linspace(0, 1, 16000, endpoint=False)
+    sine = np.sin(2 * np.pi * 440 * t)
+    db = energy_dbfs(_make_wav_bytes(sine))
+    assert -3.11 <= db <= -2.91
+
+
+@pytest.mark.asyncio
+async def test_perception_payload_includes_energy_dbfs(bus):
+    import numpy as np
+
+    encoder = FakeAcousticEncoder(8)
+    audition = _make_audition(
+        bus,
+        general_audition=True,
+        acoustic_encoder=encoder,
+        transcription_enabled=False,
+    )
+    await audition.initialize()
+    try:
+        t = np.linspace(0, 1, 16000, endpoint=False)
+        wav = _make_wav_bytes(np.sin(2 * np.pi * 440 * t))
+        await audition._perceive_acoustic(wav, 16000, "seeded")
+        entries = await bus.read("audition.out", last_id="0", count=100)
+        events = [e for _, e in entries if e.type == "audition.perception"]
+        assert len(events) == 1
+        payload = events[0].payload
+        assert "energy_dbfs" in payload
+        assert -10.0 <= payload["energy_dbfs"] <= -1.0
+    finally:
+        await _close_module(audition)
 
 
 def test_matches_state_shape_rejects_bad_inner_shapes():

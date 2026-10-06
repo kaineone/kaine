@@ -276,7 +276,7 @@ async def _do_organ_adapter(
 async def _default_http_poster(url: str, body: dict) -> None:
     import httpx
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
         resp = await client.post(url, json=body)
         resp.raise_for_status()
 

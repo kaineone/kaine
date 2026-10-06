@@ -21,9 +21,10 @@ Tasks 2.1 and 2.2 check the womb-liveness interface defined by `local-womb-feed`
 
 - [x] 3.1 Decode readouts with the bus codec, filter on `event.type`, reject pre-boot (Redis `TIME`) and stale readouts.
 - [x] 3.2 Acknowledgement request file written by an authenticated Nexus control and consumed by the runner; Nexus panel for stage, evidence and hold.
-- [ ] 3.3 Lineage-scoped prior-history check with the unknown-lineage-counts-as-lived rule; shared entity-ID source.
+- [x] 3.3 Lineage-scoped prior-history check with the unknown-lineage-counts-as-lived rule; shared entity-ID source.
 
 ## 4. Verification
 
-- [ ] 4.1 Test isolation (`STAGE_PATH` via monkeypatch); tests for the no-stimulus report, womb loss, acknowledgement and welfare during gestation.
+- [x] 4.1 Test isolation (`STAGE_PATH` via monkeypatch); tests for the no-stimulus report, womb loss, acknowledgement and welfare during gestation.
+      Isolation: an autouse conftest fixture points `STAGE_PATH` at each test's tmp dir, guarded by `tests/test_stage_file_isolation.py`. The behaviours are covered by `test_maturation_gate_runner.py::test_no_stimulus_when_gestating_without_womb_feed`, `test_womb_watch.py` (womb loss), `test_gate_birth_ack.py` (acknowledgement) and `test_spot_freeze.py::test_welfare_plus_gestation_freeze_spot_stays_out` (welfare during gestation).
 - [ ] 4.2 Offline suite green; `openspec validate maturation-gate-liveness --strict` passes.
