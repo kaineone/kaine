@@ -38,6 +38,7 @@ class IntentExpressionLog:
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
         self._migration_checked = False
+        self._encryption_off_checked = False
         self._warned_encryption_off = False
 
     @property
@@ -116,15 +117,17 @@ class IntentExpressionLog:
         encryptor = get_state_encryptor()
 
         if not encryptor.enabled:
-            if (
-                not self._warned_encryption_off
-                and self._path.is_file()
-                and has_envelope_line(self._path)
-            ):
-                log.warning(
-                    "intent log: encryption is off but the log already holds encrypted lines; new lines are written in plaintext"
-                )
-                self._warned_encryption_off = True
+            if not self._encryption_off_checked:
+                self._encryption_off_checked = True
+                if (
+                    not self._warned_encryption_off
+                    and self._path.is_file()
+                    and has_envelope_line(self._path)
+                ):
+                    log.warning(
+                        "intent log: encryption is off but the log already holds encrypted lines; new lines are written in plaintext"
+                    )
+                    self._warned_encryption_off = True
         elif not self._migration_checked:
             # Checked once per instance, and only under encryption: if the
             # encryptor is enabled later, the next write still migrates, and a

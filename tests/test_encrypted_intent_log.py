@@ -517,3 +517,27 @@ def test_warns_when_encryption_off_and_envelopes_present(monkeypatch, tmp_path, 
         assert "envelope content" not in r.message
         assert "first plaintext" not in r.message
         assert "second plaintext" not in r.message
+
+
+def test_encryption_off_envelope_check_runs_once(monkeypatch, tmp_path):
+    from kaine.persistence.encrypted_jsonl import has_envelope_line as _real_has_envelope_line
+
+    path = tmp_path / "intent_expression.jsonl"
+    path.write_text("", encoding="utf-8")
+    calls = 0
+
+    def _counting_wrapper(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return _real_has_envelope_line(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "kaine.modules.lingua.intent_log.has_envelope_line",
+        _counting_wrapper,
+    )
+
+    log = IntentExpressionLog(path)
+    for _ in range(5):
+        _append(log, "record")
+
+    assert calls == 1
