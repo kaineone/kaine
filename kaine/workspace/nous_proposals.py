@@ -18,6 +18,7 @@ import time
 from typing import Callable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.templates import felt_drive_phrase
 from kaine.workspace.volition import (
     OWN_EXTERNAL_SPEECH_SOURCE,
     OWN_EXTERNAL_SPEECH_TYPE,
@@ -234,23 +235,23 @@ class NousProposalSource:
             if intent.kind in (SPEAK, THINK):
                 self._last_at[intent.kind] = now
 
-    def _summarize_event(self, event: object) -> str:
-        """Mirror the summary style used by the drive policy."""
+    def _summarize_event_with_kind(self, event: object) -> tuple[str, str]:
+        """Mirror the summary style used by the drive policy, plus the kind."""
         if (
             event.source == USER_COMMUNICATION_SOURCE
             and event.type == USER_COMMUNICATION_TYPE
         ):
             text = str(event.payload.get("text") or "").strip()
             if text:
-                return text
+                return text, "heard"
         if (
             event.source == THYMOS_DRIVE_SOURCE
             and event.type == THYMOS_DRIVE_TYPE
         ):
             name = event.payload.get("drive")
             if isinstance(name, str):
-                return f"{name} (value={event.payload.get('value')})"
-        return f"{event.source}:{event.type}"
+                return felt_drive_phrase(name, event.payload.get("value")), "felt"
+        return f"{event.source}:{event.type}", "event"
 
     def _record_outcome(self, event: object, reason: str, realized: bool) -> None:
         proposal_id = event.payload.get("proposal_id")
@@ -322,7 +323,7 @@ class NousProposalSource:
                 return inner_intents
 
             entry_id, event = top
-            about = self._summarize_event(event)
+            about, about_kind = self._summarize_event_with_kind(event)
 
             if self._inner_guards[kind]:
                 self._inner.note_external_intent(kind)
@@ -337,7 +338,10 @@ class NousProposalSource:
 
             self._record_outcome(proposal_event, "realized", realized=True)
             return inner_intents + [
-                Intent(kind=kind, about=about, entry_id=entry_id, origin="nous")
+                Intent(
+                    kind=kind, about=about, entry_id=entry_id, origin="nous",
+                    about_kind=about_kind,
+                )
             ]
 
         if kind == REST:

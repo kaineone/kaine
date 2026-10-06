@@ -106,6 +106,11 @@ class Intent:
     carry it; Lingua honors it by cancelling the in-flight generation and
     starting this one. Default ``False`` — the flag is emitted on the wire only
     when set, so non-Lingua consumers (Praxis) simply never see an unknown field.
+
+    ``about_kind`` classifies the ``about`` field for Lingua's redaction logic:
+    ``"heard"`` for heard speech, ``"felt"`` for a drive's felt-state phrase,
+    or ``"event"`` for another coalition event summary. ``None`` is treated as
+    ``"heard"`` (fail-closed), so unmarked intents are redacted in the log.
     """
 
     kind: str
@@ -119,11 +124,14 @@ class Intent:
     interrupt: bool = False
     origin: Optional[str] = None
     proposal_id: Optional[str] = None
+    about_kind: Optional[str] = None
 
     def to_event_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"kind": self.kind, "about": self.about}
         if self.origin is not None:
             payload["origin"] = self.origin
+        if self.about_kind is not None:
+            payload["about_kind"] = self.about_kind
         if self.proposal_id is not None:
             payload["proposal_id"] = self.proposal_id
         if self.entry_id is not None:
@@ -260,7 +268,9 @@ class DefaultActionSelectionPolicy:
                 continue
             text = self._user_utterance(event)
             if text is not None:
-                return Intent(kind=SPEAK, about=text, entry_id=entry_id or None)
+                return Intent(
+                    kind=SPEAK, about=text, entry_id=entry_id or None, about_kind="heard"
+                )
         return None
 
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
