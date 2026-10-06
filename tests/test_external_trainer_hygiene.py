@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
 """Tests for the external voice-alignment trainer's job hygiene.
 
 These tests run in the kaine venv and must not require a GPU, unsloth or trl.
