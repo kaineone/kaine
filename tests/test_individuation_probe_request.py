@@ -23,6 +23,7 @@ from kaine.modules.lingua import (
 from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 from kaine.modules.lingua.context import EMPTY_AWARENESS, ContextAssembler, _identity_clause
 from kaine.privacy_filter import PrivacyFilter
+from kaine.storage import set_data_root
 
 
 class _FakeBus:
@@ -68,8 +69,9 @@ def test_self_model_old_json_loads_empty_situation_facts():
 
 
 @pytest.mark.asyncio
-async def test_ensure_situation_fact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("kaine.storage._PROCESS_ROOT", tmp_path.resolve())
+async def test_ensure_situation_fact(tmp_path: Path):
+    # The autouse conftest fixture restores the process data root afterwards.
+    set_data_root(tmp_path)
     eidolon = Eidolon(_FakeBus())
     eidolon._model = eidolon._model.with_updates(
         values=["v"],
