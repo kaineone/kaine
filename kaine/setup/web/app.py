@@ -33,7 +33,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from kaine.config import load_kaine_config
 from kaine.hardware import describe_host
 from kaine.net import SERVICE_PORTS, port_listening
-from kaine.nexus.config import NexusConfigError, load_nexus_config
+from kaine.nexus.config import load_nexus_config
 from kaine.setup import tomlwriter
 from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH, ensure_nexus_token
 from kaine.setup.steps import (
@@ -126,12 +126,33 @@ class SetupState:
     secrets_path: Path = field(default=Path("config/secrets.toml"), repr=False)
 
 
+def _resolved_secrets_path(state, repo_root):
+    secrets_path = state.secrets_path
+    if secrets_path is None:
+        return None
+    secrets_path = Path(secrets_path)
+    if secrets_path.is_absolute():
+        return secrets_path
+    return repo_root / secrets_path
+
+
+def _nexus_config_for(request):
+    state = request.app.state.setup
+    repo_root = request.app.state.repo_root
+    return load_nexus_config(
+        state.shipped_config_path,
+        operator_path=state.operator_path,
+        secrets_path=_resolved_secrets_path(state, repo_root),
+    )
+
+
 class _NoCacheMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ):
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
 
@@ -721,7 +742,10 @@ def create_setup_app(
         os.replace(tmp_path, state.operator_path)
 
         token_note: list[str] = []
-        ensure_nexus_token(state.secrets_path, out=token_note.append)
+        ensure_nexus_token(
+            _resolved_secrets_path(state, request.app.state.repo_root),
+            out=token_note.append,
+        )
         sess["token_note"] = token_note
         sess["saved"] = True
         return RedirectResponse(request.url_for("jobs"), status_code=303)
@@ -883,16 +907,9 @@ def create_setup_app(
             },
         )
 
-    @app.get("/finish", response_class=HTMLResponse, name="finish_page")
-    async def finish_page(request: Request):
+    def _finish_context(request, token=None, show_missing=False):
         state = request.app.state.setup
         sess = request.state.session
-        if not sess.get("saved"):
-            return PlainTextResponse(
-                "configuration has not been saved",
-                status_code=403,
-                headers={"Cache-Control": "no-store"},
-            )
 
         services_up: dict[str, bool] = {}
         if state.services_up_fn is not None:
@@ -912,36 +929,32 @@ def create_setup_app(
             for name, port in SERVICE_PORTS.items()
         ]
 
-        repo_root = request.app.state.repo_root
         nexus_port: int | None = None
         nexus_running = False
         nexus_available = False
+        nexus_error = None
         try:
-            nexus_cfg = load_nexus_config(repo_root / "config" / "kaine.toml")
+            nexus_cfg = _nexus_config_for(request)
             nexus_port = nexus_cfg.port
             nexus_running = port_listening(nexus_port)
             nexus_available = True
-        except NexusConfigError:
-            pass
+        except Exception as exc:
+            nexus_error = f"Nexus config could not be read ({type(exc).__name__})"
 
-        return templates.TemplateResponse(
-            request,
-            "finish.html",
-            {
-                "service_lights": service_lights,
-                "nexus_available": nexus_available,
-                "nexus_port": nexus_port,
-                "nexus_running": nexus_running,
-                "token_note": sess.get("token_note", []),
-                "token": None,
-                "show_missing": False,
-                "secrets_path": state.secrets_path,
-            },
-        )
+        return {
+            "service_lights": service_lights,
+            "nexus_available": nexus_available,
+            "nexus_port": nexus_port,
+            "nexus_running": nexus_running,
+            "token_note": sess.get("token_note", []),
+            "token": token,
+            "show_missing": show_missing,
+            "secrets_path": state.secrets_path,
+            "nexus_error": nexus_error,
+        }
 
-    @app.post("/finish/token", response_class=HTMLResponse, name="finish_token")
-    async def finish_token(request: Request):
-        state = request.app.state.setup
+    @app.get("/finish", response_class=HTMLResponse, name="finish_page")
+    async def finish_page(request: Request):
         sess = request.state.session
         if not sess.get("saved"):
             return PlainTextResponse(
@@ -950,29 +963,38 @@ def create_setup_app(
                 headers={"Cache-Control": "no-store"},
             )
 
-        repo_root = request.app.state.repo_root
-        token: str | None = None
-        try:
-            nexus_cfg = load_nexus_config(
-                repo_root / "config" / "kaine.toml", secrets_path=state.secrets_path
+        return templates.TemplateResponse(
+            request,
+            "finish.html",
+            _finish_context(request),
+        )
+
+    @app.post("/finish/token", response_class=HTMLResponse, name="finish_token")
+    async def finish_token(request: Request):
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
             )
+
+        token = None
+        nexus_error = None
+        try:
+            nexus_cfg = _nexus_config_for(request)
             token = nexus_cfg.operator_token or None
-        except NexusConfigError:
-            pass
+        except Exception as exc:
+            nexus_error = f"Nexus config could not be read ({type(exc).__name__})"
+
+        context = _finish_context(request, token=token, show_missing=token is None)
+        if nexus_error is not None:
+            context["nexus_error"] = nexus_error
 
         response = templates.TemplateResponse(
             request,
             "finish.html",
-            {
-                "service_lights": [],
-                "nexus_available": False,
-                "nexus_port": None,
-                "nexus_running": False,
-                "token_note": sess.get("token_note", []),
-                "token": token,
-                "show_missing": token is None,
-                "secrets_path": state.secrets_path,
-            },
+            context,
         )
         response.headers["Cache-Control"] = "no-store"
         return response

@@ -132,9 +132,9 @@ body {
 }
 
 .status-running {
-  background: var(--accent-green);
+  background: var(--up);
 }
 
 .status-stopped {
-  background: var(--accent-red);
+  background: var(--down);
 }
