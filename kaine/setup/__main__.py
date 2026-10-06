@@ -544,12 +544,15 @@ def _run_web(
     storage_old_root: Path,
 ) -> int:
     """Start the loopback browser setup server."""
+    # The running-cycle guard must look at the real state directory; if it
+    # cannot be resolved, refuse to start rather than guard the wrong place.
     try:
         from kaine.storage import resolve
 
         state_root = Path(resolve("state"))
-    except Exception:
-        state_root = Path("state").resolve()
+    except Exception as exc:
+        print(f"setup cannot start: the state directory cannot be resolved ({exc})", file=sys.stderr)
+        return 1
 
     try:
         app = create_setup_app(

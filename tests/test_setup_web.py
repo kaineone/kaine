@@ -994,3 +994,27 @@ def test_launch_redirect_file_is_private_and_redirects(tmp_path, monkeypatch):
     assert 'content="0;url=http://127.0.0.1:43123/?token=abc&amp;x=1"' in text
     assert target.as_uri().startswith("file://")
     assert "abc" not in target.as_uri()
+
+
+def test_run_web_refuses_when_state_dir_cannot_be_resolved(tmp_path, monkeypatch, capsys):
+    """The running-cycle guard must check the real state directory; when it
+    cannot be resolved, setup refuses to start instead of guarding cwd/state."""
+    import argparse
+
+    import kaine.storage
+    from kaine.setup import __main__ as setup_main_mod
+
+    def broken_resolve(_path):
+        raise RuntimeError("data root unavailable")
+
+    started = []
+    monkeypatch.setattr(kaine.storage, "resolve", broken_resolve)
+    monkeypatch.setattr(setup_main_mod, "serve", lambda *a, **k: started.append(1))
+    args = argparse.Namespace(
+        operator_path=tmp_path / "op.toml",
+        config_path=Path(__file__).resolve().parent.parent / "config" / "kaine.toml",
+    )
+    rc = setup_main_mod._run_web(args, describe_host(), tmp_path)
+    assert rc == 1
+    assert not started
+    assert "state directory cannot be resolved" in capsys.readouterr().err

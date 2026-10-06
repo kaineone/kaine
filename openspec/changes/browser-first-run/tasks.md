@@ -25,7 +25,7 @@
   - the session is required on every request;
   - Host and Origin checks on changes;
   - `no-store` on secret-bearing responses;
-  - idle and finish shutdown, with running jobs counting as activity;
+  - idle and finish shutdown, with running jobs counting as activity (the server's activity hold is in place; the job runner in 4.1 sets it);
   - saving is refused while a cycle runs.
 - [x] 3.3 Step pages rendered from the step model, with server-side validation.
 - [x] 3.4 A parity test: the same answers through the web driver and the terminal driver give identical config.
