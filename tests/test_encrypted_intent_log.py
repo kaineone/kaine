@@ -190,18 +190,19 @@ def test_disabled_encryptor(monkeypatch):
     assert b"SENTINEL-DISABLED" not in path.read_bytes()
 
 
-def test_tampering(monkeypatch):
+def test_tampering(monkeypatch, tmp_path):
+    """Flipping one ciphertext character fails authentication."""
     _enable(monkeypatch)
-    record = {"secret": "x"}
-    envelope = encode_record(record)
-    chars = list(envelope)
-    for i, c in enumerate(chars):
-        if c == "A":
-            chars[i] = "B"
-            break
-    tampered = "".join(chars)
+    envelope = encode_record({"secret": "x"})
+    # Flip a character in the ciphertext tail (before any '=' padding), so the
+    # envelope stays valid base64 but no longer authenticates.
+    body = envelope.rstrip("=")
+    i = len(body) - 2
+    flipped = "B" if body[i] != "B" else "C"
+    tampered = envelope[:i] + flipped + envelope[i + 1 :]
+    assert tampered != envelope
     base64.b64decode(tampered, validate=True)
-    path = Path(tempfile.mkdtemp()) / "test.jsonl"
+    path = tmp_path / "test.jsonl"
     path.write_text(tampered + "\n", encoding="utf-8")
     lines = list(iter_records(path))
     assert len(lines) == 1
@@ -384,3 +385,42 @@ async def test_hypnos_corpus_rewrite_scope(monkeypatch, tmp_path, bus):
             assert _is_envelope(line)
 
     assert backup_file.read_text(encoding="utf-8") == backup_content
+
+
+def _append(log, text):
+    log.append(mode="external", prompt="p", generated_text=text, model="m")
+
+
+def test_migration_runs_when_encryption_is_enabled_after_a_plaintext_write(monkeypatch, tmp_path):
+    path = tmp_path / "intent_expression.jsonl"
+    log = IntentExpressionLog(path)
+    _append(log, "before encryption")  # encryptor disabled: plaintext line
+    _enable(monkeypatch)
+    _append(log, "after encryption")
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(lines) == 2
+    assert all(_is_envelope(ln) for ln in lines)
+
+
+def test_failed_migration_is_retried_on_the_next_write(monkeypatch, tmp_path):
+    import kaine.modules.lingua.intent_log as intent_log_mod
+
+    path = tmp_path / "intent_expression.jsonl"
+    path.write_text(json.dumps({"generated_text": "legacy"}) + "\n", encoding="utf-8")
+    _enable(monkeypatch)
+    real = intent_log_mod.rewrite_encrypted
+    calls = []
+
+    def flaky(p):
+        calls.append(p)
+        if len(calls) == 1:
+            raise OSError("disk hiccup")
+        return real(p)
+
+    monkeypatch.setattr(intent_log_mod, "rewrite_encrypted", flaky)
+    log = IntentExpressionLog(path)
+    _append(log, "one")
+    _append(log, "two")
+    assert len(calls) == 2
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert all(_is_envelope(ln) for ln in lines)

@@ -110,9 +110,11 @@ class IntentExpressionLog:
 
     def _write(self, record: dict[str, Any]) -> None:
         if not self._migration_checked:
-            self._migration_checked = True
             from kaine.security.crypto import get_state_encryptor
 
+            # Checked once per instance, and only under encryption: if the
+            # encryptor is enabled later, the next write still migrates, and a
+            # failed migration is retried on the next write.
             if get_state_encryptor().enabled:
                 try:
                     if has_plaintext_line(self._path):
@@ -120,8 +122,11 @@ class IntentExpressionLog:
                         log.info(
                             "intent log: migrated plaintext lines to encrypted envelopes"
                         )
+                    self._migration_checked = True
                 except Exception:
-                    log.exception("intent log: plaintext migration failed")
+                    log.exception(
+                        "intent log: plaintext migration failed; retrying on the next write"
+                    )
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
