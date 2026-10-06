@@ -38,6 +38,7 @@ The `thesis_test` profile enables only:
 - the seven modules listed above;
 - `[perception_feed]` mode `"seeded"` with seed `0`;
 - `[topos].foveation = true`;
+- `[chronos].forward_prediction = true`;
 - `[audition].transcription_enabled = false` and `general_audition = true`;
 - `[volition]` policy `"self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`.
 
@@ -51,7 +52,7 @@ KAINE is **not a chatbot** and not an assistant you converse with. It is a syste
 
 - Perception enters only as prediction error. Audition hears sound, not a transcript. There is no conversational input path.
 - Lingua verbalizes the workspace's own state. It speaks rarely and only when its internal surprise rises above threshold. Its utterances are recorded and observed, not spoken back into the microphone.
-- The base-thesis form has no memory, self-model, world-model, social cognition, or sleep in the loop. Those modules exist in code but are held off by configuration until the workspace ablation shows they are justified.
+- The base-thesis form has no memory, self-model, world-model, or social cognition in the loop. Those modules exist in code but are held off by configuration until the workspace ablation shows they are justified.
 
 ## How a run starts
 

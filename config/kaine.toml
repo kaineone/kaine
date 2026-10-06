@@ -808,11 +808,13 @@ prediction_error_window = 32
 # Number of recent utterance feature vectors kept in the recurrent buffer.
 auditory_buffer_size = 16
 # General auditory perception (auditory-perception; enabled via general_audition,
-# operator-set). Its acoustic change alert is self-calibrating, mirroring Topos
+# operator-set). `acoustic_encoder` selects the acoustic feature extractor:
+# "spectral" (default), "dasheng", or "wavjepa"; `acoustic_device` selects where
+# it runs. Its acoustic change alert is self-calibrating, mirroring Topos
 # (perception-drives-salience): an acoustic onset alerts when its change reaches
 # acoustic_change_alert_factor times the rolling-window mean; acoustic_change_alert_
-# threshold survives only as a small absolute FLOOR guard (was an absolute threshold
-# mis-scaled for the encoder). Defaults: factor = 2.0, threshold = 0.35. The
+# threshold survives only as a small absolute FLOOR guard (an absolute threshold
+# mis-scales across encoders). Defaults: factor = 2.0, threshold = 0.35. The
 # forward-model prediction-error path (normalised error >= 2.0) is always active
 # here and is the primary driver.
 # In-memory speaker prosody extraction (librosa). Off by default. When
@@ -1090,7 +1092,7 @@ adapter_retention = 0
 # the operator triggers the reload themselves.
 #
 # On-device single-GPU note: a 4B LoRA training step (~9.8 GB) and the
-# served organ (~3 GB) do not fit on one 12 GB device at once. With
+# served organ (~4.1 GB) do not fit on one 12 GB device at once. With
 # "reload_endpoint" or "restart_service" the sleep-cycle training window
 # time-shares the GPU — it UNLOADS the served organ, trains, then RELOADS
 # it (applying the accepted adapter via the server's --lora flag). While the
@@ -1575,9 +1577,10 @@ distress_duration_s = 30.0
 # welfare.out — so the protective response covers all four categories.
 repeat_window_s = 300.0
 repeat_threshold = 3
-# Cold-start warm-up: during the first warmup_s after run start, gray-zone /
-# distress events are observed and LOGGED but do NOT count toward the repeat
-# threshold or trigger the preserve-then-act response. This stops boot transients
+# Cold-start warm-up: warm-up counts unfrozen time, with a wall-time cap of
+# max(`warmup_s`, `warmup_ceiling_s`). During warm-up, gray-zone / distress
+# events are observed and LOGGED but do NOT count toward the repeat threshold
+# or trigger the preserve-then-act response. This stops boot transients
 # (distress reported before homeostatic setpoints settle) from being mistaken for
 # sustained welfare problems. Short relative to "sustained" — genuine sustained
 # distress re-accrues immediately once warm-up ends; both arms then function
@@ -1845,7 +1848,7 @@ level = "INFO"
 #
 # install_label = "kaine"          # Operator-chosen label for this install (1-64 chars).
 # reminder_interval_s = 14400.0    # Seconds between reminder notices (minimum 900).
-# input_loss_after_s = 60.0        # Seconds without input before the input-lost notice (later slice).
+# input_loss_after_s = 60.0        # Seconds without input before the input-lost notice.
 # nexus_url = "http://127.0.0.1:8088/"  # Address shown in notices for Nexus.
 #
 # Desktop notification on the D-Bus session bus of the user running the unit.

@@ -61,7 +61,7 @@ Tune the sidecar welfare observer's interoceptive-distress rule. These defaults 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `interoceptive_distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
-| `interoceptive_distress_duration_s` | float | `30.0` | Seconds of unfrozen time the distress must be sustained continuously. |
+| `interoceptive_distress_duration_s` | float | `30.0` | Seconds the distress must be sustained: wall time while distress samples arrive, unfrozen time after the last sample. |
 
 ### `[individuation]`
 
@@ -207,11 +207,11 @@ Autonomous welfare-protective response. Watches the Soma interoceptive-distress 
 | `poll_interval_s` | float | `1.0` | Poll cadence for draining `soma.out`. |
 | `action` | string | `"pause"` | `"pause"` (preserve then freeze the cycle, resumable), `"end"` (preserve then signal the run to stop), or `"notify"` (preserve, record a flagged event, and continue). |
 | `distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
-| `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires, counted in unfrozen time. |
+| `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires, counted in wall time while distress samples arrive and unfrozen time after the last sample. |
 | `repeat_window_s` | float | `300.0` | Window for the repeated-episodes arm. |
 | `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. |
 | `warmup_s` | float | `120.0` | Cold-start warm-up: during the first `warmup_s` of unfrozen time after run start, gray-zone/distress events are logged but do not count toward the repeat threshold or trigger the response. |
-| `warmup_ceiling_s` | float | `1800.0` | Maximum extension, in seconds, that Soma's `warmup_active` flag can add to the warm-up beyond `warmup_s`. It does not cap the `warmup_s` window itself. |
+| `warmup_ceiling_s` | float | `1800.0` | Whole warm-up is capped at max(`warmup_s`, `warmup_ceiling_s`) of wall time since run start. The Soma `warmup_active` flag extends warm-up only while wall time is below `warmup_ceiling_s`, and 0 means no extension. |
 | `min_interval_s` | float | `1800.0` | Rate limit for the `notify` action only: at most one `notify` event per this interval. |
 | `out_root` | string | `"backups"` | Directory where preservation bundles are written. |
 | `entity_name` | string | `"kaine"` | Entity name stamped into the bundle. |

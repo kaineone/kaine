@@ -25,7 +25,7 @@ When core code needs logic that lives in evaluation, do not import it. Move the 
 
 ## Boundary-neutral shared homes
 
-Boundary-neutral homes sit between core and evaluation. They may import neither the core runtime (`kaine/cycle/`, `kaine/modules/`, `kaine/nexus/`, `kaine/workspace/`) nor `kaine/evaluation/`. The contract in [`pyproject.toml`](../../pyproject.toml) lists ten neutral homes; the most used are:
+Boundary-neutral homes sit between core and evaluation. They may import neither the core runtime (`kaine/cycle/`, `kaine/modules/`, `kaine/nexus/`, `kaine/workspace/`) nor `kaine/evaluation/`. The contract in [`pyproject.toml`](../../pyproject.toml) lists 13 neutral homes; the most used are:
 
 | Home | Contents |
 |------|----------|
@@ -35,7 +35,7 @@ Boundary-neutral homes sit between core and evaluation. They may import neither 
 | `kaine/text_embedding.py` | The text embedder. |
 | `kaine/lifecycle/welfare_signal.py` | The sustained-distress detector. |
 
-The contract also includes `kaine/state_io.py`, `kaine/storage.py`, `kaine/shared_services.py`, `kaine/net.py`, and `kaine/memory_kinds.py`. See [`pyproject.toml`](../../pyproject.toml) under `[tool.importlinter]` for the current definitions.
+The contract also includes `kaine/decision/`, `kaine/defaults.py`, `kaine/state_io.py`, `kaine/storage.py`, `kaine/shared_services.py`, `kaine/net.py`, `kaine/memory_kinds.py`, and `kaine/text_embedding_numpy.py`. See [`pyproject.toml`](../../pyproject.toml) under `[tool.importlinter]` for the current definitions.
 
 ## Declared layering
 
@@ -95,4 +95,4 @@ A dedicated GitHub Actions job, [`../../.github/workflows/import-boundary.yml`](
 
 The grep test in [`tests/systems/test_sidecar_subsystem.py::test_boundary_no_core_module_imports_evaluation`](../../tests/systems/test_sidecar_subsystem.py) is an extra safeguard: it catches real `kaine.evaluation` imports, but it does not catch aliased or indirect imports. The import contract catches those.
 
-When you add a new top-level `kaine/` package, add it to the `source_modules` list of the sidecar contract. Neither the linter checks nor the boundary tests verify that `source_modules` is complete, so keep it updated manually. The current list already omits several existing packages, including `accel_selftest`, `cfc_numpy`, `embedding_defaults`, `extras`, `install_target`, `secrets_file`, `text_embedding_numpy`, `torch_stack`, and `wheel_data`.
+When you add a new top-level `kaine/` package, add it to the `source_modules` list of the sidecar contract. `tests/test_import_contract_coverage.py` verifies that every top-level `kaine/` package is classified, so the list stays complete automatically.

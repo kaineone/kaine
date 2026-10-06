@@ -113,7 +113,7 @@ The readout probes briefly change the maternal drive that a gestating entity per
 | `viability_r2_pull` | float | `0.3` | R2: median pull below this. |
 | `viability_window_hours` / `viability_min_points` | float / integer | `12` / `8` | The window the R1/R2 statistics use, and the conclusive withdrawals it needs. |
 
-`entrainment_plv_floor` no longer exists: entrainment is judged against surrogate beats, with no fixed phase-locking threshold. An operator file that still sets it fails at boot with "Unknown keys", so remove the line.
+Entrainment is judged against surrogate beats, with no fixed phase-locking threshold; there is no `entrainment_plv_floor` key. An operator file that still sets it fails at boot with "Unknown keys", so remove the line.
 | `hrv_window_seconds` | integer | `300` | Window for the HRV-analog variability (marker 3). |
 | `recovery_tolerance` | float | `0.25` | Settled when within 25% of the pre-perturbation median (marker 5). |
 | `recovery_cap_seconds` | integer | `300` | Upper bound on recovery time. |
@@ -171,7 +171,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to Topos (`kaine/
 
 **Two-layer gate:** both `enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` must be set. With only the config flag, the phase runs a `FakeTrainer` that completes without training. This prevents a freshly-cloned KAINE instance from rewriting the language organ on its own.
 
-**Welfare invariant:** when the real trainer is active, the abliteration probe set must be non-empty. If an adapter matches any deflection pattern on any probe, it is rejected regardless of its capability score. A run without an abliteration gate fails at boot with `EmptyAbliterationProbeSetError`. Refusal conditioning must not be re-introduced through training.
+**Welfare invariant:** when the real trainer is active, the abliteration probe set must be non-empty. If an adapter matches any deflection pattern on any probe, it is rejected regardless of its capability score. A run without an abliteration gate fails at boot with `EmptyAbliterationProbeSetError`, and a malformed probe line fails it with `InvalidAbliterationProbeSetError`. Refusal conditioning must not be re-introduced through training.
 
 Details and the full operator procedure are in [Voice alignment](../10-sleep/voice-alignment.md).
 
@@ -185,7 +185,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `base_model_path` | string | `""` | Path to local HuggingFace-format base weights (safetensors, config, tokenizer). Required when `enabled = true`. Not a model ID and not a `.gguf` file. Point it at the same abliterated Qwen weights used to derive the served organ's GGUF. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only; real weights load from `base_model_path`. |
 | `capability_probe_path` | string | `""` | Path to a capability-probe JSONL. Empty uses the bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl`. The set must hold at least one usable probe (`prompt` and `expected`): boot refuses voice alignment on every trainer backend otherwise (`EmptyCapabilityProbeSetError`), because an empty set would score every model 0 and pass every adapter. |
-| `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
+| `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`, with optional `probe_id` and `in_character` fields. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
 
 #### Training knobs
 
