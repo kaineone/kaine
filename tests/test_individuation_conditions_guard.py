@@ -176,6 +176,11 @@ def test_condition_changes_returns_sorted_names_only():
     assert changes == ["model_id", "persona_digest", "persona_template_version"]
 
 
+def test_condition_changes_presence_trumps_none_value():
+    assert _condition_changes({"a": None}, {}) == ["a"]
+    assert _condition_changes({}, {"a": None}) == ["a"]
+
+
 # --- ServedOrganIdentity ---
 
 
@@ -195,10 +200,44 @@ async def test_served_organ_identity_200_returns_build_and_model(tmp_path):
     snap = organ.snapshot()
 
     assert snap["server_build"] == "build-1"
-    assert snap["organ_model_path"] == "/models/a.gguf"
+    assert snap["organ_model_file"] == "a.gguf"
+    assert snap["organ_model_path_sha256"] == hashlib.sha256(
+        "/models/a.gguf".encode("utf-8")
+    ).hexdigest()
     assert snap["organ_revisions"] == hashlib.sha256(
         json.dumps({"repo": "abc"}, sort_keys=True).encode("utf-8")
     ).hexdigest()
+
+
+async def test_served_organ_identity_200_hides_full_model_path(tmp_path):
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "build_info": "build-1",
+                "model_path": "/home/someone/models/x.gguf",
+            },
+        )
+
+    organ = ServedOrganIdentity(
+        chat_url="http://127.0.0.1:11434/v1",
+        api_key=None,
+        revision_reader=lambda: {"repo": "abc"},
+        transport=httpx.MockTransport(handler),
+    )
+    await organ.refresh()
+    snap = organ.snapshot()
+
+    assert snap["server_build"] == "build-1"
+    assert snap["organ_model_file"] == "x.gguf"
+    assert snap["organ_model_path_sha256"] == hashlib.sha256(
+        "/home/someone/models/x.gguf".encode("utf-8")
+    ).hexdigest()
+    assert snap["organ_revisions"] == hashlib.sha256(
+        json.dumps({"repo": "abc"}, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    for v in snap.values():
+        assert "/home/" not in v
 
 
 async def test_served_organ_identity_failure_returns_unavailable(tmp_path):
@@ -222,7 +261,8 @@ async def test_served_organ_identity_failure_returns_unavailable(tmp_path):
             await organ.refresh()
 
         assert organ.snapshot()["server_build"] == "unavailable"
-        assert organ.snapshot()["organ_model_path"] == "unavailable"
+        assert organ.snapshot()["organ_model_file"] == "unavailable"
+        assert organ.snapshot()["organ_model_path_sha256"] == "unavailable"
 
 
 async def test_served_organ_identity_bearer_only_with_key(tmp_path):
@@ -289,6 +329,37 @@ async def test_organ_model_path_change_is_conditions_changed(tmp_path):
     responses = [
         httpx.Response(200, json={"build_info": "b1", "model_path": "m1.gguf"}),
         httpx.Response(200, json={"build_info": "b1", "model_path": "m2.gguf"}),
+    ]
+
+    def handler(request):
+        return responses.pop(0)
+
+    organ = ServedOrganIdentity(
+        chat_url="http://127.0.0.1:11434/v1",
+        api_key=None,
+        revision_reader=lambda: {},
+        transport=httpx.MockTransport(handler),
+    )
+    core, _paths = make_core(
+        tmp_path, conditioning_inputs=FakeConditioning(), refresh_conditions=organ.refresh
+    )
+    core._conditions = lambda: {**BASE_CONDITIONS, **organ.snapshot()}
+
+    await core.capture_reference("birth")
+
+    _RaisingSampler._called = False
+    core._sampler = _RaisingSampler()
+    outcome = await core.look(warmed_up=True, lived_seconds=1.0, lived_ticks=1)
+
+    assert outcome.outcome == "inconclusive"
+    assert outcome.reason == "conditions_changed"
+    assert not _RaisingSampler._called
+
+
+async def test_organ_model_file_same_but_sha_differs_across_directories(tmp_path):
+    responses = [
+        httpx.Response(200, json={"build_info": "b1", "model_path": "/home/a/x.gguf"}),
+        httpx.Response(200, json={"build_info": "b1", "model_path": "/home/b/x.gguf"}),
     ]
 
     def handler(request):
@@ -534,6 +605,39 @@ async def test_long_inconclusive_alert_includes_last_reason(tmp_path):
 
     ledger = load_ledger(paths)
     assert ledger.last_inconclusive_reason == "conditions_unreadable"
+
+
+async def test_look_raises_marks_inconclusive_with_error_reason(tmp_path):
+    alerts = []
+
+    async def record_alert(d):
+        alerts.append(d)
+
+    sched, core, clock = make(tmp_path, alert=record_alert)
+    paths = sched._paths
+    write_reference(paths)
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    save_ledger(
+        paths,
+        Ledger(
+            reference_id="ref-1",
+            looks_completed=2,
+            alpha_spent=0.0,
+            lived_seconds=10.0,
+            lived_ticks=5,
+            last_look_at=(base - timedelta(seconds=200)).isoformat(),
+        ),
+    )
+    core.raise_on_look = RuntimeError("look failed")
+
+    await sched.tick()
+    clock.t += 10
+    await sched.tick()
+    assert len(core.looks) == 1
+
+    ledger = load_ledger(paths)
+    if ledger.inconclusive_since is not None:
+        assert ledger.last_inconclusive_reason == "error"
 
 
 def test_old_ledger_without_new_fields_loads():

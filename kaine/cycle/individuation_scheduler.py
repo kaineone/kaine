@@ -469,7 +469,7 @@ class IndividuationScheduler:
             self._look_due_at = m + self._settings.blocked_retry_s
             self._note_skip(reason)
             if self._core_look_due():
-                await self._mark_inconclusive()
+                await self._mark_inconclusive(reason=reason)
             return
 
         self._flush_lived()
@@ -519,7 +519,7 @@ class IndividuationScheduler:
                     last_outcome="error",
                     last_reason=type(exc).__name__,
                 )
-                await self._mark_inconclusive()
+                await self._mark_inconclusive(reason="error")
             return
         else:
             if outcome.outcome == "scored":

@@ -22,7 +22,7 @@ import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import httpx
@@ -48,12 +48,20 @@ def _organ_root_url(chat_url: str) -> str:
     return url.rstrip("/")
 
 
+def _model_file_from_path(model_path: str) -> str:
+    if "\\" in model_path:
+        return PureWindowsPath(model_path).name
+    return PurePosixPath(model_path).name
+
+
 class ServedOrganIdentity:
     """Best-effort identity of the organ actually serving the chat URL.
 
-    The values themselves are never logged or exposed outside the conditions
-    snapshot. On failure both identifiers are reported only as ``"unavailable"``,
-    and :meth:`refresh` raises ``RuntimeError("served organ identity unavailable")``.
+    The raw ``model_path`` from the organ is never stored on the instance or
+    exposed outside the snapshot; only a basename and a SHA-256 digest of the
+    full path are recorded. The values themselves are never logged. On failure
+    the identifiers are reported as ``"unavailable"``, and :meth:`refresh` raises
+    ``RuntimeError("served organ identity unavailable")``.
     """
 
     def __init__(
@@ -69,7 +77,8 @@ class ServedOrganIdentity:
         self._revision_reader = revision_reader
         self._transport = transport
         self._build = "unavailable"
-        self._model_path = "unavailable"
+        self._model_file = "unavailable"
+        self._model_path_sha256 = "unavailable"
 
     async def refresh(self) -> None:
         try:
@@ -86,10 +95,19 @@ class ServedOrganIdentity:
                 if not isinstance(props, dict):
                     raise ValueError("props response is not a JSON object")
                 self._build = str(props.get("build_info") or "")
-                self._model_path = str(props.get("model_path") or "")
+                model_path = str(props.get("model_path") or "")
+                if model_path:
+                    self._model_file = _model_file_from_path(model_path)
+                    self._model_path_sha256 = hashlib.sha256(
+                        model_path.encode("utf-8")
+                    ).hexdigest()
+                else:
+                    self._model_file = ""
+                    self._model_path_sha256 = ""
         except Exception as exc:
             self._build = "unavailable"
-            self._model_path = "unavailable"
+            self._model_file = "unavailable"
+            self._model_path_sha256 = "unavailable"
             raise RuntimeError("served organ identity unavailable") from exc
 
     def snapshot(self) -> dict[str, str]:
@@ -99,7 +117,8 @@ class ServedOrganIdentity:
         ).hexdigest()
         return {
             "server_build": self._build,
-            "organ_model_path": self._model_path,
+            "organ_model_file": self._model_file,
+            "organ_model_path_sha256": self._model_path_sha256,
             "organ_revisions": rev_sha,
         }
 

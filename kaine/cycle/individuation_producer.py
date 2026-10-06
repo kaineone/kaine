@@ -59,14 +59,16 @@ log = logging.getLogger(__name__)
 def _condition_changes(stored: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
     """Return sorted names of non-embedder probe-condition keys that differ.
 
-    A key present on only one side counts as a difference. Embedder keys are
-    excluded because embedder differences are handled by re-embedding.
+    A key present on only one side counts as a difference, regardless of the
+    value on the other side (including a missing key versus a key whose value
+    is ``None``). Embedder keys are excluded because embedder differences are
+    handled by re-embedding.
     """
     stored_keys = {k for k in stored if not k.startswith("embedder")}
     current_keys = {k for k in current if not k.startswith("embedder")}
     return sorted(
         k for k in (stored_keys | current_keys)
-        if stored.get(k) != current.get(k)
+        if (k in stored_keys) != (k in current_keys) or stored[k] != current[k]
     )
 
 
