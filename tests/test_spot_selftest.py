@@ -5,7 +5,6 @@ import asyncio
 import glob
 import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 
