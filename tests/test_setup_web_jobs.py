@@ -23,7 +23,7 @@ from kaine.setup.web import guard
 from kaine.setup.web.job_specs import build_job_specs
 from kaine.setup.web.jobs import JobRunner, JobSpec, _Job
 from kaine.setup.wizard import ACK_PHRASE
-from tests.test_setup_web import _defaults_from_form, _mk_app
+from tests.test_setup_web import _defaults_from_form, _exchange_token, _mk_app
 
 
 @pytest.fixture(autouse=True)
@@ -1109,7 +1109,11 @@ def test_cancel_route_kills_running_job(tmp_path, monkeypatch):
         job_id = app.state.runner.job_id_for_name("slow")
         pid = app.state.runner._jobs[job_id].proc.pid
 
-        r = client.post(f"/jobs/{job_id}/cancel", headers=h, follow_redirects=False)
+        r = client.post(
+            f"/jobs/{job_id}/cancel",
+            headers={**h, "Accept": "application/json"},
+            follow_redirects=False,
+        )
         assert r.status_code == 200
         assert r.json() == {"status": "cancelled"}
 
@@ -1535,42 +1539,52 @@ def test_run_organ_download_streams_output_and_extracts_revision(tmp_path, monke
 def test_pinned_job_route_behaviour(tmp_path, monkeypatch):
     app = _mk_app(tmp_path)
 
-    harmless = JobSpec(
-        name="harmless",
-        title="Harmless job",
-        argv=(sys.executable, "-c", "print('a')"),
-        details="harmless test",
+    slow = JobSpec(
+        name="slow",
+        title="Slow job",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="slow test",
     )
     monkeypatch.setattr(
         "kaine.setup.web.job_specs.build_job_specs",
-        lambda _c, _s, **_kw: [harmless],
+        lambda _c, _s, **_kw: [slow],
     )
 
     with TestClient(app, base_url="http://127.0.0.1:8000") as client:
         h = {"Host": "127.0.0.1:8000"}
         assert client.get("/jobs", headers=h).status_code == 403
         r = client.post(
-            "/jobs/harmless/start",
+            "/jobs/slow/start",
             headers={"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"},
             follow_redirects=False,
         )
         assert r.status_code == 403
         # Without a session the middleware rejects the request before routing.
-        assert client.get("/jobs/harmless/start", headers=h).status_code == 403
+        assert client.get("/jobs/slow/start", headers=h).status_code == 403
 
     with _saved_client(app) as client:
         h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
-        r1 = client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+        r1 = client.post("/jobs/slow/start", headers=h, follow_redirects=False)
         assert r1.status_code == 303
 
         # With a session, GET on a POST-only start route is a method mismatch.
-        assert client.get("/jobs/harmless/start", headers=h).status_code == 405
+        assert client.get("/jobs/slow/start", headers=h).status_code == 405
 
-        r2 = client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+        r2 = client.post("/jobs/slow/start", headers=h, follow_redirects=False)
         assert r2.status_code == 409
 
         r3 = client.post("/jobs/unknown/start", headers=h, follow_redirects=False)
         assert r3.status_code == 404
+
+        # Cancel the still-running duplicate-test job before leaving.
+        job_id = app.state.runner.job_id_for_name("slow")
+        rc = client.post(
+            f"/jobs/{job_id}/cancel",
+            headers={**h, "Accept": "application/json"},
+            follow_redirects=False,
+        )
+        assert rc.status_code == 200
+        _wait_for_job(app.state.runner, "slow", timeout=10.0)
 
 
 def test_build_job_specs_malformed_operator_toml_returns_no_nexus(tmp_path):
@@ -1587,3 +1601,379 @@ def test_build_job_specs_malformed_operator_toml_returns_no_nexus(tmp_path):
         operator_path=operator,
     )
     assert not any(s.name == "nexus" for s in specs)
+
+
+def test_unsaved_session_cannot_start_or_list_jobs(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    # Provide a spec so the name lookup would otherwise succeed.
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [
+            JobSpec(
+                name="redis",
+                title="Redis",
+                argv=(sys.executable, "-c", "print('redis')"),
+                details="redis test",
+            )
+        ],
+    )
+
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        _exchange_token(client, app, headers={"Host": "127.0.0.1:8000"})
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        assert client.get("/jobs", headers=h).status_code == 403
+        r = client.post(
+            "/jobs/redis/start",
+            headers=h,
+            follow_redirects=False,
+        )
+        assert r.status_code == 403
+        assert "configuration has not been saved" in r.text
+
+
+def test_group_kill_reaps_sigterm_ignoring_grandchild_after_cancel(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    script = (
+        "import os, signal, subprocess, sys, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "grand = subprocess.Popen([sys.executable, '-c',\n"
+        "    'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
+        "print('grandchild', grand.pid)\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(60)\n"
+    )
+
+    async def run():
+        runner = JobRunner(tmp_path)
+        spec = JobSpec(
+            name="spawn",
+            title="Spawn grandchild",
+            argv=(sys.executable, "-c", script),
+            details="group kill test",
+        )
+        job_id = await runner.start("spawn", spec)
+        job = runner._jobs[job_id]
+
+        grandchild_pid = None
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            for line in job.lines:
+                m = re.search(r"grandchild (\d+)", line)
+                if m:
+                    grandchild_pid = int(m.group(1))
+                    break
+            if grandchild_pid is not None:
+                break
+            await asyncio.sleep(0.05)
+        assert grandchild_pid is not None
+
+        # Confirm the grandchild is alive before we cancel.
+        os.kill(grandchild_pid, 0)
+
+        assert runner.cancel(job_id)
+
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(grandchild_pid, 0)
+            except OSError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("grandchild survived group kill")
+
+        if job.proc is not None:
+            await asyncio.wait_for(job.proc.wait(), timeout=5.0)
+        assert runner.status(job_id)["status"] != "running"
+        return runner, job_id
+
+    asyncio.run(run())
+
+
+def test_group_kill_reaps_sigterm_ignoring_grandchild_after_shutdown(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    script = (
+        "import os, signal, subprocess, sys, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "grand = subprocess.Popen([sys.executable, '-c',\n"
+        "    'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
+        "print('grandchild', grand.pid)\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(60)\n"
+    )
+
+    async def run():
+        runner = JobRunner(tmp_path)
+        spec = JobSpec(
+            name="spawn",
+            title="Spawn grandchild",
+            argv=(sys.executable, "-c", script),
+            details="group kill test",
+        )
+        job_id = await runner.start("spawn", spec)
+        job = runner._jobs[job_id]
+
+        grandchild_pid = None
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            for line in job.lines:
+                m = re.search(r"grandchild (\d+)", line)
+                if m:
+                    grandchild_pid = int(m.group(1))
+                    break
+            if grandchild_pid is not None:
+                break
+            await asyncio.sleep(0.05)
+        assert grandchild_pid is not None
+
+        os.kill(grandchild_pid, 0)
+        await runner.shutdown()
+
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(grandchild_pid, 0)
+            except OSError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("grandchild survived group kill")
+
+        assert runner.status(job_id)["status"] != "running"
+        return runner, job_id
+
+    asyncio.run(run())
+
+
+def test_kill_all_sync_kills_nondetached_leaves_detached_alive(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    async def run():
+        runner = JobRunner(tmp_path)
+
+        probe_calls: list[int] = []
+
+        def probe() -> bool:
+            probe_calls.append(1)
+            return len(probe_calls) > 2
+
+        detached_spec = JobSpec(
+            name="detached",
+            title="Detached",
+            argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+            detach=True,
+            ready_probe=probe,
+        )
+        detached_id = await runner.start("detached", detached_spec)
+
+        slow_spec = JobSpec(
+            name="slow",
+            title="Slow",
+            argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+            details="slow test",
+        )
+        slow_id = await runner.start("slow", slow_spec)
+
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if runner.status(detached_id)["status"] != "running":
+                break
+            await asyncio.sleep(0.05)
+        assert runner.status(detached_id)["status"] == "succeeded"
+
+        slow_job = runner._jobs[slow_id]
+        assert slow_job.proc is not None
+        pgid = slow_job.proc.pid
+
+        runner.kill_all_sync()
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("non-detached process group survived kill_all_sync")
+
+        detached_job = runner._jobs[detached_id]
+        assert detached_job.popen is not None
+        assert detached_job.popen.poll() is None
+
+        os.killpg(detached_job.popen.pid, signal.SIGKILL)
+        detached_job.popen.wait(timeout=10)
+
+        return runner
+
+    asyncio.run(run())
+
+
+def test_events_end_when_shutting_down(tmp_path):
+    async def run():
+        runner = JobRunner(tmp_path)
+        spec = JobSpec(
+            name="slow",
+            title="Slow",
+            argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+            details="slow test",
+        )
+        job_id = await runner.start("slow", spec)
+
+        shutting_down = False
+
+        async def flip():
+            nonlocal shutting_down
+            await asyncio.sleep(0.2)
+            shutting_down = True
+
+        flip_task = asyncio.create_task(flip())
+        items: list[Any] = []
+        async for item in runner.events(job_id, shutting_down=lambda: shutting_down):
+            items.append(item)
+            if isinstance(item, dict):
+                break
+
+        await flip_task
+        assert any(isinstance(i, dict) for i in items)
+        await runner.shutdown()
+
+    asyncio.run(run())
+
+
+def test_extras_excludes_detached_jobs(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    app = _mk_app(tmp_path)
+
+    detached_spec = JobSpec(
+        name="detached",
+        title="Detached",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        detach=True,
+        ready_probe=lambda: False,
+        details="detached test",
+    )
+    extras_spec = JobSpec(
+        name="extras",
+        title="Extras",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        exclusive=True,
+        details="extras test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [detached_spec, extras_spec],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+
+        r1 = client.post("/jobs/detached/start", headers=h, follow_redirects=False)
+        assert r1.status_code == 303
+
+        detached_job = app.state.runner._jobs[
+            app.state.runner.job_id_for_name("detached")
+        ]
+        assert detached_job.status == "running"
+
+        r2 = client.post("/jobs/extras/start", headers=h, follow_redirects=False)
+        assert r2.status_code == 409
+
+        os.killpg(detached_job.popen.pid, signal.SIGKILL)
+        detached_job.popen.wait(timeout=10)
+        # The readiness probe notices the exit on its next poll.
+        deadline = time.monotonic() + 10.0
+        while detached_job.status == "running" and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert detached_job.status != "running"
+
+        r3 = client.post("/jobs/extras/start", headers=h, follow_redirects=False)
+        assert r3.status_code == 303
+
+        r4 = client.post("/jobs/detached/start", headers=h, follow_redirects=False)
+        assert r4.status_code == 409
+
+        extras_id = app.state.runner.job_id_for_name("extras")
+        rc = client.post(
+            f"/jobs/{extras_id}/cancel",
+            headers={**h, "Accept": "application/json"},
+            follow_redirects=False,
+        )
+        assert rc.status_code == 200
+        _wait_for_job(app.state.runner, "extras", timeout=10.0)
+
+
+def test_job_cancel_returns_redirect_or_json(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    slow = JobSpec(
+        name="slow",
+        title="Slow",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="slow test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [slow],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r1 = client.post("/jobs/slow/start", headers=h, follow_redirects=False)
+        assert r1.status_code == 303
+
+        job_id = app.state.runner.job_id_for_name("slow")
+        r2 = client.post(
+            f"/jobs/{job_id}/cancel",
+            headers=h,
+            follow_redirects=False,
+        )
+        assert r2.status_code == 303
+        assert r2.headers.get("location", "").endswith("/jobs")
+
+        _wait_for_job(app.state.runner, "slow", timeout=10.0)
+
+        r3 = client.post("/jobs/slow/start", headers=h, follow_redirects=False)
+        assert r3.status_code == 303
+        job_id2 = app.state.runner.job_id_for_name("slow")
+        r4 = client.post(
+            f"/jobs/{job_id2}/cancel",
+            headers={**h, "Accept": "application/json"},
+            follow_redirects=False,
+        )
+        assert r4.status_code == 200
+        assert r4.json() == {"status": "cancelled"}
+
+        _wait_for_job(app.state.runner, "slow", timeout=10.0)
+
+
+def test_serve_kills_job_groups_on_a_forced_exit(tmp_path, monkeypatch):
+    """A second Ctrl-C skips the lifespan; serve() itself still kills job groups."""
+    import uvicorn
+
+    from kaine.setup.web import serve
+
+    app = _mk_app(tmp_path)
+    called: list[int] = []
+
+    class _Runner:
+        def kill_all_sync(self) -> None:
+            called.append(1)
+
+    app.state.runner = _Runner()
+
+    def _forced_exit(self, sockets=None):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(uvicorn.Server, "run", _forced_exit)
+    with pytest.raises(KeyboardInterrupt):
+        serve("127.0.0.1", 0, app=app)
+    assert called == [1]
