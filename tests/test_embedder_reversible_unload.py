@@ -304,7 +304,7 @@ def test_numpy_double_cancel_does_not_leak_inflight(
             input_ids: np.ndarray,
             attention_mask: np.ndarray,
         ) -> np.ndarray:
-            loop.call_soon_threadsafe(in_worker.set())
+            loop.call_soon_threadsafe(in_worker.set)
             release_thread.wait()
             return original_forward(weights, config, input_ids, attention_mask)
 
@@ -353,7 +353,7 @@ def test_sentence_double_cancel_does_not_leak_inflight(
             import numpy as np
 
             if loop_ref is not None and in_worker is not None:
-                loop_ref.call_soon_threadsafe(in_worker.set())
+                loop_ref.call_soon_threadsafe(in_worker.set)
             if release_thread is not None:
                 release_thread.wait()
             if isinstance(x, str):

@@ -379,7 +379,7 @@ class SharedEmbedder:
             self._load_lock = asyncio.Lock()
 
     async def ensure_loaded(self) -> None:
-        """Alias of :meth:`load`."""
+        """Same as :meth:`load`: load the inner embedder once (the residency name)."""
         return await self.load()
 
     async def load(self) -> None:
