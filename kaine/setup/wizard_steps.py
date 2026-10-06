@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from kaine.setup import wizard_core as _wizard
 from kaine.setup.steps import Field, Step, StepContext
 
 
@@ -33,7 +34,6 @@ def _existing(cfg: dict[str, Any], dotted: str, default: Any = None) -> Any:
 
 def _module_preset_default(ctx: StepContext, recommended: str) -> str:
     """Prefer the existing module set as a preset letter, else ``recommended``."""
-    from kaine.setup import wizard as _wizard
 
     existing = ctx.extra.get("existing_config") or {}
     mods = existing.get("modules")
@@ -90,7 +90,6 @@ def orientation_step() -> Step:
 
 def ack_step() -> Step:
     def explanation(ctx: StepContext) -> list[str]:
-        from kaine.setup import wizard as _wizard
 
         lines = _wizard.CAL_ARTICLE_4_SUMMARY.splitlines()
         if ctx.extra.get("defaults"):
@@ -104,7 +103,6 @@ def ack_step() -> Step:
         return lines
 
     def fields(ctx: StepContext) -> tuple[Field, ...]:
-        from kaine.setup import wizard as _wizard
 
         default = _wizard.ACK_PHRASE if ctx.extra.get("defaults") else ""
         return (
@@ -119,7 +117,6 @@ def ack_step() -> Step:
         )
 
     def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
-        from kaine.setup import wizard as _wizard
 
         answer = (answers.get("ack") or "").strip()
         ctx.extra["acknowledged"] = answer == _wizard.ACK_PHRASE
@@ -204,7 +201,6 @@ def accel_mismatch_step() -> Step:
     """
 
     def apply(ctx: StepContext, _answers: dict[str, Any]) -> None:
-        from kaine.setup import wizard as _wizard
 
         info = _wizard._accel_mismatch_step(
             input_fn=ctx.extra["input_fn"],
@@ -234,7 +230,6 @@ def accel_mismatch_step() -> Step:
 
 def module_preset_step() -> Step:
     def _recommended(ctx: StepContext) -> tuple[str, str]:
-        from kaine.setup import wizard as _wizard
         return _wizard.recommend_preset(ctx.extra.get("tier_rec"))
 
     def explanation(ctx: StepContext) -> list[str]:
@@ -256,7 +251,6 @@ def module_preset_step() -> Step:
         )
 
     def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
-        from kaine.setup import wizard as _wizard
 
         choice = answers.get("preset", "b")
         preset, why = _wizard.recommend_preset(ctx.extra.get("tier_rec"))
@@ -307,7 +301,6 @@ def custom_modules_step() -> Step:
         ]
 
     def fields(ctx: StepContext) -> tuple[Field, ...]:
-        from kaine.setup import wizard as _wizard
 
         seed = ctx.extra.get("custom_modules_seed") or _wizard.FULL_ENTITY_MODULES.copy()
         existing = ctx.extra.get("existing_config") or {}
@@ -322,7 +315,6 @@ def custom_modules_step() -> Step:
         )
 
     def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
-        from kaine.setup import wizard as _wizard
 
         seed = ctx.extra.get("custom_modules_seed") or _wizard.FULL_ENTITY_MODULES.copy()
         modules: dict[str, bool] = {}
@@ -514,7 +506,6 @@ def trainer_provisioning_step() -> Step:
         return not ctx.extra.get("defaults") and ctx.extra.get("probe_trainer") is not None
 
     def apply(ctx: StepContext, _answers: dict[str, Any]) -> None:
-        from kaine.setup import wizard as _wizard
         from kaine.setup.trainer_provisioning import trainer_guidance
 
         _wizard._trainer_provisioning_step(
@@ -546,7 +537,6 @@ def cl1_substrate_step() -> Step:
         return not ctx.extra.get("defaults")
 
     def apply(ctx: StepContext, _answers: dict[str, Any]) -> None:
-        from kaine.setup import wizard as _wizard
 
         _wizard._cl1_substrate_step(
             ctx.config,
