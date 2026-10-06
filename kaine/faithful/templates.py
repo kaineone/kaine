@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from typing import Any, Callable, Optional
 
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
+
 TemplateFn = Callable[[dict[str, Any]], str]
 
 STRONG_DRIVE_BAND = 0.8
@@ -70,7 +72,54 @@ HEARD_TEXT_FIELDS = frozenset({
 `text` is treated as heard speech only for `audition.transcription`; for every
 other event type it is not. `faithful_rendering` is included because a rendering
 can embed earlier heard lines.
+
+External-input event types (``audition.transcription`` and ``mundus.chat``) are
+redacted wholesale by type; on all other types, these fields are redacted at
+any depth.
 """
+
+
+def _replace_text_leaves(value):
+    if isinstance(value, str):
+        return HEARD_SPEECH_PLACEHOLDER if value.strip() else value
+    if isinstance(value, dict):
+        return {k: _replace_text_leaves(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_replace_text_leaves(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_replace_text_leaves(v) for v in value)
+    return value
+
+
+def _redact_fields(value, fields_to_redact):
+    replaced = False
+
+    def walk(node):
+        nonlocal replaced
+        if isinstance(node, dict):
+            out = {}
+            for k, v in node.items():
+                if k in fields_to_redact:
+                    if isinstance(v, str) and v.strip():
+                        out[k] = HEARD_SPEECH_PLACEHOLDER
+                        replaced = True
+                    elif isinstance(v, (dict, list, tuple)):
+                        redacted = _replace_text_leaves(v)
+                        out[k] = redacted
+                        if redacted != v:
+                            replaced = True
+                    else:
+                        out[k] = v
+                else:
+                    out[k] = walk(v)
+            return out
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        if isinstance(node, tuple):
+            return tuple(walk(item) for item in node)
+        return node
+
+    return walk(value), replaced
 
 
 def redact_heard_speech(event) -> Optional[str]:
@@ -81,19 +130,15 @@ def redact_heard_speech(event) -> Optional[str]:
         return f'Speech heard: "{HEARD_SPEECH_PLACEHOLDER}".'
 
     payload = event.payload if isinstance(event.payload, dict) else {}
+
+    if event.type in EXTERNAL_INPUT_TYPES:
+        redacted_payload = _replace_text_leaves(payload)
+        return fallback_template(event.source, event.type, redacted_payload)
+
     heard_fields = HEARD_TEXT_FIELDS - {"text"}
-    has_heard = any(
-        isinstance(payload.get(field), str) and payload[field].strip()
-        for field in heard_fields
-    )
+    redacted_payload, has_heard = _redact_fields(payload, heard_fields)
     if not has_heard:
         return None
-
-    redacted_payload = dict(payload)
-    for field in heard_fields:
-        value = redacted_payload.get(field)
-        if isinstance(value, str) and value.strip():
-            redacted_payload[field] = HEARD_SPEECH_PLACEHOLDER
 
     template_fn = TEMPLATES.get((event.source, event.type))
     if template_fn is None:

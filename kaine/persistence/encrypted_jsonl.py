@@ -15,7 +15,9 @@ import base64
 import json
 import logging
 import os
+import stat
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -108,6 +110,28 @@ def has_plaintext_line(path: Path | str) -> bool:
     return False
 
 
+def has_envelope_line(path: Path | str) -> bool:
+    """Return True if ``path`` contains at least one non-blank envelope line.
+
+    A missing file returns False.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return False
+    try:
+        fh = p.open("r", encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return False
+    with fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                continue
+            if _is_envelope(line):
+                return True
+    return False
+
+
 def rewrite_encrypted(path: Path | str) -> bool:
     """Rewrite every plaintext line of ``path`` as an encryption envelope.
 
@@ -124,6 +148,17 @@ def rewrite_encrypted(path: Path | str) -> bool:
     encryptor = get_state_encryptor()
     if not encryptor.enabled or not p.is_file():
         return False
+
+    # Sweep temp files left behind by an interrupted rewrite.
+    now_ns = time.time_ns()
+    for leftover in p.parent.glob(p.name + ".*.tmp"):
+        try:
+            if now_ns - leftover.stat().st_mtime_ns > 60 * 10**9:
+                leftover.unlink()
+        except FileNotFoundError:
+            pass
+
+    st = os.stat(p)
 
     new_lines: list[str] = []
     changed = False
@@ -162,6 +197,8 @@ def rewrite_encrypted(path: Path | str) -> bool:
             tmp.flush()
             os.fsync(tmp.fileno())
 
+        os.chmod(tmp_path, stat.S_IMODE(st.st_mode))
+        os.utime(tmp_path, ns=(st.st_atime_ns, st.st_mtime_ns))
         os.replace(tmp_path, p)
         dir_fd = os.open(p.parent, os.O_RDONLY)
         try:

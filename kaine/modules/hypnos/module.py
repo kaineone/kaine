@@ -726,6 +726,10 @@ class Hypnos(BaseModule):
             "encrypted_rewrites": 0,
         }
         rotated_path: Optional[Path] = None
+        # Only a rotation that raised is a failed measurement; a corpus-ceiling
+        # check failing after a good rotation must not mask a fresh measure.
+        rotation_failed = False
+        rotation_done = False
         try:
             rotated_path = await asyncio.to_thread(
                 rotate_intent_log,
@@ -733,6 +737,7 @@ class Hypnos(BaseModule):
                 self._voice_config.intent_log_path.parent / "intent_log",
                 sleep_index=self._sleep_count,
             )
+            rotation_done = True
             if rotated_path is not None:
                 corpus_summary["rotated"] = rotated_path.name
 
@@ -750,6 +755,7 @@ class Hypnos(BaseModule):
             corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
             corpus_summary["warned"] = ceiling_info["warned"]
         except Exception as exc:
+            rotation_failed = not rotation_done
             # Recorded so the summary never reads a failed rotation as "nothing
             # to rotate".
             corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
@@ -818,7 +824,27 @@ class Hypnos(BaseModule):
                     "hypnos: voice measures computation failed",
                     exc_info=True,
                 )
+                rotation_failed = True
                 voice_measures = None
+
+        if rotation_failed:
+            try:
+                await asyncio.to_thread(
+                    write_json_atomic,
+                    self._voice_config.intent_log_path.parent
+                    / "voice_measures_latest.json",
+                    {
+                        "measurement_failed": True,
+                        "timestamp": time.strftime(
+                            "%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()
+                        ),
+                    },
+                )
+            except Exception:
+                log.warning(
+                    "hypnos: failed to write measurement_failed marker",
+                    exc_info=True,
+                )
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition

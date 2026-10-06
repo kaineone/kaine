@@ -26,6 +26,50 @@ from kaine.bus.schema import OPERATOR_SOURCES, Event, module_stream
 
 log = logging.getLogger("kaine.cycle.utterance_outcome")
 
+DEFAULT_REPLY_WINDOW_S = 30.0
+
+
+def _warn_outcome_reply_window(value: object) -> None:
+    log.warning(
+        "outcome_reply_window_s must be a finite number > 0 (got %s); using %.0f s",
+        type(value).__name__,
+        DEFAULT_REPLY_WINDOW_S,
+    )
+
+
+def reply_window_from_lingua(lingua_section: object) -> float:
+    """Return a safe reply-window from the ``lingua`` config table.
+
+    Falls back to :data:`DEFAULT_REPLY_WINDOW_S` and logs a single warning
+    for any invalid value.  The observer is content-free and must never raise.
+    """
+    if not isinstance(lingua_section, dict):
+        return DEFAULT_REPLY_WINDOW_S
+
+    value = lingua_section.get("outcome_reply_window_s", DEFAULT_REPLY_WINDOW_S)
+    if isinstance(value, bool):
+        _warn_outcome_reply_window(value)
+        return DEFAULT_REPLY_WINDOW_S
+
+    candidate: float
+    if isinstance(value, (int, float)):
+        candidate = float(value)
+    elif isinstance(value, str):
+        try:
+            candidate = float(value)
+        except (ValueError, TypeError):
+            _warn_outcome_reply_window(value)
+            return DEFAULT_REPLY_WINDOW_S
+    else:
+        _warn_outcome_reply_window(value)
+        return DEFAULT_REPLY_WINDOW_S
+
+    if not math.isfinite(candidate) or candidate <= 0.0:
+        _warn_outcome_reply_window(value)
+        return DEFAULT_REPLY_WINDOW_S
+
+    return candidate
+
 
 # Produced by Lingua: each external_speech event opens one outcome record.
 LINGUA_EXTERNAL = "lingua.external"
@@ -49,6 +93,7 @@ async def start_utterance_outcome_observer(
     bus,
     *,
     path: Path,
+    lingua_section: object = None,
     **kwargs: Any,
 ) -> UtteranceOutcomeObserver | None:
     """Construct and start the observer, returning None if it cannot boot.
@@ -57,6 +102,8 @@ async def start_utterance_outcome_observer(
     content-free observer never aborts launch.
     """
     try:
+        if "reply_window_s" not in kwargs:
+            kwargs["reply_window_s"] = reply_window_from_lingua(lingua_section)
         observer = UtteranceOutcomeObserver(bus, path=path, **kwargs)
         await observer.start()
     except Exception as exc:
@@ -180,8 +227,9 @@ class UtteranceOutcomeObserver:
                 await self._open_record_if_new(record_id, ts)
             else:
                 log.debug(
-                    "ignoring external_speech with invalid record_id %r",
-                    record_id,
+                    "ignoring external_speech with invalid record_id (type=%s, len=%s)",
+                    type(record_id).__name__,
+                    len(record_id) if isinstance(record_id, str) else -1,
                 )
         elif stream == AUDITION_OUT and event.type == "audition.transcription":
             await self._maybe_reply(event, ts)

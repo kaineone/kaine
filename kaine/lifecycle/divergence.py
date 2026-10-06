@@ -50,6 +50,8 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
+import stat
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -157,6 +159,7 @@ def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
 class VoicePaths:
     intent_logs: tuple[Path, ...]      # live logs, each with its sibling intent_log/ corpus dir
     measures_latest: Path
+    unreadable: bool = False
 
 
 def default_voice_paths(state_root: Path) -> VoicePaths:
@@ -176,7 +179,7 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
     path. The returned ``intent_logs`` are de-duplicated, with the Lingua path
     first. ``measures_latest`` is the Hypnos intent-log's sibling
     ``voice_measures_latest.json``. Pure and fail-closed: any error returns the
-    default.
+    default paths flagged as unreadable.
     """
     default = default_voice_paths(state_root)
     try:
@@ -205,8 +208,16 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
             intent_logs=tuple(logs),
             measures_latest=hypnos_path.parent / "voice_measures_latest.json",
         )
-    except Exception:
-        return default
+    except Exception as exc:
+        log.warning(
+            "kaine.lifecycle.divergence: voice paths config unreadable (%s)",
+            type(exc).__name__,
+        )
+        return VoicePaths(
+            intent_logs=default.intent_logs,
+            measures_latest=default.measures_latest,
+            unreadable=True,
+        )
 
 
 @dataclass(frozen=True)
@@ -425,8 +436,12 @@ def _file_shows_speech(path: Path) -> bool:
     error so the caller can fail protective."""
     from kaine.persistence.encrypted_jsonl import iter_records
 
-    if not path.is_file():
+    try:
+        st = os.stat(path)
+    except (FileNotFoundError, NotADirectoryError):
         return False
+    if not stat.S_ISREG(st.st_mode):
+        return True
     for line in iter_records(path):
         # Undecryptable (wrong or missing key) or unparseable: unreadable
         # evidence, which counts as spoken, never as silence.
@@ -453,7 +468,14 @@ def _has_spoken(intent_logs: tuple[Path, ...]) -> bool:
             if _file_shows_speech(live):
                 return True
             corpus_dir = live.parent / "intent_log"
-            corpus = sorted(corpus_dir.glob("*.jsonl")) if corpus_dir.is_dir() else []
+            try:
+                with os.scandir(corpus_dir) as it:
+                    corpus = sorted(
+                        (Path(entry.path) for entry in it if entry.name.endswith(".jsonl")),
+                        key=lambda p: p.name,
+                    )
+            except (FileNotFoundError, NotADirectoryError):
+                corpus = []
             for p in corpus:
                 if _file_shows_speech(p):
                     return True
@@ -579,23 +601,43 @@ def assess_divergence(
     # D8/D13: a being that has spoken is diverged when its distinctiveness is
     # at/above threshold, or when measurement is missing/unreadable/null.
     # A silent being abstains; abstention never blocks another arm.
-    voice_has_spoken = _has_spoken(voice_paths.intent_logs)
+    voice_has_spoken = False
     voice_vote: bool | None = None
+    voice_reason: str | None = None
     voice_distinctiveness: float | None = None
     voice_measures_found = False
     voice_self_consistency: float | None = None
     voice_grounding: float | None = None
-    if voice_has_spoken:
-        vm = _read_voice_measures_latest(voice_paths.measures_latest)
-        voice_measures_found = vm is not None
-        if vm is not None:
-            voice_distinctiveness = _to_float(vm.get("distinctiveness"))
-            voice_self_consistency = _to_float(vm.get("self_consistency"))
-            voice_grounding = _to_float(vm.get("grounding"))
-        if not voice_measures_found or voice_distinctiveness is None:
-            voice_vote = True
-        else:
-            voice_vote = voice_distinctiveness >= distinctiveness_threshold
+
+    if voice_paths.unreadable:
+        voice_has_spoken = True
+        voice_vote = True
+        voice_reason = "voice_paths_unreadable"
+    else:
+        voice_has_spoken = _has_spoken(voice_paths.intent_logs)
+        if voice_has_spoken:
+            vm = _read_voice_measures_latest(voice_paths.measures_latest)
+            voice_measures_found = vm is not None
+            if vm is not None:
+                if vm.get("measurement_failed"):
+                    voice_vote = True
+                    voice_reason = "measurement_failed"
+                else:
+                    voice_distinctiveness = _to_float(vm.get("distinctiveness"))
+                    voice_self_consistency = _to_float(vm.get("self_consistency"))
+                    voice_grounding = _to_float(vm.get("grounding"))
+                    if voice_distinctiveness is None:
+                        voice_vote = True
+                        voice_reason = "measurement_missing"
+                    elif voice_distinctiveness >= distinctiveness_threshold:
+                        voice_vote = True
+                        voice_reason = "at_or_above_threshold"
+                    else:
+                        voice_vote = False
+                        voice_reason = "below_threshold"
+            else:
+                voice_vote = True
+                voice_reason = "measurement_missing"
 
     # --- Secondary: Eidolon identity drift --------------------------------
     self_model = _read_self_model(state_root / "eidolon" / "self_model.json")
@@ -644,6 +686,7 @@ def assess_divergence(
             if voice_vote is None
             else ("diverged" if voice_vote else "not_diverged")
         ),
+        "voice_reason": voice_reason,
         "voice_measures_found": voice_measures_found,
         "voice_self_consistency": voice_self_consistency,
         "voice_grounding": voice_grounding,
@@ -672,7 +715,13 @@ def assess_divergence(
                 f"(rate={cons_rate}, magnitude={cons_magnitude})"
             )
         if voice_vote is True:
-            if voice_distinctiveness is None:
+            if voice_reason == "voice_paths_unreadable":
+                reasons.append(
+                    "its voice data paths could not be read from the configuration"
+                )
+            elif voice_reason == "measurement_failed":
+                reasons.append("its latest voice measurement failed")
+            elif voice_distinctiveness is None:
                 reasons.append(
                     "it has spoken but has no readable voice distinctiveness "
                     "measurement"
