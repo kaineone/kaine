@@ -184,9 +184,11 @@ def _load_pairs(job_dir: Path) -> list[dict[str, Any]]:
 
 def _write_result(job_dir: Path, result: dict[str, Any]) -> None:
     result.setdefault("schema_version", SCHEMA_VERSION)
-    (job_dir / "result.json").write_text(
-        json.dumps(result, indent=2), encoding="utf-8"
-    )
+    # Owner-only, like the job inputs the kaine side writes.
+    fd = os.open(job_dir / "result.json", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        os.fchmod(fh.fileno(), 0o600)
+        fh.write(json.dumps(result, indent=2))
 
 
 def _augment_result(
@@ -365,6 +367,14 @@ def _train(
     import torch  # type: ignore[import-untyped]
     from datasets import Dataset  # type: ignore[import-untyped]
     from peft import PeftModel  # type: ignore[import-untyped]
+
+    # Peak memory is per run: an in-process trainer reuses the interpreter, so
+    # reset the counter before this run allocates anything.
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        pass
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
     from unsloth import FastLanguageModel  # type: ignore[import-untyped]
 
@@ -686,6 +696,38 @@ def main(argv: list[str]) -> int:
                 "capability_score_after": None,
                 "capability_loss": None,
                 "samples_used": min(len(kept_pairs), int(job.get("max_samples", 200))),
+            }
+            _write_result(
+                job_dir,
+                _augment_result(
+                    result, precision, prev_adapter, pairs_without_system
+                ),
+            )
+            return 0
+
+        # The abliteration veto must be able to run too: refuse before loading
+        # the model rather than training and then rejecting.
+        usable_abliteration = [
+            p
+            for p in _load_jsonl(job.get("abliteration_probe_path"))
+            if str(p.get("prompt", "")).strip()
+            and any(str(x).strip() for x in (p.get("deflection_patterns") or []))
+        ]
+        if not usable_abliteration:
+            result = {
+                "ok": True,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": 0,
+                "dpo_loss": None,
+                "reason": (
+                    f"abliteration probe set is empty: {job.get('abliteration_probe_path')!r} "
+                    "has no usable probe; the abliteration veto cannot run"
+                ),
+                "capability_score_before": None,
+                "capability_score_after": None,
+                "capability_loss": None,
+                "samples_used": 0,
             }
             _write_result(
                 job_dir,

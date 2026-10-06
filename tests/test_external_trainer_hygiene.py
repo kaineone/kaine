@@ -264,3 +264,30 @@ def test_relative_previous_adapter_resolves_against_the_job_dir(mod, tmp_path):
     (job_dir / "previous_adapter" / "adapter_config.json").write_text("{}")
     resolved = mod.resolve_previous_adapter({"previous_adapter_dir": "previous_adapter"}, job_dir)
     assert resolved == job_dir / "previous_adapter"
+
+
+def test_main_refuses_an_empty_abliteration_set_before_training(mod, tmp_path, monkeypatch):
+    """The welfare veto must be able to run: an empty abliteration probe set is
+    refused before any model is loaded, and result.json is owner-only."""
+    import stat
+
+    def must_not_train(*args, **kwargs):
+        raise AssertionError("_train must not run without an abliteration probe set")
+
+    monkeypatch.setattr(mod, "_train", must_not_train)
+    empty = tmp_path / "abliteration.jsonl"
+    empty.write_text("")
+    cap = tmp_path / "cap_probes.jsonl"
+    cap.write_text(json.dumps({"prompt": "2+2", "expected": "4"}) + "\n")
+    job = _default_job(tmp_path, train_precision="bf16", previous_adapter_dir=None)
+    job["capability_probe_path"] = str(cap)
+    job["abliteration_probe_path"] = str(empty)
+    job_dir = _write_job_dir(
+        tmp_path, job, [{"prompt": "p", "chosen": "c", "rejected": "r", "system": "s"}]
+    )
+    assert mod.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    result_path = job_dir / "result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert result["accepted"] is False
+    assert "abliteration probe set is empty" in result["reason"]
+    assert stat.S_IMODE(result_path.stat().st_mode) == 0o600
