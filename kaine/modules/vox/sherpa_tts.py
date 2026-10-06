@@ -137,8 +137,8 @@ class SherpaKokoroTTS:
             return tts
 
         tts = await loop.run_in_executor(self._executor, _build)
+        # The load finished after close: drop it, never keep it on a closed client.
         if self._closed:
-            tts = None
             raise RuntimeError("sherpa-onnx TTS client is closed")
         self._tts = tts
 

@@ -109,8 +109,8 @@ class SherpaMoonshineSTT:
             str(self._dir / "tokens.txt"),
             self._num_threads,
         )
+        # The load finished after close: drop it, never keep it on a closed client.
         if self._closed:
-            recognizer = None
             raise RuntimeError("sherpa-onnx STT client is closed")
         self._recognizer = recognizer
 

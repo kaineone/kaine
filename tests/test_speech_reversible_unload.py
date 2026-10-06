@@ -632,6 +632,7 @@ async def test_stt_cancelled_inference_unload_waits_for_worker_thread(tmp_path: 
             try:
                 await asyncio.wait_for(unload_task, timeout=2.0)
             except Exception:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
 
 
@@ -669,6 +670,7 @@ async def test_tts_cancelled_inference_unload_waits_for_worker_thread(tmp_path: 
             try:
                 await asyncio.wait_for(unload_task, timeout=2.0)
             except Exception:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
 
 
@@ -702,6 +704,7 @@ async def test_stt_double_cancelled_inference_releases_inflight(tmp_path: Path) 
     try:
         await asyncio.wait_for(inference, timeout=2.0)
     except asyncio.CancelledError:
+        # Expected or irrelevant here: the test asserts on state, not on this outcome.
         pass
 
 
@@ -730,4 +733,5 @@ async def test_tts_double_cancelled_inference_releases_inflight(tmp_path: Path) 
     try:
         await asyncio.wait_for(inference, timeout=2.0)
     except asyncio.CancelledError:
+        # Expected or irrelevant here: the test asserts on state, not on this outcome.
         pass
