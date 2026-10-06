@@ -40,6 +40,42 @@ The near-miss categories are shared:
 
 Every judgement is about the speaker, in the utterance. The schema has a `SCHEMA_VERSION = 1`; any change to a question's instructions or options is a new version, and a model records the version it was trained on.
 
+## 1a. Schema v2: every state field names its role
+
+Schema v1 is superseded by v2. The operator approved v2 on 2026-10-06 ("fix then label") after they could not answer the first gold item.
+
+**What was wrong in v1:**
+- **The labelling page did not say who said what.** It showed the utterance first, with no label, and then "Context (request)". That context is often itself a question. The instructions, which talk about "the speaker" and "the request", were tied to neither box.
+- **`trait_claim` items could not be answered.** A gold item keeps the trait in its own `trait` field with `context` empty, and the page never showed `trait`. That affects 22 of the 350 gold items.
+- **K1-Jev's state carried no roles.** `state_text()` produced `{"context": ..., "utterance": ...}`, with the trait under the generic `context` key. The question definitions and the role of the context reached only the generator and the label checker, which see a "Context (<label>)" line. K1-Jev never saw them.
+
+**Evidence from the v1 data** (train shards 1–4, 22,623 accepted items). Every near-miss category was planned at about 7.1% of a question's items, and most kept 7–9% after the label check. Two did not:
+- `quotation` kept 1.7–3.6% (about a third of plan);
+- `other_person` kept 1.5–6.1% (about half).
+
+These are the items where whose speech or state is being judged is ambiguous. The label checker already saw role labels, so v2 cannot change its verdicts on existing items. These rates measure ambiguity in the definitions and items themselves, and the v2 page is how the operator settles it.
+
+**v2 state.** The state is JSON with role-named keys and never a generic `context`:
+- `speaker_said`: the utterance, always present;
+- `request`: for questions whose context is the request the utterance answers (`declined`, `refusal_style`);
+- `trait`: for `trait_claim`, the trait word;
+- `reference_event`: for `recall_correct`, the event to be recalled.
+
+A question with no context gets `{"speaker_said": ...}` only. The public-source examples (Banking77, MultiNLI) put their text under `speaker_said`. `SCHEMA_VERSION = 2`, so the schema digest changes, and the threshold sidecar and the decision client follow it.
+
+**One role per request at serving time.** A served state carries only the role keys that its questions were trained with. The client therefore groups the asked questions by their context role and sends one `/v1/systemone` request per group, so every served state has a shape K1-Jev saw in training.
+
+**The labelling page mirrors the roles.** Each item shows labelled sections in reading order:
+1. the context, under "Someone said to the speaker:" (request), "Trait being asked about:" (trait) or "Earlier event:" (reference event);
+2. "The speaker said:" and the utterance;
+3. the question, its definition and the options.
+
+The page renders `trait`. It stays blind: no generated label, template or category.
+
+**Rebuilding needs no regeneration.** v2 is a CPU-only rebuild of the assembled train and dev sets from the stored item fields (utterance, context, trait). No item is regenerated and no GPU is used. Token lengths are re-measured for the sidecar's `max_prompt_tokens`. The gold set keeps its item ids, since no labels exist yet, and the page restarts on v2.
+
+**After v2.** The operator labels on the v2 page. Any question that is still unclear there gets its instructions or definition rewritten with the operator. That would be a schema v3, and it may need that question's data regenerated, under its own approval.
+
 ## 2. Prompt template and mechanics
 
 llama-server's `/v1/systemone` (built into the pinned organ image) reads `<arch>.decision.type`. K1-Jev uses `openjev`:
@@ -93,7 +129,7 @@ The builder has **no input for arbitrary paths**. It refuses to run if any confi
 **The page** is `scripts/k1jev/label_server.py`, using only the standard library (`http.server`):
 - It binds to `127.0.0.1` only; any other bind address is refused.
 - It prints a URL with a random 128-bit token. Every request without the token, or with a `Host` header other than `127.0.0.1:<port>` or `localhost:<port>`, gets 403, which blocks other local users and DNS rebinding.
-- It shows one item at a time: the utterance, the context, the question's instructions and definition, and the options as buttons with number-key shortcuts, plus `unsure` and `skip`.
+- It shows one item at a time, in labelled sections in reading order (section 1a): the context under its role ("Someone said to the speaker:", "Trait being asked about:" or "Earlier event:"), then "The speaker said:" and the utterance, then the question's instructions and definition, and the options as buttons with number-key shortcuts, plus `unsure` and `skip`.
 - **It is blind.** It never shows the generated label, the template or the item's category.
 - Each answer is appended at once to a JSONL file with `fsync`: item id, question id, label, `unsure` flag, timestamp. The page resumes where it stopped. Labels can be revised; the last answer wins and history is kept.
 - After the first pass, 10% of items come back unannounced, to measure the operator's own consistency (agreement is reported, and disagreements become `unsure`).
