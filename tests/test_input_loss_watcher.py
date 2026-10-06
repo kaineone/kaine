@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the running input-loss caretaker notice."""
+"""Tests for the running input-loss caretaker notice.
+
+Silence is measured in unfrozen seconds from an injected ``UnfrozenClock``
+driven by a fake monotonic; ``_baseline`` anchors every stream at the start,
+as ``run`` does.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -10,13 +15,14 @@ from typing import Any
 import pytest
 
 from kaine.cycle.input_check import InputLossWatcher
+from kaine.cycle.unfrozen_clock import UnfrozenClock
 
 
-class _FakeTime:
-    def __init__(self, value: int) -> None:
+class _FakeMono:
+    def __init__(self, value: float = 0.0) -> None:
         self.value = value
 
-    async def __call__(self) -> int:
+    def __call__(self) -> float:
         return self.value
 
 
@@ -27,20 +33,31 @@ def _latest_returning(entries: dict[str, tuple[str, Any]]) -> Any:
     return _latest
 
 
+def _record_into(calls: list):
+    """An awaitable on_loss callback that records each call."""
+
+    async def _on_loss() -> None:
+        calls.append(None)
+
+    return _on_loss
+
+
 @pytest.fixture
-def _watcher_factory(fake_async_bus, monkeypatch):
+def _watcher_factory(fake_async_bus):
     def _make(streams, threshold_s, poll_s=0.01):
-        monkeypatch.setattr(fake_async_bus, "server_time_ms", _FakeTime(0))
+        fake = _FakeMono()
+        clock = UnfrozenClock(
+            lambda: False, unknown_counts_as="unfrozen", monotonic=fake, poll_s=0.0
+        )
         watcher = InputLossWatcher(
             fake_async_bus,
             streams,
             threshold_s=threshold_s,
-            on_loss=lambda: (_ for _ in ()).throw(
-                AssertionError("on_loss not replaced")
-            ),
+            on_loss=lambda: (_ for _ in ()).throw(AssertionError("on_loss not replaced")),
             poll_s=poll_s,
+            unfrozen_clock=clock,
         )
-        watcher._start_ms = 0
+        watcher._fake_mono = fake
         return watcher
 
     return _make
@@ -51,17 +68,14 @@ async def test_fresh_streams_no_loss(fake_async_bus, monkeypatch, _watcher_facto
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning(
-            {"topos.out": ("1000-0", None), "audition.out": ("900-0", None)}
-        ),
+        _latest_returning({"topos.out": ("1000-0", None), "audition.out": ("900-0", None)}),
     )
-
+    await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: (calls.append(None) for _ in ()).throw(StopIteration) or None
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
-    became = await watcher._poll_once(1100)
-    assert not became
+    watcher._fake_mono.value = 9.9
+    assert not await watcher._poll_once(0)
     assert not calls
 
 
@@ -70,84 +84,68 @@ async def test_all_stale_notifies_once(fake_async_bus, monkeypatch, _watcher_fac
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning(
-            {"topos.out": ("1000-0", None), "audition.out": ("1000-0", None)}
-        ),
+        _latest_returning({"topos.out": ("1000-0", None), "audition.out": ("1000-0", None)}),
     )
-
+    await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
-    # Still fresh.
-    became = await watcher._poll_once(1500)
-    assert not became
+    watcher._fake_mono.value = 0.9
+    assert not await watcher._poll_once(0)
     assert not calls
 
-    # First loss.
-    became = await watcher._poll_once(2100)
-    assert became
+    watcher._fake_mono.value = 1.1
+    assert await watcher._poll_once(0)
     assert len(calls) == 1
 
-    # Remaining stale does not re-notify.
-    became = await watcher._poll_once(5000)
-    assert not became
+    watcher._fake_mono.value = 5.0
+    assert not await watcher._poll_once(0)
     assert len(calls) == 1
 
 
-async def test_rearm_after_fresh_then_loss_again(
-    fake_async_bus, monkeypatch, _watcher_factory
-):
+async def test_rearm_after_fresh_then_loss_again(fake_async_bus, monkeypatch, _watcher_factory):
     watcher = _watcher_factory(["topos.out", "audition.out"], threshold_s=1.0)
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning(
-            {"topos.out": ("1000-0", None), "audition.out": ("1000-0", None)}
-        ),
+        _latest_returning({"topos.out": ("1000-0", None), "audition.out": ("1000-0", None)}),
     )
-
+    await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
-    await watcher._poll_once(2100)
+    watcher._fake_mono.value = 1.1
+    await watcher._poll_once(0)
     assert len(calls) == 1
 
-    # One stream becomes fresh; this re-arms the watcher.
+    # A new topos entry is fresh activity: the watcher re-arms.
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning(
-            {"topos.out": ("2000-0", None), "audition.out": ("1000-0", None)}
-        ),
+        _latest_returning({"topos.out": ("2000-0", None), "audition.out": ("1000-0", None)}),
     )
-    became = await watcher._poll_once(2500)
-    assert not became
+    watcher._fake_mono.value = 1.5
+    assert not await watcher._poll_once(0)
     assert len(calls) == 1
 
-    # Then go stale again.
-    became = await watcher._poll_once(3100)
-    assert became
+    watcher._fake_mono.value = 2.6
+    assert await watcher._poll_once(0)
     assert len(calls) == 2
 
 
-async def test_empty_stream_recent_start_not_lost(
-    fake_async_bus, monkeypatch, _watcher_factory
-):
+async def test_empty_stream_recent_start_not_lost(fake_async_bus, monkeypatch, _watcher_factory):
     watcher = _watcher_factory(["topos.out"], threshold_s=10.0)
-    watcher._start_ms = 1000
     monkeypatch.setattr(fake_async_bus, "latest", _latest_returning({}))
-
+    await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
-    # Just under the threshold since boot.
-    became = await watcher._poll_once(10999)
-    assert not became
+    watcher._fake_mono.value = 9.999
+    assert not await watcher._poll_once(0)
     assert not calls
 
-    # Past the threshold since boot.
-    became = await watcher._poll_once(11001)
-    assert became
+    watcher._fake_mono.value = 10.001
+    assert await watcher._poll_once(0)
     assert len(calls) == 1
 
 
@@ -158,13 +156,12 @@ async def test_bus_error_skipped(fake_async_bus, monkeypatch, _watcher_factory):
         raise RuntimeError("redis down")
 
     monkeypatch.setattr(fake_async_bus, "latest", _bad_latest)
-
+    await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
-    # Should not raise and should not call on_loss.
-    became = await watcher._poll_once(2000)
-    assert not became
+    watcher._fake_mono.value = 2.0
+    assert not await watcher._poll_once(0)
     assert not calls
 
 
@@ -173,15 +170,13 @@ async def test_run_loop_respects_stop_event(fake_async_bus, monkeypatch, _watche
     monkeypatch.setattr(
         fake_async_bus, "latest", _latest_returning({"topos.out": ("1000-0", None)})
     )
-
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
     stop = asyncio.Event()
     task = asyncio.create_task(watcher.run(stop))
     await asyncio.sleep(0.05)
     assert not calls
-
     stop.set()
     await asyncio.wait_for(task, timeout=5)
 
@@ -193,15 +188,17 @@ async def test_entry_older_than_start_gets_the_boot_grace(
     a previous run) is measured from the start, so slow boot-time model loading
     is not reported as lost input."""
     watcher = _watcher_factory(["topos.out"], threshold_s=10.0)
-    watcher._start_ms = 1000
     monkeypatch.setattr(
         fake_async_bus, "latest", _latest_returning({"topos.out": ("5-0", None)})
     )
-
+    watcher._fake_mono.value = 1.0
+    await watcher._baseline()
     calls: list[None] = []
-    watcher._on_loss = lambda: calls.append(None) or None  # type: ignore[assignment]
+    watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
 
-    assert not await watcher._poll_once(10999)
+    watcher._fake_mono.value = 10.999
+    assert not await watcher._poll_once(0)
     assert not calls
-    assert await watcher._poll_once(11001)
+    watcher._fake_mono.value = 11.001
+    assert await watcher._poll_once(0)
     assert len(calls) == 1

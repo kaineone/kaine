@@ -52,7 +52,7 @@ Avoid or review before use:
 - **NVIDIA Open Model License** (streaming Parakeet, Nemotron speech). Rights terminate on bypassing safety guardrails, which conflicts with abliteration.
 - **Revenue-capped:** Cactus ($2M) and LFM ($10M).
 - **Use-restricted or custom:** DINOv3, Gemma 3 and EmbeddingGemma, Supertonic (OpenRAIL-M), TEN VAD, and Moonshine for non-English languages (non-commercial).
-- **InternVideo-Next:** licence not confirmed. It is the current default vision encoder, so confirm it.
+- **InternVideo-Next:** confirmed usable. The Hugging Face weights are tagged MIT (that repository has no LICENSE file), and the vendored modeling code is MIT per `external/internvideo_next/UPSTREAM`.
 - **Piper engine:** now GPL-3.0; check compatibility with CAL.
 
 Sources are listed in the research notes of the 2026-09-22 session and must be re-verified when each phase's change is designed.

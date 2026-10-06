@@ -65,16 +65,24 @@ GROWING_VOLUMES = (
 _RELOCATE_SUBDIRS = ("state", "data", "backups", "studies")
 
 
+MOUNTS_PATH = Path("/proc/mounts")
+"""Path read by :func:`list_filesystems` when no explicit path is given."""
+
+
 def list_filesystems(
-    mounts_path: Path = Path("/proc/mounts"),
+    mounts_path: Path | None = None,
     disk_usage: Callable[[str], Any] = shutil.disk_usage,
 ) -> list[dict]:
     """Return a list of real, mounted filesystems with free space.
 
-    One entry per physical device (first mount wins).  Pseudofilesystems,
-    loop/snap mounts and anything under ``/proc``, ``/sys``, ``/dev``,
-    ``/run``, ``/snap`` or ``/boot`` are ignored.  Never raises.
+    Reads from ``mounts_path`` when it is given, otherwise from
+    :data:`MOUNTS_PATH`. One entry per physical device (first mount wins).
+    Pseudofilesystems, loop/snap mounts and anything under ``/proc``,
+    ``/sys``, ``/dev``, ``/run``, ``/snap`` or ``/boot`` are ignored.
+    Never raises.
     """
+    if mounts_path is None:
+        mounts_path = MOUNTS_PATH
     try:
         text = mounts_path.read_text(encoding="utf-8", errors="replace")
     except Exception:

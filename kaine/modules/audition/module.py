@@ -19,6 +19,7 @@ from kaine.modules.audition.acoustic import (
     arousal_to_window,
     cosine_change,
     detect_speech,
+    energy_dbfs,
 )
 from kaine.modules.audition.emotion import (
     CATEGORIES,
@@ -295,10 +296,15 @@ class Audition(BaseModule):
         if alert:
             self._acoustic_alert_count += 1
         window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
+
+        # Content-free energy estimate (dBFS), independent of the encoder.
+        energy_db = await asyncio.to_thread(energy_dbfs, audio_bytes)
+
         payload: dict[str, Any] = {
             "source_label": source_label,
             "change_score": change,
             "prediction_error": prediction_error,
+            "energy_dbfs": energy_db,
             # Normalised acoustic prediction error (rolling-window relative) —
             # exposed so the affect layer can scale arousal by acoustic surprise
             # (perception→arousal coupling).
@@ -335,15 +341,6 @@ class Audition(BaseModule):
         if stream is None:
             return None
         return getattr(stream, "delivered_position", None)
-
-    async def _hypnos_tail_cursor(self) -> str:
-        """The id of the newest ``hypnos.out`` entry, or ``"0-0"`` for an empty
-        stream, so the consumer reads only sleep events published after boot."""
-        latest = await self._bus.client.xrevrange(self._HYPNOS_STREAM, count=1)
-        if not latest:
-            return "0-0"
-        entry_id = latest[0][0]
-        return entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
 
     async def _hypnos_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""
@@ -385,10 +382,9 @@ class Audition(BaseModule):
 
     async def initialize(self) -> None:
         await super().initialize()
-        # Start the sleep consumer at the stream's current tail. A literal "$"
-        # cursor never advances under a non-blocking XREAD, so the consumer
-        # would never see a sleep event.
-        self._hypnos_cursor = await self._hypnos_tail_cursor()
+        # Seed the hypnos cursor from the stream tail before starting the loop,
+        # otherwise a literal "$" under a non-blocking XREAD never advances.
+        self._hypnos_cursor = await self._bus.last_entry_id(self._HYPNOS_STREAM)
         self._tasks.append(
             asyncio.create_task(self._hypnos_loop(), name=f"{self.name}-hypnos-consumer")
         )

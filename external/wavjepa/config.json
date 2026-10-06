@@ -1,0 +1,50 @@
+{
+  "architectures": [
+    "WavJEPAModel"
+  ],
+  "auto_map": {
+    "AutoConfig": "configuration_wavjepa.WavJEPAConfig",
+    "AutoModel": "modeling_wavjepa.WavJEPAModel"
+  },
+  "decoder_cfg": {
+    "enable_nested_tensor": false,
+    "mask_check": true,
+    "num_layers": 12
+  },
+  "decoder_layers_cfg": {
+    "batch_first": true,
+    "bias": true,
+    "d_model": 384,
+    "dim_feedforward": 1536,
+    "dropout": 0.0,
+    "layer_norm_eps": 1e-06,
+    "nhead": 12,
+    "norm_first": false
+  },
+  "encoder_cfg": {
+    "enable_nested_tensor": false,
+    "mask_check": true,
+    "num_layers": 12
+  },
+  "encoder_layers_cfg": {
+    "batch_first": true,
+    "bias": true,
+    "d_model": 768,
+    "dim_feedforward": 3072,
+    "dropout": 0.0,
+    "layer_norm_eps": 1e-06,
+    "nhead": 12,
+    "norm_first": false
+  },
+  "extractor_config": {
+    "conv_bias": false,
+    "conv_layers_spec": "[(512, 10, 5)] + [(512, 3, 2)] * 4 + [(512,2,2)]",
+    "depthwise": false,
+    "dropout": 0.0,
+    "in_channels": 1,
+    "mode": "default"
+  },
+  "model_type": "wavjepa-base",
+  "torch_dtype": "float32",
+  "transformers_version": "4.53.2"
+}

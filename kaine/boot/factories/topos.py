@@ -26,9 +26,9 @@ def make_topos(
 
     allowed = {
         # Encoder selection (topos-temporal-video-encoder). encoder_backend
-        # picks DINOv2 (shipped default, real) or InternVideo-Next (Phase-2
-        # clip encoder). encoder_revision/encoder_local_dir pin + locate the
-        # vendored InternVideo-Next weights; unused by the DINOv2 default.
+        # picks InternVideo-Next (the shipped default clip encoder) or DINOv2
+        # (the per-frame fallback). encoder_revision/encoder_local_dir pin and
+        # locate the vendored InternVideo-Next weights; DINOv2 does not use them.
         "encoder_backend",
         "encoder_model_id",
         "encoder_revision",

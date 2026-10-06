@@ -128,3 +128,31 @@ def test_registry_invariants():
     # lingua.out IS in the canonical set; Lingua publishes an aggregate there
     # in addition to the mode-specific lingua.external / lingua.internal streams.
     assert "lingua.out" in canonical_module_streams()
+
+
+def test_diagnostics_streams_are_known():
+    """Every stream the Nexus diagnostics monitor tails is a canonical stream
+    in ``kaine.bus.streams.KNOWN_STREAMS``."""
+    from kaine.bus import streams
+    from kaine.evaluation.stream_registry import diagnostics_streams
+
+    unknown = sorted(set(diagnostics_streams()) - streams.KNOWN_STREAMS)
+    assert not unknown, "diagnostics streams not in KNOWN_STREAMS: " + ", ".join(unknown)
+
+
+def test_module_streams_are_exactly_the_modules():
+    """``MODULE_STREAMS`` holds one ``<name>.out`` per module declared under
+    ``kaine/modules/`` (a ``name: ClassVar[str]``), no more and no less."""
+    import re
+    from pathlib import Path
+
+    from kaine.bus import streams
+
+    modules_dir = Path(__file__).resolve().parent.parent / "kaine" / "modules"
+    pattern = re.compile(r'name: ClassVar\[str\] = "([a-z_]+)"')
+    names = {
+        m.group(1)
+        for path in modules_dir.rglob("*.py")
+        for m in pattern.finditer(path.read_text())
+    }
+    assert streams.MODULE_STREAMS == {f"{n}.out" for n in names}

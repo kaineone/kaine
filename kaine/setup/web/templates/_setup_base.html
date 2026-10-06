@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}KAINE Setup{% endblock %}</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
+  <link rel="stylesheet" href="{{ request.url_for('setup_css') }}">
+</head>
+<body data-setup-layout="wizard">
+  <div class="shell">
+    <aside class="rail">
+      <span class="rail__brand">KAINE</span>
+      <nav class="rail__nav" aria-label="Setup">
+        <span class="rail__seg is-active">Setup</span>
+      </nav>
+    </aside>
+    <div class="shell__body">
+      <main class="nexus-main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+</body>
+</html>
