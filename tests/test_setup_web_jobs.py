@@ -35,6 +35,48 @@ def _isolated_guard(monkeypatch):
     )
 
 
+def _zombie(pid: int) -> bool:
+    """True if ``pid`` is a zombie (exited, not yet reaped by its parent)."""
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            return fh.read().rsplit(")", 1)[1].split()[0] == "Z"
+    except FileNotFoundError:
+        # Exited and reaped between the caller's kill(pid, 0) and this read.
+        return True
+
+
+def _wait_gone(pid: int, *, group: bool = False, timeout: float = 9.0) -> None:
+    """Wait until ``pid`` (or, with ``group``, every member of process group
+    ``pid``) has exited. A zombie counts as gone: its parent's event loop may
+    reap it a moment later, and ``os.kill(pid, 0)`` still succeeds on one."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if group:
+            members = []
+            for entry in os.listdir("/proc"):
+                if not entry.isdigit():
+                    continue
+                try:
+                    with open(f"/proc/{entry}/stat") as fh:
+                        fields = fh.read().rsplit(")", 1)[1].split()
+                except FileNotFoundError:
+                    continue  # exited while the scan ran
+                if int(fields[2]) == pid:
+                    members.append(fields[0])
+            # No members left means the group no longer exists.
+            if all(state == "Z" for state in members):
+                return
+        else:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            if _zombie(pid):
+                return
+        time.sleep(0.05)
+    raise AssertionError(f"{'process group' if group else 'process'} {pid} still alive")
+
+
 def _wait_for_job(runner: JobRunner, name: str, timeout: float = 5.0) -> dict[str, Any]:
     job_id = runner.job_id_for_name(name)
     assert job_id is not None
@@ -1124,8 +1166,7 @@ def test_cancel_route_kills_running_job(tmp_path, monkeypatch):
             time.sleep(0.05)
         assert app.state.runner.status(job_id)["status"] == "cancelled"
 
-        with pytest.raises(OSError):
-            os.killpg(pid, 0)
+        _wait_gone(pid, group=True)
 
         r2 = client.post(f"/jobs/{job_id}/cancel", headers=h, follow_redirects=False)
         assert r2.status_code == 409
@@ -1199,8 +1240,7 @@ def test_shutdown_kills_non_detached_and_grandchild(tmp_path):
 
     runner, job_id, parent_pid, grandchild_pid = asyncio.run(run())
 
-    with pytest.raises(OSError):
-        os.kill(parent_pid, 0)
+    _wait_gone(parent_pid)
 
     deadline = time.monotonic() + 9.0
     while time.monotonic() < deadline:
@@ -2087,8 +2127,7 @@ def test_cancel_kills_sigign_grandchild(tmp_path, monkeypatch):
         else:
             raise AssertionError("grandchild survived cancel")
 
-        with pytest.raises(OSError):
-            os.kill(parent_pid, 0)
+        _wait_gone(parent_pid)
 
 
 def test_killpg_permission_error_is_ignored(monkeypatch):

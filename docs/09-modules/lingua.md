@@ -142,7 +142,7 @@ Every generation is appended to `state/lingua/intent_expression.jsonl` via `Inte
 - `system_digest`: the SHA-256 of the system prompt;
 - `seed`: the sampling seed, `null` for ordinary utterances.
 
-**Heard speech is redacted.** Every `audition.transcription` line in the logged rendering, and any heard `about` in the logged prompt, is written as `[heard speech]`. The logged rendering lists the same events, in the same order, as the rendering the organ saw. A heard text that still appears anywhere in the logged prompt or rendering is replaced as a last resort, and a warning is logged without the text.
+**Heard speech is redacted.** Every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf in the logged rendering and prompt, as are heard-text fields nested on other events. The logged rendering lists the same events, in the same order, as the rendering the organ saw. A heard text that still appears anywhere in the logged prompt or rendering is replaced as a last resort, and a warning is logged without the text.
 
 Lingua never truncates the log. Hypnos reads it during voice alignment but does not prune it.
 
@@ -201,7 +201,7 @@ If `[volition].interrupt_threshold` is set and a coalition whose surprise crosse
 ## Safety and zero-persistence notes
 
 - `faithful_rendering` in the intent log contains the rendered coalition text, that is, what was "conscious", with heard speech replaced by `[heard speech]`. It is operational data for voice alignment, not raw sensory data. It contains no audio waveforms, camera frames or heard words.
-- The `user_input` field in `external_speech` events is the intent's `about` field. Under the default policy it is a coalition description, not a user's spoken words. It is not duplicated to disk by Lingua itself.
+- The `user_input` field in `external_speech` events is published only for felt- and event-triggered intents, never for replies to heard speech, and any heard text in it is redacted first. Under the default policy it is a coalition description, not a user's spoken words. It is not duplicated to disk by Lingua itself.
 - Internal speech (`lingua.internal`) is never routed to Vox, and the dashboard never displays its message content.
 - The awareness-guard injection in the system prompt ensures that in-world chat, transcribed speech, and other perception cannot be used as instructions in Lingua's generation path.
 

@@ -86,7 +86,7 @@ Event bus tuning for Redis Streams.
 
 ### `[bus.per_stream_maxlen]`
 
-Per-stream overrides. The key is the full stream name (`<module>.out` or `workspace.broadcast`). The shipped caps give observers and the research archive a long lookback, so a restart of several minutes loses no records.
+Per-stream overrides. The key is the full stream name (`<module>.out` or `workspace.broadcast`). The shipped caps give observers and the research archive a long lookback, so a restart of several minutes loses no records. An unknown key logs a warning at pre-boot.
 
 ```toml
 [bus.per_stream_maxlen]
