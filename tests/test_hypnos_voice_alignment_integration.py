@@ -26,12 +26,8 @@ from kaine.modules.hypnos.capability_eval import (
 )
 from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
 
-# @@@NOTES: with preference_source="none" as the only valid Stage 0 value,
-# _run_voice_alignment never reaches the trainer. These integration tests now
-# invoke _train_on_pairs directly with pairs from DPOPairBuilder() (no
-# constructor args) using build(path, max_pairs=...), not build_pairs(), and
-# assert the same DPO/capability fields on the returned result instead of the
-# hypnos.sleep.completed bus payload.
+# With preference_source="none", a sleep never reaches the trainer, so these
+# tests call _train_on_pairs directly and check the returned result.
 
 
 @pytest.fixture

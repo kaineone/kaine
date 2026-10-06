@@ -21,11 +21,8 @@ from kaine.modules.hypnos import Hypnos, TrainingResult, VoiceAlignmentConfig
 from kaine.modules.hypnos.organ_window import OrganWindowResult
 from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
 
-# @@@NOTES: bracketing and failure-path assertions moved from the whole-sleep
-# summary to the returned PhaseResult because the default preference_source="none"
-# gate now prevents _run_voice_alignment from ever reaching the trainer. We call
-# _train_on_pairs directly with pairs built by DPOPairBuilder() (no constructor
-# args) using build(path, max_pairs=...), not build_pairs().
+# With preference_source="none", a sleep never reaches the trainer, so these
+# tests call _train_on_pairs directly and check the returned PhaseResult.
 
 
 @pytest.fixture
@@ -101,7 +98,7 @@ async def test_runner_brackets_the_trainer_call(bus, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_failed_window_completes_other_sleep_phases(bus, tmp_path, monkeypatch):
+async def test_failed_window_reports_its_outcome(bus, tmp_path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     trainer = _RecordingTrainer()
 
