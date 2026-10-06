@@ -12,7 +12,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 import httpx
@@ -226,16 +226,19 @@ class Answer:
 class DecisionClient:
     """HTTP client for a local llama-server ``/v1/systemone`` endpoint."""
 
+    _IDENTITY_TTL_S = 60.0
+
     def __init__(
         self,
         config: DecisionConfig,
         *,
         transport: httpx.BaseTransport | None = None,
-        clock=time.monotonic,
+        clock: Callable[[], float] = time.monotonic,
     ):
         """Construct a client.
 
-        *transport* is test-only and must not be used in production.
+        *transport* and *clock* are test-only and must not be used in
+        production.
         """
         # Re-check here too: the key and the utterance must never leave the host,
         # however the config was built.
@@ -248,6 +251,7 @@ class DecisionClient:
             self._sidecar.thresholds if self._sidecar is not None else None
         )
         self._identity_verified = False
+        self._identity_verified_at: float | None = None
         self._last_warning: dict[str, float] = {}
 
         # The owned client must never honor HTTP_PROXY / ALL_PROXY: those would
@@ -360,13 +364,19 @@ class DecisionClient:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
-        if not self._identity_verified:
+        identity_stale = (
+            not self._identity_verified
+            or self._identity_verified_at is None
+            or self._clock() - self._identity_verified_at >= self._IDENTITY_TTL_S
+        )
+        if identity_stale:
             identity_kind = self._verify_identity()
             if identity_kind is not None:
                 self._warn(identity_kind, question_ids)
                 self._identity_verified = False
                 return None
             self._identity_verified = True
+            self._identity_verified_at = self._clock()
 
         url = self._config.url.rstrip("/") + "/v1/systemone"
 
@@ -450,12 +460,9 @@ class DecisionClient:
                 for key, value in raw_probs.items():
                     if key not in option_keys:
                         return None
-                    if isinstance(value, bool):
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
                         return None
-                    try:
-                        prob = float(value)
-                    except Exception:
-                        return None
+                    prob = float(value)
                     if not math.isfinite(prob) or not (0.0 <= prob <= 1.0):
                         return None
                     probabilities[key] = prob
@@ -491,23 +498,17 @@ class DecisionClient:
                         return None
                     if str(idx) != key or not (0 <= idx < levels):
                         return None
-                    if isinstance(value, bool):
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
                         return None
-                    try:
-                        prob = float(value)
-                    except Exception:
-                        return None
+                    prob = float(value)
                     if not math.isfinite(prob) or not (0.0 <= prob <= 1.0):
                         return None
                     probabilities[key] = prob
 
             raw_score = ans.get("score")
-            if isinstance(raw_score, bool):
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
                 return None
-            try:
-                score = float(raw_score)
-            except Exception:
-                return None
+            score = float(raw_score)
             if not math.isfinite(score) or not (0.0 <= score <= levels - 1):
                 return None
 
@@ -523,12 +524,9 @@ class DecisionClient:
 
         if type_ == "noul":
             raw_noul = ans.get("noul")
-            if isinstance(raw_noul, bool):
+            if isinstance(raw_noul, bool) or not isinstance(raw_noul, (int, float)):
                 return None
-            try:
-                noul = float(raw_noul)
-            except Exception:
-                return None
+            noul = float(raw_noul)
             if not math.isfinite(noul) or not (0.0 <= noul <= 1.0):
                 return None
 

@@ -1219,3 +1219,65 @@ def test_warning_text_never_contains_model_path(server, sidecar_path, caplog):
         assert client.ask("x", None, [qid]) is None
     assert secret_path not in caplog.text
     client.close()
+
+
+def test_identity_reverified_on_ttl(server, sidecar_path, caplog):
+    url, _srv, handler = server
+    qid = _first_id("noul")
+    good = json.dumps(
+        {"model": "k1-jev", "answers": {qid: {"type": "noul", "noul": 0.5}}, "usage": {}}
+    ).encode()
+    handler._response = good
+
+    now = [0.0]
+
+    def monotonic():
+        return now[0]
+
+    client = DecisionClient(
+        DecisionConfig(enabled=True, url=url, thresholds_path=str(sidecar_path)),
+        clock=monotonic,
+    )
+
+    assert client.ask("x", None, [qid]) is not None
+    assert len(_props_requests(handler)) == 1
+
+    now[0] = 59.0
+    assert client.ask("x", None, [qid]) is not None
+    assert len(_props_requests(handler)) == 1
+
+    now[0] = 60.0
+    assert client.ask("x", None, [qid]) is not None
+    assert len(_props_requests(handler)) == 2
+
+    handler._props_response = {"model_path": "/models/k1-evil.gguf"}
+    now[0] = 120.0
+    with caplog.at_level("WARNING"):
+        assert client.ask("x", None, [qid]) is None
+    assert len(_props_requests(handler)) == 3
+    assert "identity_mismatch" in caplog.text
+
+    client.close()
+
+
+def test_string_numbers_rejected(server, sidecar_path):
+    url, _srv, handler = server
+    qid_noul = _first_id("noul")
+    qid_score = _first_id("score")
+    qid_choice = _first_id("choice")
+    choice_key = get_question(qid_choice).options[0].key
+
+    base = {"model": "k1-jev", "answers": {}, "usage": {}}
+    cases = [
+        (qid_noul, {"type": "noul", "noul": "0.5"}),
+        (qid_score, {"type": "score", "score": "1"}),
+        (qid_choice, {"type": "choice", "choice": choice_key, "probabilities": {choice_key: "0.3"}}),
+    ]
+
+    for qid, answer in cases:
+        handler._response = json.dumps({**base, "answers": {qid: answer}}).encode()
+        client = DecisionClient(
+            DecisionConfig(enabled=True, url=url, thresholds_path=str(sidecar_path))
+        )
+        assert client.ask("x", None, [qid]) is None
+        client.close()
