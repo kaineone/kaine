@@ -500,7 +500,7 @@ def _render_readme(
     lines += [
         "## Excluded by construction (never present or reachable)",
         "",
-        "- intent log / internal monologue (Lingua intent_expression)",
+        "- intent log / internal monologue (Lingua intent_expression and the rotated intent_log corpus)",
         "- Mnemos/Qdrant memories (verbatim transcripts, episodic records)",
         "- Eidolon self-model",
         "- conversation content (any turn text)",

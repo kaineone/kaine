@@ -51,7 +51,7 @@ The non-default `DriveBiasedActionSelectionPolicy` responds to a triggering user
 | `lingua.internal` | `realization_failed` | Content-free audit event when an LLM realization fails. It carries only `mode` and `reason_class`; it never carries generated text. It is not mirrored to `lingua.out`. |
 | `lingua.out` | mirror | A copy of every speech event is published here so one subscription can observe both external and internal utterances. `realization_failed` is not mirrored. |
 
-Both speech events carry `mode`, `model`, `prompt_length`, `latency_ms`, `origin`, `record_id`, and `faithful_rendering`. These bus events are transient, so the rendering on them is not redacted. `external_speech` also carries `user_input`, the intent's `about` field, so the A/B divergence sidecar can compare workspace-conditioned output to a bare-LLM baseline. Under the default `self_initiated_report` policy this field is the policy's own coalition description, not a transcribed user utterance. Under the conversational policy it is the utterance already transcribed by Audition.
+Both speech events carry `mode`, `model`, `prompt_length`, `latency_ms`, `origin`, `record_id`, and `faithful_rendering`. The `faithful_rendering` value published on the bus is redacted: any heard speech embedded in it is replaced with `[heard speech]`, the same rendering written to the intent log. `external_speech` also carries `user_input` only for felt and event triggers; under the default `self_initiated_report` policy this field is the policy's own coalition description, not a transcribed user utterance. Heard speech never carries `user_input`. The A/B divergence sidecar therefore measures only felt- and event-triggered replies; replies to heard speech are recorded as content-free skips and are not measured.
 
 The guard timeouts in the action-selection policy, not the `realization_failed` event, are what unstick speech. The event is the audit trail.
 
@@ -156,7 +156,7 @@ The cycle runs an observer (`kaine/cycle/utterance_outcome.py`) whenever Lingua 
 - `empatheia_deviation`: the largest Empatheia social-error deviation in the window;
 - `social_drive_delta`: the change in Thymos's social drive across the window.
 
-The window is `[lingua].outcome_reply_window_s` (30 s by default). It closes at the first reply, at the end of the window, or at the entity's next utterance. A record still open at shutdown is dropped, never written with a guessed outcome.
+The window is `[lingua].outcome_reply_window_s` (30 s by default). A value that is not a finite number above zero falls back to 30 s with a warning; it never stops the cycle from booting. It closes at the first reply, at the end of the window, or at the entity's next utterance. A record still open at shutdown is dropped, never written with a guessed outcome.
 
 ### Abliteration rationale
 

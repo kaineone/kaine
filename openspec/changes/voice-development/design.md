@@ -60,6 +60,8 @@ Until Stage 2 provides a validated preference source, the voice-alignment phase 
 - At each sleep the intent log is rotated to `state/lingua/intent_log/sleep-<n>.jsonl`.
 - The corpus is the set of rotated files, kept by default under the caps-not-culls rule.
 - A disk guard warns, and never deletes, when the corpus approaches its configured ceiling.
+- The divergence scan reads the live log and then the corpus newest first under one record cap, so the cap always keeps recent speech under evaluation.
+- Known gap, for a follow-up change: a hard crash between the rotation's `os.link` and `os.unlink` leaves the same records in the corpus and in the live log, and the next rotation duplicates them. An inode or content idempotence check at rotation closes it. Duplicates inflate the divergence counts; they never hide speech.
 
 ### D6. Trainer (P3)
 
@@ -74,8 +76,9 @@ The external trainer:
 - When the intent log is written, every heard-speech line in the rendering and the heard input in the prompt are replaced with the fixed placeholder `[heard speech]`.
 - The organ's own generated text is logged as is. It is the being's own content, not heard speech.
 - Lingua's own bus events never carry heard text. `user_input` is published only for felt and event triggers, and the published rendering is the redacted one. Audition's transcription events still carry heard text on the bus, where it is transient.
-- Redaction goes by field as well as by event type: any coalition event whose payload holds `user_input`, `user_text`, `transcription`, `heard_text` or `faithful_rendering` is logged with those values replaced.
+- Redaction goes by event type and by field. Every text value of an external-input event (`EXTERNAL_INPUT_TYPES`: `audition.transcription`, `mundus.chat`, one shared definition also used by the ignition audit) is heard input. On every other event, the heard-speech fields are redacted at any depth.
 - The placeholder keeps the structure of a reply context without its content.
+- The A/B divergence sidecar measures only felt- and event-triggered replies. Replies to heard speech carry no `user_input`, so they are recorded as content-free skips (`no_user_input_heard_reply`), not measured. Studies are unaffected, because evaluation is off in studies.
 
 ### D8. Four measures; protection is unchanged
 

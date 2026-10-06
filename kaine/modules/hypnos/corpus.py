@@ -99,6 +99,9 @@ def intent_record_paths(log_path: Path, corpus_dir: Path) -> list[Path]:
     Corpus files named ``sleep-*.jsonl`` are returned oldest first, sorted by
     modification time (``st_mtime_ns``) then name. The live ``log_path`` is
     appended last when it exists. Missing files are skipped.
+
+    The caller (the pair builder) scans this chronological list newest first,
+    so the most recent records are evaluated before older corpus files.
     """
     paths: list[Path] = []
     if corpus_dir.exists():

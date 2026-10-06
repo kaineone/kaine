@@ -336,9 +336,12 @@ class DPOPairBuilder:
         ``max_pairs`` (the training budget). The two coincide whenever the log
         holds no more than ``max_pairs`` divergent records.
 
-        ``path`` may be a single file or a sequence of files; the sequence is
-        scanned in order as one stream, with one shared ``max_records_scanned``
-        and ``max_pairs`` budget. Missing files are skipped.
+        ``path`` may be a single file or a sequence of files. The sequence is
+        expected to be chronological (oldest file first), and is scanned NEWEST
+        FIRST — files in reverse order and lines within each file in reverse
+        order — so that ``max_records_scanned`` keeps the most recent speech
+        under evaluation. The returned ``pairs`` are in chronological order.
+        Missing files are skipped.
         """
         paths: list[Path]
         if isinstance(path, (str, Path)):
@@ -352,10 +355,12 @@ class DPOPairBuilder:
         scanned = 0
         usable = 0
         unreadable = 0
-        for p in paths:
+        for p in reversed(paths):
+            if scanned >= self._max_scanned:
+                break
             if not p.exists():
                 continue
-            for line in iter_records(p):
+            for line in reversed(list(iter_records(p))):
                 if scanned >= self._max_scanned:
                     break
                 if line.unreadable:
@@ -394,6 +399,8 @@ class DPOPairBuilder:
                 "(undecryptable or malformed); skipped",
                 unreadable,
             )
+        # The scan ran newest first; hand the kept pairs back in log order.
+        pairs.reverse()
         return pairs, scanned, usable
 
 

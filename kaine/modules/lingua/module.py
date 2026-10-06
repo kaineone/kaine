@@ -18,6 +18,7 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, iter_text_leaves
 from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, HEARD_TEXT_FIELDS
 from kaine.modules.base import BaseModule
 from kaine.modules.lingua.client import (
@@ -721,29 +722,39 @@ class Lingua(BaseModule):
         # else the rolling-latest conscious coalition.
         snap = snapshot if snapshot is not None else self._latest_snapshot
 
-        # Heard speech is anything that came from an audition.transcription in
-        # the coalition, plus any unmarked about (fail-closed: felt/event must
-        # be explicitly tagged). The redaction set also holds the values of the
-        # heard-speech payload fields on any coalition event.
+        def _iter_field_values(value, fields):
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if k in fields and isinstance(v, str):
+                        stripped = v.strip()
+                        if stripped:
+                            yield stripped
+                    yield from _iter_field_values(v, fields)
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    yield from _iter_field_values(item, fields)
+
+        # Heard speech is anything that came from an external-input event in
+        # the coalition (audition.transcription, mundus.chat), plus any unmarked
+        # about (fail-closed: felt/event must be explicitly tagged). The
+        # redaction set also holds the values of the heard-speech payload fields
+        # at any depth on any coalition event.
         heard_texts: set[str] = set()
         redact_texts: set[str] = set()
         if snap is not None:
             for _entry_id, event in snap.selected_events:
-                if event.type == "audition.transcription":
-                    text = str(event.payload.get("text") or "").strip()
-                    if text:
-                        heard_texts.add(text)
-                for field in HEARD_TEXT_FIELDS - {"text"}:
-                    value = event.payload.get(field)
-                    if isinstance(value, str):
-                        stripped = value.strip()
-                        if stripped:
-                            redact_texts.add(stripped)
+                if event.type in EXTERNAL_INPUT_TYPES:
+                    for leaf in iter_text_leaves(event.payload):
+                        heard_texts.add(leaf)
+                for leaf in _iter_field_values(
+                    event.payload, HEARD_TEXT_FIELDS - {"text"}
+                ):
+                    redact_texts.add(leaf)
         redact_texts |= heard_texts
 
-        # Only a transcription makes an about heard. Field values (for example
-        # a felt phrase Lingua itself published as user_input) are redacted
-        # from the log but never decide how the trigger is framed.
+        # Only an external-input event makes an about heard. Field values (for
+        # example a felt phrase Lingua itself published as user_input) are
+        # redacted from the log but never decide how the trigger is framed.
         about_is_heard = (
             about_kind not in ("felt", "event") or about.strip() in heard_texts
         )

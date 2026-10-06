@@ -262,6 +262,7 @@ class ABDivergenceObserver(StreamSubscriberObserver):
         self._last_input = last_user_input_provider
         self._rng = rng or random.Random()
         self._sampled_count = 0
+        self._skipped_no_input = 0
 
     async def start(self) -> None:
         try:
@@ -296,12 +297,22 @@ class ABDivergenceObserver(StreamSubscriberObserver):
                 }
             )
             return
-        if self._sample_rate < 1.0 and self._rng.random() > self._sample_rate:
-            return
         payload = event.payload or {}
         real_text = str(payload.get("text") or "")
+        if not real_text:
+            return
         user_text = self._resolve_user_text(payload)
-        if not real_text or not user_text:
+        if not user_text:
+            self._skipped_no_input += 1
+            await self._sink.write(
+                {
+                    "entry_id": entry_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "skipped": "no_user_input_heard_reply",
+                }
+            )
+            return
+        if self._sample_rate < 1.0 and self._rng.random() > self._sample_rate:
             return
         try:
             bare_text = await self._client.complete(user_text)
@@ -331,9 +342,13 @@ class ABDivergenceObserver(StreamSubscriberObserver):
             }
         )
 
+    @property
+    def skipped_no_input_count(self) -> int:
+        return self._skipped_no_input
+
     def _resolve_user_text(self, payload: dict[str, Any]) -> str:
-        # Lingua publishes `user_input` only for felt and event triggers, never
-        # for heard speech; heard input comes from the audition-fed provider.
+        # Heard input has no provider in production; the provider parameter
+        # remains for tests and a future in-memory feed.
         candidate = payload.get("user_input") or payload.get("user_text")
         if candidate:
             return str(candidate)
