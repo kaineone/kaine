@@ -153,7 +153,7 @@ def verify_served_alias(
         else:
             import httpx
 
-            resp = httpx.get(url, headers=headers, timeout=timeout_s)
+            resp = httpx.get(url, headers=headers, timeout=timeout_s, trust_env=False)
     except Exception as exc:
         return ServedAliasResult(
             listed=False,

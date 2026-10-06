@@ -210,9 +210,9 @@ async def test_welfare_notify_cursor_advances_to_end_after_one_poll(
     observed: list[float] = []
     original_observe = mon._distress.observe
 
-    def _counting_observe(magnitude: float, now: float) -> bool:
+    def _counting_observe(magnitude: float, now: float, **kwargs) -> bool:
         observed.append(magnitude)
-        return original_observe(magnitude, now)
+        return original_observe(magnitude, now, **kwargs)
 
     mon._distress.observe = _counting_observe  # type: ignore[method-assign]
 

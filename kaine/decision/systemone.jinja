@@ -1,0 +1,14 @@
+{%- set letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" -%}
+<|im_start|>system
+You are K1-Jev, a decision model. Read the state, then answer the question with the letter of exactly one option.<|im_end|>
+<|im_start|>user
+State:
+{{ state }}
+
+Question ({{ type }}): {{ instructions }}
+Options:
+{%- for opt in options %}
+{{ letters[loop.index0] }}. {{ opt.key }}{% if opt.description %}: {{ opt.description }}{% endif %}
+{%- endfor %}
+<|im_end|>
+<|im_start|>assistant

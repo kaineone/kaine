@@ -51,7 +51,7 @@ All keys are under `[empatheia]` and `[empatheia.qdrant]`. The full reference is
 | `backend` | `"qdrant"` | `"qdrant"` or `"inmemory"` |
 | `collection` | `"empatheia_agents"` | Qdrant collection name for agent profiles |
 | `speaker_label` | `"operator"` | Label for the operator-facing agent |
-| `operator_sources` | `["live_mic", "microphone", "remote"]` | Sources mapped to the operator agent; other sources become `media:<source_label>`. Also used by Volition to decide which Audition sources are user utterances. |
+| `operator_sources` | `["live_mic", "microphone", "remote"]` | Sources mapped to the operator agent; other sources become `media:<source_label>`. Also used by Volition to decide which Audition sources are user utterances. Chronos uses a fixed constant for this source set and ignores this key. |
 | `deviation_threshold` | `0.5` | Emotion deviation above which `empatheia.social_error` fires |
 | `baseline_salience` | `0.15` | Minimum event salience |
 | `alert_salience` | `0.6` | Maximum event salience |

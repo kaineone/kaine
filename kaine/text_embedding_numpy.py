@@ -12,6 +12,7 @@ float32, and applies mean pooling + L2 normalization.
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import logging
 import math
@@ -29,11 +30,13 @@ from kaine.embedding_defaults import (
     DEFAULT_MODEL_ID,
     canonical_model_id,
 )
+from kaine.residency.inflight import InflightGate
 
 log = logging.getLogger(__name__)
 
 __all__ = [
     "read_safetensors",
+    "weights_residency",
     "WordPieceTokenizer",
     "resolve_model_dir",
     "NumpyMiniLMEmbedder",
@@ -61,23 +64,25 @@ def read_safetensors(path: str | Path) -> dict[str, np.ndarray]:
     some checkpoints carry.  Rejects truncated files, offset overruns,
     and unsupported dtypes.
     """
-    raw = Path(path).read_bytes()
-    if len(raw) < 8:
+    path = Path(path)
+    if os.stat(path).st_size < 8:
         raise ValueError(f"safetensors file truncated: {path}")
 
-    (header_len,) = struct.unpack("<Q", raw[:8])
+    mm = np.memmap(path, dtype=np.uint8, mode="r")
+
+    (header_len,) = struct.unpack("<Q", mm[:8].tobytes())
     header_end = 8 + header_len
-    if header_end > len(raw):
+    if header_end > mm.size:
         raise ValueError(
-            f"safetensors header length {header_len} exceeds file size {len(raw)}"
+            f"safetensors header length {header_len} exceeds file size {mm.size}"
         )
 
-    header = json.loads(raw[8:header_end].decode("utf-8"))
+    header = json.loads(mm[8:header_end].tobytes().decode("utf-8"))
     if not isinstance(header, dict):
         raise ValueError("safetensors header is not a JSON object")
 
     data_start = header_end
-    data_len = len(raw) - data_start
+    data_len = mm.size - data_start
     tensors: dict[str, np.ndarray] = {}
 
     for name, info in header.items():
@@ -110,13 +115,40 @@ def read_safetensors(path: str | Path) -> dict[str, np.ndarray]:
             )
 
         offset = data_start + start
-        arr = np.frombuffer(raw, dtype=np_dtype, count=count, offset=offset)
-        arr = arr.reshape(shape)
+        nbytes = count * itemsize
+        arr = mm[offset : offset + nbytes].view(np_dtype).reshape(shape)
         if dtype_key in {"F16", "F32"}:
             arr = arr.astype(np.float32, copy=False)
         tensors[name] = arr
 
     return tensors
+
+
+def weights_residency(tensors: dict[str, np.ndarray]) -> dict[str, int]:
+    """Return byte accounting for a weights dict produced by :func:`read_safetensors`.
+
+    ``mapped_bytes`` counts tensors whose ``.base`` chain ends in a
+    read-only ``numpy.memmap``; ``private_bytes`` counts everything else
+    (e.g. dtype conversions that had to allocate a private copy).
+    """
+    mapped = 0
+    private = 0
+
+    for arr in tensors.values():
+        base = arr.base
+        is_mapped = False
+        while base is not None:
+            if isinstance(base, np.memmap):
+                is_mapped = True
+                break
+            base = base.base
+
+        if is_mapped:
+            mapped += int(arr.nbytes)
+        else:
+            private += int(arr.nbytes)
+
+    return {"mapped_bytes": mapped, "private_bytes": private}
 
 
 class WordPieceTokenizer:
@@ -720,6 +752,9 @@ class NumpyMiniLMEmbedder:
         self._tokenizer: WordPieceTokenizer | None = None
         self._loaded = False
         self._latent_dim = DEFAULT_LATENT_DIM
+        self._load_lock: asyncio.Lock | None = None
+        self._gate = InflightGate()
+        self._residency: dict[str, int] = {}
 
         try:
             self._model_dir = resolve_model_dir(model_id, model_path=model_path)
@@ -735,6 +770,10 @@ class NumpyMiniLMEmbedder:
             )
 
     @property
+    def loaded(self) -> bool:
+        return self._loaded
+
+    @property
     def latent_dim(self) -> int:
         return self._latent_dim
 
@@ -747,11 +786,33 @@ class NumpyMiniLMEmbedder:
             "normalized": True,
         }
 
-    async def load(self) -> None:
-        """Load model weights, config and tokenizer (idempotent)."""
+    @property
+    def weights_residency(self) -> dict[str, int]:
+        """A snapshot of mapped vs private weight bytes; empty when unloaded."""
+        if not self._loaded:
+            return {}
+        return self._residency.copy()
+
+    def _ensure_lock(self) -> None:
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
+
+    async def ensure_loaded(self) -> None:
+        """Load model weights, config and tokenizer (idempotent, serialised)."""
         if self._loaded:
             return
+        self._ensure_lock()
+        async with self._load_lock:
+            if self._loaded:
+                return
+            await self._load()
 
+    async def load(self) -> None:
+        """Alias of :meth:`ensure_loaded`."""
+        return await self.ensure_loaded()
+
+    async def _load(self) -> None:
+        """Synchronous loading work, executed in a thread."""
         def _load_sync() -> None:
             model_dir = self._model_dir
             if model_dir is None:
@@ -841,6 +902,7 @@ class NumpyMiniLMEmbedder:
                 vocab_path, max_length=max_length, **tokenizer_settings
             )
             self._weights = weights
+            self._residency = weights_residency(weights)
             self._loaded = True
             log.info(
                 "numpy MiniLM embedder loaded from %s; latent_dim %d",
@@ -850,45 +912,71 @@ class NumpyMiniLMEmbedder:
 
         await asyncio.to_thread(_load_sync)
 
-    def _ensure_loaded(self) -> None:
-        if not self._loaded:
-            raise RuntimeError("embedder not loaded; await .load() first")
-
     async def encode(self, text: str) -> list[float]:
-        self._ensure_loaded()
         return (await self.encode_batch([text]))[0]
 
     async def encode_batch(self, texts: Any) -> list[list[float]]:
-        self._ensure_loaded()
+        items = list(texts)
+        if not items:
+            return []
 
-        def _encode_sync() -> list[list[float]]:
-            assert self._tokenizer is not None
-            assert self._config is not None
-            assert self._weights is not None
+        self._ensure_lock()
+        async with self._load_lock:
+            if not self._loaded:
+                await self._load()
+            weights = self._weights
+            config = self._config
+            tokenizer = self._tokenizer
+            ticket = self._gate.admit()
 
-            if len(texts) == 0:
-                return []
+        return await self._gate.run(
+            ticket, None, self._encode_sync, weights, config, tokenizer, items
+        )
 
-            ids_batch = [self._tokenizer.encode(str(t)) for t in texts]
-            max_len = max((len(ids) for ids in ids_batch), default=0)
-            input_ids = np.zeros((len(ids_batch), max_len), dtype=np.int64)
-            mask = np.zeros((len(ids_batch), max_len), dtype=np.int64)
-            for i, ids in enumerate(ids_batch):
-                input_ids[i, : len(ids)] = ids
-                mask[i, : len(ids)] = 1
+    @staticmethod
+    def _encode_sync(
+        weights: dict[str, np.ndarray],
+        config: dict[str, Any],
+        tokenizer: WordPieceTokenizer,
+        texts: list[Any],
+    ) -> list[list[float]]:
+        assert tokenizer is not None
+        assert config is not None
+        assert weights is not None
 
-            hidden = bert_forward(self._weights, self._config, input_ids, mask)
-            pooled = mean_pool_normalize(hidden, mask)
-            return [[float(x) for x in row] for row in pooled]
+        if len(texts) == 0:
+            return []
 
-        return await asyncio.to_thread(_encode_sync)
+        ids_batch = [tokenizer.encode(str(t)) for t in texts]
+        max_len = max((len(ids) for ids in ids_batch), default=0)
+        input_ids = np.zeros((len(ids_batch), max_len), dtype=np.int64)
+        mask = np.zeros((len(ids_batch), max_len), dtype=np.int64)
+        for i, ids in enumerate(ids_batch):
+            input_ids[i, : len(ids)] = ids
+            mask[i, : len(ids)] = 1
+
+        hidden = bert_forward(weights, config, input_ids, mask)
+        pooled = mean_pool_normalize(hidden, mask)
+        return [[float(x) for x in row] for row in pooled]
 
     async def embed(self, text: str) -> list[float]:
         """Alias of :meth:`encode` for the lightweight protocol."""
         return await self.encode(text)
 
+    async def unload(self) -> None:
+        """Release the model. Idempotent; waits for in-flight encoding."""
+        self._ensure_lock()
+        async with self._load_lock:
+            if not self._loaded:
+                return
+            await self._gate.wait_idle()
+            self._loaded = False
+            self._weights = None
+            self._config = None
+            self._tokenizer = None
+            self._residency = {}
+        await asyncio.to_thread(gc.collect)
+
     async def shutdown(self) -> None:
         """Release the model."""
-        self._loaded = False
-        self._weights = None
-        self._tokenizer = None
+        await self.unload()

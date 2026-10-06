@@ -33,9 +33,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.modules.topos.internvideo_next_loader import (
-    DEFAULT_WEIGHTS_DIR,
     PINNED_REVISION,
     WEIGHTS_FILENAME,
+    default_weights_dir,
 )
 from kaine.storage import resolve
 
@@ -51,7 +51,7 @@ def internvideo_next_download_cmd(
     *,
     repo: str = INTERNVIDEO_NEXT_REPO,
     revision: str = PINNED_REVISION,
-    local_dir: Path = DEFAULT_WEIGHTS_DIR,
+    local_dir: Path | None = None,
     filename: str = WEIGHTS_FILENAME,
 ) -> list[str]:
     """The exact ``hf download`` argv: the single safetensors file, pinned to the
@@ -60,10 +60,11 @@ def internvideo_next_download_cmd(
     ``--local-dir`` makes the landing path known and stable (independent of the
     hub-cache snapshot layout) so the loader can point at it directly; ``--revision``
     pins the same commit SHA as the vendored modeling code."""
+    wdir = local_dir if local_dir is not None else default_weights_dir()
     return [
         "hf", "download", repo, filename,
         "--revision", revision,
-        "--local-dir", str(resolve(local_dir)),
+        "--local-dir", str(resolve(wdir)),
     ]
 
 
@@ -81,7 +82,7 @@ def run_internvideo_next_download(
     *,
     consent: bool,
     revision: str = PINNED_REVISION,
-    local_dir: Path = DEFAULT_WEIGHTS_DIR,
+    local_dir: Path | None = None,
     runner: Any = None,
 ) -> InternVideoNextFetchResult:
     """Run the REAL ``hf download`` of the encoder weights, gated on ``consent``.
@@ -94,6 +95,7 @@ def run_internvideo_next_download(
 
     ``runner`` defaults to ``subprocess.run`` (overridable in tests; the production
     path always invokes the real CLI)."""
+    local_dir = local_dir if local_dir is not None else default_weights_dir()
     cmd = internvideo_next_download_cmd(revision=revision, local_dir=local_dir)
     if not consent:
         return InternVideoNextFetchResult(

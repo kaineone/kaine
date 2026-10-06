@@ -88,8 +88,15 @@ def _build_hypnos(bus: AsyncBus, tmp_path: Path, *, enabled: bool):
     return Hypnos(bus, trainer=trainer, voice_alignment_config=config)
 
 
+def _voice_alignment_phase(payload: dict):
+    """Locate the voice_alignment phase result in a sleep summary/payload."""
+    return next(p for p in payload["phases"] if p["phase"] == "voice_alignment")
+
+
 @pytest.mark.asyncio
 async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path):
+    """The consolidation-divergence metric is emitted unconditionally even
+    though the default preference_source="none" skips training."""
     hypnos = _build_hypnos(bus, tmp_path, enabled=True)
     await hypnos.enter_sleep()
 
@@ -102,19 +109,23 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
     assert len(completed) == 1
     entry_id, event = completed[0]
 
+    # The unconditional divergence metric is present in the voice_alignment
+    # phase metadata, not as a top-level summary key.
+    payload = event.payload
+    phase = _voice_alignment_phase(payload)
+    assert "consolidation_divergence" in phase["metadata"]
+    cd = phase["metadata"]["consolidation_divergence"]
+    assert cd["records_scanned"] == 1
+    assert cd["usable_pairs"] == 1
+    assert cd["divergence_rate"] == 1.0
+
+    # Training did not run, so there is no training-outcome row to record.
     sink = FakeSink()
     observer = VoiceAlignmentDivergenceObserver(bus, sink)
     await observer.handle("hypnos.out", entry_id, event)
 
-    assert len(sink.rows) == 1
-    row = sink.rows[0]
-    assert row["dpo_loss"] == pytest.approx(0.31)
-    assert row["adapter_accepted"] is True
-    assert row["outcome"] == "accepted"
-    assert row["capability_score_before"] == pytest.approx(0.5)
-    assert row["samples_used"] == 1
-    assert row["pairs_processed"] == 1
-    assert not any("/home/" in str(v) for v in row.values())
+    assert sink.rows == []
+    assert not any("/home/" in str(v) for v in payload.values())
 
 
 @pytest.mark.asyncio

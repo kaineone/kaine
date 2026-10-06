@@ -36,6 +36,7 @@ from kaine.boot.wiring import (
     _wire_lingua_self_model,
     _wire_oscillators,
     _wire_self_hearing_gate,
+    _wire_thymos_drive_relevance,
 )
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -282,6 +283,7 @@ def build_registry(
     _wire_lingua_self_model(registry)
     _wire_lingua_organ_adapter(registry, kaine_config)
     _wire_eidolon_capabilities(registry)
+    _wire_thymos_drive_relevance(registry)
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
     return registry
@@ -374,3 +376,4 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
     _wire_lingua_self_model(registry)
     _wire_lingua_organ_adapter(registry, kaine_config)
     _wire_eidolon_capabilities(registry)
+    _wire_thymos_drive_relevance(registry)

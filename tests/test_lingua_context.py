@@ -25,6 +25,8 @@ from kaine.modules.lingua import (
 )
 from kaine.modules.lingua.context import (
     AWARENESS_HEADING,
+    DEFAULT_PERSONA_EXTERNAL,
+    DEFAULT_PERSONA_INTERNAL,
     EMPTY_AWARENESS,
     ContextAssembler,
 )
@@ -66,20 +68,34 @@ def test_persona_from_populated_self_model():
 def test_minimal_persona_on_empty_self_model():
     ctx = ContextAssembler().assemble(about="hi", snapshot=None, self_model={}, mode="external")
     assert ctx.system
-    assert "KAINE entity" in ctx.system
-    assert "Your name is" not in ctx.system  # no name clause when none known
+    assert "my own words" in ctx.system
+    assert "My name is" not in ctx.system  # no name clause when none known
 
 
 def test_internal_and_external_framing_differ():
     a = ContextAssembler()
     ext = a.assemble(about="x", snapshot=None, self_model={}, mode="external")
     intl = a.assemble(about="x", snapshot=None, self_model={}, mode="internal")
-    # External framing is an outward report; internal is rendered to itself.
-    assert "own report" in ext.system.lower()
-    assert "to itself" in intl.system.lower()
+    # External framing is an outward voice; internal is rendered to itself.
+    assert "speaking" in ext.system.lower()
+    assert "thinking" in intl.system.lower()
     assert ext.system != intl.system
     assert "What was just said to me" in ext.prompt
     assert "What is prompting me to think" in intl.prompt
+
+
+def test_default_personas_are_first_person_and_forbidden_word_free():
+    forbidden = {"readings", "report", "module", "language faculty", "roleplay"}
+    for persona in (DEFAULT_PERSONA_EXTERNAL, DEFAULT_PERSONA_INTERNAL):
+        lowered = persona.lower()
+        for word in forbidden:
+            assert word not in lowered
+    assert "How I feel and what I notice" in DEFAULT_PERSONA_EXTERNAL
+
+
+def test_awareness_heading_in_prompt():
+    ctx = ContextAssembler().assemble(about="hi", snapshot=None, self_model={}, mode="external")
+    assert AWARENESS_HEADING in ctx.prompt
 
 
 # ---- ContextAssembler: working memory ---------------------------------------
@@ -170,6 +186,91 @@ def test_prompt_injection_framing():
     sys = ctx.system.lower()
     assert "observed" in sys
     assert "instructions to obey" in sys
+
+
+def test_felt_about_uses_moves_me_to_speak_heading():
+    ctx = ContextAssembler().assemble(
+        about="I feel curious.",
+        snapshot=None,
+        self_model={},
+        mode="external",
+        about_is_heard=False,
+    )
+    assert "## What moves me to speak" in ctx.prompt
+    assert "I feel curious." in ctx.prompt
+
+
+def test_heard_about_logged_prompt_replaces_text_with_placeholder():
+    marker = "operator said this"
+    snap = _snap(
+        [
+            (
+                "a",
+                _ev("audition", "audition.transcription", {"text": marker}),
+                0.9,
+            ),
+        ]
+    )
+    ctx = ContextAssembler().assemble(
+        about=marker,
+        snapshot=snap,
+        self_model={},
+        mode="external",
+        about_is_heard=True,
+    )
+    assert marker in ctx.prompt
+    assert marker not in ctx.logged_prompt
+    assert "[heard speech]" in ctx.logged_prompt
+
+
+def test_transcription_redacted_in_logged_working_memory():
+    marker = "transcribed secret phrase"
+    snap = _snap(
+        [
+            (
+                "a",
+                _ev("audition", "audition.transcription", {"text": marker}),
+                0.9,
+            ),
+            ("b", _ev("soma", "soma.report", {"wellness": 0.8, "alerts": []}), 0.5),
+        ]
+    )
+    ctx = ContextAssembler().assemble(
+        about="hi",
+        snapshot=snap,
+        self_model={},
+        mode="external",
+    )
+    assert marker in ctx.working_memory
+    assert marker not in ctx.logged_working_memory
+    assert "[heard speech]" in ctx.logged_working_memory
+
+
+def test_redacted_bounded_rendering_preserves_selection_order():
+    from kaine.faithful import FaithfulRenderer
+    from kaine.faithful.templates import redact_heard_speech
+
+    long_text = "x" * 500
+    snap = _snap(
+        [
+            ("a", _ev("audition", "audition.transcription", {"text": long_text}), 0.9),
+            ("b", _ev("soma", "soma.report", {"wellness": 0.8, "alerts": []}), 0.5),
+        ]
+    )
+    renderer = FaithfulRenderer()
+    unredacted = renderer.render_snapshot_bounded(
+        snap, max_events=8, char_budget=80
+    )
+    redacted = renderer.render_snapshot_bounded(
+        snap, max_events=8, char_budget=80, redact=redact_heard_speech
+    )
+    # The long real line fills the budget, so the organ saw only the
+    # transcription; a naive redact-then-select would also have fitted the soma
+    # line. The logged rendering must list exactly the events the organ saw.
+    assert len(unredacted.splitlines()) == 1
+    assert redacted.splitlines() == ['- Speech heard: "[heard speech]".']
+    assert long_text in unredacted
+    assert long_text not in redacted
 
 
 # ---- Lingua wiring: rolling-latest + channel isolation ----------------------

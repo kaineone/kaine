@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import (
@@ -38,11 +40,20 @@ class FaithfulRenderer:
             return fallback_template(event.source, event.type, dict(event.payload))
         return template(dict(event.payload))
 
-    def render_snapshot(self, snapshot: WorkspaceSnapshot) -> str:
+    def render_snapshot(
+        self,
+        snapshot: WorkspaceSnapshot,
+        *,
+        redact: Callable[[Event], Optional[str]] | None = None,
+    ) -> str:
         events = snapshot.selected_events or []
         if not events:
             return self._empty_snapshot_text
-        lines = [self._line_prefix + self.render_event(ev) for _, ev in events]
+        lines = []
+        for _, ev in events:
+            replacement = redact(ev) if redact is not None else None
+            text = replacement if replacement is not None else self.render_event(ev)
+            lines.append(self._line_prefix + text)
         return "\n".join(lines)
 
     def render_snapshot_bounded(
@@ -51,6 +62,7 @@ class FaithfulRenderer:
         *,
         max_events: int = 8,
         char_budget: int = 2000,
+        redact: Callable[[Event], Optional[str]] | None = None,
     ) -> str:
         """Render at most ``max_events`` selected events, chosen by highest
         salience and capped at ``char_budget`` characters, then ordered stably
@@ -63,6 +75,10 @@ class FaithfulRenderer:
         coalition never renders to nothing); each subsequent event is dropped
         when adding it would exceed the budget. ``max_events <= 0`` renders
         nothing.
+
+        When ``redact`` is provided and returns a string for an event, that
+        string replaces the event's rendered text in the output while keeping
+        the line prefix and the original selection/order.
         """
         events = snapshot.selected_events or []
         if not events:
@@ -74,16 +90,23 @@ class FaithfulRenderer:
             indexed,
             key=lambda t: (-(scores.get(t[1][0], 0.0)), t[0]),
         )
-        survivors: list[tuple[int, str]] = []  # (orig_idx, rendered_line)
+        survivors: list[tuple[int, Event, str]] = []  # (orig_idx, event, real_line)
         total = 0
         for orig_idx, (_entry_id, event) in ranked[: max(0, max_events)]:
-            line = self._line_prefix + self.render_event(event)
-            cost = len(line) + (1 if survivors else 0)  # +1 newline after the first
+            real_line = self._line_prefix + self.render_event(event)
+            cost = len(real_line) + (1 if survivors else 0)  # +1 newline after the first
             if survivors and total + cost > char_budget:
                 break  # over budget; lower-salience remaining are dropped
-            survivors.append((orig_idx, line))
+            survivors.append((orig_idx, event, real_line))
             total += cost
         if not survivors:
             return self._empty_snapshot_text
         survivors.sort(key=lambda t: t[0])  # restore readable (coalition) order
-        return "\n".join(line for _, line in survivors)
+        lines: list[str] = []
+        for orig_idx, event, real_line in survivors:
+            replacement = redact(event) if redact is not None else None
+            if replacement is not None:
+                lines.append(self._line_prefix + replacement)
+            else:
+                lines.append(real_line)
+        return "\n".join(lines)
