@@ -114,6 +114,15 @@ external/internvideo_next/__pycache__/
 # Never let the 182 MB weights slip in even if fetched into the vendored dir by
 # mistake (the real fetch lands them under state/models/, ignored above).
 external/internvideo_next/*.safetensors
+# Dasheng and WavJEPA (auditory encoders): vendored modeling source re-included
+# for provenance (see each UPSTREAM). Weights are fetched at setup time into the
+# models directory and never committed.
+!external/dasheng/
+external/dasheng/__pycache__/
+external/dasheng/*.safetensors
+!external/wavjepa/
+external/wavjepa/__pycache__/
+external/wavjepa/*.safetensors
 
 # HuggingFace and model caches
 .cache/
