@@ -335,14 +335,26 @@ def _cmd_assemble(args: argparse.Namespace) -> int:
     synthetic: dict[str, list[dict[str, Any]]] = {"train": [], "dev": []}
     for split in ("train", "dev"):
         path = synthetic_dir / f"{split}.jsonl"
-        if path.exists():
-            with path.open(encoding="utf-8") as f:
-                synthetic[split] = [json.loads(line) for line in f if line.strip()]
+        if not path.exists():
+            # The synthetic questions are the point of K1-Jev; never assemble
+            # a training set without them.
+            print(f"missing {path}; run generate --split {split} first", file=sys.stderr)
+            return 3
+        with path.open(encoding="utf-8") as f:
+            synthetic[split] = [json.loads(line) for line in f if line.strip()]
 
-    # Gold-norm overlap check
+    # Gold-norm overlap check. It cannot be skipped by a missing file: without
+    # the gold norms the disjointness of train/dev from gold is unknown.
     gold_norms: set[str] = set()
     gold_norms_path = work_root / "gold_norms.json"
-    if gold_norms_path.exists():
+    if not args.no_gold:
+        if not gold_norms_path.exists():
+            print(
+                f"missing {gold_norms_path}; run gold with --work-root first "
+                "(or pass --no-gold for a build with no gold set)",
+                file=sys.stderr,
+            )
+            return 3
         gold_norms.update(_load_norms(gold_norms_path))
 
     for item in synthetic["train"] + synthetic["dev"]:
@@ -520,6 +532,7 @@ def main(argv: list[str] | None = None) -> int:
 
     asm_p = sub.add_parser("assemble", parents=[common])
     asm_p.add_argument("--seed", type=int, default=20261005)
+    asm_p.add_argument("--no-gold", action="store_true")
     asm_p.add_argument("--banking-train", type=int, default=10_000)
     asm_p.add_argument("--nli-train", type=int, default=15_000)
     asm_p.add_argument("--banking-dev", type=int, default=1_500)

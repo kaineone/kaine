@@ -685,8 +685,9 @@ def test_assemble_tiny_fixtures(tmp_path, monkeypatch):
         for line in (work / "assembled" / "dev.jsonl").read_text().splitlines():
             rec = json.loads(line)
             if rec["question_id"] == "q_assemble_score":
-                keys = re.findall(r"\b([0-3])\b", rec["prompt"])
-                assert keys == ["0", "1", "2", "3"] or "0" in rec["prompt"]
+                # The score options render as "A. 0: ...", "B. 1: ..." in order.
+                options = re.findall(r"^[A-D]\. ([0-3])\b", rec["prompt"], re.M)
+                assert options == ["0", "1", "2", "3"]
     finally:
         pass  # monkeypatch restores get_question
 
@@ -769,3 +770,24 @@ def test_refuse_protected_fails_closed_on_a_broken_config(tmp_path, monkeypatch)
     with pytest.raises(build_data.ProtectedPathError):
         build_data._refuse_protected(tmp_path / "anywhere")
 
+
+
+def test_assemble_refuses_without_synthetic_splits(tmp_path):
+    work = tmp_path / "work"
+    (work / "synthetic").mkdir(parents=True)
+    (work / "synthetic" / "train.jsonl").write_text("", encoding="utf-8")
+    # dev.jsonl is missing: the synthetic questions must never be skipped.
+    rc = build_data.main(["assemble", "--work-root", str(work)])
+    assert rc == 3
+    assert not (work / "assembled").exists()
+
+
+def test_assemble_refuses_without_gold_norms(tmp_path):
+    work = tmp_path / "work"
+    (work / "synthetic").mkdir(parents=True)
+    for split in ("train", "dev"):
+        (work / "synthetic" / f"{split}.jsonl").write_text("", encoding="utf-8")
+    # No gold_norms.json: train/dev disjointness from gold would be unknown.
+    rc = build_data.main(["assemble", "--work-root", str(work)])
+    assert rc == 3
+    assert not (work / "assembled").exists()

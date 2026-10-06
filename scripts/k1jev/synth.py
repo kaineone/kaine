@@ -414,8 +414,9 @@ def run_jobs(
     lock = threading.Lock()
 
     def _incr_accepted(qid: str, style: str) -> None:
-        inner = stats["per_question_accepted"].setdefault(qid, {})
-        inner[style] = inner.get(style, 0) + 1
+        with lock:  # worker threads share these counters
+            inner = stats["per_question_accepted"].setdefault(qid, {})
+            inner[style] = inner.get(style, 0) + 1
 
     def _process(job_index: int, job: Job) -> tuple[int, list[dict[str, Any]], dict[str, int]]:
         question = schema.get_question(job.question_id)

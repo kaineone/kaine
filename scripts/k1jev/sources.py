@@ -60,7 +60,7 @@ class FetchError(Exception):
     """A download failed verification."""
 
     def __init__(self, name: str, expected: str, actual: str) -> None:
-        super().__init__(f"{name}: hash mismatch (expected {expected}, got {actual})")
+        super().__init__(f"{name}: verification failed (expected {expected}, got {actual})")
         self.name = name
         self.expected = expected
         self.actual = actual
@@ -122,8 +122,9 @@ def fetch(
                 part.unlink(missing_ok=True)
                 raise FetchError(name, expected_hash, actual)
             if expected_size is not None and part.stat().st_size != expected_size:
+                size = part.stat().st_size
                 part.unlink(missing_ok=True)
-                raise FetchError(name, expected_hash, actual)
+                raise FetchError(name, f"{expected_size} bytes", f"{size} bytes")
 
             os.replace(part, dest)
     finally:
