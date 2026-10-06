@@ -306,3 +306,46 @@ def test_checkpoint_records_the_torch_rng_state(tmp_path):
     state = torch.load(cp_dir / "trainer_state.pt", weights_only=False)
     assert state["step"] == 7
     assert torch.equal(state["rng_state"], expected)
+
+
+def test_check_prompt_lengths_accepts_up_to_max_len():
+    assert train_sft.check_prompt_lengths("train", [1, 5, 8], 8) is None
+
+
+def test_check_prompt_lengths_refuses_over_long():
+    with pytest.raises(ValueError, match="train") as excinfo:
+        train_sft.check_prompt_lengths("train", [3, 9, 4, 12], 8)
+    msg = str(excinfo.value)
+    assert "0 empty and 2 over-long" in msg
+    assert "max_len=8, longest=12" in msg
+    assert "[1, 3]" in msg
+
+
+def test_check_prompt_lengths_refuses_empty():
+    with pytest.raises(ValueError, match="empty") as excinfo:
+        train_sft.check_prompt_lengths("dev", [0, 4], 8)
+    msg = str(excinfo.value)
+    assert msg.startswith("dev: found 1 empty and 0 over-long")
+    assert "[0]" in msg
+
+
+def test_load_examples_refuses_empty_prompt(tmp_path):
+    line = (
+        '{"prompt": "  ", "answer": "A", "n_options": 2, "source": "s", "question_id": "q"}\n'
+    )
+    path = tmp_path / "empty_prompt.jsonl"
+    path.write_text(line)
+    with pytest.raises(ValueError, match="prompt"):
+        train_sft.load_examples(path)
+
+    path.write_text(
+        '{"prompt": 123, "answer": "A", "n_options": 2, "source": "s", "question_id": "q"}\n'
+    )
+    with pytest.raises(ValueError, match="prompt"):
+        train_sft.load_examples(path)
+
+
+def test_trainer_never_truncates():
+    src = Path(train_sft.__file__).read_text()
+    assert "truncation=True" not in src
+    assert "truncation_side" not in src

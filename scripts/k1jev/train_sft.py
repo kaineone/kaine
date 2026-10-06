@@ -163,6 +163,9 @@ def load_examples(path: Path) -> list[dict]:
             missing = required - record.keys()
             if missing:
                 raise ValueError(f"line {line_num}: missing keys {sorted(missing)}")
+            prompt = record["prompt"]
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise ValueError(f"line {line_num}: prompt must be a non-empty string")
             answer = record["answer"]
             n_options = record["n_options"]
             if not isinstance(answer, str) or len(answer) != 1 or answer not in LETTERS:
@@ -175,6 +178,19 @@ def load_examples(path: Path) -> list[dict]:
                 )
             examples.append(record)
     return examples
+
+
+def check_prompt_lengths(split: str, token_lengths: list[int], max_len: int) -> None:
+    """Refuse a split with an empty or over-long prompt; prompts are never truncated."""
+    empty = [i for i, length in enumerate(token_lengths) if length == 0]
+    over_long = [i for i, length in enumerate(token_lengths) if length > max_len]
+    if empty or over_long:
+        longest = max(token_lengths) if token_lengths else 0
+        raise ValueError(
+            f"{split}: found {len(empty)} empty and {len(over_long)} over-long prompts "
+            f"(max_len={max_len}, longest={longest}); "
+            f"offending indices (first 10): {sorted(empty + over_long)[:10]}"
+        )
 
 
 def bucket_batches(lengths: list[int], batch: int, seed: int) -> list[list[int]]:
@@ -386,7 +402,16 @@ def train(
     )
 
     text_tokenizer = getattr(tokenizer, "tokenizer", None) or tokenizer
-    text_tokenizer.truncation_side = "left"
+    train_lengths = [
+        len(text_tokenizer.encode(ex["prompt"], add_special_tokens=False))
+        for ex in train_ex
+    ]
+    dev_lengths = [
+        len(text_tokenizer.encode(ex["prompt"], add_special_tokens=False))
+        for ex in dev_ex
+    ]
+    check_prompt_lengths("train", train_lengths, max_len)
+    check_prompt_lengths("dev", dev_lengths, max_len)
     pad_token_id = text_tokenizer.pad_token_id
     if pad_token_id is None:
         pad_token_id = text_tokenizer.eos_token_id
@@ -421,10 +446,7 @@ def train(
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
-    lengths = [
-        len(text_tokenizer.encode(ex["prompt"], add_special_tokens=False))
-        for ex in train_ex
-    ]
+    lengths = train_lengths
 
     data_order_seed = seed
     start_step = 0
@@ -501,10 +523,8 @@ def train(
             ids = text_tokenizer.encode(
                 ex["prompt"],
                 add_special_tokens=False,
-                max_length=max_len,
-                truncation=True,
             )
-            encoded.append(ids or [pad_token_id])
+            encoded.append(ids)
             n_options_list.append(ex["n_options"])
             answer_indices_list.append(letter_index(ex["answer"]))
         input_ids_list, attn_mask_list = left_pad_batch(encoded, pad_token_id)
@@ -578,11 +598,7 @@ def train(
             ids = text_tokenizer.encode(
                 ex["prompt"],
                 add_special_tokens=False,
-                max_length=max_len,
-                truncation=True,
             )
-            if not ids:
-                ids = [pad_token_id]
             input_ids = torch.tensor([ids], dtype=torch.long, device=device)
             attention_mask = torch.tensor([[1] * len(ids)], dtype=torch.long, device=device)
 
