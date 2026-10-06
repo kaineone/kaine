@@ -394,3 +394,24 @@ async def test_events_in_one_poll_are_handled_in_time_order(bus, tmp_path):
     assert rec["record_id"] == "r1"
     assert rec["replied"] is True
     assert rec["preempted"] is False
+
+
+async def test_existing_loose_file_is_tightened(bus, tmp_path):
+    """A pre-existing outcome file with loose permissions becomes owner-only on
+    the next write."""
+    import os
+    import stat
+
+    path = tmp_path / "outcomes.jsonl"
+    path.write_text("")
+    os.chmod(path, 0o644)
+    observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=0.01)
+    await observer.start()
+    try:
+        t0 = datetime.now(timezone.utc)
+        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, "r2", t0 + timedelta(seconds=0.5))
+        await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
+    finally:
+        await observer.stop()
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600

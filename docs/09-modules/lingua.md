@@ -148,7 +148,7 @@ Lingua never truncates the log. Hypnos reads it during voice alignment but does 
 
 ### Utterance outcomes
 
-The cycle runs an observer (`kaine/cycle/utterance_outcome.py`) whenever Lingua is enabled. It writes one record per external utterance to `state/lingua/utterance_outcomes.jsonl`, keyed by the utterance's `record_id`. Each record holds exactly these fields, and never any text:
+The cycle runs an observer (`kaine/cycle/utterance_outcome.py`) whenever Lingua is enabled. It appends one record per external utterance to `state/lingua/utterance_outcomes.jsonl`, carrying the utterance's `record_id` so it can be joined with the intent log. Each record holds exactly these fields, and never any text:
 
 - `replied`: whether operator speech (an Audition transcription from an operator source, the same rule Chronos uses for an interaction) arrived first;
 - `reply_latency_s`: the time from the utterance to that reply;

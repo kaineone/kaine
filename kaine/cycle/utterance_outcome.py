@@ -242,12 +242,20 @@ class UtteranceOutcomeObserver:
         line = json.dumps(record, sort_keys=True) + "\n"
         try:
             self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            try:
+                os.chmod(self._path.parent, 0o700)
+            except OSError:
+                # Best effort: some filesystems refuse chmod; the file itself is
+                # still made owner-only below.
+                log.debug("could not tighten %s to 0700", self._path.parent)
             fd = os.open(
                 self._path,
                 os.O_APPEND | os.O_CREAT | os.O_WRONLY,
                 0o600,
             )
             try:
+                # An existing file keeps its old mode on open; tighten it.
+                os.fchmod(fd, 0o600)
                 os.write(fd, line.encode("utf-8"))
                 os.fsync(fd)
             finally:
