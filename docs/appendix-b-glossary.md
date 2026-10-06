@@ -8,7 +8,7 @@ The glossary lists the terms used throughout KAINE's documentation and codebase.
 
 ### A/B divergence
 
-A secondary evaluation instrument (`kaine/evaluation/ab_divergence.py`) that pairs every Lingua external utterance with a second, unconditioned "bare LLM" completion from the same backing model and logs the cosine similarity between them. It ships on by default as an evaluation-sidecar observer (`[evaluation].ab_divergence = true`) and is exercised offline with `instrument_runners ab_divergence` to validate its dynamic range. A/B divergence measures whether Lingua's conditioning changes surface output — it is not the project's primary falsifiable test. That role belongs to the [workspace-mediation ablation](#workspace-mediation-ablation). See also: [workspace-mediation ablation](#workspace-mediation-ablation), [Lingua](#lingua).
+A secondary evaluation instrument (`kaine/evaluation/ab_divergence.py`) that pairs felt- and event-triggered Lingua external utterances with a second, unconditioned "bare LLM" completion from the same backing model and logs the cosine similarity between them. Replies to heard speech are skipped. It ships on by default as an evaluation-sidecar observer (`[evaluation].ab_divergence = true`) and is exercised offline with `instrument_runners ab_divergence` to validate its dynamic range. A/B divergence measures whether Lingua's conditioning changes surface output — it is not the project's primary falsifiable test. That role belongs to the [workspace-mediation ablation](#workspace-mediation-ablation). See also: [workspace-mediation ablation](#workspace-mediation-ablation), [Lingua](#lingua).
 
 ### Abliteration
 
