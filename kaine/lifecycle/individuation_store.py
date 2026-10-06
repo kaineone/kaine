@@ -500,6 +500,8 @@ INCONCLUSIVE_REASONS: frozenset[str] = frozenset(
         "no_reference",
         "ledger_missing",
         "battery_changed",
+        "conditions_changed",
+        "conditions_unreadable",
         "alpha_unresolvable",
         "conditioning_changed_mid_run",
         "embedding_failed",

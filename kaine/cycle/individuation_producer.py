@@ -16,7 +16,7 @@ import math
 import secrets
 import time
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +54,20 @@ from kaine.lifecycle.individuation_store import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _condition_changes(stored: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
+    """Return sorted names of non-embedder probe-condition keys that differ.
+
+    A key present on only one side counts as a difference. Embedder keys are
+    excluded because embedder differences are handled by re-embedding.
+    """
+    stored_keys = {k for k in stored if not k.startswith("embedder")}
+    current_keys = {k for k in current if not k.startswith("embedder")}
+    return sorted(
+        k for k in (stored_keys | current_keys)
+        if stored.get(k) != current.get(k)
+    )
 
 
 @dataclass(frozen=True)
@@ -313,6 +327,50 @@ class IndividuationCore:
                 ref=ref,
             )
             return LookOutcome("inconclusive", "battery_changed", report)
+
+        # 4b. Probe conditions
+        try:
+            current_conditions = self._conditions()
+        except Exception:
+            report = await self._inconclusive(
+                "conditions_unreadable",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_unreadable", report)
+
+        stored_conditions = getattr(ref, "conditions", None)
+        if stored_conditions is None:
+            log.warning(
+                "Reference %s has no stored probe conditions; refusing comparison",
+                ref.reference_id,
+            )
+            report = await self._inconclusive(
+                "conditions_changed",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_changed", report)
+
+        changes = _condition_changes(stored_conditions, current_conditions)
+        if changes:
+            log.warning(
+                "Reference %s probe conditions changed: %s",
+                ref.reference_id,
+                changes,
+            )
+            report = await self._inconclusive(
+                "conditions_changed",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_changed", report)
 
         # 5. Unchanged being
         try:
