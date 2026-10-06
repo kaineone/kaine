@@ -32,7 +32,7 @@ def _service_checks() -> list[str]:
     ]
     for name, url in checks:
         try:
-            r = httpx.get(url, timeout=8.0)
+            r = httpx.get(url, timeout=8.0, trust_env=False)
             out.append(f"  [{r.status_code}] {name}")
         except Exception as exc:
             out.append(f"  [ERR] {name}: {type(exc).__name__}: {exc}")
