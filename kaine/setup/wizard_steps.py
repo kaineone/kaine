@@ -554,6 +554,44 @@ def cl1_substrate_step() -> Step:
     )
 
 
+def setup_steps(include_storage: bool) -> list[Step]:
+    """Return the ordered wizard steps that run after the acknowledgement."""
+    from kaine.setup.hardware_steps import (
+        consent_step,
+        device_step,
+        inventory_step,
+        shared_services_step,
+    )
+    from kaine.setup.storage_step import relocation_step, storage_step
+    from kaine.setup.wizard import propose_device_assignments
+
+    steps: list[Step] = [
+        inventory_step,
+        consent_step,
+        device_step(propose_device_assignments),
+        shared_services_step(),
+    ]
+    if include_storage:
+        steps.extend([storage_step, relocation_step])
+    steps.extend(
+        [
+            tier_step(),
+            accel_mismatch_step(),
+            module_preset_step(),
+            custom_modules_step(),
+            lingua_model_step(),
+            vox_voice_step(),
+            audition_stt_step(),
+            trainer_provisioning_step(),
+            research_opt_in_step(),
+            research_recipient_step(),
+            encryption_step(),
+            cl1_substrate_step(),
+        ]
+    )
+    return steps
+
+
 # -----------------------------------------------------------------------------
 # Research metrics
 # -----------------------------------------------------------------------------

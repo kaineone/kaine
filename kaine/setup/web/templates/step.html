@@ -1,0 +1,72 @@
+{% extends "_setup_base.html" %}
+{% block title %}{{ step.title }} — KAINE Setup{% endblock %}
+{% block content %}
+<article class="setup-step" data-step-id="{{ step.id }}">
+  <h1>{{ step.title }}</h1>
+  {% for line in explanation %}
+    <p>{{ line }}</p>
+  {% endfor %}
+  {% if is_helper %}
+    {% if fields %}
+    <div class="setup-note">
+      Please confirm the choices below.
+    </div>
+    {% else %}
+    <div class="setup-note">
+      This step is handled interactively. Press Continue to accept the safe
+      defaults.
+    </div>
+    {% endif %}
+  {% endif %}
+  <form method="post" action="{{ request.url_for('step_post') }}" data-step-id="{{ step.id }}">
+    {% if fields %}
+    <fieldset class="setup-fieldset">
+      {% for f in fields %}
+      <div class="setup-field setup-field--{{ f.kind }}">
+        {% if f.kind == "bool" %}
+          <input type="checkbox" id="field-{{ f.name }}" name="{{ f.name }}" value="true"
+            {% if values.get(f.name, f.default) %}checked{% endif %}>
+          <label for="field-{{ f.name }}">{{ f.prompt }}</label>
+        {% elif f.kind == "choice" %}
+          <fieldset>
+            <legend>{{ f.prompt }}</legend>
+            {% for choice in f.choices %}
+            <div class="choice">
+              <input type="radio" id="field-{{ f.name }}-{{ choice }}" name="{{ f.name }}" value="{{ choice }}"
+                {% if choice == values.get(f.name, f.default) %}checked{% endif %}>
+              <label for="field-{{ f.name }}-{{ choice }}">{{ choice }}</label>
+            </div>
+            {% endfor %}
+          </fieldset>
+        {% elif f.kind == "multichoice" %}
+          <fieldset>
+            <legend>{{ f.prompt }}</legend>
+            {% for choice in f.choices %}
+            <div class="choice">
+              <input type="checkbox" id="field-{{ f.name }}-{{ choice }}" name="{{ f.name }}" value="{{ choice }}"
+                {% if choice in values.get(f.name, f.default) %}checked{% endif %}>
+              <label for="field-{{ f.name }}-{{ choice }}">{{ choice }}</label>
+            </div>
+            {% endfor %}
+          </fieldset>
+        {% else %}
+          <label for="field-{{ f.name }}">{{ f.prompt }}</label>
+          <input type="{{ 'number' if f.kind == 'int' else 'text' }}"
+                 id="field-{{ f.name }}" name="{{ f.name }}"
+                 value="{{ values.get(f.name, f.default) }}">
+        {% endif %}
+        {% if errors.get(f.name) %}
+        <p class="field-error" role="alert">{{ errors[f.name] }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </fieldset>
+    {% endif %}
+    <div class="setup-actions">
+      <button type="submit" class="btn btn--primary">
+        {% if fields %}Next{% else %}Continue{% endif %}
+      </button>
+    </div>
+  </form>
+</article>
+{% endblock %}
