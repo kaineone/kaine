@@ -28,6 +28,11 @@
             Start
           </button>
         </form>
+        {% if job.status and job.status.status == 'running' %}
+        <form method="post" action="{{ request.url_for('job_cancel', job_id=job.job_id) }}" class="cancel-form">
+          <button type="submit" class="btn btn-danger">Cancel</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
   {% endfor %}

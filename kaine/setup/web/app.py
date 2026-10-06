@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import logging
 import os
 import socket
 import time
@@ -307,6 +308,10 @@ async def _lifespan(app: FastAPI):
         await watcher
     except asyncio.CancelledError:
         pass
+    try:
+        await app.state.runner.shutdown()
+    except Exception:
+        logging.exception("error during runner shutdown")
 
 
 def _helper_questions(step_id: str) -> tuple[dict[str, Any], ...]:
@@ -748,6 +753,14 @@ def create_setup_app(
                 headers={"Cache-Control": "no-store"},
             )
 
+        running, reason = guard.cycle_running_with_reason(state.state_root)
+        if running:
+            return PlainTextResponse(
+                f"an entity is running; jobs are refused ({reason})",
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
+
         specs = {
             s.name: s
             for s in job_specs.build_job_specs(
@@ -797,6 +810,25 @@ def create_setup_app(
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.post("/jobs/{job_id}/cancel", name="job_cancel")
+    async def job_cancel(request: Request, job_id: str):
+        runner = request.app.state.runner
+        if job_id not in runner:
+            raise HTTPException(status_code=404)
+
+        sess = request.state.session
+        if job_id not in sess.setdefault("job_ids", []):
+            raise HTTPException(status_code=404)
+
+        if not runner.cancel(job_id):
+            return PlainTextResponse(
+                "job is not running",
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        return {"status": "cancelled"}
+
     @app.post("/finish", response_class=HTMLResponse, name="finish")
     async def finish(request: Request):
         runner = request.app.state.runner
@@ -839,6 +871,16 @@ def create_setup_app(
 
     @app.post("/abort", response_class=HTMLResponse, name="abort")
     async def abort_(request: Request):
+        runner = request.app.state.runner
+        sess = request.state.session
+        for job_id in sess.setdefault("job_ids", []):
+            if runner.status(job_id)["status"] == "running":
+                return PlainTextResponse(
+                    "a job is still running; wait for it or cancel it",
+                    status_code=409,
+                    headers={"Cache-Control": "no-store"},
+                )
+
         request.app.state.finish_shutdown = True
         return templates.TemplateResponse(
             request,

@@ -11,16 +11,23 @@ bounded in-memory deque for the session only.
 from __future__ import annotations
 
 import asyncio
+import codecs
 import os
+import signal
 import subprocess
+import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Protocol
 
 
 class ActivityHold(Protocol):
     activity_hold: int
+
+
+READY_TIMEOUT_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,9 @@ class JobSpec:
     detach: bool = False
     ready_probe: Callable[[], bool] | None = None
     details: str = ""
+    timeout_s: float | None = 3600.0
+    exclusive: bool = False
+    log_path: Path | None = None
 
 
 @dataclass
@@ -50,6 +60,9 @@ class _Job:
     _tasks: list[asyncio.Task] = field(default_factory=list)
     _reader_task: asyncio.Task | None = None
     _stop_collecting: bool = False
+    _timed_out: bool = False
+    _cancelled: bool = False
+    _shutdown_killed: bool = False
 
     def add_line(self, line: str) -> None:
         # Progress redraws: keep the last non-empty segment after any \r.
@@ -68,6 +81,38 @@ class _Job:
         self.lines.append(line)
         self.total += 1
         self._new_line.set()
+
+
+async def _killpg(pgid: int, sig: int) -> None:
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        pass
+
+
+async def _terminate_then_kill_async_proc(proc: asyncio.subprocess.Process) -> None:
+    if proc.pid is None:
+        return
+    await _killpg(proc.pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if proc.returncode is not None:
+            return
+        await asyncio.sleep(0.1)
+    await _killpg(proc.pid, signal.SIGKILL)
+
+
+async def _terminate_then_kill_popen(popen: subprocess.Popen) -> None:
+    if popen.pid is None:
+        return
+    await _killpg(popen.pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        ret = popen.poll()
+        if ret is not None:
+            return
+        await asyncio.sleep(0.1)
+    await _killpg(popen.pid, signal.SIGKILL)
 
 
 class JobRunner:
@@ -102,6 +147,23 @@ class JobRunner:
         return {"status": job.status, "exit_code": job.exit_code}
 
     async def start(self, name: str, spec: JobSpec) -> str:
+        running_nondetached = [
+            j
+            for j in self._jobs.values()
+            if j.status == "running" and not j.spec.detach
+        ]
+        if spec.exclusive and running_nondetached:
+            raise RuntimeError(
+                f"job {name} is exclusive; another non-detached job is already running"
+            )
+        running_exclusive = [
+            j for j in self._jobs.values() if j.status == "running" and j.spec.exclusive
+        ]
+        if running_exclusive and not spec.detach:
+            raise RuntimeError(
+                f"an exclusive job is running; job {name} cannot start"
+            )
+
         existing_id = self._name_to_job_id.get(name)
         if existing_id is not None and self._jobs[existing_id].status == "running":
             raise RuntimeError(f"job {name} is already running")
@@ -122,7 +184,6 @@ class JobRunner:
                     self._dec_hold(job)
                     return job_id
 
-                # Honest readiness: do not start if the probe is already passing.
                 try:
                     already_up = await asyncio.to_thread(spec.ready_probe)
                 except Exception:
@@ -137,28 +198,56 @@ class JobRunner:
                     self._dec_hold(job)
                     return job_id
 
-                # Detached services must survive the setup process exiting.
-                # asyncio's subprocess transport closes its pipes when the event
-                # loop shuts down, killing a still-running child, so use plain
-                # subprocess.Popen and keep the object alive on the job record.
-                popen = await asyncio.to_thread(
-                    subprocess.Popen,
-                    list(spec.argv),
-                    cwd=self.repo_root,
-                    env=os.environ.copy(),
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                    close_fds=True,
-                )
-                job.popen = popen
+                if spec.log_path is not None:
+                    log_dir = spec.log_path.parent
+                    await asyncio.to_thread(
+                        log_dir.mkdir, parents=True, exist_ok=True, mode=0o700
+                    )
+                    fd = await asyncio.to_thread(
+                        os.open,
+                        spec.log_path,
+                        os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                        0o600,
+                    )
+                    try:
+                        popen = await asyncio.to_thread(
+                            subprocess.Popen,
+                            list(spec.argv),
+                            cwd=self.repo_root,
+                            env=os.environ.copy(),
+                            stdin=subprocess.DEVNULL,
+                            stdout=fd,
+                            stderr=subprocess.STDOUT,
+                            start_new_session=True,
+                            close_fds=True,
+                        )
+                    finally:
+                        await asyncio.to_thread(os.close, fd)
+                    job.popen = popen
+                    job.add_line(f"output is appended to {spec.log_path}")
+                else:
+                    popen = await asyncio.to_thread(
+                        subprocess.Popen,
+                        list(spec.argv),
+                        cwd=self.repo_root,
+                        env=os.environ.copy(),
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                        close_fds=True,
+                    )
+                    job.popen = popen
+                    job.add_line(
+                        "output goes to the service's own log; this page only checks that it is listening"
+                    )
             else:
                 kwargs: dict[str, Any] = {
                     "cwd": self.repo_root,
                     "env": os.environ.copy(),
                     "stdout": asyncio.subprocess.PIPE,
                     "stderr": asyncio.subprocess.STDOUT,
+                    "start_new_session": True,
                 }
                 proc = await asyncio.create_subprocess_exec(*spec.argv, **kwargs)
                 job.proc = proc
@@ -171,9 +260,6 @@ class JobRunner:
             return job_id
 
         if spec.detach:
-            job.add_line(
-                "output goes to the service's own log; this page only checks that it is listening"
-            )
             prober = asyncio.create_task(self._probe_ready(job))
             job._tasks.append(prober)
         else:
@@ -182,43 +268,100 @@ class JobRunner:
             job._tasks.append(reader)
             waiter = asyncio.create_task(self._wait(job))
             job._tasks.append(waiter)
+            if spec.timeout_s is not None and spec.timeout_s > 0:
+                watcher = asyncio.create_task(self._timeout_watcher(job))
+                job._tasks.append(watcher)
 
         return job_id
 
     async def _reader(self, job: _Job) -> None:
         if job.proc is None or job.proc.stdout is None:
             return
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        buffer = ""
+        overflow = False
+        consecutive_errors = 0
+        last_redraw_time = -1.0
         while True:
             try:
-                raw = await job.proc.stdout.readline()
-            except Exception:
-                break
+                raw = await job.proc.stdout.read(65536)
+                consecutive_errors = 0
+            except Exception as exc:
+                consecutive_errors += 1
+                job.add_line(f"output could not be read: {type(exc).__name__}")
+                if consecutive_errors >= 3:
+                    break
+                continue
             if not raw:
                 break
-            job.add_line(raw.decode("utf-8", errors="replace"))
+            buffer += decoder.decode(raw)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                if overflow:
+                    overflow = False
+                    continue
+                job.add_line(line)
+            if "\r" in buffer:
+                # Progress redraws: the text between the last two carriage
+                # returns is the newest complete redraw, whether the program
+                # writes "bar\r" or "\rbar". Show it at most every 0.5 s and
+                # keep only the redraw still being written.
+                head, _, tail = buffer.rpartition("\r")
+                latest = head.rsplit("\r", 1)[-1]
+                now = time.monotonic()
+                if latest and now - last_redraw_time >= 0.5:
+                    job.add_line(latest)
+                    last_redraw_time = now
+                buffer = tail
+            if len(buffer) > 4000:
+                if not overflow:
+                    job.add_line(buffer[:4000])
+                    overflow = True
+                buffer = ""
+        buffer += decoder.decode(b"", final=True)
+        if buffer and not overflow:
+            job.add_line(buffer)
+        job._stop_collecting = True
 
     async def _wait(self, job: _Job) -> None:
         if job.proc is None:
             return
         exit_code = await job.proc.wait()
-        # Drain any trailing output before declaring the job done.
         if job._reader_task is not None and not job._reader_task.done():
             try:
                 await job._reader_task
             except Exception:
                 pass
         job.exit_code = exit_code
-        job.status = "succeeded" if exit_code == 0 else "failed"
+        if job._cancelled:
+            job.status = "cancelled"
+        elif job._timed_out:
+            job.status = "failed"
+            job.add_line(f"timed out after {job.spec.timeout_s} s")
+        elif job._shutdown_killed:
+            job.status = "failed"
+            job.add_line("stopped by shutdown")
+        else:
+            job.status = "succeeded" if exit_code == 0 else "failed"
         job._done.set()
         job._new_line.set()
         self._dec_hold(job)
+
+    async def _timeout_watcher(self, job: _Job) -> None:
+        if job.spec.timeout_s is None or job.spec.timeout_s <= 0:
+            return
+        await asyncio.sleep(job.spec.timeout_s)
+        if job.proc is None or job.proc.returncode is not None:
+            return
+        job._timed_out = True
+        await _terminate_then_kill_async_proc(job.proc)
 
     async def _probe_ready(self, job: _Job) -> None:
         probe = job.spec.ready_probe
         if probe is None or job.popen is None:
             return
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + 30.0
+        deadline = loop.time() + READY_TIMEOUT_S
         while loop.time() < deadline:
             exited = job.popen.poll()
             if exited is not None:
@@ -241,11 +384,32 @@ class JobRunner:
                 return
             await asyncio.sleep(0.5)
 
+        # Stop it before reporting, so a finished job never leaves a process.
+        await _terminate_then_kill_popen(job.popen)
+        log_ref = f"see {job.spec.log_path}" if job.spec.log_path else "no log configured"
+        job.add_line(
+            f"not listening within {READY_TIMEOUT_S:.0f} s; stopped it ({log_ref})"
+        )
         job.status = "failed"
-        job.add_line("ready probe timed out after 30 s")
         job._done.set()
         job._new_line.set()
         self._dec_hold(job)
+
+    def cancel(self, job_id: str) -> bool:
+        job = self._jobs.get(job_id)
+        if job is None or job.status != "running" or job.spec.detach:
+            return False
+        job._cancelled = True
+        asyncio.create_task(_terminate_then_kill_async_proc(job.proc))
+        return True
+
+    async def shutdown(self) -> None:
+        for job in list(self._jobs.values()):
+            if job.status != "running" or job.spec.detach:
+                continue
+            job._shutdown_killed = True
+            if job.proc is not None:
+                await _terminate_then_kill_async_proc(job.proc)
 
     async def events(self, job_id: str) -> AsyncIterator[str | dict[str, Any]]:
         job = self._jobs[job_id]

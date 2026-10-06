@@ -551,7 +551,7 @@ def test_organ_cli_download_yes(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         organ_mod,
         "run_organ_download",
-        lambda _plan, consent: runs.append(consent) or good,
+        lambda _plan, consent, **kwargs: runs.append(consent) or good,
     )
     assert organ_mod.main(["download", "--yes"]) == 0
     assert runs == [True]
@@ -562,7 +562,7 @@ def test_organ_cli_download_yes(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         organ_mod,
         "run_organ_download",
-        lambda _plan, consent: runs.append(consent) or bad,
+        lambda _plan, consent, **kwargs: runs.append(consent) or bad,
     )
     assert organ_mod.main(["download", "--yes"]) == 1
     assert not written
@@ -571,10 +571,12 @@ def test_organ_cli_download_yes(tmp_path, monkeypatch, capsys):
     assert organ_mod.main(["download", "--yes-not"]) == 2
 
     # A failed provenance write is reported, not silent; the download stands.
-    monkeypatch.setattr(organ_mod, "run_organ_download", lambda _plan, consent: good)
+    monkeypatch.setattr(
+        organ_mod, "run_organ_download", lambda _plan, consent, **kwargs: good
+    )
     monkeypatch.setattr(organ_mod, "write_revision_state", lambda results: None)
     assert organ_mod.main(["download", "--yes"]) == 0
-    assert "could not be recorded" in capsys.readouterr().err
+    assert "could not be written" in capsys.readouterr().err
 
     unavailable_backend = organ_mod.OrganBackend(
         backend="cpu", available=False, path=None, summary="cpu (unavailable)"
@@ -931,3 +933,647 @@ def test_job_is_done_only_after_all_its_output_is_read(tmp_path):
     total, last = asyncio.run(run())
     assert total == 3000
     assert last == "2999"
+
+
+def test_entity_guard_blocks_job_start(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    harmless = JobSpec(
+        name="harmless",
+        title="Harmless job",
+        argv=(sys.executable, "-c", "print('ok')"),
+        details="harmless test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [harmless],
+    )
+
+    with _saved_client(app) as client:
+        # Patch the guard AFTER /save has created the session; /save itself must
+        # still succeed.
+        monkeypatch.setattr(
+            "kaine.setup.web.app.guard.cycle_running_with_reason",
+            lambda _root: (True, "test-reason"),
+        )
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r = client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+        assert r.status_code == 409
+        assert "an entity is running" in r.text
+        assert app.state.runner.job_id_for_name("harmless") is None
+
+    monkeypatch.setattr(
+        "kaine.setup.web.app.guard.cycle_running_with_reason",
+        lambda _root: (False, None),
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r = client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+        assert r.status_code == 303
+
+
+def test_long_line_is_split_and_drained(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    long_line = JobSpec(
+        name="long_line",
+        title="Long line",
+        argv=(sys.executable, "-c", "import sys; sys.stdout.write('x' * 200000)"),
+        details="long line test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [long_line],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        start = client.post("/jobs/long_line/start", headers=h, follow_redirects=False)
+        assert start.status_code == 303
+
+        st = _wait_for_job(app.state.runner, "long_line", timeout=10.0)
+        assert st["status"] == "succeeded"
+
+        job_id = app.state.runner.job_id_for_name("long_line")
+        assert job_id is not None
+        job = app.state.runner._jobs[job_id]
+        assert all(len(line) <= 4000 for line in job.lines)
+
+
+def test_redraws_are_rate_limited(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    script = (
+        "import sys, time\n"
+        "start = time.monotonic()\n"
+        "while time.monotonic() - start < 1.5:\n"
+        "    sys.stdout.write(f'{int((time.monotonic() - start) * 100)}%\\r')\n"
+        "    sys.stdout.flush()\n"
+        "    time.sleep(0.01)\n"
+        "sys.stdout.write('done\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    redraw = JobSpec(
+        name="redraw",
+        title="Redraw progress",
+        argv=(sys.executable, "-c", script),
+        details="redraw test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [redraw],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        client.post("/jobs/redraw/start", headers=h, follow_redirects=False)
+        st = _wait_for_job(app.state.runner, "redraw", timeout=10.0)
+
+        job_id = app.state.runner.job_id_for_name("redraw")
+        job = app.state.runner._jobs[job_id]
+        progress_lines = [ln for ln in job.lines if ln.endswith("%")]
+        assert len(progress_lines) >= 2
+        assert "done" in job.lines
+        assert len(job.lines) < 50
+        assert st["status"] == "succeeded"
+
+
+def test_non_detached_job_timeout_kills_process(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    slow = JobSpec(
+        name="slow",
+        title="Slow job",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="slow test",
+        timeout_s=1.0,
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [slow],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        start = client.post("/jobs/slow/start", headers=h, follow_redirects=False)
+        assert start.status_code == 303
+
+        st = _wait_for_job(app.state.runner, "slow", timeout=15.0)
+        assert st["status"] == "failed"
+
+        job_id = app.state.runner.job_id_for_name("slow")
+        job = app.state.runner._jobs[job_id]
+        assert any("timed out after 1" in ln for ln in job.lines)
+
+        pid = job.proc.pid
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"timed-out process {pid} is still alive")
+
+
+def test_cancel_route_kills_running_job(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    slow = JobSpec(
+        name="slow",
+        title="Slow job",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="slow test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [slow],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        start = client.post("/jobs/slow/start", headers=h, follow_redirects=False)
+        assert start.status_code == 303
+        job_id = app.state.runner.job_id_for_name("slow")
+        pid = app.state.runner._jobs[job_id].proc.pid
+
+        r = client.post(f"/jobs/{job_id}/cancel", headers=h, follow_redirects=False)
+        assert r.status_code == 200
+        assert r.json() == {"status": "cancelled"}
+
+        deadline = time.monotonic() + 8.0
+        while time.monotonic() < deadline:
+            if app.state.runner.status(job_id)["status"] == "cancelled":
+                break
+            time.sleep(0.05)
+        assert app.state.runner.status(job_id)["status"] == "cancelled"
+
+        with pytest.raises(OSError):
+            os.killpg(pid, 0)
+
+        r2 = client.post(f"/jobs/{job_id}/cancel", headers=h, follow_redirects=False)
+        assert r2.status_code == 409
+
+
+def test_cancel_other_session_job_returns_404(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    slow = JobSpec(
+        name="slow",
+        title="Slow job",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="slow test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [slow],
+    )
+
+    with _saved_client(app) as client1:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        client1.post("/jobs/slow/start", headers=h, follow_redirects=False)
+        job_id = app.state.runner.job_id_for_name("slow")
+
+        with _saved_client(app) as client2:
+            r = client2.post(
+                f"/jobs/{job_id}/cancel",
+                headers=h,
+                follow_redirects=False,
+            )
+            assert r.status_code == 404
+
+
+def test_shutdown_kills_non_detached_and_grandchild(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    async def run() -> tuple[JobRunner, str, int, int]:
+        runner = JobRunner(tmp_path)
+        script = (
+            "import os, subprocess, sys, time\n"
+            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+            "print(os.getpid())\n"
+            "print(child.pid)\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n"
+        )
+        spec = JobSpec(
+            name="family",
+            title="Family",
+            argv=(sys.executable, "-c", script),
+            details="family test",
+        )
+        job_id = await runner.start("family", spec)
+        job = runner._jobs[job_id]
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if job.lines:
+                break
+            await asyncio.sleep(0.05)
+
+        parent_pid, child_pid = int(job.lines[0]), int(job.lines[1])
+
+        await runner.shutdown()
+
+        return runner, job_id, parent_pid, child_pid
+
+    runner, job_id, parent_pid, child_pid = asyncio.run(run())
+
+    with pytest.raises(OSError):
+        os.kill(parent_pid, 0)
+    with pytest.raises(OSError):
+        os.kill(child_pid, 0)
+
+    assert runner.status(job_id)["status"] == "failed"
+
+
+def test_shutdown_leaves_detached_service_alive(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    async def run() -> tuple[JobRunner, str]:
+        runner = JobRunner(tmp_path)
+
+        calls: list[int] = []
+        def probe() -> bool:
+            calls.append(1)
+            return len(calls) > 1
+
+        spec = JobSpec(
+            name="detached",
+            title="Detached",
+            argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+            detach=True,
+            ready_probe=probe,
+        )
+        job_id = await runner.start("detached", spec)
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            if runner.status(job_id)["status"] != "running":
+                break
+            await asyncio.sleep(0.05)
+        await runner.shutdown()
+        return runner, job_id
+
+    runner, job_id = asyncio.run(run())
+    job = runner._jobs[job_id]
+    assert job.popen is not None
+    assert job.popen.poll() is None
+    os.killpg(job.popen.pid, signal.SIGTERM)
+    job.popen.wait(timeout=10)
+
+
+def test_abort_refuses_while_job_running(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    slow = JobSpec(
+        name="slow",
+        title="Slow job",
+        argv=(sys.executable, "-c", "import time; time.sleep(5)"),
+        details="slow test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [slow],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        client.post("/jobs/slow/start", headers=h, follow_redirects=False)
+
+        r = client.post("/abort", headers=h, follow_redirects=False)
+        assert r.status_code == 409
+        assert "a job is still running" in r.text
+
+        _wait_for_job(app.state.runner, "slow", timeout=8.0)
+
+
+def test_extras_is_exclusive(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    extras_spec = JobSpec(
+        name="extras",
+        title="Extras",
+        argv=(sys.executable, "-c", "print('extras')"),
+        exclusive=True,
+        details="extras test",
+    )
+    other_spec = JobSpec(
+        name="other",
+        title="Other",
+        argv=(sys.executable, "-c", "import time; time.sleep(2)"),
+        details="other test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [extras_spec, other_spec],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r1 = client.post("/jobs/other/start", headers=h, follow_redirects=False)
+        assert r1.status_code == 303
+
+        r2 = client.post("/jobs/extras/start", headers=h, follow_redirects=False)
+        assert r2.status_code == 409
+
+        _wait_for_job(app.state.runner, "other", timeout=8.0)
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r3 = client.post("/jobs/extras/start", headers=h, follow_redirects=False)
+        assert r3.status_code == 303
+
+        r4 = client.post("/jobs/other/start", headers=h, follow_redirects=False)
+        assert r4.status_code == 409
+
+
+def test_detached_log_path_captures_output(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    log_path = tmp_path / "logs" / "service.log"
+
+    async def run() -> JobRunner:
+        runner = JobRunner(tmp_path)
+
+        calls: list[int] = []
+        def probe() -> bool:
+            calls.append(1)
+            return len(calls) > 1
+
+        spec = JobSpec(
+            name="logged",
+            title="Logged service",
+            argv=(
+                sys.executable,
+                "-c",
+                "import sys, time\nsys.stdout.write('hello\\n')\nsys.stdout.flush()\ntime.sleep(30)\n",
+            ),
+            detach=True,
+            ready_probe=probe,
+            log_path=log_path,
+        )
+        job_id = await runner.start("logged", spec)
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            if runner.status(job_id)["status"] != "running":
+                break
+            await asyncio.sleep(0.05)
+        await runner.shutdown()
+        return runner
+
+    runner = asyncio.run(run())
+    # Detached services survive shutdown by design; stop this one by its own
+    # process group, never by a name pattern.
+    for job in runner._jobs.values():
+        if job.popen is not None and job.popen.poll() is None:
+            os.killpg(job.popen.pid, signal.SIGKILL)
+            job.popen.wait(timeout=10)
+
+    assert log_path.exists()
+    assert "hello" in log_path.read_text()
+    assert (log_path.stat().st_mode & 0o777) == 0o600
+    assert (log_path.parent.stat().st_mode & 0o777) == 0o700
+
+
+
+def test_probe_timeout_kills_non_listening_detached_child(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    monkeypatch.setattr("kaine.setup.web.jobs.READY_TIMEOUT_S", 1.0)
+
+    async def run() -> tuple[JobRunner, str]:
+        runner = JobRunner(tmp_path)
+        spec = JobSpec(
+            name="sleeper",
+            title="Sleeper",
+            argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+            detach=True,
+            ready_probe=lambda: False,
+        )
+        job_id = await runner.start("sleeper", spec)
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            if runner.status(job_id)["status"] != "running":
+                break
+            await asyncio.sleep(0.05)
+        return runner, job_id
+
+    runner, job_id = asyncio.run(run())
+    job = runner._jobs[job_id]
+    assert job.status == "failed"
+    assert "not listening within 1 s" in job.lines[-1]
+    # poll() reaps the child; os.kill(pid, 0) would also succeed on a zombie.
+    assert job.popen.poll() is not None, "detached process survived probe timeout"
+
+
+def test_main_no_revision_prints_no_rerun_warning(capsys, monkeypatch, tmp_path):
+    from kaine.setup import organ
+
+    fake_backend = type(
+        "B",
+        (),
+        {
+            "backend": "cpu",
+            "available": True,
+            "path": None,
+            "summary": "cpu test backend",
+        },
+    )()
+    fake_artifact = type(
+        "Ar",
+        (),
+        {
+            "repo": "kaineone/test",
+            "fmt": "gguf",
+            "reason": "test",
+            "size_gb": 1.0,
+            "command": (
+                "hf",
+                "download",
+                "kaineone/test",
+                "model.gguf",
+                "--local-dir",
+                str(tmp_path / "dir"),
+            ),
+        },
+    )()
+    fake_plan = type(
+        "P",
+        (),
+        {
+            "needed": True,
+            "backend": fake_backend,
+            "artifacts": [fake_artifact],
+        },
+    )()
+    fake_result = type(
+        "R",
+        (),
+        {
+            "repo": "kaineone/test",
+            "fmt": "gguf",
+            "ok": True,
+            "revision": None,
+            "detail": "ok",
+        },
+    )()
+
+    monkeypatch.setattr(
+        "kaine.organ_server.served.detect_organ_backend",
+        lambda _b, **kw: fake_backend,
+    )
+    monkeypatch.setattr(
+        "kaine.hardware.describe_host", lambda: {"backend": "cpu"}
+    )
+    monkeypatch.setattr(organ, "plan_organ_download", lambda _m, _b, **kw: fake_plan)
+    monkeypatch.setattr(
+        organ,
+        "run_organ_download",
+        lambda *_a, **_kw: [fake_result],
+    )
+    monkeypatch.setattr(organ, "write_revision_state", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        "kaine.config.load_kaine_config",
+        lambda *_a, **_kw: {"modules": {"lingua": True}},
+    )
+
+    rc = organ.main(
+        [
+            "download",
+            "--yes",
+            "--config",
+            str(tmp_path / "s.toml"),
+            "--operator-config",
+            str(tmp_path / "o.toml"),
+        ]
+    )
+    assert rc == 0
+    out, err = capsys.readouterr()
+    assert "did not report a revision" in out
+    assert "nothing was recorded for provenance" in out
+    assert "rerun" not in (out + err).lower()
+    assert "Warning" not in (out + err)
+
+
+def test_revision_from_local_dir_metadata(tmp_path):
+    from kaine.setup import organ
+
+    cmd = (
+        "hf",
+        "download",
+        "kaineone/test",
+        "model.gguf",
+        "--local-dir",
+        str(tmp_path / "weights"),
+    )
+    assert organ._revision_from_local_dir_metadata(cmd) is None
+
+    metadata_dir = tmp_path / "weights" / ".cache" / "huggingface" / "download"
+    metadata_dir.mkdir(parents=True)
+    metadata_file = metadata_dir / "model.gguf.metadata"
+
+    metadata_file.write_text("not-a-hash\n")
+    assert organ._revision_from_local_dir_metadata(cmd) is None
+
+    good_hash = "a" * 40
+    metadata_file.write_text(f"{good_hash}\n")
+    assert organ._revision_from_local_dir_metadata(cmd) == good_hash
+
+    metadata_file.write_text(f"{good_hash}\nmore\n")
+    assert organ._revision_from_local_dir_metadata(cmd) == good_hash
+
+
+def test_run_organ_download_streams_output_and_extracts_revision(tmp_path, monkeypatch):
+    from kaine.setup.organ import run_organ_download
+
+    sha = "a" * 40
+    hf_dir = tmp_path / "bin"
+    hf_dir.mkdir()
+    hf_script = hf_dir / "hf"
+    hf_script.write_text(
+        "#!/bin/sh\n"
+        f"echo 'downloading /snapshots/{sha}/model.gguf progress'\n"
+    )
+    hf_script.chmod(0o755)
+    monkeypatch.setenv("PATH", str(hf_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+    fake_artifact = type(
+        "Ar",
+        (),
+        {
+            "repo": "kaineone/test",
+            "fmt": "gguf",
+            "command": ("hf", "download", "kaineone/test", "model.gguf", "--local-dir", str(tmp_path / "dir")),
+        },
+    )()
+    fake_plan = type("P", (), {"needed": True, "artifacts": [fake_artifact]})()
+
+    seen: list[str] = []
+    results = run_organ_download(fake_plan, consent=True, stream=lambda s: seen.append(s))
+    assert any(sha in chunk for chunk in seen)
+    assert len(results) == 1
+    assert results[0].ok is True
+    assert results[0].revision == sha
+
+
+def test_pinned_job_route_behaviour(tmp_path, monkeypatch):
+    app = _mk_app(tmp_path)
+
+    harmless = JobSpec(
+        name="harmless",
+        title="Harmless job",
+        argv=(sys.executable, "-c", "print('a')"),
+        details="harmless test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [harmless],
+    )
+
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        h = {"Host": "127.0.0.1:8000"}
+        assert client.get("/jobs", headers=h).status_code == 403
+        r = client.post(
+            "/jobs/harmless/start",
+            headers={"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 403
+        # Without a session the middleware rejects the request before routing.
+        assert client.get("/jobs/harmless/start", headers=h).status_code == 403
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r1 = client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+        assert r1.status_code == 303
+
+        # With a session, GET on a POST-only start route is a method mismatch.
+        assert client.get("/jobs/harmless/start", headers=h).status_code == 405
+
+        r2 = client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+        assert r2.status_code == 409
+
+        r3 = client.post("/jobs/unknown/start", headers=h, follow_redirects=False)
+        assert r3.status_code == 404
+
+
+def test_build_job_specs_malformed_operator_toml_returns_no_nexus(tmp_path):
+    shipped = tmp_path / "shipped.toml"
+    shipped.write_text("[modules]\nlingua = false\n")
+    operator = tmp_path / "operator.toml"
+    operator.write_text("[[this is not valid toml")
+
+    specs = build_job_specs(
+        {"modules": {}},
+        {},
+        repo_root=tmp_path,
+        shipped_config_path=shipped,
+        operator_path=operator,
+    )
+    assert not any(s.name == "nexus" for s in specs)
