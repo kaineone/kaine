@@ -45,7 +45,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 19 active changes, 263 archived changes and 104 capability specs.
+The roadmap contains 19 active changes, 264 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
