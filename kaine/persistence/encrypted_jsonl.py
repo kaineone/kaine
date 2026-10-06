@@ -156,6 +156,7 @@ def rewrite_encrypted(path: Path | str) -> bool:
             if now_ns - leftover.stat().st_mtime_ns > 60 * 10**9:
                 leftover.unlink()
         except FileNotFoundError:
+            # Already removed by a concurrent sweep.
             pass
 
     st = os.stat(p)
@@ -211,5 +212,6 @@ def rewrite_encrypted(path: Path | str) -> bool:
             try:
                 os.unlink(tmp_path)
             except Exception:
+                # Best-effort cleanup; the original error is re-raised below.
                 pass
         raise

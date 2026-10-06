@@ -273,16 +273,17 @@ def test_lingua_migrates_once(monkeypatch, tmp_path):
         json.dumps({"a": 1}) + "\n" + json.dumps({"b": 2}) + "\n",
         encoding="utf-8",
     )
-    import kaine.modules.lingua.intent_log as intent_log_module
+    from kaine.modules.lingua.intent_log import rewrite_encrypted as original_rewrite
 
     calls = []
-    original_rewrite = intent_log_module.rewrite_encrypted
 
     def counting_rewrite(p):
         calls.append(p)
         return original_rewrite(p)
 
-    monkeypatch.setattr(intent_log_module, "rewrite_encrypted", counting_rewrite)
+    monkeypatch.setattr(
+        "kaine.modules.lingua.intent_log.rewrite_encrypted", counting_rewrite
+    )
     log1 = IntentExpressionLog(path)
     log1.append(mode="m", prompt="p", generated_text="g", model="m")
     assert len(calls) == 1
@@ -407,12 +408,11 @@ def test_migration_runs_when_encryption_is_enabled_after_a_plaintext_write(monke
 
 
 def test_failed_migration_is_retried_on_the_next_write(monkeypatch, tmp_path):
-    import kaine.modules.lingua.intent_log as intent_log_mod
+    from kaine.modules.lingua.intent_log import rewrite_encrypted as real
 
     path = tmp_path / "intent_expression.jsonl"
     path.write_text(json.dumps({"generated_text": "legacy"}) + "\n", encoding="utf-8")
     _enable(monkeypatch)
-    real = intent_log_mod.rewrite_encrypted
     calls = []
 
     def flaky(p):
@@ -421,7 +421,7 @@ def test_failed_migration_is_retried_on_the_next_write(monkeypatch, tmp_path):
             raise OSError("disk hiccup")
         return real(p)
 
-    monkeypatch.setattr(intent_log_mod, "rewrite_encrypted", flaky)
+    monkeypatch.setattr("kaine.modules.lingua.intent_log.rewrite_encrypted", flaky)
     log = IntentExpressionLog(path)
     _append(log, "one")
     _append(log, "two")
@@ -434,14 +434,14 @@ def test_rewrite_preserves_timestamps_and_mode(monkeypatch, tmp_path):
     path = tmp_path / "test.jsonl"
     path.write_text(json.dumps({"a": 1}) + "\n", encoding="utf-8")
     # Not the temp file's default 0o600, so a lost chmod is visible.
-    os.chmod(path, 0o640)
+    os.chmod(path, 0o700)
     target_ns = 1_000_000_000_000_000_000
     os.utime(path, ns=(target_ns, target_ns))
     _enable(monkeypatch)
     assert rewrite_encrypted(path) is True
     st = path.stat()
     assert st.st_mtime_ns == target_ns
-    assert stat.S_IMODE(st.st_mode) == 0o640
+    assert stat.S_IMODE(st.st_mode) == 0o700
 
 
 def test_rewrite_keeps_corpus_order(monkeypatch, tmp_path):
