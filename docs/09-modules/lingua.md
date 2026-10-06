@@ -156,7 +156,7 @@ The cycle runs an observer (`kaine/cycle/utterance_outcome.py`) whenever Lingua 
 - `empatheia_deviation`: the largest Empatheia social-error deviation in the window;
 - `social_drive_delta`: the change in Thymos's social drive across the window.
 
-The window is `[lingua].outcome_reply_window_s` (30 s by default). It closes at the first reply, at the end of the window, or at the entity's next utterance. A record still open at shutdown is dropped, never written with a guessed outcome.
+The window is `[lingua].outcome_reply_window_s` (30 s by default). A value that is not a finite number above zero falls back to 30 s with a warning; it never stops the cycle from booting. It closes at the first reply, at the end of the window, or at the entity's next utterance. A record still open at shutdown is dropped, never written with a guessed outcome.
 
 ### Abliteration rationale
 

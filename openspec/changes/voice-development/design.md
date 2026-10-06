@@ -60,6 +60,8 @@ Until Stage 2 provides a validated preference source, the voice-alignment phase 
 - At each sleep the intent log is rotated to `state/lingua/intent_log/sleep-<n>.jsonl`.
 - The corpus is the set of rotated files, kept by default under the caps-not-culls rule.
 - A disk guard warns, and never deletes, when the corpus approaches its configured ceiling.
+- The divergence scan reads the live log and then the corpus newest first under one record cap, so the cap always keeps recent speech under evaluation.
+- Known gap, for a follow-up change: a hard crash between the rotation's `os.link` and `os.unlink` leaves the same records in the corpus and in the live log, and the next rotation duplicates them. An inode or content idempotence check at rotation closes it. Duplicates inflate the divergence counts; they never hide speech.
 
 ### D6. Trainer (P3)
 
