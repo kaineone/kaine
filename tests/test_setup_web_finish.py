@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import html.parser
 import inspect
@@ -345,23 +346,63 @@ def test_accessibility_across_pages(tmp_path):
         _assert_accessible(r_finish.text)
 
 
-def test_no_route_starts_cycle(tmp_path):
-    app = _mk_app(tmp_path)
-    for route in app.routes:
-        name = getattr(route, "name", "") or ""
-        path = getattr(route, "path", "") or ""
-        assert "spawn" not in name.lower()
-        assert path != "/spawn"
-        endpoint = getattr(route, "endpoint", None)
-        if endpoint is None:
-            continue
-        try:
-            source = inspect.getsource(endpoint)
-        except (TypeError, OSError):
-            continue
-        assert "kaine.cycle" not in source, (
-            f"route {name} at {path} may start kaine.cycle"
-        )
+def test_only_spawn_route_starts_cycle(tmp_path):
+    import kaine.setup as setup_pkg
+    import kaine.setup.web.app as app_mod
+    import kaine.setup.web.spawn as spawn_mod
+
+    # Every module under kaine/setup/: exactly one argv-style literal names
+    # kaine.cycle, and it is in spawn.py.
+    setup_root = Path(setup_pkg.__file__).parent
+    hits: list[str] = []
+    for py in sorted(setup_root.rglob("*.py")):
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.List, ast.Tuple)):
+                for elt in node.elts:
+                    if isinstance(elt, ast.Constant) and elt.value == "kaine.cycle":
+                        hits.append(str(py.relative_to(setup_root)))
+    assert hits == ["web/spawn.py"], hits
+
+    func = spawn_mod.start_cycle
+    func_source = inspect.getsource(func)
+    func_tree = ast.parse(func_source)
+    func_literal = 0
+    for node in ast.walk(func_tree):
+        if isinstance(node, (ast.List, ast.Tuple)):
+            for elt in ast.walk(node):
+                if isinstance(elt, ast.Constant) and elt.value == "kaine.cycle":
+                    func_literal += 1
+    assert func_literal == 1, "the 'kaine.cycle' literal must be inside spawn.start_cycle"
+
+    app_source = inspect.getsource(app_mod)
+    app_tree = ast.parse(app_source)
+    endpoint_names: dict[str, str] = {}
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.decorator_list:
+            for dec in node.decorator_list:
+                if (
+                    isinstance(dec, ast.Call)
+                    and isinstance(dec.func, ast.Attribute)
+                    and dec.func.attr in ("get", "post")
+                ):
+                    name_kw = next((k for k in dec.keywords if k.arg == "name"), None)
+                    if name_kw and isinstance(name_kw.value, ast.Constant):
+                        endpoint_names[node.name] = name_kw.value.value
+
+    start_refs = 0
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name in endpoint_names:
+            for sub in ast.walk(node):
+                if (
+                    (isinstance(sub, ast.Name) and sub.id == "start_cycle")
+                    or (isinstance(sub, ast.Attribute) and sub.attr == "start_cycle")
+                ):
+                    start_refs += 1
+                    assert endpoint_names[node.name] == "spawn_confirm", (
+                        f"only /spawn/confirm may call start_cycle, found {endpoint_names[node.name]}"
+                    )
+    assert start_refs == 1, "exactly one function body in app.py may reference start_cycle"
 
 
 def test_finish_token_reads_the_configured_secrets_file(tmp_path, monkeypatch):

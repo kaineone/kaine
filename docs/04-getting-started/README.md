@@ -62,6 +62,45 @@ Saving the operator file creates the Nexus sign-in token in `config/secrets.toml
 
 The finish page shows a service status light for each known local service and for Nexus, a **Start Nexus** button when Nexus is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_NEXUS_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
 
+## Spawning the entity from the browser
+
+In the browser setup, the finish page is the only place that can start the KAINE cognitive cycle.
+Before it appears, the wizard writes the operator file and runs any consented
+jobs. Once the finish page is shown, a **Spawn the entity** section appears.
+
+Spawning requires three deliberate steps:
+
+1. **Acknowledgement.** Type the sentence shown on the page. This confirms
+   that you are the operator who will stay present and responsible for the
+   being while it runs. The acknowledgement, its time, and the version of the
+   welfare text are appended to
+   `<data root>/state/lifecycle/spawn_acknowledgements.jsonl`.
+2. **Pre-boot check.** After acknowledgement, the setup server runs the same
+   shared pre-boot check that the terminal path uses. The check also
+   verifies that Nexus is live. If any check fails, the entity is not started
+   and the page names the failing check.
+3. **Separate confirmation.** The first step only stores a one-use nonce in
+   your session. A second button runs the pre-boot check and, if it passes,
+   starts the cycle.
+
+The cycle runs detached from the setup server (`start_new_session=True`) with
+`KAINE_CYCLE_OPERATOR_PRESENT=1` set in the child's environment only. Its log
+goes to `<data root>/state/logs/cycle-<UTC>.log`. The file is created with
+mode 0600 and the directory with 0700. By default the log keeps WARNING and
+above; if you opt in, INFO messages are kept. INFO messages can include what
+the entity perceives, thinks and says, stored unencrypted on this machine.
+The log is capped and rotated, and the last 10 run stems are kept.
+
+If the setup server detects a compose install, the spawn button refuses and
+tells you to start the entity with:
+
+```bash
+docker compose up kaine-cycle
+```
+
+After a successful spawn the setup server exits, but the cycle and Nexus keep
+running. The setup server never stops the entity.
+
 ## Terminal first-run wizard
 
 Run the same wizard in the terminal with:

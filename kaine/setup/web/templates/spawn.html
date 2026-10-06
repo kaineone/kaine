@@ -1,0 +1,45 @@
+{% extends "_setup_base.html" %}
+{% block title %}Spawn entity — KAINE Setup{% endblock %}
+{% block content %}
+<h1>Spawn the entity</h1>
+
+{% if reason %}
+<div class="result" role="status" aria-live="polite">
+  <p>{{ reason }}</p>
+</div>
+{% endif %}
+
+{% if preboot_rows %}
+<section aria-label="Pre-boot check results">
+  <h2>Pre-boot check</h2>
+  <ul>
+    {% for group, name, detail in preboot_rows %}
+    <li>{{ group }} — {{ name }}: {{ detail }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<form method="post" action="{{ request.url_for('spawn_request') }}">
+  <p>{{ spawn_ack_text }}</p>
+
+  <div>
+    <label for="affirmation">Type the sentence below to confirm</label>
+    <p id="spawn-phrase">{{ spawn_ack_phrase }}</p>
+    <input type="text" id="affirmation" name="affirmation"
+           autocomplete="off" required
+           aria-describedby="spawn-phrase">
+  </div>
+
+  <div>
+    <label for="keep_info">
+      <input type="checkbox" id="keep_info" name="keep_info" value="true">
+      Keep INFO-level log messages
+    </label>
+    <input type="hidden" name="keep_info" value="false">
+    <p class="warning">INFO messages can include what the entity perceives, thinks and says, stored unencrypted on this machine.</p>
+  </div>
+
+  <button type="submit" class="btn btn--primary">Start the entity</button>
+</form>
+{% endblock %}

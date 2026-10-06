@@ -58,6 +58,31 @@
 </section>
 {% endif %}
 
+{% if saved %}
+<section aria-label="Spawn the entity">
+  <h2>Spawn the entity</h2>
+  <p>{{ spawn_ack_text }}</p>
+  <form method="post" action="{{ request.url_for('spawn_request') }}">
+    <div>
+      <label for="affirmation">Type the sentence below to confirm</label>
+      <p id="spawn-phrase">{{ spawn_ack_phrase }}</p>
+      <input type="text" id="affirmation" name="affirmation"
+             autocomplete="off" required
+             aria-describedby="spawn-phrase">
+    </div>
+    <div>
+      <label for="keep_info">
+        <input type="checkbox" id="keep_info" name="keep_info" value="true">
+        Keep INFO-level log messages
+      </label>
+      <input type="hidden" name="keep_info" value="false">
+      <p class="warning">INFO messages can include what the entity perceives, thinks and says, stored unencrypted on this machine.</p>
+    </div>
+    <button type="submit" class="btn btn--primary">Start the entity</button>
+  </form>
+</section>
+{% endif %}
+
 <form method="post" action="{{ request.url_for('finish') }}">
   <button type="submit" class="btn">Close setup</button>
 </form>

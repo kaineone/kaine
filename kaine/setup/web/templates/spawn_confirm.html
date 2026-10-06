@@ -1,0 +1,27 @@
+{% extends "_setup_base.html" %}
+{% block title %}Confirm spawn — KAINE Setup{% endblock %}
+{% block content %}
+<h1>Confirm spawn</h1>
+
+<p>Confirming runs the full pre-boot check and, if it passes, starts the entity.</p>
+
+<p>{{ spawn_ack_text }}</p>
+
+<p>Log file: <code>{{ log_dir }}/cycle-&lt;UTC time&gt;.log</code></p>
+<p>
+  {% if keep_info %}
+    INFO-level messages will be kept.
+  {% else %}
+    Only WARNING and above will be logged.
+  {% endif %}
+</p>
+
+{% if keep_info %}
+<p class="warning">INFO messages can include what the entity perceives, thinks and says, stored unencrypted on this machine.</p>
+{% endif %}
+
+<form method="post" action="{{ request.url_for('spawn_confirm') }}">
+  <input type="hidden" name="nonce" value="{{ nonce }}">
+  <button type="submit" class="btn btn--primary">Confirm and start</button>
+</form>
+{% endblock %}

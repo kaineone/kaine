@@ -473,6 +473,7 @@ def test_no_route_or_job_starts_cycle(tmp_path):
         repo_root=repo_root,
         shipped_config_path=shipped_config_path,
         operator_path=operator_path,
+        state_dir=tmp_path / "state",
     )
     for spec in specs:
         for part in spec.argv:
@@ -859,6 +860,7 @@ def test_default_specs_no_cycle_and_nexus_port_from_config(tmp_path, monkeypatch
         repo_root=repo_root,
         shipped_config_path=shipped_config_path,
         operator_path=operator_path,
+        state_dir=tmp_path / "state",
     )
 
     for spec in specs:
@@ -1654,6 +1656,7 @@ def test_build_job_specs_malformed_operator_toml_returns_no_nexus(tmp_path):
         repo_root=tmp_path,
         shipped_config_path=shipped,
         operator_path=operator,
+        state_dir=tmp_path / "state",
     )
     assert not any(s.name == "nexus" for s in specs)
 
