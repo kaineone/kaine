@@ -604,6 +604,14 @@ def bus_budget(
     per_stream = bus_cfg.get("per_stream_maxlen") or {}
     if not isinstance(per_stream, dict):
         raise ValueError("[bus.per_stream_maxlen] is not a table")
+    from kaine.bus.streams import KNOWN_STREAMS
+    for stream_name in per_stream:
+        if stream_name not in KNOWN_STREAMS:
+            log.warning(
+                "per_stream_maxlen key %r names a stream nothing publishes; "
+                "a cap on a stream no producer writes to has no effect",
+                stream_name,
+            )
     caps = BusConfig(
         default_maxlen=int(bus_cfg.get("default_maxlen", BusConfig.default_maxlen)),
         per_stream_maxlen={str(k): int(v) for k, v in per_stream.items()},
