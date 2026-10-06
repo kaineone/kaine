@@ -188,6 +188,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
 | `preference_source` | string | `"none"` | Where preferred training examples come from. Only `"none"` is accepted (the phase trains nothing) until Stage 2 adds a validated source; any other value fails at boot. |
 | `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/lingua/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
+| `distinctiveness_threshold` | float | `0.0` | Voice-arm threshold for the divergence assessment. 0 until calibrated: any being that has spoken counts as diverged by the voice arm. Must be at least 0. |
 
 #### Training knobs
 

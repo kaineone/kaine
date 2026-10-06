@@ -2073,10 +2073,10 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
     )
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
-        consolidation_thresholds_from_config,
+        voice_alignment_thresholds_from_config,
     )
 
-    cons_rate, cons_mag = consolidation_thresholds_from_config(ctx.kaine_config)
+    cons_rate, cons_mag, distinct = voice_alignment_thresholds_from_config(ctx.kaine_config)
     adapter_dir = adapter_dir_for(
         ctx.kaine_config, resolve(ctx.preservation_cfg.divergence_monitor.state_root)
     )
@@ -2096,6 +2096,7 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             require_encryption=ctx.preservation_cfg.require_encryption,
             consolidation_rate_threshold=cons_rate,
             consolidation_magnitude_threshold=cons_mag,
+            distinctiveness_threshold=distinct,
             adapter_output_dir=adapter_dir,
         )
     if ctx.supervision_mode == "unattended":

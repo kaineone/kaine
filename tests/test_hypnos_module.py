@@ -138,6 +138,42 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
         "voice_alignment",
     ]
     assert all(p["success"] for p in summary["phases"])
+
+
+@pytest.mark.asyncio
+async def test_sleep_writes_voice_measures_latest(bus: AsyncBus, tmp_path: Path):
+    intent_records = [
+        {"generated_text": "hello world this is a test.", "faithful_rendering": "x"}
+        for _ in range(3)
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    summary = await hypnos.enter_sleep()
+
+    latest = tmp_path / "voice_measures_latest.json"
+    assert latest.is_file()
+    vm = summary["voice_measures"]
+    assert vm is not None
+    assert vm["utterance_count"] == 3
+    assert vm["distinctiveness"] is None  # no shipped base profile yet
+
+
+@pytest.mark.asyncio
+async def test_voice_measures_failure_does_not_break_sleep(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    def _boom(*args, **kwargs):
+        raise RuntimeError("measures boom")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.compute_sleep_measures", _boom
+    )
+    intent_records = [
+        {"generated_text": "a b c d e f g", "faithful_rendering": "x"}
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    summary = await hypnos.enter_sleep()
+    assert all(p["success"] for p in summary["phases"])
+    assert summary.get("voice_measures") is None
     assert hypnos._mnemos.consolidated == 1
     assert hypnos._thymos.resets == 1
 

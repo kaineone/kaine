@@ -410,6 +410,8 @@ def _active_arms(assessment) -> frozenset[str]:
         arms.add("eidolon_drift")
     if signals.get("hypnos_adapters_present"):
         arms.add("adapters")
+    if signals.get("voice_vote") == "diverged":
+        arms.add("voice")
     if assessment.diverged and not arms:
         return frozenset({"diverged"})
     return frozenset(arms)
@@ -435,6 +437,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
         consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
+        distinctiveness_threshold: float = 0.0,
         consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
         adapter_output_dir: Path | None = None,
     ) -> None:
@@ -449,6 +452,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         self._config = config
         self._require_encryption = bool(require_encryption)
         self._consolidation_rate_threshold = consolidation_rate_threshold
+        self._distinctiveness_threshold = float(distinctiveness_threshold)
         self._consolidation_magnitude_threshold = consolidation_magnitude_threshold
         self._adapter_output_dir = adapter_output_dir
         # Boot settle: no assessment until boot_settle_s after construction,
@@ -511,6 +515,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             state_root=resolve(self._config.state_root),
             consolidation_rate_threshold=self._consolidation_rate_threshold,
             consolidation_magnitude_threshold=self._consolidation_magnitude_threshold,
+            distinctiveness_threshold=self._distinctiveness_threshold,
             adapter_output_dir=self._adapter_output_dir,
         )
         arms = _active_arms(assessment)

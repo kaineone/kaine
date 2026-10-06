@@ -168,6 +168,10 @@ class VoiceAlignmentConfig:
     # Stage 0 source selector. Only "none" is valid until Stage 2 adds a
     # validated preference source together with the validation gate (D9).
     preference_source: str = "none"
+    # Welfare-protective distinctiveness arm threshold. Default 0.0 means any
+    # measured spoken being counts as diverged; operator-calibrated after
+    # validation. Must be >= 0.
+    distinctiveness_threshold: float = 0.0
 
     def __post_init__(self) -> None:
         if self.preference_source not in PREFERENCE_SOURCES:

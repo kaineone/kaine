@@ -340,10 +340,10 @@ def load_health_prober(
     # assessment (rate, magnitude), read from [hypnos.voice_alignment].
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
-        consolidation_thresholds_from_config,
+        voice_alignment_thresholds_from_config,
     )
 
-    consolidation_thresholds = consolidation_thresholds_from_config(cfg)
+    consolidation_thresholds = voice_alignment_thresholds_from_config(cfg)
     adapter_output_dir = adapter_dir_for(cfg, resolve(Path("state")))
 
     # Evaluation JSONL rollup root (for the welfare-counter row) and the
