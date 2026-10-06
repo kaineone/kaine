@@ -51,7 +51,7 @@ The wizard walks through the same steps as the terminal version:
 10. Optional extras — offers to `pip install -e ".[…]"` the extras implied by your module choices. This step runs after the operator file is written.
 11. External dependencies — detects which services the enabled modules need and whether each is already running. For Redis and Qdrant it shows the exact bootstrap command and runs it only if you consent. For the heavy GPU services (model server, Speaches, Chatterbox) it prints the real setup steps and a docs link rather than pretending to install them.
 
-Saving the operator file also creates the Nexus sign-in token in `config/secrets.toml` if none exists. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
+Saving the operator file creates the Nexus sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_NEXUS_TOKEN` environment variable is unset. The token is only needed when `[nexus].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
 
 The finish page shows a service status light for each known local service and for Nexus, a **Start Nexus** button when Nexus is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_NEXUS_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
 

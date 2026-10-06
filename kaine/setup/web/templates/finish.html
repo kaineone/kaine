@@ -10,6 +10,12 @@
 </section>
 {% endif %}
 
+{% if nexus_error %}
+<section class="setup-note" aria-label="Nexus configuration error">
+  <p>{{ nexus_error }}</p>
+</section>
+{% endif %}
+
 {% if service_lights or nexus_available %}
 <section aria-label="Service status">
   <h2>Service status</h2>
@@ -43,7 +49,8 @@
 {% if token is not none %}
 <section aria-label="Nexus sign-in token">
   <p>Your Nexus sign-in token:</p>
-  <code>{{ token }}</code>
+  <code id="nexus-token" role="status" tabindex="-1">{{ token }}</code>
+  <script>(function(){var t=document.getElementById('nexus-token'); if(t){t.focus();}})();</script>
 </section>
 {% elif show_missing %}
 <section aria-label="Nexus sign-in token">

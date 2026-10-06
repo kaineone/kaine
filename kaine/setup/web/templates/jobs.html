@@ -14,7 +14,7 @@
           {% if job.status %}{{ job.status.status }}{% else %}not started{% endif %}
         </div>
         {% if job.job_id %}
-        <pre class="job-log" id="log-{{ job.job_id }}" aria-live="polite"></pre>
+        <pre class="job-log" id="log-{{ job.job_id }}" role="log" aria-live="polite"></pre>
         {% endif %}
         <details>
           <summary>Details</summary>
