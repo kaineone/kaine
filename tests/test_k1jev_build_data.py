@@ -793,6 +793,135 @@ def test_assemble_refuses_without_gold_norms(tmp_path):
     assert not (work / "assembled").exists()
 
 
+def _write_assemble_inputs(work: Path, monkeypatch, *, with_gold: bool) -> None:
+    work.mkdir()
+
+    if with_gold:
+        gold_norms = ["a gold norm utterance"]
+        (work / "gold_norms.json").write_text(json.dumps(gold_norms), encoding="utf-8")
+
+    syn_dir = work / "synthetic"
+    syn_dir.mkdir()
+    train_items = [
+        {
+            "item_id": "a1",
+            "question_id": "q_assemble",
+            "trait": None,
+            "utterance": "A synthetic training utterance.",
+            "context": None,
+            "generated_label": "yes",
+            "category": "plain",
+            "template": "v1",
+        }
+    ]
+    (syn_dir / "train.jsonl").write_text(
+        "".join(json.dumps(i) + "\n" for i in train_items), encoding="utf-8"
+    )
+    (syn_dir / "dev.jsonl").write_text(
+        json.dumps(
+            {
+                "item_id": "b1",
+                "question_id": "q_assemble_score",
+                "trait": None,
+                "utterance": "A dev utterance.",
+                "context": None,
+                "generated_label": "0",
+                "category": "plain",
+                "template": "v1",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    fake_choice = schema_module.Question(
+        id="q_assemble",
+        type="choice",
+        instructions="Choice question.",
+        definition="Def.",
+        options=(
+            schema_module.Option("yes", "yes means yes"),
+            schema_module.Option("no", None),
+        ),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    fake_score = schema_module.Question(
+        id="q_assemble_score",
+        type="score",
+        instructions="Score question.",
+        definition="Def.",
+        options=tuple(schema_module.Option(str(i), f"level {i}") for i in range(4)),
+        context_label=None,
+        seeds=(),
+        welfare=False,
+    )
+    monkeypatch.setattr(
+        schema_module,
+        "get_question",
+        lambda qid: fake_choice if qid == "q_assemble" else fake_score,
+    )
+
+    cache = work / "cache"
+    (cache / "banking77").mkdir(parents=True)
+    cats = ["card_payment", "cancel_transfer"]
+    with (cache / "banking77" / "train.csv").open("w", encoding="utf-8") as f:
+        f.write("text,category\n")
+        for i in range(10):
+            f.write(f"bank train {i},{cats[i % 2]}\n")
+    with (cache / "banking77" / "test.csv").open("w", encoding="utf-8") as f:
+        f.write("text,category\n")
+        for i in range(5):
+            f.write(f"bank dev {i},{cats[i % 2]}\n")
+
+    (cache / "multinli").mkdir(parents=True)
+    for name, rows in (
+        ("train.parquet", [(f"premise {i}", f"hyp {i}", i % 3, "government") for i in range(10)]),
+        (
+            "validation_matched.parquet",
+            [(f"val premise {i}", f"val hyp {i}", i % 3, "slate") for i in range(5)],
+        ),
+    ):
+        df = pd.DataFrame(rows, columns=["premise", "hypothesis", "label", "genre"])
+        df.to_parquet(cache / "multinli" / name, index=False)
+
+
+@pytest.mark.parametrize("no_gold", (False, True))
+def test_assemble_manifest_records_gold_exclusion(tmp_path, monkeypatch, no_gold):
+    pytest.importorskip("pyarrow")
+
+    work = tmp_path / "work"
+    _write_assemble_inputs(work, monkeypatch, with_gold=not no_gold)
+
+    args = [
+        "assemble",
+        "--work-root",
+        str(work),
+        "--seed",
+        "99",
+        "--banking-train",
+        "4",
+        "--nli-train",
+        "4",
+        "--banking-dev",
+        "2",
+        "--nli-dev",
+        "2",
+    ]
+    if no_gold:
+        args.append("--no-gold")
+
+    rc = build_data.main(args)
+    assert rc == 0
+
+    manifest = json.loads((work / "assembled" / "manifest.json").read_text())
+    assert manifest["gold_excluded"] is (not no_gold)
+    if no_gold:
+        assert manifest["gold_norms_sha256"] is None
+    else:
+        expected_sha = hashlib.sha256((work / "gold_norms.json").read_bytes()).hexdigest()
+        assert manifest["gold_norms_sha256"] == expected_sha
 def test_plan_trait_claim_targets_are_answer_keys_for_every_trait():
     rng = random.Random(0)
     jobs = synth.plan(["trait_claim"], 36, rng, near_miss_share=0.5)

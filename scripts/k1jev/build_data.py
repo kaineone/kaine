@@ -443,6 +443,10 @@ def _cmd_assemble(args: argparse.Namespace) -> int:
         "seeds": {"assemble": args.seed},
         "git_head": _git_head(),
         "nli_genre_counts": {"train": nli_train_counts, "dev": nli_dev_counts},
+        "gold_excluded": not args.no_gold,
+        "gold_norms_sha256": (
+            _sha256_file(gold_norms_path) if not args.no_gold else None
+        ),
     }
 
     for name in sources.PINNED:
