@@ -81,6 +81,7 @@ async def _close_module(module) -> None:
             try:
                 await task
             except asyncio.CancelledError:
+                # Expected: the task was cancelled just above.
                 pass
 
 
@@ -125,6 +126,7 @@ async def test_blocking_dollar_read_still_works(bus):
         try:
             await publisher
         except asyncio.CancelledError:
+            # Expected: the publisher was cancelled just above.
             pass
 
 
