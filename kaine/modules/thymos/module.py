@@ -293,7 +293,6 @@ class Thymos(BaseModule):
         has_table = (
             self._drive_sources is not None and self._dominant_drive is not None
         )
-        drive_score = 0.0
         if has_table:
             top = self._dominant_drive(self._drives.to_dict())
             if top is None or top[1] <= 0.0:
