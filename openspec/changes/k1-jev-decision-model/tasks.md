@@ -17,12 +17,12 @@
 ## 3. Training data
 - [ ] 3.1 `build_data.py fetch`: Banking77 CSVs at a pinned commit (SHA-256 checked) and MultiNLI parquet at the pinned revision, fiction genre dropped.
 - [ ] 3.2 `build_data.py generate`: synthetic train and dev through a temporary local llama-server under the GPU lock, with the rule filter and the second-pass label check. The generator's Qwen3.5-9B weights are fetched at setup time at a pinned revision and get a NOTICE entry (7.1).
-- [ ] 3.3 Refusal of any path under the data root or `state/`, and no input for arbitrary text files; tests prove both.
-- [ ] 3.4 Data manifest: per-source counts, label balance, hashes, licences.
+- [x] 3.3 Refusal of any path under the data root or `state/`, and no input for arbitrary text files; tests prove both.
+- [x] 3.4 Data manifest: per-source counts, label balance, hashes, licences.
 
 ## 4. Training
-- [ ] 4.1 `scripts/k1jev/train_sft.py` per design section 6, with the running-cycle guard.
-- [ ] 4.2 Tests with a tiny fake model under the kaine venv: argv has no shell, the loss mask covers only the answer letter, the guard refuses with a cycle present.
+- [ ] 4.1 `scripts/k1jev/train_sft.py` per design section 6, with the running-cycle guard. (Code done; acceptance is a real-stack smoke run on Qwen3.5-0.8B at the start of W2a.)
+- [x] 4.2 Tests with a tiny fake model under the kaine venv: argv has no shell, the loss mask covers only the answer letter, the guard refuses with a cycle present.
 - [ ] 4.3 Train 4B and 0.8B, in GPU chunks of at most 2 hours with a gap between chunks so the Qwen review queue can drain. Each chunk is announced to the integrator before the lock is taken. Order:
   - W1: synthetic data generation (local Qwen3.5-9B llama-server, stopped the moment the window ends), about 2 h; gold generation is a short slice of it.
   - W2a: train 0.8B, then start 4B (checkpointing every 30 min).

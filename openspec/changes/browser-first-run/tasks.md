@@ -33,9 +33,9 @@
 
 ## 4. Jobs
 
-- [ ] 4.1 A job runner with argument-list subprocesses, a Server-Sent Events progress stream and plain status lines.
-- [ ] 4.2 Jobs for the organ download (with progress), extras install, Redis and Qdrant bootstraps, and "Start Nexus".
-- [ ] 4.3 Tests:
+- [x] 4.1 A job runner with argument-list subprocesses, a Server-Sent Events progress stream and plain status lines.
+- [x] 4.2 Jobs for the organ download (with progress), extras install, Redis and Qdrant bootstraps, and "Start Nexus".
+- [x] 4.3 Tests:
   - A job never starts without its POST.
   - Failures are reported and setup continues.
   - Only the spawn route can start `kaine.cycle`.

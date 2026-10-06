@@ -61,6 +61,7 @@ from kaine.cycle.ignition_log import (
 )
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
+from kaine.cycle.utterance_outcome import start_utterance_outcome_observer
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.defaults import (
     lingua_section_api_key,
@@ -2404,6 +2405,20 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
         )
 
 
+async def _start_utterance_outcome(ctx: BootContext) -> None:
+    """Start the content-free utterance-outcome observer if Lingua is enabled.
+
+    Kept separate from `_phase_watchers` so a malformed reply-window value is
+    handled inside the observer's guarded starter and never aborts boot.
+    """
+    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+        ctx.utterance_outcome = await start_utterance_outcome_observer(
+            ctx.bus,
+            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
+            lingua_section=ctx.kaine_config.get("lingua"),
+        )
+
+
 async def _phase_watchers(ctx: BootContext) -> int | None:
     """Start the preserve watcher and the programme-end watcher."""
 
@@ -2420,6 +2435,7 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
         stop_event=ctx.stop_event,
     )
+    await _start_utterance_outcome(ctx)
 
 
 _BOOT_PHASES = (
@@ -2578,6 +2594,11 @@ async def _shutdown(ctx: BootContext) -> None:
             pass  # expected: we just cancelled it
         except Exception:
             log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
+    if ctx.utterance_outcome is not None:
+        try:
+            await ctx.utterance_outcome.stop()
+        except Exception:
+            log.warning("utterance outcome observer stop failed", exc_info=True)
     if ctx.preview_server is not None:
         try:
             await ctx.preview_server.stop()
