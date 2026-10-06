@@ -4,6 +4,7 @@
 """Verify the llama.cpp model-server image and flags are pinned and explicit."""
 
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,27 @@ def test_dockerfile_converter_is_pinned():
     assert sha_m and sha_m.group(1) == LLAMA_CPP_SHA256
 
 
+def _value_after(tokens: list[str], flag: str) -> str:
+    assert tokens.count(flag) == 1, f"{flag} must appear exactly once in {tokens}"
+    i = tokens.index(flag)
+    assert i + 1 < len(tokens), f"{flag} has no value"
+    return tokens[i + 1].strip('"')
+
+
+def _assert_flag_pairs(tokens: list[str]) -> None:
+    """Each explicit setting is a flag followed by the right value, not just
+    both tokens appearing somewhere on the line."""
+    assert _value_after(tokens, "--fit") == "off"
+    assert _value_after(tokens, "-ctk") == "f16"
+    assert _value_after(tokens, "-ctv") == "f16"
+    ngl = _value_after(tokens, "-ngl")
+    cram = _value_after(tokens, "--cache-ram")
+    for name, value in (("-ngl", ngl), ("--cache-ram", cram)):
+        assert value.isdigit() or value.startswith("${") or value.startswith("$$"), (
+            f"{name} value {value!r} is neither a number nor the validated variable"
+        )
+
+
 def test_compose_command_has_explicit_model_server_flags():
     path = REPO_ROOT / "compose" / "kaine.yml"
     data = yaml.safe_load(path.read_text())
@@ -82,26 +104,15 @@ def test_compose_command_has_explicit_model_server_flags():
     m = re.search(r"\$\{KAINE_MODEL_SERVER_CMD:-(.+)\}$", cmd, re.DOTALL)
     assert m, f"unexpected command expression: {cmd!r}"
     default = m.group(1)
-    tokens = default.split()
-    assert "--fit" in tokens and "off" in tokens
-    assert "-ngl" in tokens
-    assert "--cache-ram" in tokens
-    assert "-ctk" in tokens and "f16" in tokens
-    assert "-ctv" in tokens and "f16" in tokens
+    _assert_flag_pairs(default.split())
 
 
 def test_quadlet_exec_has_explicit_model_server_flags():
     path = REPO_ROOT / "quadlet" / "kaine-model-server.container"
     text = path.read_text()
-    m = re.search(r"^Exec=(.*)$", text, re.MULTILINE)
-    assert m
-    exec_line = m.group(1)
-    assert "--fit off" in exec_line
-    assert "-ngl" in exec_line
-    assert "--cache-ram" in exec_line
-    assert "-ctk f16" in exec_line
-    assert "-ctv f16" in exec_line
-
+    m = re.search(r"exec\s+/app/llama-server\s+(.+?)'", text)
+    assert m, "could not locate the llama-server exec in the quadlet"
+    _assert_flag_pairs(shlex.split(m.group(1)))
 
 def test_no_slot_save_path_committed():
     paths = [
