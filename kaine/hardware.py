@@ -829,8 +829,8 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
         "host": "single/dual-GPU workstation (the current default)",
         "summary": "full real-time multimodal (the untouched default)",
         "present": [
-            "lingua (Gemma E2B on GPU via Ollama)",
-            "topos vision (DINOv2 torch)",
+            "lingua (Qwen3.5-4B abliterated on GPU via llama-server)",
+            "topos vision (InternVideo-Next torch)",
             "vocal emotion (emotion2vec+)",
             "audio-in STT (faster-whisper, >realtime)",
             "audio-out TTS (Chatterbox, expressive)",

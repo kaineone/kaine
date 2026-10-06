@@ -124,7 +124,7 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | jlens | [`external/jlens/`](../external/jlens/) | Apache-2.0 | |
 | Nexus front-end assets | [`kaine/nexus/static/`](../kaine/nexus/static/) | mixed | JavaScript libraries in `vendor/`; fonts in `fonts/`. Includes three.js, uPlot, and `viz.js` (GPL-3.0-or-later). See [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). |
 
-The project `NOTICE` file currently lists only DreamerV3 and OpenNARS as third-party components; it does not yet list InternVideo-Next or jlens. Check [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) for the full vendored set.
+The project `NOTICE` file lists each vendored component above. Check [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) for the full vendored set.
 
 ## Deliberate GPL rejection
 

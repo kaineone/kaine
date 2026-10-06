@@ -47,10 +47,12 @@ from kaine.setup.organ import OrganDownloadResult, plan_organ_download, run_orga
 from kaine.storage import install_data_root
 from kaine.text_embedding import resolve_embedding_config
 
-# Shipped-default HF repo ids for the non-organ models. Kept in sync with
-# config/kaine.toml (grep: dinov2-small, all-MiniLM-L6-v2, faster-distil-whisper,
-# emotion2vec_plus_base) plus the Chatterbox TTS weights (kaine/setup/
-# dependencies.py: resemble-ai/chatterbox).
+# HF repo ids for the non-organ models. Kept in sync with config/kaine.toml
+# (grep: all-MiniLM-L6-v2, faster-distil-whisper, emotion2vec_plus_base) plus
+# the Chatterbox TTS weights (kaine/setup/dependencies.py: resemble-ai/chatterbox).
+# DEFAULT_VISION_REPO is the DINOv2 fallback, fetched only when
+# [topos].encoder_backend = "dinov2"; the shipped InternVideo-Next weights are
+# fetched by kaine.setup.internvideo_next.
 DEFAULT_STT_REPO = "Systran/faster-distil-whisper-medium.en"
 DEFAULT_EMOTION_REPO = "emotion2vec/emotion2vec_plus_base"
 DEFAULT_VISION_REPO = "facebook/dinov2-small"
