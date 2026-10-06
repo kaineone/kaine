@@ -1314,10 +1314,13 @@ def test_detached_log_path_captures_output(tmp_path):
     async def run() -> JobRunner:
         runner = JobRunner(tmp_path)
 
-        calls: list[int] = []
         def probe() -> bool:
-            calls.append(1)
-            return len(calls) > 1
+            # "Ready" once the child has really written to its log, so a slow
+            # start under a loaded suite cannot be killed before it writes.
+            try:
+                return "hello" in log_path.read_text()
+            except OSError:
+                return False
 
         spec = JobSpec(
             name="logged",
