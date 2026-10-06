@@ -3,8 +3,10 @@
 
 """Verify the llama.cpp model-server image and flags are pinned and explicit."""
 
+import os
 import re
 import shlex
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -91,10 +93,19 @@ def _assert_flag_pairs(tokens: list[str]) -> None:
     assert _value_after(tokens, "-ctv") == "f16"
     ngl = _value_after(tokens, "-ngl")
     cram = _value_after(tokens, "--cache-ram")
-    for name, value in (("-ngl", ngl), ("--cache-ram", cram)):
-        assert value.isdigit() or value.startswith("${") or value.startswith("$$"), (
-            f"{name} value {value!r} is neither a number nor the validated variable"
-        )
+    ctx = _value_after(tokens, "-c")
+    parallel = _value_after(tokens, "-np")
+    for name, value in (
+        ("-ngl", ngl),
+        ("--cache-ram", cram),
+        ("-c", ctx),
+        ("-np", parallel),
+    ):
+        assert (
+            value.isdigit()
+            or value.startswith("${")
+            or value.startswith("$$")
+        ), f"{name} value {value!r} is neither a number nor the validated variable"
 
 
 def test_compose_command_has_explicit_model_server_flags():
@@ -113,6 +124,79 @@ def test_quadlet_exec_has_explicit_model_server_flags():
     m = re.search(r"exec\s+/app/llama-server\s+(.+?)'", text)
     assert m, "could not locate the llama-server exec in the quadlet"
     _assert_flag_pairs(shlex.split(m.group(1)))
+
+
+def test_compose_and_quadlet_integer_defaults_agree():
+    """The four validated integer settings share the same default in compose
+    and quadlet."""
+    defaults = [
+        ("NGL", "999"),
+        ("CACHE_RAM_MIB", "1024"),
+        ("CTX", "32768"),
+        ("PARALLEL", "4"),
+    ]
+    compose_text = (REPO_ROOT / "compose" / "kaine.yml").read_text()
+    quadlet_text = (REPO_ROOT / "quadlet" / "kaine-model-server.container").read_text()
+    for name, default in defaults:
+        compose_pat = re.escape(
+            f"${{KAINE_MODEL_SERVER_{name}:-{default}}}"
+        )
+        quadlet_pat = re.escape(
+            f"$${{KAINE_MODEL_SERVER_{name}:-{default}}}"
+        )
+        assert re.findall(compose_pat, compose_text), (
+            f"compose missing default for {name}={default}"
+        )
+        assert re.findall(quadlet_pat, quadlet_text), (
+            f"quadlet missing default for {name}={default}"
+        )
+
+
+def test_quadlet_integer_validation_for_context_and_slots():
+    """The quadlet's sh wrapper validates KAINE_MODEL_SERVER_CTX and
+    KAINE_MODEL_SERVER_PARALLEL and refuses to start on bad input."""
+    text = (REPO_ROOT / "quadlet" / "kaine-model-server.container").read_text()
+    m = re.search(r"^Exec=-c '(.+?)'(?:\r?\n|$)", text, re.MULTILINE | re.DOTALL)
+    assert m, "could not extract quadlet Exec script"
+    script = m.group(1)
+
+    # Replace the actual server invocation with a sentinel echo.
+    script = re.sub(
+        r"exec /app/llama-server\b.*$",
+        'echo OK "$$x" "$$p"',
+        script,
+        flags=re.DOTALL,
+    )
+    # Un-double the dollars as systemd does when passing the string to sh.
+    script = re.sub(r"\$\$", "$", script)
+
+    base_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", script],
+        capture_output=True,
+        text=True,
+        env=base_env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "OK 32768 4"
+
+    for env_update, expected_stderr in (
+        ({"KAINE_MODEL_SERVER_PARALLEL": "0"}, "KAINE_MODEL_SERVER_PARALLEL"),
+        ({"KAINE_MODEL_SERVER_CTX": "abc"}, "KAINE_MODEL_SERVER_CTX"),
+        ({"KAINE_MODEL_SERVER_CTX": "0"}, "KAINE_MODEL_SERVER_CTX"),
+        # llama-server reads a context of 0 as "the model's full training context".
+        ({"KAINE_MODEL_SERVER_CTX": "00"}, "KAINE_MODEL_SERVER_CTX"),
+    ):
+        result = subprocess.run(
+            ["/bin/sh", "-c", script],
+            capture_output=True,
+            text=True,
+            env={**base_env, **env_update},
+        )
+        assert result.returncode == 64, result.stderr
+        assert expected_stderr in result.stderr
+
 
 def test_no_slot_save_path_committed():
     paths = [

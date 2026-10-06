@@ -118,6 +118,7 @@ The organ image comes from `KAINE_MODEL_SERVER_IMAGE`; its default is llama.cpp 
 The launch flags are explicit:
 - all model layers are on the GPU with automatic fitting off, so a GPU that is too small fails loudly;
 - the prompt KV cache is capped in RAM (default 1024 MiB, `KAINE_MODEL_SERVER_CACHE_RAM_MIB`);
+- the context size is explicit: default 32768 tokens shared by 4 slots, set by `KAINE_MODEL_SERVER_CTX` and `KAINE_MODEL_SERVER_PARALLEL`; without it, fitting off would allocate the model's full training context and fail on the GPU;
 - the KV cache is f16;
 - slot saving is never enabled, because it would write sensory-derived KV cache to disk.
 

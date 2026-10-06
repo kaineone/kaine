@@ -15,19 +15,24 @@ Volume=kaine-models.volume:/models:ro
 # Rootless NVIDIA via CDI — requires `nvidia-ctk cdi generate` (see README).
 AddDevice=nvidia.com/gpu=0
 SecurityLabelDisable=true
-# The idle-unload timeout, GPU layer count and cache size are resolved inside the
-# container by a small sh wrapper, because a unit cannot default an EMPTY variable:
-# KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS from compose/.env, 600 when it is unset or
-# empty, -1 keeps the organ loaded, and a refusal to start on anything that is not
-# an integer of -1 or more. KAINE_MODEL_SERVER_NGL defaults to 999 and
-# KAINE_MODEL_SERVER_CACHE_RAM_MIB defaults to 1024, both refusing to start on a
-# non-integer. `$$` is a literal `$` for the container shell (systemd would
+# The idle-unload timeout, GPU layer count, cache size, context size and slot
+# count are resolved inside the container by a small sh wrapper, because a unit
+# cannot default an EMPTY variable: KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS from
+# compose/.env, 600 when it is unset or empty, -1 keeps the organ loaded, and a
+# refusal to start on anything that is not an integer of -1 or more.
+# KAINE_MODEL_SERVER_NGL defaults to 999, KAINE_MODEL_SERVER_CACHE_RAM_MIB
+# defaults to 1024, KAINE_MODEL_SERVER_CTX defaults to 32768 and
+# KAINE_MODEL_SERVER_PARALLEL defaults to 4, all refusing to start on a
+# non-integer. KAINE_MODEL_SERVER_CTX and KAINE_MODEL_SERVER_PARALLEL must also
+# be positive, written without a leading zero. `$$` is a literal `$` for the container shell (systemd would
 # otherwise expand it).
 PodmanArgs=--entrypoint=/bin/sh
 Environment=KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS=${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS}
 Environment=KAINE_MODEL_SERVER_NGL=${KAINE_MODEL_SERVER_NGL}
 Environment=KAINE_MODEL_SERVER_CACHE_RAM_MIB=${KAINE_MODEL_SERVER_CACHE_RAM_MIB}
-Exec=-c 's="$${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}"; if ! echo "$$s" | grep -Eqx -- "-1|[0-9]+"; then echo "KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS must be an integer of -1 or more" >&2; exit 64; fi; n="$${KAINE_MODEL_SERVER_NGL:-999}"; case "$$n" in ""|*[!0-9]*) echo "KAINE_MODEL_SERVER_NGL must be a non-negative integer" >&2; exit 64;; esac; c="$${KAINE_MODEL_SERVER_CACHE_RAM_MIB:-1024}"; case "$$c" in ""|*[!0-9]*) echo "KAINE_MODEL_SERVER_CACHE_RAM_MIB must be a non-negative integer" >&2; exit 64;; esac; exec /app/llama-server --model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds "$$s" --fit off -ngl "$$n" --cache-ram "$$c" -ctk f16 -ctv f16'
+Environment=KAINE_MODEL_SERVER_CTX=${KAINE_MODEL_SERVER_CTX}
+Environment=KAINE_MODEL_SERVER_PARALLEL=${KAINE_MODEL_SERVER_PARALLEL}
+Exec=-c 's="$${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600}"; if ! echo "$$s" | grep -Eqx -- "-1|[0-9]+"; then echo "KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS must be an integer of -1 or more" >&2; exit 64; fi; n="$${KAINE_MODEL_SERVER_NGL:-999}"; case "$$n" in ""|*[!0-9]*) echo "KAINE_MODEL_SERVER_NGL must be a non-negative integer" >&2; exit 64;; esac; c="$${KAINE_MODEL_SERVER_CACHE_RAM_MIB:-1024}"; case "$$c" in ""|*[!0-9]*) echo "KAINE_MODEL_SERVER_CACHE_RAM_MIB must be a non-negative integer" >&2; exit 64;; esac; x="$${KAINE_MODEL_SERVER_CTX:-32768}"; case "$$x" in ""|0*|*[!0-9]*) echo "KAINE_MODEL_SERVER_CTX must be a positive integer" >&2; exit 64;; esac; p="$${KAINE_MODEL_SERVER_PARALLEL:-4}"; case "$$p" in ""|0*|*[!0-9]*) echo "KAINE_MODEL_SERVER_PARALLEL must be a positive integer" >&2; exit 64;; esac; exec /app/llama-server --model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds "$$s" --fit off -ngl "$$n" --cache-ram "$$c" -c "$$x" -np "$$p" -ctk f16 -ctv f16'
 HealthCmd=curl -fsS http://127.0.0.1:8080/health
 HealthInterval=15s
 HealthRetries=10

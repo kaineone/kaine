@@ -177,7 +177,7 @@ services:
     environment:
       LLAMA_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
     entrypoint: ["/bin/sh", "/opt/kaine/organ-launcher.sh"]
-    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds ${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600} --fit off -ngl ${KAINE_MODEL_SERVER_NGL:-999} --cache-ram ${KAINE_MODEL_SERVER_CACHE_RAM_MIB:-1024} -ctk f16 -ctv f16}
+    command: ${KAINE_MODEL_SERVER_CMD:---model /models/Qwen3.5-4B-abliterated-GGUF/KAINE-Qwen3.5-4B-abliterated.Q4_K_M.gguf --alias kaineone/Qwen3.5-4B-abliterated-GGUF --host 0.0.0.0 --port 8080 --sleep-idle-seconds ${KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS:-600} --fit off -ngl ${KAINE_MODEL_SERVER_NGL:-999} --cache-ram ${KAINE_MODEL_SERVER_CACHE_RAM_MIB:-1024} -c ${KAINE_MODEL_SERVER_CTX:-32768} -np ${KAINE_MODEL_SERVER_PARALLEL:-4} -ctk f16 -ctv f16}
     volumes:
       - kaine-models:/models:ro
       - ../docker/organ-launcher.sh:/opt/kaine/organ-launcher.sh:ro

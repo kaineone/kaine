@@ -18,6 +18,7 @@ The AI-alternatives report (2026-10-05, §6.2 item 6) lists these, and the opera
 - **Explicit settings on every organ command line:**
   - `--fit off` with `-ngl ${KAINE_MODEL_SERVER_NGL:-999}`: every layer on the GPU, or the load fails loudly, never a silent partial offload;
   - `--cache-ram ${KAINE_MODEL_SERVER_CACHE_RAM_MIB:-1024}`;
+  - `-c ${KAINE_MODEL_SERVER_CTX:-32768} -np ${KAINE_MODEL_SERVER_PARALLEL:-4}`: fitting off makes an explicit context mandatory;
   - `-ctk f16 -ctv f16`.
 - **No slot saving.** Slot saving (`--slot-save-path`) is never enabled. It would write sensory-derived KV cache to disk, and a test forbids it.
 
