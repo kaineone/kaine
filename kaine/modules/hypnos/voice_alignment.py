@@ -349,26 +349,26 @@ class DPOPairBuilder:
         else:
             paths = [Path(p) for p in path]
 
+        from kaine.persistence.encrypted_jsonl import iter_records
+
         pairs: list[DPOPair] = []
         scanned = 0
         usable = 0
+        unreadable = 0
         for p in reversed(paths):
             if scanned >= self._max_scanned:
                 break
             if not p.exists():
                 continue
-            with p.open("r", encoding="utf-8") as fh:
-                lines = fh.read().splitlines()
-            for line in reversed(lines):
+            for line in reversed(list(iter_records(p))):
                 if scanned >= self._max_scanned:
                     break
-                line = line.strip()
-                if not line:
+                if line.unreadable:
+                    # Not training data, and not counted as scanned, so the
+                    # template arm's rate is unaffected.
+                    unreadable += 1
                     continue
-                try:
-                    record = json.loads(line)
-                except Exception:
-                    continue
+                record = line.record
                 scanned += 1
                 chosen = (record.get("faithful_rendering") or "").strip()
                 rejected = (record.get("generated_text") or "").strip()
@@ -393,6 +393,12 @@ class DPOPairBuilder:
                         },
                     )
                 )
+        if unreadable:
+            log.warning(
+                "voice alignment: %d intent-log line(s) could not be read "
+                "(undecryptable or malformed); skipped",
+                unreadable,
+            )
         # The scan ran newest first; hand the kept pairs back in log order.
         pairs.reverse()
         return pairs, scanned, usable

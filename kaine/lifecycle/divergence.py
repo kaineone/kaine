@@ -434,25 +434,22 @@ def _file_shows_speech(path: Path) -> bool:
     """True if ``path`` holds a non-empty ``generated_text`` or any line that
     cannot be read as a record. A missing file shows nothing. Raises on an I/O
     error so the caller can fail protective."""
+    from kaine.persistence.encrypted_jsonl import iter_records
+
     try:
         st = os.stat(path)
     except (FileNotFoundError, NotADirectoryError):
         return False
     if not stat.S_ISREG(st.st_mode):
         return True
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            if not line.strip():
-                continue
-            try:
-                rec = json.loads(line)
-            except Exception:
-                return True
-            if not isinstance(rec, dict):
-                return True
-            generated = rec.get("generated_text")
-            if isinstance(generated, str) and generated.strip():
-                return True
+    for line in iter_records(path):
+        # Undecryptable (wrong or missing key) or unparseable: unreadable
+        # evidence, which counts as spoken, never as silence.
+        if line.unreadable:
+            return True
+        generated = line.record.get("generated_text")
+        if isinstance(generated, str) and generated.strip():
+            return True
     return False
 
 
