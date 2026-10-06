@@ -18,7 +18,7 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
-from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER
+from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, HEARD_TEXT_FIELDS
 from kaine.modules.base import BaseModule
 from kaine.modules.lingua.client import (
     ChatClient,
@@ -54,8 +54,10 @@ class Lingua(BaseModule):
     Agents / GWA. Lingua caches the latest broadcast it observed via a passive
     `_snapshot_cache_loop` (it stays intent-driven and never reflexively speaks;
     `on_workspace` remains the BaseModule no-op). External-speech events also
-    carry `user_input` so the A/B divergence observer can measure how much the
-    cognitive scaffolding moves the output versus a bare-LLM baseline.
+    carry `user_input`, but only when the trigger is a tagged felt-state phrase
+    or event summary; heard speech is never published. This lets the A/B
+    divergence observer measure how much the cognitive scaffolding moves the
+    output versus a bare-LLM baseline for non-heard triggers.
 
     Lingua's bus output goes to two distinct streams. `speak` writes the
     user-facing channel that Chatterbox subscribes to. `think` writes the
@@ -721,14 +723,27 @@ class Lingua(BaseModule):
 
         # Heard speech is anything that came from an audition.transcription in
         # the coalition, plus any unmarked about (fail-closed: felt/event must
-        # be explicitly tagged).
+        # be explicitly tagged). The redaction set also holds the values of the
+        # heard-speech payload fields on any coalition event.
         heard_texts: set[str] = set()
+        redact_texts: set[str] = set()
         if snap is not None:
             for _entry_id, event in snap.selected_events:
                 if event.type == "audition.transcription":
                     text = str(event.payload.get("text") or "").strip()
                     if text:
                         heard_texts.add(text)
+                for field in HEARD_TEXT_FIELDS - {"text"}:
+                    value = event.payload.get(field)
+                    if isinstance(value, str):
+                        stripped = value.strip()
+                        if stripped:
+                            redact_texts.add(stripped)
+        redact_texts |= heard_texts
+
+        # Only a transcription makes an about heard. Field values (for example
+        # a felt phrase Lingua itself published as user_input) are redacted
+        # from the log but never decide how the trigger is framed.
         about_is_heard = (
             about_kind not in ("felt", "event") or about.strip() in heard_texts
         )
@@ -755,7 +770,7 @@ class Lingua(BaseModule):
         # speech never reaches it: prompt and faithful rendering are redacted.
         logged_prompt = ctx.logged_prompt
         logged_faithful = ctx.logged_working_memory if snap is not None else None
-        for heard in heard_texts:
+        for heard in redact_texts:
             if len(heard) >= 3:
                 logged_prompt = logged_prompt.replace(heard, HEARD_SPEECH_PLACEHOLDER)
                 if logged_faithful is not None:
@@ -789,7 +804,9 @@ class Lingua(BaseModule):
         except Exception:
             log.exception("intent log append failed")
 
-        # Bus payloads remain unredacted; they are transient.
+        # Bus payloads use the same redacted faithful rendering that was
+        # persisted; user_input is carried only for tagged felt/event triggers,
+        # never for heard speech.
         payload: dict[str, Any] = {
             "text": response.text,
             "mode": mode,
@@ -798,15 +815,11 @@ class Lingua(BaseModule):
             "latency_ms": response.latency_ms,
             "record_id": record_id,
         }
-        # Carry the realized intent's origin when present (content-free).
         if origin is not None:
             payload["origin"] = origin
-        # External speech carries the triggering user input so the A/B divergence
-        # observer can build its bare baseline. Internal data: eval logs only,
-        # never the user-facing conversation surface.
-        if mode == "external" and about:
+        if mode == "external" and about and not about_is_heard:
             payload["user_input"] = about
-        faithful = ctx.working_memory if snap is not None else None
+        faithful = logged_faithful
         if faithful is not None:
             payload["faithful_rendering"] = faithful
         # Publish directly to the mode-specific stream (bypassing the

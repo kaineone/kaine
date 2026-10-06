@@ -332,9 +332,8 @@ class ABDivergenceObserver(StreamSubscriberObserver):
         )
 
     def _resolve_user_text(self, payload: dict[str, Any]) -> str:
-        # Lingua's intent-expression log carries `user_input`; if Lingua
-        # publishes that on its event payload (it does via faithful_log),
-        # use it. Otherwise, fall back to whatever's available.
+        # Lingua publishes `user_input` only for felt and event triggers, never
+        # for heard speech; heard input comes from the audition-fed provider.
         candidate = payload.get("user_input") or payload.get("user_text")
         if candidate:
             return str(candidate)

@@ -22,7 +22,7 @@ The new default persona is a short first-person frame:
 Rules:
 - The anti-confabulation rule stays in that narrower form. The organ may not invent states, but it is no longer told to recite readings.
 - The awareness heading becomes `## How I feel and what I notice`. The injection guard is unchanged.
-- The persona template carries a version string (`PERSONA_TEMPLATE_VERSION`). The individuation probe already records "persona template version" among its fixed conditions, so a birth reference captured under the old persona can never be compared with one under the new.
+- The persona template carries a version string (`PERSONA_TEMPLATE_VERSION`), and the individuation probe records it among its fixed conditions. Refusing to compare a birth reference recorded under a different persona version is enforced by individuation-rebuild task 6.3.
 
 ### D2. Drive crossings as felt states
 
@@ -72,7 +72,9 @@ The external trainer:
 ### D7. No heard speech persisted (V4)
 
 - When the intent log is written, every heard-speech line in the rendering and the heard input in the prompt are replaced with the fixed placeholder `[heard speech]`.
-- The bus events are unchanged; they are transient.
+- The organ's own generated text is logged as is. It is the being's own content, not heard speech.
+- Lingua's own bus events never carry heard text. `user_input` is published only for felt and event triggers, and the published rendering is the redacted one. Audition's transcription events still carry heard text on the bus, where it is transient.
+- Redaction goes by field as well as by event type: any coalition event whose payload holds `user_input`, `user_text`, `transcription`, `heard_text` or `faithful_rendering` is logged with those values replaced.
 - The placeholder keeps the structure of a reply context without its content.
 
 ### D8. Four measures; protection is unchanged

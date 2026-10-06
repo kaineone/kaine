@@ -261,8 +261,8 @@ async def test_lingua_realizes_speak_intent(bus: AsyncBus, tmp_path: Path):
         assert "how are you?" in req.prompt
         assert "How I feel and what I notice" in req.prompt
         assert req.system  # persona is set (was None before conditioning)
-        # External speech carries the user input for the A/B divergence observer.
-        assert payload["user_input"] == "how are you?"
+        # An untagged about counts as heard, and heard input never goes on the bus.
+        assert "user_input" not in payload
     finally:
         await lingua.shutdown()
 
@@ -363,14 +363,15 @@ async def test_real_chat_returns_text(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_speak_payload_carries_user_input(bus: AsyncBus, tmp_path: Path):
-    """External speech embeds user_input so ABDivergenceObserver can build its
-    bare baseline without an early return."""
+async def test_speak_payload_never_carries_heard_input(bus: AsyncBus, tmp_path: Path):
+    """A direct speak() about is untagged, so it counts as heard and is never
+    published; the A/B observer takes heard input from its audition provider."""
     lingua = _make_lingua(bus, tmp_path, responses=["answer"])
     await lingua.speak("what time is it?")
     entries = await bus.client.xrange(EXTERNAL_STREAM)
     payload = json.loads(entries[0][1]["payload"])
-    assert payload.get("user_input") == "what time is it?"
+    assert "user_input" not in payload
+    assert "what time is it?" not in json.dumps(payload)
 
 
 @pytest.mark.asyncio

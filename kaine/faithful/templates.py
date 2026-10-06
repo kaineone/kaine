@@ -58,13 +58,47 @@ def felt_drive_phrase(drive: str, value: object) -> str:
 
 HEARD_SPEECH_PLACEHOLDER = "[heard speech]"
 
+HEARD_TEXT_FIELDS = frozenset({
+    "text",
+    "user_input",
+    "user_text",
+    "transcription",
+    "heard_text",
+    "faithful_rendering",
+})
+"""Field names that may contain heard speech.
+`text` is treated as heard speech only for `audition.transcription`; for every
+other event type it is not. `faithful_rendering` is included because a rendering
+can embed earlier heard lines.
+"""
+
 
 def redact_heard_speech(event) -> Optional[str]:
-    """The log line for a heard-speech event, with its text replaced by the
-    placeholder; None for any other event."""
+    """Return a rendering of an event with any heard-speech payload field
+    replaced by the placeholder, or None when the event carries no heard speech.
+    """
     if event.type == "audition.transcription":
         return f'Speech heard: "{HEARD_SPEECH_PLACEHOLDER}".'
-    return None
+
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    heard_fields = HEARD_TEXT_FIELDS - {"text"}
+    has_heard = any(
+        isinstance(payload.get(field), str) and payload[field].strip()
+        for field in heard_fields
+    )
+    if not has_heard:
+        return None
+
+    redacted_payload = dict(payload)
+    for field in heard_fields:
+        value = redacted_payload.get(field)
+        if isinstance(value, str) and value.strip():
+            redacted_payload[field] = HEARD_SPEECH_PLACEHOLDER
+
+    template_fn = TEMPLATES.get((event.source, event.type))
+    if template_fn is None:
+        return fallback_template(event.source, event.type, redacted_payload)
+    return template_fn(redacted_payload)
 
 
 DEFAULT_EMPTY_SNAPSHOT_TEXT: str = "(no events selected)"
