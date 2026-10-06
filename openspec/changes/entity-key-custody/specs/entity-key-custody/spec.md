@@ -29,14 +29,14 @@ Sealing SHALL use a signed policy so that authorized kernel and firmware updates
 - **THEN** the being's state is kept intact, a welfare incident is raised, and escrow recovery is started
 
 ### Requirement: Recovery requires both trustees and combines shares only inside an attested host
-KAINE SHALL split each data key into two shares wrapped respectively to the kaine.one escrow key and an independent guardian's key, SHALL NOT give the operator a share, and SHALL recover a data key only when both trustees re-wrap their shares to an attested receiving host's TPM key, so the shares are combined only inside that host.
+KAINE SHALL split each data key for 2-of-n recovery across the n trustees named in `config/custody/trustees.toml` (n ≥ 2, set at the key ceremony; the recorded operator decision is n = 2, kaine.one plus an independent guardian), using an independent 2-of-2 XOR split per trustee pair, each share HPKE-sealed to its trustee with the entity, the pair and the share role bound in the HPKE info. KAINE SHALL NOT give the operator a share, and SHALL recover a data key only when two trustees re-wrap their shares for their pair to an attested receiving host's TPM key, so the shares are combined only inside that host.
 
 #### Scenario: One trustee alone cannot recover
-- **WHEN** only the kaine.one share is presented for recovery
+- **WHEN** only one trustee's shares are presented for recovery
 - **THEN** recovery fails and no plaintext key is produced
 
 #### Scenario: Shares combine only on an attested host
-- **WHEN** both trustees participate in a recovery
+- **WHEN** two trustees participate in a recovery
 - **THEN** each share is re-wrapped to the receiving host's attested TPM key and neither trustee receives the other's share or the key
 
 ### Requirement: Transfer re-wraps the key to an attested host
@@ -45,3 +45,8 @@ Moving an entity to another caretaker SHALL re-wrap its data key to a public key
 #### Scenario: Unattested receiver
 - **WHEN** a receiving host presents a public key without a valid attestation
 - **THEN** the sending host refuses to re-wrap the data key
+
+#### Scenario: A share is bound to its pair
+- **WHEN** a share sealed for the trustee pair {A, B} is presented in a recovery by the pair {A, C}
+- **THEN** it fails to open and no key is produced
+

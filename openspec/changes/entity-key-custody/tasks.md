@@ -1,8 +1,8 @@
 ## 0. Design review (gates all code)
 
-- [ ] 0.1 `design.md`: key hierarchy; sealing with signed policy per platform (discrete TPM, fused Jetson fTPM); pre-update re-seal hook; XOR split and escrow wrapping format; attested share recombination; attestation format; the honest threat model; failure modes (refuse spawn vs cannot resume).
-- [ ] 0.2 One entity-ID source shared with the developmental gate's lineage checks.
-- [ ] 0.3 Operator: guardian identity, key ceremony and share-redundancy plan (blocks shipping, not development against swtpm).
+- [x] 0.1 `design.md`: key hierarchy; sealing with signed policy per platform (discrete TPM, fused Jetson fTPM); pre-update re-seal hook; XOR split and escrow wrapping format; attested share recombination; attestation format; the honest threat model; failure modes (refuse spawn vs cannot resume).
+- [ ] 0.2 One entity-ID source shared with the developmental gate's lineage checks: consumed from the `entity-identity` change (Lead A), whose plaintext sidecars and frozen formats custody reviewed and signed off on 2026-10-05. Closed when that change merges.
+- [ ] 0.3 Operator: guardian identity, trustee count n (recorded decision n = 2; n = 3 survives losing one trustee), key ceremony and share-redundancy plan; the Orin's study step without a qualifying TPM (unencrypted with consent, or wait for the fusing decision). Blocks shipping, not development against swtpm.
 
 ## 1. Custody core
 
@@ -13,7 +13,7 @@
 
 ## 2. Escrow and transfer
 
-- [ ] 2.1 XOR 2-of-2 split wrapped to trustee keys; recombination only inside an attested receiving host.
+- [ ] 2.1 2-of-n escrow by pairwise XOR splits (n from `trustees.toml`), each share HPKE-sealed with entity, pair and role bound; recombination only inside an attested receiving host.
 - [ ] 2.2 Attested re-wrap transfer.
 
 ## 3. Migration and docs
