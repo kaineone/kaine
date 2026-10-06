@@ -171,7 +171,7 @@ def spawn_fakes(monkeypatch):
 
         return (Proc(), log_dir / "cycle-test.log", log_dir / "cycle-test.stderr")
 
-    async def fake_wait_ready(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5):
+    async def fake_wait_ready(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5, not_before=None):
         return ("ready", None)
 
     monkeypatch.setattr(spawn, "run_preboot", fake_preboot)
@@ -835,7 +835,7 @@ def test_spawn_guard_checks_the_saved_config_state_dir(tmp_path, monkeypatch, sp
 def test_spawn_exited_start_keeps_setup_open(tmp_path, monkeypatch, spawn_fakes):
     _mock_nexus(monkeypatch)
 
-    async def exited(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5):
+    async def exited(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5, not_before=None):
         return ("exited", 1)
 
     monkeypatch.setattr(spawn, "wait_ready", exited)
@@ -948,7 +948,7 @@ def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
 
     monkeypatch.setattr(spawn, "run_preboot", fake_preboot)
 
-    async def fake_wait_ready(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5):
+    async def fake_wait_ready(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5, not_before=None):
         return ("ready", None)
 
     monkeypatch.setattr(spawn, "wait_ready", fake_wait_ready)
@@ -1348,3 +1348,50 @@ def test_container_probe_mapping(monkeypatch):
     assert len(runs) == 2
 
     assert spawn.default_docker_probe is spawn.default_container_probe
+
+
+def test_wait_ready_ignores_a_stale_runtime_file_with_a_reused_pid(tmp_path):
+    """A previous run's runtime.json is not readiness, even with the same pid."""
+    import json
+    import time as _time
+
+    runtime = tmp_path / "runtime.json"
+
+    class Proc:
+        pid = 4242
+
+        def poll(self):
+            return None
+
+    runtime.write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+    old = _time.time() - 600
+    os.utime(runtime, (old, old))
+    started = _time.time()
+
+    outcome, _ = asyncio.run(
+        spawn.wait_ready(Proc(), runtime, timeout_s=0.3, poll_s=0.05, not_before=started)
+    )
+    assert outcome == "starting"
+
+    runtime.write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+    outcome, _ = asyncio.run(
+        spawn.wait_ready(Proc(), runtime, timeout_s=0.3, poll_s=0.05, not_before=started)
+    )
+    assert outcome == "ready"
+
+
+def test_spawn_refuses_when_the_spawned_pid_cannot_be_signalled(
+    tmp_path, spawn_fakes, monkeypatch
+):
+    """A spawned process that exists but cannot be signalled still blocks a spawn."""
+    with _saved_client(tmp_path) as (client, app):
+        app.state.spawned = {"pid": 4242, "log_path": None, "stderr_path": None}
+
+        def denied(pid, sig):
+            raise PermissionError(1, "Operation not permitted")
+
+        monkeypatch.setattr("kaine.setup.web.app.os.kill", denied)
+        r = _spawn_post(client)
+        assert r.status_code == 409
+        assert "may still be running" in r.text
+        assert app.state.spawned is not None

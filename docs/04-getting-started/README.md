@@ -64,7 +64,7 @@ The finish page shows a service status light for each known local service and fo
 
 ## Spawning the entity from the browser
 
-The finish page is the only place that can start the KAINE cognitive cycle.
+In the browser setup, the finish page is the only place that can start the KAINE cognitive cycle.
 Before it appears, the wizard writes the operator file and runs any consented
 jobs. Once the finish page is shown, a **Spawn the entity** section appears.
 

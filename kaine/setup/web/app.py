@@ -1050,7 +1050,11 @@ def create_setup_app(
             try:
                 os.kill(spawned["pid"], 0)
                 return "an entity was already started from this setup session"
-            except (OSError, ProcessLookupError):
+            except PermissionError:
+                # The process exists but cannot be signalled: treat it as
+                # still running rather than allow a second spawn.
+                return "an entity process from this setup session may still be running"
+            except ProcessLookupError:
                 request.app.state.spawned = None
 
         if state.operator_path.resolve() != (repo_root / OPERATOR_CONFIG_PATH).resolve():
@@ -1337,6 +1341,7 @@ def create_setup_app(
                 )
 
             state_dir = _state_dir_for_spawn(config, repo_root)
+            spawn_started_at = time.time()
             try:
                 proc, log_path, stderr_path = spawn.start_cycle(
                     repo_root,
@@ -1363,7 +1368,9 @@ def create_setup_app(
             }
 
             runtime_path = state_dir / "cycle" / "runtime.json"
-            outcome, code = await spawn.wait_ready(proc, runtime_path)
+            outcome, code = await spawn.wait_ready(
+                proc, runtime_path, not_before=spawn_started_at
+            )
 
             if outcome in ("ready", "starting"):
                 request.app.state.finish_shutdown = True

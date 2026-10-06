@@ -345,8 +345,13 @@ async def wait_ready(
     *,
     timeout_s: float = READY_TIMEOUT_S,
     poll_s: float = 0.5,
+    not_before: float | None = None,
 ) -> tuple[str, int | None]:
-    """Wait for the cycle to write its runtime file or exit."""
+    """Wait for the cycle to write its runtime file or exit.
+
+    ``not_before`` is the wall-clock time the cycle was started. A runtime
+    file older than that is a previous run's, even if its pid was reused.
+    """
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         ret = proc.poll()
@@ -354,11 +359,16 @@ async def wait_ready(
             return ("exited", ret)
 
         try:
-            if runtime_path.exists():
+            fresh = not_before is None or (
+                # Allow for coarse filesystem timestamps.
+                runtime_path.stat().st_mtime >= not_before - 2.0
+            )
+            if fresh:
                 data = json.loads(runtime_path.read_text(encoding="utf-8"))
                 if isinstance(data.get("pid"), int) and data["pid"] == proc.pid:
                     return ("ready", None)
         except Exception:
+            # Not written yet, or mid-write: poll again.
             pass
 
         await asyncio.sleep(poll_s)
