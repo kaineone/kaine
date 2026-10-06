@@ -10,7 +10,7 @@ Implemented. With no profile selected, the loader applies the `thesis_test` prof
 
 - The CfC backend is chosen by `cfc_backend` in `[chronos]`: `"numpy"` is the shipped default and needs no `torch` or `ncps`; `"torch"` uses `ncps.torch.CfC` and needs the `core` extra.
 - The CfC is **CPU-only by policy** regardless of host hardware. The network is small enough that a GPU adds no benefit, and enforcing CPU keeps the cycle tick budget predictable. A warning is logged if the selected device is not `cpu`.
-- Forward prediction is off by default (`forward_prediction = false`). It is purely additive and does not change base behaviour when disabled.
+- Forward prediction is off in the shipped `config/kaine.toml` (`forward_prediction = false`) and on in the default `thesis_test` profile. It is purely additive and does not change base behaviour when disabled.
 - Adaptation of the forward-prediction head is suspended during Hypnos offline cycles.
 
 ## Responsibility
@@ -23,7 +23,7 @@ On every Syneidesis workspace broadcast, Chronos:
 2. **Steps the CfC** — feeds the feature vector through a stateful Closed-form Continuous-time recurrent network, producing a hidden-state vector that encodes temporally compressed workspace history.
 3. **Scores anomaly** — the `RollingZScoreAnomaly` detector computes the z-score of the hidden state's L2 norm against a rolling window of recent norms. A high z-score means temporally unusual activity.
 4. **Scores rumination** — the `RecurrenceRuminationDetector` fingerprints the hidden state by quantizing each dimension and hashing, then counts bucket recurrences in a rolling window. Repeated identical or near-identical workspace states flag *rumination*, a welfare-relevant signal that the entity's experience has become stuck.
-5. **Measures idle time** — tracks the timestamp of the most recent event on configured user-input streams (default `audition.out`) and reports `time_since_last_interaction_s` (`inf` if no interaction yet). Any event on those streams counts, so in the default `thesis_test` profile, where `general_audition = true`, almost every workspace broadcast carries an `audition.perception` event and the idle clock stays near zero. The idle clock and snapshot delta time use the subjective `entity_clock`, not wall time.
+5. **Measures idle time** — tracks the timestamp of the most recent reset event on configured user-input streams (default `audition.out`) and reports `time_since_last_interaction_s` (`inf` if no interaction yet). Only an `audition.transcription` with non-empty `text`, or an `audition.emotion`, whose `source_label` is one of the operator sources (`live_mic`, `microphone`, `remote`) resets the clock, so the idle clock reflects real operator speech rather than every broadcast. The idle clock and snapshot delta time use the subjective `entity_clock`, not wall time.
 6. **Optionally runs a forward-prediction head** — when `forward_prediction = true`, the head maps the CfC hidden state to a predicted next feature vector. The `temporal_prediction_error` (mean absolute error between the prediction and the actual feature) drives salience in place of the z-score, and the head adapts online.
 
 ## Inputs
@@ -53,7 +53,7 @@ Chronos only resets `time_since_last_interaction_s` for speech-path events on an
 - The event type must be `audition.transcription` (with a non-empty `text` field) or `audition.emotion`.
 - The event's `payload.source_label` must be one of the shared operator sources (`live_mic`, `microphone`, `remote`).
 
-`audition.perception`, `audition.prosody`, and speech from seeded, playlist, womb, or screen perception feeds do not count. The social drive can build when the entity is not being addressed.
+`audition.perception`, `audition.prosody`, and speech from seeded, playlist, womb, or screen perception feeds do not count. The social drive can build when the entity is not being addressed. In Chronos the operator-source set is a fixed constant; it does not read `[empatheia].operator_sources`, which Volition and Empatheia do use.
 
 ## Featurizer layouts
 
@@ -165,7 +165,7 @@ To enable the forward-prediction head:
 forward_prediction = true
 ```
 
-No external services are needed. The CfC reservoir is frozen and is rebuilt from its saved `reservoir_seed`. Only the forward-prediction head weights (when enabled), `last_interaction_at`, `user_input_cursors`, and `reservoir_seed` are serialised.
+No external services are needed. The CfC reservoir is frozen and is rebuilt from its saved `reservoir_seed`. Only the forward-prediction head weights (when enabled), `last_interaction_at`, `user_input_cursors`, `featurizer_layout`, and `reservoir_seed` are serialised.
 
 ## Zero-persistence note
 
@@ -174,6 +174,7 @@ Chronos persists **no raw workspace events**. `serialize()` writes:
 - `last_interaction_at` — a single float timestamp.
 - `user_input_cursors` — Redis stream cursor positions.
 - `pred_head` — forward-prediction weight/bias tensors, only when forward prediction is enabled.
+- `featurizer_layout` — the featurizer layout used to build the 24-dim feature vector.
 - `reservoir_seed` — the seed used to reproduce the frozen CfC reservoir.
 
 A snapshot without a seed starts a new reservoir and logs that the reservoir is new. A `pred_head` snapshot whose shape does not match the configured network is rejected. The CfC hidden state is ephemeral and is not serialised; on restart, the CfC begins with a zero hidden state and re-accumulates context from subsequent workspace broadcasts.

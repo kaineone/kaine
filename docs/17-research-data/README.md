@@ -294,7 +294,7 @@ sequenceDiagram
 
 **Sampling.** `ab_sample_rate` (default `1.0`) controls what fraction of Lingua external-speech events trigger an A/B inference. At `1.0` every utterance is tested; lower values reduce cost.
 
-**Privacy.** The `user_input` field is present on `lingua.external_speech` events but is stripped from diagnostics SSE by the Nexus privacy boundary. Files are written to `data/evaluation/ab_divergence/ab_divergence-<YYYY-MM-DD>.jsonl` — operator-accessible, not streamed to the diagnostics surface by default.
+**Privacy.** The `user_input` field appears only on `lingua.external_speech` events from felt- or event-triggered replies, never for replies to heard speech, and any heard text in it is redacted first. It is stripped from diagnostics SSE by the Nexus privacy boundary. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted; they are not paired with bare-LLM completions. Files are written to `data/evaluation/ab_divergence/ab_divergence-<YYYY-MM-DD>.jsonl` — operator-accessible, not streamed to the diagnostics surface by default.
 
 **Interpretation.** A divergence near zero over time means the conscious workspace is adding no signal to Lingua's outputs. Rising divergence — the entity's conditioned outputs diverging from the bare-LLM baseline — is consistent with workspace conditioning, though as a continuous observational measure it does not by itself establish the workspace-mediation ablation's causal claim.
 
@@ -368,7 +368,7 @@ Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every f
 
 ## Configuration reference
 
-`chat_model_id` is no longer set under `[evaluation]`; the sidecar uses the Lingua model identifier, and an explicit value must match it. See the [Lingua module](../09-modules/lingua.md) and `kaine/evaluation/config.py`. The `[evaluation]` section also accepts `llm_context_window_seconds`; its default is in `kaine/evaluation/config.py`.
+`[evaluation]` does not set `chat_model_id`; the sidecar uses the Lingua model identifier, and an explicit value must match it. See the [Lingua module](../09-modules/lingua.md) and `kaine/evaluation/config.py`. The `[evaluation]` section also accepts `llm_context_window_seconds`; its default is in `kaine/evaluation/config.py`.
 
 Two additional `[evaluation]` keys are worth noting:
 
@@ -441,7 +441,7 @@ idle_poll_s = 1.0
 - Observers never modify module state and never inject into the cognitive loop. The welfare observer is the one observer that publishes to the bus, and only a content-free `welfare.gray_zone` signal (numeric scalars plus a category label, no source-payload field). Every other observer is publish-silent.
 - `replay_redact_content = true` (default) ensures no memory text content appears in sidecar JSONL without explicit operator/Guardian opt-in.
 - Individuation evidence lives at the fixed path `state/individuation/` (`reference.json`, `ledger.json` and `reports/` are encrypted; `birth_adapter.gguf` is a copy of the birth voice adapter, stored like the other adapter files). Reports hold only allow-listed scalars and never text from the being. It travels with the being: preservation bundles carry it inside the encrypted tar and a failed copy fails preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being. Whether research bundles export its content-free reports is an open operator decision, and those reports are not in research bundles today.
-- The A/B divergence instrument processes `user_input` in-memory to produce the cosine score. The JSONL file records the score and metadata, not the raw input text.
+- The A/B divergence instrument processes `user_input` in-memory to produce the cosine score, but only for felt- and event-triggered replies. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted. The JSONL file records the score and metadata, not the raw input text.
 
 ## Key files
 

@@ -230,7 +230,7 @@ Module-specific merge notes — Nous entropy values and `nous.merge_warning`, Mn
 
 ## Entity identity
 
-Each being has one identity, kept in plaintext at `state/identity/entity.json` (`kaine/lifecycle/identity.py`). The identity is an opaque `entity_id` (`ent-` followed by 32 hex characters) plus a lineage, the IDs of the being's ancestors, oldest first. Key custody reads it before it unseals anything, so it is never encrypted and it holds no cognitive content.
+Each being has one identity, kept in plaintext at `state/identity/entity.json` (`kaine/lifecycle/identity.py`). The identity is an opaque `entity_id` (`ent-` followed by 32 hex characters) plus a lineage, the IDs of the being's ancestors, oldest first. No key-custody code exists yet. The identity file is plaintext so that the planned per-entity key custody can locate a key; today only lifecycle and cycle code read it.
 
 - **Minting.** The cycle mints an identity only for a fresh spawn: a state tree with no identity file and none of its own lived artifacts (stage file, Phantasia checkpoint, Hypnos divergence record, perception desired-state). Other beings' snapshots and bundles under `state/` never count as this tree's past.
 - **Legacy beings.** A tree that lived before identities existed gets a deterministic `legacy-` ID derived from its own lived artifacts, and a preservation bundle written before identities existed revives under a `legacy-` ID derived from its preservation ID. The ID is saved at once and never re-derived.
