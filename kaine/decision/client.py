@@ -18,6 +18,7 @@ import httpx
 
 from kaine.decision.schema import (
     SCHEMA_VERSION,
+    Question,
     get_question,
     schema_digest,
     state_text,
@@ -84,8 +85,14 @@ class DecisionConfig:
             name = sorted(unknown)[0]
             raise ValueError(f"Unknown decision config key: {name!r}")
 
+        enabled = section.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ValueError(
+                f"decision config key 'enabled' must be a bool, got {type(enabled).__name__}"
+            )
+
         return cls(
-            enabled=section.get("enabled", False),
+            enabled=enabled,
             url=section.get("url", "http://127.0.0.1:11436"),
             model=section.get("model", "k1-jev"),
             timeout_s=section.get("timeout_s", 5.0),
@@ -109,6 +116,10 @@ def load_thresholds(path: str) -> dict[str, float] | None:
         logger.warning(
             "Decision thresholds file unreadable: %s", type(exc).__name__
         )
+        return None
+
+    if not isinstance(data, dict):
+        logger.warning("Decision thresholds top level is not a JSON object")
         return None
 
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -165,7 +176,7 @@ class DecisionClient:
         self,
         config: DecisionConfig,
         *,
-        http_client: httpx.Client | None = None,
+        transport: httpx.BaseTransport | None = None,
         clock=time.monotonic,
     ):
         # Re-check here too: the key and the utterance must never leave the host,
@@ -177,26 +188,19 @@ class DecisionClient:
         self._thresholds = load_thresholds(config.thresholds_path)
         self._last_warning: dict[str, float] = {}
 
-        if http_client is None:
-            # The owned client must never honor HTTP_PROXY / ALL_PROXY: those would
-            # route the bearer key and the entity's utterance off-host.
-            self._client = httpx.Client(
-                timeout=config.timeout_s, trust_env=False
-            )
-            self._owns_client = True
-        else:
-            if getattr(http_client, "trust_env", False):
-                raise ValueError(
-                    "injected http_client must disable proxy environment "
-                    "(trust_env=False)"
-                )
-            self._client = http_client
-            self._owns_client = False
+        # The owned client must never honor HTTP_PROXY / ALL_PROXY: those would
+        # route the bearer key and the entity's utterance off-host.  Redirects
+        # are also rejected so the local endpoint cannot bounce the data away.
+        self._client = httpx.Client(
+            timeout=config.timeout_s,
+            trust_env=False,
+            follow_redirects=False,
+            transport=transport,
+        )
 
     def close(self) -> None:
-        """Close the owned HTTP client, if any."""
-        if self._owns_client:
-            self._client.close()
+        """Close the owned HTTP client."""
+        self._client.close()
 
     def _warn(self, kind: str, question_ids: list[str]) -> None:
         """Rate-limited, content-free warning."""
@@ -277,6 +281,10 @@ class DecisionClient:
             self._warn("malformed_response", question_ids)
             return None
 
+        if payload.get("model") != self._config.model:
+            self._warn("model_mismatch", question_ids)
+            return None
+
         answers = payload.get("answers")
         if not isinstance(answers, dict):
             self._warn("malformed_response", question_ids)
@@ -284,15 +292,15 @@ class DecisionClient:
 
         result: dict[str, Answer] = {}
         for qid in question_ids:
-            expected_type = get_question(qid).type
+            question = get_question(qid)
             ans = answers.get(qid)
-            if not isinstance(ans, dict) or ans.get("type") != expected_type:
-                self._warn("malformed_response", question_ids)
+            if not isinstance(ans, dict) or ans.get("type") != question.type:
+                self._warn("out_of_schema", question_ids)
                 return None
 
-            parsed = self._parse_single(qid, expected_type, ans)
+            parsed = self._parse_single(question, ans)
             if parsed is None:
-                self._warn("malformed_response", question_ids)
+                self._warn("out_of_schema", question_ids)
                 return None
 
             result[qid] = parsed
@@ -301,27 +309,33 @@ class DecisionClient:
 
     def _parse_single(
         self,
-        qid: str,
-        type_: str,
+        question: Question,
         ans: dict[str, Any],
     ) -> Answer | None:
-        if type_ == "choice":
-            raw_probs = ans.get("probabilities")
-            if not isinstance(raw_probs, dict):
-                return None
+        qid = question.id
+        type_ = question.type
 
+        if type_ == "choice":
+            option_keys = {opt.key for opt in question.options}
+
+            raw_probs = ans.get("probabilities")
             probabilities: dict[str, float] = {}
-            for key, value in raw_probs.items():
-                try:
-                    prob = float(value)
-                except Exception:
+            if raw_probs is not None:
+                if not isinstance(raw_probs, dict):
                     return None
-                if not math.isfinite(prob):
-                    return None
-                probabilities[key] = prob
+                for key, value in raw_probs.items():
+                    if key not in option_keys:
+                        return None
+                    try:
+                        prob = float(value)
+                    except Exception:
+                        return None
+                    if not math.isfinite(prob) or not (0.0 <= prob <= 1.0):
+                        return None
+                    probabilities[key] = prob
 
             choice = ans.get("choice")
-            if choice is not None and not isinstance(choice, str):
+            if choice is None or not isinstance(choice, str) or choice not in option_keys:
                 return None
 
             return Answer(
@@ -335,25 +349,35 @@ class DecisionClient:
             )
 
         if type_ == "score":
-            raw_probs = ans.get("probabilities")
-            if not isinstance(raw_probs, dict):
-                return None
+            levels = len(question.options)
 
-            probabilities = {}
-            for key, value in raw_probs.items():
-                try:
-                    prob = float(value)
-                except Exception:
+            raw_probs = ans.get("probabilities")
+            probabilities: dict[str, float] = {}
+            if raw_probs is not None:
+                if not isinstance(raw_probs, dict):
                     return None
-                if not math.isfinite(prob):
-                    return None
-                probabilities[key] = prob
+                for key, value in raw_probs.items():
+                    if not isinstance(key, str):
+                        return None
+                    try:
+                        idx = int(key)
+                    except Exception:
+                        return None
+                    if str(idx) != key or not (0 <= idx < levels):
+                        return None
+                    try:
+                        prob = float(value)
+                    except Exception:
+                        return None
+                    if not math.isfinite(prob) or not (0.0 <= prob <= 1.0):
+                        return None
+                    probabilities[key] = prob
 
             try:
                 score = float(ans["score"])
             except Exception:
                 return None
-            if not math.isfinite(score):
+            if not math.isfinite(score) or not (0.0 <= score <= levels - 1):
                 return None
 
             return Answer(

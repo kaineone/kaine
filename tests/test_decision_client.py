@@ -18,6 +18,7 @@ from kaine.decision.client import DecisionClient, DecisionConfig, load_threshold
 from kaine.decision.schema import (
     QUESTIONS,
     SCHEMA_VERSION,
+    get_question,
     schema_digest,
     state_text,
     systemone_questions,
@@ -93,7 +94,7 @@ def test_request_shape(server, monkeypatch):
     url, _srv, handler = server
     qid = _first_id("noul")
     handler._response = json.dumps(
-        {"model": "k1-jev", "answers": {qid: {"type": "noul", "noul": 0.5}}, "usage": {}}
+        {"model": "k1-jev-test", "answers": {qid: {"type": "noul", "noul": 0.5}}, "usage": {}}
     ).encode()
 
     monkeypatch.setenv("KAINE_DECISION_SERVER_API_KEY", "")
@@ -207,14 +208,15 @@ def test_noul_without_threshold(server):
 def test_choice_parsing(server):
     url, _srv, handler = server
     qid = _first_id("choice")
+    o0, o1 = [o.key for o in get_question(qid).options][:2]
     handler._response = json.dumps(
         {
             "model": "k1-jev",
             "answers": {
                 qid: {
                     "type": "choice",
-                    "choice": "yes",
-                    "probabilities": {"yes": 0.8, "no": 0.2},
+                    "choice": o0,
+                    "probabilities": {o0: 0.8, o1: 0.2},
                     "confidence": 0.9,
                 }
             },
@@ -225,8 +227,8 @@ def test_choice_parsing(server):
     client = DecisionClient(DecisionConfig(enabled=True, url=url))
     ans = client.ask("x", None, [qid])[qid]
     assert ans.type == "choice"
-    assert ans.choice == "yes"
-    assert ans.probabilities == pytest.approx({"yes": 0.8, "no": 0.2})
+    assert ans.choice == o0
+    assert ans.probabilities == pytest.approx({o0: 0.8, o1: 0.2})
     assert ans.score is None
     assert ans.noul is None
     assert ans.decided is None
@@ -441,6 +443,11 @@ def test_config_unknown_key():
         DecisionConfig.from_section({"bad_key": 1})
 
 
+def test_config_enabled_not_bool():
+    with pytest.raises(ValueError, match="enabled"):
+        DecisionConfig.from_section({"enabled": "false"})
+
+
 def test_load_thresholds_good(tmp_path):
     qid = _first_id("noul")
     path = tmp_path / "thresholds.json"
@@ -536,6 +543,14 @@ def test_load_thresholds_empty_path(caplog):
     assert not caplog.records
 
 
+def test_load_thresholds_non_object_is_missing(tmp_path, caplog):
+    path = tmp_path / "thresholds.json"
+    path.write_text(json.dumps([1, 2]))
+    with caplog.at_level("WARNING"):
+        assert load_thresholds(str(path)) is None
+    assert "object" in caplog.text.lower()
+
+
 def test_import_boundary():
     root = Path(__file__).resolve().parent.parent
     script = """
@@ -598,17 +613,14 @@ def test_a_non_local_url_never_sends_the_key_or_the_utterance(monkeypatch):
     """Even if a config with a remote URL is forced past DecisionConfig, the
     client refuses at construction: no request, so neither the key nor the
     entity's speech leaves the process."""
-    import dataclasses
-
     sent = []
     transport = httpx.MockTransport(lambda request: sent.append(request) or httpx.Response(200, json={}))
     monkeypatch.setenv("KAINE_DECISION_SERVER_API_KEY", "k-secret-marker")
     cfg = DecisionConfig(enabled=True)
     object.__setattr__(cfg, "url", "http://attacker.example:80")  # bypass __post_init__
     with pytest.raises(ValueError):
-        DecisionClient(cfg, http_client=httpx.Client(transport=transport, trust_env=False))
+        DecisionClient(cfg, transport=transport)
     assert sent == []
-    del dataclasses
 
 
 def test_owned_client_ignores_environment_proxies(monkeypatch):
@@ -637,14 +649,17 @@ def test_owned_client_ignores_environment_proxies(monkeypatch):
         srv.server_close()
 
 
-def test_injected_client_with_trust_env_true_is_rejected():
-    cfg = DecisionConfig(enabled=True)
-    bad = httpx.Client(trust_env=True)
-    try:
-        with pytest.raises(ValueError):
-            DecisionClient(cfg, http_client=bad)
-    finally:
-        bad.close()
+def test_owned_client_flags():
+    client = DecisionClient(DecisionConfig(enabled=True))
+    assert client._client.trust_env is False
+    assert client._client.follow_redirects is False
+    client.close()
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+    client = DecisionClient(DecisionConfig(enabled=True), transport=transport)
+    assert client._client.trust_env is False
+    assert client._client.follow_redirects is False
+    client.close()
 
 
 @pytest.mark.parametrize(
@@ -684,3 +699,174 @@ def test_noul_out_of_bounds_is_missing(server, noul):
         assert client.ask("x", None, [qid]) is None
     finally:
         client.close()
+
+
+def test_choice_bogus_is_missing(server, caplog):
+    url, _srv, handler = server
+    qid = _first_id("choice")
+    handler._response = json.dumps(
+        {
+            "model": "k1-jev",
+            "answers": {qid: {"type": "choice", "choice": "BOGUS"}},
+            "usage": {},
+        }
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    with caplog.at_level("WARNING"):
+        assert client.ask("x", None, [qid]) is None
+    assert "out_of_schema" in caplog.text
+    client.close()
+
+
+@pytest.mark.parametrize("score", [999, -1, float("nan")])
+def test_score_out_of_bounds_or_nan_is_missing(server, score):
+    url, _srv, handler = server
+    qid = _first_id("score")
+    handler._response = json.dumps(
+        {
+            "model": "k1-jev",
+            "answers": {qid: {"type": "score", "score": score}},
+            "usage": {},
+        }
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    try:
+        assert client.ask("x", None, [qid]) is None
+    finally:
+        client.close()
+
+
+def test_choice_probability_unknown_key_is_missing(server, caplog):
+    url, _srv, handler = server
+    qid = _first_id("choice")
+    handler._response = json.dumps(
+        {
+            "model": "k1-jev",
+            "answers": {
+                qid: {
+                    "type": "choice",
+                    "choice": "yes",
+                    "probabilities": {"yes": 0.5, "unknown": 0.5},
+                }
+            },
+            "usage": {},
+        }
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    with caplog.at_level("WARNING"):
+        assert client.ask("x", None, [qid]) is None
+    assert "out_of_schema" in caplog.text
+    client.close()
+
+
+@pytest.mark.parametrize("value", [1.5, -0.1])
+def test_choice_probability_out_of_range_is_missing(server, caplog, value):
+    url, _srv, handler = server
+    qid = _first_id("choice")
+    handler._response = json.dumps(
+        {
+            "model": "k1-jev",
+            "answers": {
+                qid: {
+                    "type": "choice",
+                    "choice": "yes",
+                    "probabilities": {"yes": value, "no": 0.0},
+                }
+            },
+            "usage": {},
+        }
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    with caplog.at_level("WARNING"):
+        assert client.ask("x", None, [qid]) is None
+    assert "out_of_schema" in caplog.text
+    client.close()
+
+
+def test_answer_type_mismatch_is_missing(server, caplog):
+    url, _srv, handler = server
+    qid = _first_id("noul")
+    handler._response = json.dumps(
+        {
+            "model": "k1-jev",
+            "answers": {
+                qid: {
+                    "type": "choice",
+                    "choice": "yes",
+                    "probabilities": {"yes": 1.0},
+                }
+            },
+            "usage": {},
+        }
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    with caplog.at_level("WARNING"):
+        assert client.ask("x", None, [qid]) is None
+    assert "out_of_schema" in caplog.text
+    client.close()
+
+
+@pytest.mark.parametrize("response_model", ["other-model", None], ids=["different", "missing"])
+def test_response_model_mismatch_is_missing(server, caplog, response_model):
+    url, _srv, handler = server
+    qid = _first_id("noul")
+    payload = {
+        "answers": {qid: {"type": "noul", "noul": 0.5}},
+        "usage": {},
+    }
+    if response_model is not None:
+        payload["model"] = response_model
+    handler._response = json.dumps(payload).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url, model="k1-jev"))
+    with caplog.at_level("WARNING"):
+        assert client.ask("x", None, [qid]) is None
+    assert "model_mismatch" in caplog.text
+    client.close()
+
+
+def test_valid_response_still_parses_exactly_as_before(server):
+    url, _srv, handler = server
+    noul_qid = _first_id("noul")
+    choice_qid = _first_id("choice")
+    o0, o1 = [o.key for o in get_question(choice_qid).options][:2]
+    score_qid = _first_id("score")
+    levels = len(get_question(score_qid).options)
+    score_probs = {str(i): 1.0 / levels for i in range(levels)}
+
+    handler._response = json.dumps(
+        {
+            "model": "k1-jev",
+            "answers": {
+                noul_qid: {"type": "noul", "noul": 0.42},
+                choice_qid: {
+                    "type": "choice",
+                    "choice": o0,
+                    "probabilities": {o0: 0.8, o1: 0.2},
+                },
+                score_qid: {
+                    "type": "score",
+                    "score": 1.5,
+                    "probabilities": score_probs,
+                },
+            },
+            "usage": {},
+        }
+    ).encode()
+
+    client = DecisionClient(DecisionConfig(enabled=True, url=url))
+    result = client.ask("x", None, [noul_qid, choice_qid, score_qid])
+    assert result is not None
+    assert result[noul_qid].noul == pytest.approx(0.42)
+    assert result[choice_qid].choice == o0
+    assert result[choice_qid].probabilities == pytest.approx(
+        {o0: 0.8, o1: 0.2}
+    )
+    assert result[score_qid].score == pytest.approx(1.5)
+    assert result[score_qid].probabilities == pytest.approx(score_probs)
+    client.close()
