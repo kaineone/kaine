@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
+import types
 from pathlib import Path
 from typing import Iterator
 
 import pytest
 
-from kaine.cycle.__main__ import _resolve_boot_stage
+from kaine.cycle.__main__ import _resolve_boot_stage, _resolve_start_stage
 from kaine.lifecycle import stage as st
 from kaine.lifecycle.identity import (
     EntityIdentity,
@@ -243,17 +245,141 @@ def test_lived_before_true_when_a_descendant_record_names_this_being(tmp_path: P
     assert lived_before(me, other_root, bundle_roots=[tmp_path / "bundles"]) is True
 
 
-def test_broken_foreign_records_are_skipped(tmp_path: Path) -> None:
-    """Unreadable sidecars and manifests are skipped, never raised, and never
-    count as this being's history."""
+def test_resolve_start_stage_revived_legacy_bundle_without_identity_is_embodied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A revived preserved bundle has lived; the lineage scan must not run."""
+    data_root = tmp_path
+    state_root = data_root / "state"
+
+    monkeypatch.setattr(st, "STAGE_PATH", state_root / "lifecycle" / "stage.json")
+
+    me = mint_identity()
+
+    # Legacy preservation bundle with no identity metadata.
+    bundle_dir = state_root / "preservation" / "b1"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / "manifest.json").write_text(json.dumps({"version": "legacy"}))
+
+    def _must_not_call(*_a, **_k):
+        raise AssertionError("lineage scan must not be called for a revived being")
+
+    monkeypatch.setattr(st, "has_prior_lived_history", _must_not_call)
+
+    revive = types.SimpleNamespace(stage_state=None)
+    config = {"developmental_stage": {"enabled": True}}
+
+    with _data_root(data_root):
+        stage_state, enabled, fresh = _resolve_start_stage(config, revive, identity=me)
+
+    assert enabled is True
+    assert stage_state.stage == st.EMBODIED
+    assert fresh is False
+
+
+def test_resolve_start_stage_revived_bundle_outside_roots_is_embodied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A revived bundle outside every configured root is still treated as lived."""
+    data_root = tmp_path
+    state_root = data_root / "state"
+
+    monkeypatch.setattr(st, "STAGE_PATH", state_root / "lifecycle" / "stage.json")
+
+    me = mint_identity()
+
+    # A preserved bundle outside every configured bundle root.
+    bundle_dir = data_root / "foreign" / "b1"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / "manifest.json").write_text(json.dumps(_manifest(me)))
+
+    config = {
+        "developmental_stage": {"enabled": True},
+        "preservation": {"divergence_monitor": {"out_root": "backups"}},
+    }
+
+    revive = types.SimpleNamespace(stage_state=None)
+
+    with _data_root(data_root):
+        # Without a revive the same tree, holding only foreign/out-of-root
+        # records, still gestates.
+        gestation_state, gestation_enabled, gestation_fresh = _resolve_boot_stage(
+            config, identity=me
+        )
+        # A revival of the bundle treats the being as already-lived.
+        stage_state, enabled, fresh = _resolve_start_stage(config, revive, identity=me)
+
+    assert gestation_enabled is True
+    assert gestation_state.stage == st.GESTATION
+    assert gestation_fresh is True
+    assert enabled is True
+    assert stage_state.stage == st.EMBODIED
+    assert fresh is False
+
+
+def test_lived_before_true_with_corrupt_fork_sidecar(tmp_path: Path) -> None:
+    """An unreadable fork sidecar counts as lived evidence."""
     me = mint_identity()
     forks = tmp_path / "forks" / "broken"
     forks.mkdir(parents=True)
     (forks / "identity.json").write_text("{not json")
+    assert lived_before(me, tmp_path) is True
+
+
+def test_lived_before_true_with_corrupt_manifest(tmp_path: Path) -> None:
+    """An unreadable preservation manifest counts as lived evidence."""
+    me = mint_identity()
     bundle = tmp_path / "backups" / "b1"
     bundle.mkdir(parents=True)
     (bundle / "manifest.json").write_text("{not json")
-    bad_identity = tmp_path / "backups" / "b2"
-    bad_identity.mkdir(parents=True)
-    (bad_identity / "manifest.json").write_text(json.dumps({"identity": "nope"}))
-    assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is False
+    assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is True
+
+
+def test_lived_before_true_with_manifest_missing_identity(tmp_path: Path) -> None:
+    """A manifest without an identity object is a legacy or unknown bundle."""
+    me = mint_identity()
+    bundle = tmp_path / "backups" / "b1"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text(json.dumps({"version": "legacy"}))
+    assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is True
+
+
+def test_lived_before_true_with_manifest_json_list(tmp_path: Path) -> None:
+    """A manifest whose JSON is not an object is treated as lived."""
+    me = mint_identity()
+    bundle = tmp_path / "backups" / "b1"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text(json.dumps(["not", "an", "object"]))
+    assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is True
+
+
+def test_fork_snapshot_without_identity_sidecar_counts_as_lived(tmp_path: Path) -> None:
+    """A snapshot with no identity sidecar is unidentified, so it is lived."""
+    me = mint_identity()
+    snap = tmp_path / "forks" / "legacy"
+    snap.mkdir(parents=True)
+    (snap / "snapshot.json").write_text("{}")
+    assert lived_before(me, tmp_path) is True
+
+
+def test_manifest_with_malformed_identity_counts_as_lived(tmp_path: Path) -> None:
+    me = mint_identity()
+    bundle = tmp_path / "backups" / "b1"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text(json.dumps({"identity": {"entity_id": 7}}))
+    assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is True
+
+
+def test_unreadable_manifest_counts_as_lived(tmp_path: Path) -> None:
+    me = mint_identity()
+    bundle = tmp_path / "backups" / "b1"
+    bundle.mkdir(parents=True)
+    manifest = bundle / "manifest.json"
+    manifest.write_text(json.dumps(_manifest(mint_identity())))
+    manifest.chmod(0o000)
+    try:
+        if os.access(manifest, os.R_OK):
+            pytest.skip("running with privileges that ignore file modes")
+        assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is True
+    finally:
+        manifest.chmod(0o600)

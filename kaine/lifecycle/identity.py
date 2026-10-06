@@ -440,9 +440,9 @@ def has_prior_lived_history_in_lineage(
 
     ``None`` counts as lived (unknown lineage). Otherwise, the query reads only
     plaintext metadata: fork sidecars, preservation manifests, and any
-    configured bundle-root manifests. Records without an identity, or
-    unreadable/broken foreign records, are skipped with a warning. This function
-    never raises because of a foreign or broken record.
+    configured bundle-root manifests. Unreadable, malformed, or unidentified
+    records are treated as evidence of a lived being and return ``True``,
+    because ambiguity must resolve to "lived". This function still never raises.
     """
     if identity is None:
         return True
@@ -452,32 +452,49 @@ def has_prior_lived_history_in_lineage(
 
     forks_root = root / "forks"
     try:
-        if forks_root.is_dir():
-            for entry in forks_root.iterdir():
-                try:
-                    sidecar = read_identity_sidecar(entry)
-                except IdentityError as exc:
-                    log.warning(
-                        "Skipping unreadable fork identity sidecar %s: %s",
-                        entry / SIDECAR_NAME,
-                        exc,
-                    )
-                    continue
-                except OSError as exc:
-                    log.warning(
-                        "Skipping unreadable fork identity sidecar %s: %s",
-                        entry / SIDECAR_NAME,
-                        exc,
-                    )
-                    continue
-                if sidecar is None:
-                    continue
-                # Its own or an ancestor's record, or a descendant's: a fork
-                # whose lineage names this being proves this being lived.
-                if sidecar[0] in target_ids or identity.entity_id in sidecar[1]:
-                    return True
+        forks_present = forks_root.is_dir()
     except OSError as exc:
-        log.warning("Cannot enumerate fork snapshots under %s: %s", forks_root, exc)
+        log.warning("Cannot inspect %s; treating as prior lived history: %s", forks_root, exc)
+        return True
+    if forks_present:
+        try:
+            entries = list(forks_root.iterdir())
+        except OSError as exc:
+            log.warning(
+                "Cannot enumerate fork snapshots under %s; treating as prior lived history: %s",
+                forks_root,
+                exc,
+            )
+            return True
+        for entry in entries:
+            sidecar_path = entry / SIDECAR_NAME
+            try:
+                sidecar = read_identity_sidecar(entry)
+            except IdentityError as exc:
+                log.warning(
+                    "Treating unreadable fork identity sidecar %s as prior lived history: %s",
+                    sidecar_path,
+                    exc,
+                )
+                return True
+            except OSError as exc:
+                log.warning(
+                    "Treating unreadable fork identity sidecar %s as prior lived history: %s",
+                    sidecar_path,
+                    exc,
+                )
+                return True
+            if sidecar is None:
+                # A snapshot with no identity sidecar is unidentified: lived.
+                log.warning(
+                    "Treating fork snapshot %s without an identity sidecar as prior lived history",
+                    entry,
+                )
+                return True
+            # Its own or an ancestor's record, or a descendant's: a fork
+            # whose lineage names this being proves this being lived.
+            if sidecar[0] in target_ids or identity.entity_id in sidecar[1]:
+                return True
 
     # Preservation bundles: the legacy in-tree location plus every configured
     # bundle root (preservation out_roots default to ``backups/``).
@@ -487,24 +504,55 @@ def has_prior_lived_history_in_lineage(
                 continue
             entries = list(bundle_root.iterdir())
         except OSError as exc:
-            log.warning("Cannot enumerate preservation bundles under %s: %s", bundle_root, exc)
-            continue
+            log.warning(
+                "Cannot enumerate preservation bundles under %s; treating as prior lived history: %s",
+                bundle_root,
+                exc,
+            )
+            return True
         for entry in entries:
             manifest_path = entry / "manifest.json"
             try:
                 if not manifest_path.is_file():
                     continue
-                raw = json.loads(manifest_path.read_text())
-            except (OSError, json.JSONDecodeError) as exc:
-                log.warning("Skipping unreadable preservation manifest %s: %s", manifest_path, exc)
-                continue
+                raw_text = manifest_path.read_text()
+            except OSError as exc:
+                log.warning(
+                    "Treating unreadable preservation manifest %s as prior lived history: %s",
+                    manifest_path,
+                    exc,
+                )
+                return True
+            try:
+                raw = json.loads(raw_text)
+            except json.JSONDecodeError as exc:
+                log.warning(
+                    "Treating malformed preservation manifest %s as prior lived history: %s",
+                    manifest_path,
+                    exc,
+                )
+                return True
             if not isinstance(raw, dict):
-                continue
+                log.warning(
+                    "Treating preservation manifest with non-object JSON as prior lived history: %s",
+                    manifest_path,
+                )
+                return True
             identity_obj = raw.get("identity")
             if not isinstance(identity_obj, dict):
-                continue
+                log.warning(
+                    "Treating preservation manifest without an identity object as prior lived history: %s",
+                    manifest_path,
+                )
+                return True
             record_id = identity_obj.get("entity_id")
-            if isinstance(record_id, str) and record_id in target_ids:
+            if not isinstance(record_id, str) or not record_id:
+                log.warning(
+                    "Treating preservation manifest with a malformed identity as prior lived history: %s",
+                    manifest_path,
+                )
+                return True
+            if record_id in target_ids:
                 return True
             record_lineage = identity_obj.get("lineage")
             if isinstance(record_lineage, list) and identity.entity_id in record_lineage:
@@ -529,10 +577,11 @@ def lived_before(
         (:data:`OWN_LIVED_ARTIFACTS`), which deliberately excludes ``forks/``
         and ``preservation/``;
       * ``forks/``, in-tree ``preservation/`` or any configured bundle root
-        contains a record whose sidecar or manifest names this being or one of
-        its ancestors, or a descendant whose lineage names this being.
-
-    Unreadable or malformed foreign records are skipped with a warning.
+        contains a readable record whose sidecar or manifest names this being
+        or one of its ancestors, or a descendant whose lineage names this being;
+      * a fork sidecar, preservation manifest, or bundle manifest is unreadable,
+        malformed, or lacks an identity object — every ambiguity resolves to
+        "lived".
 
     Foreign snapshots or bundles are not counted as this being's own history.
     """

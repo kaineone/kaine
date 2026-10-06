@@ -944,6 +944,7 @@ def _resolve_boot_stage(
     config: dict[str, Any],
     stage_override: lifecycle_stage.StageState | None = None,
     identity: Any = None,
+    revived: bool = False,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the developmental stage at boot.
 
@@ -958,6 +959,10 @@ def _resolve_boot_stage(
 
     If ``stage_override`` is provided it is returned directly and the stage file
     is not read.
+
+    If ``revived`` is true, the being is treated as already-lived even if the
+    lineage scan would not otherwise find evidence, because a preserved being
+    has lived by definition.
     """
     ds_config = MaturationConfig.from_dict(config.get("developmental_stage"))
     if stage_override is not None:
@@ -973,11 +978,14 @@ def _resolve_boot_stage(
     existing = lifecycle_stage.read_stage()
     if existing is not None:
         return existing, True, False
-    prior = lifecycle_stage.has_prior_lived_history(
-        identity,
-        resolve(Path("state")),
-        bundle_roots=_preservation_bundle_roots(config),
-    )
+    if revived:
+        prior = True
+    else:
+        prior = lifecycle_stage.has_prior_lived_history(
+            identity,
+            resolve(Path("state")),
+            bundle_roots=_preservation_bundle_roots(config),
+        )
     resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
     # The gate runner persists the resolved stage on its first tick so the
     # gestation clock is anchored and evidence is owned by one writer.
@@ -991,9 +999,15 @@ def _resolve_start_stage(
     identity: Any = None,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the stage for this start: the bundle's preserved stage when
-    reviving one that carries a stage, otherwise the stage file as usual."""
+    reviving one that carries a stage, otherwise the stage file as usual.
+
+    A revived bundle counts as a lived being even when it carries no stage
+    state, so a preserved being is never regressed into gestation.
+    """
     override = revive.stage_state if revive is not None else None
-    return _resolve_boot_stage(config, stage_override=override, identity=identity)
+    return _resolve_boot_stage(
+        config, stage_override=override, identity=identity, revived=revive is not None
+    )
 
 
 def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
