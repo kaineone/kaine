@@ -73,6 +73,7 @@ async def test_emotion_classify_reload_after_shutdown_and_failure(monkeypatch):
     assert degraded.category == "neutral"
     assert degraded.confidence == 0.0
     assert degraded.raw.get("degraded") is True
+    assert failing_classifier.funasr_available is False
 
     degraded2 = await failing_classifier.classify(b"\x00", sample_rate=16000)
     assert degraded2.category == "neutral"
@@ -187,7 +188,48 @@ async def test_emotion_double_cancel_does_not_leak_inflight(monkeypatch):
         await classify_task
 
     await asyncio.wait_for(classifier.unload(), timeout=2)
-    assert classifier._inflight == 0
+    assert classifier._gate.inflight == 0
+
+
+@pytest.mark.asyncio
+async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
+    """A cancelled in-flight classify keeps the model loaded until the worker exits."""
+    loop = asyncio.get_running_loop()
+    entered = threading.Event()
+    aio_event = asyncio.Event()
+    unload_task: asyncio.Task | None = None
+
+    class BlockingAutoModel:
+        def __init__(self, **kwargs):
+            pass
+
+        def generate(self, *, input, granularity, extract_embedding):
+            loop.call_soon_threadsafe(aio_event.set)
+            entered.wait()
+            return [{"labels": ["/happy/"], "scores": [0.9]}]
+
+    monkeypatch.setitem(sys.modules, "funasr", SimpleNamespace(AutoModel=BlockingAutoModel))
+
+    classifier = Emotion2vecClassifier()
+    classify_task = asyncio.create_task(classifier.classify(b"\x00", sample_rate=16000))
+    try:
+        await asyncio.wait_for(aio_event.wait(), timeout=5)
+
+        classify_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await classify_task
+
+        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=5))
+        await asyncio.sleep(0.1)
+        assert not unload_task.done()
+        assert classifier.loaded
+        assert classifier._gate.inflight == 1
+    finally:
+        entered.set()
+
+    assert unload_task is not None
+    await asyncio.wait_for(unload_task, timeout=5)
+    assert not classifier.loaded
 
 
 # --------------------------------------------------------------------------
@@ -360,7 +402,82 @@ async def test_dinov2_double_cancel_does_not_leak_inflight(monkeypatch):
         await encode_task
 
     await asyncio.wait_for(encoder.unload(), timeout=2)
-    assert encoder._inflight == 0
+    assert encoder._gate.inflight == 0
+
+
+@pytest.mark.asyncio
+async def test_dinov2_cancelled_inference_unload_waits_for_worker(monkeypatch):
+    """A cancelled in-flight encode keeps the model loaded until the worker exits."""
+    loop = asyncio.get_running_loop()
+    entered = threading.Event()
+    aio_event = asyncio.Event()
+    unload_task: asyncio.Task | None = None
+
+    class FakeProcessor:
+        def __call__(self, *, images, return_tensors):
+            return {"pixel_values": torch.zeros(1, 3, 224, 224)}
+
+    class FakeAutoImageProcessor:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeProcessor()
+
+    class FakeModel:
+        def __init__(self, model_id, **kwargs):
+            pass
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def parameters(self):
+            return iter([torch.nn.Parameter(torch.zeros(1))])
+
+        def __call__(self, **kwargs):
+            return SimpleNamespace(last_hidden_state=torch.randn(1, 197, 384))
+
+    class FakeAutoModel:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeModel(model_id, **kwargs)
+
+    fake_transformers = SimpleNamespace(
+        AutoImageProcessor=FakeAutoImageProcessor,
+        AutoModel=FakeAutoModel,
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    encoder = DINOv2Encoder(device_preference="cpu")
+    await encoder.load()
+
+    FakeModel.__call__ = lambda self, **kwargs: (
+        loop.call_soon_threadsafe(aio_event.set),
+        entered.wait(),
+        SimpleNamespace(last_hidden_state=torch.randn(1, 197, 384)),
+    )[-1]
+
+    image = Image.new("RGB", (224, 224), color=(128, 128, 128))
+    encode_task = asyncio.create_task(encoder.encode(image))
+    try:
+        await asyncio.wait_for(aio_event.wait(), timeout=5)
+
+        encode_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await encode_task
+
+        unload_task = asyncio.create_task(asyncio.wait_for(encoder.unload(), timeout=5))
+        await asyncio.sleep(0.1)
+        assert not unload_task.done()
+        assert encoder.loaded
+        assert encoder._gate.inflight == 1
+    finally:
+        entered.set()
+
+    assert unload_task is not None
+    await asyncio.wait_for(unload_task, timeout=5)
+    assert not encoder.loaded
 
 
 @pytest.mark.asyncio
@@ -420,7 +537,7 @@ async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch
         await encode_task
 
     await asyncio.wait_for(encoder.unload(), timeout=2)
-    assert encoder._inflight == 0
+    assert encoder._gate.inflight == 0
 
 
 def test_internvideo_loader_uses_safetensors(tmp_path, monkeypatch):

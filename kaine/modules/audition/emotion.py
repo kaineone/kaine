@@ -17,6 +17,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from kaine.residency.inflight import InflightGate
+
 log = logging.getLogger(__name__)
 
 
@@ -102,7 +104,7 @@ class Emotion2vecClassifier:
     """Wrapper around emotion2vec+ via funasr.
 
     funasr is heavy and listed as an optional [audio] extra. If it
-    isn't importable, this classifier degrades to a neutral result
+    isn't importable, the classifier degrades to a neutral result
     with confidence 0.0 and logs a single warning.
     """
 
@@ -127,8 +129,7 @@ class Emotion2vecClassifier:
         self._load_failed: bool = False
         self._warned_missing = False
         self._load_lock: Optional[asyncio.Lock] = None
-        self._idle: Optional[asyncio.Event] = None
-        self._inflight: int = 0
+        self._gate = InflightGate()
 
     @property
     def model_id(self) -> str:
@@ -150,8 +151,6 @@ class Emotion2vecClassifier:
     def _lock(self) -> asyncio.Lock:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
         assert self._load_lock is not None
         return self._load_lock
 
@@ -231,6 +230,7 @@ class Emotion2vecClassifier:
         except Exception:
             log.exception("emotion2vec+ load failed; degrading to neutral")
             self._load_failed = True
+            self._funasr_available = False
             self._model = None
 
     async def ensure_loaded(self) -> None:
@@ -248,10 +248,8 @@ class Emotion2vecClassifier:
     async def unload(self) -> None:
         """Release the underlying model. Idempotent."""
         lock = self._lock()
-        idle = self._idle
-        assert idle is not None
         async with lock:
-            await idle.wait()
+            await self._gate.wait_idle()
             self._model = None
         await asyncio.to_thread(gc.collect)
         if self._device.startswith("cuda"):
@@ -275,9 +273,7 @@ class Emotion2vecClassifier:
             if self._funasr_available is False or self._load_failed or self._model is None:
                 return self._degraded_result()
             local_model = self._model
-            self._inflight += 1
-            if self._idle is not None:
-                self._idle.clear()
+            ticket = self._gate.admit()
 
         start = time.monotonic()
 
@@ -318,15 +314,16 @@ class Emotion2vecClassifier:
             # is `[{"key": ..., "labels": [...], "scores": [...]}]`.
             return result
 
+        handed = False
         try:
-            raw = await asyncio.to_thread(_infer_sync)
+            handed = True
+            raw = await self._gate.run(ticket, None, _infer_sync)
         except Exception as exc:
             log.warning("emotion2vec inference failed: %s; returning neutral", exc)
             return self._inference_failed_result(start, exc)
         finally:
-            self._inflight -= 1
-            if self._inflight == 0 and self._idle is not None:
-                self._idle.set()
+            if not handed:
+                ticket.release()
 
         item = raw[0] if isinstance(raw, list) and raw else {}
         labels = item.get("labels", []) or []

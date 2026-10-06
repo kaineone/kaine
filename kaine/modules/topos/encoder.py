@@ -18,6 +18,8 @@ import logging
 import os
 from typing import Any, Protocol, runtime_checkable
 
+from kaine.residency.inflight import InflightGate
+
 log = logging.getLogger(__name__)
 
 DEFAULT_DINOV2_MODEL_ID: str = "facebook/dinov2-small"
@@ -111,8 +113,7 @@ class DINOv2Encoder:
         self._torch: Any = None
         self._latent_dim: int | None = None
         self._load_lock: asyncio.Lock | None = None
-        self._idle: asyncio.Event | None = None
-        self._inflight: int = 0
+        self._gate = InflightGate()
 
     @property
     def model_id(self) -> str:
@@ -141,8 +142,6 @@ class DINOv2Encoder:
     def _get_lock(self) -> asyncio.Lock:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
         assert self._load_lock is not None
         return self._load_lock
 
@@ -203,10 +202,8 @@ class DINOv2Encoder:
     async def unload(self) -> None:
         """Release the underlying model. Idempotent; latent_dim stays known."""
         lock = self._get_lock()
-        idle = self._idle
-        assert idle is not None
         async with lock:
-            await idle.wait()
+            await self._gate.wait_idle()
             self._model = None
             self._processor = None
             self._torch = None
@@ -226,9 +223,7 @@ class DINOv2Encoder:
             local_model = self._model
             local_processor = self._processor
             local_torch = self._torch
-            self._inflight += 1
-            if self._idle is not None:
-                self._idle.clear()
+            ticket = self._gate.admit()
 
         def _forward_sync() -> list[float]:
             assert local_processor is not None and local_model is not None
@@ -239,12 +234,13 @@ class DINOv2Encoder:
             cls = outputs.last_hidden_state[:, 0, :].squeeze(0)
             return [float(x) for x in cls.tolist()]
 
+        handed = False
         try:
-            return await asyncio.to_thread(_forward_sync)
+            handed = True
+            return await self._gate.run(ticket, None, _forward_sync)
         finally:
-            self._inflight -= 1
-            if self._inflight == 0 and self._idle is not None:
-                self._idle.set()
+            if not handed:
+                ticket.release()
 
     async def encode_clip(self, frames: Any) -> list[float]:
         """Per-frame fallback: encode the most recent frame of the clip.
@@ -322,8 +318,7 @@ class InternVideoNextEncoder:
         self._torch: Any = None
         self._latent_dim: int | None = None
         self._load_lock: asyncio.Lock | None = None
-        self._idle: asyncio.Event | None = None
-        self._inflight: int = 0
+        self._gate = InflightGate()
 
     @property
     def model_id(self) -> str:
@@ -362,8 +357,6 @@ class InternVideoNextEncoder:
     def _get_lock(self) -> asyncio.Lock:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._idle = asyncio.Event()
-            self._idle.set()
         assert self._load_lock is not None
         return self._load_lock
 
@@ -440,10 +433,8 @@ class InternVideoNextEncoder:
     async def unload(self) -> None:
         """Release the underlying model. Idempotent; latent_dim stays known."""
         lock = self._get_lock()
-        idle = self._idle
-        assert idle is not None
         async with lock:
-            await idle.wait()
+            await self._gate.wait_idle()
             self._model = None
             self._processor = None
             self._torch = None
@@ -514,19 +505,18 @@ class InternVideoNextEncoder:
             local_processor = self._processor
             local_torch = self._torch
             forward = self._forward_clip
-            self._inflight += 1
-            if self._idle is not None:
-                self._idle.clear()
+            ticket = self._gate.admit()
 
         def _work():
             return forward(pil, torch_=local_torch, processor=local_processor, model=local_model)
 
+        handed = False
         try:
-            return await asyncio.to_thread(_work)
+            handed = True
+            return await self._gate.run(ticket, None, _work)
         finally:
-            self._inflight -= 1
-            if self._inflight == 0 and self._idle is not None:
-                self._idle.set()
+            if not handed:
+                ticket.release()
 
     async def shutdown(self) -> None:
         await self.unload()
