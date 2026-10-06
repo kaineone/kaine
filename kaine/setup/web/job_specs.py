@@ -96,8 +96,10 @@ def build_job_specs(
         details = dep.command
         if dep.name in ("redis", "qdrant"):
             details += (
-                "\nNote: cancelling this job also stops the server it starts "
-                "(it is in the job's process group)."
+                "\nNote: on a native install without systemd, cancelling this "
+                "job also stops the server it starts (it is in the job's "
+                "process group). Docker and systemd-user servers survive a "
+                "cancel."
             )
         specs.append(
             JobSpec(
