@@ -2733,7 +2733,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from pathlib import Path
 
-    from kaine.private_log import install_private_log_file
+    from kaine.cycle.private_log import install_private_log_file
 
     if known.log_file is not None:
         install_private_log_file(Path(known.log_file))

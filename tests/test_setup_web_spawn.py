@@ -676,7 +676,7 @@ def test_error_summary_strips_message_content(tmp_path):
 def test_install_private_log_file(tmp_path, monkeypatch):
     import logging
 
-    from kaine.private_log import install_private_log_file
+    from kaine.cycle.private_log import install_private_log_file
 
     log_dir = tmp_path / "logs"
     path = log_dir / "entity.log"
