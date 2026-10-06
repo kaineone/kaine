@@ -82,68 +82,146 @@ def _isolate_stage_file(tmp_path, monkeypatch):
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_STATE = os.path.join(_REPO, "state")
-# Large or operator-owned trees no test may touch anyway; skipping them keeps
-# the per-test check cheap. Preserved beings live in state/forks.
-_STATE_SKIP = {"models", "forks"}
+# The checkout's config/ holds the operator's real secrets.toml and
+# kaine.operator.toml; a test must never create or change a file there.
+_REPO_CONFIG = os.path.join(_REPO, "config")
+
+# In state/, forks and models are watched shallowly (rule 2): the directory
+# and its immediate children are fingerprinted, but their contents are not
+# walked.  _archive* directories are fully skipped.
+_STATE_SKIP = frozenset({"forks", "models"})
+
+# Operator-owned tooling/cache directories at the top of a real data root.
+# Entity data must never go in this list; the default is to watch.
+_REAL_ROOT_SKIP = frozenset(
+    {"models", "build-cache", "scratch", "abliteration", "_nonresearch_artifacts"}
+)
+_REAL_ROOT_SKIP_PREFIXES = ("k1jev",)
 
 
 def _is_inside_repo(path: str) -> bool:
-    """Return True if ``path`` is the repository directory or under it."""
+    """Return True if ``path`` is the repository directory, under it, or
+    contains it.  Any of those cases means the path is not an independent
+    real KAINE data root.
+    """
     if not path:
         return False
     real = os.path.realpath(path)
     repo_real = os.path.realpath(_REPO)
-    return real == repo_real or real.startswith(repo_real + os.sep)
+    if real == repo_real or real.startswith(repo_real + os.sep):
+        return True
+    if repo_real.startswith(real + os.sep):
+        return True
+    return False
 
 
-def _state_fingerprint(state_root: str) -> dict[str, int]:
-    """Directory mtimes under ``state_root``: any file creation, rename or
-    deletion in a watched directory changes one of them. Never reads file
-    contents. Uses import-time OS primitives so monkeypatched ``os.stat``
-    and ``os.scandir`` do not affect the guard.
+def _fingerprint(
+    root: str,
+    skip_names: set[str] | frozenset[str],
+    full_skip_names: set[str] | frozenset[str] = frozenset(),
+    full_skip_prefixes: tuple[str, ...] = (),
+) -> dict[str, tuple[int, int]]:
+    """Return ``{path: (st_mtime_ns, st_size)}`` for every directory and
+    regular file under ``root``.
+
+    Uses import-time OS primitives and ``DirEntry`` methods so a test's
+    monkeypatch of ``os.stat``/``os.scandir`` does not affect the guard.  Never
+    opens or reads file contents.
+
+    Directories whose names are in ``skip_names`` are handled with rule 2:
+    the directory itself and its immediate children are recorded, but the
+    guard does not recurse into them.
+
+    ``full_skip_names``/``full_skip_prefixes`` are applied at the root's top
+    level (and the top level of a ``state/`` child of the root); matching
+    subtrees are omitted entirely.  ``_archive*`` directories are always
+    fully skipped at those top levels.
     """
-    marks: dict[str, int] = {}
-    if not _REAL_ISDIR(state_root):
+    marks: dict[str, tuple[int, int]] = {}
+    if not _REAL_ISDIR(root):
         return marks
     try:
-        marks[state_root] = _REAL_STAT(state_root).st_mtime_ns
+        st = _REAL_STAT(root)
+        marks[root] = (st.st_mtime_ns, st.st_size)
     except OSError:
         return marks
 
-    stack: list[str] = [state_root]
+    state_dir = os.path.join(root, "state")
+    stack: list[str] = [root]
     while stack:
         current = stack.pop()
+        at_root_top = current == root
+        at_state_top = at_root_top or current == state_dir
+
         try:
             with _REAL_SCANDIR(current) as it:
                 for entry in it:
-                    if current == state_root and (
-                        entry.name in _STATE_SKIP
-                        or entry.name.startswith("_archive")
-                    ):
+                    if at_root_top:
+                        if (
+                            entry.name in full_skip_names
+                            or any(entry.name.startswith(p) for p in full_skip_prefixes)
+                        ):
+                            continue
+                    if at_state_top and entry.name.startswith("_archive"):
                         continue
-                    if not entry.is_dir(follow_symlinks=False):
-                        continue
-                    try:
-                        marks[entry.path] = entry.stat(
-                            follow_symlinks=False
-                        ).st_mtime_ns
-                    except OSError:
-                        continue
-                    stack.append(entry.path)
+
+                    is_rule2 = at_state_top and entry.name in skip_names
+
+                    if entry.is_dir(follow_symlinks=False):
+                        try:
+                            st = entry.stat(follow_symlinks=False)
+                            marks[entry.path] = (st.st_mtime_ns, st.st_size)
+                        except OSError:
+                            continue
+
+                        if is_rule2:
+                            # Record the immediate children of the rule-2
+                            # directory, but do not recurse.
+                            try:
+                                with _REAL_SCANDIR(entry.path) as subit:
+                                    for sub in subit:
+                                        try:
+                                            st = sub.stat(follow_symlinks=False)
+                                            marks[sub.path] = (
+                                                st.st_mtime_ns,
+                                                st.st_size,
+                                            )
+                                        except OSError:
+                                            continue
+                            except OSError:
+                                pass
+                        else:
+                            stack.append(entry.path)
+
+                    elif entry.is_file(follow_symlinks=False):
+                        try:
+                            st = entry.stat(follow_symlinks=False)
+                            marks[entry.path] = (st.st_mtime_ns, st.st_size)
+                        except OSError:
+                            continue
         except OSError:
             continue
+
     return marks
 
 
-def _changed_dirs(before: dict[str, int], after: dict[str, int]) -> list[str]:
-    """Return the directory paths whose mtimes changed between two snapshots."""
-    changed = sorted(set(after.items()) ^ set(before.items()))
-    return sorted({path for path, _ in changed})
+def _changed_dirs(
+    before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]
+) -> list[str]:
+    """Return the paths whose fingerprint entry changed between two snapshots.
+
+    A path is returned when it was added, removed, or its ``(mtime, size)``
+    tuple changed.
+    """
+    changed = sorted(
+        {path for path, _ in set(after.items()) ^ set(before.items())}
+    )
+    return changed
 
 
-def _compute_real_state_roots() -> list[str]:
-    """Return the state/ directories of real KAINE data roots known at session
-    start, excluding the repository and any path that is not a directory.
+def _compute_real_data_roots() -> list[str]:
+    """Return the real KAINE data roots known at session start, excluding the
+    repository and any path that is not a directory.
     """
     candidates: set[str] = set()
 
@@ -172,13 +250,9 @@ def _compute_real_state_roots() -> list[str]:
             if not _is_inside_repo(real):
                 candidates.add(real)
 
-    state_roots: list[str] = []
-    for root in candidates:
-        state_dir = os.path.join(root, "state")
-        if _REAL_ISDIR(state_dir):
-            state_roots.append(os.path.realpath(state_dir))
-
-    return sorted(set(state_roots))
+    return sorted(
+        {os.path.realpath(root) for root in candidates if _REAL_ISDIR(root)}
+    )
 
 
 try:
@@ -193,9 +267,9 @@ if _CYCLE_RUNNING is not False:
         "legitimately write to a live data root.",
         stacklevel=2,
     )
-    _REAL_STATE_ROOTS: list[str] = []
+    _REAL_DATA_ROOTS: list[str] = []
 else:
-    _REAL_STATE_ROOTS = _compute_real_state_roots()
+    _REAL_DATA_ROOTS = _compute_real_data_roots()
 
 
 @pytest.fixture(scope="session")
@@ -220,6 +294,14 @@ def _no_real_mounts(_empty_mounts_path, monkeypatch, request):
     yield
 
 
+def _format_changed_paths(changed: list[str]) -> str:
+    paths = sorted(set(changed))
+    displayed = paths[:20]
+    if len(paths) > 20:
+        displayed.append(f"... and {len(paths) - 20} more")
+    return ", ".join(displayed)
+
+
 @pytest.fixture(autouse=True)
 def _repo_state_untouched():
     """Fail any test that writes into the repository's own state/ directory.
@@ -228,14 +310,32 @@ def _repo_state_untouched():
     is read at the next spawn from this checkout: it can mark a fresh being as
     already lived, or hand it a test's developmental stage.
     """
-    before = _state_fingerprint(_REPO_STATE)
+    before = _fingerprint(_REPO_STATE, skip_names=_STATE_SKIP)
     yield
-    after = _state_fingerprint(_REPO_STATE)
+    after = _fingerprint(_REPO_STATE, skip_names=_STATE_SKIP)
     changed = _changed_dirs(before, after)
     if changed:
         pytest.fail(
             "test wrote into the repository's state/ (use tmp_path or monkeypatch "
-            f"the default path): {changed}"
+            f"the default path): {_format_changed_paths(changed)}"
+        )
+
+
+@pytest.fixture(autouse=True)
+def _repo_config_untouched():
+    """Fail any test that creates or changes a file in the checkout's config/.
+
+    That directory holds the operator's real secrets and overlay; a test that
+    writes a token or setting there changes the next real launch.
+    """
+    before = _fingerprint(_REPO_CONFIG, skip_names=frozenset())
+    yield
+    after = _fingerprint(_REPO_CONFIG, skip_names=frozenset())
+    changed = _changed_dirs(before, after)
+    if changed:
+        pytest.fail(
+            "test wrote into the repository's config/ (pass a tmp_path secrets "
+            f"or operator path): {_format_changed_paths(changed)}"
         )
 
 
@@ -244,19 +344,27 @@ def _real_data_untouched():
     """Fail any test that writes into a real KAINE data root known at session
     start. Disabled while a kaine.cycle process may be writing to those roots.
     """
-    if not _REAL_STATE_ROOTS:
+    if not _REAL_DATA_ROOTS:
         yield
         return
-    before = {root: _state_fingerprint(root) for root in _REAL_STATE_ROOTS}
+
+    kwargs = {
+        "skip_names": _STATE_SKIP,
+        "full_skip_names": _REAL_ROOT_SKIP,
+        "full_skip_prefixes": _REAL_ROOT_SKIP_PREFIXES,
+    }
+    before = {root: _fingerprint(root, **kwargs) for root in _REAL_DATA_ROOTS}
     yield
-    after = {root: _state_fingerprint(root) for root in _REAL_STATE_ROOTS}
+    after = {root: _fingerprint(root, **kwargs) for root in _REAL_DATA_ROOTS}
+
     changed: list[str] = []
-    for root in _REAL_STATE_ROOTS:
+    for root in _REAL_DATA_ROOTS:
         changed.extend(_changed_dirs(before[root], after[root]))
+
     if changed:
         pytest.fail(
             "test wrote into a real KAINE data root (use tmp_path or the "
-            f"per-test data root): {sorted(set(changed))}"
+            f"per-test data root): {_format_changed_paths(changed)}"
         )
 
 

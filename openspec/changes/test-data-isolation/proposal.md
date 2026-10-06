@@ -14,9 +14,12 @@ Two gaps let this happen:
 
 - **Every test gets its own data root.** An autouse fixture sets the process data root and `KAINE_DATA_ROOT` to the test's `tmp_path` and restores both afterwards. Tests of the no-root defaults opt out with `@pytest.mark.no_data_root`.
 - **Tests cannot discover real disks.** The storage step reads mounts from a module constant (`MOUNTS_PATH`, default `/proc/mounts`). An autouse fixture points it at an empty file, so the wizard's default stays inside the test's directory. Tests of mount parsing pass their own file, as they do today.
-- **Guards fail any test that writes to real data.** These directories are snapshotted (directory modification times only, never file contents), skipping `forks`, `models` and `_archive*`:
+- **Guards fail any test that writes to real data.** These are snapshotted (modification times and sizes only, never file contents), skipping `_archive*`:
   - the checkout's `state/`;
-  - every real data-root candidate known when the session starts: the operator config's configured data root, and the storage step's recommendation from the real mounts.
+  - the checkout's `config/`, which holds the operator's real `secrets.toml` and overlay;
+  - every real data root known when the session starts (the operator config's configured data root, and the storage step's recommendation from the real mounts). The whole root is watched, except the operator's tooling and cache directories (`models`, `build-cache`, `scratch`, `abliteration`, `_nonresearch_artifacts`, `k1jev*`). Entity data is never skipped.
+
+  Each guard records every directory and every regular file as (modification time, size), so an append or an in-place rewrite is caught as well as a create, rename or delete. `forks/` and `models/` are seen at their top level and their immediate children, without walking into a preserved being.
 
   A test that changes any of them fails and names the directories it changed. The real-root guard stands down, with a single warning, while a `kaine.cycle` process is running, because a live entity legitimately writes there.
 - **No change at runtime.** `MOUNTS_PATH` has the same default as today.
