@@ -30,9 +30,9 @@ The Hypnos organ window stops the language-organ server to free memory for voice
   - builds `state_text` and `systemone_questions`;
   - POSTs `/v1/systemone`;
   - parses each answer into `Answer(question_id, type, probabilities, choice, score, noul, decided)`, where `decided` applies the sidecar threshold for `noul` questions (`noul >= threshold`) and is `None` when there is no threshold;
-  - verifies the response's schema version against the sidecar's.
+  - checks the response against what was asked. `/v1/systemone` responses carry only `model` and `answers`, with no schema version, so the check is: the response's `model` equals the configured alias; each answer's `type` equals the requested question's type; a choice is one of that question's option keys; a score lies on its scale; every probability is finite and in [0, 1]. Schema agreement otherwise rests on the request carrying the pinned schema's question definitions, and on the thresholds sidecar's digest pin.
 
-  Any transport error, non-200, malformed body, missing answer or schema mismatch returns `None` and logs once per kind per minute (content-free: the question ids and the error kind, never the utterance).
+  Any transport error, non-200, malformed body, missing answer, out-of-schema answer or model mismatch returns `None` and logs once per kind per minute (content-free: the question ids and the error kind, never the utterance).
 - **Thresholds sidecar.** A JSON file written by the K1-Jev export: `{"schema_version": 1, "schema_digest": "...", "thresholds": {"wishes_to_stop": 0.31, ...}}`. A digest that differs from `kaine.decision.schema.schema_digest()` refuses to load. The client then runs without thresholds and logs the mismatch.
 - **Privacy:** the client never logs or persists the utterance, the context or the answers. Callers decide what they record.
 

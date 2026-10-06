@@ -8,7 +8,7 @@ The decision model SHALL be served by a separate llama-server on the organ's pin
 - **THEN** no decision server is started and no client call is made
 
 ### Requirement: The decision client never turns a failure into a negative
-The client SHALL return no answer on any transport error, non-success status, malformed body, missing answer or schema mismatch, and SHALL NOT log or persist utterances, contexts or answers. Callers SHALL treat "no answer" as "no signal", never as a negative.
+The client SHALL return no answer on any transport error, non-success status, malformed body, missing answer, answer outside the question's schema (an unknown option, a score off its scale, a probability outside [0, 1], or a type other than the one asked) or response from a model other than the configured one, and SHALL NOT log or persist utterances, contexts or answers. Callers SHALL treat "no answer" as "no signal", never as a negative.
 
 #### Scenario: Server unreachable
 - **WHEN** the decision server cannot be reached
