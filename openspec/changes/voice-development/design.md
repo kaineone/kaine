@@ -101,6 +101,25 @@ The external trainer:
 - **`record_id` on the bus.** Lingua's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
 - **`seed`** is the sampling seed of the organ request. Ordinary utterances set none, so it is `null` until Stage 2 sets one.
 
+### D11. The outcome observer, fixed at implementation (task 0.4)
+
+- **What it watches.**
+  - `lingua.external` (`external_speech`, carrying `record_id`) opens a record.
+  - `audition.out`: an `audition.transcription` from an operator source (`OPERATOR_SOURCES`) with non-empty text counts as a reply. This is the same rule Chronos uses for an interaction.
+  - `empatheia.out`: `empatheia.social_error` gives `deviation_magnitude`.
+  - `thymos.out`: `thymos.state` gives `drives.social_drive`.
+- **The window.** `reply_window_s` (default 30 s, wall clock, from the utterance's event timestamp). The record closes at the first operator reply, at the end of the window, or at the entity's next external utterance, whichever comes first.
+- **The fields.**
+  - `replied` is whether an operator reply arrived first.
+  - `reply_latency_s` is the reply time minus the utterance time, else null.
+  - `preempted` is true when the entity's own next utterance closed the window before any reply. A published utterance can't be cancelled (Lingua cancels before publishing), so this is what "preempted" can mean for one that was heard.
+  - `empatheia_deviation` is the largest deviation seen in the window, else null.
+  - `social_drive_delta` is the last social-drive value in the window minus the last one at or before the utterance, else null.
+- **No text, and no guesses.**
+  - A record holds exactly `record_id`, `replied`, `reply_latency_s`, `empatheia_deviation`, `social_drive_delta` and `preempted`.
+  - A record still open at shutdown is dropped, not written with a guessed outcome, and the count is logged.
+- **Cursors.** Every cursor is seeded from `last_entry_id` at start, never `"$"`.
+
 ## Risks
 
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.
