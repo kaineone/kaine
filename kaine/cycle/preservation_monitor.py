@@ -789,7 +789,6 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         u_now = self._unfrozen.now()
         diag = self._unfrozen.diagnostic()
         if diag["unknown_episodes"] > self._diag_unknown_seen:
-            self._diag_unknown_seen = diag["unknown_episodes"]
             try:
                 await self._incident_log.write(
                     {
@@ -800,6 +799,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                         "run_id": self._run_id(),
                     }
                 )
+                # Marked seen only once written, so a failed write is retried.
+                self._diag_unknown_seen = diag["unknown_episodes"]
             except Exception:
                 log.warning("welfare monitor: incident log write failed", exc_info=True)
         if self._acted:

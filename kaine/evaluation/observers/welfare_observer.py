@@ -181,7 +181,6 @@ class WelfareObserver(StreamSubscriberObserver):
         self._unfrozen.now()
         diag = self._unfrozen.diagnostic()
         if diag["unknown_episodes"] > self._diag_unknown_seen:
-            self._diag_unknown_seen = diag["unknown_episodes"]
             try:
                 await self._sink.write(
                     {
@@ -190,6 +189,8 @@ class WelfareObserver(StreamSubscriberObserver):
                         "unknown_episodes": diag["unknown_episodes"],
                     }
                 )
+                # Marked seen only once written, so a failed write is retried.
+                self._diag_unknown_seen = diag["unknown_episodes"]
             except Exception:
                 log.warning("welfare_observer sink write failed", exc_info=True)
         # Check time-based conditions on every poll cycle.

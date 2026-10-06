@@ -1045,3 +1045,39 @@ async def test_monitor_freeze_cannot_stretch_the_warmup_floor_past_its_wall_boun
     # Warm-up ended at 120 s of wall time; sustained sampled distress then
     # crossed 30 s later, while still frozen.
     assert len(mon._fork_manager.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_monitor_retries_an_unreadable_incident_whose_write_failed(bus, tmp_path):
+    """A failed incident write is retried on the next poll, not lost: the
+    episode is marked seen only once its record is written."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+
+    class _FailOnceLog(_StubIncidentLog):
+        def __init__(self) -> None:
+            super().__init__()
+            self.failures = 1
+
+        async def write(self, record):
+            if self.failures:
+                self.failures -= 1
+                raise OSError("disk full")
+            await super().write(record)
+
+    u = _Mono(0.0)
+    log_ = _FailOnceLog()
+    mon = _make_monitor(bus, cfg, u, incident_log=log_)
+    stop = asyncio.Event()
+    (tmp_path / "control.json").write_text("{not json")
+    await mon._poll_once(stop)  # the write fails
+    assert log_.records == []
+    u.value = 1.0
+    await mon._poll_once(stop)  # retried
+    assert [r["kind"] for r in log_.records] == ["freeze_state_unreadable"]
