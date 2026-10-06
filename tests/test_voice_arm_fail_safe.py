@@ -4,7 +4,6 @@
 import os
 from pathlib import Path
 
-import kaine.lifecycle.divergence as divergence_module
 from kaine.lifecycle.divergence import assess_divergence, voice_paths_for
 from tests.test_divergence_voice_arm import _state, _write_intent, _write_measures
 
@@ -20,7 +19,7 @@ def test_corpus_cannot_be_listed_counts_as_spoken(tmp_path, monkeypatch):
             raise PermissionError("denied")
         return real_scandir(path)
 
-    monkeypatch.setattr(divergence_module.os, "scandir", fake_scandir)
+    monkeypatch.setattr("kaine.lifecycle.divergence.os.scandir", fake_scandir)
 
     result = assess_divergence(state_root=root)
 
@@ -41,7 +40,7 @@ def test_stat_denied_on_live_log_counts_as_spoken(tmp_path, monkeypatch):
             raise PermissionError("denied")
         return real_stat(path, *args, **kwargs)
 
-    monkeypatch.setattr(divergence_module.os, "stat", fake_stat)
+    monkeypatch.setattr("kaine.lifecycle.divergence.os.stat", fake_stat)
 
     result = assess_divergence(state_root=root)
 
