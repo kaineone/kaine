@@ -46,3 +46,12 @@
 
 ## 8. Docs
 - [ ] 8.1 A K1-Jev page in the book: what it judges, what it never reads, how it was trained and measured, how to reproduce it.
+
+## 9. Schema v2: role-named state (operator-approved 2026-10-06; design section 1a)
+- [x] 9.0 Design amendment, with the evidence: the page ordering, the hidden trait, the role-less state, and quotation/other_person survival.
+- [ ] 9.1 `kaine/decision/schema.py`: `SCHEMA_VERSION = 2`; `state_text(utterance, *, role=None, value=None)` emits `speaker_said` plus the role key from the question's `context_label` (`request`, `trait`, `reference_event`); the digest test is re-pinned with the operator.
+- [ ] 9.2 `scripts/k1jev/build_data.py assemble` and `sources.py`: build v2 states from the stored item fields (trait items take `trait`); a CPU-only rebuild, with no regeneration; re-measure `max_prompt_tokens`.
+- [ ] 9.3 `scripts/k1jev/label_server.py`: labelled sections in reading order; render `trait`; still blind; the gold item ids are unchanged.
+- [ ] 9.4 `kaine/decision/client.py`: one `/v1/systemone` request per context role; the sidecar's schema version and digest follow v2.
+- [ ] 9.5 Tests: no `context` key in any v2 state; trait items carry `trait`; mixed-role asks are split; the page shows each role label and the trait, and never the generated label.
+- [ ] 9.6 Report: the per-category checker survival table (v1) next to the v2 assembled counts, in the PR.

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The decision model judges external speech against a frozen, versioned schema
-K1-Jev SHALL answer only the question templates defined in `kaine/decision/schema.py`, whose `SCHEMA_VERSION` SHALL change whenever any question's instructions or options change. A trained model SHALL record the schema version it was trained on. The state SHALL be external speech (with an optional context field) and SHALL NEVER contain `think` content or other private cognitive content.
+K1-Jev SHALL answer only the question templates defined in `kaine/decision/schema.py`, whose `SCHEMA_VERSION` SHALL change whenever any question's instructions or options change. A trained model SHALL record the schema version it was trained on. The state SHALL be external speech, with at most the one context field its question's role names (section 1a of the design), and SHALL NEVER contain `think` content or other private cognitive content.
 
 #### Scenario: A schema change is a new version
 - **WHEN** a question's instructions or options are edited
@@ -70,3 +70,21 @@ K1-Jev SHALL be published under Apache-2.0 with a model card stating its schema,
 #### Scenario: No silent upload
 - **WHEN** an upload to HF or Ollama is about to run
 - **THEN** it has been confirmed with the integrator for that specific upload
+
+### Requirement: Every state field names its role
+From schema v2, the state SHALL be JSON whose utterance key is `speaker_said` and whose context, when the question has one, is under the key for its role: `request`, `trait` or `reference_event`. The state SHALL NOT use a generic `context` key. Training, the served client and the labelling page SHALL use the same roles. The client SHALL send one request per context role, so that every served state has a shape the model was trained on.
+
+#### Scenario: A trait item carries its trait
+- **WHEN** a `trait_claim` example is assembled or served
+- **THEN** its state holds the trait under `trait` and the utterance under `speaker_said`, and no `context` key
+
+#### Scenario: Mixed questions are split by role
+- **WHEN** the client is asked `declined` and `trait_claim` about one utterance
+- **THEN** it sends one request whose state carries `request` and another whose state carries `trait`, and neither state carries both
+
+### Requirement: The labelling page shows each field under its role
+The labelling page SHALL show an item's context under a label naming its role, before the utterance, which it SHALL show under "The speaker said:". It SHALL render the trait of a `trait_claim` item, and SHALL then show the question, its definition and the options.
+
+#### Scenario: A trait item is answerable
+- **WHEN** the page serves a `trait_claim` item
+- **THEN** it shows "Trait being asked about:" with the item's trait, then "The speaker said:" with the utterance
