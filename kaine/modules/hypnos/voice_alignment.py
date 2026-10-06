@@ -4,8 +4,10 @@
 """Voice alignment: read intent-expression JSONL, build DPO pairs,
 hand them to a trainer.
 
-The trainer protocol is intentionally minimal so the real implementation
-(`UnslothDPOTrainer`) can land later without touching the orchestrator.
+The trainer protocol is intentionally minimal so the real training
+script (`scripts/hypnos_external_train.py`) can evolve without touching
+the orchestrator. The in-process, subprocess and job-queue backends all
+consume the same script and write the same result.json.
 A `FakeTrainer` is shipped as the test/no-deps default and explicitly
 rejects every batch with reason "no training backend configured" so
 operators see the expected message until they install the `[training]`
@@ -140,10 +142,10 @@ class VoiceAlignmentConfig:
     # Corpus disk-guard ceiling in GB.  0 disables the warning.
     corpus_ceiling_gb: float = 10.0
     # Trainer backend selector:
-    #   "in_process" (default) — run unsloth DPO in the entity-runtime venv
-    #     (requires the [training] extra; the shipped, byte-for-byte-unchanged
-    #     path).
-    #   "subprocess" — run the real unsloth DPO out-of-process in an
+    #   "in_process" (default) — run the same trainer script
+    #     scripts/hypnos_external_train.py in this interpreter (requires the
+    #     [training] extra).
+    #   "subprocess" — run the same script out-of-process in an
     #     operator-configured external Python env (e.g. Unsloth Studio). Used on
     #     hosts whose runtime venv cannot host unsloth (different Python ABI /
     #     torch / CUDA). See SubprocessVoiceTrainer.
@@ -457,22 +459,7 @@ async def consolidation_magnitude(
     return float(magnitude), getattr(embedder, "kind", "unknown")
 
 
-def _import_unsloth_trainer() -> type:
-    """Lazy importer so importing this module is side-effect-free
-    (the real trainer pulls in adapter_store + capability_eval which
-    keep their own imports light, but the indirection keeps the
-    import graph clean for tooling that only wants the data models)."""
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
 
-    return UnslothDPOTrainer
-
-
-def __getattr__(name: str):
-    # Allow `from kaine.modules.hypnos.voice_alignment import UnslothDPOTrainer`
-    # to keep working after the implementation moved to its own file.
-    if name == "UnslothDPOTrainer":
-        return _import_unsloth_trainer()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class FakeTrainer:

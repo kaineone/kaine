@@ -96,7 +96,7 @@ The default probe set is `eval_probes/abliteration_probes.jsonl` at the reposito
 
 ### Capability-loss veto
 
-`LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set and substring-match answers. The default probe set is `kaine/modules/hypnos/eval_probes/default.jsonl` — a small "did we break the model" smoke test. Like the abliteration set, the capability set must not be empty: boot refuses voice alignment when it has no usable probe, the in-process trainer rejects the adapter if it finds the set empty at training time, and the external trainer script rejects before loading the model. An empty set would otherwise score both models 0 and let every adapter through.
+`LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set and substring-match answers. The default probe set is `kaine/modules/hypnos/eval_probes/default.jsonl` — a small "did we break the model" smoke test. Like the abliteration set, the capability set must not be empty: boot refuses voice alignment when it has no usable probe, and the external trainer script rejects it before loading the model. An empty set would otherwise score both models 0 and let every adapter through.
 
 If `score_before - score_after > capability_loss_threshold` (default 0.05), the adapter is rejected and removed.
 
@@ -106,13 +106,15 @@ If `score_before - score_after > capability_loss_threshold` (default 0.05), the 
 
 | Backend | How it runs | Use when |
 |---------|-------------|----------|
-| `in_process` (default) | Inside the entity runtime, via `UnslothDPOTrainer`. | The runtime venv can host unsloth (compatible Python / torch / CUDA). Requires the `[training]` extra. |
+| `in_process` (default) | Inside the entity runtime. `SubprocessVoiceTrainer` loads `scripts/hypnos_external_train.py` by path and calls its entry point in a worker thread, with the same job spec, gates and result checks as `subprocess`. | The runtime venv can host unsloth (compatible Python / torch / CUDA). Requires the `[training]` extra. |
 | `subprocess` | A separate Python interpreter, via `SubprocessVoiceTrainer` shelling out to `scripts/hypnos_external_train.py`. | The runtime venv cannot host the trainer stack. |
 | `job_queue` | A separate `kaine-trainer` service that picks up job specs from a shared directory. | Containerized deployments or hosts where training must run outside the entity cycle. |
 
 ### In-process backend
 
-`kaine/modules/hypnos/unsloth_trainer.py` runs unsloth inside the entity runtime. After an accepted adapter, it also handles hot-swap dispatch and retention pruning. This backend requires the `[training]` extra installed in the entity venv.
+`SubprocessVoiceTrainer` loads `scripts/hypnos_external_train.py` by path and calls its entry point in a worker thread inside the entity runtime. The script writes the same job spec, runs the same abliteration and capability gates, promotes an accepted adapter atomically, and writes `result.json`. The bridge applies the same containment and non-empty adapter checks as the subprocess path. This backend requires the `[training]` extra installed in the entity venv.
+
+Because the trainer script does not import `kaine`, it cannot compute `mean_intent_expression_similarity_before/after`. Those fields are absent on every backend.
 
 ### Subprocess backend
 
@@ -319,7 +321,7 @@ export KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
 | File | Role |
 |------|------|
 | `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, `DPOPair`, `TrainingResult`. |
-| `kaine/modules/hypnos/unsloth_trainer.py` | `UnslothDPOTrainer` — in-process DPO+QLoRA; runs the abliteration veto before the capability-loss veto. |
+
 | `kaine/modules/hypnos/subprocess_trainer.py` | `SubprocessVoiceTrainer` — out-of-process bridge to an external trainer env. |
 | `kaine/modules/hypnos/job_queue_trainer.py` | `JobQueueVoiceTrainer` — shared-directory bridge to the `kaine-trainer` service. |
 | `kaine/modules/hypnos/trainer_service.py` | The `kaine-trainer` service that consumes jobs, runs the external trainer, and writes `DONE`. |

@@ -193,3 +193,5 @@ The external trainer:
 - `UnslothDPOTrainer`, the in-process copy of the training logic, is retired. Its welfare tests (the abliteration veto and the capability-loss veto) move onto the script's gate functions.
 - `in_process` with voice alignment enabled and operator-approved fails closed at boot when this interpreter cannot import the training dependencies (unsloth, trl, peft, datasets). The error names the reason and the working backends, `subprocess` and `job_queue`. It never trains another way.
 - The backend and hot-swap pairing rules from `voice-alignment-backend-coherence` are unchanged: `organ_adapter` still needs `job_queue`.
+- The retired trainer also reported `mean_intent_expression_similarity_before/after`. The script cannot compute them without importing `kaine`, so they are absent on every backend and the voice-tracking observer reports them as missing.
+- Adapter retention (`adapter_retention > 0`) runs after every accepted promotion, on every backend.

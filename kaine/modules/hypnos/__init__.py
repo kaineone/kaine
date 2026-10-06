@@ -10,7 +10,6 @@ from kaine.modules.hypnos.voice_alignment import (
     FakeTrainer,
     Trainer,
     TrainingResult,
-    UnslothDPOTrainer,
     VoiceAlignmentConfig,
 )
 
@@ -24,6 +23,5 @@ __all__ = [
     "RestScheduler",
     "Trainer",
     "TrainingResult",
-    "UnslothDPOTrainer",
     "VoiceAlignmentConfig",
 ]

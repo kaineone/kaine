@@ -1,41 +1,46 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Out-of-process voice-alignment trainer (the kaine-side bridge).
+"""Runtime-venv bridge to the voice-alignment trainer script.
 
 ``SubprocessVoiceTrainer`` implements the same minimal :class:`Trainer`
-protocol as :class:`~kaine.modules.hypnos.unsloth_trainer.UnslothDPOTrainer`,
+protocol as :class:`~kaine.modules.hypnos.voice_alignment.FakeTrainer`,
 so it drops into the same slot in ``boot.py::make_hypnos`` and Hypnos calls it
 identically. It runs the real unsloth DPO in an operator-configured EXTERNAL
-Python environment as a subprocess, because the trainer's torch/CUDA stack is
-incompatible with the entity-runtime venv (different Python ABI, different
-torch/CUDA). See ``openspec/changes/external-unsloth-trainer/design.md``.
+Python environment as a subprocess, or loads the same
+``scripts/hypnos_external_train.py`` by path and calls its entry point in a
+worker thread inside this interpreter when ``run_in_process=True``. The two
+environments share nothing but the filesystem. See
+``openspec/changes/external-unsloth-trainer/design.md``.
 
-The two environments share nothing but the filesystem. This class:
+This class:
 
   1. writes a job directory under ``trainer_workdir`` — ``pairs.jsonl`` (the DPO
      preference pairs) + ``job.json`` (base-model ref, hyper-params, adapter
      output dir, the probe-set paths, a schema version);
-  2. invokes ``trainer_python scripts/hypnos_external_train.py <job_dir>`` with
-     an explicit argv (NO shell), a timeout, and CWD = the job dir (so unsloth's
-     ``unsloth_compiled_cache/`` lands in the job dir, not the repo);
-  3. validates: exit code 0 AND ``result.json.ok`` AND a non-empty adapter dir
-     (when the run reports acceptance) → returns a
+  2. either invokes ``trainer_python scripts/hypnos_external_train.py <job_dir>``
+     as a subprocess with an explicit argv (NO shell), a timeout, and CWD =
+     the job dir, or runs ``module.main([entry_script, job_dir])`` in a worker
+     thread when ``run_in_process=True``;
+  3. validates: exit code 0 / return code 0 AND ``result.json.ok`` AND a
+     non-empty adapter dir contained in the configured output dir (when the
+     run reports acceptance) → returns a
      :class:`~kaine.modules.hypnos.voice_alignment.TrainingResult` of the SAME
-     shape the in-process trainer returns, so the downstream summary/telemetry
-     in ``module.py`` is unchanged.
+     shape on every backend.
 
-Fail loud, never fake: on ANY failure (non-zero exit, timeout, missing/!ok
-``result.json``, a claimed-accepted run with a missing/empty adapter dir) it
-raises :class:`SubprocessTrainerError`. There is no silent fallback to a no-op
+Fail loud, never fake: on ANY failure (non-zero exit/return code, timeout,
+missing/!ok ``result.json``, a claimed-accepted run with a missing/empty
+adapter dir or an adapter dir outside the output tree) it raises
+:class:`SubprocessTrainerError`. There is no silent fallback to a no-op
 success — that would be a pretend process (the load-bearing no-pretend
-principle). A *clean* rejection (the external gates rejected the adapter) is NOT
-an error: it returns ``TrainingResult(accepted=False, ...)`` exactly as the
-in-process trainer does, carrying the gate verdict reason.
+principle). A *clean* rejection (``ok=True, accepted=False``) is NOT
+an error: it returns ``TrainingResult(accepted=False, ...)`` exactly like the
+other backends, carrying the gate verdict reason.
 """
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import logging
 import os
@@ -64,16 +69,16 @@ EXTERNAL_ENTRY_SCRIPT = (
 #: Job-spec schema version written into job.json and echoed in result.json.
 SCHEMA_VERSION = 2
 
-#: Default wall-clock ceiling for one training subprocess (seconds). Training is
+#: Default wall-clock ceiling for one training run (seconds). Training is
 #: infrequent (once per consolidation); a generous default avoids killing a
 #: legitimately long run while still bounding a hung process.
 DEFAULT_TIMEOUT_S = 6 * 60 * 60
 
 
 class SubprocessTrainerError(RuntimeError):
-    """Raised when the external training subprocess fails to produce a valid,
-    verifiable adapter. Surfaced to Hypnos as a trainer error — never swallowed
-    into a fake success."""
+    """Raised when the trainer fails to produce a valid, verifiable adapter.
+    Surfaced to Hypnos as a trainer error — never swallowed into a fake success.
+    """
 
 
 #: Environment variables the external trainer may inherit. Everything else,
@@ -162,8 +167,8 @@ def write_job_spec(
     ]
     _write_private(job_dir / "pairs.jsonl", "\n".join(lines) + ("\n" if lines else ""))
 
-    # Resolve probe paths to the same defaults the in-process trainer uses so
-    # the external gates score against the identical sets. Imported lazily to
+    # Resolve probe paths to the same defaults every backend uses so the
+    # external gates score against the identical sets. Imported lazily to
     # keep this module's import graph light.
     from kaine.modules.hypnos.capability_eval import (
         DEFAULT_ABLITERATION_PROBE_PATH,
@@ -291,27 +296,32 @@ def result_to_training_result(
 
 
 class SubprocessVoiceTrainer:
-    """Runtime-venv bridge to an external unsloth trainer env.
+    """Runtime-venv bridge to the voice-alignment trainer script.
 
     Constructed by ``boot.py::make_hypnos`` when
-    ``[hypnos.voice_alignment].trainer_backend == "subprocess"``. The two-layer
-    operator gate (config ``enabled`` + the approval env var) is enforced by the
-    orchestrator before ``train`` is ever called, exactly as for the in-process
-    trainer.
+    ``[hypnos.voice_alignment].trainer_backend`` is ``"subprocess"`` or
+    ``"in_process"``. The two-layer operator gate (config ``enabled`` + the
+    approval env var) is enforced by the orchestrator before ``train`` is ever
+    called.
     """
 
     def __init__(
         self,
         *,
-        trainer_python: str,
+        trainer_python: Optional[str] = None,
         trainer_workdir: Path | str,
+        run_in_process: bool = False,
         entry_script: Path | str = EXTERNAL_ENTRY_SCRIPT,
         timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> None:
-        self._trainer_python = str(trainer_python)
+        if not run_in_process and trainer_python is None:
+            raise ValueError("trainer_python is required when run_in_process is False")
+        self._trainer_python = trainer_python
         self._trainer_workdir = Path(trainer_workdir)
+        self.run_in_process = run_in_process
         self._entry_script = Path(entry_script)
         self._timeout_s = float(timeout_s)
+        self._inprocess_module: Any = None
 
     async def train(
         self,
@@ -340,9 +350,10 @@ class SubprocessVoiceTrainer:
                 pairs,
                 config,
                 base_path=base_path,
-                adapter_output_dir=str(config.adapter_output_dir.resolve()),
+                adapter_output_dir=str(Path(config.adapter_output_dir).resolve()),
             )
-            result = await self._run_subprocess(
+            run = self._run_in_process if self.run_in_process else self._run_subprocess
+            result = await run(
                 job_dir,
                 samples_used=len(pairs),
                 adapter_root=Path(config.adapter_output_dir),
@@ -351,13 +362,14 @@ class SubprocessVoiceTrainer:
             scrub_job_inputs(job_dir)
 
         adapter_path: Optional[Path] = None
-        if result.get("accepted"):
+        accepted = bool(result.get("accepted"))
+        if accepted:
             adapter_dir = result.get("adapter_dir")
             if adapter_dir:
                 adapter_path = Path(adapter_dir)
 
         hot_swap_status: Optional[dict[str, Any]] = None
-        if result.get("accepted") and config.hot_swap_mode != "organ_adapter":
+        if accepted and config.hot_swap_mode != "organ_adapter":
             # Boot refuses organ_adapter for non-job-queue backends; guard defensively.
             try:
                 hot_swap_status = await dispatch_hot_swap(
@@ -371,9 +383,24 @@ class SubprocessVoiceTrainer:
                 log.exception("hot_swap dispatch raised; adapter remains promoted")
                 hot_swap_status = {"mode": config.hot_swap_mode, "ok": False}
 
-        metadata: dict[str, Any] = {"backend": "subprocess"}
+        evicted: list[Path] = []
+        if accepted and int(config.adapter_retention) > 0:
+            try:
+                evicted = adapter_store.prune(
+                    Path(config.adapter_output_dir),
+                    keep=int(config.adapter_retention),
+                )
+            except Exception:
+                log.exception("adapter retention prune failed")
+
+        metadata: dict[str, Any] = {
+            "backend": "in_process" if self.run_in_process else "subprocess",
+        }
         if hot_swap_status is not None:
             metadata["hot_swap"] = hot_swap_status
+        if evicted:
+            metadata["evicted_adapters"] = [str(p) for p in evicted]
+
         return result_to_training_result(
             result,
             samples_used=len(pairs),
@@ -393,11 +420,50 @@ class SubprocessVoiceTrainer:
         return job_dir
 
     # --------------------------------------------------------------------- #
-    # subprocess invocation + validation
+    # result validation shared by every invocation path
+    # --------------------------------------------------------------------- #
+    @staticmethod
+    def _validate_result(
+        job_dir: Path,
+        result: dict[str, Any],
+        adapter_root: Optional[Path],
+    ) -> None:
+        if not result.get("ok"):
+            raise SubprocessTrainerError(
+                f"external trainer reported failure (ok != true): "
+                f"{result.get('reason', 'no reason given')} (job {job_dir})"
+            )
+
+        if not result.get("accepted"):
+            return
+
+        adapter_dir = result.get("adapter_dir")
+        if not adapter_dir:
+            raise SubprocessTrainerError(
+                f"external trainer reported accepted but no adapter_dir "
+                f"(job {job_dir})"
+            )
+        adapter_path = Path(adapter_dir)
+        if adapter_root is not None and not adapter_path.resolve().is_relative_to(
+            adapter_root.resolve()
+        ):
+            raise SubprocessTrainerError(
+                f"external trainer reported adapter_dir {adapter_path} outside "
+                f"the adapter output dir {adapter_root} (job {job_dir})"
+            )
+        if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
+            raise SubprocessTrainerError(
+                f"external trainer reported adapter_dir {adapter_path} but it "
+                f"is missing or empty (job {job_dir})"
+            )
+
+    # --------------------------------------------------------------------- #
+    # subprocess invocation
     # --------------------------------------------------------------------- #
     async def _run_subprocess(
         self, job_dir: Path, *, samples_used: int, adapter_root: Optional[Path] = None
     ) -> dict[str, Any]:
+        assert self._trainer_python is not None
         if not self._entry_script.is_file():
             raise SubprocessTrainerError(
                 f"external trainer entry script missing: {self._entry_script}"
@@ -438,31 +504,67 @@ class SubprocessVoiceTrainer:
             )
 
         result = _read_result(job_dir)
-        if not result.get("ok"):
+        self._validate_result(job_dir, result, adapter_root)
+        return result
+
+    # --------------------------------------------------------------------- #
+    # in-process invocation
+    # --------------------------------------------------------------------- #
+    async def _run_in_process(
+        self, job_dir: Path, *, samples_used: int, adapter_root: Optional[Path] = None
+    ) -> dict[str, Any]:
+        if not self._entry_script.is_file():
             raise SubprocessTrainerError(
-                f"external trainer reported failure (ok != true): "
-                f"{result.get('reason', 'no reason given')} (job {job_dir})"
+                f"in-process trainer entry script missing: {self._entry_script}"
             )
 
-        # A claimed-accepted run MUST have produced a non-empty adapter dir.
-        if result.get("accepted"):
-            adapter_dir = result.get("adapter_dir")
-            if not adapter_dir:
+        if self._inprocess_module is None:
+            spec = importlib.util.spec_from_file_location(
+                "kaine_inprocess_trainer_script", self._entry_script
+            )
+            if spec is None or spec.loader is None:
                 raise SubprocessTrainerError(
-                    f"external trainer reported accepted but no adapter_dir "
-                    f"(job {job_dir})"
+                    f"could not create module spec for {self._entry_script}"
                 )
-            adapter_path = Path(adapter_dir)
-            if adapter_root is not None and not adapter_path.resolve().is_relative_to(
-                adapter_root.resolve()
-            ):
+            module = importlib.util.module_from_spec(spec)
+            self._inprocess_module = module
+            try:
+                spec.loader.exec_module(module)
+            except Exception as exc:
+                self._inprocess_module = None
                 raise SubprocessTrainerError(
-                    f"external trainer reported adapter_dir {adapter_path} outside "
-                    f"the adapter output dir {adapter_root} (job {job_dir})"
-                )
-            if not adapter_path.is_dir() or not any(adapter_path.iterdir()):
-                raise SubprocessTrainerError(
-                    f"external trainer reported adapter_dir {adapter_path} but it "
-                    f"is missing or empty (job {job_dir})"
-                )
+                    f"in-process trainer script failed to load: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
+        log.info(
+            "voice alignment: running trainer script in-process (%s) for %s",
+            self._entry_script,
+            job_dir,
+        )
+        try:
+            rc = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._inprocess_module.main,
+                    [str(self._entry_script), str(job_dir)],
+                ),
+                timeout=self._timeout_s,
+            )
+        except asyncio.TimeoutError as exc:
+            raise SubprocessTrainerError(
+                f"in-process trainer timed out after {self._timeout_s:.0f}s; "
+                "the training thread cannot be killed and may still hold the GPU"
+            ) from exc
+        except Exception as exc:
+            raise SubprocessTrainerError(
+                f"in-process trainer raised {type(exc).__name__}: {exc}"
+            ) from exc
+
+        if rc != 0:
+            raise SubprocessTrainerError(
+                f"in-process trainer exited {rc} (job {job_dir})"
+            )
+
+        result = _read_result(job_dir)
+        self._validate_result(job_dir, result, adapter_root)
         return result

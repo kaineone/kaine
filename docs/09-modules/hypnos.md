@@ -74,7 +74,7 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `model_id` | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only. |
 | `trainer_backend` | `"in_process"` | `"in_process"`, `"subprocess"`, or `"job_queue"`. |
 | `trainer_python` | `""` | External interpreter path; required for `subprocess`. |
-| `trainer_workdir` | `"state/hypnos/voice_align_jobs"` | Job directory root for the `subprocess` trainer. |
+| `trainer_workdir` | `"state/hypnos/voice_align_jobs"` | Job directory root for the `subprocess` and `in_process` trainers. |
 | `trainer_jobs_dir` | `"state/hypnos/voice_align_jobs"` | Shared jobs volume for the `job_queue` trainer. The value `/trainer-jobs` is used only by the ignition-study overlay. |
 | `trainer_timeout_s` | `21600` | Seconds to wait for a `job_queue` job before failing loud. |
 | `max_samples` | `200` | Maximum DPO pairs per training run. |
@@ -83,7 +83,7 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `dpo_beta` | `0.1` | DPO beta. |
 | `capability_loss_threshold` | `0.05` | Max acceptable capability regression. |
 | `training_device` | `"cuda:0"` | Device for Unsloth training. |
-| `adapter_retention` | `0` | Number of accepted adapters to keep; `0` keeps all. Retention pruning runs only in the `in_process` backend. |
+| `adapter_retention` | `0` | Number of accepted adapters to keep; `0` keeps all. Retention pruning runs after every accepted promotion on every backend. |
 | `hot_swap_mode` | `"manual"` | `"manual"`, `"reload_endpoint"`, `"restart_service"`, or `"organ_adapter"`. |
 | `organ_adapters_dir` | `"/organ-adapters"` | Mount point of the shared organ-adapters volume; used when `hot_swap_mode = "organ_adapter"`. |
 | `organ_url` | `[lingua].chat_url` | Organ base URL polled by the `organ_adapter` logic. |

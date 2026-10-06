@@ -140,10 +140,20 @@ class JobQueueVoiceTrainer:
             )
             hot_swap_status = {"mode": config.hot_swap_mode, "ok": False}
 
+        evicted: list[Path] = []
+        if int(config.adapter_retention) > 0:
+            try:
+                evicted = adapter_store.prune(out_dir, keep=int(config.adapter_retention))
+            except Exception:
+                log.exception("adapter retention prune failed")
+
         metadata: dict[str, Any] = {
             "backend": "job_queue",
             "hot_swap": hot_swap_status,
         }
+        if evicted:
+            metadata["evicted_adapters"] = [str(p) for p in evicted]
+
         return result_to_training_result(
             result,
             samples_used=len(pairs),
