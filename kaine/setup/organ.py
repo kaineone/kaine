@@ -399,6 +399,12 @@ def main(argv: list[str] | None = None) -> int:
         state_written = write_revision_state(results)
         if state_written:
             print(f"Recorded organ revision(s) for provenance: {state_written}")
+        else:
+            print(
+                "Warning: the organ was downloaded but its revision could not be "
+                "recorded for provenance; run the download again to record it.",
+                file=sys.stderr,
+            )
 
     return 0 if all_ok else 1
 

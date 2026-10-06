@@ -467,6 +467,17 @@ def test_same_origin_post_no_session_gets_403(tmp_path):
         assert r.status_code == 403
 
 
+def test_finish_requires_a_saved_configuration(tmp_path):
+    app = _mk_app(tmp_path)
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        token = app.state.setup.store.issue()
+        client.get(f"/?token={token}", headers={"Host": "127.0.0.1:8000"}, follow_redirects=False)
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        r = client.post("/finish", headers=h, follow_redirects=False)
+        assert r.status_code == 403
+        assert app.state.finish_shutdown is False
+
+
 def test_save_does_not_shutdown_finish_does(tmp_path):
     app = _mk_app(tmp_path)
 
@@ -478,7 +489,7 @@ def test_save_does_not_shutdown_finish_does(tmp_path):
         assert app.state.finish_shutdown is True
 
 
-def test_organ_cli_download_yes(tmp_path, monkeypatch):
+def test_organ_cli_download_yes(tmp_path, monkeypatch, capsys):
     from kaine.setup import organ as organ_mod
 
     backend = organ_mod.OrganBackend(
@@ -558,6 +569,12 @@ def test_organ_cli_download_yes(tmp_path, monkeypatch):
 
     assert organ_mod.main(["download"]) == 2
     assert organ_mod.main(["download", "--yes-not"]) == 2
+
+    # A failed provenance write is reported, not silent; the download stands.
+    monkeypatch.setattr(organ_mod, "run_organ_download", lambda _plan, consent: good)
+    monkeypatch.setattr(organ_mod, "write_revision_state", lambda results: None)
+    assert organ_mod.main(["download", "--yes"]) == 0
+    assert "could not be recorded" in capsys.readouterr().err
 
     unavailable_backend = organ_mod.OrganBackend(
         backend="cpu", available=False, path=None, summary="cpu (unavailable)"

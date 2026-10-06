@@ -801,6 +801,13 @@ def create_setup_app(
     async def finish(request: Request):
         runner = request.app.state.runner
         sess = request.state.session
+        if not sess.get("saved"):
+            # Ending setup without a saved configuration is Abort, not Finish.
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
         for job_id in sess.setdefault("job_ids", []):
             if runner.status(job_id)["status"] == "running":
                 return PlainTextResponse(
