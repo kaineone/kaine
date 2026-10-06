@@ -251,9 +251,9 @@ class IndividuationRuntime:
 
     async def alert(self, payload: dict) -> None:
         kind = str(payload.get("kind") or "individuation_inconclusive")
+        # The scheduler and producer pass real values: an ISO string or None,
+        # and a float or None. They are published as they are.
         inconclusive_since = payload.get("inconclusive_since")
-        if inconclusive_since == "None":
-            inconclusive_since = None
         days_raw = payload.get("days")
         days = float(days_raw) if days_raw is not None else None
         await self.bus.publish(
