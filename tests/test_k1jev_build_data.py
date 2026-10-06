@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import http.server
 import importlib.util
@@ -961,4 +962,24 @@ def test_run_jobs_keeps_at_most_the_job_quota(fake_llm_server, monkeypatch):
 def test_endpoint_client_ignores_environment_proxies():
     endpoint = synth.Endpoint("http://127.0.0.1:1/v1", "k")
     assert endpoint.client.trust_env is False
+
+
+def test_sources_client_allows_environment_proxies():
+    """sources.py has one httpx.Client call and explicitly trusts env proxies."""
+    sources_path = REPO_ROOT / "scripts" / "k1jev" / "sources.py"
+    module = ast.parse(sources_path.read_text(encoding="utf-8"))
+    client_calls = [
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "Client"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "httpx"
+    ]
+    assert len(client_calls) == 1
+    call = client_calls[0]
+    trust_env = next((kw.value for kw in call.keywords if kw.arg == "trust_env"), None)
+    assert isinstance(trust_env, ast.Constant)
+    assert trust_env.value is True
 

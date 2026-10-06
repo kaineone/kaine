@@ -91,6 +91,8 @@ def fetch(
         client = httpx.Client(
             timeout=httpx.Timeout(60.0),
             follow_redirects=True,
+            # public, hash-pinned downloads may go through an operator's proxy
+            trust_env=True,
         )
     try:
         for name in names:
