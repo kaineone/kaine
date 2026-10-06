@@ -21,7 +21,7 @@
 - [ ] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`.
 - [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured).
 - [x] 3.5 NumPy text embedder: `read_safetensors` maps the file read-only (`numpy.memmap`) and builds tensor views; `unload()` drops the views and the map.
-- [ ] 3.6 Torch engines (emotion classifier, Topos encoders) load through `safetensors.safe_open` on CPU; the Topos encoder is built lazily through `ensure_loaded()`.
+- [ ] 3.6 Torch engines (emotion classifier, Topos encoders) load through `safetensors.safe_open` on CPU; the Topos encoder is built lazily through `ensure_loaded()`. (Done for the Topos encoders: both load with `use_safetensors=True`, which transformers reads through `safe_open`, and never through pickle. The emotion classifier loads through funasr's own checkpoint reader, so its host copy is measured by calibration, not mapped. The lazy Topos start moves to 4.6, so behaviour with the manager off matches main (9.4).)
 - [ ] 3.7 ONNX Runtime sessions KAINE creates: mapped external initializers, `session.save_external_prepacked_constant_initializers = 1`, `arena_extend_strategy = kSameAsRequested`, a per-rung `gpu_mem_limit`, and `disable_prepacking` measured per operation by the calibration tool. sherpa-onnx's limits are documented, not claimed.
 
 ## 4. Residency manager

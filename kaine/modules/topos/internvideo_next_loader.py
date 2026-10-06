@@ -354,6 +354,7 @@ def load_internvideo_next(
         dtype=torch.float32,
         local_files_only=True,
         trust_remote_code=False,
+        use_safetensors=True,
     )
 
     # Frozen contract (unchanged from DINOv2): eval + no grad; Topos never trains it.
