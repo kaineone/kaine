@@ -34,6 +34,8 @@ class SherpaMoonshineSTT:
     without rebuilding the client.
     """
 
+    _CLOSE_TIMEOUT_S: float = 10.0
+
     def __init__(
         self,
         model_dir: Path | str,
@@ -99,7 +101,7 @@ class SherpaMoonshineSTT:
         if self._closed or self._executor is None:
             raise RuntimeError("sherpa-onnx STT client is closed")
         loop = asyncio.get_running_loop()
-        self._recognizer = await loop.run_in_executor(
+        recognizer = await loop.run_in_executor(
             self._executor,
             self._sherpa_module.OfflineRecognizer.from_moonshine_v2,
             str(self._dir / "encoder_model.ort"),
@@ -107,6 +109,10 @@ class SherpaMoonshineSTT:
             str(self._dir / "tokens.txt"),
             self._num_threads,
         )
+        if self._closed:
+            recognizer = None
+            raise RuntimeError("sherpa-onnx STT client is closed")
+        self._recognizer = recognizer
 
     async def ensure_loaded(self) -> None:
         """Load the model when it is not loaded.
@@ -124,13 +130,12 @@ class SherpaMoonshineSTT:
     async def warm_up(self) -> None:
         """Build the offline recogniser in the engine's worker thread.
 
-        Idempotent: a second call is a no-op. Raises on build error.
+        Idempotent: a second call is a no-op. Raises on build error and when
+        the client is closed.
         """
-        if self._closed or self._executor is None:
-            return
         await self.ensure_loaded()
 
-    async def _use_model(self) -> None:
+    async def _use_model(self) -> Any:
         """Load the model if needed and mark one in-flight inference.
 
         This holds the state lock only long enough to load and increment the
@@ -143,8 +148,10 @@ class SherpaMoonshineSTT:
             if self._closed or self._executor is None:
                 raise RuntimeError("sherpa-onnx STT client is closed")
             await self._ensure_loaded_locked()
+            recognizer = self._recognizer
             async with self._inflight_cv:
                 self._inflight += 1
+        return recognizer
 
     async def _release_inference(self) -> None:
         async with self._inflight_cv:
@@ -163,7 +170,7 @@ class SherpaMoonshineSTT:
         if self._executor is None:
             raise RuntimeError("sherpa-onnx STT client is closed")
 
-        await self._use_model()
+        recognizer = await self._use_model()
 
         try:
             with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
@@ -191,10 +198,9 @@ class SherpaMoonshineSTT:
             n = len(samples)
 
             def _decode() -> str:
-                assert self._recognizer is not None
-                stream = self._recognizer.create_stream()
+                stream = recognizer.create_stream()
                 stream.accept_waveform(rate, samples)
-                self._recognizer.decode_stream(stream)
+                recognizer.decode_stream(stream)
                 return stream.result.text
 
             loop = asyncio.get_running_loop()
@@ -245,9 +251,11 @@ class SherpaMoonshineSTT:
                 await self._wait_inflight()
                 self._recognizer = None
 
+        timed_out = False
         try:
-            await asyncio.wait_for(_drop(), timeout=10.0)
+            await asyncio.wait_for(_drop(), timeout=self._CLOSE_TIMEOUT_S)
         except asyncio.TimeoutError:
+            timed_out = True
             logger.warning(
                 "sherpa-onnx STT client: timeout waiting for in-flight inference "
                 "during close; proceeding"
@@ -255,7 +263,8 @@ class SherpaMoonshineSTT:
             self._recognizer = None
 
         if self._executor is not None:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(self._executor, gc.collect)
+            if not timed_out:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(self._executor, gc.collect)
             self._executor.shutdown(wait=False)
             self._executor = None

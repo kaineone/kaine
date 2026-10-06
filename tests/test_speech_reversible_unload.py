@@ -71,8 +71,13 @@ def _fake_stt_module(
     *,
     block_event: threading.Event | None = None,
     started_event: asyncio.Event | None = None,
+    construct_block_event: threading.Event | None = None,
+    construct_started_event: asyncio.Event | None = None,
+    block_first_call_only: bool = False,
+    set_started_first_call_only: bool = False,
 ):
     loop = asyncio.get_running_loop()
+    call_count = 0
 
     class Stream:
         def __init__(self) -> None:
@@ -86,14 +91,24 @@ def _fake_stt_module(
             return Stream()
 
         def decode_stream(self, stream: Stream) -> None:  # noqa: ARG002
-            if started_event is not None:
+            nonlocal call_count
+            call_count += 1
+            if started_event is not None and (
+                not set_started_first_call_only or call_count == 1
+            ):
                 loop.call_soon_threadsafe(started_event.set)
-            if block_event is not None:
+            if block_event is not None and (
+                not block_first_call_only or call_count == 1
+            ):
                 block_event.wait()
 
     class OfflineRecognizer:
         @staticmethod
         def from_moonshine_v2(*args, **kwargs):  # noqa: ARG004
+            if construct_started_event is not None:
+                loop.call_soon_threadsafe(construct_started_event.set)
+            if construct_block_event is not None:
+                construct_block_event.wait()
             return Recognizer()
 
     return types.SimpleNamespace(OfflineRecognizer=OfflineRecognizer)
@@ -103,9 +118,14 @@ def _fake_tts_module(
     *,
     block_event: threading.Event | None = None,
     started_event: asyncio.Event | None = None,
+    construct_block_event: threading.Event | None = None,
+    construct_started_event: asyncio.Event | None = None,
     sample_rate: int = 24000,
+    block_first_call_only: bool = False,
+    set_started_first_call_only: bool = False,
 ):
     loop = asyncio.get_running_loop()
+    call_count = 0
 
     class OfflineTtsKokoroModelConfig:
         def __init__(self, **kwargs):  # noqa: ARG002
@@ -123,12 +143,21 @@ def _fake_tts_module(
         num_speakers = 10
 
         def __init__(self, config):  # noqa: ARG002 - matches sherpa's OfflineTts(config)
-            pass
+            if construct_started_event is not None:
+                loop.call_soon_threadsafe(construct_started_event.set)
+            if construct_block_event is not None:
+                construct_block_event.wait()
 
         def generate(self, text, sid, speed):  # noqa: ARG002
-            if started_event is not None:
+            nonlocal call_count
+            call_count += 1
+            if started_event is not None and (
+                not set_started_first_call_only or call_count == 1
+            ):
                 loop.call_soon_threadsafe(started_event.set)
-            if block_event is not None:
+            if block_event is not None and (
+                not block_first_call_only or call_count == 1
+            ):
                 block_event.wait()
             return types.SimpleNamespace(
                 samples=[0.0] * 100,
@@ -265,14 +294,94 @@ async def test_stt_aclose_is_terminal(tmp_path: Path) -> None:
     await client.ensure_loaded()
     assert client.loaded
 
-    await client.aclose()
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
     assert not client.loaded
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.ensure_loaded()
 
     await client.unload()  # no-op, must not raise
-    await client.aclose()  # idempotent close
+    await asyncio.wait_for(client.aclose(), timeout=2.0)  # idempotent close
+
+
+# ---- STT close race coverage -----------------------------------------------
+
+@pytest.mark.asyncio
+async def test_stt_load_outlasting_close_is_discarded(tmp_path: Path) -> None:
+    d = _stt_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_stt_module(
+        construct_block_event=block, construct_started_event=started
+    )
+    client = SherpaMoonshineSTT(d, sherpa_module=fake_mod)
+    client._CLOSE_TIMEOUT_S = 0.05
+
+    load_task = asyncio.create_task(client.ensure_loaded())
+    await started.wait()
+
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    block_was_set_on_close = block.is_set()
+    block.set()
+
+    with pytest.raises(RuntimeError, match="closed"):
+        await load_task
+
+    assert not client.loaded
+    assert client._recognizer is None
+    assert not block_was_set_on_close
+
+
+@pytest.mark.asyncio
+async def test_stt_admitted_inference_survives_timed_out_close(tmp_path: Path) -> None:
+    d = _stt_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_stt_module(
+        block_event=block,
+        started_event=started,
+        block_first_call_only=True,
+        set_started_first_call_only=True,
+    )
+    client = SherpaMoonshineSTT(d, sherpa_module=fake_mod)
+    client._CLOSE_TIMEOUT_S = 0.05
+
+    wav = _make_wav(16000, [0] * 1000)
+    t1 = asyncio.create_task(
+        client.transcribe(wav, sample_rate=16000, model="moonshine-base-en")
+    )
+    t2 = asyncio.create_task(
+        client.transcribe(wav, sample_rate=16000, model="moonshine-base-en")
+    )
+
+    await started.wait()
+    for _ in range(1000):
+        if client._inflight == 2:
+            break
+        await asyncio.sleep(0)
+    assert client._inflight == 2
+
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    block_was_set_on_close = block.is_set()
+    assert not block_was_set_on_close
+
+    block.set()
+    r1, r2 = await asyncio.wait_for(asyncio.gather(t1, t2), timeout=5.0)
+    assert r1.text == "hello world"
+    assert r2.text == "hello world"
+    assert client._closed
+    assert client._executor is None
+
+
+@pytest.mark.asyncio
+async def test_stt_warm_up_after_close_raises(tmp_path: Path) -> None:
+    d = _stt_dir(tmp_path)
+    fake_mod = _fake_stt_module()
+    client = SherpaMoonshineSTT(d, sherpa_module=fake_mod)
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
+
+    with pytest.raises(RuntimeError, match="closed"):
+        await client.warm_up()
 
 
 # ---- TTS reversible unload --------------------------------------------------
@@ -398,11 +507,87 @@ async def test_tts_aclose_is_terminal(tmp_path: Path) -> None:
     await client.ensure_loaded()
     assert client.loaded
 
-    await client.aclose()
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
     assert not client.loaded
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.ensure_loaded()
 
     await client.unload()  # no-op
-    await client.aclose()  # idempotent
+    await asyncio.wait_for(client.aclose(), timeout=2.0)  # idempotent
+
+
+# ---- TTS close race coverage -----------------------------------------------
+
+@pytest.mark.asyncio
+async def test_tts_load_outlasting_close_is_discarded(tmp_path: Path) -> None:
+    d = _tts_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_tts_module(
+        construct_block_event=block, construct_started_event=started
+    )
+    client = SherpaKokoroTTS(d, sherpa_module=fake_mod)
+    client._CLOSE_TIMEOUT_S = 0.05
+
+    load_task = asyncio.create_task(client.ensure_loaded())
+    await started.wait()
+
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    block_was_set_on_close = block.is_set()
+    block.set()
+
+    with pytest.raises(RuntimeError, match="closed"):
+        await load_task
+
+    assert not client.loaded
+    assert client._tts is None
+    assert not block_was_set_on_close
+
+
+@pytest.mark.asyncio
+async def test_tts_admitted_inference_survives_timed_out_close(tmp_path: Path) -> None:
+    d = _tts_dir(tmp_path)
+    block = threading.Event()
+    started = asyncio.Event()
+    fake_mod = _fake_tts_module(
+        block_event=block,
+        started_event=started,
+        block_first_call_only=True,
+        set_started_first_call_only=True,
+        sample_rate=24000,
+    )
+    client = SherpaKokoroTTS(d, sherpa_module=fake_mod)
+    client._CLOSE_TIMEOUT_S = 0.05
+
+    t1 = asyncio.create_task(client.synthesize(TTSRequest(text="hello world")))
+    t2 = asyncio.create_task(client.synthesize(TTSRequest(text="hello world")))
+
+    await started.wait()
+    for _ in range(1000):
+        if client._inflight == 2:
+            break
+        await asyncio.sleep(0)
+    assert client._inflight == 2
+
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    block_was_set_on_close = block.is_set()
+    assert not block_was_set_on_close
+
+    block.set()
+    r1, r2 = await asyncio.wait_for(asyncio.gather(t1, t2), timeout=5.0)
+    assert r1.bytes_produced > 0
+    assert r2.bytes_produced > 0
+    assert client._closed
+    assert client._executor is None
+
+
+@pytest.mark.asyncio
+async def test_tts_warm_up_after_close_raises(tmp_path: Path) -> None:
+    d = _tts_dir(tmp_path)
+    fake_mod = _fake_tts_module()
+    client = SherpaKokoroTTS(d, sherpa_module=fake_mod)
+    await asyncio.wait_for(client.aclose(), timeout=2.0)
+
+    with pytest.raises(RuntimeError, match="closed"):
+        await client.warm_up()

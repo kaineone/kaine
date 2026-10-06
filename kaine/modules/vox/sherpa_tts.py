@@ -37,6 +37,8 @@ class SherpaKokoroTTS:
     without rebuilding the client.
     """
 
+    _CLOSE_TIMEOUT_S: float = 10.0
+
     def __init__(
         self,
         model_dir: Path | str,
@@ -134,7 +136,11 @@ class SherpaKokoroTTS:
                 )
             return tts
 
-        self._tts = await loop.run_in_executor(self._executor, _build)
+        tts = await loop.run_in_executor(self._executor, _build)
+        if self._closed:
+            tts = None
+            raise RuntimeError("sherpa-onnx TTS client is closed")
+        self._tts = tts
 
     async def ensure_loaded(self) -> None:
         """Load the model when it is not loaded.
@@ -153,13 +159,12 @@ class SherpaKokoroTTS:
         """Build the offline TTS object in the engine's worker thread.
 
         Idempotent: a second call is a no-op. Validates the speaker id once
-        the object exists. Raises on build or validation error.
+        the object exists. Raises on build or validation error and when the
+        client is closed.
         """
-        if self._closed or self._executor is None:
-            return
         await self.ensure_loaded()
 
-    async def _use_model(self) -> None:
+    async def _use_model(self) -> Any:
         """Load the model if needed and mark one in-flight inference."""
         if self._closed or self._executor is None:
             raise RuntimeError("sherpa-onnx TTS client is closed")
@@ -167,8 +172,10 @@ class SherpaKokoroTTS:
             if self._closed or self._executor is None:
                 raise RuntimeError("sherpa-onnx TTS client is closed")
             await self._ensure_loaded_locked()
+            tts = self._tts
             async with self._inflight_cv:
                 self._inflight += 1
+        return tts
 
     async def _release_inference(self) -> None:
         async with self._inflight_cv:
@@ -180,7 +187,7 @@ class SherpaKokoroTTS:
         if self._executor is None:
             raise RuntimeError("sherpa-onnx TTS client is closed")
 
-        await self._use_model()
+        tts = await self._use_model()
 
         try:
             text = request.text
@@ -190,8 +197,7 @@ class SherpaKokoroTTS:
             speed = self._resolve_speed(request.speed_factor)
 
             def _generate():
-                assert self._tts is not None
-                return self._tts.generate(text, sid=self._speaker_id, speed=speed)
+                return tts.generate(text, sid=self._speaker_id, speed=speed)
 
             loop = asyncio.get_running_loop()
             start = time.monotonic()
@@ -257,9 +263,11 @@ class SherpaKokoroTTS:
                 await self._wait_inflight()
                 self._tts = None
 
+        timed_out = False
         try:
-            await asyncio.wait_for(_drop(), timeout=10.0)
+            await asyncio.wait_for(_drop(), timeout=self._CLOSE_TIMEOUT_S)
         except asyncio.TimeoutError:
+            timed_out = True
             logger.warning(
                 "sherpa-onnx TTS client: timeout waiting for in-flight inference "
                 "during close; proceeding"
@@ -267,7 +275,8 @@ class SherpaKokoroTTS:
             self._tts = None
 
         if self._executor is not None:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(self._executor, gc.collect)
+            if not timed_out:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(self._executor, gc.collect)
             self._executor.shutdown(wait=False)
             self._executor = None
