@@ -172,14 +172,14 @@ async def test_previous_adapter_path_loads_named_adapters(tmp_path, fake_trainin
 
     assert result.accepted is True
     peft_call = fake_training_stack.peft_from_pretrained_calls[-1]
-    assert peft_call["adapter_name"] == "train"
+    assert peft_call["adapter_name"] == "policy"
     assert peft_call["is_trainable"] is True
     load_call = fake_training_stack.load_adapter_calls[-1]
     assert load_call["kwargs"]["adapter_name"] == "reference"
     set_call = fake_training_stack.set_adapter_calls[-1]
-    assert set_call["args"] == ("train",)
+    assert set_call["args"] == ("policy",)
     cfg = fake_training_stack.dpo_config_calls[-1]
-    assert cfg["model_adapter_name"] == "train"
+    assert cfg["model_adapter_name"] == "policy"
     assert cfg["ref_adapter_name"] == "reference"
     assert (result.adapter_path / "adapter_config.json").exists()
 

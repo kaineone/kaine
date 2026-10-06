@@ -322,3 +322,14 @@ def test_unsloth_is_imported_before_any_other_training_package():
         for a in (n.names if isinstance(n, ast.Import) else [n])
     }
     assert not (top_level & (heavy - {"unsloth"})), top_level
+
+
+def test_adapter_names_do_not_collide_with_module_attributes(mod):
+    """PEFT keeps adapters in a ModuleDict; a name equal to an nn.Module
+    attribute (e.g. "train") fails at load time with a KeyError."""
+    import torch
+
+    module_attrs = set(dir(torch.nn.Module))
+    assert mod.TRAINED_ADAPTER not in module_attrs
+    assert mod.REFERENCE_ADAPTER not in module_attrs
+    assert mod.TRAINED_ADAPTER != mod.REFERENCE_ADAPTER

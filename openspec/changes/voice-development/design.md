@@ -164,7 +164,7 @@ The external trainer:
 - **The previous adapter.**
   - `job.json` names `previous_adapter_dir` explicitly. It is the being's latest accepted adapter, taken from the adapter store, or null when the being has never trained.
   - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the being's voice.
-  - When it is named, it is loaded as a `PeftModel` twice: as adapter `train` (trainable) and as adapter `reference`. Training passes `model_adapter_name="train"` and `ref_adapter_name="reference"` to `DPOConfig`.
+  - When it is named, it is loaded as a `PeftModel` twice: as adapter `policy` (trainable) and as adapter `reference`. Training passes `model_adapter_name="policy"` and `ref_adapter_name="reference"` to `DPOConfig`. The trained adapter cannot be named `train`: PEFT keeps adapters in a `ModuleDict`, where that name collides with `nn.Module.train`.
   - When it is null, a fresh LoRA is trained and the reference is the base with the adapter disabled.
   - The kaine side copies the being's current accepted adapter (the adapter store's `current` link) into the job directory as `previous_adapter/` and writes the relative path. The script resolves a relative path against the job directory. Every backend then sees the same layout, including the job-queue trainer container, which cannot see host paths. A `current` link that exists but cannot be resolved or copied refuses the job.
   - The capability "before" score is taken with the previous adapter loaded, so it measures the being's current voice, not the base.

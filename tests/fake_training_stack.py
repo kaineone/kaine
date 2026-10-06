@@ -42,8 +42,9 @@ class FakeModel:
 
     def save_pretrained(self, path: str, selected_adapters: Optional[list[str]] = None) -> None:
         target = Path(path)
-        if selected_adapters == ["train"]:
-            target = target / "train"
+        if selected_adapters:
+            # PEFT writes a named (non-default) adapter into a subdirectory.
+            target = target / selected_adapters[0]
         target.mkdir(parents=True, exist_ok=True)
         (target / "adapter_config.json").write_text("{}", encoding="utf-8")
         (target / "adapter_model.safetensors").write_text("fake", encoding="utf-8")

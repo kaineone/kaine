@@ -63,6 +63,11 @@ from typing import Any, Optional
 
 SCHEMA_VERSION = 2
 
+# PEFT keeps adapters in a ModuleDict, so an adapter name must not collide with
+# an nn.Module attribute: "train" fails with "attribute 'train' already exists".
+TRAINED_ADAPTER = "policy"
+REFERENCE_ADAPTER = "reference"
+
 
 class TrainerJobError(Exception):
     """A validation problem with the incoming job that prevents training."""
@@ -446,10 +451,10 @@ def _train(
             )
         else:
             model = PeftModel.from_pretrained(
-                model, str(prev_adapter), adapter_name="train", is_trainable=True
+                model, str(prev_adapter), adapter_name=TRAINED_ADAPTER, is_trainable=True
             )
-            model.load_adapter(str(prev_adapter), adapter_name="reference")
-            model.set_adapter("train")
+            model.load_adapter(str(prev_adapter), adapter_name=REFERENCE_ADAPTER)
+            model.set_adapter(TRAINED_ADAPTER)
             if hasattr(model, "gradient_checkpointing_enable"):
                 model.gradient_checkpointing_enable()
     except Exception as exc:
@@ -488,8 +493,8 @@ def _train(
     if precision == "bf16":
         dpo_kwargs_common["bf16"] = True
     if prev_adapter is not None:
-        dpo_kwargs_common["model_adapter_name"] = "train"
-        dpo_kwargs_common["ref_adapter_name"] = "reference"
+        dpo_kwargs_common["model_adapter_name"] = TRAINED_ADAPTER
+        dpo_kwargs_common["ref_adapter_name"] = REFERENCE_ADAPTER
     args = DPOConfig(**dpo_kwargs_common)
 
     dpo_kwargs: dict[str, Any] = {
@@ -513,8 +518,8 @@ def _train(
         # 4. Persist adapter weights to tmp_dir before evaluation.
         tmp_dir.mkdir(parents=True, exist_ok=True)
         if prev_adapter is not None:
-            model.save_pretrained(str(tmp_dir), selected_adapters=["train"])
-            train_subdir = tmp_dir / "train"
+            model.save_pretrained(str(tmp_dir), selected_adapters=[TRAINED_ADAPTER])
+            train_subdir = tmp_dir / TRAINED_ADAPTER
             if (train_subdir / "adapter_config.json").exists():
                 for child in list(train_subdir.iterdir()):
                     target = tmp_dir / child.name
