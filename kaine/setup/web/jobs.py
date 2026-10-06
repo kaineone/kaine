@@ -264,8 +264,10 @@ class JobRunner:
                 job.proc = proc
                 if spec.name in BOOTSTRAP_SERVER_JOBS:
                     job.add_line(
-                        "cancelling this job also stops the server it starts "
-                        "(it is in the job's process group)"
+                        "on a native install without systemd, cancelling this "
+                        "job also stops the server it starts (it is in the "
+                        "job's process group). Docker and systemd-user servers "
+                        "survive a cancel."
                     )
         except Exception as exc:
             job.add_line(f"could not start job: {exc}")

@@ -807,7 +807,10 @@ def create_setup_app(
         async def stream():
             async for item in runner.events(
                 job_id,
-                shutting_down=lambda: request.app.state.shutting_down,
+                shutting_down=lambda: bool(
+                    getattr(getattr(request.app.state, "server", None), "should_exit", False)
+                )
+                or request.app.state.shutting_down,
             ):
                 if isinstance(item, str):
                     yield f"data: {item}\n\n"

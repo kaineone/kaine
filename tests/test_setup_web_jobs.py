@@ -1166,10 +1166,13 @@ def test_shutdown_kills_non_detached_and_grandchild(tmp_path):
     async def run() -> tuple[JobRunner, str, int, int]:
         runner = JobRunner(tmp_path)
         script = (
-            "import os, subprocess, sys, time\n"
-            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+            "import os, signal, subprocess, sys, time\n"
+            "grandchild = subprocess.Popen([\n"
+            "    sys.executable, '-c',\n"
+            "    'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)',\n"
+            "])\n"
             "print(os.getpid())\n"
-            "print(child.pid)\n"
+            "print(grandchild.pid)\n"
             "sys.stdout.flush()\n"
             "time.sleep(30)\n"
         )
@@ -1184,22 +1187,30 @@ def test_shutdown_kills_non_detached_and_grandchild(tmp_path):
 
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
-            if job.lines:
+            if len(job.lines) >= 2:
                 break
             await asyncio.sleep(0.05)
 
-        parent_pid, child_pid = int(job.lines[0]), int(job.lines[1])
+        parent_pid, grandchild_pid = int(job.lines[0]), int(job.lines[1])
 
         await runner.shutdown()
 
-        return runner, job_id, parent_pid, child_pid
+        return runner, job_id, parent_pid, grandchild_pid
 
-    runner, job_id, parent_pid, child_pid = asyncio.run(run())
+    runner, job_id, parent_pid, grandchild_pid = asyncio.run(run())
 
     with pytest.raises(OSError):
         os.kill(parent_pid, 0)
-    with pytest.raises(OSError):
-        os.kill(child_pid, 0)
+
+    deadline = time.monotonic() + 9.0
+    while time.monotonic() < deadline:
+        try:
+            os.kill(grandchild_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("grandchild survived shutdown")
 
     assert runner.status(job_id)["status"] == "failed"
 
@@ -1980,3 +1991,164 @@ def test_serve_kills_job_groups_on_a_forced_exit(tmp_path, monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         serve("127.0.0.1", 0, app=app)
     assert called == [1]
+
+
+def test_sse_events_stop_on_server_should_exit(tmp_path):
+    """The events generator exits once the uvicorn server asks to exit."""
+    import uvicorn
+
+    app = _mk_app(tmp_path)
+    runner = JobRunner(tmp_path)
+    app.state.runner = runner
+    app.state.shutting_down = False
+    app.state.server = uvicorn.Server(uvicorn.Config(app))
+
+    slow = JobSpec(
+        name="slow",
+        title="Slow",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="slow test",
+    )
+
+    async def run() -> None:
+        job_id = await runner.start("slow", slow)
+
+        def shutting_down() -> bool:
+            server = getattr(app.state, "server", None)
+            return bool(getattr(server, "should_exit", False)) or app.state.shutting_down
+
+        async def consume():
+            async for _ in runner.events(job_id, shutting_down=shutting_down):
+                pass
+
+        task = asyncio.create_task(consume())
+        await asyncio.sleep(0.2)
+        app.state.server.should_exit = True
+        await asyncio.wait_for(task, timeout=3.0)
+
+    asyncio.run(run())
+
+
+def test_cancel_kills_sigign_grandchild(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("start_new_session and killpg are POSIX-only")
+
+    app = _mk_app(tmp_path)
+
+    script = (
+        "import os, signal, subprocess, sys, time\n"
+        "grandchild = subprocess.Popen([\n"
+        "    sys.executable, '-c',\n"
+        "    'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)',\n"
+        "])\n"
+        "print(os.getpid())\n"
+        "print(grandchild.pid)\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(30)\n"
+    )
+    family = JobSpec(
+        name="family",
+        title="Family",
+        argv=(sys.executable, "-c", script),
+        details="family test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [family],
+    )
+
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        client.post("/jobs/family/start", headers=h, follow_redirects=False)
+        job_id = app.state.runner.job_id_for_name("family")
+
+        job = app.state.runner._jobs[job_id]
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if len(job.lines) >= 2:
+                break
+            time.sleep(0.05)
+        parent_pid, grandchild_pid = int(job.lines[0]), int(job.lines[1])
+
+        r = client.post(
+            f"/jobs/{job_id}/cancel",
+            headers={**h, "Accept": "application/json"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+
+        deadline = time.monotonic() + 9.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(grandchild_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("grandchild survived cancel")
+
+        with pytest.raises(OSError):
+            os.kill(parent_pid, 0)
+
+
+def test_killpg_permission_error_is_ignored(monkeypatch):
+    def _raise(*args, **kwargs):
+        raise PermissionError("not allowed")
+
+    monkeypatch.setattr(os, "killpg", _raise)
+
+    from kaine.setup.web import jobs
+
+    asyncio.run(jobs._killpg(123, signal.SIGTERM))
+    assert jobs._group_alive(123) is True
+
+
+def test_events_route_ends_when_the_server_is_exiting(tmp_path, monkeypatch):
+    """The SSE route ends on uvicorn's own should_exit, which is set before the
+    lifespan runs, so a streaming page cannot hold the server open."""
+    import threading
+
+    import uvicorn
+
+    app = _mk_app(tmp_path)
+    sleeper = JobSpec(
+        name="sleeper",
+        title="Sleeper",
+        argv=(sys.executable, "-c", "import time; time.sleep(30)"),
+        details="sleeper",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [sleeper],
+    )
+    with _saved_client(app) as client:
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        client.post("/jobs/sleeper/start", headers=h, follow_redirects=False)
+        job_id = app.state.runner.job_id_for_name("sleeper")
+
+        server = uvicorn.Server(uvicorn.Config(app))
+        server.should_exit = True
+        app.state.server = server
+
+        done = threading.Event()
+
+        def _read() -> None:
+            with client.stream(
+                "GET", f"/jobs/{job_id}/events", headers={"Host": "127.0.0.1:8000"}
+            ) as resp:
+                for _ in resp.iter_lines():
+                    pass
+            done.set()
+
+        reader = threading.Thread(target=_read, daemon=True)
+        reader.start()
+        reader.join(timeout=5.0)
+        try:
+            assert done.is_set(), "the event stream did not end on should_exit"
+        finally:
+            app.state.server = None
+            client.post(
+                f"/jobs/{job_id}/cancel",
+                headers={**h, "Accept": "application/json"},
+                follow_redirects=False,
+            )
