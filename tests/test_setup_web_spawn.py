@@ -885,7 +885,6 @@ def test_spawn_start_failure_is_refused_not_500(tmp_path, monkeypatch, spawn_fak
 
 def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
     """Runtime enumeration: only /spawn/confirm may start ``kaine.cycle``."""
-    import asyncio
     import tomllib
 
     from kaine.setup.web import job_specs as job_specs_mod
@@ -1395,3 +1394,12 @@ def test_spawn_refuses_when_the_spawned_pid_cannot_be_signalled(
         assert r.status_code == 409
         assert "may still be running" in r.text
         assert app.state.spawned is not None
+
+
+def test_exit_explanation_names_the_refusal_codes():
+    from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE
+
+    assert "operator presence" in spawn.exit_explanation(2)
+    assert "research safety net" in spawn.exit_explanation(RESEARCH_GATE_EXIT_CODE)
+    assert spawn.exit_explanation(None) is None
+    assert spawn.exit_explanation(12345) is None

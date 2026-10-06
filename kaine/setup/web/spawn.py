@@ -10,6 +10,7 @@ a one-way welfare event: every gate here fails closed.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -41,39 +42,25 @@ READY_TIMEOUT_S = 30.0
 LOG_KEEP_RUNS = 10
 
 
-class _LazyExitDict(dict):
-    """Lazily imports cycle exit codes the first time they are looked up."""
+@functools.lru_cache(maxsize=1)
+def _exit_explanations() -> dict[int, str]:
+    """The cycle's refusal exit codes, imported on first use."""
+    from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE
+    from kaine.cycle.unattended_gate import UNATTENDED_GATE_EXIT_CODE
 
-    def _load(self) -> None:
-        if getattr(self, "_loaded", False):
-            return
-        from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE
-        from kaine.cycle.unattended_gate import UNATTENDED_GATE_EXIT_CODE
-
-        self.update(
-            {
-                1: "configuration error or boot refusal; see the stderr file",
-                2: "the cycle refused: operator presence was not confirmed",
-                RESEARCH_GATE_EXIT_CODE: "the cycle refused: the research safety net was not satisfied",
-                UNATTENDED_GATE_EXIT_CODE: "the cycle refused: the unattended supervision safety net was not satisfied",
-            }
-        )
-        self._loaded = True
-
-    def __getitem__(self, key):  # type: ignore[override]
-        self._load()
-        return super().__getitem__(key)
-
-    def __contains__(self, key):  # type: ignore[override]
-        self._load()
-        return super().__contains__(key)
-
-    def get(self, key, default=None):  # type: ignore[override]
-        self._load()
-        return super().get(key, default)
+    return {
+        1: "configuration error or boot refusal; see the stderr file",
+        2: "the cycle refused: operator presence was not confirmed",
+        RESEARCH_GATE_EXIT_CODE: "the cycle refused: the research safety net was not satisfied",
+        UNATTENDED_GATE_EXIT_CODE: "the cycle refused: the unattended supervision safety net was not satisfied",
+    }
 
 
-EXIT_EXPLANATIONS: dict[int, str] = _LazyExitDict()
+def exit_explanation(code: int | None) -> str | None:
+    """A plain-language reason for a cycle exit code, if it is a known one."""
+    if code is None:
+        return None
+    return _exit_explanations().get(code)
 
 
 def record_acknowledgement(state_dir: Path, phrase: str, *, now) -> None:
@@ -250,6 +237,7 @@ async def run_preboot(
             proc.kill()
             await proc.wait()
         except Exception:
+            # The check already exited; the timeout result stands.
             pass
         return (False, [], "the pre-boot check timed out")
 
@@ -287,6 +275,7 @@ def prune_logs(log_dir: Path, keep: int = LOG_KEEP_RUNS) -> None:
             if p.name.split(".", 1)[0] not in keep_set:
                 p.unlink(missing_ok=True)
     except Exception:
+        # Pruning old logs is best-effort; it must never block a spawn.
         pass
 
 

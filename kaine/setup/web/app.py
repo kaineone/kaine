@@ -1382,13 +1382,12 @@ def create_setup_app(
                 nexus_cfg = _nexus_config_for(request)
                 nexus_url = f"http://127.0.0.1:{nexus_cfg.port}/"
             except Exception:
+                # No readable Nexus config: the page shows no Nexus link.
                 pass
 
             explanation = ""
             if outcome == "exited" and code is not None:
-                explanation = spawn.EXIT_EXPLANATIONS.get(
-                    code, f"exit code {code}"
-                )
+                explanation = spawn.exit_explanation(code) or f"exit code {code}"
 
             errors = []
             if outcome == "exited":
