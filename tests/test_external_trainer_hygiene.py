@@ -291,3 +291,34 @@ def test_main_refuses_an_empty_abliteration_set_before_training(mod, tmp_path, m
     assert result["accepted"] is False
     assert "abliteration probe set is empty" in result["reason"]
     assert stat.S_IMODE(result_path.stat().st_mode) == 0o600
+
+
+def test_unsloth_is_imported_before_any_other_training_package():
+    """Unsloth's import fixes repair trl on transformers 5 only when unsloth is
+    imported first; this pins the order in the script source."""
+    import ast
+
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    heavy = {"unsloth", "trl", "peft", "datasets", "transformers", "torch"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name != "_train":
+            continue
+        order = []
+        for stmt in ast.walk(node):
+            if isinstance(stmt, ast.ImportFrom) and stmt.module:
+                order.append((stmt.lineno, stmt.module.split(".")[0]))
+            elif isinstance(stmt, ast.Import):
+                order.extend((stmt.lineno, a.name.split(".")[0]) for a in stmt.names)
+        first = [m for _, m in sorted(order) if m in heavy]
+        assert first and first[0] == "unsloth", first
+        break
+    else:
+        raise AssertionError("_train not found")
+    # No heavy package at module level, where it would load before unsloth.
+    top_level = {
+        (n.module or "").split(".")[0] if isinstance(n, ast.ImportFrom) else a.name.split(".")[0]
+        for n in tree.body
+        if isinstance(n, (ast.Import, ast.ImportFrom))
+        for a in (n.names if isinstance(n, ast.Import) else [n])
+    }
+    assert not (top_level & (heavy - {"unsloth"})), top_level
