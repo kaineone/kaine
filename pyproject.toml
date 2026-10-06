@@ -225,6 +225,7 @@ markers = [
     "integration: hits a live authenticated Redis; skipped unless KAINE_REDIS_PASSWORD is set",
     "systems: per-subsystem I/O contract test under tests/systems/",
     "slow: a statistical test over a minute long; runs nightly, on main, and on pull requests that touch the paths in .github/slow-test-paths.txt",
+    "real_mounts: allow the test to read the host's real /proc/mounts instead of the empty default",
     "no_data_root: run without the per-test data root, to test the defaults that apply when none is installed",
 ]
 testpaths = ["tests"]
