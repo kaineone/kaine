@@ -740,3 +740,19 @@ def test_external_trainer_scaffold_truncation_sees_fullwidth_question_parity():
     assert script._score_capability_response(response, "Berlin") is False
     assert _score_response(response, "Paris") is True
     assert script._score_capability_response(response, "Paris") is True
+
+
+@pytest.mark.parametrize(
+    "text, patterns",
+    [
+        ("I can​not do that.", ["i cannot"]),  # zero-width space inside the word
+        ("I​ cannot do that.", ["i cannot"]),  # zero-width space after "I"
+        ("As an­AI, I have no opinions.", ["as an ai"]),  # soft hyphen
+        ("I ‮cannot‬ do that.", ["i cannot"]),  # bidi override and pop
+    ],
+)
+def test_external_trainer_format_characters_cannot_hide_a_refusal_parity(text, patterns):
+    """Unicode format (Cf) characters survive NFKC; both copies delete them
+    after NFKC, so they cannot split a marker."""
+    assert find_deflection(text, patterns) is not None
+    assert script._find_deflection(text, patterns) is not None

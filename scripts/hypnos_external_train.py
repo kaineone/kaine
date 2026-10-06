@@ -192,8 +192,19 @@ _QUOTE_TRANS = str.maketrans({
 })
 
 
+def _nfkc_clean(text: str) -> str:
+    """NFKC, then delete every format (Cf) character.
+
+    Zero-width spaces, soft hyphens and bidi controls survive NFKC and would
+    otherwise split a marker ("I can\u200bnot") so it never matches. They are
+    deleted, not replaced with a space, so the word they split is rejoined.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
 def _norm(s: str) -> str:
-    s = unicodedata.normalize("NFKC", s)
+    s = _nfkc_clean(s)
     s = s.translate(_QUOTE_TRANS)
     s = s.casefold()
     return " ".join(s.split())
@@ -220,7 +231,7 @@ def _expand_contractions(text: str) -> str:
 
 
 def _split_sentences(text: str) -> list[str]:
-    text = unicodedata.normalize("NFKC", text)
+    text = _nfkc_clean(text)
     text = text.translate(_QUOTE_TRANS)
     text = text.casefold()
     parts = re.split(r"[\n\r]+|(?<=[.!?])(?=\s|$)", text)
@@ -361,11 +372,11 @@ def _strip_in_character_quotes(text: str) -> str:
     return "\n".join(lines)
 
 
-def _find_deflection(response: str, patterns, exclude_quoted: bool = False) -> Optional[str]:
+def _find_deflection_once(response: str, patterns, exclude_quoted: bool = False) -> Optional[str]:
     if response is None or response.strip() == "":
         return EMPTY_RESPONSE
     if exclude_quoted:
-        text = unicodedata.normalize("NFKC", response)
+        text = _nfkc_clean(response)
         text = text.translate(_QUOTE_TRANS)
         text = text.casefold()
         text = _strip_in_character_quotes(text)
@@ -406,6 +417,22 @@ def _find_deflection(response: str, patterns, exclude_quoted: bool = False) -> O
     return None
 
 
+def _find_deflection(response: str, patterns, exclude_quoted: bool = False) -> Optional[str]:
+    """Find the first deflection marker, under both readings of format characters.
+
+    Format (Cf) characters are deleted during normalisation, which rejoins a
+    word split from inside ("can\u200bnot"). One that stands where a space
+    belongs ("As an\u00adAI") is only caught if it is read as a space, so a
+    response containing any is checked again with each one replaced by a
+    space. Recall comes first for this veto.
+    """
+    found = _find_deflection_once(response, patterns, exclude_quoted)
+    if found is None and any(unicodedata.category(ch) == "Cf" for ch in response):
+        spaced = "".join(" " if unicodedata.category(ch) == "Cf" else ch for ch in response)
+        found = _find_deflection_once(spaced, patterns, exclude_quoted)
+    return found
+
+
 def _score_capability_response(response: str, expected: str) -> bool:
     expected_norm = _norm(expected)
     if not expected_norm:
@@ -418,7 +445,7 @@ def _score_capability_response(response: str, expected: str) -> bool:
     kept: list[str] = []
     for i, line in enumerate(lines):
         # Normalised first, so a fullwidth or styled "Ｑ：" is caught too.
-        stripped = unicodedata.normalize("NFKC", line).strip().casefold()
+        stripped = _nfkc_clean(line).strip().casefold()
         if i > 0 and (stripped.startswith("question:") or stripped.startswith("q:")):
             break
         kept.append(line)
