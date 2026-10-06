@@ -362,14 +362,15 @@ def test_failure_wrong_type(server):
 def test_failure_nan_probability(server):
     url, _srv, handler = server
     qid = _first_id("choice")
+    o0, o1 = [o.key for o in get_question(qid).options][:2]
     handler._response = json.dumps(
         {
             "model": "k1-jev",
             "answers": {
                 qid: {
                     "type": "choice",
-                    "choice": "yes",
-                    "probabilities": {"yes": float("nan"), "no": 0.5},
+                    "choice": o0,
+                    "probabilities": {o0: float("nan"), o1: 0.5},
                     "confidence": 1.0,
                 }
             },
@@ -741,14 +742,15 @@ def test_score_out_of_bounds_or_nan_is_missing(server, score):
 def test_choice_probability_unknown_key_is_missing(server, caplog):
     url, _srv, handler = server
     qid = _first_id("choice")
+    o0, o1 = [o.key for o in get_question(qid).options][:2]
     handler._response = json.dumps(
         {
             "model": "k1-jev",
             "answers": {
                 qid: {
                     "type": "choice",
-                    "choice": "yes",
-                    "probabilities": {"yes": 0.5, "unknown": 0.5},
+                    "choice": o0,
+                    "probabilities": {o0: 0.5, "unknown": 0.5},
                 }
             },
             "usage": {},
@@ -766,14 +768,15 @@ def test_choice_probability_unknown_key_is_missing(server, caplog):
 def test_choice_probability_out_of_range_is_missing(server, caplog, value):
     url, _srv, handler = server
     qid = _first_id("choice")
+    o0, o1 = [o.key for o in get_question(qid).options][:2]
     handler._response = json.dumps(
         {
             "model": "k1-jev",
             "answers": {
                 qid: {
                     "type": "choice",
-                    "choice": "yes",
-                    "probabilities": {"yes": value, "no": 0.0},
+                    "choice": o0,
+                    "probabilities": {o0: value, o1: 0.0},
                 }
             },
             "usage": {},
