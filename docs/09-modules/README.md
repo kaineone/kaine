@@ -13,7 +13,7 @@ The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) 
 | [Echo](echo.md) | Test infrastructure: records every workspace snapshot and can publish `echo.ping`. | No |
 | [Eidolon](eidolon.md) | Self-model organ: identity maintenance and workspace-source drift detection. | No |
 | [Empatheia](empatheia.md) | Social-cognition organ: per-agent theory-of-mind models and familiarity tracking. | No |
-| [Hypnos](hypnos.md) | Sleep and maintenance organ: fatigue-triggered cycles with welfare gates on model-modifying operations. | No |
+| [Hypnos](hypnos.md) | Sleep and maintenance organ: fatigue-triggered cycles with welfare gates on model-modifying operations. | Yes |
 | [Lingua](lingua.md) | Language organ: voice generator that speaks from the conscious workspace. | Yes |
 | [Mnemos](mnemos.md) | Episodic memory organ: vector-embedding store with affect-tagged traces and Hypnos-gated replay. | No |
 | [Mundus](mundus.md) | Body-agnostic embodiment control plane: routes perception and action through a pluggable adapter. | No |
@@ -36,7 +36,7 @@ Modules that are off in `thesis_test` are built and tested but shipped disabled.
 
 ## The base-thesis profile
 
-The base-thesis profile in [`config/profiles/thesis_test.toml`](../../config/profiles/thesis_test.toml) is a research profile, not a deployment tier. It enables the four diverse predictive processors the base thesis needs — soma, chronos, topos, and audition — plus the language organ (`lingua`) and the affect organ (`thymos`):
+The base-thesis profile in [`config/profiles/thesis_test.toml`](../../config/profiles/thesis_test.toml) is a research profile, not a deployment tier. It enables the four diverse predictive processors the base thesis needs — soma, chronos, topos, and audition — plus the language organ (`lingua`), the affect organ (`thymos`), and Hypnos (`hypnos`, sleep and consolidation with voice alignment off):
 
 ```toml
 [modules]
@@ -46,6 +46,7 @@ topos = true
 audition = true
 lingua = true
 thymos = true
+hypnos = true
 ```
 
 With no profile selected, `thesis_test` is loaded automatically, so a bare `python -m kaine.cycle` already uses it. You can also request it explicitly:

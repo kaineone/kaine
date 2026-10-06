@@ -10,7 +10,7 @@ Implemented. Audition ships disabled: `config/kaine.toml` sets `[modules].auditi
 - Vocal emotion classification (`emotion2vec+`) and live microphone capture need the `[audio]` extras: `pip install -e .[audio]`. If `funasr` is missing, emotion degrades to neutral with a one-time warning.
 - Prosody extraction (`audition.prosody`) needs `librosa`, also from the `[audio]` extras.
 - The `AuditoryForwardModel` is always active once the module is enabled (CPU-only, tiny MLP; no extra deps beyond `torch`).
-- **General auditory perception** (`general_audition`, off by default in the shipped `config/kaine.toml`; on in the `thesis_test` profile) turns Audition into a perceptual sense for any sound, not only speech. The default encoder is a download-free `SpectralAcousticEncoder` (numpy only). See [General auditory perception](#general-auditory-perception).
+- **General auditory perception** (`general_audition`, off by default in the shipped `config/kaine.toml`; on in the `thesis_test` profile) turns Audition into a perceptual sense for any sound, not only speech. The default encoder is a download-free `SpectralAcousticEncoder` (numpy only). The optional `dasheng` and `wavjepa` acoustic encoders need `torch`, `torchaudio`, and `einops` from the `[audio]` and `[internvideo]` extras; their weights load lazily at the first `embed()` call, so a missing fetch fails at runtime, not at boot. See [General auditory perception](#general-auditory-perception).
 - **Speech-to-text is gated off by default** (`transcription_enabled = false`) in both the shipped `config/kaine.toml` and the `thesis_test` profile. The STT client, model, and pipeline remain built and functional; they are bypassed unless an operator sets `transcription_enabled = true` in a local override. See [General auditory perception](#general-auditory-perception).
 - The module is named `audition`, paired with [`vox`](vox.md) for speech output.
 
@@ -68,6 +68,7 @@ On each utterance boundary (detected by the VAD in `LiveMicrophone`, or on a dir
 | Vox `SpeakingGate` | `gate.is_speaking()` | Drops captures during the entity's own speech |
 | External callers | `process_audio()` directly | Programmatic injection (e.g. from a virtual-world chat feed via a Mundus body) |
 | Thymos arousal seam | `set_arousal_provider()` (general audition only) | Injected zero-arg callable returning arousal in [0, 1] that sizes the auditory attentional window; Audition never imports the workspace |
+| Hypnos | `hypnos.out` | `hypnos.sleep.started` suspends forward-model adaptation; `hypnos.sleep.completed` resumes it |
 
 Audition does not subscribe to the workspace broadcast.
 
@@ -77,7 +78,7 @@ All events are published to the `audition.out` stream.
 
 | Event type | Payload fields | Salience |
 |---|---|---|
-| `audition.perception` (general audition only) | `source_label`, `change_score`, `normalised_error`, `prediction_error`, `alert`, `encoder_model_id`, `attended_window`; `item` and `item_order` for playlist feeds | `baseline_salience` normally; `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when `normalised_error ≥ 2.0` |
+| `audition.perception` (general audition only) | `source_label`, `change_score`, `normalised_error`, `prediction_error`, `alert`, `encoder_model_id`, `attended_window`, `energy_dbfs`; `item` and `item_order` for playlist feeds | `baseline_salience` normally; `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when `normalised_error ≥ 2.0` |
 | `audition.transcription` | `text`, `backend`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error` | `baseline_salience` (0.4) normally; raised toward `alert_salience` (0.8) by high prediction error; `alert_salience` on STT failure |
 | `audition.emotion` | `category`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error`, `degraded`, `error` | `baseline_salience` for neutral; `alert_salience` for non-neutral; further raised by high prediction error |
 | `audition.prosody` | `source_label`, `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std`, `tempo_bpm` | `baseline_salience` (always) |
@@ -126,7 +127,8 @@ Section `[audition]` in `config/kaine.toml`. For the full reference see [Module 
 | `arousal_window_max` | `1.0` | Widest auditory attentional window (at low arousal) |
 | `acoustic_change_alert_factor` | `2.0` | Ratio of current acoustic change to the rolling mean that, together with `acoustic_change_alert_threshold`, raises `audition.perception` to `alert_salience` |
 | `acoustic_change_alert_threshold` | `0.35` | Floor on raw cosine-change before `audition.perception` can be raised to `alert_salience` |
-| `acoustic_encoder` | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"` (default, numpy, no download). A plugin may also fill the `audition.acoustic_encoder` seam; setting a non-default value together with a filled seam is a configuration error. |
+| `acoustic_encoder` | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"` (default, numpy, no download), `"dasheng"` (Dasheng-base, Apache-2.0) or `"wavjepa"` (WavJEPA-base, MIT). The two self-supervised encoders need their weights fetched once (`python -m kaine.setup.audio_ssl dasheng --yes`, or `wavjepa`) and need `torch`, `torchaudio` and `einops` from the `[audio]` and `[internvideo]` extras; their weights load at the first `embed()`, so a missing fetch fails at runtime, not at boot. A plugin may also fill the `audition.acoustic_encoder` seam; setting a non-default value together with a filled seam is a configuration error. |
+| `acoustic_device` | `"cpu"` | Device for the self-supervised encoders, resolved like other module devices. |
 
 ## Deterministic auditory feed
 
@@ -176,16 +178,18 @@ graph TD
 
 When `general_audition` is enabled, `process_audio()` first calls `_perceive_acoustic()` (in `kaine/modules/audition/module.py`, backed by `kaine/modules/audition/acoustic.py`) before the speech path:
 
-1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim) and represents speech, music, and environmental sound in one space. A stronger frozen self-supervised audio encoder plugs in through the same protocol; the encoder is frozen (only the forward model adapts). Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
+1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim) and represents speech, music, and environmental sound in one space. Two frozen self-supervised encoders are selectable through the same protocol, both 768-d at 16 kHz: Dasheng-base (`dasheng`) and WavJEPA-base (`wavjepa`, student path only). They load offline from the vendored code under `external/` and the weights fetched at setup, and keep only a RAM rolling window (2 s by default) of recent audio for context. The encoder is frozen; only the forward model adapts. Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
 
 A plugin can replace the encoder through the `audition.acoustic_encoder` seam. The plugin returns an object satisfying the `AcousticEncoder` protocol (`embedding_dim`, `model_id`, and `embed(audio_bytes, sample_rate)`). When the seam is filled, `[audition].acoustic_encoder` must be unset or `spectral`; any other value together with a filled seam is a configuration error.
 
 The acoustic forward model persists with the being under `acoustic_forward_models`, keyed by the encoder's `model_id`. Switching encoders carries the old encoder's checkpoint forward, so returning to it restores what was learned. A checkpoint whose tensor shapes do not match the running encoder is discarded with a warning. The serialised form contains no raw audio, no raw embeddings, and no buffers beyond a per-feature mean/variance summary.
 
+Every `audition.perception` event also carries `energy_dbfs`, the window's RMS level in dB full scale (floored at -120), computed independently of the encoder.
+
 Both forward models suspend adaptation from `hypnos.sleep.started` to `hypnos.sleep.completed`. Perception and prediction-error inference continue; only online learning pauses.
 2. **Salience** — `cosine_change()` scores acoustic novelty against the previous embedding, and a dedicated `AuditoryForwardModel` over the embedding contributes a prediction error normalised against its rolling mean (Chronos/Topos convention). The window is `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when the normalised acoustic prediction error is ≥ 2.0; otherwise `baseline_salience` — so a novel or sudden sound is salient whether or not it is a voice.
 3. **Arousal-set attentional window** — `arousal_to_window()` maps Thymos arousal in [0, 1] to the breadth of the auditory attentional window (Easterbrook narrowing: higher arousal → tighter window; sign tunable via `arousal_window_min`/`max`). Arousal reaches Audition through an injected provider seam (`set_arousal_provider()`, wired at boot like the topos-arousal / affect seams) — Audition never imports the workspace. `None` → widest window.
-4. **Publish** — a content-free `audition.perception` event (change, normalised error, prediction error, alert flag, encoder id, attended-window breadth; no audio) reaches the workspace.
+4. **Publish** — a content-free `audition.perception` event (change, normalised error, prediction error, alert flag, encoder id, attended-window breadth, `energy_dbfs`; no audio) reaches the workspace.
 5. **Speech gate** — `detect_speech()` (a cheap energy + spectral-centroid voice-activity heuristic) routes detected-speech windows to the STT+emotion path; non-speech windows return and are perceived only through the general path.
 
 All acoustic embeddings, the forward-model buffer, and any attended-stream state are memory-only and released as they age; the serialised buffer remains a statistical descriptor (per-feature mean/variance), never raw audio or embeddings. The self-hearing gate applies in both modes.
@@ -240,6 +244,8 @@ live mic: N chunks (B pcm bytes) flushed, K below minimum…
 | `kaine/modules/audition/live.py` | `LiveMicrophone` — VAD supervisor, locus gate, zero-persistence |
 | `kaine/modules/audition/feed.py` | Deterministic auditory feed sources and `_AudioStream` factory wiring |
 | `kaine/modules/audition/monitor.py` | `MonitorAudioStream` for screen-audio capture |
+| `kaine/modules/audition/ssl_encoders.py` | Frozen self-supervised acoustic encoders (`dasheng`, `wavjepa`) |
+| `kaine/setup/audio_ssl.py` | Weight-setup helper for the self-supervised acoustic encoders |
 
 ## Enabling and use
 
@@ -291,13 +297,14 @@ transcription_enabled = true
 
 ## Zero-persistence note
 
-Audition holds no raw audio beyond the scope of a single `process_audio()` call. The live-microphone path enforces this in `live.py`: PCM lives in a bounded `asyncio.Queue`, the in-memory WAV blob lives in a `BytesIO`, and all references are released when `process_audio()` returns.
+Audition holds no raw audio beyond the scope of a single `process_audio()` call, except that the `dasheng` and `wavjepa` acoustic encoders retain up to `context_s` (2.0 s) of decoded PCM in RAM across calls for context. That buffer is never written to disk. The live-microphone path enforces this in `live.py`: PCM lives in a bounded `asyncio.Queue`, the in-memory WAV blob lives in a `BytesIO`, and all references are released when `process_audio()` returns.
 
 `serialize()` writes:
 
 - `stt_model`, `emotion_model_id` — identity strings only.
 - `forward_model.layers` — MLP weight/bias tensors.
 - `auditory_buffer_summary` — statistical descriptor (n_utterances, per-feature mean/variance); no raw audio or feature vectors.
+- `acoustic_forward_models` — map keyed by encoder `model_id`, each holding a `state_dict` and a `buffer_summary` for the general-audition forward model.
 
 No `NamedTemporaryFile`, no `.wav` file, no raw audio bytes appear on the bus. The `audition.prosody` payload contains only numeric features. Under general auditory perception the acoustic embedding, the acoustic forward-model buffer, and any attended-stream state are likewise memory-only and released as they age; the `audition.perception` payload carries only content-free numeric descriptors and the encoder identity string.
 

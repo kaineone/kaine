@@ -207,6 +207,7 @@ class Topos(BaseModule):
 
         # Hypnos sleep flag — suspend forward-model adaptation during sleep.
         self._in_hypnos: bool = False
+        # Initialize resolves this to the current stream tail via last_entry_id().
         self._hypnos_cursor: str = "$"
 
         # Attention-driven foveation state (topos-foveation). All memory-only.
@@ -261,6 +262,10 @@ class Topos(BaseModule):
                 units=self._forward_model_units,
                 visual_buffer_size=self._visual_buffer_size,
             )
+
+        # Seed the hypnos cursor from the stream tail before starting the loop,
+        # otherwise a literal "$" under a non-blocking XREAD never advances.
+        self._hypnos_cursor = await self._bus.last_entry_id(_HYPNOS_STREAM)
 
         await super().initialize()
         self._tasks.append(

@@ -81,7 +81,7 @@ Nous implements belief updating, policy selection, and epistemic action by minim
 
 pymdp's agent API fits a compact generative model, and the JAX path `jit`-compiles planning to stay within the cycle budget. The default complexity envelope is small (64 steps) and runs comfortably on CPU.
 
-NARS/ONA is archived under `external/archive/` and is no longer used. It lacked a direct Predictive Processing foundation and required a subprocess bridge; active inference runs in-process and connects directly to the prediction-error loop across the system. See [Nous](../09-modules/nous.md) for module details and [The cognitive cycle](../08-cognitive-cycle/README.md) for timing.
+NARS/ONA is archived under `external/archive/`. KAINE uses the active-inference engine in Nous instead; it runs in-process and connects directly to the prediction-error loop across the system. NARS/ONA lacked a direct Predictive Processing foundation and required a subprocess bridge. See [Nous](../09-modules/nous.md) for module details and [The cognitive cycle](../08-cognitive-cycle/README.md) for timing.
 
 ---
 
@@ -146,7 +146,7 @@ Abliteration removes the residual-stream refusal direction installed by the orig
 
 The model is served through an OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1`. On CUDA hosts the default path is Unsloth Studio, which also runs the sleep-cycle trainer. On AMD/ROCm or edge hosts the path uses llama.cpp server images or any conforming `llama-server`. Chain-of-thought is suppressed with `chat_template_kwargs: {"enable_thinking": false}` in the `/v1/chat/completions` request body. Lingua is a voice, not a reasoner.
 
-A 4B training step (~9.8 GB) plus the loaded organ (~3 GB) do not fit together on a 12 GB card, so voice-alignment training time-shares `cuda:0` rather than running alongside inference. A larger organ overflows to CPU/RAM and cannot be retrained locally; operators with more VRAM can configure a larger abliterated organ in `config/kaine.operator.toml`.
+A 4B training step (~9.8 GB) plus the loaded organ (~4.1 GB) do not fit together on a 12 GB card, so voice-alignment training time-shares `cuda:0` rather than running alongside inference. A larger organ overflows to CPU/RAM and cannot be retrained locally; operators with more VRAM can configure a larger abliterated organ in `config/kaine.operator.toml`.
 
 Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queue"` using the `kaine-trainer` container. The `hot_swap_mode = "organ_adapter"` option swaps only the LoRA adapter rather than the whole model. For the full sleep-phase procedure see [Voice alignment](../10-sleep/voice-alignment.md).
 

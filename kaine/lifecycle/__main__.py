@@ -31,7 +31,6 @@ Exit codes
 from __future__ import annotations
 
 import argparse
-import errno
 import json
 import logging
 import os
@@ -40,7 +39,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from kaine.bus.client import CYCLE_CLIENT_NAME
 from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.decommission import (
     _STATE_SUBTREES,
@@ -136,31 +134,12 @@ def _state_subtree_has_content(state_root: Path, sub: str) -> bool:
         return True
 
 
-def _is_connection_refused(exc: Exception) -> bool:
-    """Walk an exception chain looking for ECONNREFUSED."""
-    seen: set[int] = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        if isinstance(exc, ConnectionRefusedError):
-            return True
-        if isinstance(exc, OSError) and exc.errno == errno.ECONNREFUSED:
-            return True
-        # Some Redis clients wrap the underlying OSError in ``args``.
-        for arg in getattr(exc, "args", ()):
-            if isinstance(arg, ConnectionRefusedError):
-                return True
-            if isinstance(arg, OSError) and arg.errno == errno.ECONNREFUSED:
-                return True
-        exc = exc.__cause__ or exc.__context__
-    return False
-
-
 def _bus_shows_live_entity(config: dict[str, Any]) -> tuple[bool | None, str]:
     """Probe the shared bus for a live cycle.
 
     First asks the Redis server for connected clients named by a KAINE cycle
-    (activity-independent).  If no named client is connected, falls back to the
-    newest workspace broadcast on the configured db.  Returns ``(True,
+    (activity-independent).  If no named client is connected, falls back to
+    the newest workspace broadcast on the configured db.  Returns ``(True,
     detail)`` if a cycle is connected or a recent entry exists, ``(False,
     detail)`` if the bus is known down or the stream is empty/stale, and
     ``(None, detail)`` if the bus configuration is missing or the server could
@@ -179,55 +158,9 @@ def _bus_shows_live_entity(config: dict[str, Any]) -> tuple[bool | None, str]:
     except Exception as exc:
         return (None, f"bus configuration load failed ({type(exc).__name__})")
 
-    client = None
-    try:
-        import redis
+    from kaine.bus.cycle_presence import cycle_on_bus
 
-        from kaine.bus.schema import WORKSPACE_STREAM
-
-        client = redis.Redis.from_url(
-            bus_cfg.url,
-            socket_connect_timeout=2.0,
-            socket_timeout=2.0,
-        )
-        try:
-            client.ping()
-        except Exception as exc:
-            if _is_connection_refused(exc):
-                return (
-                    False,
-                    "the bus is not running (connection refused); no cycle can be connected to it",
-                )
-            return (None, f"bus unreachable ({type(exc).__name__})")
-
-        try:
-            for c in client.client_list():
-                if c.get("name") == CYCLE_CLIENT_NAME:
-                    return (True, "a KAINE cycle is connected to the bus")
-        except Exception as exc:
-            return (None, f"cannot list bus clients ({type(exc).__name__})")
-
-        entries = client.xrevrange(WORKSPACE_STREAM, count=1)
-        if not entries:
-            return (False, f"{WORKSPACE_STREAM} has no broadcast")
-        entry_id, _fields = entries[0]
-        id_str = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
-        ms = int(id_str.split("-")[0])
-        age_s = time.time() - ms / 1000.0
-        if age_s < BUS_FRESH_SECONDS:
-            return (True, f"{WORKSPACE_STREAM} last broadcast {age_s:.0f} s ago")
-        return (
-            False,
-            f"{WORKSPACE_STREAM} has no recent broadcast (last {age_s:.0f} s ago)",
-        )
-    except Exception as exc:
-        return (None, f"bus unreachable ({type(exc).__name__})")
-    finally:
-        if client is not None:
-            try:
-                client.close()
-            except Exception:
-                log.debug("bus client close failed", exc_info=True)
+    return cycle_on_bus(bus_cfg)
 
 
 def _load_kaine_config(path: Path) -> dict[str, Any]:

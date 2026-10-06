@@ -17,9 +17,12 @@ _CONFIG = tomllib.loads((_ROOT / "config" / "kaine.toml").read_text())
 # Modules whose producer stream is `<name>.out`.
 _MODULE_NAMES = [
     "soma", "chronos", "topos", "nous", "mnemos", "eidolon", "thymos",
-    "praxis", "lingua", "audition", "vox", "hypnos", "echo",
+    "praxis", "lingua", "audition", "vox", "hypnos", "empatheia",
+    "mundus", "perception", "phantasia", "echo",
 ]
 # Canonical set of streams the live system actually publishes to.
+# ``lingua.out`` is Lingua's aggregate producer and is already included via
+# ``module_stream("lingua")`` in the list above.
 _PRODUCER_STREAMS = {module_stream(m) for m in _MODULE_NAMES} | {
     "workspace.broadcast",   # Syneidesis
     "cycle.out",             # cycle engine

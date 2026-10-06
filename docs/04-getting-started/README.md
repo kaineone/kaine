@@ -1,6 +1,6 @@
 # Getting started
 
-This page is for operators installing KAINE for the first time. It covers the one-command bootstrap, host requirements, the install script, the first-run wizard, and the optional extras that enable specific modules. After the install finishes, continue with [Supporting services](services.md) and [First boot](first-boot.md) to bring up the runtime and start the entity.
+This page is for operators installing KAINE for the first time. It covers the one-command bootstrap, host requirements, the install script, the browser first-run wizard, and the optional extras that enable specific modules. After the install finishes, continue with [Supporting services](services.md) and [First boot](first-boot.md) to bring up the runtime and start the entity.
 
 ## One command on any host
 
@@ -24,6 +24,53 @@ Replace the URLs with your own fork of the repository.
 | Termux / Android | `TERMUX_VERSION` or `com.termux` prefix | `cpu` | `memory-edge` | edge memory modules; `speech-edge` is a manual install; Topos is excluded |
 
 The bootstrap script prints the system-package command for your package manager (`apt`, `dnf`, `pacman`, `pkg`, or `brew`) and only runs it when you pass `--yes`. It does not start the entity and does not assume root: `sudo` commands prompt the operator.
+
+## Browser first-run wizard
+
+Open the loopback setup wizard in a browser with:
+
+```bash
+.venv/bin/python -m kaine.setup --web
+```
+
+The server binds to `127.0.0.1` on a free port, prints a single-use launch URL to the terminal, and opens a private redirect file in the default browser. The URL with the launch token never appears in a browser command line.
+
+Both the browser and the terminal wizard write your choices to a gitignored `config/kaine.operator.toml`. `load_kaine_config()` deep-merges that file over the shipped `config/kaine.toml` at boot, so operator values win and the committed file stays untouched. The wizard only writes keys it owns: it merges its own values into any hand edits and other tables, it refuses to write unowned keys, and it pre-fills each question from the existing operator file. Re-running it with no changes leaves the file untouched. Before writing it lists the changed keys and asks `[Y/n]`; `--defaults` answers the prompt automatically. Comments inside the file are lost when the wizard rewrites a changed key. The wizard never edits the shipped config and never boots the entity. The browser wizard refuses to start on a malformed operator file, and it refuses to save while a cycle is running or when it cannot tell. After saving, it offers consented setup jobs (optional extras, organ download, shared services, and Nexus) with streamed progress.
+
+Both wizards ask the same questions, in this order (the terminal wizard runs every step in sequence):
+
+1. A short orientation.
+2. CAL welfare acknowledgement — a summary of the Article 4 care obligations and a required typed acknowledgement before any entity is configured.
+3. Hardware — lists every compute device, allowed-device selection, the proposed device map (`[hardware.devices]`: `organ` and `vision`), CPU threads, shared services (`[services.<name>].shared`), and data-root selection. It also recommends a deployment tier and warns about accelerator mismatches.
+4. Module selection — the wizard offers two presets or a custom set. The **base thesis** is the module set of `config/profiles/thesis_test.toml` (Soma, Chronos, Thymos, Lingua, Topos, Audition and Hypnos). The **full entity** turns on all fourteen cognitive modules; the embodiment modules, Perception and Mundus, stay off. The wizard recommends the full entity when the hardware step found a tier of 2 or higher that runs every module at once without swapping modules in and out, and the base thesis otherwise, including when it has no tier recommendation. **Custom** asks about each module, starting from the recommended preset. `--defaults` takes the recommendation. The wizard writes a full `[modules]` table to `config/kaine.operator.toml`, which merges last and wins, so after the wizard has run its choices replace the `thesis_test` profile's.
+5. Model, voice, and STT — discovers served options from the model server, Chatterbox, and Speaches when reachable, otherwise accepts manual entry, and records `[lingua].model_id`, `[vox].predefined_voice_id`, and `[audition].stt_model`.
+6. Trainer — if Hypnos voice alignment is enabled, provisions the Stage-2 trainer (`[hypnos.voice_alignment].trainer_backend`).
+7. Research metrics — an opt-in, metrics-only research submission. Answering No turns submission off, including on a re-run after an earlier Yes.
+8. State encryption — the question defaults to the current value. Answering No while encryption is on keeps it on: turning it off would leave already-encrypted state unreadable, so the wizard says so and leaves it to a manual decrypting migration. If encryption is enabled, a missing or wrong key refuses boot.
+9. Optional CL1 plugin — an opt-in connection to the CL1 substrate (skipped under `--defaults`). Answering No removes a CL1 setup an earlier run recorded; other plugins stay enabled. See [Plugins and CL1](../19-plugins-and-cl1.md).
+10. Confirm and write — the wizard lists the keys that will change and asks `[Y/n]` before writing `config/kaine.operator.toml`.
+11. Container settings — writes the Compose GPU variables and, if the data root moved, a volume override.
+12. Optional extras — offers to `pip install -e ".[…]"` the extras implied by your module choices.
+13. Consented organ download and serve — downloads and serves the selected organ model only if you consent.
+14. External dependencies — detects which services the enabled modules need and whether each is already running. For Redis and Qdrant it shows the exact bootstrap command and runs it only if you consent. For the heavy GPU services (model server, Speaches, Chatterbox) it prints the real setup steps and a docs link rather than pretending to install them.
+15. Nexus token — generates a token into `config/secrets.toml` if none exists.
+16. Summary — the environment gates, service bring-up commands, and how to launch.
+
+In the browser, steps 1 to 10 are the wizard pages and the review page. The browser wizard does not write the container settings (step 11); run the terminal wizard for those. After you save, the browser wizard offers the remaining setup work (optional extras, the organ download, shared services and Nexus) as consented jobs, and its finish page takes the place of the summary.
+
+Saving the operator file creates the Nexus sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_NEXUS_TOKEN` environment variable is unset. The token is only needed when `[nexus].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
+
+The finish page shows a service status light for each known local service and for Nexus, a **Start Nexus** button when Nexus is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_NEXUS_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
+
+## Terminal first-run wizard
+
+Run the same wizard in the terminal with:
+
+```bash
+.venv/bin/python -m kaine.setup
+```
+
+This is useful when a browser is not available or when you prefer a text interface. Pass `--defaults` to accept safe non-interactive defaults. The terminal wizard writes the same `config/kaine.operator.toml`, creates the same Nexus sign-in token, and ends with a summary of the environment gates, the service bring-up commands and how to launch.
 
 ## Prerequisites
 
@@ -50,7 +97,7 @@ Every runtime service is local. Model weights download from public repositories 
 
 If no profile is selected, the loader applies the `thesis_test` profile automatically. That profile turns Soma, Chronos, Topos, Audition, Lingua, and Thymos on and disables every other module. It also sets `[perception_feed]` to `seeded` with seed 0, `[topos].foveation = true`, `[audition].transcription_enabled = false` with `general_audition = true`, and `[volition] policy="self_initiated_report"`, `drive_initiative=false`, `sig_expiry_s=300.0`. Every other value comes from the shipped `config/kaine.toml`.
 
-`config/kaine.operator.toml` merges last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's.
+`config/kaine.operator.toml` merges last and wins, and the first-run wizard always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's.
 
 The bootstrap script already starts Redis and Qdrant, and the first-run wizard checks that both answer before the entity can boot. Bring both up even when the enabled modules do not use Qdrant. The model server is needed for Lingua. Speaches is needed only when Audition transcription is enabled; Chatterbox is needed only when Vox is enabled. You can also use the on-device `sherpa_onnx` backend for STT and TTS instead (see [On-device speech](#on-device-speech)).
 
@@ -159,30 +206,6 @@ The `cuda_devices` field lists each GPU with name, total VRAM, and free VRAM. Th
 NVIDIA CUDA is the primary tested configuration. AMD ROCm, Intel Arc/XPU, and Apple MPS receive community testing. CPU-only always works.
 
 See [Accelerators and PyTorch wheels](../03-hardware/accelerators.md) for detailed wheel selection.
-
-## First-run wizard
-
-```bash
-.venv/bin/python -m kaine.setup
-```
-
-The wizard writes your choices to a gitignored `config/kaine.operator.toml`. `load_kaine_config()` deep-merges that file over the shipped `config/kaine.toml` at boot, so operator values win and the committed file stays untouched. The wizard never edits the shipped config and never boots the entity. Run it non-interactively with `python -m kaine.setup --defaults`.
-
-The wizard walks through:
-
-1. A short orientation.
-2. CAL welfare acknowledgement — a summary of the Article 4 care obligations and a required typed acknowledgement before any entity is configured.
-3. Hardware — lists every compute device, allowed-device selection, the proposed device map (`[hardware.devices]`: `organ` and `vision`), CPU threads, shared services (`[services.<name>].shared`), and data-root selection. It also recommends a deployment tier and warns about accelerator mismatches.
-4. Module selection — the wizard offers two presets or a custom set. The **base thesis** is the module set of `config/profiles/thesis_test.toml` (Soma, Chronos, Thymos, Lingua, Topos and Audition). The **full entity** turns on all fourteen cognitive modules; the embodiment modules, Perception and Mundus, stay off. The wizard recommends the full entity when the hardware step found a tier of 2 or higher that runs every module at once without swapping modules in and out, and the base thesis otherwise, including when it has no tier recommendation. **Custom** asks about each module, starting from the recommended preset. `--defaults` takes the recommendation. The wizard writes a full `[modules]` table to `config/kaine.operator.toml`, which merges last and wins, so after the wizard has run its choices replace the `thesis_test` profile's.
-5. Model, voice, and STT — discovers served options from the model server, Chatterbox, and Speaches when reachable, otherwise accepts manual entry, and records `[lingua].model_id`, `[vox].predefined_voice_id`, and `[audition].stt_model`. If you enable Hypnos voice alignment, it also provisions the Stage-2 trainer (`[hypnos.voice_alignment].trainer_backend`).
-6. Optional CL1 integration — an opt-in connection to a CL1 instance if configured. See [Plugins and CL1](../19-plugins-and-cl1.md).
-7. Consented organ download and serve — downloads and serves the selected organ model only if you consent.
-8. Nexus token — generates a token into `config/secrets.toml`.
-9. Research metrics — an opt-in, metrics-only research submission (off by default).
-10. State encryption — the shipped `config/kaine.toml` already has `[security.state_encryption].enabled = true`. The wizard asks "Enable state encryption at rest?" with a default of No; declining writes nothing, so the shipped value stays in force. If encryption is enabled, a missing or wrong key refuses boot.
-11. Optional extras — offers to `pip install -e ".[…]"` the extras implied by your module choices. This step runs after the operator file is written.
-12. External dependencies — detects which services the enabled modules need and whether each is already running. For Redis and Qdrant it shows the exact bootstrap command and runs it only if you consent. For the heavy GPU services (model server, Speaches, Chatterbox) it prints the real setup steps and a docs link rather than pretending to install them.
-13. Summary — the environment gates, service bring-up commands, and how to launch.
 
 Nexus ships with `[nexus].access = "open"` by default: viewing and control are open with no token or sign-in. Set it to `"token"` or export `KAINE_NEXUS_ACCESS=token` to require the operator token and session sign-in. `KAINE_NEXUS_READ_ONLY=1` refuses every request except GET/HEAD/OPTIONS with 403. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet hostnames. Host and Origin checks always apply.
 

@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from kaine.setup import wizard
+from kaine.setup import wizard, wizard_core
 from kaine.setup.wizard import run_wizard
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -141,7 +141,7 @@ def test_vox_sherpa_onnx_skips_chatterbox_voice_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        wizard,
+        wizard_core,
         "base_thesis_modules",
         lambda profiles_dir=None: {m: m == "vox" for m in wizard.MODULE_ORDER},
     )
@@ -165,7 +165,7 @@ def test_audition_sherpa_onnx_skips_speaches_stt_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        wizard,
+        wizard_core,
         "base_thesis_modules",
         lambda profiles_dir=None: {m: m == "audition" for m in wizard.MODULE_ORDER},
     )

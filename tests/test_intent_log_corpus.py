@@ -174,12 +174,10 @@ def test_rotate_without_hard_links_falls_back_to_rename_and_never_overwrites(
 ) -> None:
     """On a filesystem without hard links the move falls back to rename, and
     still never replaces an existing corpus file."""
-    import kaine.modules.hypnos.corpus as corpus_mod
-
     def no_links(_src, _dst):
         raise OSError("hard links not supported")
 
-    monkeypatch.setattr(corpus_mod.os, "link", no_links)
+    monkeypatch.setattr("kaine.modules.hypnos.corpus.os.link", no_links)
     log_path = tmp_path / "intent.jsonl"
     corpus_dir = tmp_path / "intent_log"
     corpus_dir.mkdir()

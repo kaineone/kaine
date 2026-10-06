@@ -27,7 +27,8 @@ competition:
 - **Topos** (foveated vision over raw video),
 - **Audition** (raw sound as prediction error),
 - **Thymos** (affect/arousal — the precision core setting the gain on the
-  competition, itself moved by perceptual surprise), and
+  competition, itself moved by perceptual surprise),
+- **Hypnos** (fatigue-triggered sleep and consolidation, with voice alignment off), and
 - **Lingua** (the output-only voice),
 
 with **Syneidesis** (the workspace) and **Volition** (action selection) as
@@ -45,8 +46,8 @@ architecture is a scored prompt-assembler and the thesis is falsified. That test
 pre-registered and designed so a null result is reportable.
 
 Everything richer — **memory, self-model, world-model, social cognition,
-sleep/consolidation, effectors, embodiment, and a spoken voice** (the remaining
-ten modules plus the oscillatory and embodiment layers) — is **built, tested,
+effectors, embodiment, and a spoken voice** (the remaining
+nine modules, plus the oscillatory and embodiment layers) — is **built, tested,
 and gated off** until a positive base result. It is held, never removed.
 
 ## 📚 Documentation

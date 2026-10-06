@@ -290,6 +290,27 @@ native_pid_is_ours() {
 # ------------------------------------------------------------------------------
 # Native process supervision helpers
 # ------------------------------------------------------------------------------
+native_wait_exec() {
+  # Wait (up to ~5 s) until a just-backgrounded child has exec'd into the
+  # service, so the pid recorded in its pidfile is recognisable. Between fork
+  # and exec the child's command line is still this script's, and a bootstrap
+  # run in that window would call the pidfile stale and start a second copy.
+  # Returns 1 if the child died before it got there.
+  local svc="$1"
+  local pid="$2"
+  local i
+  for i in $(seq 1 50); do
+    if native_pid_is_ours "$svc" "$pid"; then return 0; fi
+    # A child that exited is gone or a zombie (kill -0 still succeeds on a
+    # zombie until it is reaped), and either way the service did not start.
+    if ! kill -0 "$pid" 2>/dev/null; then return 1; fi
+    if [[ -r "/proc/$pid/stat" && "$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)" == "Z" ]]; then return 1; fi
+    sleep 0.1
+  done
+  echo "==> kaine-${svc} (pid ${pid}) is running but has not identified itself yet" >&2
+  return 0
+}
+
 native_is_running() {
   local svc="$1"
   if using_systemd; then
@@ -486,6 +507,10 @@ EOF
 
   nohup redis-server "$conf" > "$logs_dir/redis.log" 2>&1 &
   local pid=$!
+  if ! native_wait_exec redis "$pid"; then
+    echo "==> kaine-redis exited during startup; see ${logs_dir}/redis.log" >&2
+    return 1
+  fi
   echo "$pid" > "$pidfile"
   echo "==> started kaine-redis in the background (pid ${pid})"
 }
@@ -614,6 +639,10 @@ EOF
   # Non-systemd: load the env file in a subshell so the API key is never on argv.
   ( set -a; . "$env_file"; set +a; exec nohup "$binary" ) > "$svc_dir/qdrant.log" 2>&1 &
   local pid=$!
+  if ! native_wait_exec qdrant "$pid"; then
+    echo "==> kaine-qdrant exited during startup; see ${svc_dir}/qdrant.log" >&2
+    return 1
+  fi
   echo "$pid" > "$pidfile"
   echo "==> started kaine-qdrant in the background (pid ${pid})"
 }
