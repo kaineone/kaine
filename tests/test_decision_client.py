@@ -556,3 +556,14 @@ if loaded:
     )
     assert result.returncode == 0
     assert "forbidden" not in result.stdout
+
+
+def test_ask_never_raises_on_an_unexpected_error():
+    # An unknown question id fails while the request is built (KeyError),
+    # before any HTTP call: ask must still return None, never raise.
+    cfg = DecisionConfig(enabled=True, url="http://127.0.0.1:9")
+    client = DecisionClient(cfg)
+    try:
+        assert client.ask("hello", None, ["no_such_question"]) is None
+    finally:
+        client.close()
