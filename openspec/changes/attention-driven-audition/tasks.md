@@ -25,18 +25,24 @@ date._
       (`kaine/modules/audition/acoustic.py:SpectralAcousticEncoder`) plus an
       `AcousticEncoder` protocol so a stronger frozen SSL encoder plugs in; the
       concrete SSL model remains the lead's/host's choice._
-- [ ] 0.2 Attention granularity: single attended window first, stream/source
+      **2026-10-05:** the encoder is selectable (task 5.1); the thesis default is
+      the bake-off winner (task 6.6). Ticked when 6.8 lands.
+- [x] 0.2 Attention granularity: single attended window first, stream/source
       separation later? (Flag 2)
       _Phase-1 realization: a single arousal-modulated attended window
       (`acoustic.py:arousal_to_window`, `module.py:_perceive_acoustic`), the
       design's likely-(a)-first; source separation (b) is Phase 2 (task 2.1),
       still the lead's call to green-light._
-- [ ] 0.3 Speech gating: keep the voice-activity detector to route the STT+emotion
+      **Locked 2026-10-05 by the lead: (a).** Source separation is a separate
+      future change with its own model and design (design §Amendment).
+- [x] 0.3 Speech gating: keep the voice-activity detector to route the STT+emotion
       specialization, or drive it from the general salience/attention signal?
       (Flag 4)
       _Phase-1 realization: an explicit voice-activity heuristic
       (`acoustic.py:detect_speech`, gated in `module.py:process_audio`); whether
       to drive the gate from the general salience signal instead is still open._
+      **Locked 2026-10-05 by the lead: keep the voice-activity detector**
+      (design §Amendment).
 
 ## 1. Phase 1 — general acoustic front end + salience + arousal-modulated window
 
@@ -69,12 +75,13 @@ the still-unbuilt foveation Phase 2 (its `2.1` attention schema is likewise
 unchecked). Not implemented here to avoid a pretend process (no separation/schema
 is shipped as a stub)._
 
-- [ ] 2.1 Stream/source separation: attend one sound among several (the true
+- [ ] 2.1 **Deferred:** stream/source separation: attend one sound among several (the true
       analog of foveation, "attend one thing among many").
-      _Blocked/deferred: gated on OPEN operator decision 0.2 (single window vs
+      _Deferred 2026-10-05: decision 0.2 chose the single window; separation is a
+      future change with its own separation model. Earlier note: gated on decision 0.2 (single window vs
       source separation); design §Flags 2 calls (b) "heavier" and a later phase.
       Building it now would preempt the lead's call._
-- [ ] 2.2 An attention schema for sound: publish a predicted next attended stream,
+- [ ] 2.2 **Deferred:** an attention schema for sound: publish a predicted next attended stream,
       content-free, for the self-model and diagnostics.
       _Deferred: "predicted next attended stream" presupposes multiple separated
       streams (depends on 2.1); with the Phase-1 single window there is one stream
@@ -86,13 +93,13 @@ is shipped as a stub)._
 _Deferred — design §Flags 5 marks localization a later phase; mirrors the
 still-unbuilt foveation Phase 3–4._
 
-- [ ] 3.1 Auditory localization: a content-free direction ("where" for a sound),
+- [ ] 3.1 **Deferred (hardware):** auditory localization: a content-free direction ("where" for a sound),
       the analog of the fovea's coordinates.
       _Blocked: localization needs ≥2-channel capture (interaural time/level
       differences); the capture path is mono (`LiveMicConfig.channels = 1`,
       `[audition].capture_channels = 1`). Producing a direction from mono audio
       would be a pretend process._
-- [ ] 3.2 Route the auditory attention direction into the shared "attention /
+- [ ] 3.2 **Deferred (belongs to embodiment work):** route the auditory attention direction into the shared "attention /
       gaze direction decoupled from the body" control the foveation change names,
       so screen gaze, camera gaze, and sound direction share one mechanism.
       _Blocked: depends on 3.1, and on the vision side first wiring the fovea into
@@ -116,3 +123,59 @@ still-unbuilt foveation Phase 3–4._
       _Not actionable in this repo: the paper is not present in this public
       repository (no `.tex` / paper source / §3.4 here). Flagged, not ticked —
       this is a paper-only change to be made where the paper lives._
+      **2026-10-05:** filed as a note in the paper repository's
+      `REVISION-NOTES.md` together with task 6.10.
+
+## 5. Selectable encoder and persisted forward model (amendment 2026-10-05, A1)
+
+- [x] 5.1 `[audition].acoustic_encoder` (`spectral` default) resolved through a
+      registry in the factory and added to its allowed keys. An unknown or
+      unprovisioned encoder raises `ConfigurationError`.
+- [x] 5.2 Plugin seam `audition.acoustic_encoder` in `INJECTABLE_SEAMS`
+      (integrator pinged first), honoured by the factory through
+      `_check_injections`. A filled seam plus a non-default
+      `acoustic_encoder` is a configuration error.
+- [x] 5.3 `serialize()`/`deserialize()` carry `acoustic_forward_models` keyed by
+      encoder `model_id`: load on matching shapes, discard on a mismatch with a
+      warning, carry other encoders' entries forward untouched.
+- [x] 5.4 A `hypnos.out` consumer suspends adaptation of both forward models during
+      sleep, as Topos does.
+- [x] 5.5 Tests: config selection, the plugin seam (honoured, conflict, recorded),
+      a persistence round-trip through `serialize`/`deserialize` in a fresh
+      instance, the mismatch discard, encoder switch-and-back, sleep suspension
+      through decoded `hypnos.out` events, and the zero-persistence test over the
+      new key. Mutation-check each one.
+
+## 6. Self-supervised encoders (amendment 2026-10-05, B1)
+
+- [ ] 6.1 Vendor Dasheng-base under `external/dasheng/`, from the Hugging Face
+      repository, never the Zenodo GPL copy. Add an `UPSTREAM` file with the pinned
+      revision and licence, and a setup-time weight fetch pinned to that
+      revision. Load with `local_files_only`, `HF_HUB_OFFLINE=1`, and no
+      `trust_remote_code`.
+- [ ] 6.2 Vendor WavJEPA-base under `external/wavjepa/` the same way. Replace the
+      config `eval()` with a literal parse and rename the shadowing `types.py`.
+      The runtime path loads the student encoder only.
+- [ ] 6.3 `DashengAcousticEncoder` and `WavJEPAAcousticEncoder` behind the
+      registry, each with a RAM-only rolling window buffer, covered by the
+      zero-persistence test.
+- [ ] 6.4 ONNX and dynamic-int8 exports of a thin segment module per encoder,
+      with a parity test against torch on the real weights.
+- [ ] 6.5 An energy channel: `energy_dbfs` on `audition.perception`, available to
+      salience independently of the encoder.
+- [ ] 6.6 Offline bake-off (`scripts/bench_audition_encoders.py`) on the seeded,
+      playlist and womb feeds, with the four design metrics. Record it under
+      `docs/records/`. GPU runs take the host lock (duration sent to the
+      integrator first).
+- [ ] 6.7 Recalibrate acoustic salience (normalisation, alert factor and floor)
+      for the winner on the same feeds.
+- [ ] 6.8 The winner becomes the `thesis_test` profile default (integrator
+      pinged first). Tier 0 keeps `spectral`. Add `NOTICE` and licence-appendix
+      entries (integrator pinged first).
+- [ ] 6.9 WavJEPA mismatch ("MMN") mode in the bake-off harness only, behind a
+      flag. The teacher and predictor are loaded only there; the result goes in
+      the record.
+- [ ] 6.10 Paper revision note: the encoder class, and "over raw waveform"
+      refined if the winner computes a mel spectrogram inside the model.
+- [ ] 6.11 `docs/09-modules/audition.md` documents encoder selection,
+      persistence, sleep suspension and the energy channel.

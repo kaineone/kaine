@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Protocol, runtime_checkable
+from typing import Callable, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -156,6 +156,22 @@ class SpectralAcousticEncoder:
         if norm > 0:
             emb = emb / norm
         return emb.astype(float).tolist()
+
+
+ACOUSTIC_ENCODERS: dict[str, Callable[[], AcousticEncoder]] = {
+    "spectral": SpectralAcousticEncoder,
+    # dasheng and wavjepa are registered in section 6.
+}
+
+
+def build_acoustic_encoder(name: str) -> AcousticEncoder:
+    """Resolve an encoder name to a fresh ``AcousticEncoder`` instance."""
+    key = name.strip().lower()
+    ctor = ACOUSTIC_ENCODERS.get(key)
+    if ctor is None:
+        known = ", ".join(sorted(ACOUSTIC_ENCODERS))
+        raise ValueError(f"unknown acoustic encoder {name!r}; known: {known}")
+    return ctor()
 
 
 class FakeAcousticEncoder:

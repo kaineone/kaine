@@ -131,3 +131,33 @@ specialized detail path) applied to the auditory modality.
 - **Speech detection** — keep the existing voice-activity path to gate the STT
   specialization, or drive the speech gate from the general salience/attention
   signal directly.
+
+## Amendment (2026-10-05): a selectable encoder, a persisted forward model, and the self-supervised encoders
+
+Phase 1 shipped with a download-free spectral encoder behind the `AcousticEncoder` protocol. The paper says three times that Audition uses a frozen self-supervised encoder over the raw waveform (§3.5 table, §3.5 prose, §5.2), so the code and the paper diverge. Nothing selects an encoder from configuration, and Audition has no plugin seam. Two further defects:
+
+- **The acoustic forward model starts from scratch on every boot.** `Audition.serialize()` persists only the speech-path forward model, so what a being has learned to expect of its sound world is lost at every restart.
+- **Neither forward model suspends adaptation during sleep.** Topos and Chronos both do; Audition does not, although `AuditoryForwardModel.suspended` exists.
+
+### What this amendment adds
+
+**Selectable encoder (A1)**
+- `[audition].acoustic_encoder` selects the encoder: `spectral` (the default), and, once they are built, `dasheng` and `wavjepa`. An unknown name, or a name whose weights are not provisioned, is a configuration error at boot. It never falls back silently.
+- An Audition plugin seam, `audition.acoustic_encoder`, lets a plugin supply any `AcousticEncoder`. A filled seam and a non-default `acoustic_encoder` together are a configuration error.
+
+**Persisted forward model (A1)**
+- The acoustic forward model's weights and buffer summary persist with the being. They are keyed by the encoder's `model_id`, so switching encoder and back keeps what was learned under each.
+- A checkpoint whose shapes do not match the running encoder is discarded with a warning, matching Topos.
+- Both forward models suspend adaptation between `hypnos.sleep.started` and `hypnos.sleep.completed`, matching Topos.
+
+**Self-supervised encoders (B1)**
+- Dasheng-base (Apache-2.0, from Hugging Face, never the GPL Zenodo copy) and WavJEPA-base (code BSD-3-Clause, weights MIT) are vendored under `external/`, with pinned revisions and `UPSTREAM` files.
+- They load with `local_files_only` and `HF_HUB_OFFLINE=1`, never `trust_remote_code`, from weights fetched at setup time.
+- ONNX and int8 exports serve the torch-free tiers.
+- A separate energy channel carries loudness for salience, because WavJEPA normalises loudness away and Dasheng's embedding is not a loudness measure.
+- An offline bake-off on the seeded, playlist and womb feeds picks the thesis-profile default and is recorded under `docs/records/`. Tier 0 keeps `spectral`.
+- WavJEPA's predictor-based mismatch ("MMN mode") is an offline experiment inside the bake-off harness only. It is not wired into the runtime module.
+
+### Research impact
+
+The thesis-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived being keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.

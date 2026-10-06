@@ -302,7 +302,7 @@ def construct_module(
     Copies the module's section from ``kaine_config``, wires the shared
     perception feed for Topos/Audition/Soma, injects ``entity_clock`` into
     clocked factories, injects ``intent_secret`` into Praxis, and dispatches
-    plugin injections to Chronos, Soma and Nous.
+    plugin injections to Chronos, Soma, Nous and Audition.
 
     Returns ``None`` when the module's factory returns ``None`` — i.e. its
     configured backend could not load. The caller is responsible for skipping
@@ -311,7 +311,7 @@ def construct_module(
     if name not in SIMPLE_FACTORIES and name != "hypnos":
         raise ConfigurationError(f"unknown module {name!r}")
 
-    if injections and name not in {"chronos", "soma", "nous"}:
+    if injections and name not in {"chronos", "soma", "nous", "audition"}:
         raise ConfigurationError(
             f"module {name!r} does not accept injections"
         )
@@ -349,6 +349,8 @@ def construct_module(
     if name == "praxis":
         return factory(bus, section, intent_secret=intent_secret)
     if name in {"chronos", "soma", "nous"}:
+        return factory(bus, section, injections=injections)
+    if name == "audition":
         return factory(bus, section, injections=injections)
     return factory(bus, section)
 

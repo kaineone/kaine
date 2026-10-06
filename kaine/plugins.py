@@ -9,8 +9,9 @@ loaded. The loader validates declared seams, detects conflicts, and supplies
 constructor injections to module factories.
 
 Recognized injectable seams are ``chronos.network``, ``soma.forward_model``,
-``nous.engine`` (a replacement engine), and ``nous.engine_wrapper`` (a callable
-that receives KAINE's default Nous engine and returns the engine to use).
+``nous.engine`` (a replacement engine), ``nous.engine_wrapper`` (a callable that
+receives KAINE's default Nous engine and returns the engine to use), and
+``audition.acoustic_encoder`` (an ``AcousticEncoder`` instance).
 """
 from __future__ import annotations
 
@@ -38,6 +39,7 @@ INJECTABLE_SEAMS: dict[str, frozenset[str]] = {
     "chronos": frozenset({"network"}),
     "soma": frozenset({"forward_model"}),
     "nous": frozenset({"engine", "engine_wrapper"}),
+    "audition": frozenset({"acoustic_encoder"}),
 }
 
 # A replacement and a wrapper for the same model cannot both apply.

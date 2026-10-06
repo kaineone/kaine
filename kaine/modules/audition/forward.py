@@ -313,6 +313,34 @@ class AuditoryForwardModel:
                     module.bias.copy_(bias)
                 layer_idx += 1
 
+    def matches_state_shape(self, state: dict[str, Any]) -> bool:
+        """Whether a ``state_dict()`` snapshot's tensor shapes fit this model.
+
+        A checkpoint sized to a different encoder ``feature_dim`` (input
+        ``2*feature_dim`` → hidden ``units`` → output ``feature_dim``) must be
+        detected BEFORE any ``copy_``, so a mismatch is discarded rather than
+        raising. Returns False on any malformed/short layer list too.
+        """
+        torch = self._torch
+        import torch.nn as nn
+
+        layers = state.get("layers")
+        linears = [m for m in self._net if isinstance(m, nn.Linear)]
+        if not isinstance(layers, list) or len(layers) != len(linears):
+            return False
+        # Every weight and bias must convert to a tensor of exactly the shape
+        # it would be copied into: a ragged, non-numeric or differently sized
+        # entry is a mismatch, so load_state_dict can never fail part-way.
+        for layer, module in zip(layers, linears):
+            try:
+                weight = torch.tensor(layer["weight"], dtype=torch.float32)
+                bias = torch.tensor(layer["bias"], dtype=torch.float32)
+            except (KeyError, TypeError, ValueError, RuntimeError):
+                return False
+            if weight.shape != module.weight.shape or bias.shape != module.bias.shape:
+                return False
+        return True
+
     def buffer_summary(self) -> dict[str, Any]:
         """Return a statistical descriptor of the auditory buffer.
 

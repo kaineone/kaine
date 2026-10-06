@@ -126,6 +126,7 @@ Section `[audition]` in `config/kaine.toml`. For the full reference see [Module 
 | `arousal_window_max` | `1.0` | Widest auditory attentional window (at low arousal) |
 | `acoustic_change_alert_factor` | `2.0` | Ratio of current acoustic change to the rolling mean that, together with `acoustic_change_alert_threshold`, raises `audition.perception` to `alert_salience` |
 | `acoustic_change_alert_threshold` | `0.35` | Floor on raw cosine-change before `audition.perception` can be raised to `alert_salience` |
+| `acoustic_encoder` | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"` (default, numpy, no download). A plugin may also fill the `audition.acoustic_encoder` seam; setting a non-default value together with a filled seam is a configuration error. |
 
 ## Deterministic auditory feed
 
@@ -176,6 +177,12 @@ graph TD
 When `general_audition` is enabled, `process_audio()` first calls `_perceive_acoustic()` (in `kaine/modules/audition/module.py`, backed by `kaine/modules/audition/acoustic.py`) before the speech path:
 
 1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim) and represents speech, music, and environmental sound in one space. A stronger frozen self-supervised audio encoder plugs in through the same protocol; the encoder is frozen (only the forward model adapts). Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
+
+A plugin can replace the encoder through the `audition.acoustic_encoder` seam. The plugin returns an object satisfying the `AcousticEncoder` protocol (`embedding_dim`, `model_id`, and `embed(audio_bytes, sample_rate)`). When the seam is filled, `[audition].acoustic_encoder` must be unset or `spectral`; any other value together with a filled seam is a configuration error.
+
+The acoustic forward model persists with the being under `acoustic_forward_models`, keyed by the encoder's `model_id`. Switching encoders carries the old encoder's checkpoint forward, so returning to it restores what was learned. A checkpoint whose tensor shapes do not match the running encoder is discarded with a warning. The serialised form contains no raw audio, no raw embeddings, and no buffers beyond a per-feature mean/variance summary.
+
+Both forward models suspend adaptation from `hypnos.sleep.started` to `hypnos.sleep.completed`. Perception and prediction-error inference continue; only online learning pauses.
 2. **Salience** — `cosine_change()` scores acoustic novelty against the previous embedding, and a dedicated `AuditoryForwardModel` over the embedding contributes a prediction error normalised against its rolling mean (Chronos/Topos convention). The window is `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when the normalised acoustic prediction error is ≥ 2.0; otherwise `baseline_salience` — so a novel or sudden sound is salient whether or not it is a voice.
 3. **Arousal-set attentional window** — `arousal_to_window()` maps Thymos arousal in [0, 1] to the breadth of the auditory attentional window (Easterbrook narrowing: higher arousal → tighter window; sign tunable via `arousal_window_min`/`max`). Arousal reaches Audition through an injected provider seam (`set_arousal_provider()`, wired at boot like the topos-arousal / affect seams) — Audition never imports the workspace. `None` → widest window.
 4. **Publish** — a content-free `audition.perception` event (change, normalised error, prediction error, alert flag, encoder id, attended-window breadth; no audio) reaches the workspace.
@@ -310,6 +317,8 @@ No `NamedTemporaryFile`, no `.wav` file, no raw audio bytes appear on the bus. T
 | `tests/test_audition_live_logging.py` | Live-mic summary logging interval and message format |
 | `tests/test_audio_self_hearing.py` | `SpeakingGate` self-hearing suppression |
 | `tests/test_audition_feed.py` | Deterministic auditory-feed sources — seeded procedural audio (determinism, seek-safety, seed decorrelation), playlist audio (manifest verify fail-closed, honest PyAV-absent failure), and `womb` |
+| `tests/test_audition_encoder_selection.py` | Encoder registry, factory config, plugin seam, and `construct_module` injection |
+| `tests/test_audition_persistence.py` | Acoustic forward-model persistence round-trip, shape mismatch discard, encoder switch-and-back, sleep suspension, and zero-persistence over the new key |
 | `tests/systems/test_audition_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related

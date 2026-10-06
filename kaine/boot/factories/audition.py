@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.common import _check_injections
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
@@ -38,7 +39,13 @@ def _audition_sherpa_failure_reason() -> str:
     return "unknown failure"
 
 
-def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
+def make_audition(
+    bus: AsyncBus,
+    section: dict[str, Any],
+    *,
+    injections: Optional[Mapping[str, Any]] = None,
+) -> BaseModule:
+    from kaine.modules.audition.acoustic import ACOUSTIC_ENCODERS, build_acoustic_encoder
     from kaine.modules.audition.live import LiveMicConfig
     from kaine.modules.audition.module import Audition
 
@@ -82,6 +89,7 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "arousal_window_max",
         "acoustic_change_alert_threshold",
         "acoustic_change_alert_factor",
+        "acoustic_encoder",
         # Unified deterministic perception feed (unified-perception-feed). The
         # resolved top-level [perception_feed] config, injected by build_registry
         # under this reserved key. Selecting seeded/playlist supplies a
@@ -160,7 +168,44 @@ def make_audition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # heard; ``continuous_capture=True`` on the mic config switches it to
     # fixed-window delivery. The deterministic feeds and the desktop monitor
     # already stream continuous blocks.
-    if bool(section.get("general_audition", False)):
+    general_audition = bool(section.get("general_audition", False))
+    injected = _check_injections("audition", injections, {"acoustic_encoder"})
+
+    if "acoustic_encoder" in injected:
+        # The plugin seam fills the encoder. The config value must then be
+        # unset or the default "spectral"; otherwise it conflicts with the seam.
+        if section.get("acoustic_encoder") is not None and str(
+            section.get("acoustic_encoder", "")
+        ).strip().lower() not in ("", "spectral"):
+            raise ConfigurationError(
+                "the audition.acoustic_encoder seam is filled by a plugin; "
+                "[audition].acoustic_encoder must be left unset"
+            )
+        if not general_audition:
+            raise ConfigurationError(
+                "a plugin-filled acoustic encoder would never run because general_audition is disabled"
+            )
+        kwargs["acoustic_encoder"] = injected["acoustic_encoder"]
+    elif general_audition:
+        name = section.get("acoustic_encoder", "spectral")
+        if not isinstance(name, str):
+            raise ConfigurationError("[audition].acoustic_encoder must be a string")
+        try:
+            kwargs["acoustic_encoder"] = build_acoustic_encoder(name)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
+    elif "acoustic_encoder" in section:
+        # Validate the name even when general audition is off, so a typo still
+        # fails at boot rather than being silently ignored. Only the name is
+        # checked: an encoder that will never run is not built.
+        name = section["acoustic_encoder"]
+        if not isinstance(name, str) or name.strip().lower() not in ACOUSTIC_ENCODERS:
+            raise ConfigurationError(
+                f"unknown acoustic encoder {name!r}; known: "
+                + ", ".join(sorted(ACOUSTIC_ENCODERS))
+            )
+
+    if general_audition:
         kwargs["general_audition"] = True
         wmin = section.get("arousal_window_min")
         wmax = section.get("arousal_window_max")

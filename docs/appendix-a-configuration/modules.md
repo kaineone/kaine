@@ -447,6 +447,7 @@ For sherpa-onnx install the `speech-edge` extra and fetch models with `python -m
 | `arousal_window_max` | float | `1.0` | Upper bound of the arousal-modulated acoustic analysis window in seconds. |
 | `acoustic_change_alert_threshold` | float | `0.35` | Small absolute floor guard on the acoustic change alert. |
 | `acoustic_change_alert_factor` | float | `2.0` | Relative multiplier: an acoustic onset alerts when it reaches this factor times the rolling-window mean of change scores. |
+| `acoustic_encoder` | string | `"spectral"` | Acoustic encoder for general auditory perception. An unknown name fails at boot. A plugin may supply the encoder through the `audition.acoustic_encoder` seam instead. |
 
 The forward-model prediction-error path is always active and is the primary driver of auditory salience.
 
