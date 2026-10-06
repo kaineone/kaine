@@ -331,8 +331,8 @@ def test_plan_coverage_and_limits(monkeypatch):
         plain = sum(j.n for j in jobs if j.style == "plain")
         assert plain >= int(0.4 * sum(j.n for j in jobs))
     finally:
+        # monkeypatch restores get_question
         schema_module.QUESTIONS = old_questions
-        pass  # monkeypatch restores get_question
 
 
 def test_generation_messages_contains_required_parts():
@@ -554,8 +554,8 @@ def test_gold_refuses_overwrite(fake_llm_server, monkeypatch, tmp_path):
         content = out_items.read_text(encoding="utf-8")
         assert "test-key" not in content
     finally:
+        # monkeypatch restores get_question
         schema_module.QUESTIONS = old_questions
-        pass  # monkeypatch restores get_question
 
 
 def test_assemble_tiny_fixtures(tmp_path, monkeypatch):

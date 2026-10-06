@@ -705,14 +705,6 @@ def _cmd_assemble(args: argparse.Namespace) -> int:
             print("fiction present in NLI data", file=sys.stderr)
             return 3
 
-    def _to_question(options: list[list[Any]]) -> Any:
-        return types.SimpleNamespace(
-            id="unused",
-            type="choice",
-            instructions="unused",
-            options=tuple(schema.Option(key=k, description=d) for k, d in options),
-        )
-
     def _public_example(ex: dict[str, Any]) -> tuple[Any, str, str, str, str]:
         q = types.SimpleNamespace(
             id=ex["question_id"],

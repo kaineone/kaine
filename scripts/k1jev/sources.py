@@ -9,7 +9,6 @@ import csv
 import hashlib
 import os
 import random
-import re
 from pathlib import Path
 from typing import Any
 
