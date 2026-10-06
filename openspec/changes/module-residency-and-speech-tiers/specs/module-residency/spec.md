@@ -236,3 +236,17 @@ The pre-boot check SHALL include a `Residency fit` row computed from the fit rep
 - **WHEN** the pre-boot check runs and no footprint catalogue exists
 - **THEN** the `Residency fit` row SKIPS and names the calibration command
 
+### Requirement: Engine weights are mapped where the backend allows
+The NumPy text embedder SHALL map its safetensors file read-only and build tensors as views of the map. Torch engines SHALL load through `safetensors.safe_open`. The Topos encoder SHALL be built on first use through `ensure_loaded()`. The footprint catalogue SHALL record, per rung, whether its weights are mapped.
+
+#### Scenario: The embedder shares pages with the file
+- **WHEN** the NumPy embedder loads its weights
+- **THEN** its tensors are views of a read-only memory map of the safetensors file, and `unload()` releases the map
+
+### Requirement: The quantization of every model is fixed before launch and recorded
+Every rung SHALL record its quantization and the SHA-256 of its weights file. Each tier profile SHALL name one rung per organ and encoder. `RunContext.model_rungs` SHALL record the backend, model id, quantization and weights hash that loaded at boot. In deterministic mode and in any run started by a study runner, rung selection SHALL be frozen at boot: a later load failure SHALL be a surfaced residency failure and an incident, the run SHALL be marked inadmissible, and no other rung SHALL be substituted.
+
+#### Scenario: No substitution during a study
+- **WHEN** a study run's organ rung fails to load after boot
+- **THEN** no other rung is loaded in its place, an incident is recorded, and the run is marked inadmissible
+
