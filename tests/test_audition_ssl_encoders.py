@@ -39,6 +39,7 @@ async def _close_module(module: Any) -> None:
             try:
                 await task
             except asyncio.CancelledError:
+                # Expected: the task was cancelled just above.
                 pass
 
 
@@ -408,7 +409,6 @@ def test_wavjepa_real_weights_tone_vs_noise():
 async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
-    bus = Any  # placeholder for import below
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
 
@@ -432,9 +432,7 @@ def test_factory_passes_the_resolved_device_to_the_encoder(monkeypatch):
     def fake_build(name, **kwargs):
         captured["name"] = name
         captured.update(kwargs)
-        from kaine.modules.audition.acoustic import FakeAcousticEncoder
-
-        return FakeAcousticEncoder(8)
+        return acoustic_mod.FakeAcousticEncoder(8)
 
     import kaine.modules.audition.acoustic as acoustic_mod
 
