@@ -93,12 +93,18 @@ def build_job_specs(
         if not _dependency_needed(dep, modules):
             continue
         argv = tuple(shlex.split(dep.command))
+        details = dep.command
+        if dep.name in ("redis", "qdrant"):
+            details += (
+                "\nNote: cancelling this job also stops the server it starts "
+                "(it is in the job's process group)."
+            )
         specs.append(
             JobSpec(
                 name=dep.name,
                 title=dep.role,
                 argv=argv,
-                details=dep.command,
+                details=details,
             )
         )
 

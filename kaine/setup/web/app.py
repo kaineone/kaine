@@ -317,9 +317,11 @@ async def _idle_watcher(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    app.state.shutting_down = False
     app.state.last_activity = app.state.setup.store.now()
     watcher = asyncio.create_task(_idle_watcher(app))
     yield
+    app.state.shutting_down = True
     watcher.cancel()
     try:
         await watcher
@@ -778,7 +780,9 @@ def create_setup_app(
                 headers={"Cache-Control": "no-store"},
             )
 
-        running, reason = guard.cycle_running_with_reason(state.state_root)
+        running, reason = await asyncio.to_thread(
+            guard.cycle_running_with_reason, state.state_root
+        )
         if running:
             return PlainTextResponse(
                 f"an entity is running; jobs are refused ({reason})",
@@ -822,7 +826,10 @@ def create_setup_app(
             raise HTTPException(status_code=404)
 
         async def stream():
-            async for item in runner.events(job_id):
+            async for item in runner.events(
+                job_id,
+                shutting_down=lambda: request.app.state.shutting_down,
+            ):
                 if isinstance(item, str):
                     yield f"data: {item}\n\n"
                 else:
@@ -852,7 +859,9 @@ def create_setup_app(
                 headers={"Cache-Control": "no-store"},
             )
 
-        return {"status": "cancelled"}
+        if "application/json" in request.headers.get("accept", ""):
+            return {"status": "cancelled"}
+        return RedirectResponse(request.url_for("jobs"), status_code=303)
 
     @app.post("/finish", response_class=HTMLResponse, name="finish")
     async def finish(request: Request):
@@ -1430,6 +1439,7 @@ def serve(
         port=actual_port,
         loop="asyncio",
         log_level="warning",
+        timeout_graceful_shutdown=5,
     )
     server = uvicorn.Server(config)
     app.state.server = server
@@ -1446,6 +1456,11 @@ def serve(
     try:
         server.run(sockets=[sock])
     finally:
+        try:
+            if hasattr(app.state, "runner"):
+                app.state.runner.kill_all_sync()
+        except Exception:
+            logging.exception("error during kill_all_sync")
         try:
             sock.close()
         except OSError:
