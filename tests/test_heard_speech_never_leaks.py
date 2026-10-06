@@ -14,6 +14,7 @@ from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, redact_heard_speech
 from kaine.modules.lingua import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Lingua
+from kaine.modules.mnemos.module import _serialize_snapshot
 from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 from kaine.workspace.volition import SPEAK
 
@@ -118,6 +119,9 @@ async def test_heard_sentinel_never_leaves_lingua(bus: AsyncBus, tmp_path: Path)
         assert len(records) == 2
         assert sentinel not in lingua.intent_log.path.read_text()
         assert HEARD_SPEECH_PLACEHOLDER in records[1]["faithful_rendering"]
+
+        snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
+        assert sentinel not in _serialize_snapshot(snapshot)
     finally:
         await lingua.shutdown()
 
@@ -268,6 +272,11 @@ async def test_mundus_chat_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
         assert sentinel not in log_text
         assert sender not in log_text
         assert HEARD_SPEECH_PLACEHOLDER in records[0]["faithful_rendering"]
+
+        snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
+        serialized = _serialize_snapshot(snapshot)
+        assert sentinel not in serialized
+        assert sender not in serialized
     finally:
         await lingua.shutdown()
 
@@ -303,6 +312,9 @@ async def test_nested_heard_field_never_leaves_lingua(bus: AsyncBus, tmp_path: P
                 assert sentinel not in json.dumps(payload)
 
         assert sentinel not in lingua.intent_log.path.read_text()
+
+        snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
+        assert sentinel not in _serialize_snapshot(snapshot)
     finally:
         await lingua.shutdown()
 
@@ -391,5 +403,114 @@ async def test_nested_heard_field_value_is_scrubbed_from_an_event_about(
         )
         await _say(lingua, about=sentinel, snapshot=note, about_kind="event")
         assert sentinel not in lingua.intent_log.path.read_text()
+    finally:
+        await lingua.shutdown()
+
+
+def _events_from_entries(entries):
+    out = []
+    for entry_id, fields in entries:
+        payload = fields.get("payload")
+        if isinstance(payload, str):
+            payload = json.loads(payload) if payload else {}
+        elif payload is None:
+            payload = {}
+        source = fields.get("source", "lingua")
+        type_ = fields.get("type", "external_speech")
+        salience = fields.get("salience")
+        if salience is not None:
+            try:
+                salience = float(salience)
+            except Exception:
+                salience = 0.6
+        else:
+            salience = 0.6
+        ts_raw = fields.get("timestamp")
+        if ts_raw:
+            try:
+                timestamp = datetime.fromisoformat(ts_raw)
+            except Exception:
+                timestamp = datetime.now(timezone.utc)
+        else:
+            timestamp = datetime.now(timezone.utc)
+        out.append(
+            (
+                entry_id,
+                Event(
+                    source=source,
+                    type=type_,
+                    payload=payload,
+                    salience=salience,
+                    timestamp=timestamp,
+                ),
+            )
+        )
+    return out
+
+
+def test_redact_heard_speech_list_and_dict_fields():
+    s1 = "SENTINEL-LIST-001"
+    s2 = "SENTINEL-DICT-002"
+    s3 = "SENTINEL-TRANSCRIPT-003"
+
+    list_event = _event(
+        "somewhere", "something.happened", {"user_input": [s1, {"x": s2}]}
+    )
+    line = redact_heard_speech(list_event)
+    assert line is not None
+    assert s1 not in line
+    assert s2 not in line
+    assert HEARD_SPEECH_PLACEHOLDER in line
+
+    dict_event = _event(
+        "somewhere", "something.happened", {"transcription": {"text": s3}}
+    )
+    line = redact_heard_speech(dict_event)
+    assert line is not None
+    assert s3 not in line
+    assert HEARD_SPEECH_PLACEHOLDER in line
+
+
+@pytest.mark.asyncio
+async def test_heard_list_payload_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+    sentinel = "PURPLE-HERON-LIST-4471"
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        event = _event(
+            "nexus",
+            "nexus.note",
+            {"user_input": [sentinel]},
+            0.9,
+        )
+        await _say(
+            lingua, about="reflecting", snapshot=_snapshot([("n1", event)]), about_kind="event"
+        )
+        await _assert_sentinel_nowhere(bus, lingua, sentinel)
+        records = _records(lingua.intent_log.path)
+        assert records
+        assert HEARD_SPEECH_PLACEHOLDER in records[-1]["faithful_rendering"]
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_about_matching_list_field_value_is_scrubbed(
+    bus: AsyncBus, tmp_path: Path
+):
+    sentinel = "PURPLE-HERON-LIST-4471"
+    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
+    await lingua.initialize()
+    try:
+        event = _event(
+            "nexus",
+            "nexus.note",
+            {"user_input": [sentinel]},
+            0.9,
+        )
+        await _say(
+            lingua, about=sentinel, snapshot=_snapshot([("n1", event)]), about_kind="event"
+        )
+        await _assert_sentinel_nowhere(bus, lingua, sentinel)
     finally:
         await lingua.shutdown()
