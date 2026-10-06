@@ -2737,6 +2737,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if known.log_file is not None:
         install_private_log_file(Path(known.log_file))
+        # Apply the requested level at once, so nothing below it (config
+        # loading included) reaches the file before the config level is set.
+        if known.log_level is not None:
+            logging.getLogger().setLevel(getattr(logging, known.log_level))
 
     # Load config early enough to decide the boot mode. A run is EITHER
     # operator-present OR research-safety-net-verified, never neither. The
