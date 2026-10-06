@@ -933,3 +933,47 @@ def test_idle_shutdown_honours_activity_hold(tmp_path):
         # The watcher checks every second; give it time.
         time.sleep(1.5)
         assert server.should_exit is True
+
+
+def test_post_without_get_never_answers_a_step_that_does_not_apply(tmp_path):
+    """POST acts on the same step GET would show: a client that never fetches
+    the page cannot answer (or crash) a step the terminal would skip, such as
+    the deployment-tier step when no tier recommendation exists."""
+    app = _mk_app(tmp_path, recommend_tier_fn=lambda: None)
+    client = _session_client(app)
+    r, _token = _exchange_token(client, app)
+    assert r.status_code in (302, 303)
+    headers = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+
+    client.post("/step", data={}, headers=headers, follow_redirects=False)
+    r = client.post("/step", data={"ack": ACK_PHRASE}, headers=headers, follow_redirects=False)
+    assert r.status_code in (302, 303)
+
+    for _ in range(100):
+        r = client.post("/step", data={}, headers=headers, follow_redirects=False)
+        assert r.status_code != 500, r.text
+        if r.status_code in (302, 303) and "/review" in r.headers.get("location", ""):
+            break
+    else:
+        raise AssertionError("never reached review")
+    sid = client.cookies["setup_session"]
+    assert app.state.setup.store.sessions[sid]["step_index"] == len(app.state.setup.steps)
+
+
+def test_launch_redirect_file_is_private_and_redirects(tmp_path, monkeypatch):
+    """The browser is opened on an owner-only redirect file, so the launch
+    token never appears on a process command line."""
+    import stat
+    import tempfile
+
+    from kaine.setup.__main__ import _launch_redirect_file
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    url = "http://127.0.0.1:43123/?token=abc&x=1"
+    target = _launch_redirect_file(url)
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert stat.S_IMODE(target.parent.stat().st_mode) == 0o700
+    text = target.read_text()
+    assert 'content="0;url=http://127.0.0.1:43123/?token=abc&amp;x=1"' in text
+    assert target.as_uri().startswith("file://")
+    assert "abc" not in target.as_uri()

@@ -250,6 +250,19 @@ def _current_step(state: SetupState, sess: dict[str, Any]) -> tuple[Step | None,
     return state.steps[idx], idx
 
 
+def _advance_to_applicable(
+    state: SetupState, sess: dict[str, Any], ctx: StepContext
+) -> Step | None:
+    """Move the session past steps that do not apply (as ``run_step`` skips
+    them in the terminal) and return the current applicable step, or None
+    when every step is done."""
+    step, _idx = _current_step(state, sess)
+    while step is not None and not step.applies(ctx):
+        sess["step_index"] += 1
+        step, _idx = _current_step(state, sess)
+    return step
+
+
 def _require_done(state: SetupState, sess: dict[str, Any]) -> PlainTextResponse | None:
     if not sess.get("acknowledged") or sess["step_index"] < len(state.steps):
         return PlainTextResponse(
@@ -497,11 +510,9 @@ def create_setup_app(
             return RedirectResponse(request.url_for("review"), status_code=303)
 
         ctx = _make_ctx(state, sess)
-        while step is not None and not step.applies(ctx):
-            sess["step_index"] += 1
-            step, _idx = _current_step(state, sess)
-            if step is None:
-                return RedirectResponse(request.url_for("review"), status_code=303)
+        step = _advance_to_applicable(state, sess, ctx)
+        if step is None:
+            return RedirectResponse(request.url_for("review"), status_code=303)
 
         is_helper = step.id in _HELPER_STEP_IDS
         if is_helper:
@@ -541,8 +552,12 @@ def create_setup_app(
         if step is None:
             return RedirectResponse(request.url_for("review"), status_code=303)
 
-        # POST always acts on the current step and never skips ahead.
+        # POST acts on the current applicable step, exactly the one GET shows;
+        # a step that does not apply is passed over, never answered.
         ctx = _make_ctx(state, sess)
+        step = _advance_to_applicable(state, sess, ctx)
+        if step is None:
+            return RedirectResponse(request.url_for("review"), status_code=303)
         form = await _read_form(request)
         is_helper = step.id in _HELPER_STEP_IDS
         if is_helper:

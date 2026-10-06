@@ -514,6 +514,30 @@ def _print_next_steps(
     line("Recommended first: KAINE_FIRST_BOOT_OPERATOR_PRESENT=1 scripts/first-boot.sh")
 
 
+def _launch_redirect_file(url: str) -> Path:
+    """Write a private HTML page that redirects to ``url`` and return its path.
+
+    The directory and file are created owner-only (0700/0600), so the launch
+    token never appears in any process's command line.
+    """
+    import html
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="kaine-setup-"))
+    os.chmod(directory, 0o700)
+    target = directory / "open-setup.html"
+    escaped = html.escape(url, quote=True)
+    body = (
+        "<!doctype html><meta charset=\"utf-8\">"
+        f'<meta http-equiv="refresh" content="0;url={escaped}">'
+        f'<title>KAINE setup</title><a href="{escaped}">Continue setup</a>'
+    )
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    return target
+
+
 def _run_web(
     args: argparse.Namespace,
     host: dict[str, Any],
@@ -550,9 +574,12 @@ def _run_web(
     token = app.state.setup.store.issue()
 
     def on_ready(url: str) -> None:
+        # The URL carries the single-use launch token, so it goes only to this
+        # terminal. The browser is pointed at a private redirect file instead:
+        # a browser's command line is visible to every local user.
         print(f"Open this address to continue setup: {url}", file=sys.stderr)
         try:
-            webbrowser.open(url)
+            webbrowser.open(_launch_redirect_file(url).as_uri())
         except Exception:
             pass
 
