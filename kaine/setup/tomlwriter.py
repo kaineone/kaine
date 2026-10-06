@@ -34,6 +34,15 @@ class _Remove(str):
     def __repr__(self) -> str:
         return "REMOVE"
 
+    def __reduce__(self) -> str:
+        return "REMOVE"
+
+    def __copy__(self) -> "_Remove":
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "_Remove":
+        return self
+
 
 REMOVE = _Remove()
 
@@ -162,13 +171,15 @@ def _is_owned_remove_path(
     dotted: str, owned: frozenset[str], existing_flat: dict[str, Any]
 ) -> bool:
     """Whether ``dotted`` may be removed from ``existing`` under ``owned``."""
-    if dotted in owned:
-        return True
     prefix = dotted + "."
-    owned_children = [k for k in owned if k.startswith(prefix)]
-    if not owned_children:
+    owns_path = dotted in owned or any(k.startswith(prefix) for k in owned)
+    if not owns_path:
         return False
-    return all(k in owned for k in existing_flat if k.startswith(prefix))
+    return all(
+        k in owned
+        for k in existing_flat
+        if k == dotted or k.startswith(prefix)
+    )
 
 
 def _delete_dotted(cfg: dict[str, Any], dotted: str) -> None:

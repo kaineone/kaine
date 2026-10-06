@@ -40,25 +40,11 @@ from kaine.setup.steps import (
     StepContext,
     owned_changes,
 )
-from kaine.setup.tomlwriter import REMOVE
 from kaine.setup.web import guard, job_specs, session
 from kaine.setup.web.driver import validate_fields
 from kaine.setup.web.jobs import JobRunner
 from kaine.setup.wizard import ACK_PHRASE
 from kaine.setup.wizard_steps import ack_step, orientation_step, setup_steps
-
-_REMOVE_MARKER = str(REMOVE)
-
-
-def _decode_remove_markers(value: Any) -> Any:
-    """Turn JSON-safe remove markers back into the REMOVE sentinel."""
-    if isinstance(value, dict):
-        return {k: _decode_remove_markers(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_decode_remove_markers(v) for v in value]
-    if value == _REMOVE_MARKER:
-        return REMOVE
-    return value
 
 # Steps whose ``apply`` calls ``ctx.extra["input_fn"]`` because they need
 # interactive yes/no decisions that cannot be expressed as declarative fields.
@@ -681,10 +667,10 @@ def create_setup_app(
         # removal shows as the owned keys it deletes.
         try:
             preview = tomlwriter.merge_owned(
-                state.existing, _decode_remove_markers(sess["config"]), OWNED_KEYS
+                state.existing, sess["config"], OWNED_KEYS
             )
         except ValueError:
-            preview = _decode_remove_markers(sess["config"])
+            preview = sess["config"]
         changes = owned_changes(state.existing, preview)
         return templates.TemplateResponse(
             request,
@@ -716,7 +702,7 @@ def create_setup_app(
 
         try:
             merged = tomlwriter.merge_owned(
-                state.existing, _decode_remove_markers(sess["config"]), OWNED_KEYS
+                state.existing, sess["config"], OWNED_KEYS
             )
         except ValueError as exc:
             return templates.TemplateResponse(

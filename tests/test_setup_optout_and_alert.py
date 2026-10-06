@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib
+import pickle
 import sys
 
 import pytest
@@ -15,7 +16,6 @@ from kaine.cycle import caretaker
 from kaine.cycle.individuation_runtime import IndividuationRuntime
 from kaine.setup import tomlwriter
 from kaine.setup.steps import OWNED_KEYS, StepContext
-from kaine.setup.web import app as web_app  # noqa: F401  # ensures web side loads
 
 
 def _out_collector() -> tuple[list[str], object]:
@@ -61,6 +61,54 @@ def test_merge_owned_remove_rejects_table_with_unowned_leaf() -> None:
     existing = {"t": {"x": 3, "unowned": 5}}
     with pytest.raises(ValueError):
         tomlwriter.merge_owned(existing, {"t": tomlwriter.REMOVE}, owned)
+
+
+def test_merge_owned_remove_rejects_unowned_scalar_under_owned_prefix() -> None:
+    owned = frozenset({"a.b"})
+    existing = {"a": 5}
+    with pytest.raises(ValueError):
+        tomlwriter.merge_owned(existing, {"a": tomlwriter.REMOVE}, owned)
+    assert existing == {"a": 5}
+
+
+def test_merge_owned_remove_deletes_owned_leaf() -> None:
+    owned = frozenset({"a.b"})
+    existing = {"a": {"b": 1}}
+    merged = tomlwriter.merge_owned(
+        existing, {"a": {"b": tomlwriter.REMOVE}}, owned
+    )
+    assert merged == {}
+
+
+def test_merge_owned_remove_deletes_table_with_all_owned_leaves() -> None:
+    owned = frozenset({"t.x", "t.y"})
+    existing = {"t": {"x": 3, "y": 4}}
+    merged = tomlwriter.merge_owned(existing, {"t": tomlwriter.REMOVE}, owned)
+    assert "t" not in merged
+    assert merged == {}
+
+
+def test_remove_sentinel_survives_copy_and_pickle() -> None:
+    data = {"a": tomlwriter.REMOVE}
+    assert copy.copy(data)["a"] is tomlwriter.REMOVE
+    assert copy.deepcopy(data)["a"] is tomlwriter.REMOVE
+    assert pickle.loads(pickle.dumps(data))["a"] is tomlwriter.REMOVE
+
+
+def test_merge_owned_writes_plain_remove_string_as_value() -> None:
+    owned = frozenset({"a.b"})
+    existing = {}
+    merged = tomlwriter.merge_owned(
+        existing, {"a": {"b": "__kaine_remove__"}}, owned
+    )
+    assert merged == {"a": {"b": "__kaine_remove__"}}
+    assert "__kaine_remove__" in tomlwriter.dumps(merged)
+
+
+def test_web_app_has_no_decode_remove_markers() -> None:
+    from kaine.setup.web import app
+
+    assert not hasattr(app, "_decode_remove_markers")
 
 
 def test_merge_owned_remove_absent_key_is_no_op() -> None:

@@ -18,8 +18,10 @@ A documentation audit on 2026-10-06 found three defects on main.
 ## Impact
 
 - Code:
-  - `kaine/setup/wizard_steps.py`, `kaine/setup/wizard_core.py` and `kaine/setup/tomlwriter.py`;
+  - `kaine/cycle/caretaker.py` and `kaine/cycle/individuation_runtime.py`;
   - `kaine/setup/__main__.py`;
-  - `kaine/cycle/individuation_runtime.py` and `kaine/cycle/caretaker.py`;
-  - tests.
+  - `kaine/setup/tomlwriter.py` and `kaine/setup/web/app.py`;
+  - `kaine/setup/wizard_steps.py`.
+- Tests:
+  - `tests/test_setup_optout_and_alert.py` and `tests/test_setup_web.py`.
 - Research impact: none. These are setup and alert paths only.
