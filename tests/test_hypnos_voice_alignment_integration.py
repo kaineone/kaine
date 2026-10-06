@@ -25,6 +25,7 @@ from kaine.modules.hypnos.capability_eval import (
     NoopCapabilityEval,
 )
 from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
+from tests.voice_prompt_support import with_verified_system
 
 # With preference_source="none", a sleep never reaches the trainer, so these
 # tests call _train_on_pairs directly and check the returned result.
@@ -68,8 +69,14 @@ async def test_training_result_carries_voice_tracking_fields(
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         "\n".join(
-            json.dumps({"prompt": f"p{i}", "faithful_rendering": f"t{i}", "generated_text": f"g{i}"})
-            for i in range(2)
+            json.dumps(r)
+            for r in with_verified_system(
+                log_path,
+                [
+                    {"prompt": f"p{i}", "faithful_rendering": f"t{i}", "generated_text": f"g{i}"}
+                    for i in range(2)
+                ],
+            )
         )
         + "\n",
         encoding="utf-8",
@@ -122,7 +129,11 @@ async def test_training_result_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Pa
     capability scores on the result; no sidecar event is published."""
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
-        json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})
+        json.dumps(
+            with_verified_system(
+                log_path, [{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}]
+            )[0]
+        )
         + "\n",
         encoding="utf-8",
     )

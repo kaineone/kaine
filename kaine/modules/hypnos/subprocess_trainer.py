@@ -38,11 +38,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
 from typing import Any, Optional
 
+from kaine.modules.hypnos import adapter_store
 from kaine.modules.hypnos.hot_swap import dispatch as dispatch_hot_swap
 from kaine.modules.hypnos.voice_alignment import (
     DPOPair,
@@ -59,7 +62,7 @@ EXTERNAL_ENTRY_SCRIPT = (
 )
 
 #: Job-spec schema version written into job.json and echoed in result.json.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: Default wall-clock ceiling for one training subprocess (seconds). Training is
 #: infrequent (once per consolidation); a generous default avoids killing a
@@ -71,6 +74,30 @@ class SubprocessTrainerError(RuntimeError):
     """Raised when the external training subprocess fails to produce a valid,
     verifiable adapter. Surfaced to Hypnos as a trainer error — never swallowed
     into a fake success."""
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` readable by the owner only (0600)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        os.fchmod(fh.fileno(), 0o600)
+        fh.write(text)
+
+
+def scrub_job_inputs(job_dir: Path) -> None:
+    """Delete a job's sensitive inputs once the trainer has finished with them.
+
+    ``pairs.jsonl`` holds the being's prompts, utterances and decrypted system
+    prompts, and ``previous_adapter/`` is a copy of its learned voice. The
+    external trainer cannot import kaine to decrypt, so they are plaintext
+    while it runs; they must not outlive the run.
+    """
+    pairs_path = job_dir / "pairs.jsonl"
+    try:
+        pairs_path.unlink()
+    except FileNotFoundError:
+        pass
+    shutil.rmtree(job_dir / "previous_adapter", ignore_errors=True)
 
 
 def write_job_spec(
@@ -87,12 +114,12 @@ def write_job_spec(
     an absolute host path or a path relative to the job directory).
     """
     lines = [
-        json.dumps({"prompt": p.prompt, "chosen": p.chosen, "rejected": p.rejected})
+        json.dumps(
+            {"prompt": p.prompt, "chosen": p.chosen, "rejected": p.rejected, "system": p.system}
+        )
         for p in pairs
     ]
-    (job_dir / "pairs.jsonl").write_text(
-        "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8"
-    )
+    _write_private(job_dir / "pairs.jsonl", "\n".join(lines) + ("\n" if lines else ""))
 
     # Resolve probe paths to the same defaults the in-process trainer uses so
     # the external gates score against the identical sets. Imported lazily to
@@ -108,10 +135,33 @@ def write_job_spec(
     abliteration_probe_path = (
         config.abliteration_probe_path or str(DEFAULT_ABLITERATION_PROBE_PATH)
     )
+
+    adapter_store_dir = Path(config.adapter_output_dir)
+    current = adapter_store.current_path(adapter_store_dir)
+    current_link = adapter_store_dir / "current"
+    previous_adapter_dir = None
+    if current_link.is_symlink() or current_link.exists():
+        if current is None:
+            raise SubprocessTrainerError(
+                f"the being's current adapter could not be read ({current_link} "
+                "does not resolve); refusing to train a fresh adapter in its place"
+            )
+        try:
+            shutil.copytree(current, job_dir / "previous_adapter")
+        except Exception as exc:
+            raise SubprocessTrainerError(
+                f"the being's current adapter could not be read ({current}: "
+                f"{type(exc).__name__}: {exc}); refusing to train a fresh adapter "
+                "in its place"
+            ) from exc
+        previous_adapter_dir = "previous_adapter"
+
     job = {
         "schema_version": SCHEMA_VERSION,
         "base_model_path": str(base_path),
         "adapter_output_dir": str(adapter_output_dir),
+        "previous_adapter_dir": previous_adapter_dir,
+        "train_precision": str(config.train_precision),
         "lora_rank": int(config.lora_rank),
         "learning_rate": float(config.learning_rate),
         "dpo_beta": float(config.dpo_beta),
@@ -122,9 +172,7 @@ def write_job_spec(
         "capability_probe_path": str(Path(capability_probe_path).resolve()),
         "abliteration_probe_path": str(Path(abliteration_probe_path).resolve()),
     }
-    (job_dir / "job.json").write_text(
-        json.dumps(job, indent=2), encoding="utf-8"
-    )
+    _write_private(job_dir / "job.json", json.dumps(job, indent=2))
 
 
 def _read_result(job_dir: Path) -> dict[str, Any]:
@@ -245,15 +293,17 @@ class SubprocessVoiceTrainer:
             )
 
         job_dir = self._make_job_dir()
-        write_job_spec(
-            job_dir,
-            pairs,
-            config,
-            base_path=base_path,
-            adapter_output_dir=str(config.adapter_output_dir.resolve()),
-        )
-
-        result = await self._run_subprocess(job_dir, samples_used=len(pairs))
+        try:
+            write_job_spec(
+                job_dir,
+                pairs,
+                config,
+                base_path=base_path,
+                adapter_output_dir=str(config.adapter_output_dir.resolve()),
+            )
+            result = await self._run_subprocess(job_dir, samples_used=len(pairs))
+        finally:
+            scrub_job_inputs(job_dir)
 
         adapter_path: Optional[Path] = None
         if result.get("accepted"):
@@ -292,7 +342,9 @@ class SubprocessVoiceTrainer:
     def _make_job_dir(self) -> Path:
         stamp = time.strftime("%Y%m%dT%H%M%S")
         job_dir = self._trainer_workdir / f"job-{stamp}-{int(time.time() * 1000) % 1000:03d}"
-        job_dir.mkdir(parents=True, exist_ok=True)
+        self._trainer_workdir.mkdir(parents=True, mode=0o700, exist_ok=True)
+        job_dir.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(job_dir, 0o700)
         return job_dir
 
     # --------------------------------------------------------------------- #

@@ -156,7 +156,7 @@ async def test_job_spec_written_for_external_process(tmp_path):
     assert job["lora_rank"] == cfg.lora_rank
     assert job["dpo_beta"] == pytest.approx(cfg.dpo_beta)
     assert job["seed"] == cfg.seed
-    assert job["schema_version"] == 1
+    assert job["schema_version"] == 2
     # Probe paths resolve to the bundled defaults (the external gates use them).
     assert job["capability_probe_path"].endswith("default.jsonl")
     assert job["abliteration_probe_path"].endswith("abliteration_probes.jsonl")

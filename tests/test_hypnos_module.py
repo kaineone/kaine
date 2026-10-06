@@ -20,6 +20,7 @@ from kaine.modules.hypnos import (
     VoiceAlignmentConfig,
 )
 from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
+from tests.voice_prompt_support import with_verified_system
 
 
 @pytest.fixture(autouse=True)
@@ -98,7 +99,7 @@ def _make_hypnos(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if intent_records is not None:
         with log_path.open("w", encoding="utf-8") as fh:
-            for r in intent_records:
+            for r in with_verified_system(log_path, intent_records):
                 fh.write(json.dumps(r) + "\n")
     config = VoiceAlignmentConfig(
         intent_log_path=log_path,

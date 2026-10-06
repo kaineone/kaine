@@ -1077,6 +1077,9 @@ seed = 42
 # voice alignment training. Lingua inference should be paused during
 # the training pass to avoid contention.
 training_device = "cuda:0"
+# "bf16" (default) or "4bit". Never a silent fallback: a run that does not fit
+# fails closed with its measured peak memory.
+train_precision = "bf16"
 # How many accepted adapters to keep under adapter_output_dir. 0 = keep
 # every accepted adapter: they are the entity's learned voice, so
 # infrastructure does not cull them. A positive value evicts the oldest

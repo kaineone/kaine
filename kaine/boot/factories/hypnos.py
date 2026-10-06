@@ -26,6 +26,21 @@ from kaine.text_embedding import (
 log = logging.getLogger(__name__)
 
 
+def _parse_train_precision(raw: Any) -> str:
+    if not isinstance(raw, str):
+        raise VoiceAlignmentConfigError(
+            f"[hypnos.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
+            f"got {type(raw).__name__}: {raw!r}"
+        )
+    value = raw.strip()
+    if value not in {"bf16", "4bit"}:
+        raise VoiceAlignmentConfigError(
+            f"[hypnos.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
+            f"got {value!r}"
+        )
+    return value
+
+
 def voice_alignment_config_from_section(
     voice_cfg_section: dict[str, Any],
     kaine_config: Optional[dict[str, Any]] = None,
@@ -103,6 +118,9 @@ def voice_alignment_config_from_section(
             ),
             seed=int(voice_cfg_section.get("seed", 42)),
             training_device=str(voice_cfg_section.get("training_device", "cuda:0")),
+            train_precision=_parse_train_precision(
+                voice_cfg_section.get("train_precision", "bf16")
+            ),
             adapter_retention=int(voice_cfg_section.get("adapter_retention", 0)),
             hot_swap_mode=str(voice_cfg_section.get("hot_swap_mode", "manual")),
             reload_endpoint_url=reload_endpoint_url,

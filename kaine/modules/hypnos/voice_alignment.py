@@ -39,6 +39,7 @@ class DPOPair:
     chosen: str
     rejected: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    system: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,8 @@ class VoiceAlignmentConfig:
     # Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles voice alignment
     # training. Operator can override to "cuda:1" or "cpu".
     training_device: str = "cuda:0"
+    # "bf16" (default, D14) or "4bit"; never a silent fallback.
+    train_precision: str = "bf16"
     # How many accepted adapters to keep under adapter_output_dir.
     # 0 (the default) keeps every accepted adapter: they are the entity's
     # learned voice, so infrastructure does not cull them. A positive value
@@ -192,6 +195,10 @@ class VoiceAlignmentConfig:
             )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
+        if self.train_precision not in ("bf16", "4bit"):
+            raise ValueError(
+                f"train_precision must be one of 'bf16', '4bit'; got {self.train_precision!r}"
+            )
 
 
 @dataclass(frozen=True)
@@ -385,6 +392,7 @@ class DPOPairBuilder:
                             "timestamp": record.get("timestamp"),
                             "mode": record.get("mode"),
                             "model": record.get("model"),
+                            "system_digest": record.get("system_digest"),
                         },
                     )
                 )

@@ -31,6 +31,7 @@ from kaine.modules.hypnos.subprocess_trainer import (
     SubprocessTrainerError,
     _read_result,
     result_to_training_result,
+    scrub_job_inputs,
     write_job_spec,
 )
 from kaine.modules.hypnos.voice_alignment import (
@@ -88,17 +89,15 @@ class JobQueueVoiceTrainer:
         job_name = job_dir.name
         out_dir = Path(config.adapter_output_dir)
 
-        write_job_spec(
-            job_dir,
-            pairs,
-            config,
-            base_path=base_path,
-            adapter_output_dir="out",
-        )
-
-        self._write_ready_atomic(job_dir)
-
         try:
+            write_job_spec(
+                job_dir,
+                pairs,
+                config,
+                base_path=base_path,
+                adapter_output_dir="out",
+            )
+            self._write_ready_atomic(job_dir)
             result = await self._poll_for_result(job_dir, job_name)
         finally:
             self._delete_pairs(job_dir)
@@ -173,9 +172,7 @@ class JobQueueVoiceTrainer:
         (job_dir / "CANCELLED").write_text("", encoding="utf-8")
 
     def _delete_pairs(self, job_dir: Path) -> None:
-        pairs_path = job_dir / "pairs.jsonl"
-        if pairs_path.exists():
-            pairs_path.unlink()
+        scrub_job_inputs(job_dir)
 
     # --------------------------------------------------------------------- #
     # polling + result validation
