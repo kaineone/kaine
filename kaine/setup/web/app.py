@@ -773,12 +773,14 @@ def create_setup_app(
                 headers={"Cache-Control": "no-store"},
             )
 
+        state_dir = _state_dir_for_spawn(sess["config"], request.app.state.repo_root)
         specs = job_specs.build_job_specs(
             sess["config"],
             state.shipped,
             repo_root=request.app.state.repo_root,
             shipped_config_path=state.shipped_config_path,
             operator_path=state.operator_path,
+            state_dir=state_dir,
         )
         runner = request.app.state.runner
         jobs_info = []
@@ -814,6 +816,7 @@ def create_setup_app(
                 headers={"Cache-Control": "no-store"},
             )
 
+        state_dir = _state_dir_for_spawn(sess["config"], request.app.state.repo_root)
         specs = {
             s.name: s
             for s in job_specs.build_job_specs(
@@ -822,6 +825,7 @@ def create_setup_app(
                 repo_root=request.app.state.repo_root,
                 shipped_config_path=state.shipped_config_path,
                 operator_path=state.operator_path,
+                state_dir=state_dir,
             )
         }
         if name not in specs:
@@ -1260,6 +1264,56 @@ def create_setup_app(
                 )
 
             ok, results, verdict = await spawn.run_preboot(repo_root)
+
+            # Re-check the safety gates after the long preboot to close the
+            # time-of-check/time-of-use window (at minimum: is an entity now
+            # running in the saved config's state directory?).
+            if ok:
+                refusal = _spawn_gate_checks(request, sess, child_env)
+                if refusal:
+                    return state.templates.TemplateResponse(
+                        request,
+                        "spawn.html",
+                        {
+                            "reason": refusal,
+                            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                            "preboot_rows": [],
+                        },
+                        status_code=409,
+                    )
+
+                # The preboot may have taken a long time; reload the config the
+                # cycle will actually read, and refuse if it changed under us.
+                try:
+                    reloaded = load_runtime_config(
+                        state.shipped_config_path, state.operator_path
+                    )
+                except Exception as exc:
+                    return state.templates.TemplateResponse(
+                        request,
+                        "spawn.html",
+                        {
+                            "reason": f"configuration could not be loaded ({type(exc).__name__})",
+                            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                            "preboot_rows": [],
+                        },
+                        status_code=409,
+                    )
+                if reloaded != config:
+                    return state.templates.TemplateResponse(
+                        request,
+                        "spawn.html",
+                        {
+                            "reason": "the configuration changed while the pre-boot check ran; start again from the finish page",
+                            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                            "preboot_rows": [],
+                        },
+                        status_code=409,
+                    )
+
             if not ok:
                 rows = [
                     (

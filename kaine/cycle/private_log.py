@@ -29,7 +29,11 @@ class _SecureRotatingFileHandler(RotatingFileHandler):
 
 
 def install_private_log_file(
-    path: Path, *, max_bytes: int = 5 * 2**20, backup_count: int = 4
+    path: Path,
+    *,
+    level: int = logging.NOTSET,
+    max_bytes: int = 5 * 2**20,
+    backup_count: int = 4,
 ) -> logging.Handler:
     """Install a private, capped, stderr-replacing log file.
 
@@ -48,6 +52,7 @@ def install_private_log_file(
         maxBytes=max_bytes,
         backupCount=backup_count,
     )
+    handler.setLevel(level)
     handler.setFormatter(logging.Formatter(_FORMAT))
 
     root = logging.getLogger()

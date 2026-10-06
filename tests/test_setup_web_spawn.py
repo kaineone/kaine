@@ -218,6 +218,24 @@ def _mock_nexus(monkeypatch, port=12345):
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_cwd_nexus_log():
+    """The nexus job spec must never place its log under the current cwd."""
+    log = Path.cwd() / "state" / "logs" / "nexus.log"
+    existed_before = log.exists()
+    stats_before = None
+    if existed_before:
+        st = log.stat()
+        stats_before = (st.st_mtime_ns, st.st_size)
+    yield
+    if not existed_before:
+        assert not log.exists()
+    else:
+        assert log.exists()
+        st = log.stat()
+        assert (st.st_mtime_ns, st.st_size) == stats_before
+
+
 def test_spawn_refuses_wrong_affirmation(tmp_path, spawn_fakes):
     with _saved_client(tmp_path) as (client, _app):
         r = _spawn_post(client, affirmation="not the phrase")
@@ -960,7 +978,9 @@ def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
 
         real_build_job_specs = job_specs_mod.build_job_specs
 
-        def build_all_specs(config, shipped, *, repo_root, shipped_config_path, operator_path):
+        def build_all_specs(
+            config, shipped, *, repo_root, shipped_config_path, operator_path, state_dir
+        ):
             merged = dict(config)
             merged["modules"] = dict(all_modules)
             return real_build_job_specs(
@@ -969,6 +989,7 @@ def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
                 repo_root=repo_root,
                 shipped_config_path=shipped_config_path,
                 operator_path=operator_path,
+                state_dir=state_dir,
             )
 
         monkeypatch.setattr(job_specs_mod, "build_job_specs", build_all_specs)
@@ -979,6 +1000,7 @@ def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
             repo_root=app.state.repo_root,
             shipped_config_path=app.state.shipped_config_path,
             operator_path=app.state.setup.operator_path,
+            state_dir=tmp_path / "data" / "state",
         )
 
         base_headers = {
@@ -1037,3 +1059,292 @@ def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
         assert cycle_starts[0][:3] == [sys.executable, "-m", "kaine.cycle"]
 
         client.post("/abort", headers=base_headers, follow_redirects=False)
+
+
+def test_spawn_confirm_rechecks_the_guard_after_preboot(tmp_path, monkeypatch, spawn_fakes):
+    patched_calls = []
+
+    with _saved_client(tmp_path) as (client, app):
+        r = _spawn_post(client)
+        assert r.status_code == 200
+        nonce = _extract_nonce(r.text)
+
+        def fake_running_with_reason(state_dir):
+            if len(patched_calls) == 0:
+                patched_calls.append(False)
+                return (False, None)
+            patched_calls.append(True)
+            return (True, "started meanwhile")
+
+        monkeypatch.setattr(guard, "cycle_running_with_reason", fake_running_with_reason)
+
+        r2 = _confirm_post(client, nonce)
+        assert r2.status_code == 409
+        assert "started meanwhile" in r2.text
+        assert len(patched_calls) == 2
+        assert spawn_fakes == []
+
+
+def test_spawn_confirm_refuses_config_changed_during_preboot(tmp_path, monkeypatch, spawn_fakes):
+    import kaine.setup.web.app as webapp
+
+    with _saved_client(tmp_path) as (client, app):
+        r = _spawn_post(client)
+        assert r.status_code == 200
+        nonce = _extract_nonce(r.text)
+
+        original_load = webapp.load_runtime_config
+
+        def wrapped_load(*args, **kwargs):
+            cfg = original_load(*args, **kwargs)
+            changed = dict(cfg)
+            changed["_changed"] = True
+            return changed
+
+        async def fake_preboot(repo_root, *, timeout_s=600.0):
+            monkeypatch.setattr(webapp, "load_runtime_config", wrapped_load)
+            return (True, [], "all good")
+
+        monkeypatch.setattr(spawn, "run_preboot", fake_preboot)
+
+        r2 = _confirm_post(client, nonce)
+        assert r2.status_code == 409
+        assert "configuration changed" in r2.text.lower()
+        assert spawn_fakes == []
+
+
+def test_spawn_acknowledgement_location_mode_and_content(tmp_path, spawn_fakes):
+    import json
+
+    with _saved_client(tmp_path) as (client, app):
+        app.state.setup.state_root = tmp_path / "startup-state"
+        r = _spawn_post(client)
+        assert r.status_code == 200
+
+        ack_path = tmp_path / "data" / "state" / "lifecycle" / "spawn_acknowledgements.jsonl"
+        assert ack_path.exists()
+        assert stat.S_IMODE(ack_path.stat().st_mode) == 0o600
+
+        lines = ack_path.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert "at" in record
+        assert record["text_version"] == 1
+        assert re.fullmatch(r"[0-9a-f]{64}", record["text_sha256"])
+        assert record["affirmation"] == spawn.SPAWN_ACK_PHRASE
+
+        assert not (tmp_path / "startup-state").exists()
+
+
+def test_record_acknowledgement_tightens_an_existing_file(tmp_path):
+    import json
+
+    lifecycle = tmp_path / "state" / "lifecycle"
+    lifecycle.mkdir(parents=True)
+    path = lifecycle / "spawn_acknowledgements.jsonl"
+    path.write_text('{"old": true}\n', encoding="utf-8")
+    path.chmod(0o644)
+
+    spawn.record_acknowledgement(
+        tmp_path / "state",
+        spawn.SPAWN_ACK_PHRASE,
+        now=lambda: datetime(2030, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0]) == {"old": True}
+    record = json.loads(lines[1])
+    assert record["affirmation"] == spawn.SPAWN_ACK_PHRASE
+    assert record["at"] == "2030-01-02T00:00:00+00:00"
+
+
+def test_nexus_job_log_lives_under_the_state_dir(tmp_path, monkeypatch):
+    from kaine.setup.web.job_specs import build_job_specs
+
+    def fake_load_nexus_config(shipped, *, operator_path=None):
+        return SimpleNamespace(port=12345, operator_token="x" * 40)
+
+    monkeypatch.setattr(
+        "kaine.nexus.config.load_nexus_config",
+        fake_load_nexus_config,
+    )
+
+    state_dir = tmp_path / "data" / "state"
+    specs = build_job_specs(
+        {},
+        {},
+        repo_root=tmp_path,
+        shipped_config_path=tmp_path / "kaine.toml",
+        operator_path=tmp_path / "kaine.operator.toml",
+        state_dir=state_dir,
+    )
+    nexus_specs = [s for s in specs if s.name == "nexus"]
+    assert len(nexus_specs) == 1
+    assert nexus_specs[0].log_path == state_dir / "logs" / "nexus.log"
+
+
+def test_private_log_handler_has_its_own_level(tmp_path):
+    import logging
+
+    from kaine.cycle.private_log import install_private_log_file
+
+    root = logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+    handler = None
+    try:
+        root.setLevel(logging.DEBUG)
+        handler = install_private_log_file(tmp_path / "x.log", level=logging.WARNING)
+        log = logging.getLogger("kaine.test.handlerlevel")
+        log.setLevel(logging.INFO)
+        log.info("info message")
+        log.warning("warning message")
+        handler.flush()
+
+        text = (tmp_path / "x.log").read_text(encoding="utf-8")
+        assert "warning message" in text
+        assert " INFO " not in text
+    finally:
+        if handler is not None:
+            root.removeHandler(handler)
+            handler.close()
+        for h in saved_handlers:
+            if h not in root.handlers:
+                root.addHandler(h)
+        root.setLevel(saved_level)
+        logging.captureWarnings(False)
+
+
+def test_cycle_cli_log_flags_apply_before_config_loading(tmp_path, monkeypatch):
+    import logging
+
+    import kaine.cycle.__main__ as main_mod
+
+    p = tmp_path / "cycle.log"
+    root = logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+
+    def fake_load_kaine_config(*args, **kwargs):
+        log = logging.getLogger("kaine.config")
+        log.info("info during config load")
+        log.warning("warning during config load")
+        return {"logging": {"level": "DEBUG"}}
+
+    def fake_install_data_root(config):
+        return None
+
+    for name in (
+        "KAINE_CYCLE_OPERATOR_PRESENT",
+        "KAINE_RESEARCH_MODE",
+        "KAINE_CYCLE_UNATTENDED",
+        "KAINE_PROFILE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setattr(main_mod, "_load_kaine_config", fake_load_kaine_config)
+    monkeypatch.setattr(main_mod, "install_data_root", fake_install_data_root)
+
+    try:
+        # The real CLI starts at INFO via basicConfig, which is a no-op under
+        # pytest; start below WARNING so the early --log-level is what filters.
+        root.setLevel(logging.DEBUG)
+        rc = main_mod.main(["--log-file", str(p), "--log-level", "WARNING"])
+    finally:
+        for h in list(root.handlers):
+            if h not in saved_handlers:
+                root.removeHandler(h)
+                h.close()
+        for h in saved_handlers:
+            if h not in root.handlers:
+                root.addHandler(h)
+        root.setLevel(saved_level)
+        logging.captureWarnings(False)
+
+    assert rc == 2
+    assert p.exists()
+    assert stat.S_IMODE(p.stat().st_mode) == 0o600
+    text = p.read_text(encoding="utf-8")
+    assert "warning during config load" in text
+    assert " INFO " not in text
+    assert " DEBUG " not in text
+
+
+def test_container_probe_mapping(monkeypatch):
+    runs = []
+
+    class FakeCompleted:
+        def __init__(self, returncode, stdout):
+            self.returncode = returncode
+            self.stdout = stdout
+
+    class FakeSubprocess:
+        def __init__(self, plan):
+            self.plan = plan
+
+        def run(self, cmd, **kwargs):
+            runs.append(cmd)
+            binary = cmd[0]
+            outcome = self.plan[binary]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    class FakeShutil:
+        def __init__(self, mapping):
+            self.mapping = mapping
+
+        def which(self, binary):
+            return self.mapping.get(binary)
+
+    # no binaries present -> False, no subprocess runs
+    monkeypatch.setattr(spawn, "shutil", FakeShutil({"docker": None, "podman": None}))
+    monkeypatch.setattr(spawn, "subprocess", FakeSubprocess({}))
+    runs.clear()
+    assert spawn.default_container_probe() is False
+    assert runs == []
+
+    # docker alone lists the container -> True
+    monkeypatch.setattr(spawn, "shutil", FakeShutil({"docker": "/bin/docker", "podman": None}))
+    monkeypatch.setattr(spawn, "subprocess", FakeSubprocess({"docker": FakeCompleted(0, "kaine-cycle\n")}))
+    runs.clear()
+    assert spawn.default_container_probe() is True
+    assert len(runs) == 1
+
+    # docker alone returns non-zero -> None
+    monkeypatch.setattr(spawn, "shutil", FakeShutil({"docker": "/bin/docker", "podman": None}))
+    monkeypatch.setattr(spawn, "subprocess", FakeSubprocess({"docker": FakeCompleted(1, "")}))
+    runs.clear()
+    assert spawn.default_container_probe() is None
+    assert len(runs) == 1
+
+    # podman alone times out -> None
+    monkeypatch.setattr(spawn, "shutil", FakeShutil({"docker": None, "podman": "/bin/podman"}))
+    monkeypatch.setattr(spawn, "subprocess", FakeSubprocess({"podman": subprocess.TimeoutExpired(cmd="", timeout=5.0)}))
+    runs.clear()
+    assert spawn.default_container_probe() is None
+    assert len(runs) == 1
+
+    # both present and clean but no match -> False, two runs
+    monkeypatch.setattr(spawn, "shutil", FakeShutil({"docker": "/bin/docker", "podman": "/bin/podman"}))
+    monkeypatch.setattr(spawn, "subprocess", FakeSubprocess({
+        "docker": FakeCompleted(0, ""),
+        "podman": FakeCompleted(0, ""),
+    }))
+    runs.clear()
+    assert spawn.default_container_probe() is False
+    assert len(runs) == 2
+
+    # docker raises but podman lists the container -> True (any True wins)
+    monkeypatch.setattr(spawn, "shutil", FakeShutil({"docker": "/bin/docker", "podman": "/bin/podman"}))
+    monkeypatch.setattr(spawn, "subprocess", FakeSubprocess({
+        "docker": OSError("boom"),
+        "podman": FakeCompleted(0, "kaine-cycle\n"),
+    }))
+    runs.clear()
+    assert spawn.default_container_probe() is True
+    assert len(runs) == 2
+
+    assert spawn.default_docker_probe is spawn.default_container_probe

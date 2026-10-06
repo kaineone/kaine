@@ -2736,11 +2736,14 @@ def main(argv: list[str] | None = None) -> int:
     from kaine.cycle.private_log import install_private_log_file
 
     if known.log_file is not None:
-        install_private_log_file(Path(known.log_file))
+        level = logging.NOTSET
+        if known.log_level is not None:
+            level = getattr(logging, known.log_level)
+        install_private_log_file(Path(known.log_file), level=level)
         # Apply the requested level at once, so nothing below it (config
         # loading included) reaches the file before the config level is set.
         if known.log_level is not None:
-            logging.getLogger().setLevel(getattr(logging, known.log_level))
+            logging.getLogger().setLevel(level)
 
     # Load config early enough to decide the boot mode. A run is EITHER
     # operator-present OR research-safety-net-verified, never neither. The

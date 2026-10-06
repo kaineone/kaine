@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import kaine.storage
 from kaine import net
 from kaine.setup.dependencies import DEPENDENCIES
 from kaine.setup.web.jobs import JobSpec
@@ -40,6 +39,7 @@ def build_job_specs(
     repo_root: Path,
     shipped_config_path: Path,
     operator_path: Path,
+    state_dir: Path,
 ) -> list[JobSpec]:
     """Return the job specs offered for this saved operator configuration."""
     specs: list[JobSpec] = []
@@ -121,7 +121,7 @@ def build_job_specs(
         # Nexus configuration is unsafe/invalid/malformed; do not offer the start job.
         return specs
 
-    nexus_log = Path(kaine.storage.resolve("state/logs/nexus.log"))
+    nexus_log = state_dir / "logs" / "nexus.log"
     specs.append(
         JobSpec(
             name="nexus",

@@ -92,6 +92,7 @@ def record_acknowledgement(state_dir: Path, phrase: str, *, now) -> None:
 
     path = lifecycle_dir / "spawn_acknowledgements.jsonl"
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(line)
         fh.flush()
@@ -196,7 +197,7 @@ def compose_markers(
         )
     elif probe is None:
         markers.append(
-            "Docker could not be asked whether a containerized cycle exists"
+            "no container runtime (docker or podman) could be asked whether a containerized cycle exists"
         )
 
     return markers
@@ -405,33 +406,48 @@ def error_summary(log_path: Path, *, max_lines: int = 5) -> list[str]:
     return combined[-max_lines:]
 
 
-def default_docker_probe() -> bool | None:
-    """Return True if a container named exactly ``kaine-cycle`` exists."""
-    if shutil.which("docker") is None:
-        return False
+def default_container_probe() -> bool | None:
+    """Return True if a container named exactly ``kaine-cycle`` exists.
 
-    try:
-        result = subprocess.run(
-            [
-                "docker",
-                "ps",
-                "-a",
-                "--filter",
-                "name=^kaine-cycle$",
-                "--format",
-                "{{.Names}}",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-        )
-    except Exception:
-        return None
+    Probe every available container runtime (docker, podman).  Return
+    ``True`` as soon as any runtime lists ``kaine-cycle``.  Return ``None``
+    if any present runtime raised, exited non-zero, or timed out.  Return
+    ``False`` only when every present runtime answered cleanly with no match,
+    or neither runtime exists.
+    """
+    any_failure = False
+    for binary in ("docker", "podman"):
+        if shutil.which(binary) is None:
+            continue
+        try:
+            result = subprocess.run(
+                [
+                    binary,
+                    "ps",
+                    "-a",
+                    "--filter",
+                    "name=^kaine-cycle$",
+                    "--format",
+                    "{{.Names}}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+        except Exception:
+            any_failure = True
+            continue
 
-    if result.returncode != 0:
-        return None
+        if result.returncode != 0:
+            any_failure = True
+            continue
 
-    for line in result.stdout.splitlines():
-        if line.strip() == "kaine-cycle":
-            return True
-    return False
+        for line in result.stdout.splitlines():
+            if line.strip() == "kaine-cycle":
+                return True
+
+    return None if any_failure else False
+
+
+# Backward-compatible alias for callers that imported the old name.
+default_docker_probe = default_container_probe
