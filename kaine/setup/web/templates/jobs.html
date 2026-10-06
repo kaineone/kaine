@@ -14,7 +14,7 @@
           {% if job.status %}{{ job.status.status }}{% else %}not started{% endif %}
         </div>
         {% if job.job_id %}
-        <pre class="job-log" id="log-{{ job.job_id }}"></pre>
+        <pre class="job-log" id="log-{{ job.job_id }}" role="log" aria-live="polite"></pre>
         {% endif %}
         <details>
           <summary>Details</summary>
@@ -39,9 +39,7 @@
   </tbody>
 </table>
 
-<form method="post" action="{{ request.url_for('finish') }}" class="setup-actions">
-  <button type="submit" class="btn">Finish setup</button>
-</form>
+<p class="setup-actions"><a href="{{ request.url_for('finish_page') }}">Finish setup</a></p>
 
 <script>
 (function () {

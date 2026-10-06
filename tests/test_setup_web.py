@@ -53,6 +53,8 @@ def _mk_app(tmp_path: Path, **overrides) -> object:
         "device_consumers_fn": lambda: [],
         "services_up_fn": lambda: {},
         "storage_old_root": tmp_path,
+        # Never the checkout's real config/secrets.toml.
+        "secrets_path": tmp_path / "secrets.toml",
     }
     kwargs.update(overrides)
     return create_setup_app(**kwargs)
