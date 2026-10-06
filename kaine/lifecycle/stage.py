@@ -44,7 +44,8 @@ from kaine.storage import resolve
 
 # Per-fork developmental-stage file. Under the per-fork state root, like other
 # per-fork state, so a fork inherits the parent's stage.
-STAGE_PATH = Path("state/lifecycle/stage.json")
+DEFAULT_STAGE_PATH = Path("state/lifecycle/stage.json")
+STAGE_PATH = DEFAULT_STAGE_PATH
 
 GESTATION = "gestation"
 EMBODIED = "embodied"
