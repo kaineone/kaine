@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -178,6 +179,12 @@ class VoiceAlignmentConfig:
             raise ValueError(
                 f"unknown preference_source {self.preference_source!r}; "
                 f"known: {sorted(PREFERENCE_SOURCES)}"
+            )
+        threshold = float(self.distinctiveness_threshold)
+        if not math.isfinite(threshold) or threshold < 0.0:
+            raise ValueError(
+                "distinctiveness_threshold must be a finite, non-negative number; "
+                f"got {self.distinctiveness_threshold!r}"
             )
         if not float(self.corpus_ceiling_gb) >= 0.0:
             raise ValueError(

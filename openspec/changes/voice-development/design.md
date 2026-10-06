@@ -136,8 +136,9 @@ The external trainer:
   - With no profile for that digest, distinctiveness is null, which is the protective path. A changed GGUF under the same model id (for example, after an operator-approved edit) therefore never reuses an old profile.
   - This change ships the loader and the format. The first profile comes in a follow-up, after one announced GPU-lock job.
 - **The measures, per sleep.** They are computed from the just-rotated corpus file, using the being's own generated text only. They are appended to `state/lingua/voice_measures.jsonl`, and the latest is mirrored in `voice_measures_latest.json`.
-  - **distinctiveness:** the Jensen–Shannon distance between the being's style profile and the base profile, else null;
-  - **self_consistency:** the JS distance between this sleep's profile and the cumulative profile of earlier sleeps, else null; the cumulative profile is stored as numbers in `voice_profile_cumulative.json`;
+  - **The profile distance** used by both measures below is `0.5 × √JS₂(p, q) + 0.5 × mean(|x − y| / (|x| + |y|))`. Here JS₂ is the base-2 Jensen–Shannon divergence of the two function-word distributions; the mean runs over the scalar style features (mean sentence length, mean word length, type-token ratio and the four punctuation rates). It lies in [0, 1].
+  - **distinctiveness:** the profile distance between the being's style profile and the base profile, else null;
+  - **self_consistency:** the profile distance between this sleep's profile and the cumulative profile of earlier sleeps, else null; the cumulative profile is stored as numbers in `voice_profile_cumulative.json`;
   - **grounding:** the fraction of utterances that share at least one content word with their redacted faithful rendering;
   - **health:** utterance count, mean tokens, distinct-1, distinct-2, and the largest repeated-trigram fraction.
 - **Content-free.** These files hold numbers and the fixed function-word identities only, never a generated sentence. A test plants a sentinel phrase in the corpus and checks that it appears in neither the measures nor the profiles.

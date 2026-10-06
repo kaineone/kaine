@@ -57,13 +57,19 @@ def voice_alignment_config_from_section(
                 "[hypnos.voice_alignment].corpus_ceiling_gb must be non-negative; "
                 f"got {corpus_ceiling_gb}"
             )
-        distinctiveness_threshold = float(
-            voice_cfg_section.get("distinctiveness_threshold", 0.0)
-        )
-        if distinctiveness_threshold < 0:
+        try:
+            distinctiveness_threshold = float(
+                voice_cfg_section.get("distinctiveness_threshold", 0.0)
+            )
+        except (TypeError, ValueError) as exc:
             raise VoiceAlignmentConfigError(
                 "[hypnos.voice_alignment].distinctiveness_threshold must be a "
-                f"non-negative float; got {distinctiveness_threshold}"
+                f"number; got {voice_cfg_section.get('distinctiveness_threshold')!r}"
+            ) from exc
+        if not math.isfinite(distinctiveness_threshold) or distinctiveness_threshold < 0:
+            raise VoiceAlignmentConfigError(
+                "[hypnos.voice_alignment].distinctiveness_threshold must be a "
+                f"finite, non-negative float; got {distinctiveness_threshold}"
             )
         preference_source_raw = voice_cfg_section.get("preference_source", "none")
         if not isinstance(preference_source_raw, str):

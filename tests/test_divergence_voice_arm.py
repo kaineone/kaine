@@ -160,3 +160,60 @@ def test_voice_arm_is_its_own_preservation_edge():
     assert _active_arms(both) == frozenset({"consolidation", "voice"})
     abstain = DivergenceAssessment(diverged=False, signals={"voice_vote": "abstain"})
     assert _active_arms(abstain) == frozenset()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1.0])
+def test_non_finite_or_negative_threshold_falls_back_to_protective_zero(tmp_path, bad):
+    root = _state(tmp_path)
+    _write_intent(root, "intent_expression.jsonl", "hello world")
+    _write_measures(root, {"distinctiveness": 0.1})
+    result = assess_divergence(state_root=root, distinctiveness_threshold=bad)
+    assert result.diverged
+    assert result.signals["voice_vote"] == "diverged"
+    assert result.signals["voice_distinctiveness_threshold"] == 0.0
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", -1.0, "lots"])
+def test_config_threshold_reader_never_silences_the_arm(bad):
+    from kaine.lifecycle.divergence import voice_alignment_thresholds_from_config
+
+    cfg = {"hypnos": {"voice_alignment": {"distinctiveness_threshold": bad}}}
+    assert voice_alignment_thresholds_from_config(cfg)[2] == 0.0
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", -1.0, "lots"])
+def test_boot_refuses_a_threshold_that_is_not_finite_and_non_negative(bad):
+    from kaine.boot.errors import VoiceAlignmentConfigError
+    from kaine.boot.factories.hypnos import voice_alignment_config_from_section
+
+    with pytest.raises(VoiceAlignmentConfigError, match="distinctiveness_threshold"):
+        voice_alignment_config_from_section({"distinctiveness_threshold": bad})
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.5])
+def test_voice_config_refuses_a_threshold_that_is_not_finite_and_non_negative(tmp_path, bad):
+    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+
+    with pytest.raises(ValueError, match="distinctiveness_threshold"):
+        VoiceAlignmentConfig(
+            intent_log_path=tmp_path / "log.jsonl",
+            adapter_output_dir=tmp_path / "adapters",
+            distinctiveness_threshold=bad,
+        )
+
+
+def test_reason_names_the_measured_distinctiveness_and_threshold(tmp_path):
+    root = _state(tmp_path)
+    _write_intent(root, "intent_expression.jsonl", "hello world")
+    _write_measures(root, {"distinctiveness": 0.6})
+    result = assess_divergence(state_root=root, distinctiveness_threshold=0.5)
+    assert result.diverged
+    assert "0.6000" in result.summary and "threshold 0.5" in result.summary
+    assert "uncalibrated" not in result.summary
+
+
+def test_reason_names_a_missing_measurement(tmp_path):
+    root = _state(tmp_path)
+    _write_intent(root, "intent_expression.jsonl", "hello world")
+    result = assess_divergence(state_root=root, distinctiveness_threshold=0.5)
+    assert "no readable voice distinctiveness measurement" in result.summary

@@ -341,8 +341,8 @@ def health(texts: list[str]) -> dict[str, Any]:
     * ``utterance_count``: number of texts;
     * ``mean_tokens``: average tokens per text;
     * ``distinct_1``: unique unigrams / total unigrams;
-    * ``distinct_2``: unique bigrams / total bigrams, counting bigrams within
-      each text only (never across two utterances);
+    * ``distinct_2``: unique bigrams across the whole corpus / total bigrams.
+      A bigram is formed only within one text, never across two utterances;
     * ``max_repeated_trigram_fraction``: the largest, over texts, share of a
       text's trigram occurrences that repeat an earlier trigram of that text
       (0 when nothing repeats; a degeneration signal).

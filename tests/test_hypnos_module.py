@@ -138,6 +138,8 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
         "voice_alignment",
     ]
     assert all(p["success"] for p in summary["phases"])
+    assert hypnos._mnemos.consolidated == 1
+    assert hypnos._thymos.resets == 1
 
 
 @pytest.mark.asyncio

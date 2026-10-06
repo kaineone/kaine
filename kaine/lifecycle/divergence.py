@@ -122,7 +122,9 @@ def voice_alignment_thresholds_from_config(
     try:
         section = ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
         distinct = float(section.get("distinctiveness_threshold", distinct))
-        if distinct < 0:
+        # NaN or infinity would make every comparison False and silence the
+        # arm; fall back to the protective 0.0 instead.
+        if not math.isfinite(distinct) or distinct < 0:
             distinct = 0.0
     except Exception:
         distinct = 0.0
@@ -458,6 +460,10 @@ def assess_divergence(
         now = datetime.now(timezone.utc)
 
     distinctiveness_threshold = float(distinctiveness_threshold)
+    if not math.isfinite(distinctiveness_threshold) or distinctiveness_threshold < 0:
+        # A non-finite or negative threshold can never be a calibration; the
+        # protective 0.0 keeps the arm voting for every being that has spoken.
+        distinctiveness_threshold = 0.0
 
     adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
 
@@ -596,10 +602,16 @@ def assess_divergence(
                 f"(rate={cons_rate}, magnitude={cons_magnitude})"
             )
         if voice_vote is True:
-            reasons.append(
-                "its voice measures mark divergence (uncalibrated threshold 0, "
-                "or no measurement for a being that has spoken)"
-            )
+            if voice_distinctiveness is None:
+                reasons.append(
+                    "it has spoken but has no readable voice distinctiveness "
+                    "measurement"
+                )
+            else:
+                reasons.append(
+                    f"its voice distinctiveness {voice_distinctiveness:.4f} is at "
+                    f"or above the threshold {distinctiveness_threshold:g}"
+                )
         if eidolon_drift:
             reasons.append(
                 f"Eidolon recorded {drift_count} identity drift(s) with a non-empty history"

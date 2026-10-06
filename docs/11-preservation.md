@@ -30,7 +30,7 @@ The safety-net monitors live in `kaine/cycle/preservation_monitor.py`. They are 
 The voice arm reads the content-free voice measures Hypnos writes each sleep (`state/lingua/voice_measures_latest.json`).
 - A being that has never spoken abstains: the arm casts no vote, and the other arms decide.
 - A being that has spoken is diverged by this arm when its stylometric distinctiveness from the base organ is at or above `[hypnos.voice_alignment].distinctiveness_threshold`. That threshold is 0 until it is calibrated, so any being that has spoken counts.
-- It is also diverged when its measures are missing, unreadable or not finite.
+- It is also diverged when its distinctiveness measure is missing, unreadable or not finite. The other measures are recorded for the operator but do not vote.
 
 The live monitor names this arm `voice`, so the arm's first vote is a preservation edge like any other.
 
