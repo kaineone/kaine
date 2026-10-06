@@ -30,6 +30,8 @@ class LaunchSessionStore:
 
     def exchange(self, token: str) -> str | None:
         """Validate ``token`` and return a fresh session id, or ``None``."""
+        if not isinstance(token, str) or not token.isascii():
+            return None
         for stored, (issued, used) in self._tokens.items():
             if hmac.compare_digest(stored, token):
                 if used or (self.now() - issued) > self.ttl_seconds:

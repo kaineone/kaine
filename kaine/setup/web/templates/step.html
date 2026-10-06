@@ -43,6 +43,7 @@
         {% elif f.kind == "multichoice" %}
           <fieldset>
             <legend>{{ f.prompt }}</legend>
+            <input type="hidden" name="{{ f.name }}" value="">
             {% for choice in f.choices %}
             <div class="choice">
               <input type="checkbox" id="field-{{ f.name }}-{{ choice }}" name="{{ f.name }}" value="{{ choice }}"

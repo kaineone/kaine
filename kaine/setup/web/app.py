@@ -78,7 +78,11 @@ async def _read_form(request: Request) -> dict[str, str | list[str]]:
     ct = request.headers.get("content-type", "")
     if not ct.startswith("application/x-www-form-urlencoded"):
         raise HTTPException(status_code=415, detail="unsupported media type")
-    parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="form is not valid UTF-8")
+    parsed = parse_qs(text, keep_blank_values=True)
     result: dict[str, str | list[str]] = {}
     for key, values in parsed.items():
         if len(values) == 1:
