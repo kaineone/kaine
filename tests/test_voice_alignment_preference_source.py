@@ -170,3 +170,19 @@ def test_config_itself_refuses_an_unknown_source(tmp_path):
             adapter_output_dir=tmp_path / "adapters",
             preference_source="faithful_rendering",
         )
+
+
+def test_corpus_ceiling_must_be_a_non_negative_number(tmp_path):
+    from kaine.boot.errors import VoiceAlignmentConfigError
+    from kaine.boot.factories.hypnos import voice_alignment_config_from_section
+    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+
+    with pytest.raises(ValueError, match="corpus_ceiling_gb"):
+        VoiceAlignmentConfig(
+            intent_log_path=tmp_path / "log.jsonl",
+            adapter_output_dir=tmp_path / "adapters",
+            corpus_ceiling_gb=-1.0,
+        )
+    for bad in ("lots", -2):
+        with pytest.raises(VoiceAlignmentConfigError, match="corpus_ceiling_gb"):
+            voice_alignment_config_from_section({"corpus_ceiling_gb": bad})

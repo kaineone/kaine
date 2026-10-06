@@ -64,9 +64,11 @@ class FakeBackend:
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_publishes_top_level_voice_tracking_fields(
+async def test_training_result_carries_voice_tracking_fields(
     bus: AsyncBus, tmp_path: Path,
 ):
+    """Calling ``_train_on_pairs`` directly returns a result carrying the
+    voice-tracking fields; no sleep and no published event are involved."""
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         "\n".join(
@@ -119,10 +121,9 @@ async def test_end_to_end_publishes_top_level_voice_tracking_fields(
 
 
 @pytest.mark.asyncio
-async def test_sidecar_event_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Path):
-    """Training still produces the real DPO loss and capability scores; with
-    preference_source="none" the same fields are read directly from the
-    returned result."""
+async def test_training_result_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Path):
+    """Calling ``_train_on_pairs`` directly returns the real DPO loss and
+    capability scores on the result; no sidecar event is published."""
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})

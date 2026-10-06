@@ -175,6 +175,10 @@ class VoiceAlignmentConfig:
                 f"unknown preference_source {self.preference_source!r}; "
                 f"known: {sorted(PREFERENCE_SOURCES)}"
             )
+        if not float(self.corpus_ceiling_gb) >= 0.0:
+            raise ValueError(
+                f"corpus_ceiling_gb must be a non-negative number; got {self.corpus_ceiling_gb!r}"
+            )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
 
