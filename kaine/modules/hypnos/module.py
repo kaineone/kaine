@@ -13,7 +13,11 @@ from typing import Any, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
-from kaine.modules.hypnos.corpus import check_corpus_ceiling, rotate_intent_log
+from kaine.modules.hypnos.corpus import (
+    check_corpus_ceiling,
+    intent_record_paths,
+    rotate_intent_log,
+)
 from kaine.modules.hypnos.phases import (
     PhaseResult,
     affective_reset,
@@ -32,6 +36,7 @@ from kaine.modules.hypnos.voice_alignment import (
     VoiceAlignmentConfig,
     consolidation_magnitude,
     operator_approved,
+    read_consolidation_divergence,
     write_consolidation_divergence,
 )
 from kaine.storage import resolve
@@ -937,14 +942,22 @@ class Hypnos(BaseModule):
         rejected utterance text.
         """
         self._sleep_count += 1
+        build_failed = False
         try:
-            pairs, scanned, usable = self._builder.build_with_counts(
+            paths = await asyncio.to_thread(
+                intent_record_paths,
                 self._voice_config.intent_log_path,
+                self._voice_config.intent_log_path.parent / "intent_log",
+            )
+            pairs, scanned, usable = await asyncio.to_thread(
+                self._builder.build_with_counts,
+                paths,
                 max_pairs=self._voice_config.max_samples,
             )
         except Exception:
             log.warning("consolidation divergence: pair build failed", exc_info=True)
             pairs, scanned, usable = [], 0, 0
+            build_failed = True
         rate = usable / max(1, scanned)
         magnitude, embedder_kind = await consolidation_magnitude(
             pairs, embedder=self._consolidation_embedder
@@ -963,7 +976,21 @@ class Hypnos(BaseModule):
         kwargs: dict[str, Any] = {"sleep_index": self._sleep_count}
         if self._consolidation_divergence_path is not None:
             kwargs["path"] = self._consolidation_divergence_path
-        write_consolidation_divergence(metric, **kwargs)
+        # The template arm is a protective floor (voice-development D8): a scan
+        # that failed or found nothing is no evidence, so it never overwrites an
+        # earlier record. Otherwise one bad read would un-diverge a being.
+        prior = None
+        if scanned == 0:  # also the case when the build failed
+            read_kwargs = {"path": kwargs["path"]} if "path" in kwargs else {}
+            prior = read_consolidation_divergence(**read_kwargs)
+        if prior is not None:
+            payload["record_kept"] = True
+            log.warning(
+                "consolidation divergence: %s; keeping the earlier record",
+                "pair build failed" if build_failed else "no records scanned",
+            )
+        else:
+            write_consolidation_divergence(metric, **kwargs)
         # Content-free bus event (rides the existing metric path). An
         # intermediate publish must never propagate: catch, log, continue —
         # the metric is already persisted above, and the sleep pipeline must

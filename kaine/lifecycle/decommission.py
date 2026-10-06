@@ -351,6 +351,17 @@ def capture_backup(
         except Exception as exc:
             errors.append(f"copy intent_expression.jsonl: {exc}")
 
+    # --- 2b. Rotated intent log corpus ----------------------------------
+    intent_corpus_src = state_root / "lingua" / "intent_log"
+    if intent_corpus_src.is_dir():
+        try:
+            shutil.copytree(
+                intent_corpus_src, bundle_dir / "intent_log", dirs_exist_ok=True
+            )
+            inventory.append("intent_log/")
+        except Exception as exc:
+            errors.append(f"copy intent_log/: {exc}")
+
     # --- 3. Hypnos voice adapters ---------------------------------------
     adapters_src = state_root / "hypnos" / "adapters"
     if adapters_src.is_dir():

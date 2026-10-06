@@ -19,7 +19,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
 from kaine.storage import resolve
 
@@ -308,7 +308,10 @@ class DPOPairBuilder:
         return pairs
 
     def build_with_counts(
-        self, path: Path | str, *, max_pairs: int
+        self,
+        path: Path | str | Sequence[Path | str],
+        *,
+        max_pairs: int,
     ) -> tuple[list[DPOPair], int, int]:
         """Build DPO pairs AND report ``(pairs, records_scanned, usable_pairs)``.
 
@@ -321,48 +324,58 @@ class DPOPairBuilder:
         ``max_pairs`` — only the returned ``pairs`` list is capped at
         ``max_pairs`` (the training budget). The two coincide whenever the log
         holds no more than ``max_pairs`` divergent records.
+
+        ``path`` may be a single file or a sequence of files; the sequence is
+        scanned in order as one stream, with one shared ``max_records_scanned``
+        and ``max_pairs`` budget. Missing files are skipped.
         """
-        p = Path(path)
-        if not p.exists():
-            return [], 0, 0
+        paths: list[Path]
+        if isinstance(path, (str, Path)):
+            paths = [Path(path)]
+        else:
+            paths = [Path(p) for p in path]
+
         pairs: list[DPOPair] = []
         scanned = 0
         usable = 0
-        with p.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                if scanned >= self._max_scanned:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except Exception:
-                    continue
-                scanned += 1
-                chosen = (record.get("faithful_rendering") or "").strip()
-                rejected = (record.get("generated_text") or "").strip()
-                if not chosen or not rejected:
-                    continue
-                if chosen == rejected:
-                    continue
-                usable += 1
-                if len(pairs) >= max_pairs:
-                    # Keep scanning (denominator + numerator) but stop building
-                    # pairs once the training budget is full.
-                    continue
-                pairs.append(
-                    DPOPair(
-                        prompt=str(record.get("prompt", "")),
-                        chosen=chosen,
-                        rejected=rejected,
-                        metadata={
-                            "timestamp": record.get("timestamp"),
-                            "mode": record.get("mode"),
-                            "model": record.get("model"),
-                        },
+        for p in paths:
+            if not p.exists():
+                continue
+            with p.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    if scanned >= self._max_scanned:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except Exception:
+                        continue
+                    scanned += 1
+                    chosen = (record.get("faithful_rendering") or "").strip()
+                    rejected = (record.get("generated_text") or "").strip()
+                    if not chosen or not rejected:
+                        continue
+                    if chosen == rejected:
+                        continue
+                    usable += 1
+                    if len(pairs) >= max_pairs:
+                        # Keep scanning (denominator + numerator) but stop building
+                        # pairs once the training budget is full.
+                        continue
+                    pairs.append(
+                        DPOPair(
+                            prompt=str(record.get("prompt", "")),
+                            chosen=chosen,
+                            rejected=rejected,
+                            metadata={
+                                "timestamp": record.get("timestamp"),
+                                "mode": record.get("mode"),
+                                "model": record.get("model"),
+                            },
+                        )
                     )
-                )
         return pairs, scanned, usable
 
 

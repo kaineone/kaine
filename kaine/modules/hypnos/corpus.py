@@ -29,6 +29,10 @@ def rotate_intent_log(
     The move never overwrites: a hard link is created and the source name is
     unlinked; if hard links are unsupported, ``os.rename`` is used only after
     confirming the destination does not exist.
+
+    On failure to unlink the live log after the hard link is created, the new
+    corpus link is removed so the records remain only in the live log and are
+    never duplicated by a later rotation.
     """
     if not log_path.exists() or log_path.stat().st_size == 0:
         return None
@@ -69,10 +73,43 @@ def rotate_intent_log(
             suffix += 1
             continue
         else:
-            os.unlink(src)
+            try:
+                os.unlink(src)
+            except OSError as exc:
+                try:
+                    os.unlink(str(dst))
+                except OSError as cleanup_exc:
+                    log.error(
+                        "rotate_intent_log: failed to unlink live log %s after "
+                        "hard-linking to %s; cleanup of the corpus link also "
+                        "failed: %s",
+                        src,
+                        dst,
+                        cleanup_exc,
+                    )
+                raise exc
             break
 
     return dst
+
+
+def intent_record_paths(log_path: Path, corpus_dir: Path) -> list[Path]:
+    """Return the chronological evidence stream for consolidation divergence.
+
+    Corpus files named ``sleep-*.jsonl`` are returned oldest first, sorted by
+    modification time (``st_mtime_ns``) then name. The live ``log_path`` is
+    appended last when it exists. Missing files are skipped.
+    """
+    paths: list[Path] = []
+    if corpus_dir.exists():
+        corpus_files = sorted(
+            (p for p in corpus_dir.glob("sleep-*.jsonl") if p.is_file()),
+            key=lambda p: (p.stat().st_mtime_ns, p.name),
+        )
+        paths.extend(corpus_files)
+    if log_path.exists():
+        paths.append(log_path)
+    return paths
 
 
 def corpus_size_bytes(corpus_dir: Path) -> int:
