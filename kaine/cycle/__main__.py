@@ -78,6 +78,13 @@ from kaine.experiment import (
 from kaine.hardware import allowed_devices, apply_hardware_config
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import MaturationGateRunner
+from kaine.lifecycle.identity import (
+    EntityIdentity,
+    IdentityError,
+    load_identity,
+    resolve_spawn_identity,
+    save_identity,
+)
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.maturation_gate import (
     LIFECYCLE_SOURCE,
@@ -156,6 +163,9 @@ ORGAN_GATE_REFUSED_EXIT = 9
 
 # Exit code when individuation is misconfigured or lacks the lingua module.
 INDIVIDUATION_REFUSED_EXIT = 10
+
+# Exit code when entity identity cannot be resolved or a revive conflicts with the existing tree.
+IDENTITY_REFUSED_EXIT = 11
 
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
@@ -979,6 +989,30 @@ def _resolve_start_stage(
     return _resolve_boot_stage(config, stage_override=override)
 
 
+def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
+    """Resolve the entity identity for this boot before any module starts.
+
+    When reviving, the bundle's identity is returned but not yet persisted: it is
+    written to disk only after the revive lands. A target tree that already holds
+    a different identity is refused before any state is modified.
+    """
+    path = resolve(state_root) / "identity" / "entity.json"
+    if revive is not None:
+        existing = load_identity(path)
+        if existing is not None and existing.entity_id != revive.plan.identity.entity_id:
+            raise IdentityError(
+                f"refusing revive into tree with identity {existing.entity_id!r}; "
+                f"bundle identity is {revive.plan.identity.entity_id!r}"
+            )
+        return revive.plan.identity
+    return resolve_spawn_identity(state_root)
+
+
+def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
+    """Persist a revived identity once the revive has successfully landed."""
+    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
+
+
 # Effectors that have nothing to act on in the womb: Mundus has no world and
 # Vox has no air to speak into. Both are activated by the gate runner at birth.
 GESTATION_DORMANT_EFFECTORS = ("mundus", "vox")
@@ -1164,6 +1198,38 @@ async def _revive_or_refuse(revive, registry) -> int | None:
         return REVIVE_REFUSED_EXIT
 
 
+async def _apply_revive(revive, registry, state_root: Path) -> int | None:
+    """Apply a revive plan, then persist its identity only if the revive lands.
+
+    Returns None when the revive landed and its identity was persisted, else
+    the relevant exit code. The caller is responsible for stopping the welfare
+    producer and closing the bus after this returns.
+    """
+    refused = await _revive_or_refuse(revive, registry)
+    if refused is not None:
+        return refused
+
+    try:
+        _persist_revived_identity(state_root, revive.plan.identity)
+    except (IdentityError, OSError) as exc:
+        log.error(
+            "could not persist revived identity %s: %s",
+            revive.plan.identity.entity_id,
+            exc,
+        )
+        for module in list(registry.all_modules()):
+            try:
+                await module.shutdown()
+            except Exception:
+                log.warning(
+                    "module %s shutdown failed during revive identity refusal",
+                    module.name,
+                    exc_info=True,
+                )
+        return IDENTITY_REFUSED_EXIT
+    return None
+
+
 def _start_preserve_watcher(
     registry, fork_manager, preservation_cfg, *, is_paused, request_stop, stop_event
 ) -> asyncio.Task:
@@ -1267,6 +1333,20 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     """Load the config if none was passed, and resolve the developmental stage this boot starts in."""
     if ctx.kaine_config is None:
         ctx.kaine_config = _load_kaine_config()
+
+    # Entity identity resolution. Runs before stage resolution and before any
+    # module state is touched, so a legacy identity is persisted before the same
+    # boot can write a new artifact that would shift the derivation.
+    try:
+        ctx.identity = _resolve_boot_identity(resolve(Path("state")), ctx.revive)
+    except IdentityError as exc:
+        log.error("entity identity resolution refused: %s", exc)
+        return IDENTITY_REFUSED_EXIT
+    log.info(
+        "entity identity: %s (%s)",
+        ctx.identity.entity_id,
+        ctx.identity.origin,
+    )
 
     # Developmental stage resolution. Done early so gestation can gate locus and
     # embodiment before any module opens. Ship-inert by default: a normal boot
@@ -1594,7 +1674,9 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # Module background loops run briefly on fresh state before the revive lands,
     # which is safe because the cognitive cycle (and so the workspace) has not started.
     if ctx.revive is not None:
-        refused = await _revive_or_refuse(ctx.revive, ctx.registry)
+        refused = await _apply_revive(
+            ctx.revive, ctx.registry, resolve(Path("state"))
+        )
         if refused is not None:
             await _stop_welfare_producer(ctx.welfare_producer)
             await ctx.bus.close()
@@ -1857,7 +1939,10 @@ async def _phase_supervision(ctx: BootContext) -> int | None:
     ctx.spot_cfg = SpotConfig.from_section(ctx.kaine_config.get("spot") or {})
     lifecycle_cfg = ctx.kaine_config.get("lifecycle") or {}
     ctx.fork_manager = ForkManager(
-        resolve(lifecycle_cfg.get("snapshots_path", "state/forks"))
+        resolve(lifecycle_cfg.get("snapshots_path", "state/forks")),
+        identity_source=lambda: load_identity(
+            resolve(Path("state")) / "identity" / "entity.json"
+        ),
     )
 
     ctx.rebuild_module = _make_rebuild_module(ctx.bus, ctx.kaine_config, ctx.registry, ctx.intent_secret)
