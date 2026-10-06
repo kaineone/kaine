@@ -152,3 +152,33 @@ The external trainer:
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.
 - **Sycophancy (Stage 2, external signal).** It is mitigated by Empatheia weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
 - **Weak evidence.** No study shows these methods yield a human-like individual voice from a 4B organ with tens of utterances per sleep. The stages are measured as research.
+
+### D14. Trainer hygiene, fixed at implementation (task 0.6; integrator-approved 2026-10-05)
+
+- **Precision.**
+  - The voice-alignment base is the 4B organ (`kaineone/Qwen3.5-4B-abliterated`). Its bf16 weights are about 8 GB, so LoRA DPO fits a 12 GB card when the reference is the same model with an adapter swapped in rather than a second copy, and gradient checkpointing is on.
+  - `[hypnos.voice_alignment].train_precision` takes "bf16" (the default, per D6) or "4bit". Any other value is refused at boot.
+  - There is no silent fallback. If bf16 does not fit, the run fails closed with the measured reason.
+  - `result.json` and the sleep summary record the precision used.
+  - "4bit" is set only after a real bf16 step has failed on the host, and only with the measured peak VRAM in hand, because Unsloth flags QLoRA on Qwen3.5 as lossy.
+- **The previous adapter.**
+  - `job.json` names `previous_adapter_dir` explicitly. It is the being's latest accepted adapter, taken from the adapter store, or null when the being has never trained.
+  - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the being's voice.
+  - When it is named, it is loaded as a `PeftModel` twice: as adapter `train` (trainable) and as adapter `reference`. Training passes `model_adapter_name="train"` and `ref_adapter_name="reference"` to `DPOConfig`.
+  - When it is null, a fresh LoRA is trained and the reference is the base with the adapter disabled.
+  - The capability "before" score is taken with the previous adapter loaded, so it measures the being's current voice, not the base.
+- **The system prompt store.**
+  - Lingua writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
+  - The text is the persona only: the template, the name, the Eidolon values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
+  - The text is the being's own self-model content. Each file is written as `get_state_encryptor().encrypt(text)` and read with `maybe_decrypt`, so it is never plaintext on disk when state encryption is enabled. The digest is verified over the decrypted text.
+  - It is covered by the same caps-not-culls disk guard as the corpus.
+- **The conversational format.**
+  - Each pair's prompt is `[system, user]` and its chosen and rejected completions are `[assistant]` messages, in TRL's conversational format.
+  - Before the job is built, the kaine side reads each pair's system prompt by digest and verifies sha256(text) == digest. A pair whose prompt is missing or fails verification is dropped and counted. It is never trained with a placeholder.
+- **One training core.**
+  - Three backends train: `in_process` (the shipped default), `subprocess` and `job_queue`. The last two already run `scripts/hypnos_external_train.py`.
+  - The in-process `UnslothDPOTrainer` carried its own copy of the training code. It would have kept 4-bit loading, a fresh LoRA and plain-text prompts.
+  - It now writes the same job spec into a temporary job directory and runs that script's entry point in-process, loaded by path, so the script never imports `kaine`. It then reads `result.json` through the same parser as the subprocess backend.
+  - D6 and D14 therefore hold for every backend.
+- **Both vetoes are unchanged.**
+- **Validation.** Tests exercise the dataset builder and the adapter loader without a GPU. One real bf16 step runs in the trainer environment on the 12 GB card, under the GPU lock and announced first.
