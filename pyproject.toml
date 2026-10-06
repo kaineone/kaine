@@ -301,6 +301,14 @@ source_modules = [
     "kaine.setup",
     "kaine.transfer",
     "kaine.workspace",
+    "kaine.accel_selftest",
+    "kaine.cfc_numpy",
+    "kaine.embedding_defaults",
+    "kaine.extras",
+    "kaine.install_target",
+    "kaine.secrets_file",
+    "kaine.torch_stack",
+    "kaine.wheel_data",
 ]
 forbidden_modules = ["kaine.evaluation"]
 ignore_imports = [
@@ -370,6 +378,7 @@ source_modules = [
     "kaine.experiment",
     "kaine.privacy_filter",
     "kaine.text_embedding",
+    "kaine.text_embedding_numpy",
     "kaine.lifecycle.welfare_signal",
     # Cross-cutting stdlib-only primitives shared by core, the modules, and the
     # evaluation sidecar alike (atomic JSON state writer, local-service port
