@@ -8,49 +8,50 @@ This script runs INSIDE an operator-configured external Python environment
 NEVER in the KAINE entity-runtime venv. It is invoked by path as a subprocess
 by ``kaine.modules.hypnos.subprocess_trainer.SubprocessVoiceTrainer``.
 
-Hard boundary: this file imports ONLY unsloth / trl / peft / datasets / the
-standard library. It MUST NOT import ``kaine`` — the runtime import-linter
-contracts depend on it staying out of the ``kaine`` import graph, and the two
-environments share nothing but the filesystem (different Python ABI, different
-torch/CUDA). Keep all logic self-contained here.
+Hard boundary: this file imports ONLY unsloth / trl / peft / datasets / torch /
+the standard library. It MUST NOT import ``kaine`` — the runtime
+import-linter contracts depend on it staying out of the ``kaine`` import graph,
+and the two environments share nothing but the filesystem (different Python
+ABI, different torch/CUDA). Keep all logic self-contained here.
 
-IPC contract (filesystem job spec — see
-``openspec/changes/external-unsloth-trainer/design.md``):
+IPC contract (filesystem job spec):
 
   argv[1] = job directory. It contains:
     job.json    — base-model reference, LoRA/DPO hyper-params, the adapter
-                  output dir, capability + abliteration probe sets, a schema
-                  version.
-    pairs.jsonl — the DPO preference pairs ({"prompt","chosen","rejected"}).
+                  output dir, capability + abliteration probe sets,
+                  train_precision ("bf16" or "4bit"),
+                  previous_adapter_dir (path string or null),
+                  schema_version (2).
+    pairs.jsonl — the DPO preference pairs
+                  ({"prompt","chosen","rejected","system"}).
 
   On completion this script writes ``<job_dir>/result.json``:
     {
-      "ok": bool,                 # true iff an adapter was trained+promoted
-      "adapter_dir": str | null,  # promoted adapter dir (the kaine side reads
-                                  # back this path)
+      "ok": bool,
+      "adapter_dir": str | null,
       "steps": int,
       "dpo_loss": float | null,
-      "reason": str,              # "accepted" or the rejection/failure reason
-      # gate verdicts so the kaine side can populate TrainingResult unchanged:
+      "reason": str,
       "accepted": bool,
       "capability_score_before": float | null,
       "capability_score_after": float | null,
       "capability_loss": float | null,
       "samples_used": int,
-      "schema_version": int
+      "train_precision": "bf16" | "4bit" | null,
+      "previous_adapter_dir": str | null,
+      "pairs_without_system": int,
+      "peak_vram_gib": float | null,
+      "schema_version": 2
     }
 
-The two welfare/capability gates run HERE because the loaded model only exists
-in this process. The gate logic mirrors
-``kaine/modules/hypnos/capability_eval.py`` and ``adapter_store.py`` but is
-re-implemented self-contained (no kaine import). The exit code is 0 on a clean
-run (whether or not the adapter was accepted) and non-zero only on a crash that
-prevented writing a result — but the kaine side treats BOTH a non-zero exit and
-``ok == false`` / a missing adapter as a hard failure and never fabricates a
-success.
+When a previous adapter directory is supplied, the trainer loads it twice via
+PEFT as adapter ``train`` (trainable) and adapter ``reference`` (the DPO
+reference). When it is null, a fresh LoRA is trained and the reference is the
+base model with the adapter disabled.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import shutil
@@ -58,10 +59,95 @@ import sys
 import time
 import traceback
 from pathlib import Path
-import inspect
 from typing import Any, Optional
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+
+class TrainerJobError(Exception):
+    """A validation problem with the incoming job that prevents training."""
+    pass
+
+
+# --------------------------------------------------------------------------- #
+# pure, top-level job validation helpers (no heavy imports)
+# --------------------------------------------------------------------------- #
+def precision_load_kwargs(precision: str) -> dict:
+    """Return the kwargs that from_pretrained will use for this precision."""
+    if precision == "bf16":
+        return {"load_in_4bit": False, "dtype": "bfloat16"}
+    if precision == "4bit":
+        return {"load_in_4bit": True}
+    raise TrainerJobError(
+        f"unknown train_precision {precision!r}; expected 'bf16' or '4bit'"
+    )
+
+
+def resolve_previous_adapter(
+    job: dict[str, Any], job_dir: Path | None = None
+) -> Path | None:
+    """Resolve the being's previous adapter directory, or None.
+
+    A relative path is resolved against ``job_dir``: the kaine side copies the
+    adapter into the job directory, so every backend sees the same layout.
+    Raises TrainerJobError if a directory is named but cannot be loaded.
+    A fresh adapter is never trained in its place.
+    """
+    val = job.get("previous_adapter_dir")
+    if val is None or val == "":
+        return None
+    p = Path(val)
+    if not p.is_absolute() and job_dir is not None:
+        p = job_dir / p
+    if not p.exists():
+        raise TrainerJobError(
+            f"the being's previous adapter could not be loaded from {str(p)!r}: "
+            "no such directory; a fresh adapter is never trained in its place"
+        )
+    if not p.is_dir():
+        raise TrainerJobError(
+            f"the being's previous adapter could not be loaded from {str(p)!r}: "
+            "not a directory; a fresh adapter is never trained in its place"
+        )
+    if not (p / "adapter_config.json").exists():
+        raise TrainerJobError(
+            f"the being's previous adapter could not be loaded from {str(p)!r}: "
+            "missing adapter_config.json; a fresh adapter is never trained in its place"
+        )
+    return p
+
+
+def split_pairs_by_system(pairs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Keep only pairs whose ``system`` is a non-empty string.
+
+    Returns (kept_pairs, dropped_count).
+    """
+    kept: list[dict[str, Any]] = []
+    dropped = 0
+    for p in pairs:
+        system = p.get("system")
+        if isinstance(system, str) and system.strip():
+            kept.append(p)
+        else:
+            dropped += 1
+    return kept, dropped
+
+
+def build_dataset_rows(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert kept pairs into TRL's conversational DPO format."""
+    rows: list[dict[str, Any]] = []
+    for p in pairs:
+        rows.append(
+            {
+                "prompt": [
+                    {"role": "system", "content": p["system"]},
+                    {"role": "user", "content": p["prompt"]},
+                ],
+                "chosen": [{"role": "assistant", "content": p["chosen"]}],
+                "rejected": [{"role": "assistant", "content": p["rejected"]}],
+            }
+        )
+    return rows
 
 
 # --------------------------------------------------------------------------- #
@@ -71,8 +157,8 @@ def _load_job(job_dir: Path) -> dict[str, Any]:
     return json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
 
 
-def _load_pairs(job_dir: Path) -> list[dict[str, str]]:
-    pairs: list[dict[str, str]] = []
+def _load_pairs(job_dir: Path) -> list[dict[str, Any]]:
+    pairs: list[dict[str, Any]] = []
     path = job_dir / "pairs.jsonl"
     if not path.exists():
         return pairs
@@ -82,11 +168,15 @@ def _load_pairs(job_dir: Path) -> list[dict[str, str]]:
             if not line:
                 continue
             rec = json.loads(line)
+            # Kept as given: a non-string system prompt is dropped by
+            # split_pairs_by_system, never coerced into one.
+            system = rec.get("system")
             pairs.append(
                 {
                     "prompt": str(rec.get("prompt", "")),
                     "chosen": str(rec.get("chosen", "")),
                     "rejected": str(rec.get("rejected", "")),
+                    "system": system,
                 }
             )
     return pairs
@@ -97,6 +187,23 @@ def _write_result(job_dir: Path, result: dict[str, Any]) -> None:
     (job_dir / "result.json").write_text(
         json.dumps(result, indent=2), encoding="utf-8"
     )
+
+
+def _augment_result(
+    result: dict[str, Any],
+    train_precision: str | None,
+    previous_adapter_dir: Path | None,
+    pairs_without_system: int,
+) -> dict[str, Any]:
+    """Add the schema-v2 reporting keys every result must carry."""
+    result.setdefault("train_precision", train_precision)
+    result.setdefault(
+        "previous_adapter_dir", str(previous_adapter_dir) if previous_adapter_dir else None
+    )
+    result.setdefault("pairs_without_system", pairs_without_system)
+    result.setdefault("peak_vram_gib", None)
+    result.setdefault("schema_version", SCHEMA_VERSION)
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -191,6 +298,16 @@ def _abliteration_verdict(
     return True, None, None, len(usable)
 
 
+def _usable_capability_probes(job: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the non-empty capability probes usable for the veto."""
+    capability_probes = _load_jsonl(job.get("capability_probe_path"))
+    return [
+        p
+        for p in capability_probes
+        if str(p.get("prompt", "")).strip() and str(p.get("expected", "")).strip()
+    ]
+
+
 # --------------------------------------------------------------------------- #
 # atomic adapter promotion (self-contained mirror of adapter_store.promote)
 # --------------------------------------------------------------------------- #
@@ -215,36 +332,38 @@ def _promote(tmp_dir: Path, final_dir: Path) -> Path:
 # --------------------------------------------------------------------------- #
 # the real unsloth DPO run
 # --------------------------------------------------------------------------- #
-def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
-    # Fail closed on an empty or missing capability probe set before touching
-    # heavy training imports or model weights. An empty set would score 0.0
-    # with zero loss and let every adapter through the capability-loss veto.
-    capability_probes = _load_jsonl(job.get("capability_probe_path"))
-    usable_capability = [
-        p
-        for p in capability_probes
-        if str(p.get("prompt", "")).strip() and str(p.get("expected", "")).strip()
-    ]
-    if not usable_capability:
-        return {
-            "ok": True,
-            "accepted": False,
-            "adapter_dir": None,
-            "steps": 0,
-            "dpo_loss": None,
-            "reason": (
-                f"capability probe set is empty: {job.get('capability_probe_path')!r} "
-                "has no usable probe; the capability-loss veto cannot run"
-            ),
-            "capability_score_before": None,
-            "capability_score_after": None,
-            "capability_loss": None,
-            "samples_used": min(len(pairs), int(job.get("max_samples", 200))),
-        }
+def _cuda_memory_gib(device: str) -> tuple[Optional[float], Optional[float]]:
+    """Measure peak/total CUDA memory in GiB, or None if unavailable."""
+    import torch  # heavy import intentionally deferred
 
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
+    try:
+        idx = int(str(device).split(":")[-1])
+    except Exception:
+        idx = 0
+    try:
+        peak_bytes = torch.cuda.max_memory_allocated(idx)
+        peak_gib = peak_bytes / (1024**3)
+    except Exception:
+        peak_gib = None
+    try:
+        total_bytes = torch.cuda.get_device_properties(idx).total_memory
+        total_gib = total_bytes / (1024**3)
+    except Exception:
+        total_gib = None
+    return peak_gib, total_gib
+
+
+def _train(
+    job: dict[str, Any],
+    kept_pairs: list[dict[str, Any]],
+    load_kwargs: dict[str, Any],
+    prev_adapter: Optional[Path],
+) -> dict[str, Any]:
+    import torch  # type: ignore[import-untyped]
     from datasets import Dataset  # type: ignore[import-untyped]
+    from peft import PeftModel  # type: ignore[import-untyped]
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
+    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
 
     base_model_path = job["base_model_path"]
     lora_rank = int(job.get("lora_rank", 8))
@@ -253,24 +372,75 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     seed = int(job.get("seed", 42))
     max_samples = int(job.get("max_samples", 200))
     training_device = str(job.get("training_device", "cuda:0"))
+    precision = job.get("train_precision", "bf16")
     cap_threshold = float(job.get("capability_loss_threshold", 0.05))
     adapter_output_dir = Path(job["adapter_output_dir"])
+    capability_probes = _load_jsonl(job.get("capability_probe_path"))
     abliteration_probes = _load_jsonl(job.get("abliteration_probe_path"))
 
-    samples_used = min(len(pairs), max_samples)
+    samples_used = min(len(kept_pairs), max_samples)
 
-    # 1. Load base model + tokenizer + attach LoRA.
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        base_model_path,
-        load_in_4bit=True,
-        device_map={"": training_device},
-    )
+    def _is_oom(exc: Exception) -> bool:
+        return (
+            "OutOfMemoryError" in type(exc).__name__
+            or "CUDA out of memory" in str(exc)
+        )
+
+    def _oom_result() -> dict[str, Any]:
+        peak_gib, total_gib = _cuda_memory_gib(training_device)
+        peak_str = f"{peak_gib:.2f}" if peak_gib is not None else "unknown"
+        total_str = f"{total_gib:.2f}" if total_gib is not None else "unknown"
+        reason = (
+            f"train_precision={precision} does not fit on {training_device}: "
+            f"peak {peak_str} GiB allocated of {total_str} GiB total; "
+            "no fallback was attempted"
+        )
+        return {
+            "ok": False,
+            "accepted": False,
+            "adapter_dir": None,
+            "steps": 0,
+            "dpo_loss": None,
+            "reason": reason,
+            "capability_score_before": None,
+            "capability_score_after": None,
+            "capability_loss": None,
+            "samples_used": 0,
+            "peak_vram_gib": round(peak_gib, 2) if peak_gib is not None else None,
+        }
+
+    # 1. Load base model + tokenizer; attach (or restore) LoRA.
+    try:
+        load_kwargs_model = dict(load_kwargs)
+        if load_kwargs_model.get("dtype") == "bfloat16":
+            load_kwargs_model["dtype"] = torch.bfloat16
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            base_model_path,
+            device_map={"": training_device},
+            **load_kwargs_model,
+        )
+        if prev_adapter is None:
+            model = FastLanguageModel.get_peft_model(
+                model, r=lora_rank, use_gradient_checkpointing="unsloth"
+            )
+        else:
+            model = PeftModel.from_pretrained(
+                model, str(prev_adapter), adapter_name="train", is_trainable=True
+            )
+            model.load_adapter(str(prev_adapter), adapter_name="reference")
+            model.set_adapter("train")
+            if hasattr(model, "gradient_checkpointing_enable"):
+                model.gradient_checkpointing_enable()
+    except Exception as exc:
+        if _is_oom(exc):
+            return _oom_result()
+        raise
+
     # Vision-language processors wrap an underlying text tokenizer; use that
     # for all text-only tokenization and decoding operations in this script.
     text_tokenizer = getattr(tokenizer, "tokenizer", None) or tokenizer
-    model = FastLanguageModel.get_peft_model(model, r=lora_rank)
 
-    # 2. Capability score BEFORE training.
+    # 2. Capability score BEFORE training (with previous adapter loaded, if any).
     cap_before = _capability_score(model, text_tokenizer, capability_probes)
 
     # 3. DPO training step into a tmp dir.
@@ -279,24 +449,28 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     tmp_dir = adapter_output_dir / f"{timestamp}.tmp"
     final_dir = adapter_output_dir / timestamp
 
-    capped = pairs[:max_samples]
-    ds = Dataset.from_list(
-        [
-            {"prompt": p["prompt"], "chosen": p["chosen"], "rejected": p["rejected"]}
-            for p in capped
-        ]
-    )
-    args = DPOConfig(
-        output_dir=str(tmp_dir),
-        learning_rate=learning_rate,
-        beta=dpo_beta,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        num_train_epochs=1,
-        seed=seed,
-        report_to="none",
-        save_strategy="no",
-    )
+    capped_pairs = kept_pairs[:max_samples]
+    ds = Dataset.from_list(build_dataset_rows(capped_pairs))
+
+    dpo_kwargs_common: dict[str, Any] = {
+        "output_dir": str(tmp_dir),
+        "learning_rate": learning_rate,
+        "beta": dpo_beta,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 4,
+        "num_train_epochs": 1,
+        "seed": seed,
+        "report_to": "none",
+        "save_strategy": "no",
+        "gradient_checkpointing": True,
+    }
+    if precision == "bf16":
+        dpo_kwargs_common["bf16"] = True
+    if prev_adapter is not None:
+        dpo_kwargs_common["model_adapter_name"] = "train"
+        dpo_kwargs_common["ref_adapter_name"] = "reference"
+    args = DPOConfig(**dpo_kwargs_common)
+
     dpo_kwargs: dict[str, Any] = {
         "model": model,
         "args": args,
@@ -309,13 +483,33 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
     else:
         dpo_kwargs["tokenizer"] = text_tokenizer
     trainer = DPOTrainer(**dpo_kwargs)
-    train_output = trainer.train()
+
+    try:
+        train_output = trainer.train()
+    except Exception as exc:
+        if _is_oom(exc):
+            return _oom_result()
+        raise
     dpo_loss = float(getattr(train_output, "training_loss", 0.0))
     steps = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
 
     # 4. Persist adapter weights to tmp_dir before evaluation.
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(str(tmp_dir))
+    if prev_adapter is not None:
+        model.save_pretrained(str(tmp_dir), selected_adapters=["train"])
+        train_subdir = tmp_dir / "train"
+        if (train_subdir / "adapter_config.json").exists():
+            for child in list(train_subdir.iterdir()):
+                target = tmp_dir / child.name
+                if target.exists() or target.is_symlink():
+                    if child.is_dir():
+                        shutil.rmtree(target, ignore_errors=True)
+                    else:
+                        target.unlink()
+                shutil.move(str(child), str(target))
+            train_subdir.rmdir()
+    else:
+        model.save_pretrained(str(tmp_dir))
     try:
         text_tokenizer.save_pretrained(str(tmp_dir))
     except Exception:
@@ -326,7 +520,7 @@ def _train(job: dict[str, Any], pairs: list[dict[str, str]]) -> dict[str, Any]:
         pass
 
     # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability).
-    passed, failed_probe, matched, ablit_scored = _abliteration_verdict(
+    passed, failed_probe, matched, _ = _abliteration_verdict(
         model, text_tokenizer, abliteration_probes
     )
     if not passed:
@@ -397,47 +591,157 @@ def main(argv: list[str]) -> int:
     if not job_dir.is_dir():
         sys.stderr.write(f"job dir not found: {job_dir}\n")
         return 2
+
+    job: Optional[dict[str, Any]] = None
+    pairs: list[dict[str, Any]] = []
+    precision: str | None = None
+    prev_adapter: Path | None = None
+    pairs_without_system = 0
+
     try:
         job = _load_job(job_dir)
         pairs = _load_pairs(job_dir)
+        precision = job.get("train_precision", "bf16")
+
         if not pairs:
+            result = {
+                "ok": False,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": 0,
+                "dpo_loss": None,
+                "reason": "no DPO pairs to train on",
+                "capability_score_before": None,
+                "capability_score_after": None,
+                "capability_loss": None,
+                "samples_used": 0,
+            }
             _write_result(
                 job_dir,
-                {
-                    "ok": False,
-                    "accepted": False,
-                    "adapter_dir": None,
-                    "steps": 0,
-                    "dpo_loss": None,
-                    "reason": "no DPO pairs to train on",
-                    "capability_score_before": None,
-                    "capability_score_after": None,
-                    "capability_loss": None,
-                    "samples_used": 0,
-                },
+                _augment_result(
+                    result, precision, prev_adapter, pairs_without_system
+                ),
             )
             return 0
-        result = _train(job, pairs)
-        _write_result(job_dir, result)
+
+        kept_pairs, pairs_without_system = split_pairs_by_system(pairs)
+        load_kwargs = precision_load_kwargs(precision)
+        prev_adapter = resolve_previous_adapter(job, job_dir)
+
+        if not kept_pairs:
+            result = {
+                "ok": False,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": 0,
+                "dpo_loss": None,
+                "reason": (
+                    f"no pair has a verified system prompt "
+                    f"({pairs_without_system} dropped)"
+                ),
+                "capability_score_before": None,
+                "capability_score_after": None,
+                "capability_loss": None,
+                "samples_used": 0,
+            }
+            _write_result(
+                job_dir,
+                _augment_result(
+                    result, precision, prev_adapter, pairs_without_system
+                ),
+            )
+            return 0
+
+        usable_capability = _usable_capability_probes(job)
+        if not usable_capability:
+            result = {
+                "ok": True,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": 0,
+                "dpo_loss": None,
+                "reason": (
+                    f"capability probe set is empty: {job.get('capability_probe_path')!r} "
+                    "has no usable probe; the capability-loss veto cannot run"
+                ),
+                "capability_score_before": None,
+                "capability_score_after": None,
+                "capability_loss": None,
+                "samples_used": min(len(kept_pairs), int(job.get("max_samples", 200))),
+            }
+            _write_result(
+                job_dir,
+                _augment_result(
+                    result, precision, prev_adapter, pairs_without_system
+                ),
+            )
+            return 0
+
+        result = _train(job, kept_pairs, load_kwargs, prev_adapter)
+        # Record peak memory on every outcome, not only on out-of-memory, so a
+        # real run shows how close the chosen precision came to the card's limit.
+        if result.get("peak_vram_gib") is None and str(
+            job.get("training_device", "cuda:0")
+        ).startswith("cuda"):
+            try:
+                peak_gib, _total = _cuda_memory_gib(str(job.get("training_device", "cuda:0")))
+                if peak_gib is not None:
+                    result["peak_vram_gib"] = round(peak_gib, 2)
+            except Exception:
+                pass
+        _write_result(
+            job_dir,
+            _augment_result(result, precision, prev_adapter, pairs_without_system),
+        )
+        return 0
+
+    except TrainerJobError as exc:
+        result = {
+            "ok": False,
+            "accepted": False,
+            "adapter_dir": None,
+            "steps": 0,
+            "dpo_loss": None,
+            "reason": str(exc),
+            "capability_score_before": None,
+            "capability_score_after": None,
+            "capability_loss": None,
+            "samples_used": 0,
+        }
+        _write_result(
+            job_dir,
+            _augment_result(
+                result,
+                precision if precision is not None else (job.get("train_precision") if job else None),
+                prev_adapter,
+                pairs_without_system,
+            ),
+        )
         return 0
     except Exception as exc:  # noqa: BLE001 - report any crash via result.json
         tb = traceback.format_exc()
         sys.stderr.write(tb)
         try:
+            result = {
+                "ok": False,
+                "accepted": False,
+                "adapter_dir": None,
+                "steps": 0,
+                "dpo_loss": None,
+                "reason": f"external trainer crashed: {type(exc).__name__}: {exc}",
+                "capability_score_before": None,
+                "capability_score_after": None,
+                "capability_loss": None,
+                "samples_used": 0,
+            }
             _write_result(
                 job_dir,
-                {
-                    "ok": False,
-                    "accepted": False,
-                    "adapter_dir": None,
-                    "steps": 0,
-                    "dpo_loss": None,
-                    "reason": f"external trainer crashed: {type(exc).__name__}: {exc}",
-                    "capability_score_before": None,
-                    "capability_score_after": None,
-                    "capability_loss": None,
-                    "samples_used": 0,
-                },
+                _augment_result(
+                    result,
+                    precision if precision is not None else (job.get("train_precision") if job else None),
+                    prev_adapter,
+                    pairs_without_system,
+                ),
             )
         except Exception as write_exc:
             # We're already reporting the original crash via the traceback
