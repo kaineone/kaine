@@ -16,7 +16,6 @@ import pytest
 from starlette.testclient import TestClient
 
 import kaine.nexus
-import kaine.setup.web
 from kaine import secrets_file
 from kaine.net import SERVICE_PORTS
 from kaine.setup.web import guard
@@ -449,7 +448,7 @@ def test_finish_routes_survive_an_unreadable_nexus_config(tmp_path, monkeypatch)
 
 
 def test_setup_css_uses_only_nexus_tokens():
-    setup_css = Path(kaine.setup.web.__file__).parent / "static" / "setup.css"
+    setup_css = Path(guard.__file__).parent / "static" / "setup.css"
     nexus_css = Path(kaine.nexus.__file__).parent / "static" / "style.css"
     used = set(re.findall(r"var\(--([\w-]+)\)", setup_css.read_text(encoding="utf-8")))
     defined = set(
@@ -485,7 +484,7 @@ def test_relative_secrets_path_resolved_against_repo_root(tmp_path, monkeypatch)
     # the other cwd only those, so any secrets file written there would show.
     (other_cwd / "config").mkdir()
     (other_cwd / "config" / "profiles").symlink_to(
-        Path(kaine.setup.web.__file__).resolve().parents[3] / "config" / "profiles"
+        Path(guard.__file__).resolve().parents[3] / "config" / "profiles"
     )
     monkeypatch.chdir(other_cwd)
 
