@@ -135,6 +135,7 @@ def test_unauthenticated_request_does_not_refresh_activity(tmp_path):
     app = _mk_app(tmp_path, now=clock.now)
     client = _session_client(app)
 
+    clock.t = 50.0
     r = client.get(
         "/static/style.css",
         headers={"Host": "127.0.0.1:8000"},
@@ -142,6 +143,22 @@ def test_unauthenticated_request_does_not_refresh_activity(tmp_path):
     )
     assert r.status_code == 403
     assert app.state.last_activity == 0.0
+
+    # Nor does a failed token exchange.
+    clock.t = 55.0
+    r = client.get("/?token=not-a-real-token", headers={"Host": "127.0.0.1:8000"}, follow_redirects=False)
+    assert r.status_code == 403
+    assert app.state.last_activity == 0.0
+
+    # An authenticated request does refresh it.
+    clock.t = 60.0
+    r, _token = _exchange_token(client, app)
+    assert r.status_code in (302, 303)
+    assert app.state.last_activity == 60.0
+    clock.t = 100.0
+    r = client.get("/step", headers={"Host": "127.0.0.1:8000"}, follow_redirects=False)
+    assert r.status_code == 200
+    assert app.state.last_activity == 100.0
 
 
 def test_host_check_rejects_evil_host(tmp_path):
