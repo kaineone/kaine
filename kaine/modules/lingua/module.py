@@ -725,11 +725,15 @@ class Lingua(BaseModule):
         def _iter_field_values(value, fields):
             if isinstance(value, dict):
                 for k, v in value.items():
-                    if k in fields and isinstance(v, str):
-                        stripped = v.strip()
-                        if stripped:
-                            yield stripped
-                    yield from _iter_field_values(v, fields)
+                    if k in fields:
+                        if isinstance(v, str):
+                            stripped = v.strip()
+                            if stripped:
+                                yield stripped
+                        elif isinstance(v, (dict, list, tuple)):
+                            yield from iter_text_leaves(v)
+                    elif isinstance(v, (dict, list, tuple)):
+                        yield from _iter_field_values(v, fields)
             elif isinstance(value, (list, tuple)):
                 for item in value:
                     yield from _iter_field_values(item, fields)
@@ -741,6 +745,9 @@ class Lingua(BaseModule):
         # at any depth on any coalition event.
         heard_texts: set[str] = set()
         redact_texts: set[str] = set()
+        # Heard-field values from events other than Lingua's own. Lingua's own
+        # earlier user_input is a felt or event phrase it chose to publish.
+        foreign_field_texts: set[str] = set()
         if snap is not None:
             for _entry_id, event in snap.selected_events:
                 if event.type in EXTERNAL_INPUT_TYPES:
@@ -750,6 +757,8 @@ class Lingua(BaseModule):
                     event.payload, HEARD_TEXT_FIELDS - {"text"}
                 ):
                     redact_texts.add(leaf)
+                    if event.source != "lingua":
+                        foreign_field_texts.add(leaf)
         redact_texts |= heard_texts
 
         # Only an external-input event makes an about heard. Field values (for
@@ -829,7 +838,16 @@ class Lingua(BaseModule):
         if origin is not None:
             payload["origin"] = origin
         if mode == "external" and about and not about_is_heard:
-            payload["user_input"] = about
+            # A felt or event about can still repeat heard text found in the
+            # coalition (an external input, or a heard field on another
+            # module's event); that text is redacted before publishing.
+            published_about = about
+            for heard in heard_texts | foreign_field_texts:
+                if len(heard) >= 3:
+                    published_about = published_about.replace(
+                        heard, HEARD_SPEECH_PLACEHOLDER
+                    )
+            payload["user_input"] = published_about
         faithful = logged_faithful
         if faithful is not None:
             payload["faithful_rendering"] = faithful
