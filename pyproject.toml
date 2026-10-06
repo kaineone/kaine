@@ -309,6 +309,7 @@ source_modules = [
     "kaine.secrets_file",
     "kaine.torch_stack",
     "kaine.wheel_data",
+    "kaine.residency",
 ]
 forbidden_modules = ["kaine.evaluation"]
 ignore_imports = [
