@@ -68,7 +68,7 @@ KAINE runs on CPU-only hosts. With two GPUs it uses a primary/secondary split:
 | `cuda:1` (secondary GPU) | Topos InternVideo-Next vision encoder; Chatterbox TTS |
 | CPU | Chronos CfC, Mnemos embedder, Audition emotion2vec+, Speaches STT, control paths |
 
-VRAM needs depend on the model and batch size. As a planning hint, the shipped config comments describe a served organ at about 3 GB and a 4B LoRA training step at about 9.8 GB; those two do not fit on a single 12 GB device at once, so training time-shares the GPU. See [Hardware](../03-hardware/README.md) for sizing guidance.
+VRAM needs depend on the model and batch size. As a planning hint, the shipped config comments describe a served organ at about 4.1 GB and a 4B LoRA training step at about 9.8 GB; those two do not fit on a single 12 GB device at once, so training time-shares the GPU. See [Hardware](../03-hardware/README.md) for sizing guidance.
 
 Device selection is centralized in `kaine.hardware` and configured per-module via the `device` key in `config/kaine.toml`. `KAINE_FORCE_DEVICE=<device>` overrides every module at once. Unavailable devices fall back safely with a logged warning. When `[hardware].allowed_devices` is set, the resolver normally restricts modules to that set; `KAINE_FORCE_DEVICE` overrides it with a warning, and `cpu` is always allowed.
 
