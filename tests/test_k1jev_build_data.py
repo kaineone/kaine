@@ -28,6 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 import kaine.decision.schema as schema_module  # noqa: E402
 import kaine.storage as storage  # noqa: E402
 
+# The K1-Jev builder is an operator tool that refuses to write under any
+# KAINE data root; its tests run without the per-test data root.
+pytestmark = pytest.mark.no_data_root
+
 
 def _load_script(rel_path: str, module_name: str):
     spec = importlib.util.spec_from_file_location(

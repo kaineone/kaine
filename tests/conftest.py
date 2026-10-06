@@ -189,6 +189,8 @@ def _fingerprint(
                                         except OSError:
                                             continue
                             except OSError:
+                                # The directory itself is already recorded; an
+                                # unlistable one simply shows no children.
                                 pass
                         else:
                             stack.append(entry.path)
