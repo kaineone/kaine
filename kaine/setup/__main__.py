@@ -27,7 +27,6 @@ from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env
 from kaine.setup import tomlwriter
 from kaine.setup.steps import OWNED_KEYS, assert_owned, owned_changes
 from kaine.setup.storage_step import existing_volumes, write_volume_override
-from kaine.setup.web import create_setup_app, serve
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
 
@@ -554,6 +553,8 @@ def _run_web(
     except Exception as exc:
         print(f"setup cannot start: the state directory cannot be resolved ({exc})", file=sys.stderr)
         return 1
+
+    from kaine.setup.web import create_setup_app, serve
 
     try:
         app = create_setup_app(

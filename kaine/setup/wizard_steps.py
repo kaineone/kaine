@@ -20,6 +20,7 @@ from kaine.setup.hardware_steps import (
 )
 from kaine.setup.steps import Field, Step, StepContext
 from kaine.setup.storage_step import relocation_step, storage_step
+from kaine.setup.tomlwriter import REMOVE
 
 
 def _existing(cfg: dict[str, Any], dotted: str, default: Any = None) -> Any:
@@ -544,12 +545,22 @@ def cl1_substrate_step() -> Step:
         return not ctx.extra.get("defaults")
 
     def apply(ctx: StepContext, _answers: dict[str, Any]) -> None:
-
         _wizard._cl1_substrate_step(
             ctx.config,
             input_fn=ctx.extra["input_fn"],
             line=_make_line(ctx),
         )
+        if "cl1" in (ctx.config.get("plugins") or {}):
+            return
+        # Declined (or nothing to convert): remove a CL1 setup an earlier run
+        # recorded, so answering No turns it off. Other plugins stay enabled.
+        existing = ctx.extra.get("existing_config") or {}
+        plugins = existing.get("plugins") or {}
+        enabled = plugins.get("enabled") or []
+        if "cl1" in plugins or "cl1" in enabled:
+            target = ctx.config.setdefault("plugins", {})
+            target["cl1"] = REMOVE
+            target["enabled"] = [p for p in enabled if p != "cl1"]
 
     return Step(
         id="cl1-substrate",
@@ -618,6 +629,8 @@ def research_opt_in_step() -> Step:
     def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
         if answers.get("opt_in"):
             ctx.extra["research_opted_in"] = True
+        else:
+            ctx.config.setdefault("research_submission", {})["enabled"] = False
 
     return Step(
         id="research-opt-in",
@@ -704,6 +717,16 @@ def encryption_step() -> Step:
             line(
                 "  32 bytes) before booting, or the entity will refuse to start."
             )
+        else:
+            existing = ctx.extra.get("existing_config") or {}
+            if _existing(existing, "security.state_encryption.enabled", False):
+                line = _make_line(ctx)
+                line(
+                    "  State encryption stays on: turning it off would leave already-encrypted state unreadable, and this wizard does not decrypt it."
+                )
+                line(
+                    "  To turn it off, decrypt the state first (see docs/13-security-and-privacy.md), then set [security.state_encryption].enabled = false by hand."
+                )
 
     return Step(
         id="state-encryption",
