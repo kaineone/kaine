@@ -64,6 +64,10 @@ class UnfrozenClock:
         self._cached_at = now
         return state
 
+    def wall(self) -> float:
+        """The wall (monotonic) time this clock is measured against."""
+        return self._monotonic()
+
     def now(self) -> float:
         t = self._monotonic()
         state = self._read()

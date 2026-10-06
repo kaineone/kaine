@@ -7,7 +7,7 @@ Every elapsed-time arm of the welfare-protective monitor and the welfare observe
 - unmaintained fatigue;
 - the cold-start warm-up.
 
-A span whose freeze state cannot be read SHALL count as unfrozen, so a missing or corrupt control file never stops a welfare timer, and the unreadable state SHALL be logged and surfaced in the detector's status, never swallowed. Sample-driven evaluation SHALL be unchanged: a sample that crosses or falls below a threshold is evaluated when it arrives, frozen or not, and events delivered during a freeze SHALL count in windowed counters. Poll cadence and rate limits SHALL stay on wall time. The monitor and the observer SHALL keep running through every freeze.
+A span whose freeze state cannot be read SHALL count as unfrozen, so a missing or corrupt control file never stops a welfare timer, and the unreadable state SHALL be logged and surfaced in the protective monitor's `freeze_state_unreadable` incident-log record and in the welfare observer's evaluation-sink diagnostic, never swallowed. Sample-driven evaluation SHALL be unchanged: a sample that crosses or falls below a threshold is evaluated when it arrives, frozen or not, and events delivered during a freeze SHALL count in windowed counters. Poll cadence and rate limits SHALL stay on wall time. The monitor and the observer SHALL keep running through every freeze.
 
 #### Scenario: A freeze is not sustained distress
 - **WHEN** a distress-level sample arrives and the cycle is then frozen for 60 s with no further sample, against a 30 s duration
@@ -27,7 +27,7 @@ A span whose freeze state cannot be read SHALL count as unfrozen, so a missing o
 
 #### Scenario: A corrupt control file does not silence distress
 - **WHEN** `state/cycle/control.json` is corrupt and distress-level samples persist for 30 s
-- **THEN** the sustained-distress event is published at the threshold, and the detector's status reports the unreadable control state
+- **THEN** the sustained-distress event is published at the threshold, and the protective monitor's `freeze_state_unreadable` incident-log record and the welfare observer's evaluation-sink diagnostic report the unreadable control state
 
 #### Scenario: A long freeze does not lose a genuine crossing
 - **WHEN** the cycle stays frozen indefinitely and gray-zone events keep arriving

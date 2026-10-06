@@ -260,6 +260,22 @@ class WelfareObserver(StreamSubscriberObserver):
         except Exception:
             log.warning("welfare_observer gray-zone publish failed", exc_info=True)
 
+    async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
+        self._sustained_interoceptive_distress_count += 1
+        # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
+        # the raw soma.report prediction_error is NOT copied — only the
+        # derived seconds_sustained scalar.
+        await self._emit_gray_zone(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "gray_zone_event": "sustained_interoceptive_distress",
+                "seconds_sustained": seconds_sustained,
+                "interoceptive_distress_threshold": self._interoceptive_distress_threshold,
+                "interoceptive_distress_duration_s": self._interoceptive_distress_duration_s,
+                "sustained_interoceptive_distress_count": self._sustained_interoceptive_distress_count,
+            }
+        )
+
     # --- Stream handlers -------------------------------------------------
 
     async def _handle_soma(self, entry_id: str, event: Event) -> None:
@@ -276,11 +292,18 @@ class WelfareObserver(StreamSubscriberObserver):
             payload = event.payload or {}
             magnitude = float(payload.get("prediction_error", 0.0))
             now = self._unfrozen.now()
+            wall_now = self._unfrozen.wall()
             # Feed the shared tracker (records onset / resets on drop). The fire
             # itself is timer-driven in _check_timed_conditions so a sustained
             # episode is detected by the passage of time even with no further
             # samples — the original behavior.
-            self._interoceptive_distress.observe(magnitude, now)
+            # Pass both clocks so frozen time after the last sample is not
+            # counted, but samples that keep arriving during a freeze sustain
+            # the wall-time portion of the run.
+            if self._interoceptive_distress.observe(magnitude, now, wall_now=wall_now):
+                await self._emit_sustained_interoceptive_distress(
+                    self._interoceptive_distress.last_fire_elapsed
+                )
 
     async def _handle_hypnos(self, entry_id: str, event: Event) -> None:
         if event.type != "hypnos.sleep.completed":
@@ -388,22 +411,10 @@ class WelfareObserver(StreamSubscriberObserver):
         # (d) Sustained interoceptive distress (timer-driven via the shared
         # tracker, so an episode fires on elapsed duration even with no new
         # sample; fires once per episode).
-        since = self._interoceptive_distress.active_since
-        if since is not None and self._interoceptive_distress.check_timeout(now):
-            self._sustained_interoceptive_distress_count += 1
-            # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
-            # the raw soma.report prediction_error is NOT copied — only the
-            # derived seconds_sustained scalar.
-            await self._emit_gray_zone(
-                {
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "gray_zone_event": "sustained_interoceptive_distress",
-                    "seconds_sustained": now - since,
-                    "interoceptive_distress_threshold": self._interoceptive_distress_threshold,
-                    "interoceptive_distress_duration_s": self._interoceptive_distress_duration_s,
-                    "sustained_interoceptive_distress_count": self._sustained_interoceptive_distress_count,
-                }
-            )
+        if self._interoceptive_distress.active_since is not None:
+            seconds = self._interoceptive_distress.elapsed(now)
+            if self._interoceptive_distress.check_timeout(now):
+                await self._emit_sustained_interoceptive_distress(seconds)
 
 
 def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSink]:

@@ -236,9 +236,9 @@ async def test_monitor_same_sample_without_freeze_crosses_at_30s(bus):
     assert len(mon._fork_manager.calls) == 1
 
 @pytest.mark.asyncio
-async def test_monitor_sustained_distress_resumes_after_release(bus):
-    """High samples keep arriving through a freeze; the run keeps its
-    accumulated unfrozen duration and crosses 30 s of unfrozen time later."""
+async def test_monitor_sustained_distress_crosses_on_wall_time_while_sampling_through_freeze(bus):
+    """High samples keep arriving through a freeze, so they are evidence the
+    distress persisted: the run crosses at 30 s of wall time, frozen or not."""
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
@@ -248,7 +248,8 @@ async def test_monitor_sustained_distress_resumes_after_release(bus):
         warmup_ceiling_s=0.0,
     )
     u = _Mono(0.0)
-    mon = _make_monitor(bus, cfg, u)
+    # One clock base: wall time is what the run measures while samples arrive.
+    mon = _make_monitor(bus, cfg, u, wall=u)
     stop = asyncio.Event()
 
     await _push_soma(bus, 0.9)
@@ -256,20 +257,19 @@ async def test_monitor_sustained_distress_resumes_after_release(bus):
     u.value = 10.0
     await mon._poll_once(stop)  # 10 s unfrozen
     control_state.freeze(reason="test", source="operator")
-    for t_s in (11.0, 40.0, 70.0):  # 60 s frozen, samples still arriving
-        u.value = t_s
-        await _push_soma(bus, 0.9)
-        await mon._poll_once(stop)
+    u.value = 11.0
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)  # 11 s of wall time, sampled while frozen
     assert mon._fork_manager.calls == []
-    control_state.stand_down(source="operator")
-    u.value = 71.0
-    await mon._poll_once(stop)  # release poll adds nothing
-    u.value = 80.0
-    await mon._poll_once(stop)  # 19 s unfrozen
+    u.value = 29.0
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)  # 29 s
     assert mon._fork_manager.calls == []
-    u.value = 91.5
-    await mon._poll_once(stop)  # 30.5 s unfrozen
+    u.value = 30.5
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)  # 30.5 s of wall time: crosses while still frozen
     assert len(mon._fork_manager.calls) == 1
+    control_state.stand_down(source="operator")
 
 @pytest.mark.asyncio
 async def test_monitor_low_sample_during_freeze_resets_sustained_timer(bus):
@@ -681,3 +681,367 @@ def test_default_clocks_count_unknown_as_unfrozen(bus):
 
     watcher = InputLossWatcher(FakeBus(), ["x"], threshold_s=1.0, on_loss=_noop)
     assert watcher._unfrozen.unknown_counts_as == "unfrozen"
+
+
+# ---------------------------------------------------------------------------
+# Second-review fixes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_monitor_freeze_during_warmup_capped_by_wall_ceiling(bus):
+    """Integrator reproduction: a freeze at t=10 s during warm-up does not
+    blind the repeat arm forever; the response fires once wall time passes
+    warmup_ceiling_s, and never while warm-up still drains."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        repeat_window_s=1000.0,
+        repeat_threshold=2,
+        warmup_s=120.0,
+        warmup_ceiling_s=300.0,
+    )
+    u = _Mono(0.0)
+    wall = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u, wall)
+    stop = asyncio.Event()
+
+    await mon._poll_once(stop)  # warm-up origin stamped at wall/u 0
+    control_state.freeze(reason="test", source="operator")
+    for step in range(1, 80):  # wall advances in 5 s ticks up to 395 s
+        wall.value = step * 5.0
+        u.value = wall.value
+        if wall.value % 50.0 == 0.0:
+            await _push_gray_zone(bus, "sustained_extreme_vad")
+            await _push_gray_zone(bus, "unmaintained_fatigue")
+        await mon._poll_once(stop)
+        assert len(mon._fork_manager.calls) == 0 or wall.value >= 300.0, (
+            f"fired prematurely at wall={wall.value}"
+        )
+    assert len(mon._fork_manager.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_monitor_sustained_distress_fires_by_wall_time_while_sampling_through_freeze(bus):
+    """Samples keep arriving during a freeze, so the sustained run tracks
+    wall time and crosses at distress_duration_s of wall time."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    wall = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u, wall)
+    stop = asyncio.Event()
+
+    await _push_soma(bus, 0.9)
+    wall.value = 0.0
+    u.value = 0.0
+    await mon._poll_once(stop)  # onset
+
+    control_state.freeze(reason="test", source="operator")
+    for t_s in (5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0):
+        wall.value = t_s
+        u.value = t_s
+        await _push_soma(bus, 0.9)
+        await mon._poll_once(stop)
+        if t_s < 30.0:
+            assert mon._fork_manager.calls == []
+    assert len(mon._fork_manager.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_observer_sustained_distress_fires_by_wall_time_while_sampling_through_freeze(
+    monkeypatch,
+):
+    """The observer's interoceptive-distress arm also tracks wall time while
+    samples keep arriving during a freeze."""
+    from kaine.lifecycle.welfare_signal import SustainedThresholdTracker
+
+    u = _Mono(0.0)
+    sink = FakeSink()
+    obs = WelfareObserver(
+        FakeBus(),
+        sink,
+        maintenance_window_s=9999.0,
+        extreme_vad_threshold=0.9,
+        extreme_vad_duration_s=9999.0,
+        consolidation_window_s=9999.0,
+        replay_rate_threshold=9999,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+    )
+
+    u.value = 0.0
+    await obs._handle_soma(
+        "1-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+    )
+
+    control_state.freeze(reason="test", source="operator")
+    for t_s in (5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0):
+        u.value = t_s
+        await obs._handle_soma(
+            f"{int(t_s)}-0",
+            _event("soma", "soma.report", {"prediction_error": 0.9}),
+        )
+        await obs._tick()
+        if t_s < 30.0:
+            assert not any(
+                r.get("gray_zone_event") == "sustained_interoceptive_distress"
+                for r in sink.rows
+            )
+
+    assert any(
+        r.get("gray_zone_event") == "sustained_interoceptive_distress"
+        for r in sink.rows
+    )
+    # The tracker is the shared implementation.
+    assert isinstance(obs._interoceptive_distress, SustainedThresholdTracker)
+
+
+async def test_observer_sustained_distress_fires_once_on_dense_unfrozen_samples(monkeypatch):
+    """A sample arriving exactly at the sustain duration must emit the gray-zone
+    record, even if _tick is never called between samples."""
+    from kaine.lifecycle.welfare_signal import SustainedThresholdTracker
+
+    u = _Mono(0.0)
+    sink = FakeSink()
+    obs = WelfareObserver(
+        FakeBus(),
+        sink,
+        maintenance_window_s=9999.0,
+        extreme_vad_threshold=0.9,
+        extreme_vad_duration_s=9999.0,
+        consolidation_window_s=9999.0,
+        replay_rate_threshold=9999,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+        interoceptive_distress_threshold=0.5,
+        interoceptive_distress_duration_s=30.0,
+    )
+
+    u.value = 0.0
+    await obs._handle_soma(
+        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+    )
+    for t_s in range(1, 31):
+        u.value = float(t_s)
+        await obs._handle_soma(
+            f"{t_s}-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+        )
+        if t_s < 30:
+            assert not any(
+                r.get("gray_zone_event") == "sustained_interoceptive_distress"
+                for r in sink.rows
+            )
+
+    distress_records = [
+        r for r in sink.rows
+        if r.get("gray_zone_event") == "sustained_interoceptive_distress"
+    ]
+    assert len(distress_records) == 1
+    assert distress_records[0]["seconds_sustained"] >= 30.0
+    # The tracker is the shared implementation.
+    assert isinstance(obs._interoceptive_distress, SustainedThresholdTracker)
+
+
+def test_tracker_elapsed_formula_counts_wall_to_last_sample_then_unfrozen():
+    """A sample anchors the wall portion; only unfrozen time after the last
+    sample is counted."""
+    from kaine.lifecycle.welfare_signal import SustainedThresholdTracker
+
+    tracker = SustainedThresholdTracker(threshold=0.5, duration_s=30.0)
+    # Onset at unfrozen/wall 0; last sample before freeze at 10.
+    assert not tracker.observe(0.9, 0.0, wall_now=0.0)
+    assert not tracker.observe(0.9, 10.0, wall_now=10.0)
+
+    # No samples during a 60 s freeze: frozen time after the last sample
+    # does not count.
+    assert not tracker.check_timeout(10.0)
+    assert not tracker.check_timeout(10.0)
+
+    # After release, only unfrozen time since the last sample counts.
+    assert not tracker.check_timeout(29.9)
+    assert tracker.check_timeout(30.0)
+
+
+def test_tracker_elapsed_formula_with_samples_during_freeze():
+    """Samples arriving during a freeze advance the wall-time portion."""
+    from kaine.lifecycle.welfare_signal import SustainedThresholdTracker
+
+    tracker = SustainedThresholdTracker(threshold=0.5, duration_s=30.0)
+    assert not tracker.observe(0.9, 0.0, wall_now=0.0)
+
+    # Freeze starts; unfrozen time stays at 10, but wall time advances.
+    assert not tracker.observe(0.9, 10.0, wall_now=10.0)
+    for wall in (15.0, 20.0, 25.0):
+        assert not tracker.observe(0.9, 10.0, wall_now=wall)
+    assert tracker.observe(0.9, 10.0, wall_now=30.0)
+
+
+def test_tracker_without_wall_now_matches_single_clock_behavior():
+    """Callers that pass one clock (wall_now defaults to now) see the same
+    behavior as the original single-clock tracker."""
+    from kaine.lifecycle.welfare_signal import SustainedThresholdTracker
+
+    tracker = SustainedThresholdTracker(threshold=0.5, duration_s=30.0)
+    assert not tracker.observe(0.9, 0.0)
+    assert not tracker.observe(0.9, 15.0)
+    assert not tracker.check_timeout(29.9)
+    assert tracker.check_timeout(30.0)
+
+    # A drop below threshold resets.
+    assert not tracker.observe(0.0, 100.0)
+    assert not tracker.observe(0.9, 100.0)
+    assert not tracker.check_timeout(129.9)
+    assert tracker.check_timeout(130.0)
+
+
+@pytest.mark.asyncio
+async def test_input_loss_baseline_failure_retried_and_leftover_not_fresh():
+    """A failed baseline is retried; leftover entries are anchored, not
+    mistaken for fresh activity, and loss is reported at the threshold."""
+    class _FlakyBus:
+        def __init__(self, latest_return):
+            self._latest = latest_return
+            self._calls = 0
+
+        async def latest(self, stream: str):
+            self._calls += 1
+            if self._calls <= 1:
+                raise RuntimeError("baseline boom")
+            return self._latest
+
+    u = _Mono(0.0)
+    calls: list[None] = []
+    watcher = InputLossWatcher(
+        _FlakyBus(("1-0", None)),
+        ["topos.out"],
+        threshold_s=1.0,
+        poll_s=0.01,
+        on_loss=_record_into(calls),
+        unfrozen_clock=_unfrozen_clock(u),
+    )
+    await watcher._baseline()  # fails
+    assert "topos.out" not in watcher._baselined
+
+    # First poll retries the baseline; the leftover entry is anchored.
+    u.value = 0.2
+    assert not await watcher._poll_once(0)
+    assert "topos.out" in watcher._baselined
+    assert not calls
+
+    # Silence grows in unfrozen time; crosses the threshold exactly.
+    u.value = 0.9
+    assert not await watcher._poll_once(0)
+    u.value = 1.5
+    assert await watcher._poll_once(0)
+    assert len(calls) == 1
+
+
+def test_cycle_wiring_uses_one_shared_unfrozen_clock():
+    """The cycle boot creates a single `UnfrozenClock` and passes it to both
+    the welfare-protective monitor and the input-loss watcher."""
+    import ast
+    import inspect
+
+    from kaine.cycle import __main__ as cycle_main
+
+    source = inspect.getsource(cycle_main)
+    tree = ast.parse(source)
+
+    assigns = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Attribute) and target.attr == "unfrozen_clock"
+            for target in node.targets
+        )
+    ]
+    assert len(assigns) == 1, "expected exactly one ctx.unfrozen_clock assignment"
+
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+    monitor_call = next(
+        (c for c in calls if isinstance(c.func, ast.Name) and c.func.id == "WelfareProtectiveMonitor"),
+        None,
+    )
+    watcher_call = next(
+        (c for c in calls if isinstance(c.func, ast.Name) and c.func.id == "InputLossWatcher"),
+        None,
+    )
+    assert monitor_call is not None
+    assert watcher_call is not None
+
+    def uses_shared_clock(call):
+        for kw in call.keywords:
+            if kw.arg == "unfrozen_clock":
+                return (
+                    isinstance(kw.value, ast.Attribute)
+                    and kw.value.attr == "unfrozen_clock"
+                )
+        return False
+
+    assert uses_shared_clock(monitor_call)
+    assert uses_shared_clock(watcher_call)
+
+
+@pytest.mark.asyncio
+async def test_monitor_zero_ceiling_means_the_soma_flag_never_extends_warmup(bus):
+    """warmup_ceiling_s = 0 disables the Soma warm-up extension: a flag that
+    stays set (stuck) must not hold the gate open, so sustained distress still
+    crosses at its duration."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u, wall=u)
+    stop = asyncio.Event()
+    for t_s in (0.0, 10.0, 20.0, 30.5):
+        u.value = t_s
+        await _push_soma(bus, 0.9, warmup_active=True)
+        await mon._poll_once(stop)
+    assert len(mon._fork_manager.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_monitor_freeze_cannot_stretch_the_warmup_floor_past_its_wall_bound(bus):
+    """With no Soma extension (ceiling 0), a freeze that starts inside the
+    warm-up floor ends warm-up at warmup_s of wall time, not never."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=120.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u, wall=u)
+    stop = asyncio.Event()
+    await mon._poll_once(stop)  # stamp the start at 0
+    u.value = 10.0
+    control_state.freeze(reason="test", source="operator")
+    t = 10.0
+    while t <= 200.0:
+        u.value = t
+        await _push_soma(bus, 0.9)
+        await mon._poll_once(stop)
+        if t < 120.0:
+            assert mon._fork_manager.calls == [], t
+        t += 5.0
+    control_state.stand_down(source="operator")
+    # Warm-up ended at 120 s of wall time; sustained sampled distress then
+    # crossed 30 s later, while still frozen.
+    assert len(mon._fork_manager.calls) == 1

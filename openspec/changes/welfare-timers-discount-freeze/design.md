@@ -10,7 +10,7 @@
   3. records the state.
 
   A span that starts or ends frozen does not count.
-- **An unreadable control state is never swallowed.** The first unknown observation in an episode logs one warning, and the episode ends at the next good read. `diagnostic()` reports the number of unknown episodes and whether the clock is in one now, and the protective monitor and the observer include it in their status output.
+- **An unreadable control state is never swallowed.** The first unknown observation in an episode logs one warning, and the episode ends at the next good read. `diagnostic()` reports the number of unknown episodes and whether the clock is in one now; the protective monitor surfaces it as a `freeze_state_unreadable` incident-log record, and the observer surfaces it as an evaluation-sink diagnostic. The observer exposes `freeze_clock_diagnostic` for tests.
 - The clock is background-free: it advances only when called. Callers already call it on every poll, at least once per second, so a release is attributed to within one poll interval. For welfare that delays a sustained verdict by at most one poll after a freeze ends (about 1 s against a 30 s threshold), and never fires one early.
 - `frozen() -> bool | None` exposes the last observation for callers that need it (input loss).
 - Reading the control file is cheap (a small JSON file). The clock caches the read for `poll_s`, so a burst of calls within one poll costs one read.
@@ -28,6 +28,8 @@ Why a new primitive, not `LivedTimeAccumulator` directly. `LivedTimeAccumulator`
 | Observer sustained extreme VAD | `time.monotonic()` | `UnfrozenClock.now()` |
 | Observer unmaintained fatigue | `time.monotonic()` | `UnfrozenClock.now()` |
 | `InputLossWatcher` staleness | wall | unfrozen time |
+
+**Sustained distress is anchored to the last sample.** A sample is evidence that the high state persisted, so the elapsed duration of an episode is the wall time from its onset to the last at/above-threshold sample, plus only the unfrozen time since that last sample. While samples keep arriving (even during a freeze), the elapsed duration tracks wall time; once they stop, frozen time stops counting. This is implemented in the shared `SustainedThresholdTracker`.
 
 The protective monitor takes **two** clocks after this change:
 - `clock`, still wall, for poll cadence and rate limits;

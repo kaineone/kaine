@@ -279,6 +279,7 @@ class InputLossWatcher:
         self._unfrozen = unfrozen_clock or UnfrozenClock.for_welfare()
         self._last_id: dict[str, str | None] = {}
         self._changed_at: dict[str, float] = {}
+        self._baselined: set[str] = set()
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """Poll stream freshness until ``stop_event`` is set.
@@ -306,15 +307,26 @@ class InputLossWatcher:
         """
         u = self._unfrozen.now()
         for stream in self._streams:
-            try:
-                latest = await self._bus.latest(stream)
-            except Exception:
-                log.warning(
-                    "InputLossWatcher: bus.latest(%r) failed at start", stream, exc_info=True
-                )
-                latest = None
-            self._last_id[stream] = latest[0] if latest is not None else None
-            self._changed_at[stream] = u
+            await self._baseline_stream(stream, u)
+
+    async def _baseline_stream(self, stream: str, u: float) -> bool:
+        """Try to anchor one stream. Return True on success.
+
+        On failure the stream stays unbaselined and will be retried at the
+        start of each poll, so leftover entries are not mistaken for fresh
+        activity.
+        """
+        try:
+            latest = await self._bus.latest(stream)
+        except Exception:
+            log.warning(
+                "InputLossWatcher: bus.latest(%r) failed at start", stream, exc_info=True
+            )
+            return False
+        self._last_id[stream] = latest[0] if latest is not None else None
+        self._changed_at[stream] = u
+        self._baselined.add(stream)
+        return True
 
     async def _poll_once(self, now_ms: int) -> bool:
         """Evaluate freshness once and notify on a transition to lost.
@@ -330,6 +342,13 @@ class InputLossWatcher:
         bus_error = False
 
         for stream in self._streams:
+            # Retry any stream whose baseline failed; it is not "fresh" until a
+            # baseline succeeds and a newer entry arrives.
+            if stream not in self._baselined:
+                if not await self._baseline_stream(stream, u):
+                    bus_error = True
+                    continue
+
             try:
                 latest = await self._bus.latest(stream)
             except Exception:
