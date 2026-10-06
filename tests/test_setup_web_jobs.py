@@ -19,10 +19,20 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from kaine.setup.web import guard
 from kaine.setup.web.job_specs import build_job_specs
 from kaine.setup.web.jobs import JobRunner, JobSpec, _Job
 from kaine.setup.wizard import ACK_PHRASE
 from tests.test_setup_web import _defaults_from_form, _mk_app
+
+
+@pytest.fixture(autouse=True)
+def _isolated_guard(monkeypatch):
+    monkeypatch.setattr(guard, "load_bus_config", lambda *a, **k: object())
+    monkeypatch.setattr(guard, "cycle_on_bus", lambda *a, **k: (False, "stub"))
+    monkeypatch.setattr(
+        guard, "cycle_process_details", lambda *a, **k: (False, None, None)
+    )
 
 
 def _wait_for_job(runner: JobRunner, name: str, timeout: float = 5.0) -> dict[str, Any]:
