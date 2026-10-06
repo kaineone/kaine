@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import kaine.storage
 from kaine import net
 from kaine.setup.dependencies import DEPENDENCIES
 from kaine.setup.web.jobs import JobSpec
@@ -59,6 +60,7 @@ def build_job_specs(
                 name="extras",
                 title="Install optional extras",
                 argv=argv,
+                exclusive=True,
                 details=" ".join(argv),
             )
         )
@@ -80,6 +82,7 @@ def build_job_specs(
                 name="organ_download",
                 title="Download the language organ",
                 argv=argv,
+                timeout_s=6 * 3600,
                 details=" ".join(argv),
             )
         )
@@ -100,14 +103,17 @@ def build_job_specs(
         )
 
     try:
-        from kaine.nexus.config import NexusConfigError, load_nexus_config
+        from kaine.nexus.config import load_nexus_config
 
-        nexus_cfg = load_nexus_config(repo_root / "config" / "kaine.toml")
+        nexus_cfg = load_nexus_config(
+            shipped_config_path, operator_path=operator_path
+        )
         nexus_port = nexus_cfg.port
-    except NexusConfigError:
-        # Nexus configuration is unsafe/invalid; do not offer the start job.
+    except Exception:
+        # Nexus configuration is unsafe/invalid/malformed; do not offer the start job.
         return specs
 
+    nexus_log = Path(kaine.storage.resolve("state/logs/nexus.log"))
     specs.append(
         JobSpec(
             name="nexus",
@@ -115,7 +121,8 @@ def build_job_specs(
             argv=(sys.executable, "-m", "kaine.nexus"),
             detach=True,
             ready_probe=lambda port=nexus_port: net.port_listening(port),
-            details=f"{sys.executable} -m kaine.nexus (port {nexus_port})",
+            log_path=nexus_log,
+            details=f"{sys.executable} -m kaine.nexus (port {nexus_port}; log {nexus_log})",
         )
     )
 

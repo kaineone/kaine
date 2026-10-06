@@ -27,9 +27,11 @@ def form_value(form: Any, field: Field) -> str:
     ``form`` is either a Starlette :class:`FormData` or the dict produced by
     ``_read_form``.  A bool is true only when the LAST submitted value,
     lower-cased, is one of ``true``, ``on``, ``1`` or ``yes``; an explicit
-    ``false`` (or a hidden companion) is false.  An absent field falls
-    back to the field's own default for every field kind.  Multi-choice
-    checkboxes are joined with commas.
+    ``false`` (or a hidden companion) is false.  An absent field falls back
+    to the field's own default; for multi-choice checkboxes a hidden companion
+    input with an empty value is included so unticking every box still submits
+    the field, the empty value is ignored, and only a truly absent field falls
+    back to the default.  Multi-choice checkboxes are joined with commas.
     """
     values = _form_values(form, field.name)
     if not values:
@@ -50,7 +52,7 @@ def form_value(form: Any, field: Field) -> str:
         return "false"
 
     if field.kind == "multichoice":
-        return ",".join(values)
+        return ",".join(v for v in values if v != "")
 
     return last
 
@@ -63,6 +65,15 @@ def validate_fields(fields, form) -> tuple[dict[str, Any], dict[str, str]]:
     answers: dict[str, Any] = {}
     errors: dict[str, str] = {}
     for fld in fields:
+        if fld.kind == "multichoice":
+            submitted = _form_values(form, fld.name)
+            if submitted and all(v.strip() == "" for v in submitted):
+                # Every box unticked: only the hidden companion arrived. An
+                # empty answer must never fall back to the default, which for
+                # hardware consent is every device.
+                errors[fld.name] = "at least one choice is required"
+                answers[fld.name] = []
+                continue
         value, err = parse_answer(fld, form_value(form, fld))
         if err:
             errors[fld.name] = err
