@@ -61,7 +61,7 @@ from kaine.cycle.ignition_log import (
 )
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
-from kaine.cycle.utterance_outcome import UtteranceOutcomeObserver
+from kaine.cycle.utterance_outcome import start_utterance_outcome_observer
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.defaults import (
     lingua_section_api_key,
@@ -2317,7 +2317,7 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         stop_event=ctx.stop_event,
     )
     if (ctx.kaine_config.get("modules") or {}).get("lingua"):
-        ctx.utterance_outcome = UtteranceOutcomeObserver(
+        ctx.utterance_outcome = await start_utterance_outcome_observer(
             ctx.bus,
             path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
             reply_window_s=float(
@@ -2326,7 +2326,6 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
                 )
             ),
         )
-        await ctx.utterance_outcome.start()
 
 
 _BOOT_PHASES = (

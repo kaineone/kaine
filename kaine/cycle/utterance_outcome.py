@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +43,30 @@ class _OpenRecord:
     baseline_social_drive: Optional[float]
     latest_social_drive: Optional[float]
     max_empatheia_deviation: Optional[float]
+
+
+async def start_utterance_outcome_observer(
+    bus,
+    *,
+    path: Path,
+    **kwargs: Any,
+) -> UtteranceOutcomeObserver | None:
+    """Construct and start the observer, returning None if it cannot boot.
+
+    This helper is used by the cycle boot so that a failure to start the
+    content-free observer never aborts launch.
+    """
+    try:
+        observer = UtteranceOutcomeObserver(bus, path=path, **kwargs)
+        await observer.start()
+    except Exception as exc:
+        log.warning(
+            "utterance-outcome observer disabled: could not start (%s)",
+            exc,
+            exc_info=True,
+        )
+        return None
+    return observer
 
 
 class UtteranceOutcomeObserver:
@@ -115,7 +140,7 @@ class UtteranceOutcomeObserver:
                 break
 
     async def _poll(self) -> None:
-        merged: list[tuple[str, Event]] = []
+        merged: list[tuple[str, str, Event]] = []
         for stream in STREAMS:
             try:
                 entries, last_scanned = await self._bus.read_entries(
@@ -130,32 +155,48 @@ class UtteranceOutcomeObserver:
             if last_scanned is not None:
                 self._cursors[stream] = last_scanned
             for entry_id, event in entries:
-                merged.append((stream, event))
-        merged.sort(key=lambda se: se[1].timestamp.timestamp())
-        for stream, event in merged:
-            self._handle_event(stream, event)
-        self._check_expiry()
+                merged.append((stream, entry_id, event))
+        merged.sort(key=lambda se: se[2].timestamp.timestamp())
+        for stream, entry_id, event in merged:
+            try:
+                await self._handle_event(stream, event)
+            except Exception:
+                log.debug(
+                    "failed to handle %s event %s; skipping",
+                    stream,
+                    entry_id,
+                    exc_info=True,
+                )
+        await self._check_expiry()
 
-    def _handle_event(self, stream: str, event: Event) -> None:
+    async def _handle_event(self, stream: str, event: Event) -> None:
         ts = event.timestamp.timestamp()
         if stream == LINGUA_EXTERNAL and event.type == "external_speech":
             record_id = event.payload.get("record_id")
-            if isinstance(record_id, str) and record_id:
-                self._open_record_if_new(record_id, ts)
+            if (
+                isinstance(record_id, str)
+                and re.fullmatch(r"[0-9a-f]{32}", record_id) is not None
+            ):
+                await self._open_record_if_new(record_id, ts)
+            else:
+                log.debug(
+                    "ignoring external_speech with invalid record_id %r",
+                    record_id,
+                )
         elif stream == AUDITION_OUT and event.type == "audition.transcription":
-            self._maybe_reply(event, ts)
+            await self._maybe_reply(event, ts)
         elif stream == EMPATHEIA_OUT and event.type == "empatheia.social_error":
-            self._maybe_empatheia(event, ts)
+            await self._maybe_empatheia(event, ts)
         elif stream == THYMOS_OUT and event.type == "thymos.state":
-            self._maybe_thymos(event, ts)
+            await self._maybe_thymos(event, ts)
 
-    def _open_record_if_new(self, record_id: str, ts: float) -> None:
+    async def _open_record_if_new(self, record_id: str, ts: float) -> None:
         if self._open_record is not None:
             # The next utterance preempts the open one only if it came inside
             # that one's window; otherwise the window had already run out
             # unanswered (a batch can hold both).
             expired = ts - self._open_record.start_ts > self._reply_window_s
-            self._close_open(
+            await self._close_open(
                 preempted=not expired, replied=False, reply_latency_s=None
             )
         self._open_record = _OpenRecord(
@@ -166,7 +207,7 @@ class UtteranceOutcomeObserver:
             max_empatheia_deviation=None,
         )
 
-    def _maybe_reply(self, event: Event, ts: float) -> None:
+    async def _maybe_reply(self, event: Event, ts: float) -> None:
         if self._open_record is None:
             return
         payload = event.payload
@@ -179,9 +220,11 @@ class UtteranceOutcomeObserver:
         if ts - self._open_record.start_ts > self._reply_window_s:
             return
         latency = max(0.0, ts - self._open_record.start_ts)
-        self._close_open(preempted=False, replied=True, reply_latency_s=latency)
+        await self._close_open(
+            preempted=False, replied=True, reply_latency_s=latency
+        )
 
-    def _maybe_empatheia(self, event: Event, ts: float) -> None:
+    async def _maybe_empatheia(self, event: Event, ts: float) -> None:
         if self._open_record is None:
             return
         magnitude = event.payload.get("deviation_magnitude")
@@ -193,7 +236,7 @@ class UtteranceOutcomeObserver:
         if current is None or magnitude > current:
             self._open_record.max_empatheia_deviation = float(magnitude)
 
-    def _maybe_thymos(self, event: Event, ts: float) -> None:
+    async def _maybe_thymos(self, event: Event, ts: float) -> None:
         drives = event.payload.get("drives") or {}
         value = drives.get("social_drive")
         if not isinstance(value, (int, float)) or not math.isfinite(value):
@@ -205,13 +248,15 @@ class UtteranceOutcomeObserver:
             return
         self._open_record.latest_social_drive = float(value)
 
-    def _check_expiry(self) -> None:
+    async def _check_expiry(self) -> None:
         if self._open_record is None:
             return
         if self._now() - self._open_record.start_ts > self._reply_window_s:
-            self._close_open(preempted=False, replied=False, reply_latency_s=None)
+            await self._close_open(
+                preempted=False, replied=False, reply_latency_s=None
+            )
 
-    def _close_open(
+    async def _close_open(
         self,
         *,
         preempted: bool,
@@ -235,10 +280,13 @@ class UtteranceOutcomeObserver:
             "social_drive_delta": delta,
             "preempted": preempted,
         }
-        self._write_record(record)
+        await self._write_record(record)
         self._open_record = None
 
-    def _write_record(self, record: dict[str, Any]) -> None:
+    async def _write_record(self, record: dict[str, Any]) -> None:
+        await asyncio.to_thread(self._write_record_sync, record)
+
+    def _write_record_sync(self, record: dict[str, Any]) -> None:
         line = json.dumps(record, sort_keys=True) + "\n"
         try:
             self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)

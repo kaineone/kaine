@@ -11,7 +11,10 @@ import pytest
 from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.cycle.utterance_outcome import UtteranceOutcomeObserver
+from kaine.cycle.utterance_outcome import (
+    UtteranceOutcomeObserver,
+    start_utterance_outcome_observer,
+)
 
 EXPECTED_KEYS = {
     "record_id",
@@ -21,6 +24,9 @@ EXPECTED_KEYS = {
     "social_drive_delta",
     "preempted",
 }
+
+R1 = "a" * 32
+R2 = "b" * 32
 
 
 @pytest.fixture
@@ -77,7 +83,7 @@ async def test_answered_utterance(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         await bus.publish(
             Event(
                 source="audition",
@@ -94,7 +100,7 @@ async def test_answered_utterance(bus, tmp_path):
     assert len(records) == 1
     rec = records[0]
     assert set(rec.keys()) == EXPECTED_KEYS
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["replied"] is True
     assert rec["preempted"] is False
     assert rec["reply_latency_s"] == pytest.approx(1.5, abs=0.05)
@@ -114,7 +120,7 @@ async def test_unanswered(bus, tmp_path):
     )
     await observer.start()
     try:
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         clock.t = start_epoch + 0.5
         records = await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
     finally:
@@ -123,7 +129,7 @@ async def test_unanswered(bus, tmp_path):
     assert len(records) == 1
     rec = records[0]
     assert set(rec.keys()) == EXPECTED_KEYS
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["replied"] is False
     assert rec["reply_latency_s"] is None
     assert rec["preempted"] is False
@@ -135,8 +141,8 @@ async def test_preempted(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
-        await _xadd_external_speech(bus, "r2", t0 + timedelta(seconds=0.5))
+        await _xadd_external_speech(bus, R1, t0)
+        await _xadd_external_speech(bus, R2, t0 + timedelta(seconds=0.5))
         records = await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
         assert observer.pending_count == 1
     finally:
@@ -144,7 +150,7 @@ async def test_preempted(bus, tmp_path):
 
     assert len(records) == 1
     rec = records[0]
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["preempted"] is True
     assert rec["replied"] is False
     assert rec["reply_latency_s"] is None
@@ -158,7 +164,7 @@ async def test_non_operator_speech_is_not_reply(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         await bus.publish(
             Event(
                 source="audition",
@@ -182,7 +188,7 @@ async def test_non_operator_speech_is_not_reply(bus, tmp_path):
         await observer.stop()
 
     rec = records[0]
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["replied"] is False
     assert rec["preempted"] is False
 
@@ -202,7 +208,7 @@ async def test_empatheia_and_social_drive(bus, tmp_path):
                 timestamp=t0 - timedelta(seconds=1),
             )
         )
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         await bus.publish(
             Event(
                 source="thymos",
@@ -255,7 +261,7 @@ async def test_no_text_in_file(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         secret = "secret transcript content"
         await bus.publish(
             Event(
@@ -274,7 +280,7 @@ async def test_no_text_in_file(bus, tmp_path):
     assert set(records[0].keys()) == EXPECTED_KEYS
     content = path.read_text()
     assert secret not in content
-    assert '"record_id": "r1"' in content
+    assert f'"record_id": "{R1}"' in content
 
 
 async def test_shutdown_drops_open_records(bus, tmp_path, caplog):
@@ -286,7 +292,7 @@ async def test_shutdown_drops_open_records(bus, tmp_path, caplog):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         await asyncio.wait_for(_wait_for_open(observer), timeout=1)
     finally:
         await observer.stop()
@@ -301,7 +307,7 @@ async def test_shutdown_drops_open_records(bus, tmp_path, caplog):
 async def test_cursors_start_at_tail(bus, tmp_path):
     path = tmp_path / "outcomes.jsonl"
     t0 = datetime.now(timezone.utc)
-    await _xadd_external_speech(bus, "r1", t0)
+    await _xadd_external_speech(bus, R1, t0)
     observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=0.01)
     await observer.start()
     try:
@@ -319,7 +325,7 @@ async def test_poison_entry_does_not_stall(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         # More undecodable entries than one read returns (64): a cursor that
         # only advanced past decoded entries would re-read them forever.
         for _ in range(70):
@@ -338,7 +344,7 @@ async def test_poison_entry_does_not_stall(bus, tmp_path):
         await observer.stop()
 
     rec = records[0]
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["replied"] is True
 
 
@@ -353,14 +359,14 @@ async def test_next_utterance_after_the_window_is_not_a_preemption(bus, tmp_path
     )
     await observer.start()
     try:
-        await _xadd_external_speech(bus, "r1", t0)
-        await _xadd_external_speech(bus, "r2", t0 + timedelta(seconds=5))
+        await _xadd_external_speech(bus, R1, t0)
+        await _xadd_external_speech(bus, R2, t0 + timedelta(seconds=5))
         records = await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
     finally:
         await observer.stop()
 
     rec = records[0]
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["preempted"] is False
     assert rec["replied"] is False
 
@@ -373,10 +379,10 @@ async def test_events_in_one_poll_are_handled_in_time_order(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
+        await _xadd_external_speech(bus, R1, t0)
         await asyncio.wait_for(_wait_for_open(observer), timeout=2)
         # Both written before the next poll; lingua.external is read first.
-        await _xadd_external_speech(bus, "r2", t0 + timedelta(seconds=2))
+        await _xadd_external_speech(bus, R2, t0 + timedelta(seconds=2))
         await bus.publish(
             Event(
                 source="audition",
@@ -391,7 +397,7 @@ async def test_events_in_one_poll_are_handled_in_time_order(bus, tmp_path):
         await observer.stop()
 
     rec = records[0]
-    assert rec["record_id"] == "r1"
+    assert rec["record_id"] == R1
     assert rec["replied"] is True
     assert rec["preempted"] is False
 
@@ -409,9 +415,126 @@ async def test_existing_loose_file_is_tightened(bus, tmp_path):
     await observer.start()
     try:
         t0 = datetime.now(timezone.utc)
-        await _xadd_external_speech(bus, "r1", t0)
-        await _xadd_external_speech(bus, "r2", t0 + timedelta(seconds=0.5))
+        await _xadd_external_speech(bus, R1, t0)
+        await _xadd_external_speech(bus, R2, t0 + timedelta(seconds=0.5))
         await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
     finally:
         await observer.stop()
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+async def test_start_utterance_outcome_observer_disabled_on_error(tmp_path, caplog):
+    caplog.set_level(logging.WARNING)
+
+    class BrokenBus:
+        async def last_entry_id(self, stream):
+            raise RuntimeError("redis down")
+
+    path = tmp_path / "outcomes.jsonl"
+    result = await start_utterance_outcome_observer(
+        BrokenBus(), path=path, poll_interval_s=0.01
+    )
+    assert result is None
+    assert any(
+        "utterance-outcome observer disabled: could not start" in rec.message
+        for rec in caplog.records
+    )
+
+
+async def test_malformed_event_in_poll_does_not_drop_reply(bus, tmp_path, caplog):
+    """A malformed thymos.state event in the same poll must not prevent a later
+    operator reply from being recorded."""
+    caplog.set_level(logging.DEBUG)
+    path = tmp_path / "outcomes.jsonl"
+    observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=1.0)
+    await observer.start()
+    try:
+        t0 = datetime.now(timezone.utc)
+        await _xadd_external_speech(bus, R1, t0)
+        await _wait_for_open(observer)
+
+        # Both events arrive before the next poll; the malformed thymos event
+        # must not abort handling of the reply.
+        await bus.publish(
+            Event(
+                source="thymos",
+                type="thymos.state",
+                payload={"drives": "oops"},
+                salience=0.5,
+                timestamp=t0 + timedelta(seconds=0.1),
+            )
+        )
+        await bus.publish(
+            Event(
+                source="audition",
+                type="audition.transcription",
+                payload={"source_label": "live_mic", "text": "hello"},
+                salience=0.5,
+                timestamp=t0 + timedelta(seconds=0.2),
+            )
+        )
+        records = await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
+    finally:
+        await observer.stop()
+
+    rec = records[0]
+    assert rec["record_id"] == R1
+    assert rec["replied"] is True
+    assert any(
+        "failed to handle thymos.out" in rec.message for rec in caplog.records
+    )
+
+
+async def test_invalid_record_id_is_ignored(bus, tmp_path, caplog):
+    caplog.set_level(logging.DEBUG)
+    path = tmp_path / "outcomes.jsonl"
+    observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=0.01)
+    await observer.start()
+    try:
+        t0 = datetime.now(timezone.utc)
+        await _xadd_external_speech(bus, "../../x", t0)
+        await asyncio.sleep(0.2)
+    finally:
+        await observer.stop()
+
+    assert _read_records(path) == []
+    assert not path.exists()
+    assert any("invalid record_id" in rec.message for rec in caplog.records)
+
+
+async def test_write_record_runs_off_event_loop(bus, tmp_path, monkeypatch):
+    import kaine.cycle.utterance_outcome as uo
+
+    real_to_thread = uo.asyncio.to_thread
+    calls = []
+
+    async def fake_to_thread(func, *args, **kwargs):
+        calls.append((func.__name__, args, kwargs))
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(uo.asyncio, "to_thread", fake_to_thread)
+
+    path = tmp_path / "outcomes.jsonl"
+    observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=0.01)
+    await observer.start()
+    try:
+        t0 = datetime.now(timezone.utc)
+        await _xadd_external_speech(bus, R1, t0)
+        await bus.publish(
+            Event(
+                source="audition",
+                type="audition.transcription",
+                payload={"source_label": "live_mic", "text": "hello"},
+                salience=0.5,
+                timestamp=t0 + timedelta(seconds=0.1),
+            )
+        )
+        records = await asyncio.wait_for(_wait_for_records(path, 1), timeout=2)
+    finally:
+        await observer.stop()
+
+    assert len(records) == 1
+    assert any(
+        call[0] == "_write_record_sync" and call[1][0]["record_id"] == R1
+        for call in calls
+    )
