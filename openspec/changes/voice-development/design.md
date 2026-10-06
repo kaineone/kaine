@@ -166,6 +166,7 @@ The external trainer:
   - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the being's voice.
   - When it is named, it is loaded as a `PeftModel` twice: as adapter `train` (trainable) and as adapter `reference`. Training passes `model_adapter_name="train"` and `ref_adapter_name="reference"` to `DPOConfig`.
   - When it is null, a fresh LoRA is trained and the reference is the base with the adapter disabled.
+  - The kaine side copies the being's current accepted adapter (the adapter store's `current` link) into the job directory as `previous_adapter/` and writes the relative path. The script resolves a relative path against the job directory. Every backend then sees the same layout, including the job-queue trainer container, which cannot see host paths. A `current` link that exists but cannot be resolved or copied refuses the job.
   - The capability "before" score is taken with the previous adapter loaded, so it measures the being's current voice, not the base.
 - **The system prompt store.**
   - Lingua writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
@@ -182,3 +183,13 @@ The external trainer:
   - D6 and D14 therefore hold for every backend.
 - **Both vetoes are unchanged.**
 - **Validation.** Tests exercise the dataset builder and the adapter loader without a GPU. One real bf16 step runs in the trainer environment on the 12 GB card, under the GPU lock and announced first.
+
+### D15. One training core (task 0.6; integrator decision, 2026-10-05)
+
+- Every trainer backend runs `scripts/hypnos_external_train.py`:
+  - `subprocess` runs it in the operator's trainer interpreter;
+  - `job_queue` runs it in the trainer service;
+  - `in_process` loads it by path and calls its entry point in this interpreter, in a worker thread, with the same job spec and the same `result.json` parsing as `subprocess`.
+- `UnslothDPOTrainer`, the in-process copy of the training logic, is retired. Its welfare tests (the abliteration veto and the capability-loss veto) move onto the script's gate functions.
+- `in_process` with voice alignment enabled and operator-approved fails closed at boot when this interpreter cannot import the training dependencies (unsloth, trl, peft, datasets). The error names the reason and the working backends, `subprocess` and `job_queue`. It never trains another way.
+- The backend and hot-swap pairing rules from `voice-alignment-backend-coherence` are unchanged: `organ_adapter` still needs `job_queue`.
