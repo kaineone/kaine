@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 import os
 import socket
 import time
@@ -23,6 +24,7 @@ from fastapi.responses import (
     HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
+    StreamingResponse,
 )
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -37,8 +39,9 @@ from kaine.setup.steps import (
     StepContext,
     owned_changes,
 )
-from kaine.setup.web import guard, session
+from kaine.setup.web import guard, job_specs, session
 from kaine.setup.web.driver import validate_fields
+from kaine.setup.web.jobs import JobRunner
 from kaine.setup.wizard import ACK_PHRASE
 from kaine.setup.wizard_steps import ack_step, orientation_step, setup_steps
 
@@ -111,6 +114,7 @@ class SetupState:
     recommend_tier_fn: Callable[[], Any] | None = None
     device_consumers_fn: Callable[[], list[dict]] | None = None
     services_up_fn: Callable[[], dict[str, bool]] | None = None
+    shipped_config_path: Path | None = None
 
 
 class _NoCacheMiddleware(BaseHTTPMiddleware):
@@ -453,10 +457,16 @@ def create_setup_app(
         recommend_tier_fn=recommend_tier_fn,
         device_consumers_fn=device_consumers_fn,
         services_up_fn=services_up_fn,
+        shipped_config_path=shipped_config_path,
     )
+    repo_root = Path(__file__).resolve().parents[3]
+    app.state.repo_root = repo_root
+    app.state.shipped_config_path = shipped_config_path
     app.state.last_activity = store.now()
     app.state.finish_shutdown = False
     app.state.activity_hold = 0
+
+    app.state.runner = JobRunner(repo_root=repo_root, hold=app.state)
 
     # Middleware order (innermost first): session, no-cache, host/origin.
     app.add_middleware(_SessionMiddleware)
@@ -693,8 +703,121 @@ def create_setup_app(
         tmp_path.write_text(tomlwriter.dumps(merged))
         os.replace(tmp_path, state.operator_path)
 
+        sess["saved"] = True
+        return RedirectResponse(request.url_for("jobs"), status_code=303)
+
+    @app.get("/jobs", response_class=HTMLResponse, name="jobs")
+    async def jobs(request: Request):
+        state = request.app.state.setup
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        specs = job_specs.build_job_specs(
+            sess["config"],
+            state.shipped,
+            repo_root=request.app.state.repo_root,
+            shipped_config_path=state.shipped_config_path,
+            operator_path=state.operator_path,
+        )
+        runner = request.app.state.runner
+        jobs_info = []
+        for spec in specs:
+            job_id = runner.job_id_for_name(spec.name)
+            st = runner.status(job_id) if job_id is not None else None
+            jobs_info.append({"spec": spec, "job_id": job_id, "status": st})
+
+        return templates.TemplateResponse(
+            request,
+            "jobs.html",
+            {"jobs": jobs_info},
+        )
+
+    @app.post("/jobs/{name}/start", name="job_start")
+    async def job_start(request: Request, name: str):
+        state = request.app.state.setup
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        specs = {
+            s.name: s
+            for s in job_specs.build_job_specs(
+                sess["config"],
+                state.shipped,
+                repo_root=request.app.state.repo_root,
+                shipped_config_path=state.shipped_config_path,
+                operator_path=state.operator_path,
+            )
+        }
+        if name not in specs:
+            raise HTTPException(status_code=404, detail="unknown job")
+
+        try:
+            job_id = await request.app.state.runner.start(name, specs[name])
+        except RuntimeError as exc:
+            return PlainTextResponse(
+                str(exc),
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        sess.setdefault("job_ids", []).append(job_id)
+        return RedirectResponse(request.url_for("jobs"), status_code=303)
+
+    @app.get("/jobs/{job_id}/events")
+    async def job_events(request: Request, job_id: str):
+        runner = request.app.state.runner
+        if job_id not in runner:
+            raise HTTPException(status_code=404)
+
+        sess = request.state.session
+        if job_id not in sess.setdefault("job_ids", []):
+            raise HTTPException(status_code=404)
+
+        async def stream():
+            async for item in runner.events(job_id):
+                if isinstance(item, str):
+                    yield f"data: {item}\n\n"
+                else:
+                    payload = json.dumps(item, separators=(",", ":"))
+                    yield f"event: done\ndata: {payload}\n\n"
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/finish", response_class=HTMLResponse, name="finish")
+    async def finish(request: Request):
+        runner = request.app.state.runner
+        sess = request.state.session
+        for job_id in sess.setdefault("job_ids", []):
+            if runner.status(job_id)["status"] == "running":
+                return PlainTextResponse(
+                    "a job is still running; wait for it to finish",
+                    status_code=409,
+                    headers={"Cache-Control": "no-store"},
+                )
+
         request.app.state.finish_shutdown = True
-        return RedirectResponse(request.url_for("done"), status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "done.html",
+            {
+                "abort": False,
+                "message": "Setup finished; you can close this window.",
+            },
+        )
 
     @app.get("/done", response_class=HTMLResponse, name="done")
     async def done(request: Request):

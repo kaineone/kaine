@@ -37,6 +37,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -320,3 +321,87 @@ def write_revision_state(
         return str(target)
     except OSError:
         return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for the consented organ download step.
+
+    Loads the merged operator configuration, plans the download, runs it with
+    explicit consent, prints one line per artifact, records revisions for
+    provenance exactly as the terminal path does, and exits non-zero if any
+    artifact failed.  Never prints a token.
+    """
+    import argparse
+    from pathlib import Path
+
+    if argv is None:
+        argv = sys.argv[1:]
+
+    parser = argparse.ArgumentParser(prog="python -m kaine.setup.organ")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    download_p = subparsers.add_parser("download")
+    download_p.add_argument("--yes", action="store_true")
+    download_p.add_argument("--config", type=Path, default=None)
+    download_p.add_argument("--operator-config", type=Path, default=None)
+
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+
+    if args.command != "download":
+        return 2
+
+    if not args.yes:
+        print("download requires --yes to confirm", file=sys.stderr)
+        return 2
+
+    # Lazy imports to keep ``kaine.setup.organ``'s import graph unchanged.
+    from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
+    from kaine.hardware import describe_host
+    from kaine.organ_server.served import detect_organ_backend
+
+    shipped_config_path = args.config if args.config is not None else SHIPPED_CONFIG_PATH
+    operator_config_path = (
+        args.operator_config if args.operator_config is not None else OPERATOR_CONFIG_PATH
+    )
+
+    config = load_kaine_config(shipped_config_path, operator_path=operator_config_path)
+    host = describe_host()
+    modules = config.get("modules") or {}
+
+    try:
+        backend = detect_organ_backend(str(host.get("backend") or "cpu"))
+        plan = plan_organ_download(modules, backend, config=config)
+    except Exception as exc:
+        print(f"organ planning error: {exc}", file=sys.stderr)
+        return 1
+
+    print(backend.summary)
+
+    if not plan.needed or not plan.artifacts:
+        print("No organ download needed for this configuration.")
+        return 0
+
+    if not backend.available:
+        for ln in acquisition_guide(backend, plan):
+            print(ln)
+        return 1
+
+    results = run_organ_download(plan, consent=True)
+    all_ok = bool(results) and all(r.ok for r in results)
+
+    for r in results:
+        tag = "ok" if r.ok else "FAILED"
+        print(f"[{tag}] {r.repo} — {r.detail}")
+
+    if all_ok:
+        state_written = write_revision_state(results)
+        if state_written:
+            print(f"Recorded organ revision(s) for provenance: {state_written}")
+
+    return 0 if all_ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
