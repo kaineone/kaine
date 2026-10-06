@@ -157,7 +157,7 @@ Per host:
 
 The main blocker to a cross-host split was a handful of boot-time direct Python references plus the single shared asyncio loop.
 
-- **Done** — Lingua now reads Eidolon's self-model from the bus (`eidolon.self_model` on `eidolon.out`) instead of holding a live `eidolon.model` handle, so Lingua can run on a separate trusted GPU host.
+- Lingua reads Eidolon's self-model from the bus (`eidolon.self_model` on `eidolon.out`) instead of holding a live `eidolon.model` handle, so Lingua can run on a separate trusted GPU host.
 - **Still single-host** — Hypnos still receives live object handles at boot. That coupling is the next decoupling target; nothing moves it yet.
 
 ### Batch offload behind a verification gate
