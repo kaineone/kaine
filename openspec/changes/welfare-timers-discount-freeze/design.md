@@ -21,7 +21,7 @@ Why a new primitive, not `LivedTimeAccumulator` directly. `LivedTimeAccumulator`
 | Arm | Today | After |
 |---|---|---|
 | Protective monitor sustained distress | `SustainedThresholdTracker` fed `time.monotonic` through the injected `clock` | fed `UnfrozenClock.now` |
-| Protective monitor cold-start warm-up | origin stamped from `clock()` | origin and checks in unfrozen time |
+| Protective monitor cold-start warm-up | origin stamped from `clock()` | floor in unfrozen time; the whole warm-up bounded by `max(warmup_s, warmup_ceiling_s)` of wall time, and the Soma `warmup_active` flag extends it only while wall time is under `warmup_ceiling_s` (0 means it never extends it), so a freeze can never hold it open |
 | Protective monitor repeat counter (`WindowedEventCounter`) | events in a wall window | unchanged: event-driven |
 | Protective monitor poll cadence and divergence rate limits | wall | unchanged: wall |
 | Observer sustained interoceptive distress | `time.monotonic()` | `UnfrozenClock.now()` |
@@ -30,6 +30,8 @@ Why a new primitive, not `LivedTimeAccumulator` directly. `LivedTimeAccumulator`
 | `InputLossWatcher` staleness | wall | unfrozen time |
 
 **Sustained distress is anchored to the last sample.** A sample is evidence that the high state persisted, so the elapsed duration of an episode is the wall time from its onset to the last at/above-threshold sample, plus only the unfrozen time since that last sample. While samples keep arriving (even during a freeze), the elapsed duration tracks wall time; once they stop, frozen time stops counting. This is implemented in the shared `SustainedThresholdTracker`.
+
+**Known reliance.** The observer's sustained extreme-VAD arm is timed in unfrozen time with no sample anchor, so it relies on Thymos not publishing while the cycle is frozen. If Thymos ever publishes during a freeze, that arm would need the same last-sample anchoring.
 
 The protective monitor takes **two** clocks after this change:
 - `clock`, still wall, for poll cadence and rate limits;
@@ -45,7 +47,7 @@ A stuck freeze, such as an operator who never resumes, suspends **only** the tim
 - A gray-zone event produced during the freeze reaches the windowed repeat counter.
 - The protective response can still act on repeated events.
 
-So a genuine crossing during a long freeze is never lost. A sustained run that began before the freeze resumes with its accumulated unfrozen duration once the freeze is released, and it is not restarted.
+So a genuine crossing during a long freeze is never lost. A sustained run that began before a freeze in which no samples arrive resumes with its accumulated unfrozen duration once the freeze is released, and it is not restarted. When the next sample arrives, the elapsed time is anchored to it on wall time, so the frozen span is then counted after all. That errs towards acting, which is the safe direction for a protective response.
 
 ## What does not change
 - **Thresholds, categories and events stay the same.** No arm becomes less sensitive to a sample: a crossing sample is evaluated when it arrives.

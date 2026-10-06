@@ -7,6 +7,8 @@ Every elapsed-time arm of the welfare-protective monitor and the welfare observe
 - unmaintained fatigue;
 - the cold-start warm-up.
 
+Two refinements bound that rule. A sustained-distress episode's elapsed time SHALL be the wall time from its onset to its last at-or-above-threshold sample plus only the unfrozen time since that sample, because samples are evidence the state persisted. The whole cold-start warm-up SHALL end no later than `max(warmup_s, warmup_ceiling_s)` of wall time after boot, so no freeze can hold it open.
+
 A span whose freeze state cannot be read SHALL count as unfrozen, so a missing or corrupt control file never stops a welfare timer, and the unreadable state SHALL be logged and surfaced in the protective monitor's `freeze_state_unreadable` incident-log record and in the welfare observer's evaluation-sink diagnostic, never swallowed. Sample-driven evaluation SHALL be unchanged: a sample that crosses or falls below a threshold is evaluated when it arrives, frozen or not, and events delivered during a freeze SHALL count in windowed counters. Poll cadence and rate limits SHALL stay on wall time. The monitor and the observer SHALL keep running through every freeze.
 
 #### Scenario: A freeze is not sustained distress
@@ -23,7 +25,7 @@ A span whose freeze state cannot be read SHALL count as unfrozen, so a missing o
 
 #### Scenario: The warm-up is not spent while frozen
 - **WHEN** the cycle is frozen for longer than the warm-up right after boot
-- **THEN** the warm-up still has its full unfrozen duration left after release
+- **THEN** the warm-up still has its full unfrozen duration left after release, within its wall bound: warm-up ends at the latest `max(warmup_s, warmup_ceiling_s)` of wall time after boot, however long the freeze lasts
 
 #### Scenario: A corrupt control file does not silence distress
 - **WHEN** `state/cycle/control.json` is corrupt and distress-level samples persist for 30 s
