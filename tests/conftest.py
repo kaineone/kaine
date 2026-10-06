@@ -37,6 +37,21 @@ def _save_restore_data_root():
     storage.set_data_root(previous)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_stage_file(tmp_path, monkeypatch):
+    """Point the default developmental-stage file at this test's tmp_path.
+
+    The stage file decides gestation versus embodiment at boot. A test that
+    saves a stage without naming a path must never write the real
+    ``state/lifecycle/stage.json`` of the checkout (or of whatever data root is
+    installed). A test that sets ``STAGE_PATH`` itself still overrides this.
+    """
+    monkeypatch.setattr(
+        "kaine.lifecycle.stage.STAGE_PATH",
+        tmp_path / "isolated-state" / "lifecycle" / "stage.json",
+    )
+
+
 @pytest.fixture
 def bus_config_with_password() -> BusConfig:
     return BusConfig(password="test-password", audit_required=False)

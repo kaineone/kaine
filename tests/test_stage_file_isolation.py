@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""No test writes the checkout's real developmental-stage file."""
+
+from pathlib import Path
+
+from kaine.lifecycle import stage
+
+
+def test_default_stage_writes_land_in_the_test_tmp_dir(tmp_path):
+    real = (Path.cwd() / "state" / "lifecycle" / "stage.json").resolve()
+    before = real.read_bytes() if real.exists() else None
+
+    stage.write_stage(stage.StageState(stage=stage.GESTATION))
+
+    assert stage.STAGE_PATH.is_relative_to(tmp_path)
+    assert stage.read_stage().stage == stage.GESTATION
+    after = real.read_bytes() if real.exists() else None
+    assert after == before
