@@ -3,7 +3,9 @@
 
 import base64
 import json
+import logging
 import os
+import stat
 import tempfile
 import time
 from pathlib import Path
@@ -14,12 +16,14 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.divergence import assess_divergence
 from kaine.modules.hypnos import FakeTrainer, Hypnos, VoiceAlignmentConfig
+from kaine.modules.hypnos.corpus import intent_record_paths
 from kaine.modules.hypnos.voice_alignment import DPOPairBuilder
 from kaine.modules.hypnos.voice_measures import compute_sleep_measures
 from kaine.modules.lingua.intent_log import IntentExpressionLog
 from kaine.persistence.encrypted_jsonl import (
     _is_envelope,
     encode_record,
+    has_plaintext_line,
     iter_records,
     rewrite_encrypted,
 )
@@ -424,3 +428,92 @@ def test_failed_migration_is_retried_on_the_next_write(monkeypatch, tmp_path):
     assert len(calls) == 2
     lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert all(_is_envelope(ln) for ln in lines)
+
+
+def test_rewrite_preserves_timestamps_and_mode(monkeypatch, tmp_path):
+    path = tmp_path / "test.jsonl"
+    path.write_text(json.dumps({"a": 1}) + "\n", encoding="utf-8")
+    # Not the temp file's default 0o600, so a lost chmod is visible.
+    os.chmod(path, 0o640)
+    target_ns = 1_000_000_000_000_000_000
+    os.utime(path, ns=(target_ns, target_ns))
+    _enable(monkeypatch)
+    assert rewrite_encrypted(path) is True
+    st = path.stat()
+    assert st.st_mtime_ns == target_ns
+    assert stat.S_IMODE(st.st_mode) == 0o640
+
+
+def test_rewrite_keeps_corpus_order(monkeypatch, tmp_path):
+    corpus_dir = tmp_path / "corpus"
+    corpus_dir.mkdir()
+    s1 = corpus_dir / "sleep-1.jsonl"
+    s2 = corpus_dir / "sleep-2.jsonl"
+    s1.write_text(json.dumps({"text": "old"}) + "\n", encoding="utf-8")
+    _enable(monkeypatch)
+    s2.write_text(encode_record({"text": "new"}) + "\n", encoding="utf-8")
+    os.utime(s1, ns=(0, 1_000_000_000_000_000_000))
+    os.utime(s2, ns=(0, 2_000_000_000_000_000_000))
+    live = tmp_path / "intent.jsonl"
+    assert rewrite_encrypted(s1) is True
+    paths = intent_record_paths(live, corpus_dir)
+    assert paths.index(s1) < paths.index(s2)
+
+
+def test_rewrite_leaves_no_plaintext_in_the_directory(monkeypatch, tmp_path):
+    _enable(monkeypatch)
+    path = tmp_path / "test.jsonl"
+    sentinel = "SENTINEL-PLAINTEXT-9912"
+    path.write_text(json.dumps({"secret": sentinel}) + "\n", encoding="utf-8")
+    assert rewrite_encrypted(path) is True
+    for name in os.listdir(tmp_path):
+        full = tmp_path / name
+        if full.is_file():
+            assert sentinel.encode() not in full.read_bytes()
+    assert not has_plaintext_line(path)
+
+
+def test_stale_tmp_is_swept(monkeypatch, tmp_path):
+    _enable(monkeypatch)
+    path = tmp_path / "test.jsonl"
+    path.write_text(json.dumps({"a": 1}) + "\n", encoding="utf-8")
+    stale = tmp_path / "test.jsonl.abc.tmp"
+    stale.write_text("stale", encoding="utf-8")
+    fresh = tmp_path / "test.jsonl.now.tmp"
+    fresh.write_text("fresh", encoding="utf-8")
+    now_ns = time.time_ns()
+    os.utime(stale, ns=(0, now_ns - 600 * 10**9))
+    os.utime(fresh, ns=(0, now_ns))
+    assert rewrite_encrypted(path) is True
+    assert not stale.exists()
+    assert fresh.exists()
+
+
+def test_append_after_torn_line_starts_a_new_line(tmp_path):
+    path = tmp_path / "intent_expression.jsonl"
+    path.write_text('{"partial": 1}', encoding="utf-8")
+    log = IntentExpressionLog(path)
+    _append(log, "after torn")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    records = list(iter_records(path))
+    assert len(records) == 2
+    assert records[1].record["generated_text"] == "after torn"
+
+
+def test_warns_when_encryption_off_and_envelopes_present(monkeypatch, tmp_path, caplog):
+    path = tmp_path / "intent_expression.jsonl"
+    _enable(monkeypatch)
+    log = IntentExpressionLog(path)
+    _append(log, "envelope content")
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    log2 = IntentExpressionLog(path)
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.lingua.intent_log"):
+        _append(log2, "first plaintext")
+        _append(log2, "second plaintext")
+    warnings = [r for r in caplog.records if "encryption is off" in r.message]
+    assert len(warnings) == 1
+    for r in caplog.records:
+        assert "envelope content" not in r.message
+        assert "first plaintext" not in r.message
+        assert "second plaintext" not in r.message

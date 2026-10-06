@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from kaine.persistence.encrypted_jsonl import (
     encode_record,
+    has_envelope_line,
     has_plaintext_line,
     rewrite_encrypted,
 )
@@ -37,6 +38,7 @@ class IntentExpressionLog:
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
         self._migration_checked = False
+        self._warned_encryption_off = False
 
     @property
     def path(self) -> Path:
@@ -109,27 +111,47 @@ class IntentExpressionLog:
         self._write(record)
 
     def _write(self, record: dict[str, Any]) -> None:
-        if not self._migration_checked:
-            from kaine.security.crypto import get_state_encryptor
+        from kaine.security.crypto import get_state_encryptor
 
+        encryptor = get_state_encryptor()
+
+        if not encryptor.enabled:
+            if (
+                not self._warned_encryption_off
+                and self._path.is_file()
+                and has_envelope_line(self._path)
+            ):
+                log.warning(
+                    "intent log: encryption is off but the log already holds encrypted lines; new lines are written in plaintext"
+                )
+                self._warned_encryption_off = True
+        elif not self._migration_checked:
             # Checked once per instance, and only under encryption: if the
             # encryptor is enabled later, the next write still migrates, and a
             # failed migration is retried on the next write.
-            if get_state_encryptor().enabled:
-                try:
-                    if has_plaintext_line(self._path):
-                        rewrite_encrypted(self._path)
-                        log.info(
-                            "intent log: migrated plaintext lines to encrypted envelopes"
-                        )
-                    self._migration_checked = True
-                except Exception:
-                    log.exception(
-                        "intent log: plaintext migration failed; retrying on the next write"
+            try:
+                if has_plaintext_line(self._path):
+                    rewrite_encrypted(self._path)
+                    log.info(
+                        "intent log: migrated plaintext lines to encrypted envelopes"
                     )
+                self._migration_checked = True
+            except Exception:
+                log.exception(
+                    "intent log: plaintext migration failed; retrying on the next write"
+                )
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
+            # A torn final line (a crash mid-append) must not swallow the next
+            # record: start on a fresh line.
+            if self._path.is_file() and self._path.stat().st_size > 0:
+                with open(self._path, "rb") as tail:
+                    tail.seek(-1, os.SEEK_END)
+                    torn = tail.read(1) != b"\n"
+                if torn:
+                    with open(self._path, "a", encoding="utf-8") as fhn:
+                        fhn.write("\n")
             with open(self._path, "a", encoding="utf-8") as fh:
                 fh.write(encode_record(record) + "\n")
                 fh.flush()
