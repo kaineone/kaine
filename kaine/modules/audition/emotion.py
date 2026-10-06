@@ -10,6 +10,8 @@ so Audition as a whole still produces transcriptions.
 """
 from __future__ import annotations
 
+import asyncio
+import gc
 import logging
 import time
 from dataclasses import dataclass, field
@@ -122,7 +124,11 @@ class Emotion2vecClassifier:
         self._model: Any = None
         self._funasr: Any = None
         self._funasr_available: Optional[bool] = None
+        self._load_failed: bool = False
         self._warned_missing = False
+        self._load_lock: Optional[asyncio.Lock] = None
+        self._load_condition: Optional[asyncio.Condition] = None
+        self._inflight: int = 0
 
     @property
     def model_id(self) -> str:
@@ -136,30 +142,46 @@ class Emotion2vecClassifier:
     def funasr_available(self) -> Optional[bool]:
         return self._funasr_available
 
-    async def load(self) -> None:
-        if self._funasr_available is not None:
+    @property
+    def loaded(self) -> bool:
+        """True while the emotion2vec model is held."""
+        return self._model is not None
+
+    def _lock_condition(self) -> tuple[asyncio.Lock, asyncio.Condition]:
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
+            self._load_condition = asyncio.Condition(self._load_lock)
+        assert self._load_condition is not None
+        return self._load_lock, self._load_condition
+
+    async def _ensure_loaded_locked(self) -> None:
+        if self._model is not None:
             return
-        try:
-            import funasr  # type: ignore[import-untyped]
-        except Exception as exc:
-            self._funasr_available = False
-            if not self._warned_missing:
-                log.warning(
-                    "funasr not installed; emotion classifier degrades to "
-                    "neutral. Install with `pip install -e .[audio]` to "
-                    "enable emotion2vec+ recognition. (%s)",
-                    exc,
-                )
-                self._warned_missing = True
+        if self._funasr_available is False or self._load_failed:
             return
-        import asyncio
+        if self._funasr_available is None:
+            try:
+                import funasr  # type: ignore[import-untyped]
+            except Exception as exc:
+                self._funasr_available = False
+                if not self._warned_missing:
+                    log.warning(
+                        "funasr not installed; emotion classifier degrades to "
+                        "neutral. Install with `pip install -e .[audio]` to "
+                        "enable emotion2vec+ recognition. (%s)",
+                        exc,
+                    )
+                    self._warned_missing = True
+                return
+            self._funasr = funasr
+            self._funasr_available = True
 
         def _load_sync():
             kwargs = {"disable_update": True}
             if not self._device.startswith("cuda"):
                 kwargs["fp16"] = False
                 kwargs["bf16"] = False
-            return funasr.AutoModel(
+            return self._funasr.AutoModel(
                 model=self._model_id,
                 device=self._device,
                 hub=self._hub,
@@ -168,8 +190,6 @@ class Emotion2vecClassifier:
 
         try:
             self._model = await asyncio.to_thread(_load_sync)
-            self._funasr = funasr
-            self._funasr_available = True
             if not self._device.startswith("cuda"):
                 import torch
 
@@ -209,7 +229,36 @@ class Emotion2vecClassifier:
             log.info("emotion2vec+ loaded: %s on %s", self._model_id, self._device)
         except Exception:
             log.exception("emotion2vec+ load failed; degrading to neutral")
-            self._funasr_available = False
+            self._load_failed = True
+            self._model = None
+
+    async def ensure_loaded(self) -> None:
+        if self._model is not None:
+            return
+        if self._funasr_available is False or self._load_failed:
+            return
+        lock, condition = self._lock_condition()
+        async with condition:
+            await self._ensure_loaded_locked()
+
+    async def load(self) -> None:
+        return await self.ensure_loaded()
+
+    async def unload(self) -> None:
+        """Release the underlying model. Idempotent."""
+        lock, condition = self._lock_condition()
+        async with condition:
+            while self._inflight > 0:
+                await condition.wait()
+            self._model = None
+        await asyncio.to_thread(gc.collect)
+        if self._device.startswith("cuda"):
+            import torch
+
+            torch.cuda.empty_cache()
+
+    async def shutdown(self) -> None:
+        await self.unload()
 
     async def classify(
         self,
@@ -217,19 +266,16 @@ class Emotion2vecClassifier:
         *,
         sample_rate: int,
     ) -> EmotionResult:
-        await self.load()
+        lock, condition = self._lock_condition()
+
+        async with condition:
+            await self._ensure_loaded_locked()
+            if self._funasr_available is False or self._load_failed or self._model is None:
+                return self._degraded_result()
+            local_model = self._model
+            self._inflight += 1
+
         start = time.monotonic()
-        if not self._funasr_available or self._model is None:
-            return EmotionResult(
-                category="neutral",
-                confidence=0.0,
-                scores={c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
-                model=self._model_id,
-                latency_ms=(time.monotonic() - start) * 1000.0,
-                raw={"degraded": True},
-            )
-        import asyncio
-        import io
 
         def _infer_sync() -> dict[str, Any]:
             # funasr's AutoModel.generate accepts an audio file path or
@@ -237,10 +283,12 @@ class Emotion2vecClassifier:
             # we pass bytes via an io.BytesIO. If the model does not
             # support BytesIO, we try a numpy array decoded in-memory —
             # we NEVER write raw audio to disk (zero-persistence invariant).
+            import io
+
             import numpy as np
 
             try:
-                result = self._model.generate(
+                result = local_model.generate(
                     input=io.BytesIO(audio_bytes),
                     granularity="utterance",
                     extract_embedding=False,
@@ -251,12 +299,13 @@ class Emotion2vecClassifier:
                 # the array is released as soon as generate() returns.
                 try:
                     import wave
+
                     with wave.open(io.BytesIO(audio_bytes), "rb") as _wf:
                         _pcm = _wf.readframes(_wf.getnframes())
                     _samples = np.frombuffer(_pcm, dtype=np.int16).astype(np.float32) / 32768.0
                 except Exception:
                     _samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                result = self._model.generate(
+                result = local_model.generate(
                     input=_samples,
                     granularity="utterance",
                     extract_embedding=False,
@@ -269,14 +318,12 @@ class Emotion2vecClassifier:
             raw = await asyncio.to_thread(_infer_sync)
         except Exception as exc:
             log.warning("emotion2vec inference failed: %s; returning neutral", exc)
-            return EmotionResult(
-                category="neutral",
-                confidence=0.0,
-                scores={c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
-                model=self._model_id,
-                latency_ms=(time.monotonic() - start) * 1000.0,
-                raw={"inference_failed": True, "error": str(exc)},
-            )
+            return self._inference_failed_result(start, exc)
+        finally:
+            async with condition:
+                self._inflight -= 1
+                condition.notify_all()
+
         item = raw[0] if isinstance(raw, list) and raw else {}
         labels = item.get("labels", []) or []
         scores_list = item.get("scores", []) or []
@@ -299,8 +346,25 @@ class Emotion2vecClassifier:
             raw={"funasr": item},
         )
 
-    async def shutdown(self) -> None:
-        self._model = None
+    def _degraded_result(self) -> EmotionResult:
+        return EmotionResult(
+            category="neutral",
+            confidence=0.0,
+            scores={c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
+            model=self._model_id,
+            latency_ms=0.0,
+            raw={"degraded": True},
+        )
+
+    def _inference_failed_result(self, start: float, exc: Exception) -> EmotionResult:
+        return EmotionResult(
+            category="neutral",
+            confidence=0.0,
+            scores={c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
+            model=self._model_id,
+            latency_ms=(time.monotonic() - start) * 1000.0,
+            raw={"inference_failed": True, "error": str(exc)},
+        )
 
 
 def _normalize_label(label: str) -> str:

@@ -11,6 +11,8 @@ lazily on first init, so the rest of the package imports without requiring
 """
 from __future__ import annotations
 
+import asyncio
+import gc
 import io
 import logging
 import os
@@ -108,6 +110,9 @@ class DINOv2Encoder:
         self._processor: Any = None
         self._torch: Any = None
         self._latent_dim: int | None = None
+        self._load_lock: asyncio.Lock | None = None
+        self._load_condition: asyncio.Condition | None = None
+        self._inflight: int = 0
 
     @property
     def model_id(self) -> str:
@@ -120,6 +125,11 @@ class DINOv2Encoder:
         return self._latent_dim
 
     @property
+    def loaded(self) -> bool:
+        """True while the frozen model is held."""
+        return self._model is not None
+
+    @property
     def clip_len(self) -> int:
         # DINOv2 is a per-frame encoder: a "clip" is a single frame.
         return 1
@@ -128,11 +138,16 @@ class DINOv2Encoder:
     def device(self) -> str:
         return self._device
 
-    async def load(self) -> None:
+    def _get_lock_condition(self) -> tuple[asyncio.Lock, asyncio.Condition]:
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
+            self._load_condition = asyncio.Condition(self._load_lock)
+        assert self._load_condition is not None
+        return self._load_lock, self._load_condition
+
+    async def _ensure_loaded_locked(self) -> None:
         if self._model is not None:
             return
-        import asyncio
-
         # Suppress HuggingFace telemetry before any from_pretrained call,
         # matching kaine/text_embedding.py (CAL no-outbound guarantee).
         os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -148,7 +163,9 @@ class DINOv2Encoder:
             from transformers import AutoImageProcessor, AutoModel
 
             processor = AutoImageProcessor.from_pretrained(self._model_id)
-            model = AutoModel.from_pretrained(self._model_id, dtype=torch.float32)
+            model = AutoModel.from_pretrained(
+                self._model_id, dtype=torch.float32, use_safetensors=True
+            )
             model.eval()
             for p in model.parameters():
                 p.requires_grad_(False)
@@ -171,23 +188,59 @@ class DINOv2Encoder:
             self._latent_dim,
         )
 
-    async def encode(self, image: Any) -> list[float]:
-        if self._model is None:
-            await self.load()
-        import asyncio
+    async def ensure_loaded(self) -> None:
+        """Load and freeze the underlying model. Idempotent."""
+        if self._model is not None:
+            return
+        lock, condition = self._get_lock_condition()
+        async with condition:
+            await self._ensure_loaded_locked()
 
+    async def load(self) -> None:
+        return await self.ensure_loaded()
+
+    async def unload(self) -> None:
+        """Release the underlying model. Idempotent; latent_dim stays known."""
+        lock, condition = self._get_lock_condition()
+        async with condition:
+            while self._inflight > 0:
+                await condition.wait()
+            self._model = None
+            self._processor = None
+            self._torch = None
+        await asyncio.to_thread(gc.collect)
+        if self._device.startswith("cuda"):
+            import torch
+
+            torch.cuda.empty_cache()
+
+    async def encode(self, image: Any) -> list[float]:
         pil = _coerce_to_pil(image)
+        lock, condition = self._get_lock_condition()
+
+        async with condition:
+            if self._model is None:
+                await self._ensure_loaded_locked()
+            local_model = self._model
+            local_processor = self._processor
+            local_torch = self._torch
+            self._inflight += 1
 
         def _forward_sync() -> list[float]:
-            assert self._processor is not None and self._model is not None
-            inputs = self._processor(images=pil, return_tensors="pt")
+            assert local_processor is not None and local_model is not None
+            inputs = local_processor(images=pil, return_tensors="pt")
             inputs = {k: v.to(self._device) for k, v in inputs.items()}
-            with self._torch.no_grad():
-                outputs = self._model(**inputs)
+            with local_torch.no_grad():
+                outputs = local_model(**inputs)
             cls = outputs.last_hidden_state[:, 0, :].squeeze(0)
             return [float(x) for x in cls.tolist()]
 
-        return await asyncio.to_thread(_forward_sync)
+        try:
+            return await asyncio.to_thread(_forward_sync)
+        finally:
+            async with condition:
+                self._inflight -= 1
+                condition.notify_all()
 
     async def encode_clip(self, frames: Any) -> list[float]:
         """Per-frame fallback: encode the most recent frame of the clip.
@@ -201,9 +254,7 @@ class DINOv2Encoder:
         return await self.encode(seq[-1])
 
     async def shutdown(self) -> None:
-        # transformers models are reclaimed by GC; nothing explicit to do.
-        self._model = None
-        self._processor = None
+        await self.unload()
 
 
 class InternVideoNextEncoder:
@@ -266,6 +317,9 @@ class InternVideoNextEncoder:
         self._processor: Any = None
         self._torch: Any = None
         self._latent_dim: int | None = None
+        self._load_lock: asyncio.Lock | None = None
+        self._load_condition: asyncio.Condition | None = None
+        self._inflight: int = 0
 
     @property
     def model_id(self) -> str:
@@ -296,12 +350,21 @@ class InternVideoNextEncoder:
     def device(self) -> str:
         return self._device
 
-    async def load(self, *, _model: Any = None, _processor: Any = None) -> None:
-        """Load the frozen encoder + processor and probe ``latent_dim``. Idempotent.
+    @property
+    def loaded(self) -> bool:
+        """True while the frozen model is held."""
+        return self._model is not None
 
-        ``_model`` / ``_processor`` inject fakes for tests (no weights / GPU /
-        vendored-code deps); production leaves them ``None`` → the offline loader
-        and the vendored ``VideoMAEImageProcessor`` config are used."""
+    def _get_lock_condition(self) -> tuple[asyncio.Lock, asyncio.Condition]:
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
+            self._load_condition = asyncio.Condition(self._load_lock)
+        assert self._load_condition is not None
+        return self._load_lock, self._load_condition
+
+    async def _ensure_loaded_locked(
+        self, *, _model: Any = None, _processor: Any = None
+    ) -> None:
         if self._model is not None:
             return
         import asyncio
@@ -344,7 +407,9 @@ class InternVideoNextEncoder:
         # Probe latent_dim with a dummy 16-frame clip forward (same pattern as
         # DINOv2 probing 384 today), so a dim change is discovered at load.
         dummy = [_solid_image(self._clip_resolution, self._clip_resolution)] * self._clip_len
-        probe = await asyncio.to_thread(self._forward_clip, dummy)
+        probe = await asyncio.to_thread(
+            self._forward_clip, dummy, torch_=self._torch, processor=self._processor, model=self._model
+        )
         self._latent_dim = len(probe)
         log.info(
             "Topos encoder %s loaded on %s; clip_len %d, pooling %s, latent dim %d "
@@ -356,28 +421,60 @@ class InternVideoNextEncoder:
             self._latent_dim,
         )
 
-    def _forward_clip(self, pil_frames: list[Any]) -> list[float]:
+    async def ensure_loaded(self, *, _model: Any = None, _processor: Any = None) -> None:
+        """Load the frozen encoder + processor and probe ``latent_dim``. Idempotent."""
+        if self._model is not None:
+            return
+        lock, condition = self._get_lock_condition()
+        async with condition:
+            await self._ensure_loaded_locked(_model=_model, _processor=_processor)
+
+    async def load(self, *, _model: Any = None, _processor: Any = None) -> None:
+        return await self.ensure_loaded(_model=_model, _processor=_processor)
+
+    async def unload(self) -> None:
+        """Release the underlying model. Idempotent; latent_dim stays known."""
+        lock, condition = self._get_lock_condition()
+        async with condition:
+            while self._inflight > 0:
+                await condition.wait()
+            self._model = None
+            self._processor = None
+            self._torch = None
+        await asyncio.to_thread(gc.collect)
+        if self._device.startswith("cuda"):
+            import torch
+
+            torch.cuda.empty_cache()
+
+    def _forward_clip(
+        self, pil_frames: list[Any], *, torch_: Any, processor: Any, model: Any
+    ) -> list[float]:
         """Synchronous clip forward + pool → a flat 768-length float list.
 
         Builds ``pixel_values`` via the VideoMAE processor, orients it to the
         vendored backbone's expected ``[B, C, T, H, W]``, runs the frozen forward
-        (native attention pool or mean pool), and returns the pooled vector."""
-        torch = self._torch
-        inputs = self._processor(pil_frames, return_tensors="pt")
+        (native attention pool or mean pool), and returns the pooled vector.
+
+        ``torch_``, ``processor`` and ``model`` are passed explicitly so the
+        worker thread never reads ``self._model`` while an ``unload()`` may be
+        waiting for in-flight encodes to finish."""
+        torch = torch_
+        inputs = processor(pil_frames, return_tensors="pt")
         pixel_values = inputs["pixel_values"]
         # VideoMAE processors emit [B, T, C, H, W]; the vendored PatchEmbed reads
         # [B, C, T, H, W]. Reorient when the channel axis is at index 2.
         if pixel_values.ndim == 5 and pixel_values.shape[2] == 3 and pixel_values.shape[1] != 3:
             pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
-        param = next(self._model.parameters(), None)
+        param = next(model.parameters(), None)
         if param is not None:
             pixel_values = pixel_values.to(device=self._device, dtype=param.dtype)
         with torch.no_grad():
             if self._pooling == "attention":
                 # model(pixel_values) → clip_projector (native attention pool) → [1, 768].
-                out = self._model(pixel_values)
+                out = model(pixel_values)
             else:
-                feats = self._model.extract_features(pixel_values)  # [1, 4096, 768]
+                feats = model.extract_features(pixel_values)  # [1, 4096, 768]
                 out = feats.mean(dim=1)  # [1, 768]
         vec = out.squeeze(0).float().tolist()
         return [float(x) for x in vec]
@@ -395,10 +492,6 @@ class InternVideoNextEncoder:
 
     async def encode_clip(self, frames: Any) -> list[float]:
         """Encode a clip of ``clip_len`` frames to one pooled 768-dim vector."""
-        if self._model is None:
-            await self.load()
-        import asyncio
-
         seq = list(frames)
         if len(seq) != self._clip_len:
             raise ValueError(
@@ -406,11 +499,29 @@ class InternVideoNextEncoder:
                 f"got {len(seq)}"
             )
         pil = [_coerce_to_pil(f) for f in seq]
-        return await asyncio.to_thread(self._forward_clip, pil)
+        lock, condition = self._get_lock_condition()
+
+        async with condition:
+            if self._model is None:
+                await self._ensure_loaded_locked()
+            local_model = self._model
+            local_processor = self._processor
+            local_torch = self._torch
+            forward = self._forward_clip
+            self._inflight += 1
+
+        def _work():
+            return forward(pil, torch_=local_torch, processor=local_processor, model=local_model)
+
+        try:
+            return await asyncio.to_thread(_work)
+        finally:
+            async with condition:
+                self._inflight -= 1
+                condition.notify_all()
 
     async def shutdown(self) -> None:
-        self._model = None
-        self._processor = None
+        await self.unload()
 
 
 def _load_videomae_processor() -> Any:
