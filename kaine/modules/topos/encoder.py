@@ -111,7 +111,7 @@ class DINOv2Encoder:
         self._torch: Any = None
         self._latent_dim: int | None = None
         self._load_lock: asyncio.Lock | None = None
-        self._load_condition: asyncio.Condition | None = None
+        self._idle: asyncio.Event | None = None
         self._inflight: int = 0
 
     @property
@@ -138,12 +138,13 @@ class DINOv2Encoder:
     def device(self) -> str:
         return self._device
 
-    def _get_lock_condition(self) -> tuple[asyncio.Lock, asyncio.Condition]:
+    def _get_lock(self) -> asyncio.Lock:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._load_condition = asyncio.Condition(self._load_lock)
-        assert self._load_condition is not None
-        return self._load_lock, self._load_condition
+            self._idle = asyncio.Event()
+            self._idle.set()
+        assert self._load_lock is not None
+        return self._load_lock
 
     async def _ensure_loaded_locked(self) -> None:
         if self._model is not None:
@@ -192,8 +193,8 @@ class DINOv2Encoder:
         """Load and freeze the underlying model. Idempotent."""
         if self._model is not None:
             return
-        lock, condition = self._get_lock_condition()
-        async with condition:
+        lock = self._get_lock()
+        async with lock:
             await self._ensure_loaded_locked()
 
     async def load(self) -> None:
@@ -201,10 +202,11 @@ class DINOv2Encoder:
 
     async def unload(self) -> None:
         """Release the underlying model. Idempotent; latent_dim stays known."""
-        lock, condition = self._get_lock_condition()
-        async with condition:
-            while self._inflight > 0:
-                await condition.wait()
+        lock = self._get_lock()
+        idle = self._idle
+        assert idle is not None
+        async with lock:
+            await idle.wait()
             self._model = None
             self._processor = None
             self._torch = None
@@ -216,15 +218,17 @@ class DINOv2Encoder:
 
     async def encode(self, image: Any) -> list[float]:
         pil = _coerce_to_pil(image)
-        lock, condition = self._get_lock_condition()
+        lock = self._get_lock()
 
-        async with condition:
+        async with lock:
             if self._model is None:
                 await self._ensure_loaded_locked()
             local_model = self._model
             local_processor = self._processor
             local_torch = self._torch
             self._inflight += 1
+            if self._idle is not None:
+                self._idle.clear()
 
         def _forward_sync() -> list[float]:
             assert local_processor is not None and local_model is not None
@@ -238,9 +242,9 @@ class DINOv2Encoder:
         try:
             return await asyncio.to_thread(_forward_sync)
         finally:
-            async with condition:
-                self._inflight -= 1
-                condition.notify_all()
+            self._inflight -= 1
+            if self._inflight == 0 and self._idle is not None:
+                self._idle.set()
 
     async def encode_clip(self, frames: Any) -> list[float]:
         """Per-frame fallback: encode the most recent frame of the clip.
@@ -318,7 +322,7 @@ class InternVideoNextEncoder:
         self._torch: Any = None
         self._latent_dim: int | None = None
         self._load_lock: asyncio.Lock | None = None
-        self._load_condition: asyncio.Condition | None = None
+        self._idle: asyncio.Event | None = None
         self._inflight: int = 0
 
     @property
@@ -355,12 +359,13 @@ class InternVideoNextEncoder:
         """True while the frozen model is held."""
         return self._model is not None
 
-    def _get_lock_condition(self) -> tuple[asyncio.Lock, asyncio.Condition]:
+    def _get_lock(self) -> asyncio.Lock:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._load_condition = asyncio.Condition(self._load_lock)
-        assert self._load_condition is not None
-        return self._load_lock, self._load_condition
+            self._idle = asyncio.Event()
+            self._idle.set()
+        assert self._load_lock is not None
+        return self._load_lock
 
     async def _ensure_loaded_locked(
         self, *, _model: Any = None, _processor: Any = None
@@ -425,8 +430,8 @@ class InternVideoNextEncoder:
         """Load the frozen encoder + processor and probe ``latent_dim``. Idempotent."""
         if self._model is not None:
             return
-        lock, condition = self._get_lock_condition()
-        async with condition:
+        lock = self._get_lock()
+        async with lock:
             await self._ensure_loaded_locked(_model=_model, _processor=_processor)
 
     async def load(self, *, _model: Any = None, _processor: Any = None) -> None:
@@ -434,10 +439,11 @@ class InternVideoNextEncoder:
 
     async def unload(self) -> None:
         """Release the underlying model. Idempotent; latent_dim stays known."""
-        lock, condition = self._get_lock_condition()
-        async with condition:
-            while self._inflight > 0:
-                await condition.wait()
+        lock = self._get_lock()
+        idle = self._idle
+        assert idle is not None
+        async with lock:
+            await idle.wait()
             self._model = None
             self._processor = None
             self._torch = None
@@ -499,9 +505,9 @@ class InternVideoNextEncoder:
                 f"got {len(seq)}"
             )
         pil = [_coerce_to_pil(f) for f in seq]
-        lock, condition = self._get_lock_condition()
+        lock = self._get_lock()
 
-        async with condition:
+        async with lock:
             if self._model is None:
                 await self._ensure_loaded_locked()
             local_model = self._model
@@ -509,6 +515,8 @@ class InternVideoNextEncoder:
             local_torch = self._torch
             forward = self._forward_clip
             self._inflight += 1
+            if self._idle is not None:
+                self._idle.clear()
 
         def _work():
             return forward(pil, torch_=local_torch, processor=local_processor, model=local_model)
@@ -516,9 +524,9 @@ class InternVideoNextEncoder:
         try:
             return await asyncio.to_thread(_work)
         finally:
-            async with condition:
-                self._inflight -= 1
-                condition.notify_all()
+            self._inflight -= 1
+            if self._inflight == 0 and self._idle is not None:
+                self._idle.set()
 
     async def shutdown(self) -> None:
         await self.unload()

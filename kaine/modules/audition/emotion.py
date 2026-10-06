@@ -127,7 +127,7 @@ class Emotion2vecClassifier:
         self._load_failed: bool = False
         self._warned_missing = False
         self._load_lock: Optional[asyncio.Lock] = None
-        self._load_condition: Optional[asyncio.Condition] = None
+        self._idle: Optional[asyncio.Event] = None
         self._inflight: int = 0
 
     @property
@@ -147,12 +147,13 @@ class Emotion2vecClassifier:
         """True while the emotion2vec model is held."""
         return self._model is not None
 
-    def _lock_condition(self) -> tuple[asyncio.Lock, asyncio.Condition]:
+    def _lock(self) -> asyncio.Lock:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
-            self._load_condition = asyncio.Condition(self._load_lock)
-        assert self._load_condition is not None
-        return self._load_lock, self._load_condition
+            self._idle = asyncio.Event()
+            self._idle.set()
+        assert self._load_lock is not None
+        return self._load_lock
 
     async def _ensure_loaded_locked(self) -> None:
         if self._model is not None:
@@ -237,8 +238,8 @@ class Emotion2vecClassifier:
             return
         if self._funasr_available is False or self._load_failed:
             return
-        lock, condition = self._lock_condition()
-        async with condition:
+        lock = self._lock()
+        async with lock:
             await self._ensure_loaded_locked()
 
     async def load(self) -> None:
@@ -246,10 +247,11 @@ class Emotion2vecClassifier:
 
     async def unload(self) -> None:
         """Release the underlying model. Idempotent."""
-        lock, condition = self._lock_condition()
-        async with condition:
-            while self._inflight > 0:
-                await condition.wait()
+        lock = self._lock()
+        idle = self._idle
+        assert idle is not None
+        async with lock:
+            await idle.wait()
             self._model = None
         await asyncio.to_thread(gc.collect)
         if self._device.startswith("cuda"):
@@ -266,14 +268,16 @@ class Emotion2vecClassifier:
         *,
         sample_rate: int,
     ) -> EmotionResult:
-        lock, condition = self._lock_condition()
+        lock = self._lock()
 
-        async with condition:
+        async with lock:
             await self._ensure_loaded_locked()
             if self._funasr_available is False or self._load_failed or self._model is None:
                 return self._degraded_result()
             local_model = self._model
             self._inflight += 1
+            if self._idle is not None:
+                self._idle.clear()
 
         start = time.monotonic()
 
@@ -320,9 +324,9 @@ class Emotion2vecClassifier:
             log.warning("emotion2vec inference failed: %s; returning neutral", exc)
             return self._inference_failed_result(start, exc)
         finally:
-            async with condition:
-                self._inflight -= 1
-                condition.notify_all()
+            self._inflight -= 1
+            if self._inflight == 0 and self._idle is not None:
+                self._idle.set()
 
         item = raw[0] if isinstance(raw, list) and raw else {}
         labels = item.get("labels", []) or []

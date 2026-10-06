@@ -148,6 +148,48 @@ async def test_emotion_unload_in_gap(monkeypatch):
     assert result.category == "happy"
 
 
+@pytest.mark.asyncio
+async def test_emotion_double_cancel_does_not_leak_inflight(monkeypatch):
+    """A twice-cancelled in-flight classify releases the in-flight count."""
+    loop = asyncio.get_running_loop()
+    entered = threading.Event()
+    aio_event = asyncio.Event()
+
+    class BlockingAutoModel:
+        def __init__(self, **kwargs):
+            pass
+
+        def generate(self, *, input, granularity, extract_embedding):
+            loop.call_soon_threadsafe(aio_event.set)
+            entered.wait()
+            return [{"labels": ["/happy/"], "scores": [0.9]}]
+
+    monkeypatch.setitem(sys.modules, "funasr", SimpleNamespace(AutoModel=BlockingAutoModel))
+
+    classifier = Emotion2vecClassifier()
+    classify_task = asyncio.create_task(classifier.classify(b"\x00", sample_rate=16000))
+    try:
+        await asyncio.wait_for(aio_event.wait(), timeout=5)
+
+        lock = classifier._lock()
+        await lock.acquire()
+        try:
+            classify_task.cancel()
+            await asyncio.sleep(0)
+            classify_task.cancel()
+            await asyncio.sleep(0)
+        finally:
+            lock.release()
+    finally:
+        entered.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await classify_task
+
+    await asyncio.wait_for(classifier.unload(), timeout=2)
+    assert classifier._inflight == 0
+
+
 # --------------------------------------------------------------------------
 # Topos encoders
 # --------------------------------------------------------------------------
@@ -243,6 +285,142 @@ async def test_dinov2_uses_safetensors_and_reloads(monkeypatch):
 
     await encoder.load()
     assert encoder.loaded is True
+
+
+@pytest.mark.asyncio
+async def test_dinov2_double_cancel_does_not_leak_inflight(monkeypatch):
+    """A twice-cancelled in-flight encode releases the in-flight count."""
+    loop = asyncio.get_running_loop()
+    entered = threading.Event()
+    aio_event = asyncio.Event()
+
+    class FakeProcessor:
+        def __call__(self, *, images, return_tensors):
+            return {"pixel_values": torch.zeros(1, 3, 224, 224)}
+
+    class FakeAutoImageProcessor:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeProcessor()
+
+    class FakeModel:
+        def __init__(self, model_id, **kwargs):
+            pass
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def parameters(self):
+            return iter([torch.nn.Parameter(torch.zeros(1))])
+
+        def __call__(self, **kwargs):
+            return SimpleNamespace(last_hidden_state=torch.randn(1, 197, 384))
+
+    class FakeAutoModel:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeModel(model_id, **kwargs)
+
+    fake_transformers = SimpleNamespace(
+        AutoImageProcessor=FakeAutoImageProcessor,
+        AutoModel=FakeAutoModel,
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    encoder = DINOv2Encoder(device_preference="cpu")
+    await encoder.load()
+
+    FakeModel.__call__ = lambda self, **kwargs: (
+        loop.call_soon_threadsafe(aio_event.set),
+        entered.wait(),
+        SimpleNamespace(last_hidden_state=torch.randn(1, 197, 384)),
+    )[-1]
+
+    image = Image.new("RGB", (224, 224), color=(128, 128, 128))
+    encode_task = asyncio.create_task(encoder.encode(image))
+    try:
+        await asyncio.wait_for(aio_event.wait(), timeout=5)
+
+        lock = encoder._get_lock()
+        await lock.acquire()
+        try:
+            encode_task.cancel()
+            await asyncio.sleep(0)
+            encode_task.cancel()
+            await asyncio.sleep(0)
+        finally:
+            lock.release()
+    finally:
+        entered.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await encode_task
+
+    await asyncio.wait_for(encoder.unload(), timeout=2)
+    assert encoder._inflight == 0
+
+
+@pytest.mark.asyncio
+async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch):
+    """A twice-cancelled in-flight encode_clip releases the in-flight count."""
+
+    def fake_loader(**kwargs):
+        return object()
+
+    def fake_processor(*args, **kwargs):
+        return {"pixel_values": torch.zeros(1, 16, 3, 224, 224)}
+
+    monkeypatch.setattr(
+        "kaine.modules.topos.internvideo_next_loader.load_internvideo_next",
+        fake_loader,
+    )
+    monkeypatch.setattr(
+        "kaine.modules.topos.encoder._load_videomae_processor",
+        fake_processor,
+    )
+
+    encoder = InternVideoNextEncoder(device_preference="cpu", clip_len=16)
+
+    # Non-blocking probe for load().
+    encoder._forward_clip = lambda frames, **kwargs: [1.0] * 768
+    await encoder.load()
+
+    loop = asyncio.get_running_loop()
+    entered = threading.Event()
+    aio_event = asyncio.Event()
+
+    def blocking_forward(frames, **kwargs):
+        loop.call_soon_threadsafe(aio_event.set)
+        entered.wait()
+        return [1.0] * 768
+
+    encoder._forward_clip = blocking_forward
+
+    frames = [Image.new("RGB", (224, 224), color=(128, 128, 128)) for _ in range(16)]
+    encode_task = asyncio.create_task(encoder.encode_clip(frames))
+    try:
+        await asyncio.wait_for(aio_event.wait(), timeout=5)
+
+        lock = encoder._get_lock()
+        await lock.acquire()
+        try:
+            encode_task.cancel()
+            await asyncio.sleep(0)
+            encode_task.cancel()
+            await asyncio.sleep(0)
+        finally:
+            lock.release()
+    finally:
+        entered.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await encode_task
+
+    await asyncio.wait_for(encoder.unload(), timeout=2)
+    assert encoder._inflight == 0
 
 
 def test_internvideo_loader_uses_safetensors(tmp_path, monkeypatch):
