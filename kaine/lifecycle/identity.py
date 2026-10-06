@@ -530,7 +530,9 @@ def lived_before(
         and ``preservation/``;
       * ``forks/``, in-tree ``preservation/`` or any configured bundle root
         contains a record whose sidecar or manifest names this being or one of
-        its ancestors.
+        its ancestors, or a descendant whose lineage names this being.
+
+    Unreadable or malformed foreign records are skipped with a warning.
 
     Foreign snapshots or bundles are not counted as this being's own history.
     """

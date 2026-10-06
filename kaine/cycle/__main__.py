@@ -1373,8 +1373,9 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     )
 
     # Developmental stage resolution. Done early so gestation can gate locus and
-    # embodiment before any module opens. Ship-inert by default: a normal boot
-    # is completely unaffected.
+    # embodiment before any module opens. With staging off (the shipped
+    # default) a boot is unaffected; with it on, a fresh spawn gestates even
+    # beside other beings' records, and anything that has lived does not.
     ctx.stage_state, ctx.staging_enabled, ctx.fresh_gestation = _resolve_start_stage(ctx.kaine_config, ctx.revive, ctx.identity)
     if ctx.revive is not None and ctx.revive.stage_state is not None:
         log.info(

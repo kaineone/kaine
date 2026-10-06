@@ -143,7 +143,9 @@ def test_resolve_boot_stage_gestation_for_fresh_identity_with_foreign_records(
     (fork_dir / "snapshot.json").write_text("{}")
     write_identity_sidecar(fork_dir, other)
 
-    bundle_dir = state_root / "backups" / "b1"
+    # The default preservation out_root is "backups", resolved under the data
+    # root, so this foreign bundle is one the boot check really reads.
+    bundle_dir = data_root / "backups" / "b1"
     bundle_dir.mkdir(parents=True)
     (bundle_dir / "manifest.json").write_text(json.dumps(_manifest(other)))
 
@@ -151,10 +153,16 @@ def test_resolve_boot_stage_gestation_for_fresh_identity_with_foreign_records(
 
     with _data_root(data_root):
         stage_state, enabled, fresh = _resolve_boot_stage(config, identity=me)
+        # The same bundle naming this being would make it lived, which proves
+        # the check reads this location.
+        (bundle_dir / "manifest.json").write_text(json.dumps(_manifest(me)))
+        lived_state, _, lived_fresh = _resolve_boot_stage(config, identity=me)
 
     assert enabled is True
     assert stage_state.stage == st.GESTATION
     assert fresh is True
+    assert lived_state.stage != st.GESTATION
+    assert lived_fresh is False
 
 
 def test_resolve_boot_stage_embodied_for_legacy_tree(
@@ -216,3 +224,36 @@ def test_resolve_boot_stage_finds_own_bundle_under_configured_out_root(
         stage_state, _enabled, fresh = _resolve_boot_stage(config, identity=me)
     assert stage_state.stage == st.EMBODIED
     assert fresh is False
+
+
+def test_lived_before_true_when_a_descendant_record_names_this_being(tmp_path: Path) -> None:
+    """A fork or bundle whose lineage names this being proves it lived."""
+    me = mint_identity()
+    child = fork_identity(me)
+    forks = tmp_path / "forks" / "child-fork"
+    forks.mkdir(parents=True)
+    (forks / "snapshot.json").write_text("{}")
+    write_identity_sidecar(forks, child)
+    assert lived_before(me, tmp_path) is True
+
+    other_root = tmp_path / "elsewhere"
+    bundle = tmp_path / "bundles" / "b1"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text(json.dumps(_manifest(fork_identity(me))))
+    assert lived_before(me, other_root, bundle_roots=[tmp_path / "bundles"]) is True
+
+
+def test_broken_foreign_records_are_skipped(tmp_path: Path) -> None:
+    """Unreadable sidecars and manifests are skipped, never raised, and never
+    count as this being's history."""
+    me = mint_identity()
+    forks = tmp_path / "forks" / "broken"
+    forks.mkdir(parents=True)
+    (forks / "identity.json").write_text("{not json")
+    bundle = tmp_path / "backups" / "b1"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text("{not json")
+    bad_identity = tmp_path / "backups" / "b2"
+    bad_identity.mkdir(parents=True)
+    (bad_identity / "manifest.json").write_text(json.dumps({"identity": "nope"}))
+    assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is False
