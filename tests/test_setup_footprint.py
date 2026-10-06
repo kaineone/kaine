@@ -1031,7 +1031,9 @@ def test_main_corrupt_catalogue_is_named_then_replaced(capsys, tmp_path, monkeyp
     [backup] = list(tmp_path.glob("footprints.json.bak-*"))
     assert backup.read_text() == "not json {"
     assert calls
-    [entry] = load_catalogue(cat)
+    entries = load_catalogue(cat)
+    assert len(entries) == 1
+    entry = entries[0]
     assert entry.component == "topos.encoder"
 
 
@@ -1234,7 +1236,9 @@ def test_main_default_measure_path_is_wired(capsys, tmp_path, monkeypatch):
     assert target.func is footprint._run_component_target
     assert target.args[0].component == "embedding"
     assert timeout == 600.0
-    [entry] = load_catalogue(catalogue)
+    entries = load_catalogue(catalogue)
+    assert len(entries) == 1
+    entry = entries[0]
     assert entry.component == "embedding"
     assert entry.bytes == 123 << 20
     assert entry.mapped is True

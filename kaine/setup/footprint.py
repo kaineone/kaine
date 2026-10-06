@@ -1023,6 +1023,7 @@ def _measure_callable_in_child(
         try:
             os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
+            # The group exited between the last check and the SIGKILL.
             pass
 
     try:
