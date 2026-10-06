@@ -314,16 +314,12 @@ class Emotion2vecClassifier:
             # is `[{"key": ..., "labels": [...], "scores": [...]}]`.
             return result
 
-        handed = False
+        # run() owns the ticket from here: it releases it however the call ends.
         try:
-            handed = True
             raw = await self._gate.run(ticket, None, _infer_sync)
         except Exception as exc:
             log.warning("emotion2vec inference failed: %s; returning neutral", exc)
             return self._inference_failed_result(start, exc)
-        finally:
-            if not handed:
-                ticket.release()
 
         item = raw[0] if isinstance(raw, list) and raw else {}
         labels = item.get("labels", []) or []

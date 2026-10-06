@@ -234,13 +234,8 @@ class DINOv2Encoder:
             cls = outputs.last_hidden_state[:, 0, :].squeeze(0)
             return [float(x) for x in cls.tolist()]
 
-        handed = False
-        try:
-            handed = True
-            return await self._gate.run(ticket, None, _forward_sync)
-        finally:
-            if not handed:
-                ticket.release()
+        # run() owns the ticket from here: it releases it however the call ends.
+        return await self._gate.run(ticket, None, _forward_sync)
 
     async def encode_clip(self, frames: Any) -> list[float]:
         """Per-frame fallback: encode the most recent frame of the clip.
@@ -510,13 +505,8 @@ class InternVideoNextEncoder:
         def _work():
             return forward(pil, torch_=local_torch, processor=local_processor, model=local_model)
 
-        handed = False
-        try:
-            handed = True
-            return await self._gate.run(ticket, None, _work)
-        finally:
-            if not handed:
-                ticket.release()
+        # run() owns the ticket from here: it releases it however the call ends.
+        return await self._gate.run(ticket, None, _work)
 
     async def shutdown(self) -> None:
         await self.unload()
