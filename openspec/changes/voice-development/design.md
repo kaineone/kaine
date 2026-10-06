@@ -120,6 +120,12 @@ The external trainer:
   - A record still open at shutdown is dropped, not written with a guessed outcome, and the count is logged.
 - **Cursors.** Every cursor is seeded from `last_entry_id` at start, never `"$"`.
 
+### D12. Retiring telemetry-as-chosen (task 0.7)
+
+- **`preference_source`.** `[hypnos.voice_alignment]` gains `preference_source`, default `"none"`, which is the only value Stage 0 implements. With `"none"` the voice-alignment phase never trains, even when `enabled` and the operator-approval variable are both set. Its result and the sleep summary say `skipped: no validated preference source (voice-development Stage 2)`. Any other value is refused at boot as unknown until Stage 2 adds its source together with the validation gate (D9).
+- **What still runs.** The consolidation-divergence metric is still computed and published on every sleep. It reads the same faithful-versus-generated pairs, and the template-divergence arm still votes as a protective floor (D8). Only their use as preferred training data is retired.
+- **The training machinery stays tested.** Training moves into a method, `_train_on_pairs(pairs)`: the organ window, the trainer call, the abliteration veto and promotion. Its tests call it directly. The phase-level tests assert that open gates without a preference source never reach the trainer. Stage 2 will call `_train_on_pairs` with its own candidates.
+
 ## Risks
 
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.
