@@ -862,12 +862,16 @@ def _task_for_component(
     return None
 
 
-def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
-    # Put the child in its own process group so a timeout in the parent can
-    # terminate the whole subtree together.
+def _child_main(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
+    """Spawed-child entry point: detach into a new process group, then wrap."""
+    # Detach into a new process group so a parent timeout can terminate the
+    # whole subtree with killpg without leaving orphan model processes.
     if hasattr(os, "setsid"):
         os.setsid()
+    _child_wrapper(conn, target_fn)
 
+
+def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
     # Restrict the child to a small allowlist before any model code runs. This
     # prevents secrets and proxy vars from leaking into downloaded weights'
     # subprocesses or logs.
@@ -888,7 +892,12 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
 
         device_snapshots: dict[int, int] = {}
         if torch is not None and torch.cuda.is_available():
-            for i in range(torch.cuda.device_count()):
+            try:
+                device_count = torch.cuda.device_count()
+            except Exception:
+                # The CUDA runtime reports no device-enumeration API; skip GPUs.
+                device_count = 0
+            for i in range(device_count):
                 try:
                     free, total = torch.cuda.mem_get_info(i)
                     device_snapshots[i] = total - free
@@ -1008,7 +1017,7 @@ def _measure_callable_in_child(
     """Run a callable in a spawned child and return its memory footprint."""
     ctx = multiprocessing.get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
-    process = ctx.Process(target=_child_wrapper, args=(child_conn, target_fn))
+    process = ctx.Process(target=_child_main, args=(child_conn, target_fn))
     process.start()
     # Close the parent's copy of the child's connection immediately so a crash
     # or exit in the child is visible as EOF on the receive end.
@@ -1315,15 +1324,21 @@ def _needs_for(
 ) -> list[Need]:
     """Build fit-report needs from catalogue entries that match this rung.
 
-    Every enabled component is represented. Components without a matching
-    catalogue entry are emitted as uncalibrated so the fit report cannot
-    falsely claim a clean fit.
+    Components explicitly marked as ``not_measured`` are skipped, and external
+    services that were not successfully measured (no catalogue entry) are also
+    skipped because the fit report does not plan for them. Every other enabled
+    component is represented; those without a matching entry are emitted as
+    uncalibrated so the fit report cannot falsely claim a clean fit.
     """
     interactive_components = {"lingua", "audition.stt", "vox.tts"}
     budget_domains = {b.name for b in budgets}
     needs: list[Need] = []
     for info in components:
         rung = f"{info.backend}:{info.model_id}"
+
+        if info.kind == "not_measured":
+            continue
+
         matches = [
             e
             for e in entries
@@ -1332,6 +1347,12 @@ def _needs_for(
             and e.model_id == info.model_id
             and e.host_class == host
         ]
+
+        if info.kind == "external" and not matches:
+            # The service was not measured successfully; it is not part of
+            # the host co-residency plan.
+            continue
+
         if not matches:
             needs.append(
                 Need(
@@ -1521,25 +1542,30 @@ def main(
 
     catalogue_path = args.catalogue
 
-    # load_catalogue never raises: an unreadable file reads as empty. Say so
-    # before it is replaced, so earlier measurements are not lost silently.
     entries = load_catalogue(catalogue_path)
     existing = _catalogue_file(catalogue_path)
-    if not entries and existing.is_file() and existing.stat().st_size > 0:
-        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
-        backup = existing.with_name(f"{existing.name}.bak-{stamp}")
+    if existing.is_file() and existing.stat().st_size > 0:
         try:
-            existing.rename(backup)
-            err(
-                f"warning: the existing footprint catalogue at {existing} was "
-                f"corrupt or unreadable and was moved to {backup}"
-            )
-        except OSError as move_exc:
-            err(
-                f"warning: the existing footprint catalogue at {existing} is "
-                f"corrupt or unreadable but could not be moved ({move_exc}); "
-                "it will be replaced by this run's measurements"
-            )
+            raw = json.loads(existing.read_text(encoding="utf-8"))
+            corrupt = not isinstance(raw, list)
+        except Exception:
+            # Any read/parse failure means the file cannot be trusted.
+            corrupt = True
+        if corrupt:
+            stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+            backup = existing.with_name(f"{existing.name}.bak-{stamp}")
+            try:
+                existing.rename(backup)
+                err(
+                    f"warning: the existing footprint catalogue at {existing} "
+                    f"could not be read; it was moved to {backup} and will be replaced"
+                )
+            except OSError as move_exc:
+                err(
+                    f"warning: the existing footprint catalogue at {existing} "
+                    f"could not be read; it was moved to {backup} and will be replaced "
+                    f"(rename failed: {move_exc})"
+                )
 
     measured_entries: list[Entry] = []
     had_failure = False
@@ -1639,6 +1665,9 @@ def main(
         err(f"error: failed to render fit report: {exc}")
         return 2
 
+    if had_failure:
+        return 1
+
     if report.uncalibrated:
         uncalibrated_list = ", ".join(report.uncalibrated)
         err(
@@ -1646,7 +1675,7 @@ def main(
         )
         return 3
 
-    return 1 if had_failure else 0
+    return 0
 
 
 if __name__ == "__main__":

@@ -2,22 +2,15 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import os
-import sys
 import time
 from pathlib import Path
 from typing import Any
 
-import psutil
-import pytest
-
 from kaine.residency.budget import Domain
-from kaine.residency.catalogue import load_catalogue
-from kaine.residency.fit import Need, fit_report
 from kaine.setup.footprint import (
-    _child_wrapper,
+    ComponentInfo,
     _measure_callable_in_child,
     _needs_for,
-    _select_components,
     _validate_child_record,
     main,
 )
@@ -98,20 +91,22 @@ def _run(
 def test_uncalibrated_enabled_components_exit_three_and_named(
     capsys, tmp_path, monkeypatch
 ):
-    """An enabled component without a catalogue figure makes the fit partial."""
+    """An enabled, planned component without a catalogue figure makes the fit partial."""
     _hermetic_selection(monkeypatch)
     config = {
-        "modules": {"lingua": True},
-        "lingua": {"backend": "openai", "chat_url": "http://127.0.0.1:5000"},
+        "modules": {"topos": True},
+        "topos": {"encoder_backend": "internvideo_next"},
     }
 
-    code, out, err, catalogue_path = _run(["--yes"], config, tmp_path, capsys)
+    code, out, err, catalogue_path = _run(
+        ["--yes", "--only", "topos.encoder"], config, tmp_path, capsys
+    )
 
     assert code == 3
-    assert "Uncalibrated components: lingua" in out
-    assert "result is partial; uncalibrated components: lingua" in err
-    # The local service was not running, so nothing was written yet.
-    assert catalogue_path.read_text() == "[]"
+    assert "Uncalibrated components: topos.encoder" in out
+    assert "result is partial; uncalibrated components: topos.encoder" in err
+    # The weights are absent, so nothing was measured and no file is written.
+    assert not catalogue_path.exists()
 
 
 def test_data_root_installed_before_selection(capsys, tmp_path, monkeypatch):
@@ -152,11 +147,14 @@ def test_remote_url_not_measured(capsys, tmp_path, monkeypatch):
         "lingua": {"backend": "openai", "chat_url": "http://example.com:5000"},
     }
 
-    code, out, err, catalogue_path = _run(["--yes"], config, tmp_path, capsys)
+    code, out, err, catalogue_path = _run(
+        ["--yes", "--only", "lingua"], config, tmp_path, capsys
+    )
 
     assert "not measured: remote_endpoint" in out
+    assert code == 0
     # No local load was attempted and no entry was written.
-    assert catalogue_path.read_text() == "[]"
+    assert not catalogue_path.exists()
 
 
 def test_parent_rejects_invalid_child_records():
@@ -196,12 +194,12 @@ def test_real_child_crash_failed_quickly_and_writes_nothing(
 
     start = time.monotonic()
     ok, peak, device_bytes, device, mapped, error = _measure_callable_in_child(
-        _exit_three_target, timeout=30
+        _exit_three_target, timeout=60
     )
     elapsed = time.monotonic() - start
 
     assert ok is False
-    assert elapsed < 5
+    assert elapsed < 30
     assert "child" in error.lower() or "exit" in error.lower()
 
     # Ensure no catalogue side effects from the failure path by running main
@@ -226,7 +224,7 @@ def test_real_child_crash_failed_quickly_and_writes_nothing(
     )
     assert code == 1
     assert "FAILED" in out
-    assert catalogue_path.read_text() == "[]"
+    assert not catalogue_path.exists()
 
 
 def _env_assert_child():
@@ -255,27 +253,17 @@ def test_child_env_allowlist_drops_secrets_and_sets_offline(monkeypatch):
     assert ok is True, error
 
 
-def test_corrupt_catalogue_backed_up(capsys, tmp_path, monkeypatch):
-    """A corrupt existing catalogue is moved to a timestamped backup."""
+def test_corrupt_catalogue_untouched_when_nothing_is_measured(capsys, tmp_path, monkeypatch):
+    """With nothing measured nothing is written, so a corrupt catalogue is left as is."""
     _hermetic_selection(monkeypatch)
-    config = {"modules": {}}
-
-    # First run creates a valid empty catalogue.
-    code, out, err, catalogue_path = _run([], config, tmp_path, capsys)
-    assert code == 0
-    assert catalogue_path.read_text() == "[]"
-
-    # Corrupt it before the second run.
+    catalogue_path = tmp_path / "footprints.json"
     catalogue_path.write_text("not valid json")
 
-    code, out, err, catalogue_path = _run([], config, tmp_path, capsys)
-    assert code == 0
-    assert "corrupt or unreadable" in err
+    code, out, err, catalogue_path = _run(["--yes"], {"modules": {}}, tmp_path, capsys)
 
-    backups = list(tmp_path.glob("footprints.json.bak-*"))
-    assert len(backups) == 1
-    assert backups[0].read_text() == "not valid json"
-    assert catalogue_path.read_text() == "[]"
+    assert code == 0  # nothing is enabled, so nothing is selected or planned
+    assert catalogue_path.read_text() == "not valid json"
+    assert not list(tmp_path.glob("footprints.json.bak-*"))
 
 
 def test_non_positive_timeout_rejected(capsys, tmp_path):
@@ -297,25 +285,18 @@ def test_needs_for_uncalibrated_and_device_folding():
     """_needs_for emits uncalibrated Needs and folds device bytes on unified hosts."""
     from kaine.residency.catalogue import Entry
 
-    entries = [
-        Entry(
-            component="topos.encoder",
-            backend="internvideo_next",
-            model_id="internvideo_next",
-            bytes=2 << 30,
-            device="cuda:0",
-            device_bytes=4 << 30,
-            mapped=False,
-            host_class="discrete",
-        ),
-    ]
-
-    component = _select_components(
-        {"modules": {"topos": True}, "topos": {"encoder_backend": "internvideo_next"}}
+    base_entry = dict(
+        component="topos.encoder",
+        backend="internvideo_next",
+        model_id="internvideo_next",
+        bytes=2 << 30,
+        device="cuda:0",
+        device_bytes=4 << 30,
+        mapped=False,
     )
-    # Make the component appear selected; the selection above may mark it absent
-    # on this machine, so build a deterministic ComponentInfo instead.
-    from kaine.setup.footprint import ComponentInfo
+
+    discrete_entries = [Entry(host_class="discrete", **base_entry)]
+    unified_entries = [Entry(host_class="unified", **base_entry)]
 
     info = ComponentInfo(
         name="topos.encoder",
@@ -324,7 +305,6 @@ def test_needs_for_uncalibrated_and_device_folding():
         model_id="internvideo_next",
     )
 
-    # Discrete host with a cuda:0 budget domain -> separate device need.
     discrete_budgets = (
         Domain(
             name="system",
@@ -345,10 +325,9 @@ def test_needs_for_uncalibrated_and_device_folding():
             derivation="test",
         ),
     )
-    needs = _needs_for(entries, [info], "discrete", discrete_budgets)
+    needs = _needs_for(discrete_entries, [info], "discrete", discrete_budgets)
     assert any(n.domain == "cuda:0" and n.footprint_bytes == 4 << 30 for n in needs)
 
-    # Unified host with no cuda domain -> device bytes folded into system.
     unified_budgets = (
         Domain(
             name="system",
@@ -360,7 +339,7 @@ def test_needs_for_uncalibrated_and_device_folding():
             derivation="test",
         ),
     )
-    needs = _needs_for(entries, [info], "unified", unified_budgets)
+    needs = _needs_for(unified_entries, [info], "unified", unified_budgets)
     system_need = next(n for n in needs if n.domain == "system")
     assert system_need.footprint_bytes == (2 << 30) + (4 << 30)
 

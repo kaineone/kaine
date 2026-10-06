@@ -15,6 +15,7 @@ from kaine.residency.budget import Domain
 from kaine.residency.catalogue import Entry, load_catalogue
 from kaine.residency.fit import Need, fit_report
 from kaine.setup.footprint import (
+    ComponentInfo,
     HostClassUnknown,
     ServiceNotMeasurable,
     _child_wrapper,
@@ -384,7 +385,9 @@ def test_consent_yes_measures(capsys, tmp_path, monkeypatch):
         input_fn=lambda prompt: "yes",
         stdin_isatty=True,
     )
-    assert code == 0
+    assert code == 3
+    assert "Uncalibrated components:" in out
+    assert "embedding" in out
     assert calls
 
 
@@ -498,7 +501,10 @@ def test_nothing_measured_writes_no_file(capsys, tmp_path, monkeypatch):
         },
     }
     code, out, err, cat = _run(["--yes"], config, tmp_path, capsys)
-    assert code == 0
+    assert code == 3
+    assert "Uncalibrated components:" in out
+    assert "topos.encoder" in out
+    assert "embedding" in out
     assert not cat.exists()
 
 
@@ -560,9 +566,12 @@ def test_audition_transcription_disabled_no_stt(capsys, tmp_path, monkeypatch):
         },
     }
     code, out, err, cat = _run(["--yes"], config, tmp_path, capsys, measure=measure)
-    assert code == 0
+    # The shared embedding is absent under the hermetic selection, so the
+    # result is partial (exit 3); the point here is that no STT is selected.
+    assert code == 3
     assert not calls
     assert "audition.stt" not in out
+    assert "uncalibrated components: embedding" in err
 
 
 def test_sherpa_stt_and_tts_selected(monkeypatch, capsys, tmp_path):
@@ -642,7 +651,7 @@ def test_container_port_forwarder_not_measured(capsys, tmp_path, monkeypatch):
         )
 
     code, out, err, cat = _run(
-        ["--yes"],
+        ["--yes", "--only", "lingua"],
         config,
         tmp_path,
         capsys,
@@ -821,17 +830,37 @@ def test_needs_for_ignores_other_model_ids():
             host_class="cpu",
         ),
     ]
-    info = type(
-        "ComponentInfo",
-        (),
-        {
-            "name": "topos.encoder",
-            "kind": "in_process",
-            "backend": "internvideo_next",
-            "model_id": "current-model",
-        },
+    info = ComponentInfo(
+        name="topos.encoder",
+        kind="in_process",
+        backend="internvideo_next",
+        model_id="current-model",
     )
-    needs = _needs_for(entries, [info], "cpu")
+    needs = _needs_for(
+        entries,
+        [info],
+        "cpu",
+        (
+            Domain(
+                name="system",
+                kind="system",
+                total_bytes=16 << 30,
+                available_bytes=15 << 30,
+                reserve_bytes=1 << 30,
+                budget_bytes=15 << 30,
+                derivation="test",
+            ),
+            Domain(
+                name="cuda:0",
+                kind="accelerator",
+                total_bytes=8 << 30,
+                available_bytes=7 << 30,
+                reserve_bytes=1 << 30,
+                budget_bytes=7 << 30,
+                derivation="test",
+            ),
+        ),
+    )
     assert len(needs) == 2
     sys_need = next(n for n in needs if n.domain == "system")
     assert sys_need.footprint_bytes == 200 << 20
@@ -979,7 +1008,10 @@ def test_main_corrupt_catalogue_is_named_then_replaced(capsys, tmp_path, monkeyp
         torch_module=_fake_torch(False),
     )
     assert code == 0
-    assert "could not be read; it will be replaced" in err
+    assert "could not be read" in err
+    assert "moved to" in err
+    [backup] = list(tmp_path.glob("footprints.json.bak-*"))
+    assert backup.read_text() == "not json {"
     assert calls
     [entry] = load_catalogue(cat)
     assert entry.component == "topos.encoder"
@@ -1112,8 +1144,11 @@ def test_child_wrapper_zero_cuda_memory_records_no_device(monkeypatch):
         (),
         {
             "is_available": staticmethod(lambda: True),
+            "device_count": staticmethod(lambda: 1),
             "current_device": staticmethod(lambda: 0),
             "max_memory_reserved": staticmethod(lambda: 0),
+            "memory_allocated": staticmethod(lambda device: 0),
+            "mem_get_info": staticmethod(lambda device: (8 << 30, 16 << 30)),
         },
     )()
     fake_torch = type("_Torch", (), {"cuda": fake_cuda})()
