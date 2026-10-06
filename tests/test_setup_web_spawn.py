@@ -863,3 +863,177 @@ def test_spawn_start_failure_is_refused_not_500(tmp_path, monkeypatch, spawn_fak
         assert "could not be started (OSError)" in r.text
         assert app.state.spawned is None
         assert app.state.finish_shutdown is False
+
+
+def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
+    """Runtime enumeration: only /spawn/confirm may start ``kaine.cycle``."""
+    import asyncio
+    import tomllib
+
+    from kaine.setup.web import job_specs as job_specs_mod
+
+    recorded_argv: list[list[str]] = []
+
+    # Above /proc/sys/kernel/pid_max (at most 2**22), so no real process or
+    # group can ever have this id if teardown signals it.
+    impossible_pid = 2**30
+
+    class FakePopen:
+        pid = impossible_pid
+        returncode = 0
+
+        def poll(self):
+            # Exited at once: no fake service holds a job "running".
+            return 0
+
+        def wait(self, timeout=None):
+            return 0
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            pass
+
+    def fake_popen(argv, **kwargs):
+        recorded_argv.append(list(argv))
+        return FakePopen()
+
+    def fake_run(*args, **kwargs):
+        args0 = args[0] if args else []
+        recorded_argv.append(list(args0))
+        return subprocess.CompletedProcess(
+            args=args0, returncode=0, stdout=b"", stderr=b""
+        )
+
+    async def fake_subprocess_exec(*args, **kwargs):
+        recorded_argv.append(list(args))
+        proc = SimpleNamespace(
+            pid=impossible_pid,
+            returncode=0,
+            stdout=asyncio.StreamReader(),
+        )
+        proc.stdout.feed_eof()
+        proc.wait = AsyncMock(return_value=0)
+        proc.communicate = AsyncMock(return_value=(b"", b""))
+        return proc
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess_exec)
+    monkeypatch.setattr(
+        "kaine.setup.web.jobs.asyncio.create_subprocess_exec", fake_subprocess_exec
+    )
+
+    async def fake_preboot(repo_root, *, timeout_s=600.0):
+        return (True, [], "all good")
+
+    monkeypatch.setattr(spawn, "run_preboot", fake_preboot)
+
+    async def fake_wait_ready(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5):
+        return ("ready", None)
+
+    monkeypatch.setattr(spawn, "wait_ready", fake_wait_ready)
+
+    real_start_cycle = spawn.start_cycle
+
+    def recording_start_cycle(*args, **kwargs):
+        if "popen" not in kwargs:
+            kwargs["popen"] = fake_popen
+        return real_start_cycle(*args, **kwargs)
+
+    monkeypatch.setattr(spawn, "start_cycle", recording_start_cycle)
+
+    _mock_nexus(monkeypatch)
+    monkeypatch.setattr(
+        "kaine.nexus.config.load_nexus_config",
+        lambda *a, **k: SimpleNamespace(port=12345, operator_token="x" * 40),
+    )
+
+    with _saved_client(tmp_path) as (client, app):
+        shipped_cfg = tomllib.loads(
+            app.state.shipped_config_path.read_text(encoding="utf-8")
+        )
+        all_modules = {
+            name: True for name in (shipped_cfg.get("modules") or {}).keys()
+        }
+
+        real_build_job_specs = job_specs_mod.build_job_specs
+
+        def build_all_specs(config, shipped, *, repo_root, shipped_config_path, operator_path):
+            merged = dict(config)
+            merged["modules"] = dict(all_modules)
+            return real_build_job_specs(
+                merged,
+                shipped,
+                repo_root=repo_root,
+                shipped_config_path=shipped_config_path,
+                operator_path=operator_path,
+            )
+
+        monkeypatch.setattr(job_specs_mod, "build_job_specs", build_all_specs)
+
+        full_specs = real_build_job_specs(
+            {"modules": all_modules},
+            app.state.setup.shipped,
+            repo_root=app.state.repo_root,
+            shipped_config_path=app.state.shipped_config_path,
+            operator_path=app.state.setup.operator_path,
+        )
+
+        base_headers = {
+            "Host": "127.0.0.1:8000",
+            "Origin": "http://127.0.0.1:8000",
+        }
+
+        for spec in full_specs:
+            client.post(
+                f"/jobs/{spec.name}/start",
+                headers=base_headers,
+                follow_redirects=False,
+            )
+
+        skip = {"spawn_confirm", "abort"}
+        token = app.state.setup.store.issue()
+
+        def _fill(path: str) -> str:
+            for m in re.finditer(r"\{([^}]+)\}", path):
+                replacement = token if "token" in m.group(1) else "dummy"
+                path = path.replace(m.group(0), replacement, 1)
+            return path
+
+        for route in app.routes:
+            methods = getattr(route, "methods", None)
+            path = getattr(route, "path", None)
+            if not methods or not path:
+                continue
+            if getattr(route, "name", None) in skip:
+                continue
+            filled = _fill(path)
+            if "GET" in methods:
+                client.get(filled, headers=base_headers, follow_redirects=False)
+            if "POST" in methods:
+                client.post(filled, headers=base_headers, follow_redirects=False)
+
+        assert not any("kaine.cycle" in argv for argv in recorded_argv), recorded_argv
+
+        r_spawn = client.post(
+            "/spawn",
+            data={"affirmation": spawn.SPAWN_ACK_PHRASE, "keep_info": "false"},
+            headers=base_headers,
+            follow_redirects=False,
+        )
+        assert r_spawn.status_code in (200, 303), re.findall(r'<p>([^<]+)</p>', r_spawn.text)[:3]
+        nonce = _extract_nonce(r_spawn.text)
+        r_confirm = client.post(
+            "/spawn/confirm",
+            data={"nonce": nonce},
+            headers=base_headers,
+            follow_redirects=False,
+        )
+        assert r_confirm.status_code == 200, r_confirm.text
+        cycle_starts = [argv for argv in recorded_argv if "kaine.cycle" in argv]
+        assert len(cycle_starts) == 1, cycle_starts
+        assert cycle_starts[0][:3] == [sys.executable, "-m", "kaine.cycle"]
+
+        client.post("/abort", headers=base_headers, follow_redirects=False)
