@@ -323,6 +323,7 @@ def test_numpy_double_cancel_does_not_leak_inflight(
             try:
                 await asyncio.wait_for(encode_task, 2)
             except asyncio.CancelledError:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
             await asyncio.wait_for(embedder.unload(), 2)
             assert embedder._gate.inflight == 0
@@ -389,6 +390,7 @@ def test_sentence_double_cancel_does_not_leak_inflight(
             try:
                 await asyncio.wait_for(encode_task, 2)
             except asyncio.CancelledError:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
             await asyncio.wait_for(embedder.unload(), 2)
             assert embedder._gate.inflight == 0

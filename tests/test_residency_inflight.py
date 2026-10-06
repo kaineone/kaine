@@ -49,6 +49,7 @@ def test_cancelled_while_running():
             try:
                 await task
             except asyncio.CancelledError:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
 
             assert gate.inflight == 1
@@ -99,6 +100,7 @@ def test_cancelled_before_start():
             try:
                 await second_task
             except asyncio.CancelledError:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
 
             assert gate.inflight == 1
@@ -196,6 +198,7 @@ def test_two_concurrent_jobs_one_cancelled():
             try:
                 await task1
             except asyncio.CancelledError:
+                # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
 
             assert gate.inflight == 2
@@ -262,6 +265,7 @@ def test_wait_idle_from_different_loop_while_inflight_raises():
         try:
             await task
         except asyncio.CancelledError:
+            # Expected or irrelevant here: the test asserts on state, not on this outcome.
             pass
 
     asyncio.run(first())
@@ -299,6 +303,8 @@ def test_abandoned_job_never_runs_fn():
             for future, fn, args, kwargs in self._pending:
                 try:
                     result = fn(*args, **kwargs)
+                # Like a real executor: every exception, BaseException included,
+                # is delivered to the future.
                 except BaseException as exc:
                     future.set_exception(exc)
                 else:
