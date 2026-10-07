@@ -26,3 +26,25 @@ CI SHALL run the test suite in parallel, one worker per CPU, keeping each test f
 #### Scenario: CI runs the suite
 - **WHEN** the test workflow runs
 - **THEN** pytest runs with `-n auto --dist loadfile`
+
+### Requirement: The suite is a required check and runs for every merge-queue batch
+The tests workflow SHALL run on every pull request to `main` without a path filter, and on every merge-queue batch. The CodeQL, import-boundary, red-team and ruff workflows SHALL also run on merge-queue batches. A merge-queue batch SHALL run the slow tests when it changes a path listed in `.github/slow-test-paths.txt`, diffed against the batch's base.
+
+#### Scenario: A pull request changes only OpenSpec files
+- **WHEN** a pull request changes only files under `openspec/`
+- **THEN** the test suite still runs, so the required pytest check reports a result
+
+#### Scenario: A merge-queue batch touches the Active Inference benchmark
+- **WHEN** a merge-queue batch changes `kaine/evaluation/benchmarks/active_inference/`
+- **THEN** CI runs the slow tests for that batch as well as the rest of the suite
+
+### Requirement: Tests never write to real KAINE data
+The test suite SHALL give every test its own data root and SHALL prevent tests from discovering the host's real disks. A test that changes the checkout's `state/`, or any real data-root candidate known when the session starts, SHALL fail and name the directories it changed. The guards SHALL read directory modification times only, never file contents. They SHALL skip `forks`, `models` and `_archive*`. The real-root guard SHALL stand down, with a warning, while a `kaine.cycle` process is running.
+
+#### Scenario: A test drives the setup wizard to a save
+- **WHEN** a test runs the storage step without naming a data root
+- **THEN** it sees no real mounts, and its default data root lies inside the test's temporary directory
+
+#### Scenario: A test writes into a real data root
+- **WHEN** a test creates or removes a file under a watched real data root
+- **THEN** that test fails and names the changed directory

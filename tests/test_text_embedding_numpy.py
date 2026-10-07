@@ -287,9 +287,10 @@ def test_tiny_bert_load_and_encode(tiny_bert_dir: Path) -> None:
     for a, b in zip(batch[0], vec):
         assert abs(a - b) < 1e-6
 
+    # encode on a never-loaded embedder loads it first, like the
+    # sentence-transformers embedder and the speech engines.
     fresh = NumpyMiniLMEmbedder(model_path=str(tiny_bert_dir))
-    with pytest.raises(RuntimeError):
-        asyncio.run(fresh.encode("hello world"))
+    assert asyncio.run(fresh.encode("hello world")) == vec
 
 
 def test_tokenizer_config_do_lower_case_false_preserves_cased(tiny_bert_dir: Path) -> None:

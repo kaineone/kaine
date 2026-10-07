@@ -16,7 +16,7 @@ import math
 import secrets
 import time
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +54,22 @@ from kaine.lifecycle.individuation_store import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _condition_changes(stored: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
+    """Return sorted names of non-embedder probe-condition keys that differ.
+
+    A key present on only one side counts as a difference, regardless of the
+    value on the other side (including a missing key versus a key whose value
+    is ``None``). Embedder keys are excluded because embedder differences are
+    handled by re-embedding.
+    """
+    stored_keys = {k for k in stored if not k.startswith("embedder")}
+    current_keys = {k for k in current if not k.startswith("embedder")}
+    return sorted(
+        k for k in (stored_keys | current_keys)
+        if (k in stored_keys) != (k in current_keys) or stored[k] != current[k]
+    )
 
 
 @dataclass(frozen=True)
@@ -116,6 +132,7 @@ class IndividuationCore:
         abort_reason: Callable[[], str | None],
         rng: np.random.Generator | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        refresh_conditions: Callable[[], Awaitable[None]] | None = None,
         entity_name: str = "",
     ) -> None:
         self._paths = paths
@@ -133,6 +150,7 @@ class IndividuationCore:
         self._abort_reason = abort_reason
         self._rng = rng if rng is not None else np.random.default_rng()
         self._now = now
+        self._refresh_conditions = refresh_conditions
         self._entity_name = entity_name
 
     async def capture_reference(
@@ -146,6 +164,14 @@ class IndividuationCore:
         the birth adapter is copied only for a ``birth`` reference and only after the
         reference document is safely persisted.
         """
+        if self._refresh_conditions is not None:
+            try:
+                await self._refresh_conditions()
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to refresh probe conditions before capture"
+                ) from exc
+
         if kind not in REFERENCE_KINDS:
             raise ValueError(f"Invalid reference kind {kind!r}")
 
@@ -245,6 +271,18 @@ class IndividuationCore:
         """Run one individuation look."""
         start = time.perf_counter()
 
+        if self._refresh_conditions is not None:
+            try:
+                await self._refresh_conditions()
+            except Exception:
+                report = await self._inconclusive(
+                    "conditions_unreadable",
+                    ref_id="unknown",
+                    k=None,
+                    start=start,
+                )
+                return LookOutcome("inconclusive", "conditions_unreadable", report)
+
         # 1. Ledger
         try:
             ledger = load_ledger(self._paths)
@@ -313,6 +351,64 @@ class IndividuationCore:
                 ref=ref,
             )
             return LookOutcome("inconclusive", "battery_changed", report)
+
+        # 4b. Probe conditions
+        try:
+            current_conditions = self._conditions()
+        except Exception:
+            report = await self._inconclusive(
+                "conditions_unreadable",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_unreadable", report)
+
+        stored_conditions = getattr(ref, "conditions", None)
+        if not stored_conditions:
+            log.warning(
+                "Reference %s has no stored probe conditions; refusing comparison",
+                ref.reference_id,
+            )
+            report = await self._inconclusive(
+                "conditions_changed",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_changed", report)
+
+        if not isinstance(stored_conditions, Mapping):
+            log.warning(
+                "Reference %s stored probe conditions are not a mapping; refusing comparison",
+                ref.reference_id,
+            )
+            report = await self._inconclusive(
+                "conditions_unreadable",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_unreadable", report)
+
+        changes = _condition_changes(stored_conditions, current_conditions)
+        if changes:
+            log.warning(
+                "Reference %s probe conditions changed: %s",
+                ref.reference_id,
+                changes,
+            )
+            report = await self._inconclusive(
+                "conditions_changed",
+                ref_id=ref.reference_id,
+                k=k,
+                start=start,
+                ref=ref,
+            )
+            return LookOutcome("inconclusive", "conditions_changed", report)
 
         # 5. Unchanged being
         try:

@@ -322,6 +322,7 @@ def test_durable_paths_cover_every_configured_store(tmp_path):
     assert paths["[preservation.welfare_response].out_root"] == tmp_path / "backups"
 
 
+@pytest.mark.no_data_root
 def test_durable_paths_use_module_defaults():
     paths = dict(preboot.durable_paths({}))
     assert paths["[lifecycle].snapshots_path"] == Path("state/forks")
@@ -337,6 +338,7 @@ def test_disk_pass_with_plenty_of_space(tmp_path):
     assert [r.status for r in rows if r.name == "Disk free (Redis data)"] == [preboot.SKIP]
 
 
+@pytest.mark.no_data_root
 def test_disk_rows_split_by_filesystem(tmp_path):
     cfg = _disk_config(tmp_path)
     backups = tmp_path / "backups"

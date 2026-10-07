@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from kaine.lifecycle.divergence import DivergenceAssessment
+from kaine.lifecycle.identity import IdentityError, load_identity
 from kaine.memory_kinds import (
     MNEMOS_COLLECTION_KINDS,
     MNEMOS_STAMP_COLLECTION,
@@ -320,6 +321,24 @@ def capture_backup(
     errors: list[str] = []
 
     bundle_dir = out_root / f"entity_{_safe_name(entity_name)}_{_utc_stamp()}"
+    # The being's identity goes into the plaintext manifest so key custody can
+    # find its key without decrypting the bundle (entity-identity D7). It is read
+    # before the bundle directory exists, so an unreadable identity leaves no
+    # partial copy of the being behind (D10).
+    identity_entry: dict[str, Any] | None = None
+    try:
+        identity = load_identity(state_root / "identity" / "entity.json")
+    except IdentityError as exc:
+        return BackupResult(
+            ok=False,
+            backup_path=bundle_dir,
+            errors=[f"load identity for backup: {exc}"],
+        )
+    if identity is not None:
+        identity_entry = {
+            "entity_id": identity.entity_id,
+            "lineage": list(identity.lineage),
+        }
     try:
         # out_root may not exist yet; create it owner-only too.
         out_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -519,6 +538,9 @@ def capture_backup(
             "inside bundle.tar.enc — decrypt with the operator's KAINE_STATE_KEY first."
         ),
     }
+    if identity_entry is not None:
+        manifest["identity"] = identity_entry
+
     manifest_path = bundle_dir / "manifest.json"
     try:
         _atomic_write_text(manifest_path, json.dumps(manifest, indent=2, sort_keys=True))

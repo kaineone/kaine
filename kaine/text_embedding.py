@@ -26,6 +26,7 @@ re-exports these names for back-compat without a second implementation.
 from __future__ import annotations
 
 import asyncio
+import gc
 import hashlib
 import logging
 import math
@@ -36,6 +37,7 @@ from typing import Any, Iterable, Protocol, runtime_checkable
 from kaine.embedding_defaults import DEFAULT_LATENT_DIM as DEFAULT_LATENT_DIM
 from kaine.embedding_defaults import DEFAULT_MODEL_ID as DEFAULT_MODEL_ID
 from kaine.embedding_defaults import canonical_model_id
+from kaine.residency.inflight import InflightGate
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +114,12 @@ class SentenceTransformerTextEmbedder:
         self._device = "cpu"
         self._model: Any = None
         self._latent_dim: int | None = None
+        self._load_lock: asyncio.Lock | None = None
+        self._gate = InflightGate()
+
+    @property
+    def loaded(self) -> bool:
+        return self._model is not None
 
     @property
     def latent_dim(self) -> int:
@@ -143,10 +151,22 @@ class SentenceTransformerTextEmbedder:
             "normalized": True,
         }
 
-    async def load(self) -> None:
-        if self._model is not None:
-            return
+    def _ensure_lock(self) -> None:
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
 
+    async def ensure_loaded(self) -> None:
+        """Load the underlying model (idempotent, serialised)."""
+        if self.loaded:
+            return
+        self._ensure_lock()
+        async with self._load_lock:
+            if self.loaded:
+                return
+            await self._load_locked()
+
+    async def _load_locked(self) -> None:
+        """Model loading body; must be called with ``self._load_lock`` held."""
         os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
         from kaine.hardware import resolve_device
 
@@ -155,7 +175,9 @@ class SentenceTransformerTextEmbedder:
         self._device = resolve_device(self._device_preference)
 
         def _load_sync():
-            from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
+            from sentence_transformers import (
+                SentenceTransformer,  # type: ignore[import-untyped]
+            )
 
             return SentenceTransformer(self._model_id, device=self._device)
 
@@ -168,36 +190,64 @@ class SentenceTransformerTextEmbedder:
             self._latent_dim,
         )
 
+    async def load(self) -> None:
+        """Alias of :meth:`ensure_loaded`."""
+        return await self.ensure_loaded()
+
     async def encode(self, text: str) -> list[float]:
-        if self._model is None:
-            await self.load()
+        self._ensure_lock()
+
+        async with self._load_lock:
+            if not self.loaded:
+                await self._load_locked()
+            model = self._model
+            ticket = self._gate.admit()
 
         def _encode_sync() -> list[float]:
-            assert self._model is not None
-            vec = self._model.encode(text, convert_to_numpy=True, show_progress_bar=False)
+            assert model is not None
+            vec = model.encode(text, convert_to_numpy=True, show_progress_bar=False)
             return [float(x) for x in vec.tolist()]
 
-        return await asyncio.to_thread(_encode_sync)
+        return await self._gate.run(ticket, None, _encode_sync)
 
     async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
-        if self._model is None:
-            await self.load()
-
         items = list(texts)
+        self._ensure_lock()
+
+        async with self._load_lock:
+            if not self.loaded:
+                await self._load_locked()
+            model = self._model
+            ticket = self._gate.admit()
 
         def _encode_sync() -> list[list[float]]:
-            assert self._model is not None
-            arr = self._model.encode(items, convert_to_numpy=True, show_progress_bar=False)
+            assert model is not None
+            arr = model.encode(items, convert_to_numpy=True, show_progress_bar=False)
             return [[float(x) for x in row.tolist()] for row in arr]
 
-        return await asyncio.to_thread(_encode_sync)
+        return await self._gate.run(ticket, None, _encode_sync)
 
     async def embed(self, text: str) -> list[float]:
         """Alias of :meth:`encode` for the lightweight ``TextEmbedder`` callers."""
         return await self.encode(text)
 
+    async def unload(self) -> None:
+        """Release the model. Idempotent; waits for in-flight encoding."""
+        self._ensure_lock()
+        async with self._load_lock:
+            if not self.loaded:
+                return
+            await self._gate.wait_idle()
+            self._model = None
+        await asyncio.to_thread(gc.collect)
+        if self._device.startswith("cuda"):
+            import torch
+
+            torch.cuda.empty_cache()
+
     async def shutdown(self) -> None:
-        self._model = None
+        """Release the model."""
+        await self.unload()
 
 
 class HashEmbedder:
@@ -292,6 +342,7 @@ class SharedEmbedder:
     ``shutdown()`` is intentionally a no-op: MnemosCore shuts its embedder
     down when it stops, and a Spot restart of one module must not unload
     the model underneath the other modules that still hold a reference to it.
+    ``unload()`` is the residency path and delegates to the inner embedder.
     """
 
     def __init__(self, inner: Embedder) -> None:
@@ -302,6 +353,10 @@ class SharedEmbedder:
     @property
     def inner(self) -> Embedder:
         return self._inner
+
+    @property
+    def loaded(self) -> bool:
+        return getattr(self._inner, "loaded", self._loaded)
 
     @property
     def latent_dim(self) -> int:
@@ -319,17 +374,35 @@ class SharedEmbedder:
     def kind(self) -> Any:
         return getattr(self._inner, "kind", None)
 
-    async def load(self) -> None:
-        if self._loaded:
-            return
-        # Created on first load() so construction outside a running loop is safe.
+    def _ensure_lock(self) -> None:
         if self._load_lock is None:
             self._load_lock = asyncio.Lock()
+
+    async def ensure_loaded(self) -> None:
+        """Same as :meth:`load`: load the inner embedder once (the residency name)."""
+        return await self.load()
+
+    async def load(self) -> None:
+        if self.loaded:
+            return
+        self._ensure_lock()
         async with self._load_lock:
-            if self._loaded:
+            if self.loaded:
                 return
-            await self._inner.load()
+            inner_load = getattr(self._inner, "ensure_loaded", None)
+            if inner_load is None:
+                inner_load = self._inner.load
+            await inner_load()
             self._loaded = True
+
+    async def unload(self) -> None:
+        """Delegate to the inner embedder's unload and clear cached state."""
+        self._ensure_lock()
+        async with self._load_lock:
+            inner_unload = getattr(self._inner, "unload", None)
+            if inner_unload is not None:
+                await inner_unload()
+            self._loaded = False
 
     async def shutdown(self) -> None:
         """No-op: the shared instance outlives individual module lifecycles."""

@@ -33,6 +33,7 @@ from typing import Optional
 
 from kaine.distributed.gate import VerifierOutcome
 from kaine.distributed.job import ArtifactKind, BatchJob, ExpectedArtifact, JobKind
+from kaine.lifecycle.identity import read_identity_sidecar
 from kaine.lifecycle.timing_profile import build_timing_metadata
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ def build_forked_being_job(
     time_scale: Optional[float] = None,
     base_model_ref: Optional[str] = None,
     result_relpath: str = DEFAULT_SNAPSHOT_RELPATH,
+    fork_root: Optional[Path] = None,
 ) -> BatchJob:
     """Build the batch-job descriptor for a forked temporary being.
 
@@ -69,6 +71,15 @@ def build_forked_being_job(
         "directive": directive,
         **timing_meta,
     }
+    # The fork's plaintext identity travels with the job, so key custody can find
+    # the fork's key without decrypting its snapshot (entity-identity D7).
+    if fork_root is not None:
+        sidecar = read_identity_sidecar(Path(fork_root) / fork_snapshot_id)
+        if sidecar is not None:
+            inputs["fork_identity"] = {
+                "entity_id": sidecar[0],
+                "lineage": list(sidecar[1]),
+            }
     return BatchJob(
         kind=JobKind.FORKED_BEING,
         expected_artifact=ExpectedArtifact(

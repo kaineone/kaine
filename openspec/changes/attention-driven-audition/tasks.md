@@ -148,20 +148,20 @@ still-unbuilt foveation Phase 3–4._
 
 ## 6. Self-supervised encoders (amendment 2026-10-05, B1)
 
-- [ ] 6.1 Vendor Dasheng-base under `external/dasheng/`, from the Hugging Face
+- [x] 6.1 Vendor Dasheng-base under `external/dasheng/`, from the Hugging Face
       repository, never the Zenodo GPL copy. Add an `UPSTREAM` file with the pinned
       revision and licence, and a setup-time weight fetch pinned to that
       revision. Load with `local_files_only`, `HF_HUB_OFFLINE=1`, and no
       `trust_remote_code`.
-- [ ] 6.2 Vendor WavJEPA-base under `external/wavjepa/` the same way. Replace the
+- [x] 6.2 Vendor WavJEPA-base under `external/wavjepa/` the same way. Replace the
       config `eval()` with a literal parse and rename the shadowing `types.py`.
       The runtime path loads the student encoder only.
-- [ ] 6.3 `DashengAcousticEncoder` and `WavJEPAAcousticEncoder` behind the
+- [x] 6.3 `DashengAcousticEncoder` and `WavJEPAAcousticEncoder` behind the
       registry, each with a RAM-only rolling window buffer, covered by the
       zero-persistence test.
 - [ ] 6.4 ONNX and dynamic-int8 exports of a thin segment module per encoder,
       with a parity test against torch on the real weights.
-- [ ] 6.5 An energy channel: `energy_dbfs` on `audition.perception`, available to
+- [x] 6.5 An energy channel: `energy_dbfs` on `audition.perception`, available to
       salience independently of the encoder.
 - [ ] 6.6 Offline bake-off (`scripts/bench_audition_encoders.py`) on the seeded,
       playlist and womb feeds, with the four design metrics. Record it under

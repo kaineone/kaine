@@ -127,6 +127,7 @@ class OpenAIChatClient:
                 base_url=self._base_url,
                 headers=headers,
                 timeout=self._timeout_s,
+                trust_env=False,
             )
         return self._client
 

@@ -5,7 +5,6 @@ import asyncio
 import glob
 import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -87,8 +86,11 @@ def test_spot_selftest_does_not_touch_global_state(tmp_path, monkeypatch):
     assert not real_escalation.exists()
 
 
-def test_spot_selftest_removes_scratch_directory():
-    pattern = str(Path(tempfile.gettempdir()) / "kaine-spot-selftest-*")
+def test_spot_selftest_removes_scratch_directory(tmp_path, monkeypatch):
+    # A private temp root: parallel workers run their own self-tests, and their
+    # scratch directories in the shared /tmp would look like ours.
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    pattern = str(tmp_path / "kaine-spot-selftest-*")
     before = set(glob.glob(pattern))
 
     result = asyncio.run(run_spot_selftest({"enabled": True}, timeout_s=2.0))

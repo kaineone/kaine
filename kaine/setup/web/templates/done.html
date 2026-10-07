@@ -1,0 +1,11 @@
+{% extends "_setup_base.html" %}
+{% block title %}Setup complete — KAINE Setup{% endblock %}
+{% block content %}
+{% if abort %}
+  <h1>Setup ended</h1>
+  <p>{{ message }}</p>
+{% else %}
+  <h1>Setup saved</h1>
+  <p>{{ message }}</p>
+{% endif %}
+{% endblock %}

@@ -9,6 +9,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 from kaine.bus.errors import BusConfigError
 from kaine.config import OPERATOR_CONFIG_PATH, deep_merge
@@ -108,7 +109,7 @@ def _parse_max_connections(raw) -> int:
     return raw
 
 
-def load_bus_config(
+def _build_bus_config(
     kaine_toml: Optional[Path] = None,
     secrets_toml: Optional[Path] = None,
     env: Optional[dict[str, str]] = None,
@@ -167,7 +168,7 @@ def load_bus_config(
         or redis_doc.get("username")
     )
 
-    config = BusConfig(
+    return BusConfig(
         host=str(redis_doc.get("host", "127.0.0.1")),
         port=int(redis_doc.get("port", 6379)),
         db=int(redis_doc.get("db", 0)),
@@ -182,7 +183,19 @@ def load_bus_config(
         max_connections=max_connections,
     )
 
-    if not url_override and not config.password:
+
+def load_bus_config(
+    kaine_toml: Optional[Path] = None,
+    secrets_toml: Optional[Path] = None,
+    env: Optional[dict[str, str]] = None,
+    operator_toml: Optional[Path] = None,
+) -> BusConfig:
+    root = _project_root()
+    kaine_toml = kaine_toml or root / DEFAULT_KAINE_TOML
+    secrets_toml = secrets_toml or root / DEFAULT_SECRETS_TOML
+    config = _build_bus_config(kaine_toml, secrets_toml, env, operator_toml)
+
+    if not config.url_override and not config.password:
         raise BusConfigError(
             "no Redis password found in KAINE_REDIS_PASSWORD env, "
             f"{secrets_toml}, or {kaine_toml}; KAINE refuses to connect "
@@ -190,6 +203,19 @@ def load_bus_config(
             "must be safe to ship onto network-attached hosts)"
         )
     return config
+
+
+def load_bus_endpoint(
+    kaine_toml: Optional[Path] = None,
+    secrets_toml: Optional[Path] = None,
+    env: Optional[dict[str, str]] = None,
+    operator_toml: Optional[Path] = None,
+) -> tuple[str, int]:
+    config = _build_bus_config(kaine_toml, secrets_toml, env, operator_toml)
+    if config.url_override:
+        parsed = urlsplit(config.url_override)
+        return (parsed.hostname or "127.0.0.1", parsed.port or 6379)
+    return (config.host, config.port)
 
 
 def maxlen_for(config: BusConfig, stream: str) -> int:

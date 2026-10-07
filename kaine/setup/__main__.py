@@ -14,6 +14,8 @@ import argparse
 import os
 import subprocess
 import sys
+import tomllib
+import webbrowser
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
@@ -23,15 +25,14 @@ from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env_values
 from kaine.setup import tomlwriter
+from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH
+from kaine.setup.nexus_token import ensure_nexus_token as _ensure_nexus_token
+from kaine.setup.steps import OWNED_KEYS, assert_owned, owned_changes
 from kaine.setup.storage_step import existing_volumes, write_volume_override
 from kaine.setup.wizard import WizardResult, run_wizard
 from kaine.storage import install_data_root
 
 DEFAULT_OPERATOR_PATH = OPERATOR_CONFIG_PATH
-# Where Nexus reads its operator token (kaine.nexus.config.load_nexus_config).
-DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
-# Nexus rejects shorter operator tokens (kaine.nexus.config.load_nexus_config).
-_MIN_NEXUS_TOKEN_LEN = 32
 
 
 def _describe_host_with_cpu() -> dict[str, Any]:
@@ -59,7 +60,7 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
     # Model server (Unsloth Studio / llama.cpp): OpenAI-compatible
     # /v1/models -> {"data": [{"id": "..."}, ...]}.
     try:
-        resp = httpx.get(f"{DEFAULT_CHAT_URL}/models", timeout=timeout_s)
+        resp = httpx.get(f"{DEFAULT_CHAT_URL}/models", timeout=timeout_s, trust_env=False)
         if resp.status_code == 200:
             data = resp.json()
             result["served_models"] = [
@@ -75,7 +76,8 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
     # Chatterbox: /get_predefined_voices -> list or dict of voice ids
     try:
         resp = httpx.get(
-            "http://127.0.0.1:8883/get_predefined_voices", timeout=timeout_s
+            "http://127.0.0.1:8883/get_predefined_voices", timeout=timeout_s,
+            trust_env=False,
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -93,7 +95,7 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
 
     # Speaches: /v1/models -> {"data": [{"id": "..."}, ...]}
     try:
-        resp = httpx.get("http://127.0.0.1:8000/v1/models", timeout=timeout_s)
+        resp = httpx.get("http://127.0.0.1:8000/v1/models", timeout=timeout_s, trust_env=False)
         if resp.status_code == 200:
             data = resp.json()
             result["stt_models"] = [
@@ -354,93 +356,6 @@ def _provision_dependencies(
             )
 
 
-def _ensure_nexus_token(
-    secrets_path: Path,
-    *,
-    out: Callable[[str], Any],
-    env: dict[str, str] | None = None,
-) -> str:
-    """Ensure a Nexus operator sign-in token exists.
-
-    Without a token, Nexus rejects every sign-in with 503. The environment
-    variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
-    from or written to ``[nexus] operator_token`` in the secrets file.
-    """
-    import secrets
-    import tomllib
-
-    from kaine import secrets_file
-
-    env = os.environ if env is None else env
-    out("\n")
-
-    env_token = env.get("KAINE_NEXUS_TOKEN", "").strip()
-    if env_token:
-        if len(env_token) < _MIN_NEXUS_TOKEN_LEN:
-            out(
-                "Nexus sign-in token: KAINE_NEXUS_TOKEN is shorter than "
-                f"{_MIN_NEXUS_TOKEN_LEN} characters, so Nexus will refuse it. "
-                "Unset it or replace it with a longer one.\n"
-            )
-            return "too_short"
-        out(
-            "Nexus sign-in token: provided by KAINE_NEXUS_TOKEN; nothing written.\n"
-        )
-        return "env"
-
-    try:
-        existing = secrets_file.read_toml_field(
-            secrets_path, "nexus", "operator_token"
-        )
-    except tomllib.TOMLDecodeError:
-        out(
-            f"{secrets_path} is not valid TOML; the Nexus sign-in token was NOT "
-            "generated. Fix the file, then re-run setup.\n"
-        )
-        return "malformed"
-    except OSError as exc:
-        out(
-            f"{secrets_path} could not be read ({exc}); the Nexus sign-in token "
-            "was NOT generated.\n"
-        )
-        return "error"
-
-    if isinstance(existing, str) and existing.strip():
-        # Never overwrite an operator's token, but say so when Nexus would
-        # refuse it rather than reporting it as fine.
-        if len(existing.strip()) < _MIN_NEXUS_TOKEN_LEN:
-            out(
-                f"Nexus sign-in token in {secrets_path} [nexus] operator_token is "
-                f"shorter than {_MIN_NEXUS_TOKEN_LEN} characters, so Nexus will "
-                "refuse it. Replace it, or delete that line and re-run setup to "
-                "generate one.\n"
-            )
-            return "too_short"
-        out(
-            f"Nexus sign-in token: already set in {secrets_path} [nexus] "
-            "operator_token; kept.\n"
-        )
-        return "kept"
-
-    token = secrets.token_urlsafe(32)
-    try:
-        secrets_file.upsert_toml_field(
-            secrets_path, "nexus", "operator_token", token
-        )
-    except (OSError, ValueError) as exc:
-        out(
-            f"Could not save Nexus sign-in token to {secrets_path} ({exc}).\n"
-        )
-        return "error"
-
-    out(
-        f"Nexus sign-in token: generated and saved to {secrets_path} under "
-        "[nexus] operator_token (mode 600). It is not shown here; open that file "
-        "when Nexus asks for it.\n"
-    )
-    return "generated"
-
-
 def _print_next_steps(
     config: dict[str, Any],
     *,
@@ -510,6 +425,85 @@ def _print_next_steps(
     line("Recommended first: KAINE_FIRST_BOOT_OPERATOR_PRESENT=1 scripts/first-boot.sh")
 
 
+def _launch_redirect_file(url: str) -> Path:
+    """Write a private HTML page that redirects to ``url`` and return its path.
+
+    The directory and file are created owner-only (0700/0600), so the launch
+    token never appears in any process's command line.
+    """
+    import html
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="kaine-setup-"))
+    os.chmod(directory, 0o700)
+    target = directory / "open-setup.html"
+    escaped = html.escape(url, quote=True)
+    body = (
+        "<!doctype html><meta charset=\"utf-8\">"
+        f'<meta http-equiv="refresh" content="0;url={escaped}">'
+        f'<title>KAINE setup</title><a href="{escaped}">Continue setup</a>'
+    )
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    return target
+
+
+def _run_web(
+    args: argparse.Namespace,
+    host: dict[str, Any],
+    storage_old_root: Path,
+) -> int:
+    """Start the loopback browser setup server."""
+    # The running-cycle guard must look at the real state directory; if it
+    # cannot be resolved, refuse to start rather than guard the wrong place.
+    try:
+        from kaine.storage import resolve
+
+        state_root = Path(resolve("state"))
+    except Exception as exc:
+        print(f"setup cannot start: the state directory cannot be resolved ({exc})", file=sys.stderr)
+        return 1
+
+    from kaine.setup.web import create_setup_app, serve
+
+    try:
+        app = create_setup_app(
+            state_root=state_root,
+            operator_path=args.operator_path,
+            shipped_config_path=args.config_path,
+            secrets_path=args.secrets_path or DEFAULT_SECRETS_PATH,
+            host=host,
+            probe_services=probe_services,
+            probe_trainer=_probe_trainer,
+            recommend_tier_fn=recommend_tier,
+            device_consumers_fn=device_consumers,
+            services_up_fn=lambda: {
+                name: port_listening(port) for name, port in SERVICE_PORTS.items()
+            },
+            storage_old_root=storage_old_root,
+        )
+    except ValueError as exc:
+        # A malformed operator file is never silently replaced.
+        print(f"setup cannot start: {exc}", file=sys.stderr)
+        return 1
+
+    token = app.state.setup.store.issue()
+
+    def on_ready(url: str) -> None:
+        # The URL carries the single-use launch token, so it goes only to this
+        # terminal. The browser is pointed at a private redirect file instead:
+        # a browser's command line is visible to every local user.
+        print(f"Open this address to continue setup: {url}", file=sys.stderr)
+        try:
+            webbrowser.open(_launch_redirect_file(url).as_uri())
+        except Exception:
+            pass
+
+    serve("127.0.0.1", 0, app=app, setup_token=token, on_ready=on_ready)
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -542,6 +536,11 @@ def main(
         type=Path,
         default=None,
         help="secrets file that receives a generated Nexus token (default: config/secrets.toml)",
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="start the loopback browser setup server",
     )
     args = parser.parse_args(argv)
 
@@ -576,6 +575,20 @@ def main(
     except Exception:
         storage_old_root = Path.cwd()
 
+    if args.web:
+        return _run_web(args, host, storage_old_root)
+
+    # Load the existing operator file (if any) for pre-fill and merge-on-save.
+    existing_raw: dict[str, Any] = {}
+    try:
+        with args.operator_path.open("rb") as fh:
+            existing_raw = tomllib.load(fh)
+    except FileNotFoundError:
+        existing_raw = {}
+    except Exception as exc:
+        write(f"could not read existing operator file at {args.operator_path}: {exc}\n")
+        return 1
+
     result: WizardResult = run_wizard(
         input_fn=_input,
         out=write,
@@ -590,33 +603,71 @@ def main(
         },
         defaults=args.defaults,
         storage_old_root=storage_old_root,
+        existing_config=existing_raw,
     )
 
     if not result.acknowledged:
         return 1
 
-    # Write the operator override.
+    # Merge wizard-owned updates with the existing file so hand edits survive.
+    try:
+        merged = tomlwriter.merge_owned(existing_raw, result.config, OWNED_KEYS)
+    except ValueError as exc:
+        write(f"configuration cannot be saved: {exc}\n")
+        return 1
+
+    try:
+        # merge_owned only sets owned keys, so any other change is a bug.
+        changed = owned_changes(existing_raw, merged)
+        assert_owned(changed)
+    except ValueError as exc:
+        write(f"internal error: unexpected config key change: {exc}\n")
+        return 1
+
     operator_path: Path = args.operator_path
-    operator_path.parent.mkdir(parents=True, exist_ok=True)
-    operator_path.write_text(tomlwriter.dumps(result.config))
+
+    if changed:
+        write(f"The following keys will change in {operator_path}:\n")
+        for key in sorted(changed):
+            write(f"  {key}\n")
+        write("Comments in the operator file are not preserved.\n")
+    else:
+        # Nothing to change: leave the file, and its comments, exactly as it is.
+        write(f"No wizard-owned keys to change in {operator_path}; the file is left as it is.\n")
+
+    if changed and not args.defaults:
+        suffix = " [Y/n]: "
+        raw = (_input(f"Write these changes to {operator_path}?{suffix}") or "").strip().lower()
+        if not raw:
+            confirm = True
+        else:
+            confirm = raw in ("y", "yes")
+        if not confirm:
+            write("Not writing changes.\n")
+            return 0
+
+    if changed:
+        operator_path.parent.mkdir(parents=True, exist_ok=True)
+        operator_path.write_text(tomlwriter.dumps(merged))
 
     compose_env_path = Path("compose/.env")
-    devmap = device_map(result.config)
+    devmap = device_map(merged)
     if compose_env_path.exists() and devmap:
         gpu_env = compose_gpu_env(devmap)
         if gpu_env:
             write_env_values(compose_env_path, gpu_env)
-            out(
+            write(
                 "wrote compose GPU variables: "
                 + ", ".join(f"{k}={v}" for k, v in sorted(gpu_env.items()))
+                + "\n"
             )
 
-    data_root = result.config.get("storage", {}).get("data_root")
+    data_root = merged.get("storage", {}).get("data_root")
     if data_root and Path("compose/kaine.yml").exists():
         _, msg = write_volume_override(
             Path(data_root), Path("compose"), existing=existing_volumes()
         )
-        out(msg)
+        write(msg + "\n")
 
     # Offer the implied extras install.
     _install_extras(
@@ -625,7 +676,7 @@ def main(
 
     # Consented, hardware-aware organ download + turnkey serve (lingua only).
     _provision_organ(
-        result.config,
+        merged,
         shipped=shipped,
         host=host,
         input_fn=_input,
@@ -635,13 +686,13 @@ def main(
 
     # Detect + offer-or-guide the external services the enabled modules need.
     _provision_dependencies(
-        result.config, input_fn=_input, out=write, defaults=args.defaults
+        merged, input_fn=_input, out=write, defaults=args.defaults
     )
 
     # Resolved at call time (not as the argparse default) so tests can redirect it.
     _ensure_nexus_token(args.secrets_path or DEFAULT_SECRETS_PATH, out=write)
 
-    _print_next_steps(result.config, operator_path=operator_path, out=write)
+    _print_next_steps(merged, operator_path=operator_path, out=write)
     return 0
 
 

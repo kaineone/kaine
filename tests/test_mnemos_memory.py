@@ -87,13 +87,15 @@ async def test_consolidate_now_empties_short_term(core: MnemosCore):
 
 
 @pytest.mark.asyncio
-async def test_short_term_recall_uses_substring(core: MnemosCore):
-    await core.store("the cat is on the mat")
-    await core.store("the dog is at the door")
+async def test_short_term_recall_uses_cosine_similarity_with_recency_tie_break(core: MnemosCore):
+    await core.store("the cat sat on the mat")
+    await core.store("the cat sat on the mat")
     results, summary = await core.recall("cat", k=2, collection="short_term")
     assert summary.count == 2
-    # The first result is the one containing "cat".
-    assert "cat" in results[0].text
+    # Identical vectors give identical cosine scores; recency breaks the tie.
+    assert results[0].point_id == "short_term:1"
+    assert results[1].point_id == "short_term:0"
+    assert results[0].score == pytest.approx(results[1].score)
 
 
 @pytest.mark.asyncio

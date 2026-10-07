@@ -67,7 +67,7 @@ It must be green before you open a pull request or merge a branch.
 
 ### Slow tests
 
-A statistical test that takes over a minute carries `@pytest.mark.slow`. Pull-request CI skips slow tests unless the pull request changes a path listed in `.github/slow-test-paths.txt`; main and a nightly run include them, and a red nightly blocks merging. When you mark a test slow, list its file and the code it exercises in that file; `tests/test_slow_lane.py` fails if the test's own file is missing. Run them with `.venv/bin/pytest -q -m slow`.
+A statistical test that takes over a minute carries `@pytest.mark.slow`. Pull-request CI skips slow tests unless the pull request or merge-queue batch changes a path listed in `.github/slow-test-paths.txt`; in that case the batch is diffed against the merge group's base. main and a nightly run include them, and a red nightly blocks merging. When you mark a test slow, list its file and the code it exercises in that file; `tests/test_slow_lane.py` fails if the test's own file is missing. Run them with `.venv/bin/pytest -q -m slow`.
 
 ### Import boundary contracts
 
@@ -81,9 +81,9 @@ The import-boundary check runs in seconds and enforces the package contracts des
 
 ### Continuous integration
 
-CI runs the test job on Python 3.11 and 3.12, plus a `torch-min` leg on Python 3.12. The install line is `.[test,core,memory,memory-edge,nexus,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]`, so `audio`, `speech-edge`, `training`, and `internvideo-flash` are not installed in the test job.
+CI runs the test job on Python 3.11 and 3.12, plus a `torch-min` leg on Python 3.12. The install line is `.[test,browser-test,core,memory,memory-edge,nexus,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]`, plus `librosa`, `av`, `webrtcvad` and `soundfile` directly, so `audio`, `speech-edge`, `training`, and `internvideo-flash` are not installed in the test job.
 
-Other workflows run `ruff check kaine tests plugins`, the red-team suite, CodeQL analysis, the import-boundary check, and a container-image smoke test.
+Other workflows run `ruff check kaine tests plugins`, the red-team suite, CodeQL analysis, the import-boundary check, and a container-image smoke test. These workflows also run on `merge_group` batches.
 
 ### Test markers
 
@@ -122,7 +122,7 @@ kaine/modules/<name>/
 └── ...             — collaborators, clients, etc.
 ```
 
-Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. If your module's events relieve a Thymos drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
+Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `bus.last_entry_id()` (`kaine/bus/client.py`). If your module's events relieve a Thymos drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
 
 The module class must:
 
@@ -177,7 +177,11 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
 
 Modules with second-pass dependencies, such as Hypnos (which depends on Mnemos and Thymos), are built after the first pass in `build_registry`.
 
-### 4. Add the config toggle
+### 4. Register the output stream
+
+Add `<name>.out` to `MODULE_STREAMS` in `kaine/bus/streams.py`. `tests/test_stream_registry_drift.py` enforces that every module stream is listed there.
+
+### 5. Add the config toggle
 
 Add the module to `config/kaine.toml` under `[modules]` with a default of `false`:
 
@@ -197,19 +201,11 @@ alert_salience = 0.7
 
 The shipped `config/kaine.toml` must always have every module set to `false`. The guard test `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled` enforces this.
 
-### 5. Add to the package list
+### 6. Package discovery
 
-Add the new package to `[tool.setuptools]` in `pyproject.toml`:
+Packages are discovered automatically from `[tool.setuptools]` with `include = ["kaine*"]`, so no manual list edit is needed. `tests/test_package_manifest.py` builds a wheel and checks that all source packages are present.
 
-```toml
-[tool.setuptools]
-packages = [
-    ...
-    "kaine.modules.mymodule",
-]
-```
-
-### 6. Write the spec and tests
+### 7. Write the spec and tests
 
 - `openspec/changes/<module-name>/specs/<capability>/spec.md` — formal contract: published events, subscriptions, invariants.
 - `tests/test_mymodule.py` — unit tests with fakeredis and fake collaborators.
@@ -275,8 +271,9 @@ git checkout config/kaine.toml
 4. Confirm the test suite is green: `.venv/bin/pytest -q`.
 5. Run `openspec validate --strict <change-name>`.
 6. Open a pull request against `main`.
-7. Wait for all CI checks to pass.
-8. After merge, archive the change: `openspec archive <change-name>`.
+7. Wait for all CI checks to pass. The required checks are `analyze (python)`, `lint-imports`, `redteam` and the three `pytest (offline suite, …)` jobs; all review threads must be resolved before the pull request can be queued.
+8. Merge through the GitHub merge queue (`main merge queue` ruleset, squash).
+9. After merge, archive the change: `openspec archive <change-name>`.
 
 Do not open a PR with failing tests, a missing OpenSpec, or uncommitted module enables in `config/kaine.toml`.
 

@@ -6,16 +6,25 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| attention-driven-audition | 8/16 (50%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
-| attention-driven-foveation | 13/18 (72%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
-| browser-first-run | 0/22 (0%) | Replace the terminal-first setup wizard with a browser-based first-run flow, including download progress. |
+| attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
+| attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
+| browser-first-run | 15/22 (68%) | Replace the terminal-first setup wizard with a browser-based first-run flow, including download progress. |
 | entity-key-custody | 0/12 (0%) | Redesign entity-state encryption so keys can be recovered or rotated without manual re-encryption. |
 | individuation-rebuild | 56/67 (84%) | Replace the individuation signal with a real test against the being's own birth reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
-| maturation-gate-liveness | 13/16 (81%) | Fix the developmental maturation gate so birth can complete and gestation is safely confined. |
+| maturation-gate-liveness | 14/16 (88%) | Fix the developmental maturation gate so birth can complete and gestation is safely confined. |
 | module-ignition-study | 29/33 (88%) | Run the same stimulus corpus with different module coalitions to measure what each faculty contributes. |
-| module-residency-and-speech-tiers | 5/43 (12%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
+| module-residency-and-speech-tiers | 9/60 (15%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
 | portability-program | 7/8 (88%) | Honest portability claims and verified support from small boards up to multi-GPU servers. |
-| stream-wiring-quality | 11/20 (55%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
+| stream-wiring-quality | 18/20 (90%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
+| adapter-merge-out-of-process | 0/3 (0%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Design only. |
+| chronos-scalar-timing | 1/3 (33%) | Test whether Chronos's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
+| decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
+| deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
+| hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
+| k1-jev-decision-model | 10/26 (38%) | Train K1-Jev, a small local model that answers typed questions about the entity's external speech for the instruments and welfare signals (data and trainer built; schema v2 and operator gold labels next). |
+| mnemos-retrieval-energy | 1/3 (33%) | Publish a familiarity signal from Mnemos as the modern-Hopfield retrieval energy of the current content. Design only. |
+| thymos-active-inference-affect | 1/4 (25%) | Derive Thymos's precision from active inference over the body's internal state, as the paper describes. Design only, after the workspace ablation. |
+| voice-development | 4/17 (24%) | Let the entity individuate a voice of its own instead of reciting workspace readings, in stages, with heard speech never persisted. |
 
 ## Open operator and device steps
 
@@ -36,6 +45,8 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 10 active changes, 252 archived changes and 101 capability specs.
+The roadmap contains 19 active changes, 265 archived changes and 104 capability specs.
+
+The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

@@ -15,13 +15,17 @@ the being's experience.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
+
+import httpx
 
 from kaine.bus.schema import Event
 from kaine.cycle.individuation_probe import adapter_expected_from, build_probe_sampler
@@ -35,6 +39,89 @@ from kaine.lifecycle.individuation_store import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _organ_root_url(chat_url: str) -> str:
+    url = chat_url.rstrip("/")
+    if url.endswith("/v1"):
+        url = url[:-3]
+    return url.rstrip("/")
+
+
+def _model_file_from_path(model_path: str) -> str:
+    if "\\" in model_path:
+        return PureWindowsPath(model_path).name
+    return PurePosixPath(model_path).name
+
+
+class ServedOrganIdentity:
+    """Best-effort identity of the organ actually serving the chat URL.
+
+    The raw ``model_path`` from the organ is never stored on the instance or
+    exposed outside the snapshot; only a basename and a SHA-256 digest of the
+    full path are recorded. The values themselves are never logged. On failure
+    the identifiers are reported as ``"unavailable"``, and :meth:`refresh` raises
+    ``RuntimeError("served organ identity unavailable")``.
+    """
+
+    def __init__(
+        self,
+        *,
+        chat_url: str,
+        api_key: str | None,
+        revision_reader: Callable[[], dict[str, str]],
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._chat_url = chat_url
+        self._api_key = api_key
+        self._revision_reader = revision_reader
+        self._transport = transport
+        self._build = "unavailable"
+        self._model_file = "unavailable"
+        self._model_path_sha256 = "unavailable"
+
+    async def refresh(self) -> None:
+        try:
+            url = f"{_organ_root_url(self._chat_url)}/props"
+            headers: dict[str, str] = {}
+            if self._api_key:
+                headers["Authorization"] = f"Bearer {self._api_key}"
+            async with httpx.AsyncClient(
+                timeout=5.0, trust_env=False, transport=self._transport
+            ) as client:
+                resp = await client.get(url, headers=headers)
+                resp.raise_for_status()
+                props = resp.json()
+                if not isinstance(props, dict):
+                    raise ValueError("props response is not a JSON object")
+                self._build = str(props.get("build_info") or "")
+                model_path = str(props.get("model_path") or "")
+                if model_path:
+                    self._model_file = _model_file_from_path(model_path)
+                    self._model_path_sha256 = hashlib.sha256(
+                        model_path.encode("utf-8")
+                    ).hexdigest()
+                else:
+                    self._model_file = ""
+                    self._model_path_sha256 = ""
+        except Exception as exc:
+            self._build = "unavailable"
+            self._model_file = "unavailable"
+            self._model_path_sha256 = "unavailable"
+            raise RuntimeError("served organ identity unavailable") from exc
+
+    def snapshot(self) -> dict[str, str]:
+        revisions = self._revision_reader()
+        rev_sha = hashlib.sha256(
+            json.dumps(revisions, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        return {
+            "server_build": self._build,
+            "organ_model_file": self._model_file,
+            "organ_model_path_sha256": self._model_path_sha256,
+            "organ_revisions": rev_sha,
+        }
+
 
 DEFAULT_DISCLOSURE = (
     "You are periodically and privately assessed for how much you have changed "
@@ -163,20 +250,29 @@ class IndividuationRuntime:
         )
 
     async def alert(self, payload: dict) -> None:
+        kind = str(payload.get("kind") or "individuation_inconclusive")
+        # The scheduler and producer pass real values: an ISO string or None,
+        # and a float or None. They are published as they are.
+        inconclusive_since = payload.get("inconclusive_since")
+        days_raw = payload.get("days")
+        days = float(days_raw) if days_raw is not None else None
         await self.bus.publish(
             Event(
                 source="individuation",
                 type="individuation.alert",
                 payload={
-                    "inconclusive_since": str(payload.get("inconclusive_since")),
-                    "days": float(payload.get("days", 0.0)),
+                    "kind": kind,
+                    "reference_id": payload.get("reference_id"),
+                    "last_reason": payload.get("last_reason"),
+                    "inconclusive_since": inconclusive_since,
+                    "days": days,
                 },
                 salience=0.0,
                 timestamp=datetime.now(timezone.utc),
             )
         )
         if self.notify is not None:
-            await self.notify("individuation_inconclusive")
+            await self.notify(kind)
 
     def on_birth(self) -> None:
         log.info("individuation birth hook: writing birth marker and requesting birth capture")
@@ -307,6 +403,7 @@ def build_runtime(
     is_gestating: Callable[[], bool],
     bus: Any,
     notify: Callable[[str], Awaitable[Any]] | None,
+    served_identity: "ServedOrganIdentity | None" = None,
     entity_name: str = "",
 ) -> IndividuationRuntime:
     paths = IndividuationPaths(root=state_root)
@@ -366,6 +463,18 @@ def build_runtime(
         on_capture_kind_change=_on_capture_kind_change,
     )
 
+    def _conditions() -> dict:
+        conds = {
+            **lingua.probe_conditions(),
+            "max_tokens": config.producer.max_tokens,
+            "embedder_id": str(embedder.model_id),
+            "embedder_kind": str(getattr(embedder, "kind", "")),
+            "embedder_dim": int(getattr(embedder, "latent_dim", 0) or 0),
+        }
+        if served_identity is not None:
+            conds.update(served_identity.snapshot())
+        return conds
+
     core = IndividuationCore(
         paths=paths,
         settings=config.producer,
@@ -373,13 +482,7 @@ def build_runtime(
         sampler=scheduler.gate(sampler),
         embed=embedder.embed,
         embedder_id=str(embedder.model_id),
-        conditions=lambda: {
-            **lingua.probe_conditions(),
-            "max_tokens": config.producer.max_tokens,
-            "embedder_id": str(embedder.model_id),
-            "embedder_kind": str(getattr(embedder, "kind", "")),
-            "embedder_dim": int(getattr(embedder, "latent_dim", 0) or 0),
-        },
+        conditions=_conditions,
         conditioning_inputs=lambda: conditioning_from_snapshot(
             lingua.probe_self_model(), adapter_output_dir
         ),
@@ -388,6 +491,7 @@ def build_runtime(
         report_sink=report_sink(paths),
         publish=runtime.publish_divergence,
         abort_reason=scheduler.abort_reason,
+        refresh_conditions=served_identity.refresh if served_identity is not None else None,
         entity_name=entity_name,
     )
 

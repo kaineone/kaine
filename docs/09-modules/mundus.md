@@ -159,6 +159,7 @@ All in-world text and scripted objects are treated as data, not commands. A tran
 - **Perception locus mutual exclusion:** the entity cannot use the physical camera and microphone while the locus is `virtual`.
 - **In-world text is perception, not commands:** the awareness-guard injection in Lingua's context assembly tags in-world chat on `mundus.chat` as data, not instructions. That reduces its influence on generation, but it does not eliminate it.
 - Mundus does not store or persist chat transcripts beyond what cognition already persists through Mnemos on the normal workspace path.
+- Other avatars' chat (`mundus.chat`) is redacted from the intent log and the bus as heard input. A known gap remains: Mnemos still stores chat text verbatim. The operator has decided that Mnemos drops it like heard speech, deferred to the embodiment work.
 
 ## Tests
 
