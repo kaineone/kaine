@@ -787,7 +787,7 @@ def _train(
     # import fixes repair trl 0.24 on transformers 5, whose package-availability
     # helper returns a tuple: without them every optional-dependency flag in trl
     # is truthy and DPOTrainer fails to import (mergekit).
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
+    from unsloth import FastLanguageModel  # type: ignore[import-untyped]  # noqa: I001 (must load first)
     import torch  # type: ignore[import-untyped]
     from datasets import Dataset  # type: ignore[import-untyped]
     from peft import PeftModel  # type: ignore[import-untyped]
@@ -800,7 +800,6 @@ def _train(
     except Exception:
         pass
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
 
     base_model_path = job["base_model_path"]
     lora_rank = int(job.get("lora_rank", 8))
