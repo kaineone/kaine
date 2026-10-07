@@ -144,6 +144,9 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
 
                         adapter = job_dir / "out" / "20260930T000000"
                         adapter.mkdir(parents=True)
+                        (adapter / "adapter_config.json").write_text(
+                            "{}", encoding="utf-8"
+                        )
                         (adapter / "adapter.gguf").write_text(
                             "fake-gguf", encoding="utf-8"
                         )
@@ -159,6 +162,9 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
                         result = {
                             "ok": True,
                             "accepted": True,
+                            "schema_version": 2,
+                            "abliteration_passed": True,
+                            "abliteration_probes_scored": 1,
                             "adapter_dir": str(adapter.relative_to(job_dir)),
                             "gguf_sha256": sha,
                             "steps": 7,
@@ -250,7 +256,10 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
                     if (job_dir / "READY").exists():
                         (job_dir / "result.json").write_text(
                             json.dumps(
-                                {"ok": False, "reason": "capability gate rejected"}
+                                {
+                                    "ok": False,
+                                    "reason": "capability gate rejected",
+                                }
                             ),
                             encoding="utf-8",
                         )
@@ -260,7 +269,7 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
         raise TimeoutError("fake service never saw READY")
 
     service_task = asyncio.create_task(fake_service())
-    with pytest.raises(SubprocessTrainerError, match="ok != true"):
+    with pytest.raises(SubprocessTrainerError, match="capability gate rejected"):
         await trainer.train(_pairs(), cfg)
     assert (await service_task) is None
 
@@ -272,6 +281,9 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
 @pytest.mark.asyncio
 async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
     """An adapter_dir outside the job dir is rejected before promotion."""
+    evil = tmp_path / "evil"
+    evil.mkdir()
+    (evil / "adapter_config.json").write_text("{}")
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
         jobs_dir=tmp_path / "jobs",
@@ -291,10 +303,14 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
                                 {
                                     "ok": True,
                                     "accepted": True,
+                                    "schema_version": 2,
+                                    "abliteration_passed": True,
+                                    "abliteration_probes_scored": 1,
                                     "adapter_dir": "../evil",
                                     "reason": "accepted",
                                     "capability_loss": 0.0,
                                     "samples_used": 2,
+                                    "dpo_loss": 0.1,
                                 }
                             ),
                             encoding="utf-8",
@@ -305,7 +321,7 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
         raise TimeoutError("fake service never saw READY")
 
     service_task = asyncio.create_task(fake_service())
-    with pytest.raises(SubprocessTrainerError, match="outside"):
+    with pytest.raises(SubprocessTrainerError, match="is not strictly inside"):
         await trainer.train(_pairs(), cfg)
     assert (await service_task) is None
 
@@ -332,17 +348,24 @@ async def test_gguf_sha_mismatch_raises(tmp_path):
                     if (job_dir / "READY").exists():
                         adapter = job_dir / "out" / "20260930T000000"
                         adapter.mkdir(parents=True)
+                        (adapter / "adapter_config.json").write_text(
+                            "{}", encoding="utf-8"
+                        )
                         (adapter / "adapter.gguf").write_text(
                             "fake-gguf", encoding="utf-8"
                         )
                         result = {
                             "ok": True,
                             "accepted": True,
+                            "schema_version": 2,
+                            "abliteration_passed": True,
+                            "abliteration_probes_scored": 1,
                             "adapter_dir": str(adapter.relative_to(job_dir)),
                             "gguf_sha256": "0" * 64,
                             "reason": "accepted",
                             "capability_loss": 0.0,
                             "samples_used": 2,
+                            "dpo_loss": 0.1,
                         }
                         (job_dir / "result.json").write_text(
                             json.dumps(result), encoding="utf-8"
@@ -393,12 +416,16 @@ async def test_subprocess_backend_does_not_block_event_loop(tmp_path):
         """
         import time
         time.sleep(0.5)
-        adapter = job_dir / 'adapter_out'
+        adapter = Path(job['adapter_output_dir']) / 'accepted_adapter'
         adapter.mkdir(parents=True, exist_ok=True)
         (adapter / 'adapter_model.safetensors').write_text('fake-weights')
+        (adapter / 'adapter_config.json').write_text('{}')
         result = {
             'ok': True,
             'accepted': True,
+            'schema_version': 2,
+            'abliteration_passed': True,
+            'abliteration_probes_scored': 1,
             'adapter_dir': str(adapter),
             'steps': 3,
             'dpo_loss': 0.1,

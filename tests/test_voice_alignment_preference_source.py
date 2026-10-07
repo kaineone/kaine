@@ -20,6 +20,7 @@ from kaine.modules.hypnos.voice_alignment import (
     PREFERENCE_SOURCES,
     DPOPairBuilder,
 )
+from tests.voice_prompt_support import with_verified_system
 
 
 @pytest.fixture
@@ -49,7 +50,11 @@ class _RecordingTrainer:
 def _section(tmp_path: Path, **overrides):
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
-        json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})
+        json.dumps(
+            with_verified_system(
+                log_path, [{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}]
+            )[0]
+        )
         + "\n",
         encoding="utf-8",
     )
@@ -152,7 +157,9 @@ async def test_train_on_pairs_calls_trainer_with_given_pairs(
     voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
 
     assert len(trainer.calls) == 1
-    assert trainer.calls[0] == pairs
+    # The same pairs, each now carrying its verified system prompt.
+    assert [p.prompt for p in trainer.calls[0]] == [p.prompt for p in pairs]
+    assert all(p.system == "I am a test persona." for p in trainer.calls[0])
     assert voice_result.accepted is True
     assert voice_result.samples_used == len(pairs)
     assert phase_result.success is True

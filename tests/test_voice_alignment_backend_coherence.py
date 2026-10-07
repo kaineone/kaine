@@ -79,12 +79,17 @@ def _accepted_stub(tmp_path: Path) -> Path:
     return _write_stub(
         tmp_path,
         """
-        adapter = job_dir / 'adapter_out'
+        # The real script promotes inside the adapter output dir.
+        adapter = Path(job['adapter_output_dir']) / 'adapter_out'
         adapter.mkdir(parents=True, exist_ok=True)
+        (adapter / 'adapter_config.json').write_text('{}')
         (adapter / 'adapter_model.safetensors').write_text('fake-weights')
         result = {
             'ok': True,
             'accepted': True,
+            'schema_version': 2,
+            'abliteration_passed': True,
+            'abliteration_probes_scored': 1,
             'adapter_dir': str(adapter),
             'steps': 3,
             'dpo_loss': 0.1,
@@ -104,7 +109,10 @@ def _rejected_stub(tmp_path: Path) -> Path:
         (job_dir / 'result.json').write_text(json.dumps({
             'ok': True,
             'accepted': False,
+            'schema_version': 2,
             'reason': 'rejected by gate',
+            'capability_loss': None,
+            'adapter_dir': None,
             'samples_used': len(pairs),
         }))
         """,

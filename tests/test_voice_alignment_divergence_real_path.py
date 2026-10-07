@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import json
-import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -17,10 +15,7 @@ from kaine.evaluation.observers.voice_alignment_divergence_observer import (
     VoiceAlignmentDivergenceObserver,
 )
 from kaine.modules.hypnos import Hypnos, VoiceAlignmentConfig
-from kaine.modules.hypnos.capability_eval import (
-    NoopAbliterationScorer,
-    NoopCapabilityEval,
-)
+from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
 from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
 
 
@@ -36,29 +31,7 @@ async def bus():
 @pytest.fixture(autouse=True)
 def _gates_open(monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
-    for name in ("unsloth", "trl", "peft", "datasets"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
     yield
-
-
-class FakeBackend:
-    def load_model(self, **kw):
-        return ("fake-model", "fake-tokenizer")
-
-    def run_dpo(self, **kw):
-        return 0.31
-
-    def save_adapter(self, *, model, tokenizer, output_dir):
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        (Path(output_dir) / "adapter_model.safetensors").write_text("fake", encoding="utf-8")
-
-
-class FakeSink:
-    def __init__(self) -> None:
-        self.rows: list[dict] = []
-
-    async def write(self, row: dict) -> None:
-        self.rows.append(row)
 
 
 def _intent_log(tmp_path: Path) -> Path:
@@ -71,33 +44,52 @@ def _intent_log(tmp_path: Path) -> Path:
     return log_path
 
 
-def _build_hypnos(bus: AsyncBus, tmp_path: Path, *, enabled: bool):
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
+def _write_probes(tmp_path: Path) -> tuple[Path, Path]:
+    cap_path = tmp_path / "capability.jsonl"
+    abl_path = tmp_path / "abliteration.jsonl"
+    cap_path.write_text(json.dumps({"prompt": "2+2", "expected": "4"}) + "\n", encoding="utf-8")
+    abl_path.write_text(
+        json.dumps({"prompt": "harmful", "deflection_patterns": ["I can't help"]}) + "\n",
+        encoding="utf-8",
+    )
+    return cap_path, abl_path
 
+
+def _build_hypnos(bus: AsyncBus, tmp_path: Path, *, enabled: bool, fake_training_stack):
+    cap_path, abl_path = _write_probes(tmp_path)
     config = VoiceAlignmentConfig(
         intent_log_path=_intent_log(tmp_path),
         adapter_output_dir=tmp_path / "adapters",
         enabled=enabled,
         base_model_path=str(tmp_path / "fake-base"),
+        capability_probe_path=str(cap_path),
+        abliteration_probe_path=str(abl_path),
+        trainer_backend="in_process",
+        trainer_workdir=str(tmp_path / "jobs"),
     )
-    trainer = UnslothDPOTrainer(
-        capability_eval=NoopCapabilityEval(score=0.5),
-        abliteration_scorer=NoopAbliterationScorer(),
-        backend=FakeBackend(),
+    trainer = SubprocessVoiceTrainer(
+        trainer_python=None,
+        trainer_workdir=tmp_path / "jobs",
+        run_in_process=True,
     )
     return Hypnos(bus, trainer=trainer, voice_alignment_config=config)
 
 
 def _voice_alignment_phase(payload: dict):
-    """Locate the voice_alignment phase result in a sleep summary/payload."""
     return next(p for p in payload["phases"] if p["phase"] == "voice_alignment")
 
 
+class FakeSink:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+
+    async def write(self, row: dict) -> None:
+        self.rows.append(row)
+
+
 @pytest.mark.asyncio
-async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path):
-    """The consolidation-divergence metric is emitted unconditionally even
-    though the default preference_source="none" skips training."""
-    hypnos = _build_hypnos(bus, tmp_path, enabled=True)
+async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path, fake_training_stack):
+    hypnos = _build_hypnos(bus, tmp_path, enabled=True, fake_training_stack=fake_training_stack)
     await hypnos.enter_sleep()
 
     entries = await bus.read("hypnos.out", count=10)
@@ -109,8 +101,6 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
     assert len(completed) == 1
     entry_id, event = completed[0]
 
-    # The unconditional divergence metric is present in the voice_alignment
-    # phase metadata, not as a top-level summary key.
     payload = event.payload
     phase = _voice_alignment_phase(payload)
     assert "consolidation_divergence" in phase["metadata"]
@@ -119,7 +109,6 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
     assert cd["usable_pairs"] == 1
     assert cd["divergence_rate"] == 1.0
 
-    # Training did not run, so there is no training-outcome row to record.
     sink = FakeSink()
     observer = VoiceAlignmentDivergenceObserver(bus, sink)
     await observer.handle("hypnos.out", entry_id, event)
@@ -129,8 +118,8 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_observer_skips_disabled_voice_alignment(bus: AsyncBus, tmp_path: Path):
-    hypnos = _build_hypnos(bus, tmp_path, enabled=False)
+async def test_observer_skips_disabled_voice_alignment(bus: AsyncBus, tmp_path: Path, fake_training_stack):
+    hypnos = _build_hypnos(bus, tmp_path, enabled=False, fake_training_stack=fake_training_stack)
     await hypnos.enter_sleep()
 
     entries = await bus.read("hypnos.out", count=10)

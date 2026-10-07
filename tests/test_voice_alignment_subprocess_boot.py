@@ -54,15 +54,27 @@ def test_subprocess_backend_selects_subprocess_trainer(tmp_path, _approved):
     assert isinstance(trainer, SubprocessVoiceTrainer)
 
 
-def test_in_process_backend_selects_unsloth_trainer(tmp_path, _approved, monkeypatch):
+def test_in_process_backend_runs_the_trainer_script(tmp_path, _approved, monkeypatch):
     import types
 
     for name in ("unsloth", "trl", "peft", "datasets"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
 
-    trainer = _resolve_trainer(_cfg(tmp_path, trainer_backend="in_process"))
-    assert isinstance(trainer, UnslothDPOTrainer)
+    trainer = _resolve_trainer(_cfg(tmp_path, trainer_backend="in_process", trainer_python=""))
+    assert isinstance(trainer, SubprocessVoiceTrainer)
+    assert trainer.run_in_process is True
+
+
+def test_in_process_backend_fails_closed_without_training_deps(tmp_path, _approved):
+    for name in ("unsloth", "trl", "peft", "datasets"):
+        sys.modules.pop(name, None)
+
+    with pytest.raises(VoiceAlignmentConfigError) as excinfo:
+        _resolve_trainer(_cfg(tmp_path, trainer_backend="in_process", trainer_python=""))
+
+    msg = str(excinfo.value)
+    assert "subprocess" in msg
+    assert "job_queue" in msg
 
 
 def test_empty_trainer_python_raises_config_error(tmp_path, _approved):

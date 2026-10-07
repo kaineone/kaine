@@ -11,7 +11,6 @@ from kaine.modules.hypnos.voice_alignment import (
     DPOPairBuilder,
     FakeTrainer,
     Trainer,
-    UnslothDPOTrainer,
     VoiceAlignmentConfig,
 )
 
@@ -99,21 +98,6 @@ async def test_fake_can_accept_for_capability_test(tmp_path: Path):
     assert result.accepted is True
     assert result.adapter_path is not None
     assert result.adapter_path.exists()
-
-
-@pytest.mark.asyncio
-async def test_unsloth_trainer_returns_clear_error_when_deps_missing(tmp_path: Path, monkeypatch):
-    import sys
-    # Force the unsloth import path to fail.
-    monkeypatch.setitem(sys.modules, "unsloth", None)
-    trainer = UnslothDPOTrainer()
-    cfg = VoiceAlignmentConfig(
-        intent_log_path=tmp_path / "log.jsonl",
-        adapter_output_dir=tmp_path / "adapters",
-    )
-    result = await trainer.train([DPOPair("p", "c", "r")], cfg)
-    assert result.accepted is False
-    assert "unsloth" in result.reason.lower()
 
 
 def test_voice_alignment_config_defaults(tmp_path: Path):
