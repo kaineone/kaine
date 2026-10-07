@@ -61,6 +61,7 @@ def write_system_prompt(store_dir: Path, text: str) -> str:
         try:
             os.close(fd)
         except OSError:
+            # Already closed by the file object; the original error is re-raised.
             pass
         Path(tmp_path).unlink(missing_ok=True)
         raise

@@ -1186,6 +1186,7 @@ def main(argv: list[str]) -> int:
                 if peak_gib is not None:
                     result["peak_vram_gib"] = round(peak_gib, 2)
             except Exception:
+                # The peak is informational; a failed read leaves it out.
                 pass
         _write_result(
             job_dir,

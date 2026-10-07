@@ -173,6 +173,7 @@ def scrub_job_inputs(job_dir: Path) -> None:
     try:
         pairs_path.unlink()
     except FileNotFoundError:
+        # Already scrubbed: nothing of the pairs is left to remove.
         pass
     shutil.rmtree(job_dir / "previous_adapter", ignore_errors=True)
 
@@ -726,6 +727,7 @@ class SubprocessVoiceTrainer:
             try:
                 reason = str(_read_result(job_dir).get("reason") or reason)
             except Exception:
+                # No readable result: keep "no result.json" as the reason.
                 pass
             raise SubprocessTrainerError(
                 f"in-process trainer exited {rc} (job {job_dir}): {reason}"
