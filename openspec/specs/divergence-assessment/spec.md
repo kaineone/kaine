@@ -74,3 +74,10 @@ The live divergence monitor SHALL assess divergence with the consolidation thres
 #### Scenario: A lowered rate threshold is honoured live
 - **WHEN** `consolidation_divergence_rate_threshold = 0.2` and the latest consolidation record has `divergence_rate = 0.3`
 - **THEN** the live monitor's assessment reports organ-level divergence, as the decommission CLI's does
+
+### Requirement: Unreadable intent-log lines count as spoken evidence
+The divergence assessment's spoken-evidence check SHALL treat an intent-log or corpus line that cannot be decrypted or parsed as evidence that the being has spoken, so the voice arm votes diverged rather than abstaining.
+
+#### Scenario: A log holding only an undecryptable line
+- **WHEN** the only line in the intent log is an envelope that fails authentication
+- **THEN** the voice arm votes diverged and the being is assessed as diverged
