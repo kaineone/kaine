@@ -796,8 +796,12 @@ def _train(
     # reset the counter before this run allocates anything.
     try:
         if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
+            # The device the peak is later read from, not the current one.
+            torch.cuda.reset_peak_memory_stats(
+                str(job.get("training_device", "cuda:0"))
+            )
     except Exception:
+        # No usable CUDA device: the run reports its peak as unknown.
         pass
     from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
 
