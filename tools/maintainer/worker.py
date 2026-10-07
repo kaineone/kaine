@@ -17,6 +17,7 @@ strips control characters and a wrapping markdown fence, and (with --apply) writ
 ONLY the allow-listed paths into REPO. Fails loudly on empty responses, unknown
 paths or zero blocks.
 """
+import pathlib
 import argparse
 import json
 import os
@@ -90,8 +91,8 @@ def main() -> int:
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     if a.reapply:
-        return _finish(open(os.path.join(a.out, "response.txt")).read(), a)
-    prompt = open(a.brief).read()
+        return _finish(pathlib.Path(os.path.join(a.out, "response.txt")).read_text(), a)
+    prompt = pathlib.Path(a.brief).read_text()
     body = {"model": a.model, "prompt": prompt, "stream": False, "think": a.think,
             "options": {"num_predict": a.num_predict, "num_ctx": a.ctx}}
     req = urllib.request.Request("http://localhost:11434/api/generate",

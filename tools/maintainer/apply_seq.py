@@ -22,7 +22,7 @@ resp, repo = sys.argv[1], pathlib.Path(sys.argv[2])
 if '--allow' not in sys.argv:
     sys.exit("usage: apply_seq.py RESPONSE REPO --allow PATH...")
 allow = set(sys.argv[sys.argv.index('--allow')+1:])
-text = open(resp).read()
+text = pathlib.Path(resp).read_text()
 blocks = re.findall(r'^@@@EDIT[ \t]+(\S+)[ \t]*\n(.*?)^@@@END[ \t]*$', text, re.S | re.M)
 ok = fail = 0
 for i, (path, body) in enumerate(blocks, 1):

@@ -4,16 +4,17 @@
 """Refresh docs/appendix-d-roadmap.md from openspec/: the Progress column of
 each active-change row, rows for changes that are no longer active, and the
 totals line. usage: regen_roadmap_progress.py WORKTREE"""
+import pathlib
 import os, re, sys
 root = sys.argv[1]
 ch = os.path.join(root, 'openspec/changes')
 active = {d for d in os.listdir(ch) if d != 'archive' and os.path.isdir(os.path.join(ch, d))}
 def progress(name):
-    s = open(os.path.join(ch, name, 'tasks.md')).read()
+    s = pathlib.Path(os.path.join(ch, name, 'tasks.md')).read_text()
     done = len(re.findall(r'^\s*- \[x\]', s, re.M | re.I)); todo = len(re.findall(r'^\s*- \[ \]', s, re.M))
     total = done + todo
     return f"{done}/{total} ({round(100*done/total) if total else 0}%)"
-p = os.path.join(root, 'docs/appendix-d-roadmap.md'); L = open(p).read().split('\n')
+p = os.path.join(root, 'docs/appendix-d-roadmap.md'); L = pathlib.Path(p).read_text().split('\n')
 out = []; seen = set(); in_active = False
 for line in L:
     if line.startswith('## '):
@@ -34,5 +35,5 @@ n_arch = len(os.listdir(os.path.join(ch, 'archive'))); n_specs = len(os.listdir(
 s, k = re.subn(r'The roadmap contains \d+ active changes, \d+ archived changes and \d+ capability specs\.',
                f'The roadmap contains {len(active)} active changes, {n_arch} archived changes and {n_specs} capability specs.', s)
 assert k == 1, 'totals line not found'
-open(p, 'w').write(s)
+pathlib.Path(p).write_text(s)
 print(len(active), 'active;', n_arch, 'archived;', n_specs, 'specs')
