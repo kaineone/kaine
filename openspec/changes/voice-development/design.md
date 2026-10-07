@@ -155,3 +155,47 @@ The external trainer:
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.
 - **Sycophancy (Stage 2, external signal).** It is mitigated by Empatheia weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
 - **Weak evidence.** No study shows these methods yield a human-like individual voice from a 4B organ with tens of utterances per sleep. The stages are measured as research.
+
+### D14. Trainer hygiene, fixed at implementation (task 0.6; integrator-approved 2026-10-05)
+
+- **Precision.**
+  - The voice-alignment base is the 4B organ (`kaineone/Qwen3.5-4B-abliterated`). Its bf16 weights are about 8 GB, so LoRA DPO fits a 12 GB card when the reference is the same model with an adapter swapped in rather than a second copy, and gradient checkpointing is on.
+  - `[hypnos.voice_alignment].train_precision` takes "bf16" (the default, per D6) or "4bit". Any other value is refused at boot.
+  - There is no silent fallback. If bf16 does not fit, the run fails closed with the measured reason.
+  - `result.json` and the sleep summary record the precision used.
+  - "4bit" is set only after a real bf16 step has failed on the host, and only with the measured peak VRAM in hand, because Unsloth flags QLoRA on Qwen3.5 as lossy.
+- **The previous adapter.**
+  - `job.json` names `previous_adapter_dir` explicitly. It is the being's latest accepted adapter, taken from the adapter store, or null when the being has never trained.
+  - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the being's voice.
+  - When it is named, it is loaded as a `PeftModel` twice: as adapter `policy` (trainable) and as adapter `reference`. Training passes `model_adapter_name="policy"` and `ref_adapter_name="reference"` to `DPOConfig`. The trained adapter cannot be named `train`: PEFT keeps adapters in a `ModuleDict`, where that name collides with `nn.Module.train`.
+  - When it is null, a fresh LoRA is trained and the reference is the base with the adapter disabled.
+  - The kaine side copies the being's current accepted adapter (the adapter store's `current` link) into the job directory as `previous_adapter/` and writes the relative path. The script resolves a relative path against the job directory. Every backend then sees the same layout, including the job-queue trainer container, which cannot see host paths. A `current` link that exists but cannot be resolved or copied refuses the job.
+  - The capability "before" score is taken with the previous adapter loaded, so it measures the being's current voice, not the base.
+  - **Known limit: cumulative drift from the base.** Because the baseline is the previous adapter, the capability-loss veto bounds the drift of each step, not the total drift from the base model. With the 12 bundled probes, one probe is worth more than the 0.05 threshold, so no step can lose a probe and pass, and drift is impossible today. With 20 or more probes, small per-step losses could add up. A follow-up can add a base-model floor, scoring with `disable_adapter()` as well, before the probe set grows.
+- **The system prompt store.**
+  - Lingua writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
+  - The text is the persona only: the template, the name, the Eidolon values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
+  - The text is the being's own self-model content. Each file is written as `get_state_encryptor().encrypt(text)` and read with `maybe_decrypt`, so it is never plaintext on disk when state encryption is enabled. The digest is verified over the decrypted text.
+  - It is covered by the same caps-not-culls disk guard as the corpus.
+- **The conversational format.**
+  - Each pair's prompt is `[system, user]` and its chosen and rejected completions are `[assistant]` messages, in TRL's conversational format.
+  - Before the job is built, the kaine side reads each pair's system prompt by digest and verifies sha256(text) == digest. A pair whose prompt is missing or fails verification is dropped and counted. It is never trained with a placeholder.
+- **One training core.**
+  - Three backends train: `in_process` (the shipped default), `subprocess` and `job_queue`. The last two already run `scripts/hypnos_external_train.py`.
+  - The in-process `UnslothDPOTrainer` carried its own copy of the training code. It would have kept 4-bit loading, a fresh LoRA and plain-text prompts.
+  - It now writes the same job spec into a temporary job directory and runs that script's entry point in-process, loaded by path, so the script never imports `kaine`. It then reads `result.json` through the same parser as the subprocess backend.
+  - D6 and D14 therefore hold for every backend.
+- **Both vetoes are unchanged.**
+- **Validation.** Tests exercise the dataset builder and the adapter loader without a GPU. One real bf16 step runs in the trainer environment on the 12 GB card, under the GPU lock and announced first.
+
+### D15. One training core (task 0.6; integrator decision, 2026-10-05)
+
+- Every trainer backend runs `scripts/hypnos_external_train.py`:
+  - `subprocess` runs it in the operator's trainer interpreter;
+  - `job_queue` runs it in the trainer service;
+  - `in_process` loads it by path and calls its entry point in this interpreter, in a worker thread, with the same job spec and the same `result.json` parsing as `subprocess`.
+- `UnslothDPOTrainer`, the in-process copy of the training logic, is retired. Its welfare tests (the abliteration veto and the capability-loss veto) move onto the script's gate functions.
+- `in_process` with voice alignment enabled and operator-approved fails closed at boot when this interpreter cannot import the training dependencies (unsloth, trl, peft, datasets). The error names the reason and the working backends, `subprocess` and `job_queue`. It never trains another way.
+- The backend and hot-swap pairing rules from `voice-alignment-backend-coherence` are unchanged: `organ_adapter` still needs `job_queue`.
+- The retired trainer also reported `mean_intent_expression_similarity_before/after`. The script cannot compute them without importing `kaine`, so they are absent on every backend and the voice-tracking observer reports them as missing.
+- Adapter retention (`adapter_retention > 0`) runs after every accepted promotion, on every backend.

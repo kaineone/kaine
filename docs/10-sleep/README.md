@@ -166,7 +166,7 @@ Layer 2 of the voice-alignment gate is the environment variable `KAINE_VOICE_ALI
 | `kaine/modules/hypnos/phases.py` | Phases 1–4 |
 | `kaine/modules/hypnos/scheduler.py` | `RestScheduler` |
 | `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer` |
-| `kaine/modules/hypnos/unsloth_trainer.py` | In-process DPO+QLoRA training |
+
 | `kaine/modules/hypnos/job_queue_trainer.py` | Job-queue trainer backend |
 | `kaine/modules/hypnos/subprocess_trainer.py` | Subprocess trainer backend |
 | `kaine/modules/hypnos/trainer_service.py` | `kaine-trainer` service |

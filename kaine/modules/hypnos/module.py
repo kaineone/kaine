@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import time
@@ -30,6 +31,7 @@ from kaine.modules.hypnos.scheduler import RestScheduler
 from kaine.modules.hypnos.voice_alignment import (
     TRAINING_SOURCES,
     ConsolidationDivergence,
+    DPOPair,
     DPOPairBuilder,
     FakeTrainer,
     Trainer,
@@ -45,6 +47,8 @@ from kaine.modules.hypnos.voice_measures import (
     load_base_profile,
     organ_gguf_sha256,
 )
+from kaine.persistence.encrypted_jsonl import has_plaintext_line, rewrite_encrypted
+from kaine.persistence.system_prompts import read_system_prompt, store_dir_for
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
@@ -719,6 +723,7 @@ class Hypnos(BaseModule):
             "rotated": None,
             "corpus_bytes": 0,
             "warned": False,
+            "encrypted_rewrites": 0,
         }
         rotated_path: Optional[Path] = None
         # Only a rotation that raised is a failed measurement; a corpus-ceiling
@@ -735,6 +740,12 @@ class Hypnos(BaseModule):
             rotation_done = True
             if rotated_path is not None:
                 corpus_summary["rotated"] = rotated_path.name
+
+            corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
+            for f in sorted(corpus_dir.glob("sleep-*.jsonl")):
+                if await asyncio.to_thread(has_plaintext_line, f):
+                    if await asyncio.to_thread(rewrite_encrypted, f):
+                        corpus_summary["encrypted_rewrites"] += 1
 
             ceiling_info = await asyncio.to_thread(
                 check_corpus_ceiling,
@@ -802,11 +813,12 @@ class Hypnos(BaseModule):
                     / "voice_measures_latest.json",
                     measures,
                 )
-                await asyncio.to_thread(
-                    write_json_atomic,
-                    cumulative_path,
-                    new_cumulative,
-                )
+                if new_cumulative is not None:
+                    await asyncio.to_thread(
+                        write_json_atomic,
+                        cumulative_path,
+                        new_cumulative,
+                    )
             except Exception:
                 log.warning(
                     "hypnos: voice measures computation failed",
@@ -1205,10 +1217,51 @@ class Hypnos(BaseModule):
             )
         return await self._train_on_pairs(pairs, start_ms, _meta)
 
+    async def _attach_system_prompts(
+        self, pairs: list[DPOPair],
+    ) -> tuple[list[DPOPair], int]:
+        """Attach verified system prompts to DPO pairs.
+
+        Drops pairs whose stored system prompt is missing or fails digest
+        verification.  File I/O is run in a worker thread.
+        """
+
+        def _attach() -> tuple[list[DPOPair], int]:
+            store_dir = store_dir_for(self._voice_config.intent_log_path)
+            kept: list[DPOPair] = []
+            dropped = 0
+            for pair in pairs:
+                digest = pair.metadata.get("system_digest")
+                text = read_system_prompt(store_dir, digest) if digest else None
+                if text is None:
+                    dropped += 1
+                    continue
+                kept.append(dataclasses.replace(pair, system=text))
+            return kept, dropped
+
+        return await asyncio.to_thread(_attach)
+
     async def _train_on_pairs(
         self, pairs, start_ms, _meta
     ) -> tuple[TrainingResult, PhaseResult]:
         window_meta: dict[str, Any] = {}
+        pairs, dropped = await self._attach_system_prompts(pairs)
+        if not pairs:
+            elapsed_ms = time.monotonic() * 1000.0 - start_ms
+            voice_result = TrainingResult(
+                accepted=False,
+                adapter_path=None,
+                capability_loss=0.0,
+                reason=f"no pair has a verified system prompt ({dropped} dropped)",
+                samples_used=0,
+            )
+            return voice_result, PhaseResult(
+                phase="voice_alignment",
+                success=True,
+                elapsed_ms=elapsed_ms,
+                metadata=_meta({"pairs_without_system": dropped}),
+            )
+
         try:
 
             async def _train() -> TrainingResult:
@@ -1286,6 +1339,7 @@ class Hypnos(BaseModule):
             )
         phase_meta = {
             "pairs": len(pairs),
+            "pairs_without_system": dropped,
             "accepted": voice_result.accepted,
             "reason": voice_result.reason,
         }

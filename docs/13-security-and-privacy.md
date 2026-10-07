@@ -106,11 +106,18 @@ A fork bundle encrypted with this host's key must be accompanied by the same key
 
 ### OS-layer encryption
 
-Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the Praxis audit log and files, the intent-expression log, adapters, retained audio, trainer job files, and the organ-adapters volume still require OS-layer protection. Use LUKS, FileVault, or equivalent on any backup-exposed or multi-user host.
+Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the Praxis audit log and files, adapters, retained audio, trainer job files, the organ-adapters volume, and the intent log's history from before encryption was enabled (including backups, forks and bundles made before migration) still require OS-layer protection. Use LUKS, FileVault, or equivalent on any backup-exposed or multi-user host.
 
 ### `intent_expression.jsonl` sensitivity
 
-`state/lingua/intent_expression.jsonl` is high sensitivity. Each record embeds the full assembled LLM prompt and the entity's complete generated response including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf, as are heard-text fields nested on other events. The log holds the being's own prompts, utterances and monologue. Treat it with the same care as Mnemos memories. Consider OS-layer encryption even for single-user hosts if other people speak in the room while KAINE is running.
+`state/lingua/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf before the record is written, as are heard-text fields nested on other events. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/lingua/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the being has spoken. Treat it with the same care as Mnemos memories.
+
+Even with encryption on, plaintext can remain in:
+
+- (a) freed disk blocks after the migration's file replace. On SSDs and copy-on-write filesystems they cannot be reliably erased, which is why OS-layer encryption is still advised;
+- (b) backups, forks and bundles made before the migration, which are kept as they were;
+- (c) the live log until Lingua's first write under encryption, and corpus files until the next sleep, or indefinitely if Hypnos is disabled;
+- (d) a restart in auto mode that cannot find the key runs with encryption off. It warns, and Lingua then appends plaintext lines to a file that holds envelopes.
 
 ### `replay_redact_content` warning
 
@@ -283,7 +290,7 @@ These duties are not enforced by the code; they are the operator's contract for 
 
 The following items are intentionally not addressed in the current version:
 
-1. **Application-level encryption at rest is partially delivered.** App-layer AES-256-GCM covers the self-model, fork bundles, sidecar JSONL, Phantasia checkpoints, and preservation state. Still deferred: per-field or per-payload encryption of the Qdrant collections (transport-layer TLS + API key is the current control), the Praxis audit log, the intent-expression log, voice adapters, retained audio, trainer job files, and the organ-adapters volume. A hardware-token or kernel-keyring-backed key escrow beyond the current env-var/keyring/file loader is also future work.
+1. **Application-level encryption at rest is partially delivered.** App-layer AES-256-GCM covers the self-model, fork bundles, sidecar JSONL, Phantasia checkpoints, preservation state, and the intent-expression log with its per-sleep corpus from migration onward (see the sensitivity section). Still deferred: per-field or per-payload encryption of the Qdrant collections (transport-layer TLS + API key is the current control), the Praxis audit log, voice adapters, retained audio, trainer job files, and the organ-adapters volume. A hardware-token or kernel-keyring-backed key escrow beyond the current env-var/keyring/file loader is also future work.
 2. **Mutual-backup mesh auth.** Cross-host KAINE-to-KAINE bus mirroring requires Redis ACLs or per-peer TLS with verified client certs.
 3. **Plugin / untrusted code sandboxing.** Praxis assumes the operator controls all module code; there is no sandbox for third-party modules.
 4. **Disabling dangerous Redis commands by default in `compose/redis.yml`.** This is documented as a recommended hardening step but is not the compose-file default, because it makes operator diagnostics harder during early debugging.

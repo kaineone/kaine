@@ -539,7 +539,7 @@ def compute_sleep_measures(
     *,
     base_profile: dict[str, Any] | None = None,
     cumulative: dict[str, Any] | None = None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Compute the four voice measures from a rotated corpus file.
 
     Reads JSONL from ``corpus_file``, skipping ``event: "preempted"`` and
@@ -547,33 +547,34 @@ def compute_sleep_measures(
     ``(generated_text, faithful_rendering)`` for grounding.
 
     Returns ``(measures, new_cumulative)`` where ``measures`` contains
-    ``utterance_count``, ``distinctiveness``, ``self_consistency``,
-    ``grounding``, ``health``, ``base_profile_digest`` and ``ts``.
+    ``utterance_count``, ``unreadable_lines``, ``distinctiveness``,
+    ``self_consistency``, ``grounding``, ``health``, ``base_profile_digest``
+    and ``ts``.
     """
+    from kaine.persistence.encrypted_jsonl import iter_records
+
     texts: list[str] = []
     pairs: list[tuple[str, str]] = []
+    unreadable_lines = 0
 
     try:
         path = Path(corpus_file)
         if path.is_file():
-            with path.open("r", encoding="utf-8") as fh:
-                for raw in fh:
-                    line = raw.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except Exception:
-                        continue
-                    if not isinstance(rec, dict) or rec.get("event") == "preempted":
-                        continue
-                    generated = rec.get("generated_text")
-                    if not isinstance(generated, str):
-                        continue
-                    texts.append(generated)
-                    pairs.append((generated, rec.get("faithful_rendering")))
+            for line in iter_records(path):
+                if line.unreadable:
+                    unreadable_lines += 1
+                    continue
+                rec = line.record
+                if rec.get("event") == "preempted":
+                    continue
+                generated = rec.get("generated_text")
+                if not isinstance(generated, str):
+                    continue
+                texts.append(generated)
+                pairs.append((generated, rec.get("faithful_rendering")))
     except Exception:
         log.debug("compute_sleep_measures: corpus read failed", exc_info=True)
+        unreadable_lines += 1
 
     this_profile = style_profile(texts)
     health_dict = health(texts)
@@ -581,7 +582,7 @@ def compute_sleep_measures(
 
     distinctiveness: float | None = None
     base_digest: str | None = None
-    if isinstance(base_profile, dict):
+    if unreadable_lines == 0 and isinstance(base_profile, dict):
         base_digest = base_profile.get("gguf_sha256")
         try:
             distinctiveness = profile_distance(
@@ -591,7 +592,11 @@ def compute_sleep_measures(
             distinctiveness = None
 
     self_consistency: float | None = None
-    if cumulative is not None and isinstance(cumulative, dict):
+    if (
+        unreadable_lines == 0
+        and cumulative is not None
+        and isinstance(cumulative, dict)
+    ):
         try:
             self_consistency = profile_distance(this_profile, cumulative)
         except Exception:
@@ -599,6 +604,7 @@ def compute_sleep_measures(
 
     measures = {
         "utterance_count": health_dict["utterance_count"],
+        "unreadable_lines": unreadable_lines,
         "distinctiveness": distinctiveness,
         "self_consistency": self_consistency,
         "grounding": grounding_score,
@@ -607,5 +613,7 @@ def compute_sleep_measures(
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
+    if unreadable_lines > 0:
+        return measures, cumulative
     new_cumulative = merge_profiles(cumulative, this_profile)
     return measures, new_cumulative

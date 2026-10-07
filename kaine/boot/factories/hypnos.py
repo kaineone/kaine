@@ -26,6 +26,21 @@ from kaine.text_embedding import (
 log = logging.getLogger(__name__)
 
 
+def _parse_train_precision(raw: Any) -> str:
+    if not isinstance(raw, str):
+        raise VoiceAlignmentConfigError(
+            f"[hypnos.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
+            f"got {type(raw).__name__}: {raw!r}"
+        )
+    value = raw.strip()
+    if value not in {"bf16", "4bit"}:
+        raise VoiceAlignmentConfigError(
+            f"[hypnos.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
+            f"got {value!r}"
+        )
+    return value
+
+
 def voice_alignment_config_from_section(
     voice_cfg_section: dict[str, Any],
     kaine_config: Optional[dict[str, Any]] = None,
@@ -103,6 +118,9 @@ def voice_alignment_config_from_section(
             ),
             seed=int(voice_cfg_section.get("seed", 42)),
             training_device=str(voice_cfg_section.get("training_device", "cuda:0")),
+            train_precision=_parse_train_precision(
+                voice_cfg_section.get("train_precision", "bf16")
+            ),
             adapter_retention=int(voice_cfg_section.get("adapter_retention", 0)),
             hot_swap_mode=str(voice_cfg_section.get("hot_swap_mode", "manual")),
             reload_endpoint_url=reload_endpoint_url,
@@ -340,29 +358,31 @@ def _resolve_trainer(
     if backend == "job_queue":
         return _resolve_job_queue_trainer(voice_config, kaine_config)
 
+    # backend == "in_process"
     try:
         import datasets  # noqa: F401  # type: ignore[import-untyped]
         import peft  # noqa: F401  # type: ignore[import-untyped]
         import trl  # noqa: F401  # type: ignore[import-untyped]
         import unsloth  # noqa: F401  # type: ignore[import-untyped]
     except Exception as exc:
-        # voice_alignment.enabled=True + operator_approved=True + missing extras
-        # is a configuration error, not an acceptable silent fallback.  Installing
-        # FakeTrainer here would let training cycles "succeed" while writing nothing
-        # — a pretend process.  Raise so the operator sees a clear boot failure
-        # instead of silently producing useless training runs.
         raise VoiceAlignmentConfigError(
-            f"voice_alignment is enabled and operator-approved but the [training] "
-            f"extras are not installed ({exc}). Install them with:\n"
-            f"  .venv/bin/pip install 'kaine[training]'\n"
-            f"or disable voice_alignment in kaine.toml / kaine.operator.toml."
+            "voice_alignment is enabled and operator-approved with "
+            f"trainer_backend = 'in_process', but this interpreter cannot import "
+            f"the training dependencies ({exc}). Use trainer_backend = 'subprocess' "
+            "with trainer_python set to the trainer environment's interpreter, or "
+            "'job_queue', or disable voice_alignment."
         ) from exc
     _require_non_empty_abliteration_probes(voice_config)
     _require_non_empty_capability_probes(voice_config)
 
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
+    from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
 
-    return UnslothDPOTrainer(base_model_path=voice_config.base_model_path)
+    return SubprocessVoiceTrainer(
+        trainer_python=None,
+        trainer_workdir=resolve(voice_config.trainer_workdir),
+        run_in_process=True,
+        timeout_s=voice_config.trainer_timeout_s,
+    )
 
 
 def _require_non_empty_abliteration_probes(

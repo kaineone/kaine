@@ -4,8 +4,10 @@
 """Voice alignment: read intent-expression JSONL, build DPO pairs,
 hand them to a trainer.
 
-The trainer protocol is intentionally minimal so the real implementation
-(`UnslothDPOTrainer`) can land later without touching the orchestrator.
+The trainer protocol is intentionally minimal so the real training
+script (`scripts/hypnos_external_train.py`) can evolve without touching
+the orchestrator. The in-process, subprocess and job-queue backends all
+consume the same script and write the same result.json.
 A `FakeTrainer` is shipped as the test/no-deps default and explicitly
 rejects every batch with reason "no training backend configured" so
 operators see the expected message until they install the `[training]`
@@ -39,6 +41,7 @@ class DPOPair:
     chosen: str
     rejected: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    system: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,8 @@ class VoiceAlignmentConfig:
     # Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles voice alignment
     # training. Operator can override to "cuda:1" or "cpu".
     training_device: str = "cuda:0"
+    # "bf16" (default, D14) or "4bit"; never a silent fallback.
+    train_precision: str = "bf16"
     # How many accepted adapters to keep under adapter_output_dir.
     # 0 (the default) keeps every accepted adapter: they are the entity's
     # learned voice, so infrastructure does not cull them. A positive value
@@ -137,10 +142,10 @@ class VoiceAlignmentConfig:
     # Corpus disk-guard ceiling in GB.  0 disables the warning.
     corpus_ceiling_gb: float = 10.0
     # Trainer backend selector:
-    #   "in_process" (default) — run unsloth DPO in the entity-runtime venv
-    #     (requires the [training] extra; the shipped, byte-for-byte-unchanged
-    #     path).
-    #   "subprocess" — run the real unsloth DPO out-of-process in an
+    #   "in_process" (default) — run the same trainer script
+    #     scripts/hypnos_external_train.py in this interpreter (requires the
+    #     [training] extra).
+    #   "subprocess" — run the same script out-of-process in an
     #     operator-configured external Python env (e.g. Unsloth Studio). Used on
     #     hosts whose runtime venv cannot host unsloth (different Python ABI /
     #     torch / CUDA). See SubprocessVoiceTrainer.
@@ -192,6 +197,10 @@ class VoiceAlignmentConfig:
             )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
+        if self.train_precision not in ("bf16", "4bit"):
+            raise ValueError(
+                f"train_precision must be one of 'bf16', '4bit'; got {self.train_precision!r}"
+            )
 
 
 @dataclass(frozen=True)
@@ -349,26 +358,26 @@ class DPOPairBuilder:
         else:
             paths = [Path(p) for p in path]
 
+        from kaine.persistence.encrypted_jsonl import iter_records
+
         pairs: list[DPOPair] = []
         scanned = 0
         usable = 0
+        unreadable = 0
         for p in reversed(paths):
             if scanned >= self._max_scanned:
                 break
             if not p.exists():
                 continue
-            with p.open("r", encoding="utf-8") as fh:
-                lines = fh.read().splitlines()
-            for line in reversed(lines):
+            for line in reversed(list(iter_records(p))):
                 if scanned >= self._max_scanned:
                     break
-                line = line.strip()
-                if not line:
+                if line.unreadable:
+                    # Not training data, and not counted as scanned, so the
+                    # template arm's rate is unaffected.
+                    unreadable += 1
                     continue
-                try:
-                    record = json.loads(line)
-                except Exception:
-                    continue
+                record = line.record
                 scanned += 1
                 chosen = (record.get("faithful_rendering") or "").strip()
                 rejected = (record.get("generated_text") or "").strip()
@@ -390,9 +399,16 @@ class DPOPairBuilder:
                             "timestamp": record.get("timestamp"),
                             "mode": record.get("mode"),
                             "model": record.get("model"),
+                            "system_digest": record.get("system_digest"),
                         },
                     )
                 )
+        if unreadable:
+            log.warning(
+                "voice alignment: %d intent-log line(s) could not be read "
+                "(undecryptable or malformed); skipped",
+                unreadable,
+            )
         # The scan ran newest first; hand the kept pairs back in log order.
         pairs.reverse()
         return pairs, scanned, usable
@@ -450,22 +466,7 @@ async def consolidation_magnitude(
     return float(magnitude), getattr(embedder, "kind", "unknown")
 
 
-def _import_unsloth_trainer() -> type:
-    """Lazy importer so importing this module is side-effect-free
-    (the real trainer pulls in adapter_store + capability_eval which
-    keep their own imports light, but the indirection keeps the
-    import graph clean for tooling that only wants the data models)."""
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
 
-    return UnslothDPOTrainer
-
-
-def __getattr__(name: str):
-    # Allow `from kaine.modules.hypnos.voice_alignment import UnslothDPOTrainer`
-    # to keep working after the implementation moved to its own file.
-    if name == "UnslothDPOTrainer":
-        return _import_unsloth_trainer()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class FakeTrainer:

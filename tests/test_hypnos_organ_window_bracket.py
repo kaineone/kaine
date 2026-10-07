@@ -20,6 +20,7 @@ from kaine.bus.config import BusConfig
 from kaine.modules.hypnos import Hypnos, TrainingResult, VoiceAlignmentConfig
 from kaine.modules.hypnos.organ_window import OrganWindowResult
 from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
+from tests.voice_prompt_support import with_verified_system
 
 # With preference_source="none", a sleep never reaches the trainer, so these
 # tests call _train_on_pairs directly and check the returned PhaseResult.
@@ -52,7 +53,11 @@ class _RecordingTrainer:
 def _hypnos(bus, tmp_path, *, trainer, runner):
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
-        json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})
+        json.dumps(
+            with_verified_system(
+                log_path, [{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}]
+            )[0]
+        )
         + "\n",
         encoding="utf-8",
     )

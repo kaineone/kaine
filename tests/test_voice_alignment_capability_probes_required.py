@@ -103,6 +103,20 @@ def test_require_non_empty_capability_probes_default_bundle(tmp_path: Path):
 # --------------------------------------------------------------------------- #
 # External trainer script guard (self-contained, no kaine imports).
 # --------------------------------------------------------------------------- #
+def _run_script_job(tmp_path: Path, job: dict) -> dict:
+    """Run the script's entry point on a one-pair job; the probe check runs in
+    main before any heavy import or training."""
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    (job_dir / "job.json").write_text(json.dumps(job), encoding="utf-8")
+    (job_dir / "pairs.jsonl").write_text(
+        json.dumps({"prompt": "p", "chosen": "c", "rejected": "r", "system": "s"}) + "\n",
+        encoding="utf-8",
+    )
+    assert script.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    return json.loads((job_dir / "result.json").read_text(encoding="utf-8"))
+
+
 def _empty_probe_job(tmp_path: Path, capability_probe_path: str) -> dict[str, str | int]:
     return {
         "capability_probe_path": capability_probe_path,
@@ -121,7 +135,7 @@ def test_script_rejects_empty_capability_probes_without_importing_unsloth(
     empty_probe.write_text("")
 
     job = _empty_probe_job(tmp_path, str(empty_probe))
-    result = script._train(job, [{"prompt": "p", "chosen": "c", "rejected": "r"}])
+    result = _run_script_job(tmp_path, job)
 
     assert "unsloth" not in sys.modules
     assert result["ok"] is True
@@ -139,7 +153,7 @@ def test_script_rejects_missing_capability_probe_file(
 
     missing = tmp_path / "missing.jsonl"
     job = _empty_probe_job(tmp_path, str(missing))
-    result = script._train(job, [{"prompt": "p", "chosen": "c", "rejected": "r"}])
+    result = _run_script_job(tmp_path, job)
 
     assert "unsloth" not in sys.modules
     assert result["ok"] is True

@@ -28,6 +28,7 @@ from kaine.modules.lingua.client import (
 )
 from kaine.modules.lingua.context import PERSONA_TEMPLATE_VERSION, ContextAssembler
 from kaine.modules.lingua.intent_log import IntentExpressionLog
+from kaine.persistence.system_prompts import digest_of, store_dir_for, write_system_prompt
 from kaine.storage import resolve
 from kaine.workspace.volition import SPEAK, THINK, VOLITION_STREAM
 
@@ -124,6 +125,7 @@ class Lingua(BaseModule):
             base_url=chat_url, timeout_s=request_timeout_s, api_key=api_key
         )
         self._intent_log = intent_log or IntentExpressionLog(resolve(intent_log_path))
+        self._stored_system_digests: set[str] = set()
         self._model_id = model_id
         self._think = think
         self._temperature = float(temperature)
@@ -803,7 +805,15 @@ class Lingua(BaseModule):
             log.warning("heard speech placeholder applied to residual text in log")
 
         record_id = uuid.uuid4().hex
-        system_digest = hashlib.sha256(ctx.system.encode("utf-8")).hexdigest()
+        system_digest = digest_of(ctx.system)
+        try:
+            store_dir = store_dir_for(self._intent_log.path)
+            if system_digest not in self._stored_system_digests:
+                write_system_prompt(store_dir, ctx.system)
+                self._stored_system_digests.add(system_digest)
+        except Exception:
+            log.exception("system prompt store failed")
+
         try:
             self._intent_log.append(
                 mode=mode,
