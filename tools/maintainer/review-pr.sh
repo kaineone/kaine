@@ -22,6 +22,9 @@ B="$OUT/review_brief.md"
   for c in "$@"; do echo; echo "## Context: $(basename "$c")"; cat "$c"; done
 } > "$B"
 echo "brief: $(wc -c < "$B") chars"
-python3 "$HERE/worker.py" "$B" "$OUT" --think high || true
+if ! python3 "$HERE/worker.py" "$B" "$OUT" --think high --text; then
+  echo "review-pr: the worker failed; read $OUT/thinking.txt" >&2
+  exit 1
+fi
 echo "== worker findings"
 cat "$OUT/response.txt"

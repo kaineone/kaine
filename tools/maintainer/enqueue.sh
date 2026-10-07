@@ -6,6 +6,6 @@
 # calls the merge-queue GraphQL mutation directly.
 set -euo pipefail
 PR=${1:?usage: enqueue.sh PR}
-ID=$(gh pr view "$PR" --repo kaineone/kaine --json id -q .id)
+ID=$(gh pr view "$PR" --repo "${KAINE_REPO:-kaineone/kaine}" --json id -q .id)
 gh api graphql -f query='mutation($id:ID!){enqueuePullRequest(input:{pullRequestId:$id}){mergeQueueEntry{position state}}}' -f id="$ID" \
   --jq '"#'"$PR"' queued: position \(.data.enqueuePullRequest.mergeQueueEntry.position) (\(.data.enqueuePullRequest.mergeQueueEntry.state))"'

@@ -38,7 +38,23 @@ def _unfence(content: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+
+def inside(repo, rel: str):
+    """``repo/rel`` if ``rel`` is a plain relative path that stays inside ``repo``."""
+    from pathlib import Path as _P
+    p = _P(rel)
+    if p.is_absolute() or ".." in p.parts:
+        raise SystemExit(f"refusing path outside the checkout: {rel}")
+    root = _P(repo).resolve()
+    dest = (root / p).resolve()
+    if root != dest and root not in dest.parents:
+        raise SystemExit(f"refusing path outside the checkout: {rel}")
+    return dest
+
 def _finish(resp: str, a) -> int:
+    if a.text:
+        # A plain-text answer (a review): there are no file blocks to check.
+        return 0
     blocks = [(p, _unfence(c)) for p, c in BLOCK.findall(resp)]
     if not blocks:
         print("NO @@@FILE BLOCKS in response", file=sys.stderr)
@@ -51,7 +67,7 @@ def _finish(resp: str, a) -> int:
         return 4
     if a.apply:
         for p, content in blocks:
-            dest = os.path.join(a.apply, p)
+            dest = str(inside(a.apply, p))
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             with open(dest, "w") as fh:
                 fh.write(content)
@@ -70,6 +86,7 @@ def main() -> int:
     ap.add_argument("--ctx", type=int, default=int(os.environ.get("WORKER_CTX", "131072")))
     ap.add_argument("--num-predict", type=int, default=65536)
     ap.add_argument("--reapply", action="store_true")
+    ap.add_argument("--text", action="store_true", help="the answer is plain text, not file blocks")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     if a.reapply:

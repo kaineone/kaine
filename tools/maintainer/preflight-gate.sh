@@ -27,7 +27,7 @@ step "suite (fast, -n 8)" env CUDA_VISIBLE_DEVICES="" PYTHONPATH="$WT" "$HERE/sa
   -n "${GATE_WORKERS:-8}" --dist loadfile -m "not slow" -o faulthandler_timeout=600
 git fetch -q origin main
 re=$(grep -v '^#' .github/slow-test-paths.txt | grep -v '^[[:space:]]*$')
-if git diff --name-only origin/main...HEAD | grep -E -q -f <(printf '%s\n' "$re"); then
+if [ -n "$re" ] && git diff --name-only origin/main...HEAD | grep -E -q -f <(printf '%s\n' "$re"); then
   step "slow lane (touched)" env CUDA_VISIBLE_DEVICES="" PYTHONPATH="$WT" "$HERE/safe-run.sh" "$PY" -m pytest -q -p no:cacheprovider -m slow -o faulthandler_timeout=600
 fi
 [ "$fail" = 0 ] && echo "PREFLIGHT GREEN" || echo "PREFLIGHT RED"

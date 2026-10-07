@@ -24,6 +24,19 @@ BLOCK = re.compile(r"^@@@EDIT[ \t]+(\S+)[ \t]*\n(.*?)^@@@END[ \t]*$", re.S | re.
 PAIR = re.compile(r"^<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n?>>>>>>> REPLACE[ \t]*$", re.S | re.M)
 
 
+
+def inside(repo, rel: str):
+    """``repo/rel`` if ``rel`` is a plain relative path that stays inside ``repo``."""
+    from pathlib import Path as _P
+    p = _P(rel)
+    if p.is_absolute() or ".." in p.parts:
+        raise SystemExit(f"refusing path outside the checkout: {rel}")
+    root = _P(repo).resolve()
+    dest = (root / p).resolve()
+    if root != dest and root not in dest.parents:
+        raise SystemExit(f"refusing path outside the checkout: {rel}")
+    return dest
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("response")
@@ -47,7 +60,7 @@ def main() -> int:
             return 4
         text = staged.get(path)
         if text is None:
-            text = (Path(a.repo) / path).read_text()
+            text = inside(a.repo, path).read_text()
         n = text.count(search)
         if n == 0 and a.loose_blank_lines:
             # Workers often drop blank lines from anchors (import groups).
@@ -71,7 +84,7 @@ def main() -> int:
                 print(f"{path}: does not compile after edits: {exc}", file=sys.stderr)
                 return 6
     for path, text in staged.items():
-        (Path(a.repo) / path).write_text(text)
+        inside(a.repo, path).write_text(text)
     print(f"applied {len(edits)} edit(s) to {len(staged)} file(s)")
     return 0
 
