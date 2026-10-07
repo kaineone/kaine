@@ -61,4 +61,4 @@
   - Reads without a session are refused.
 - [x] 5.4 Accessibility pass: keyboard navigation, focus order, labels and contrast.
 - [x] 5.5 `docs/04-getting-started/README.md` leads with the browser setup. The terminal wizard is documented as an alternative.
-- [ ] 5.6 `openspec validate browser-first-run --strict` passes.
+- [x] 5.6 `openspec validate browser-first-run --strict` passes.

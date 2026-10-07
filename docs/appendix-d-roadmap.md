@@ -8,10 +8,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | --- | --- | --- |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
-| browser-first-run | 15/22 (68%) | Replace the terminal-first setup wizard with a browser-based first-run flow, including download progress. |
 | entity-key-custody | 0/12 (0%) | Redesign entity-state encryption so keys can be recovered or rotated without manual re-encryption. |
 | individuation-rebuild | 56/67 (84%) | Replace the individuation signal with a real test against the being's own birth reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
-| maturation-gate-liveness | 14/16 (88%) | Fix the developmental maturation gate so birth can complete and gestation is safely confined. |
 | module-ignition-study | 29/33 (88%) | Run the same stimulus corpus with different module coalitions to measure what each faculty contributes. |
 | module-residency-and-speech-tiers | 9/60 (15%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
 | portability-program | 7/8 (88%) | Honest portability claims and verified support from small boards up to multi-GPU servers. |
@@ -24,7 +22,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | k1-jev-decision-model | 10/26 (38%) | Train K1-Jev, a small local model that answers typed questions about the entity's external speech for the instruments and welfare signals (data and trainer built; schema v2 and operator gold labels next). |
 | mnemos-retrieval-energy | 1/3 (33%) | Publish a familiarity signal from Mnemos as the modern-Hopfield retrieval energy of the current content. Design only. |
 | thymos-active-inference-affect | 1/4 (25%) | Derive Thymos's precision from active inference over the body's internal state, as the paper describes. Design only, after the workspace ablation. |
-| voice-development | 4/17 (24%) | Let the entity individuate a voice of its own instead of reciting workspace readings, in stages, with heard speech never persisted. |
+| voice-development | 7/17 (41%) | Let the entity individuate a voice of its own instead of reciting workspace readings, in stages, with heard speech never persisted. |
 
 ## Open operator and device steps
 
@@ -45,7 +43,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 19 active changes, 265 archived changes and 104 capability specs.
+The roadmap contains 17 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
