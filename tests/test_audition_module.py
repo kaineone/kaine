@@ -566,6 +566,7 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "normalised_error",
             "encoder_model_id",
             "attended_window",
+            "attended_seconds",
             "alert",
             "energy_dbfs",
         }

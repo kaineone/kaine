@@ -203,7 +203,8 @@ async def test_speech_forward_model_shape_mismatch_discarded(bus, caplog):
                 {"weight": [[0.0] * 10] * 4, "bias": [0.0] * 4},
                 {"weight": [[0.0] * 99] * 99, "bias": [0.0] * 99},
             ]
-        }
+        },
+        "forward_model_features": "utterance_duration_v2",
     }
     with caplog.at_level(logging.WARNING, logger="kaine.modules.audition"):
         audition.deserialize(bad_state)
@@ -355,7 +356,27 @@ async def test_speech_forward_model_bad_bias_discarded_not_raised(bus, caplog):
     bad = audition._forward_model.state_dict()
     bad["layers"][-1]["bias"] = bad["layers"][-1]["bias"] + [0.0]
     with caplog.at_level(logging.WARNING, logger="kaine.modules.audition"):
-        audition.deserialize({"forward_model": bad})
+        audition.deserialize({"forward_model": bad, "forward_model_features": "utterance_duration_v2"})
     assert any("discarding" in rec.message.lower() for rec in caplog.records)
+    assert audition._forward_model.state_dict() == original_weights
+    await _close_module(audition)
+
+
+@pytest.mark.asyncio
+async def test_untagged_speech_checkpoint_discarded(bus, caplog, monkeypatch):
+    audition = _make_audition(bus)
+    original_weights = audition._forward_model.state_dict()
+
+    def _raising_load_state_dict(*args, **kwargs):
+        raise AssertionError("load_state_dict should not be called")
+
+    monkeypatch.setattr(
+        audition._forward_model,
+        "load_state_dict",
+        _raising_load_state_dict,
+    )
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.audition"):
+        audition.deserialize({"forward_model": audition._forward_model.state_dict()})
+    assert any("predates" in rec.message.lower() for rec in caplog.records)
     assert audition._forward_model.state_dict() == original_weights
     await _close_module(audition)
