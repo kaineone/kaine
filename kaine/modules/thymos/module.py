@@ -446,6 +446,8 @@ class Thymos(BaseModule):
                     )
                 except asyncio.TimeoutError:
                     pass
+                if self._stopped.is_set():
+                    break
                 try:
                     await self._tick()
                     await self._maybe_publish_state()
