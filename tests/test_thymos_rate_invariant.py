@@ -48,7 +48,8 @@ class _NoOpRegulation:
 
 @pytest.mark.asyncio
 async def test_appraisal_rate_invariance(bus: AsyncBus):
-    """Broadcast-rate changes should not change total arousal gained per second."""
+    # Rewritten for research affect: the per-broadcast arousal nudge is removed,
+    # so arousal no longer depends on broadcast rate or coalition variance.
     events = [
         _event(salience=0.8),
         _event(salience=0.1),
@@ -79,9 +80,10 @@ async def test_appraisal_rate_invariance(bus: AsyncBus):
 
     arousal_slow = await run(0.3)
     arousal_fast = await run(0.1)
-    # One reference-interval nudge at the scale cap of 4.
-    max_one_nudge = 0.05 * 0.078 * 4
-    assert abs(arousal_slow - arousal_fast) < max_one_nudge
+    # Arousal should stay at the baseline because neither drift nor appraisal nudges it.
+    assert arousal_slow == pytest.approx(0.3)
+    assert arousal_fast == pytest.approx(0.3)
+    assert arousal_slow == pytest.approx(arousal_fast)
 
 
 @pytest.mark.asyncio
@@ -95,11 +97,3 @@ async def test_timer_publishes_state(bus: AsyncBus):
         assert len(state_events) >= 2
     finally:
         await thymos.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_invalid_appraisal_reference_interval(bus: AsyncBus):
-    with pytest.raises(ValueError):
-        Thymos(bus, appraisal_reference_interval_s=0.0)
-    with pytest.raises(ValueError):
-        Thymos(bus, appraisal_reference_interval_s=-0.1)

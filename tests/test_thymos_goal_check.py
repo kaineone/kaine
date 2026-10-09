@@ -205,9 +205,9 @@ async def test_emotion_event_carries_goal_significance_method(bus: AsyncBus):
     await thymos.initialize()
     try:
         thymos.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
-        thymos.drives.social_drive.value = 0.8
+        thymos.drives.social_drive.value = 0.2
         await thymos.on_workspace(
-            _snapshot([_ev(source="audition", type_="perception", salience=0.9, eid="e1")])
+            _snapshot([_ev(source="audition", type_="perception", salience=0.9, eid="e1", normalised_error=3.0)])
         )
         entries = await bus.read("thymos.out", last_id="0", count=20)
         emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]

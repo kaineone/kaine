@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
-from kaine.boot.errors import _require_keys
+from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -21,6 +21,7 @@ def make_thymos(
     entity_clock: Optional[EntityClock] = None,
 ) -> BaseModule:
     from kaine.modules.thymos.coupling import CouplingConfig
+    from kaine.modules.thymos.drives import DriveSet
     from kaine.modules.thymos.module import Thymos
     from kaine.modules.thymos.state import DimensionalState
 
@@ -30,13 +31,20 @@ def make_thymos(
         "baseline_dominance",
         "drift_rate_per_s",
         "publish_interval_s",
-        "appraisal_reference_interval_s",
         "baseline_salience",
         "alert_salience",
         "soma_stream",
         "chronos_stream",
         "mnemos_stream",
         "social_drive_time_scale_s",
+        "volition_stream",
+        "fast_time_constant_s",
+        "slow_time_constant_s",
+        "learning_progress_floor",
+        "alert_excess_margin",
+        "intent_rate_weight",
+        "valence_time_constant_s",
+        "valence_progress_gain",
         "drives",  # nested per-drive sub-tables, consumed by DriveSet default
         "coupling",  # nested [thymos.coupling] sub-table
     }
@@ -50,16 +58,31 @@ def make_thymos(
     for k in (
         "drift_rate_per_s",
         "publish_interval_s",
-        "appraisal_reference_interval_s",
         "baseline_salience",
         "alert_salience",
         "soma_stream",
         "chronos_stream",
         "mnemos_stream",
         "social_drive_time_scale_s",
+        "volition_stream",
+        "fast_time_constant_s",
+        "slow_time_constant_s",
+        "learning_progress_floor",
+        "alert_excess_margin",
+        "intent_rate_weight",
+        "valence_time_constant_s",
+        "valence_progress_gain",
     ):
         if k in section:
             kwargs[k] = section[k]
+    # Build DriveSet from the optional [thymos.drives] sub-tables.
+    drives_section = section.get("drives")
+    try:
+        drives = DriveSet.from_config(drives_section)
+    except ValueError as exc:
+        raise ConfigurationError(f"Invalid [thymos.drives] configuration: {exc}") from exc
+    kwargs["drives"] = drives
+
     # Build CouplingConfig from the optional [thymos.coupling] sub-table.
     coupling_section = section.get("coupling") or {}
     coupling_allowed = {

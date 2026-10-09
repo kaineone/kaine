@@ -288,10 +288,18 @@ Thymos maintains a dimensional VAD (valence/arousal/dominance) state, categorica
 | `publish_interval_s` | float | `1.0` | Seconds between affect-state publications to the bus. |
 | `baseline_salience` | float | `0.1` | Salience of routine affective state publications. |
 | `alert_salience` | float | `0.7` | Salience on significant affective change or drive threshold crossing. |
-| `social_drive_time_scale_s` | float | `600.0` | Time scale over which the social drive builds. |
+| `social_drive_time_scale_s` | float | `600.0` | Accepted for compatibility; no longer used. The social drive builds at its build rate once an operator interaction has occurred. |
 | `soma_stream` | string | `"soma.out"` | Stream observed for interoceptive prediction errors. |
 | `chronos_stream` | string | `"chronos.out"` | Stream observed for temporal events. |
 | `mnemos_stream` | string | `"mnemos.out"` | Stream observed for memory recall events that trigger affect. |
+| `volition_stream` | string | `"volition.out"` | Stream observed for Volition intents; each non-rest intent relieves restlessness. |
+| `fast_time_constant_s` | float | `10.0` | Subjective time constant of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
+| `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; learning progress is the relative fall from slow to fast. |
+| `learning_progress_floor` | float | `0.05` | Noise floor on learning progress before it relieves curiosity. |
+| `alert_excess_margin` | float | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom. |
+| `intent_rate_weight` | float | `0.05` | Per-broadcast weight of the intent-rate average that holds off restlessness. |
+| `valence_time_constant_s` | float | `30.0` | Time constant of valence's relaxation toward its target. |
+| `valence_progress_gain` | float | `2.0` | Gain on learning progress in the valence target and the pleasantness check. |
 
 ### Affect coupling
 
@@ -318,17 +326,18 @@ The four shipped drives are `curiosity`, `boredom`, `social_drive`, and `restles
 | Key | Type | Description |
 |---|---|---|
 | `build_rate` | float | Rate at which the drive accumulates per second under activating conditions; `build_rate` is scaled by the incoming signal. |
-| `decay_rate` | float | Rate at which the drive decays per second when conditions are absent. |
+| `decay_rate` | float | Rate at which the drive decays toward zero per second. Under full deprivation a drive settles at `build_rate / (build_rate + decay_rate)`. |
 | `threshold` | float | Drive level at which a threshold-crossing event is published. |
+| `relief_gain` | float | For curiosity and boredom, the relief rate per second at full strength (learning progress; excess perceptual alerts). For the others, the fraction of the drive removed by a full consummatory event (social: a new operator interaction; restlessness: a non-rest Volition intent). |
 
 Shipped defaults:
 
-| Drive | `build_rate` | `decay_rate` | `threshold` |
-|---|---|---|---|
-| `curiosity` | `0.05` | `0.02` | `0.7` |
-| `boredom` | `0.04` | `0.02` | `0.7` |
-| `social_drive` | `0.01` | `0.005` | `0.7` |
-| `restlessness` | `0.03` | `0.02` | `0.7` |
+| Drive | `build_rate` | `decay_rate` | `threshold` | `relief_gain` |
+|---|---|---|---|---|
+| `curiosity` | `0.05` | `0.0055` | `0.7` | `0.5` |
+| `boredom` | `0.04` | `0.0045` | `0.7` | `0.3` |
+| `social_drive` | `0.01` | `0.0011` | `0.7` | `0.8` |
+| `restlessness` | `0.03` | `0.0033` | `0.7` | `0.5` |
 
 ## Praxis
 
