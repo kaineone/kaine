@@ -70,7 +70,9 @@ PLV(a, b) = | mean(exp(i*(a_k - b_k))) |
            = hypot(sum(cos(a_k - b_k)), sum(sin(a_k - b_k))) / n
 ```
 
-The result is in `[0, 1]`. PLV `1.0` means perfectly phase-locked; PLV near `0.0` means independent. The mean pairwise PLV of a coalition is the average over all unordered pairs. A single-source coalition has no pair, so it maps to PLV `1.0` and is never penalized for being alone.
+The result is in `[0, 1]`. PLV `1.0` means perfectly phase-locked; PLV near `0.0` means independent.
+
+**Only fresh samples count.** A module's oscillator advances only when that module publishes, so between its events its phase is frozen. The scorer marks a sample fresh when it differs from that module's previous sample, and computes a pair's PLV only over the ticks in the window where both samples are fresh. A pair with fewer than three jointly fresh ticks has no evidence of locking and contributes the *neutral PLV*, the value that maps to a factor of exactly `1.0`. Without this rule, two modules that rarely publish would show constant phase series and a PLV of exactly `1.0`. The mean pairwise PLV of a coalition is the average over all unordered pairs; a coalition or cohort with a single source has no pair and gets the neutral value, so it is neither boosted nor penalized for being alone.
 
 ### Coherence factor
 
@@ -82,7 +84,7 @@ factor = floor + (ceiling - floor) × PLV
 
 Default bounds are `coherence_floor = 0.8` and `coherence_ceiling = 1.25`.
 
-For each candidate event, `factor_for_source(source, cohort)` computes the mean PLV of that source with every other module in the cohort. Phase-locked events are boosted toward `1.25×`; desynchronized events are attenuated toward `0.8×`. At equal salience a phase-locked coalition wins.
+For each candidate event, `factor_for_source(source, cohort)` computes the mean PLV of that source with every other module in the cohort, using the neutral PLV for any pair without enough jointly fresh samples. The neutral PLV is `(1 - floor) / (ceiling - floor)`, `0.444` at the defaults. Phase-locked events are boosted toward `1.25×`; desynchronized events are attenuated toward `0.8×`. At equal salience a phase-locked coalition wins.
 
 ### PLV in snapshot metadata
 

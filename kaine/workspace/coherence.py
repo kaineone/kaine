@@ -16,6 +16,15 @@ The coherence factor multiplies a coalition's aggregate salience in
 ``Syneidesis.select`` BEFORE top-k/threshold. The factor is bounded so a
 pathologically self-reinforcing coalition cannot run away (paper §9).
 
+**Freshness rule.** ``CoherenceScorer.observe`` stores each phase together with a
+freshness flag. A sample is fresh only when the reported phase is finite and
+differs from that source's previously reported phase. Pairwise PLV is computed
+only over jointly fresh observations (the common suffix of the two windows,
+restricted to positions where both samples are fresh). If fewer than
+``MIN_FRESH_SAMPLES`` jointly fresh observations are available, the pair
+contributes the **neutral PLV** instead. The neutral PLV maps to a coherence
+factor of exactly 1.0 whenever ``floor <= 1.0 <= ceiling``.
+
 **Disabled is bit-for-bit.** When ``enabled`` is false, `Syneidesis` never
 constructs or consults a `CoherenceScorer`, so selection is identical to the
 pre-change behavior. This module's logic only runs on the enabled path.
@@ -32,6 +41,7 @@ from typing import Iterable
 from kaine.oscillator import NEUTRAL_PHASE
 
 MIN_PLV_WINDOW: int = 10
+MIN_FRESH_SAMPLES: int = 3
 
 
 def phase_locking_value(phases_a: list[float], phases_b: list[float]) -> float:
@@ -120,8 +130,9 @@ class CoherenceScorer:
         self._floor = float(coherence_floor)
         self._ceiling = float(coherence_ceiling)
         # Ephemeral sliding windows; NOT serialized (re-init to neutral on
-        # restart). Keyed by module name (== event source).
-        self._buffers: dict[str, deque[float]] = defaultdict(
+        # restart). Keyed by module name (== event source). Each entry is a
+        # deque of (phase_value, is_fresh) tuples.
+        self._buffers: dict[str, deque[tuple[float, bool]]] = defaultdict(
             lambda: deque(maxlen=self._window)
         )
 
@@ -140,29 +151,101 @@ class CoherenceScorer:
     def observe(self, phases: dict[str, float]) -> None:
         """Append this tick's per-module phases to their sliding windows.
 
-        Modules absent from ``phases`` simply do not advance this tick. A
-        module's missing phase falls back to the neutral phase.
+        Modules absent from ``phases`` simply do not advance this tick. A missing
+        or non-finite phase is stored as ``NEUTRAL_PHASE`` and marked not fresh.
+        A finite phase is marked fresh only when it differs from the source's
+        previous stored phase (the very first sample is therefore never fresh).
+        Each stored sample is a ``(value, fresh)`` tuple.
         """
         for source, ph in phases.items():
-            value = float(ph) if ph is not None and math.isfinite(ph) else NEUTRAL_PHASE
-            self._buffers[source].append(value)
-
-    def _windows_for(self, sources: Iterable[str]) -> list[list[float]]:
-        windows: list[list[float]] = []
-        for source in sources:
-            buf = self._buffers.get(source)
-            if buf:
-                windows.append(list(buf))
+            if ph is not None and math.isfinite(ph):
+                value = float(ph)
+                input_finite = True
             else:
-                # No observed phase yet → neutral, single-sample window. Two
-                # such modules lock perfectly (both neutral), matching the
-                # "absent oscillator is neutral" requirement.
-                windows.append([NEUTRAL_PHASE])
-        return windows
+                value = NEUTRAL_PHASE
+                input_finite = False
+
+            buf = self._buffers[source]
+            fresh = False
+            if buf and input_finite and value != buf[-1][0]:
+                fresh = True
+            buf.append((value, fresh))
+
+    def neutral_plv(self) -> float:
+        """The PLV value that maps to a coherence factor of 1.0.
+
+        Returns ``(1.0 - floor) / (ceiling - floor)`` clipped to ``[0, 1]``.
+        When ``ceiling == floor`` the division is degenerate and 1.0 is returned
+        directly.
+        """
+        if self._ceiling == self._floor:
+            return 1.0
+        val = (1.0 - self._floor) / (self._ceiling - self._floor)
+        if val < 0.0:
+            return 0.0
+        if val > 1.0:
+            return 1.0
+        return val
+
+    def _pair_plv(self, a: str, b: str) -> float | None:
+        """PLV between two sources over their jointly fresh observations.
+
+        The two buffers are aligned on their common suffix (the last ``n``
+        samples, where ``n`` is the minimum buffer length). Only positions where
+        both samples are fresh are kept. If fewer than ``MIN_FRESH_SAMPLES``
+        remain, ``None`` is returned (the caller should substitute
+        ``neutral_plv()``). If one or both sources have no observations,
+        ``None`` is returned.
+        """
+        buf_a = self._buffers.get(a)
+        buf_b = self._buffers.get(b)
+        if not buf_a or not buf_b:
+            return None
+
+        n = min(len(buf_a), len(buf_b))
+        if n == 0:
+            return None
+
+        samples_a = list(buf_a)[-n:]
+        samples_b = list(buf_b)[-n:]
+
+        fresh_a: list[float] = []
+        fresh_b: list[float] = []
+        for (va, fa), (vb, fb) in zip(samples_a, samples_b):
+            if fa and fb:
+                fresh_a.append(va)
+                fresh_b.append(vb)
+
+        if len(fresh_a) < MIN_FRESH_SAMPLES:
+            return None
+        return phase_locking_value(fresh_a, fresh_b)
 
     def plv(self, sources: Iterable[str]) -> float:
-        """Mean pairwise PLV among the given source modules, in ``[0, 1]``."""
-        return mean_pairwise_plv(self._windows_for(sources))
+        """Mean pairwise PLV among the given source modules, in ``[0, 1]``.
+
+        For each unordered pair the per-pair PLV is computed over jointly fresh
+        observations; if fewer than ``MIN_FRESH_SAMPLES`` jointly fresh
+        observations are available, the pair contributes ``neutral_plv()``.
+        With fewer than two sources ``neutral_plv()`` is returned.
+        """
+        sources = list(sources)
+        m = len(sources)
+        if m < 2:
+            return self.neutral_plv()
+
+        total = 0.0
+        pairs = 0
+        for i in range(m):
+            for j in range(i + 1, m):
+                p = self._pair_plv(sources[i], sources[j])
+                if p is None:
+                    p = self.neutral_plv()
+                total += p
+                pairs += 1
+
+        if pairs == 0:
+            return self.neutral_plv()
+        return total / pairs
 
     def factor(self, sources: Iterable[str]) -> float:
         """Bounded coherence multiplier for a coalition's source modules.
@@ -175,24 +258,26 @@ class CoherenceScorer:
     def factor_for_source(self, source: str, cohort: Iterable[str]) -> float:
         """Coherence multiplier for one source given the candidate cohort.
 
-        The candidate's coalition is itself plus the other modules active this
-        round; its factor reflects how phase-locked it is with them. A source
-        locked to the cohort is boosted toward the ceiling; a desynchronized
-        source is attenuated toward the floor. A source alone in the cohort has
-        no pair to lock and maps from PLV 1.0 (never penalised for solitude).
+        For each other source in the cohort, the pairwise PLV is computed over
+        jointly fresh observations; if there are not enough jointly fresh
+        observations, ``neutral_plv()`` is used for that pair. The mean of
+        those per-pair PLVs is then mapped onto
+        ``[coherence_floor, coherence_ceiling]``. A source alone in its cohort
+        returns the neutral factor, which is ``1.0`` whenever
+        ``floor <= 1 <= ceiling``.
         """
         others = [s for s in cohort if s != source]
         if not others:
-            return self.factor_from_plv(1.0)
-        source_window = self._windows_for([source])[0]
-        other_windows = self._windows_for(others)
-        # Source-centric coherence: how locked this source is with the rest of
-        # the cohort (mean PLV of source↔each other), so a phase-locked source
-        # is boosted and a desynchronized one attenuated independently.
-        total = 0.0
-        for win in other_windows:
-            total += phase_locking_value(source_window, win)
-        return self.factor_from_plv(total / len(other_windows))
+            return self.factor_from_plv(self.neutral_plv())
+
+        values: list[float] = []
+        for other in others:
+            p = self._pair_plv(source, other)
+            if p is None:
+                p = self.neutral_plv()
+            values.append(p)
+
+        return self.factor_from_plv(sum(values) / len(values))
 
     def factor_from_plv(self, plv: float) -> float:
         """Linear map of a PLV value onto ``[floor, ceiling]``, bounded."""

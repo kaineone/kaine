@@ -93,19 +93,73 @@ def test_factor_clamps_out_of_range_plv():
 
 def test_locked_modules_get_higher_factor_than_desync():
     s = _scorer(window=12)
-    # Feed phases over several ticks: a and b locked (same phase),
-    # c random (desynchronized from both).
-    rng = random.Random(3)
+    # a and b advance together so every sample after the first is fresh and
+    # the two series stay perfectly locked. c advances independently.
     for k in range(12):
-        ph = k * 0.4
-        s.observe({"a": ph, "b": ph, "c": rng.uniform(0, 2 * math.pi)})
+        ph = 0.3 * k
+        s.observe({"a": ph, "b": ph, "c": (1.7 * k * k) % (2 * math.pi)})
     factor_locked = s.factor_for_source("a", ["a", "b"])
     factor_desync = s.factor_for_source("c", ["a", "b", "c"])
     assert factor_locked > factor_desync
 
 
-def test_single_source_cohort_maps_from_full_plv():
+def test_single_source_cohort_gets_exact_unit_factor():
     s = _scorer(floor=0.8, ceiling=1.25)
     s.observe({"a": 0.5})
-    # Alone in the cohort → never penalised: maps from PLV 1.0 → ceiling.
-    assert s.factor_for_source("a", ["a"]) == pytest.approx(1.25)
+    # A source alone in the cohort returns the neutral unit-gain factor, not
+    # the ceiling.
+    assert s.factor_for_source("a", ["a"]) == pytest.approx(1.0)
+    assert s.factor_for_source("a", ["a"]) != pytest.approx(1.25)
+
+
+def test_constant_phases_yield_neutral_factor_not_ceiling():
+    # Frozen phases are never fresh, so the pair has no jointly fresh
+    # observations and must fall back to the neutral PLV (factor 1.0).
+    s = _scorer(window=12)
+    for _ in range(12):
+        s.observe({"a": 0.5, "b": 0.5})
+    assert s.factor(["a", "b"]) == pytest.approx(1.0)
+    assert s.factor(["a", "b"]) != pytest.approx(1.25)
+    assert s.factor_for_source("a", ["a", "b"]) == pytest.approx(1.0)
+
+
+def test_neutral_plv_maps_to_unit_factor():
+    s = _scorer(floor=0.8, ceiling=1.25)
+    assert s.factor_from_plv(s.neutral_plv()) == pytest.approx(1.0)
+
+
+def test_pair_with_two_fresh_samples_uses_neutral_plv():
+    # Only two jointly fresh observations -> below MIN_FRESH_SAMPLES -> the
+    # pair must contribute neutral_plv, giving factor 1.0 rather than 1.25.
+    s = _scorer(window=10)
+    s.observe({"a": 0.0, "b": 0.0})
+    s.observe({"a": 0.0, "b": 0.0})
+    s.observe({"a": 1.0, "b": 1.0})
+    s.observe({"a": 2.0, "b": 2.0})
+    f = s.factor_for_source("a", ["a", "b"])
+    assert f == pytest.approx(1.0)
+    assert f != pytest.approx(1.25)
+
+
+def test_first_sample_is_not_fresh():
+    s = _scorer()
+    s.observe({"a": 0.5})
+    assert s._buffers["a"][0][0] == pytest.approx(0.5)
+    assert s._buffers["a"][0][1] is False
+
+    s.observe({"a": 0.5})
+    assert s._buffers["a"][1][1] is False
+
+    s.observe({"a": 0.6})
+    assert s._buffers["a"][2][1] is True
+
+
+def test_null_control_floor_equals_ceiling():
+    # When coherence_floor == coherence_ceiling, every factor must equal that
+    # value, including a lone source and a perfectly coherent frozen pair.
+    s = CoherenceScorer(plv_window=10, coherence_floor=0.9, coherence_ceiling=0.9)
+    assert s.factor_for_source("a", ["a"]) == pytest.approx(0.9)
+
+    for value in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0):
+        s.observe({"a": value, "b": value})
+    assert s.factor_for_source("a", ["a", "b"]) == pytest.approx(0.9)
