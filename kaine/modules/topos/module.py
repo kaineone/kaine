@@ -475,20 +475,26 @@ class Topos(BaseModule):
             # recent trajectory. Content-free; published alongside the fovea.
             if self._fovea_predictor is not None:
                 predicted_fovea = self._fovea_predictor.predict_next(fovea)
-            peripheral_view, foveal_view = foveate(
-                frame_np,
-                fovea,
-                peripheral_size=self._peripheral_size,
-                foveal_size=self._foveal_size,
-            )
-            # Two encodes: peripheral gist drives change/habituation/salience
-            # (whole-field continuity); foveal carries the attended detail. Both go
-            # through the clip seam so foveation composes with the clip encoder —
-            # a per-frame encoder (clip_len == 1) encodes the single view; the
-            # InternVideo-Next clip encoder (clip_len == 16) encodes the view as a
-            # static clip (perception-drives-salience task 3).
-            peripheral_latent = await self._encode_clip([peripheral_view] * self._clip_len)
-            foveal_latent = await self._encode_clip([foveal_view] * self._clip_len)
+            # Both views are derived from every buffered frame at the fovea chosen
+            # on the latest frame, so the clip encoder sees motion; a per-frame
+            # encoder (clip_len 1) gets the single latest view as before.
+            peripheral_views = []
+            foveal_views = []
+            for idx, f in enumerate(list(self._frame_buffer)):
+                if idx == len(self._frame_buffer) - 1:
+                    f_np = frame_np
+                else:
+                    f_np = self._foveation_frame(f)
+                p, fv = foveate(
+                    f_np,
+                    fovea,
+                    peripheral_size=self._peripheral_size,
+                    foveal_size=self._foveal_size,
+                )
+                peripheral_views.append(p)
+                foveal_views.append(fv)
+            peripheral_latent = await self._encode_clip(peripheral_views)
+            foveal_latent = await self._encode_clip(foveal_views)
             embedding = peripheral_latent
         else:
             embedding = await self._encode_clip(list(self._frame_buffer))

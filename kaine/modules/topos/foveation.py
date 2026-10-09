@@ -4,11 +4,15 @@
 """Attention-driven foveation core — spatial attention and view derivation.
 
 Given a native-resolution frame, compute a coarse spatial saliency map (per-tile
+precision-weighted change — the deviation of the current tile change from its running
+mean divided by its running standard deviation, floored at a fraction of the mean
 change), select a single fovea target by the precision-weighted combination of that
 bottom-up saliency with an optional top-down bias, size the fovea from arousal
 (Easterbrook narrowing — higher arousal, tighter fovea), and derive a downsampled
 peripheral view plus a high-resolution foveal crop from the *same* in-memory frame.
 
+Precision weighting down-weights habitual flicker and up-weights unusual change, as
+in predictive coding (Feldman and Friston 2010). The top-down channel stays unwired.
 Pure and dependency-light (numpy + a lazily-imported cv2 for resizes). No disk I/O:
 frames and views exist only in memory, preserving the zero-raw-sense-data invariant.
 The direction and exact magnitude of the arousal→size mapping are tuning parameters,
@@ -72,19 +76,70 @@ def tile_change(
 
 
 class SpatialSaliency:
-    """Stateful coarse per-tile change map over consecutive frames (memory only)."""
+    """Stateful coarse per-tile precision-weighted change map over consecutive frames
+    (memory only).
 
-    def __init__(self, grid: tuple[int, int] = (12, 12)) -> None:
+    The bottom-up map is the per-tile precision-weighted change: the deviation of
+    the current tile change from its running mean change, divided by the running
+    standard deviation of tile change (floored at ``floor_fraction`` of the mean
+    tile change). Habitual flicker is therefore down-weighted and unusual change
+    up-weighted, as precision weighting in predictive coding (Feldman and Friston
+    2010). The top-down channel stays unwired.
+    """
+
+    def __init__(
+        self,
+        grid: tuple[int, int] = (12, 12),
+        *,
+        alpha: float = 0.05,
+        warmup: int = 5,
+        floor_fraction: float = 0.1,
+    ) -> None:
+        if not (0.0 < alpha <= 1.0):
+            raise ValueError("alpha must be in (0, 1]")
+        if warmup < 0:
+            raise ValueError("warmup must be non-negative")
+        if floor_fraction <= 0.0:
+            raise ValueError("floor_fraction must be positive")
         self._grid = (int(grid[0]), int(grid[1]))
+        self._alpha = float(alpha)
+        self._warmup = int(warmup)
+        self._floor_fraction = float(floor_fraction)
         self._prev: np.ndarray | None = None
+        self._mu: np.ndarray | None = None
+        self._var: np.ndarray | None = None
+        self._count: int = 0
 
     @property
     def grid(self) -> tuple[int, int]:
         return self._grid
 
     def observe(self, frame: np.ndarray) -> np.ndarray:
+        prev = self._prev
         change, self._prev = tile_change(frame, self._prev, grid=self._grid)
-        return change
+        if prev is None:
+            return change
+        if self._count < self._warmup or self._mu is None:
+            out = change
+        else:
+            mean_mu = float(np.mean(self._mu))
+            s0 = self._floor_fraction * max(mean_mu, 1e-12)
+            denom = np.sqrt(self._var + s0 * s0)
+            out = (np.maximum(0.0, change.astype(np.float64) - self._mu) / denom).astype(
+                np.float32
+            )
+        # Exponential moving mean and variance (West's incremental form).
+        if self._mu is None:
+            self._mu = change.astype(np.float64)
+            self._var = np.zeros_like(self._mu, dtype=np.float64)
+        else:
+            delta = change.astype(np.float64) - self._mu
+            self._mu = self._mu + self._alpha * delta
+            self._var = (1.0 - self._alpha) * (
+                self._var + self._alpha * delta * delta
+            )
+        self._count += 1
+        return out
 
 
 def combine_saliency(
@@ -125,14 +180,16 @@ def select_fovea(
     hysteresis: float = 0.0,
 ) -> FoveaTarget:
     """Select the single fovea target: the argmax tile of ``saliency`` (a grid map),
-    sized from arousal. When the map is flat (no salient region) the target is the
-    centre. Hysteresis holds ``prev`` unless the new argmax beats the saliency at
+    sized from arousal. When the map is flat (no salient region) the fovea holds its previous
+    location, or the centre when there is none. Hysteresis holds ``prev`` unless the new argmax beats the saliency at
     ``prev``'s tile by more than ``hysteresis`` (fraction), damping thrash between
     comparable tiles."""
     sal = np.asarray(saliency, dtype=np.float32)
     gh, gw = sal.shape
     size = arousal_to_size(arousal, size_range=size_range)
     if float(sal.max()) <= float(sal.min()):  # flat / all-zero → no salient region
+        if prev is not None:
+            return FoveaTarget(prev.x, prev.y, size)
         return FoveaTarget(0.5, 0.5, size)
     flat = int(np.argmax(sal))
     ty, tx = divmod(flat, gw)
