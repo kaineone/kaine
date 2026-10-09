@@ -191,6 +191,9 @@ def run_task(
             # orchestrator set one; else the eval seed drives the rng directly.
             rng_seed = derive_seed(config.master_seed, seed)
             # --- AIF (no learning episodes; competent from the model) ---------
+            # Distinct stream for stochastic AIF policy sampling (kept separate
+            # from the env RNG by a large prime offset).
+            aif_agent.rng = np.random.default_rng(int(rng_seed) + 7919)
             aif_rec = _run_aif_seed(task, aif_agent, rng_seed, config.aif_eval_episodes)
             aif_dq = decision_quality(aif_rec["eval_returns"])
             aif_scores.append(aif_dq["mean"])

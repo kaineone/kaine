@@ -74,9 +74,14 @@ class AIFAgent:
 
     Construction builds the env's generative model and the live engine once
     (warming the JAX trace); :meth:`act` runs one real belief-update + EFE
-    policy-selection step and returns the first action of the EFE-minimising
-    policy. The engine is reused across all episodes/steps of a task (as the
-    live module reuses it across cognitive cycles).
+    policy-selection step and returns the first action of the selected policy.
+    If ``rng`` is supplied, the policy is sampled from the posterior
+    ``softmax(gamma * -G + ln E)`` computed with this agent's ``gamma``
+    (default ``16.0``, the value KAINE's NumPy engine uses), because the
+    engine's ``pymdp`` Agent is constructed with ``pymdp``'s default policy
+    precision of ``1.0``. If ``rng`` is ``None`` the agent deterministically
+    picks the EFE-minimising policy. The
+    engine is reused across all episodes/steps of a task.
     """
 
     def __init__(
@@ -86,8 +91,10 @@ class AIFAgent:
         efe_timeout_ms: float = 60_000.0,
         num_iter: int = 16,
         gamma: float = 16.0,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self._task = task
+        self.rng = rng
         self._model = build_model_for_env(task)
         self._policy_len = int(getattr(task, "policy_len", 1))
         # Reuse the live engine. A generous timeout: this is an offline
@@ -147,9 +154,11 @@ class AIFAgent:
         """Run one real EFE step on the observation and return the first action.
 
         Performs the live engine's belief update from the *carried* prior (so
-        information gathered earlier persists), selects the EFE-minimising
-        policy, returns its first controllable action, and propagates the belief
-        through that action's transition for the next step.
+        information gathered earlier persists). With a supplied ``rng`` the
+        policy is sampled from the policy posterior; otherwise the
+        EFE-minimising policy is chosen. Returns the selected policy's first
+        controllable action and propagates the belief through that action's
+        transition for the next step.
         """
         action, neg_efe, posterior, qs = self._infer_policy_efe(obs)
         self.last_efe = [float(-x) for x in neg_efe]
@@ -186,7 +195,28 @@ class AIFAgent:
             if s > 0:
                 arr = arr / s
             posterior.append([float(x) for x in arr])
-        best_policy = int(np.argmin(-neg))
+        if self.rng is None:
+            best_policy = int(np.argmin(-neg))
+        else:
+            lnE = (
+                np.log(
+                    np.clip(
+                        np.asarray(agent.E, dtype=np.float64).reshape(-1),
+                        1e-16,
+                        None,
+                    )
+                )
+                if getattr(agent, "E", None) is not None
+                else np.zeros(len(neg), dtype=np.float64)
+            )
+            z = self._gamma * neg + lnE
+            z = z - z.max()
+            p = np.exp(z)
+            p = p / p.sum()
+            if not np.isfinite(p).all() or p.sum() <= 0.0:
+                best_policy = int(np.argmin(-neg))
+            else:
+                best_policy = int(self.rng.choice(len(p), p=p))
         action = int(self._policy_first_action[best_policy])
         return action, [float(x) for x in neg], posterior, qs
 
