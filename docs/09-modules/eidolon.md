@@ -14,7 +14,7 @@ No external services are required. The self-model is persisted to `state/eidolon
 
 Eidolon holds KAINE's self-model — a structured, persistent description of the entity. In the PP+GWT framing, it maintains identity continuity across cognitive cycles. It does two things:
 
-1. **KL-drift detection** — every `workspace.broadcast`, it compares the recent event-source distribution to the historical distribution with symmetric KL divergence and publishes `eidolon.drift` when the composition of conscious content shifts significantly.
+1. **KL-drift detection** — every `workspace.broadcast`, it compares the recent event-source distribution (the last `drift_window` broadcasts) with a reference distribution built from the broadcasts that have left that window, using symmetric (Jeffreys) KL divergence, and publishes `eidolon.drift` when the composition of conscious content shifts significantly. The two distributions are disjoint, so a shift is not diluted by its own counts, and the score is 0.0 until the reference holds at least `drift_window` broadcasts (about twice the window after boot; the detector's counts are not saved across restarts).
 2. **Self-inference** (opt-in) — when enabled, it accumulates observations from Lingua (speech type labels only), Thymos (VAD numerics), and Nous (EFE policy labels), and at each Hypnos maintenance-cycle end it writes four self-model fields: `behavioral_norms`, `personality_baseline`, `values`, and `capability_map`.
 
 Raw speech text is never read or stored. The `_record_voice` and `observe_lingua` methods inspect only event type, length, and word count.
@@ -39,7 +39,7 @@ External speech is recorded for zero-persistence accounting, but self-inference 
 
 | Stream | Event type | Key payload fields | Salience |
 |---|---|---|---|
-| `eidolon.out` | `eidolon.drift` | `score`, `recent_count`, `historical_count`, `top_drifted_sources` | `alert_salience` (0.7) |
+| `eidolon.out` | `eidolon.drift` | `score`, `recent_count`, `historical_count` (all events ever observed), `reference_count` (events in the reference), `top_drifted_sources` | `alert_salience` (0.7) |
 | `eidolon.out` | `eidolon.self_model` | `name`, `values`, `behavioral_norms`, `personality_baseline`, `capability_map` | `baseline_salience` (0.05) |
 
 `eidolon.drift` carries no event contents — only source names and numeric scores. `eidolon.self_model` is published unconditionally at `initialize()` and again after each successful `maintenance_cycle_end()`. Lingua consumes `eidolon.self_model` over the bus to seed its persona.

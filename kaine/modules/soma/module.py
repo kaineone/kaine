@@ -151,6 +151,9 @@ class Soma(BaseModule):
         self._prediction_error_window: deque[float] = deque(
             maxlen=int(prediction_error_window)
         )
+        self._action_error_window: deque[float] = deque(
+            maxlen=int(prediction_error_window)
+        )
         self._last_prediction_error: float = 0.0
 
         # --- Learned expected prediction error ---
@@ -274,10 +277,11 @@ class Soma(BaseModule):
         return not self._warmup_conditions_met()
 
     def _warming_baseline(self, prior_errors: list[float]) -> float:
-        """The forward model's current typical error (rolling mean of the prior
-        window). Cold-start error hovers near this baseline uniformly, so
-        subtracting it strips the model-ignorance contribution while genuine
-        error *above* the baseline still accrues into fatigue."""
+        """Mean of the accumulator's own recent inputs (unexpected error, or
+        raw error during a hard breach) before this tick, so the damping
+        compares like with like. Cold-start error hovers near this baseline
+        uniformly, so subtracting it strips the model-ignorance contribution
+        while genuine error *above* the baseline still accrues into fatigue."""
         if not prior_errors:
             return 0.0
         return sum(prior_errors) / len(prior_errors)
@@ -376,10 +380,11 @@ class Soma(BaseModule):
             self._forward_model.suspended = True
         else:
             self._forward_model.suspended = False
-        # The window as it stood BEFORE this tick's error — the warming baseline
-        # is computed against prior errors so a single spike still reads as a
-        # spike (see _warming_baseline / the fatigue dampening below).
-        prior_errors = list(self._prediction_error_window)
+        # The action-error window as it stood BEFORE this tick's error — the
+        # warming baseline is computed against prior action errors so a single
+        # spike still reads as a spike (see _warming_baseline / the fatigue
+        # dampening below).
+        prior_action_errors = list(self._action_error_window)
 
         now_read = self._clock.now()
         if self._last_read_time is None:
@@ -465,7 +470,7 @@ class Soma(BaseModule):
         # prediction_error — the "cry" — is untouched and published in full below.
         fatigue_input = action_error
         if gate:
-            baseline = self._warming_baseline(prior_errors)
+            baseline = self._warming_baseline(prior_action_errors)
             fatigue_input = max(0.0, action_error - baseline)
             if fatigue_input < action_error:
                 log.debug(
@@ -486,6 +491,10 @@ class Soma(BaseModule):
                 "no premature maintenance forced",
                 prediction_error,
             )
+        # Record this tick's action error for future warm-up baselines. It is
+        # intentionally NOT included in the baseline used for this tick.
+        if math.isfinite(action_error):
+            self._action_error_window.append(action_error)
 
         # --- Regulation advisory (withheld during warm-up unless overridden) ---
         advisory = self._regulation.update(action_error, now=now)
