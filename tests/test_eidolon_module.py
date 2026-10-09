@@ -121,6 +121,7 @@ async def test_workspace_above_threshold_publishes_diagnostics_only(bus: AsyncBu
             "score",
             "recent_count",
             "historical_count",
+            "reference_count",
             "top_drifted_sources",
         }
         assert ev.salience == pytest.approx(eidolon._alert_salience)
