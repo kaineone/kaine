@@ -587,8 +587,6 @@ class Thymos(BaseModule):
                 return None
 
             e = _to_error(payload.get("prediction_error"))
-            if e is None:
-                e = _to_error(payload.get("normalised_error"))
             if e is not None:
                 source: str = getattr(event, "source", None) or event.type
                 if source not in self._err_slow:
@@ -617,12 +615,14 @@ class Thymos(BaseModule):
                     )
             return
         if stream == self._soma_stream and event.type == "soma.report":
-            wellness = event.payload.get("wellness", 1.0)
+            wellness = event.payload.get("wellness")
             try:
                 w = float(wellness)
             except (TypeError, ValueError):
-                w = 1.0
-            self._wellness = _clip01(w)
+                pass
+            else:
+                if math.isfinite(w):
+                    self._wellness = _clip01(w)
             alerts = event.payload.get("alerts") or []
             if alerts:
                 self._state = self._state.nudged(arousal=0.05)

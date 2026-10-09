@@ -96,7 +96,7 @@ async def test_thymos_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
                 Event(
                     source="topos",
                     type="topos.report",
-                    payload={"normalised_error": r},
+                    payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
                 ),
@@ -136,7 +136,7 @@ async def test_thymos_emotion_carries_goal_significance_method(bus: AsyncBus):
                 Event(
                     source="topos",
                     type="topos.report",
-                    payload={"normalised_error": r},
+                    payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
                 ),

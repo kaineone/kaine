@@ -102,7 +102,7 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
                 Event(
                     source="topos",
                     type="topos.report",
-                    payload={"normalised_error": r},
+                    payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
                 ),
@@ -223,7 +223,7 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
                 Event(
                     source="topos",
                     type="topos.report",
-                    payload={"normalised_error": r},
+                    payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
                 ),
@@ -241,7 +241,7 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
                 Event(
                     source="topos",
                     type="topos.report",
-                    payload={"normalised_error": 5.0},
+                    payload={"prediction_error": 5.0},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
                 ),
@@ -349,5 +349,39 @@ async def test_learning_progress_averaged_over_sources(bus):
             assert mixed_signed < topos_signed
         finally:
             await topos_only.shutdown()
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_soma_report_without_wellness_keeps_prior(bus: AsyncBus):
+    fake_now = [0.0]
+    thymos = Thymos(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
+    await thymos.initialize()
+    try:
+        assert thymos._wellness == 0.5
+        await thymos._handle_peer_event(
+            "soma.out",
+            Event(
+                source="soma",
+                type="soma.report",
+                payload={},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        assert thymos._wellness == 0.5
+
+        await thymos._handle_peer_event(
+            "soma.out",
+            Event(
+                source="soma",
+                type="soma.report",
+                payload={"wellness": 0.8},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        assert thymos._wellness == 0.8
     finally:
         await thymos.shutdown()
