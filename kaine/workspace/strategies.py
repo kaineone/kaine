@@ -67,6 +67,9 @@ class StaticThymosModulator:
             raise ValueError("default must be in [0, 1]")
         self._default = default
 
+    def contrast_gain(self) -> float:
+        return 0.0
+
     async def modulate(self, event: Event) -> float:
         return self._default
 

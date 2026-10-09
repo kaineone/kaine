@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
     pass
+    from kaine.workspace.precision import SourcePrecision
 from kaine.boot.common import _effective_hot_swap_mode
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.defaults import lingua_section_api_key
@@ -78,6 +79,11 @@ _SYNEIDESIS_ALLOWED_KEYS: set[str] = {
     "novelty_window",
     "salience_thymos_factor",
     "salience_goal_factor",
+    "precision_weighting",
+    "precision_sample_weight",
+    "precision_warmup_samples",
+    "precision_bounds",
+    "arousal_contrast_gain",
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED
@@ -125,7 +131,19 @@ def make_salience_factors(
     goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
 
     if thymos_factor == "state_modulator":
-        thymos_modulator = StateModulator(affect_provider.dimensional_state)
+        arousal_contrast_gain = float(section.get("arousal_contrast_gain", 8.0))
+        if arousal_contrast_gain < 0.0:
+            raise ConfigurationError(
+                "[syneidesis].arousal_contrast_gain must be >= 0"
+            )
+        baseline_arousal = float(
+            (kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
+        )
+        thymos_modulator = StateModulator(
+            affect_provider.dimensional_state,
+            contrast_gain_max=arousal_contrast_gain,
+            baseline_arousal=baseline_arousal,
+        )
     elif thymos_factor == "static":
         thymos_modulator = StaticThymosModulator()
     else:
@@ -167,6 +185,47 @@ def make_salience_factors(
         )
 
     return thymos_modulator, goal_scorer, downgraded_factors
+
+
+def make_source_precision(kaine_config: dict[str, Any]) -> SourcePrecision | None:
+    """Build the optional source-precision tracker from the [syneidesis] section.
+
+    Returns ``None`` when precision weighting is disabled, otherwise a
+    :class:`kaine.workspace.precision.SourcePrecision` configured from the
+    section. Invalid values raise :class:`ConfigurationError`.
+    """
+    from kaine.workspace.precision import SourcePrecision
+
+    section = dict(kaine_config.get("syneidesis") or {})
+    if not section.get("precision_weighting", True):
+        return None
+
+    sample_weight = float(section.get("precision_sample_weight", 0.02))
+    warmup_samples = int(section.get("precision_warmup_samples", 20))
+    raw_bounds = section.get("precision_bounds", (0.5, 1.5))
+
+    try:
+        bounds = tuple(float(b) for b in raw_bounds)
+    except Exception as exc:
+        raise ConfigurationError(
+            f"[syneidesis].precision_bounds must be a pair of floats, "
+            f"got {raw_bounds!r}"
+        ) from exc
+
+    if len(bounds) != 2:
+        raise ConfigurationError(
+            f"[syneidesis].precision_bounds must contain exactly two floats, "
+            f"got {raw_bounds!r}"
+        )
+
+    try:
+        return SourcePrecision(
+            sample_weight=sample_weight,
+            warmup_samples=warmup_samples,
+            bounds=bounds,
+        )
+    except ValueError as exc:
+        raise ConfigurationError(f"Invalid precision configuration: {exc}") from exc
 
 
 def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:

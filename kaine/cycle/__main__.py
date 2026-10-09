@@ -43,6 +43,7 @@ from kaine.boot import (
     known_module_names,
     make_coherence_scorer,
     make_salience_factors,
+    make_source_precision,
     plugin_injections,
 )
 from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
@@ -1836,6 +1837,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
             goal_scorer=goal_scorer,
             thymos_modulator=thymos_modulator,
             downgraded_factors=downgraded_factors,
+            precision=make_source_precision(ctx.kaine_config),
         ),
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),

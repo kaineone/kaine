@@ -144,5 +144,6 @@ from kaine.boot.wiring import (  # noqa: F401 - re-exported
     drive_sources_for,
     make_coherence_scorer,
     make_salience_factors,
+    make_source_precision,
     oscillator_enabled,
 )

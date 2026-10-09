@@ -11,7 +11,7 @@ Thymos is KAINE's affective appraisal layer. It:
 - Maintains a continuous, homeostatic VAD (valence/arousal/dominance) dimensional state.
 - Runs a five-check Scherer Component Process Model appraisal on each workspace broadcast.
 - Maintains four motivational drive accumulators: `curiosity`, `boredom`, `social_drive`, and `restlessness`.
-- Exposes a `StateModulator` that Syneidesis uses as a salience multiplier.
+- Exposes a `StateModulator` that Syneidesis uses for two arousal effects: a level factor `0.2 + 0.8 × arousal` common to every candidate, and a contrast gain that is 0 at or below baseline arousal and rises to `[syneidesis].arousal_contrast_gain` at arousal 1, sharpening the competition (adaptive gain; arousal-biased competition). Neither reorders candidates; per-source precision in Syneidesis does.
 - Optionally folds a perceived speaker emotion into its own appraisal as a familiarity-weighted, decaying input.
 
 ## Inputs
