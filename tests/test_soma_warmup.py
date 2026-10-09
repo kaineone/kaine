@@ -396,3 +396,77 @@ def test_shipped_config_ships_warmup_knobs():
     assert soma["regulation_warmup_min_samples"] == 1000
     assert soma["regulation_warmup_min_seconds"] == pytest.approx(1200.0)
     assert soma["regulation_warmup_require_error_stabilized"] is False
+
+
+# ---------------------------------------------------------------------------
+# Warm-up baseline must use the action-error window, not raw prediction error
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_warmup_fatigue_spike_above_action_mean_not_damped_by_raw_mean(
+    bus: AsyncBus,
+):
+    # During warm-up the fatigue input is damped by the recent mean of the
+    # action-error stream (unexpected error, or raw error during a hard
+    # breach). A spike in unexpected error that is well above that recent mean
+    # but still below the recent raw prediction-error mean must produce a
+    # positive fatigue input. Under the old raw-window baseline it would have
+    # been clamped to zero.
+    soma, src = _make_soma(
+        bus,
+        error=1.0,  # raw prediction error stays high
+        fatigue_decay_per_s=0.0,
+        fatigue_maintenance_threshold=10.0,
+        prediction_error_window=10,
+        regulation_warmup_min_samples=10_000,
+        regulation_warmup_min_seconds=10_000.0,
+    )
+
+    unexpected_values = [0.1, 0.1, 0.1, 0.5]
+    gen = iter(unexpected_values)
+    soma._expected_error.unexpected = lambda residuals, dt, learn=True: next(gen)
+
+    values = []
+    for i in range(4):
+        src.t = float(i)
+        await soma.tick_once()
+        values.append(soma._fatigue.value)
+
+    # Fatigue integrates input * dt and the first tick has dt = 0. Ticks 1-2
+    # sit at their own recent mean (0.1) and are damped to zero; the spike to
+    # 0.5 on tick 3 adds (0.5 - 0.1) * 1 s. The old raw-window baseline (mean
+    # raw error 1.0) would have damped the spike to zero as well.
+    assert values[2] == pytest.approx(0.0)
+    assert values[3] == pytest.approx(0.4)
+
+
+@pytest.mark.asyncio
+async def test_warmup_fatigue_steady_action_error_equal_to_mean_damped(
+    bus: AsyncBus,
+):
+    # A steady unexpected error equal to its recent action-error mean should
+    # be damped to (near) zero fatigue input during warm-up.
+    soma, src = _make_soma(
+        bus,
+        error=1.0,
+        fatigue_decay_per_s=0.0,
+        fatigue_maintenance_threshold=10.0,
+        prediction_error_window=10,
+        regulation_warmup_min_samples=10_000,
+        regulation_warmup_min_seconds=10_000.0,
+    )
+
+    unexpected_values = [0.3] * 5
+    gen = iter(unexpected_values)
+    soma._expected_error.unexpected = lambda residuals, dt, learn=True: next(gen)
+
+    values = []
+    for i in range(5):
+        src.t = float(i)
+        await soma.tick_once()
+        values.append(soma._fatigue.value)
+
+    # The first tick has dt = 0; after that the window mean is 0.3 and equal
+    # inputs are damped to zero, so no fatigue accrues.
+    assert values[-1] == pytest.approx(0.0)
