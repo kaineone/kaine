@@ -475,8 +475,6 @@ class Thymos(BaseModule):
                         / total_salience
                     )
                 drive_score = v * (2.0 * f - 1.0)
-        else:
-            drive_score = 0.0
 
         active_goals = self._goals.active()
         ledger_score = 0.0
