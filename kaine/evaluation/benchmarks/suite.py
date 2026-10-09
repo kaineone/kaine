@@ -230,13 +230,13 @@ def _mediation_aggregate_verdict(
         "min_effect": config.mediation_min_effect,
         "alpha": config.alpha,
     }
-    if mean_delta >= config.mediation_min_effect and pvalue <= config.alpha:
+    if mean_delta >= config.mediation_min_effect and pvalue < config.alpha:
         return Verdict(
             outcome=Outcome.WIN,
             detail=(
                 f"competitive mediation increases cross-module coupling "
                 f"(mean delta {mean_delta:.3f} >= {config.mediation_min_effect}, "
-                f"sign-test p={pvalue:.4f} <= {config.alpha}) — does work flat "
+                f"sign-test p={pvalue:.4f} < {config.alpha}) — does work flat "
                 "fan-in does not"
             ),
             metrics=metrics,
