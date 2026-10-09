@@ -19,9 +19,9 @@ from kaine.modules.thymos.state import DimensionalState
 class StateModulator:
     """Arousal-weighted salience modulator.
 
-    Higher arousal → broader attention (higher multiplier).
-    Lower arousal → narrower attention (lower multiplier).
-    Bounded to [0, 1] for Syneidesis's strategy product.
+    The level factor rises linearly with arousal, and the contrast gain
+    sharpens the competition above baseline (adaptive gain;
+    arousal-biased competition, Mather and Sutherland 2011).
     """
 
     def __init__(
@@ -30,14 +30,34 @@ class StateModulator:
         *,
         floor: float = 0.2,
         ceiling: float = 1.0,
+        contrast_gain_max: float = 0.0,
+        baseline_arousal: float = 0.3,
     ) -> None:
         if not 0.0 <= floor <= ceiling <= 1.0:
             raise ValueError(
                 "floor and ceiling must satisfy 0 <= floor <= ceiling <= 1"
             )
+        if contrast_gain_max < 0.0:
+            raise ValueError("contrast_gain_max must be >= 0")
+        if not 0.0 <= baseline_arousal < 1.0:
+            raise ValueError(
+                "baseline_arousal must satisfy 0 <= baseline_arousal < 1"
+            )
         self._state_getter = state_getter
         self._floor = float(floor)
         self._ceiling = float(ceiling)
+        self._contrast_gain_max = float(contrast_gain_max)
+        self._baseline_arousal = float(baseline_arousal)
+
+    def contrast_gain(self) -> float:
+        a = float(self._state_getter().arousal)
+        denom = 1.0 - self._baseline_arousal
+        t = (a - self._baseline_arousal) / denom
+        if t < 0.0:
+            t = 0.0
+        elif t > 1.0:
+            t = 1.0
+        return self._contrast_gain_max * t
 
     async def modulate(self, event: Event) -> float:
         state = self._state_getter()

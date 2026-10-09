@@ -194,6 +194,11 @@ Global Workspace scoring parameters.
 | `novelty_window` | integer | `32` | Sliding-window length (ticks) for the novelty detector. |
 | `salience_thymos_factor` | string | `"state_modulator"` | Source of the Thymos salience factor. `"state_modulator"` wires the real arousal-weighted StateModulator. `"static"` bypasses affect weighting and fires a degraded-mode warning. |
 | `salience_goal_factor` | string | `"static"` | Source of the goal salience factor. `"static"` leaves the goal factor at a constant; this is the shipped default and logs at INFO. `"drive_relevance"` is built and selectable but ships off by default: it changes what reaches the workspace and would shift the research baseline. |
+| `precision_weighting` | boolean | `true` | Weight each candidate by its source's precision (inverse variance of the intensities it publishes) relative to the other sources. |
+| `precision_sample_weight` | float | `0.02` | Exponential-average weight per event for the precision statistics (about 50 events). |
+| `precision_warmup_samples` | integer | `20` | Events a source needs before it counts as warmed; weights stay 1.0 until three sources are warmed. |
+| `precision_bounds` | array of 2 floats | `[0.5, 1.5]` | Lower and upper bounds on a source's precision weight. |
+| `arousal_contrast_gain` | float | `8.0` | Logistic contrast slope at arousal 1.0; the slope is 0 at or below baseline arousal. `0` disables the contrast. |
 
 ### Volition
 
