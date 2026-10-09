@@ -40,6 +40,14 @@ def _clip01(x: float) -> float:
     return x
 
 
+def _clip(x: float, lo: float, hi: float) -> float:
+    if x < lo:
+        return lo
+    if x > hi:
+        return hi
+    return x
+
+
 class Thymos(BaseModule):
     name: ClassVar[str] = "thymos"
 
@@ -60,9 +68,10 @@ class Thymos(BaseModule):
         mnemos_stream: str = "mnemos.out",
         social_drive_time_scale_s: float = 600.0,
         volition_stream: str = "volition.out",
-        learning_progress_fast_weight: float = 0.1,
-        learning_progress_slow_weight: float = 0.02,
-        alert_rate_weight: float = 0.05,
+        fast_time_constant_s: float = 10.0,
+        slow_time_constant_s: float = 100.0,
+        learning_progress_floor: float = 0.05,
+        alert_excess_margin: float = 0.5,
         intent_rate_weight: float = 0.05,
         valence_time_constant_s: float = 30.0,
         valence_progress_gain: float = 2.0,
@@ -88,16 +97,25 @@ class Thymos(BaseModule):
             raise ValueError("publish_interval_s must be positive")
         if social_drive_time_scale_s <= 0:
             raise ValueError("social_drive_time_scale_s must be positive")
+        if not math.isfinite(fast_time_constant_s) or fast_time_constant_s <= 0:
+            raise ValueError("fast_time_constant_s must be finite and > 0")
+        if not math.isfinite(slow_time_constant_s) or slow_time_constant_s <= 0:
+            raise ValueError("slow_time_constant_s must be finite and > 0")
+        if fast_time_constant_s >= slow_time_constant_s:
+            raise ValueError("fast_time_constant_s must be < slow_time_constant_s")
+        if not math.isfinite(learning_progress_floor) or not (0.0 <= learning_progress_floor < 1.0):
+            raise ValueError("learning_progress_floor must be finite and in [0, 1)")
+        if not math.isfinite(alert_excess_margin) or alert_excess_margin < 0:
+            raise ValueError("alert_excess_margin must be finite and >= 0")
         for name, w in (
-            ("learning_progress_fast_weight", learning_progress_fast_weight),
-            ("learning_progress_slow_weight", learning_progress_slow_weight),
-            ("alert_rate_weight", alert_rate_weight),
             ("intent_rate_weight", intent_rate_weight),
         ):
             if not (0.0 < w <= 1.0):
                 raise ValueError(f"{name} must be in (0, 1]")
-        if valence_time_constant_s <= 0:
-            raise ValueError("valence_time_constant_s must be > 0")
+        if not math.isfinite(valence_time_constant_s) or valence_time_constant_s <= 0:
+            raise ValueError("valence_time_constant_s must be finite and > 0")
+        if not math.isfinite(valence_progress_gain) or valence_progress_gain < 0:
+            raise ValueError("valence_progress_gain must be finite and >= 0")
 
         self._baseline = (baseline or DimensionalState()).clamped()
         self._state = DimensionalState(
@@ -118,9 +136,10 @@ class Thymos(BaseModule):
         self._mnemos_stream = mnemos_stream
         self._social_drive_time_scale_s = float(social_drive_time_scale_s)
         self._volition_stream = volition_stream
-        self._learning_progress_fast_weight = float(learning_progress_fast_weight)
-        self._learning_progress_slow_weight = float(learning_progress_slow_weight)
-        self._alert_rate_weight = float(alert_rate_weight)
+        self._fast_time_constant_s = float(fast_time_constant_s)
+        self._slow_time_constant_s = float(slow_time_constant_s)
+        self._learning_progress_floor = float(learning_progress_floor)
+        self._alert_excess_margin = float(alert_excess_margin)
         self._intent_rate_weight = float(intent_rate_weight)
         self._valence_time_constant_s = float(valence_time_constant_s)
         self._valence_progress_gain = float(valence_progress_gain)
@@ -128,7 +147,9 @@ class Thymos(BaseModule):
         # Perceptual learning-progress state.
         self._err_fast: dict[str, float] = {}
         self._err_slow: dict[str, float] = {}
-        self._alert_rate = 0.0
+        self._err_last_at: dict[str, float] = {}
+        self._alert_fast = 0.0
+        self._alert_slow = 0.0
         self._intent_rate = 0.0
         self._intents_since_broadcast = 0
         self._wellness = 0.5  # neutral prior: no Soma wellness information yet
@@ -202,9 +223,10 @@ class Thymos(BaseModule):
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
 
-        `learning_progress` is max(0, g) where g is the per-module relative
-        fall of the raw forward-model prediction error, averaged over the
-        perceptual modules (Oudeyer and Kaplan 2007; Schmidhuber 2010).
+        `learning_progress` is max(0, g - floor) / (1 - floor) where g is
+        the per-module relative fall of the raw forward-model prediction
+        error, averaged over the perceptual modules (Oudeyer and Kaplan
+        2007; Schmidhuber 2010).
         """
         g_values: list[float] = []
         for source, slow in self._err_slow.items():
@@ -217,7 +239,30 @@ class Thymos(BaseModule):
         if not g_values:
             return 0.0, 0.0
         g = sum(g_values) / len(g_values)
-        return max(0.0, g), g
+        floor = self._learning_progress_floor
+        lp = max(0.0, g - floor) / (1.0 - floor)
+        return lp, g
+
+    def _pleasantness(self, g: float) -> float:
+        """Appraisal pleasantness for signed progress `g`.
+
+        Coupling contributes only through the appraisal: the perceived
+        other's pleasantness is added to tanh(valence_progress_gain * g),
+        then clipped to [-1, 1]. This value is what valence relaxes toward
+        (shifted by wellness).
+        """
+        coupling_pleasantness = self._perceived_appraisal_contribution()[0]
+        return _clip(
+            math.tanh(self._valence_progress_gain * g) + coupling_pleasantness,
+            -1.0, 1.0,
+        )
+
+    _ALERT_RATE_FLOOR_PER_S: ClassVar[float] = 0.05
+
+    def _alert_excess(self) -> float:
+        """Return alert-stream novelty relative to its own habituated rate."""
+        ratio = self._alert_fast / max(self._alert_slow, self._ALERT_RATE_FLOOR_PER_S)
+        return _clip(ratio - 1.0 - self._alert_excess_margin, 0.0, 1.0)
 
     def set_drive_relevance(
         self,
@@ -283,18 +328,22 @@ class Thymos(BaseModule):
         self._last_tick_at = now
         lp, g = self._progress()
 
-        # Arousal and dominance drift toward baseline; valence is overwritten below.
+        # Decay alert-rate estimates before using them.
+        fast_tau = self._fast_time_constant_s
+        slow_tau = self._slow_time_constant_s
+        self._alert_fast *= math.exp(-dt / fast_tau)
+        self._alert_slow *= math.exp(-dt / slow_tau)
+        nb = self._alert_excess()
+
+        # Arousal and dominance drift toward baseline; valence relaxes below.
         drifted = self._state.drift_toward(
             self._baseline, self._drift_rate, dt
         )
         v = self._state.valence  # pre-drift valence
-        coupling_pleasantness = self._perceived_appraisal_contribution()[0]
         if dt > 0.0:
-            v_target = math.tanh(
-                self._valence_progress_gain * g
-                + (self._wellness - 0.5)
-                + coupling_pleasantness
-            )
+            # Valence relaxes toward the appraisal's pleasantness shifted by
+            # wellness; coupling reaches valence only through the appraisal.
+            v_target = _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
             k = 1.0 - math.exp(-dt / self._valence_time_constant_s)
             new_valence = v + (v_target - v) * k
         else:
@@ -305,11 +354,17 @@ class Thymos(BaseModule):
             dominance=drifted.dominance,
         ).clamped()
 
+        # Continuous drive relief: curiosity at full strength = learning progress,
+        # boredom at full strength = alert-stream novelty excess. Rate-based relief
+        # is independent of the report rate, so drives can still build under noise.
+        self._drives.relieve_rate("curiosity", lp, dt)
+        self._drives.relieve_rate("boredom", nb, dt)
+
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
             dt,
             novelty_signal=max(0.0, 1.0 - lp),
-            activity_signal=max(0.0, 1.0 - self._alert_rate),
+            activity_signal=max(0.0, 1.0 - nb),
             social_signal=social_signal,
             action_signal=max(0.0, 1.0 - self._intent_rate),
         )
@@ -380,9 +435,10 @@ class Thymos(BaseModule):
             has_novel = True
         novelty = 1.0 - prod_factor if has_novel else 0.0
 
-        # Pleasantness tracks signed learning progress.
+        # Pleasantness is the appraisal's signed learning progress; coupling
+        # contributes only through the appraisal, not by a direct state write.
         _, g = self._progress()
-        pleas = math.tanh(self._valence_progress_gain * g)
+        pleas = self._pleasantness(g)
 
         # Goal/need-relevance check (Scherer 2009, "The dynamic architecture of
         # emotion"; the component process model the paper cites): scored against the
@@ -454,8 +510,7 @@ class Thymos(BaseModule):
         # and the perceived intensity raises novelty, so the entity's *own*
         # appraisal→state path (below) produces its response.
         pp, pn = self._perceived_appraisal_contribution()
-        pleas = max(-1.0, min(1.0, pleas + pp))
-        novelty = max(-1.0, min(1.0, novelty + pn))
+        novelty = _clip(novelty + pn, -1.0, 1.0)
         return AppraisalScores(
             novelty=novelty,
             intrinsic_pleasantness=pleas,
@@ -589,24 +644,25 @@ class Thymos(BaseModule):
             e = _to_error(payload.get("prediction_error"))
             if e is not None:
                 source: str = getattr(event, "source", None) or event.type
+                now = self._clock()
                 if source not in self._err_slow:
-                    self._err_fast[source] = e
-                    self._err_slow[source] = e
+                    if e > 0.0:
+                        self._err_fast[source] = e
+                        self._err_slow[source] = e
+                        self._err_last_at[source] = now
                 else:
-                    self._err_fast[source] += self._learning_progress_fast_weight * (
-                        e - self._err_fast[source]
-                    )
-                    self._err_slow[source] += self._learning_progress_slow_weight * (
-                        e - self._err_slow[source]
-                    )
+                    dt = max(0.0, now - self._err_last_at[source])
+                    self._err_fast[source] += (
+                        1.0 - math.exp(-dt / self._fast_time_constant_s)
+                    ) * (e - self._err_fast[source])
+                    self._err_slow[source] += (
+                        1.0 - math.exp(-dt / self._slow_time_constant_s)
+                    ) * (e - self._err_slow[source])
+                    self._err_last_at[source] = now
             alert = bool(payload.get("alert"))
-            self._alert_rate += self._alert_rate_weight * (
-                (1.0 if alert else 0.0) - self._alert_rate
-            )
-            lp, _ = self._progress()
-            self._drives.relieve("curiosity", lp)
             if alert:
-                self._drives.relieve("boredom", 1.0)
+                self._alert_fast += 1.0 / self._fast_time_constant_s
+                self._alert_slow += 1.0 / self._slow_time_constant_s
                 norm = float(payload.get("normalised_error", 0.0) or 0.0)
                 surprise = min(self._perception_arousal_cap, max(0.0, norm - 1.0))
                 if surprise > 0.0:

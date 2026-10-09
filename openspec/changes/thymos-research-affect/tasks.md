@@ -12,6 +12,7 @@
 - [x] 2.5 With no per-broadcast nudges left, `appraisal_reference_interval_s` is removed from the constructor, factory, `config/kaine.toml` and docs.
 - [x] 2.6 Default decay rates are a ninth of the build rates, so each drive can cross its threshold; `DriveSet.from_config` rejects unknown drive names.
 - [x] 2.7 A REST intent neither counts toward the intent rate nor relieves restlessness; learning progress reads only raw `prediction_error`; a Soma report without a valid wellness keeps the prior value.
+- [x] 2.8 Second review: error and alert averages run over subjective time (10 s, 100 s) and seed at the first positive error; curiosity and boredom are relieved continuously per second, by learning progress above a noise floor and by alert excess over the habituated rate; valence relaxes toward the appraisal's pleasantness check plus wellness, so coupling reaches valence only through the appraisal (MODIFIED deltas for `thymos` and `thymos-affect-coupling`); non-finite time constants and gains are rejected.
 
 ## 3. Tests, docs
 

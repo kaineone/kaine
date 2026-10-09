@@ -7,6 +7,11 @@ Each drive is a float in [0, 1] with a build rate (scaled by an
 external signal), a decay rate, a threshold, a relief gain, and a
 hysteresis band that prevents event storms when the value oscillates
 near the threshold.
+
+For ``curiosity`` and ``boredom`` the relief gain is a continuous rate
+per second at full strength (relieve_rate); for ``social_drive`` and
+``restlessness`` it is the fraction removed per consummatory event
+(relieve).
 """
 from __future__ import annotations
 
@@ -58,7 +63,7 @@ class Drive:
     build_rate: float = 0.05        # per second when signal = 1.0
     decay_rate: float = 0.0055      # per second
     threshold: float = 0.7
-    relief_gain: float = 0.5
+    relief_gain: float = 0.5  # rate/s at full strength for curiosity/boredom; fraction per event for social/restlessness
     hysteresis_fraction: float = 0.9  # must drop below threshold * this to re-fire
     _has_fired: bool = field(default=False, init=False, repr=False)
 
@@ -92,6 +97,17 @@ class Drive:
         """Apply a consummatory event of strength `strength` ∈ [0, 1]."""
         c = _clamp01(strength)
         self.value = _clamp01(self.value * (1.0 - self.relief_gain * c))
+        self._check_hysteresis()
+
+    def relieve_rate(self, strength: float, dt: float) -> None:
+        """Apply continuous relief at rate ``relief_gain * strength`` per second.
+
+        The exact solution of dD/dt = -relief_gain * strength * D is used,
+        so the amount relieved is independent of the update rate.
+        """
+        c = _clamp01(strength)
+        if dt > 0.0:
+            self.value = _clamp01(self.value * math.exp(-self.relief_gain * c * dt))
         self._check_hysteresis()
 
     def _check_hysteresis(self) -> None:
@@ -202,6 +218,16 @@ class DriveSet:
         if drive is None or not isinstance(drive, Drive):
             raise KeyError(name)
         drive.relieve(strength)
+
+    def relieve_rate(self, name: str, strength: float, dt: float) -> None:
+        """Continuously relieve a named drive over ``dt`` seconds.
+
+        Unknown names raise KeyError.
+        """
+        drive = getattr(self, name, None)
+        if drive is None or not isinstance(drive, Drive):
+            raise KeyError(name)
+        drive.relieve_rate(strength, dt)
 
     def reset_all(self) -> None:
         for d in self.all():

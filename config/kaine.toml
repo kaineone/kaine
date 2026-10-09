@@ -663,12 +663,17 @@ baseline_arousal = 0.3
 baseline_dominance = 0.0
 drift_rate_per_s = 0.05
 publish_interval_s = 1.0
-# Valence relaxes toward tanh(valence_progress_gain * learning_progress + wellness - 0.5 + coupling)
-# (Joffily and Coricelli 2013). The time constant is subjective seconds.
+# Valence relaxes toward the appraisal's pleasantness (learning progress + coupling)
+# shifted by wellness (Joffily and Coricelli 2013). The time constant is subjective seconds.
 volition_stream = "volition.out"
-learning_progress_fast_weight = 0.1
-learning_progress_slow_weight = 0.02
-alert_rate_weight = 0.05
+# Fast time constant for prediction-error averaging and alert-rate fast habituation (subjective s).
+fast_time_constant_s = 10.0
+# Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
+slow_time_constant_s = 100.0
+# Learning-progress floor: progress below this is treated as zero.
+learning_progress_floor = 0.05
+# Alert excess margin: alert rate must exceed the habituated rate by this fraction to count as novel.
+alert_excess_margin = 0.5
 intent_rate_weight = 0.05
 valence_time_constant_s = 30.0
 valence_progress_gain = 2.0
@@ -699,7 +704,9 @@ decay_s = 10.0
 # coupling_max_rate_per_s is legacy (the DriftSafeguard it fed was removed when
 # coupling became appraisal-routed); if present it is ignored, not an error.
 
-# relief_gain: fraction of the drive removed by a full consummatory event (curiosity: learning progress; boredom: a perceptual alert; social: a new operator interaction; restlessness: a non-rest Volition intent).
+# relief_gain: curiosity and boredom are relieved continuously at relief_gain per second times
+# learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
+# relief_gain of their value per event (social: a new operator interaction; restlessness: a non-rest Volition intent).
 # Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
 [thymos.drives.curiosity]
 build_rate = 0.05

@@ -43,7 +43,7 @@ See the [Configuration reference](../appendix-a-configuration/modules.md) for th
 
 | Key | Default | Description |
 |---|---|---|
-| `baseline_valence` | `0.0` | VAD baseline valence `[-1, 1]` |
+| `baseline_valence` | `0.0` | Initial valence and its value after an affective reset `[-1, 1]`; valence otherwise relaxes toward its target (below), not toward this baseline |
 | `baseline_arousal` | `0.3` | VAD baseline arousal `[0, 1]` |
 | `baseline_dominance` | `0.0` | VAD baseline dominance `[-1, 1]` |
 | `drift_rate_per_s` | `0.05` | Homeostatic drift rate toward baseline per second |
@@ -51,10 +51,12 @@ See the [Configuration reference](../appendix-a-configuration/modules.md) for th
 | `baseline_salience` | `0.1` | Salience for routine state events |
 | `alert_salience` | `0.7` | Salience for emotion changes and drive crossings |
 | `social_drive_time_scale_s` | `600.0` | Accepted for compatibility; no longer used (the social drive builds at its build rate once an interaction has occurred) |
-| `learning_progress_fast_weight`, `learning_progress_slow_weight` | `0.1`, `0.02` | Per-report weights of the fast and slow averages of each perceptual module's raw prediction error |
-| `alert_rate_weight`, `intent_rate_weight` | `0.05`, `0.05` | Weights of the perceptual alert-rate and Volition intent-rate averages |
+| `fast_time_constant_s`, `slow_time_constant_s` | `10.0`, `100.0` | Subjective time constants of the fast and slow averages of each perceptual module's raw prediction error and of the perceptual alert rate |
+| `learning_progress_floor` | `0.05` | Noise floor subtracted from signed progress before it relieves curiosity: `LP = max(0, g - floor) / (1 - floor)` |
+| `alert_excess_margin` | `0.5` | The fast alert rate must exceed the slow one by this fraction before it relieves boredom |
+| `intent_rate_weight` | `0.05` | Per-broadcast weight of the Volition intent-rate average |
 | `valence_time_constant_s` | `30.0` | Time constant of valence's relaxation toward its target |
-| `valence_progress_gain` | `2.0` | Gain on learning progress in the valence target and the pleasantness check |
+| `valence_progress_gain` | `2.0` | Gain on learning progress in the pleasantness check, which sets the valence target |
 | `volition_stream` | `"volition.out"` | Stream Thymos reads Volition intents from |
 | `soma_stream` | from `config/kaine.toml` | Input stream name for Soma reports |
 | `chronos_stream` | from `config/kaine.toml` | Input stream name for Chronos reports |
@@ -67,7 +69,7 @@ Drive sub-tables (`[thymos.drives.<name>]` for `curiosity`, `boredom`, `social_d
 | `build_rate` | per drive | Build rate per second when signal = 1.0 |
 | `decay_rate` | per drive | Decay rate per second |
 | `threshold` | `0.7` | Threshold for crossing event |
-| `relief_gain` | per drive (0.5, 0.3, 0.8, 0.5) | Fraction of the drive a full consummatory event removes: `D <- D (1 - relief_gain * c)` |
+| `relief_gain` | per drive (0.5, 0.3, 0.8, 0.5) | Curiosity and boredom: relief rate per second at full strength, `D <- D exp(-relief_gain * c * dt)`. Social drive and restlessness: fraction a full consummatory event removes, `D <- D (1 - relief_gain * c)` |
 
 Coupling sub-table (`[thymos.coupling]`):
 
@@ -101,7 +103,7 @@ Any drive that crosses its `threshold` and has not already fired emits a `thymos
 | Check | Proxy used |
 |---|---|
 | **Novelty** | Suddenness from surprise: `1 - prod(1 - s_m)` over selected events carrying a `normalised_error` ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`; a ratio of 2.2 gives 0.72 |
-| **Intrinsic pleasantness** | `tanh(valence_progress_gain * g)`, with `g` the perceptual learning progress (errors falling is pleasant) |
+| **Intrinsic pleasantness** | `clip(tanh(valence_progress_gain * g) + coupling, -1, 1)`, with `g` the perceptual learning progress (errors falling is pleasant) and `coupling` the perceived-emotion contribution below |
 | **Goal significance** | Dominant homeostatic drive, signed by salience-weighted source match; active `GoalLedger` entries still contribute by token overlap when present |
 | **Coping potential** | `state.valence + (0.5 - state.arousal)` |
 | **Norm compatibility** | `0.0` (pending Eidolon integration) |
@@ -125,11 +127,14 @@ When the `GoalLedger` holds active goals, their token-overlap score (`relevance 
 
 The five scores map to a categorical emotion (`joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, `neutral`) via a rule-based `classify()`. On category change, Thymos publishes a `thymos.emotion` event. SURPRISE is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. DISGUST stays unreachable until a self-model supplies norms (`norm_compatibility_available: false`).
 
-The appraisal no longer nudges the dimensional state. Surprise reaches arousal through the perceptual-alert path below; counting it again in the appraisal once fed a positive loop through the access rate. Valence follows learning progress:
+The appraisal does not nudge arousal. Surprise reaches arousal through the perceptual-alert path below; counting it again in the appraisal once fed a positive loop through the access rate. Valence relaxes toward the appraisal's pleasantness check, shifted by wellness:
 
 ```
-g        = mean over Topos, Audition of (E_slow - E_fast) / E_slow    # raw prediction error, clipped to [-1, 1]
-v_target = tanh(valence_progress_gain * g + (wellness - 0.5) + coupling_pleasantness)
+E_fast, E_slow per module: exponential averages of raw prediction error over subjective time,
+                           time constants fast_time_constant_s and slow_time_constant_s,
+                           seeded at the module's first positive error
+g        = mean over Topos, Audition of clip((E_slow - E_fast) / E_slow, -1, 1)
+v_target = clip(pleasantness + (wellness - 0.5), -1, 1)
 valence += (v_target - valence) * (1 - exp(-dt / valence_time_constant_s))
 ```
 
@@ -147,16 +152,16 @@ This is the path by which surprise raises arousal.
 
 ### Drive accumulators
 
-Each `Drive` is a deficit in `[0,1]` relative to a setpoint (Hull 1943; Keramati and Gutkin 2014). Between events it follows the exact solution of `dD/dt = build_rate * u * (1 - D) - decay_rate * D`, so it relaxes toward `build_rate * u / (build_rate * u + decay_rate)` at a rate independent of how often it is updated. The default decay rates are a ninth of the build rates, so a fully deprived drive settles near 0.9, above its 0.7 threshold. A consummatory event of strength `c` relieves it: `D <- D (1 - relief_gain * c)`; the reduction is what Keramati and Gutkin call the homeostatic reward. The four drives:
+Each `Drive` is a deficit in `[0,1]` relative to a setpoint (Hull 1943; Keramati and Gutkin 2014). Between events it follows the exact solution of `dD/dt = build_rate * u * (1 - D) - decay_rate * D`, so it relaxes toward `build_rate * u / (build_rate * u + decay_rate)` at a rate independent of how often it is updated. The default decay rates are a ninth of the build rates, so a fully deprived drive settles near 0.9, above its 0.7 threshold. Relief is the reduction Keramati and Gutkin call the homeostatic reward. Curiosity and boredom are relieved continuously, `D <- D exp(-relief_gain * c * dt)`, so their relief does not depend on how often the perceptual modules report. The social drive and restlessness are relieved per discrete event, `D <- D (1 - relief_gain * c)`. The four drives:
 
 | Drive | Builds with `u` | Relieved by | Grounding |
 |---|---|---|---|
-| `curiosity` | `1 - LP` (perception not improving) | each perceptual report, `c = LP` | curiosity is satisfied by learning progress (Oudeyer and Kaplan 2007; Schmidhuber 2010) |
-| `boredom` | `1 - alert_rate` (nothing new) | each perceptual alert, `c = 1` | boredom signals a lack of engagement and is relieved by novelty (Eastwood et al. 2012; Westgate and Wilson 2018) |
+| `curiosity` | `1 - LP` (perception not improving) | continuously, `c = LP` | curiosity is satisfied by learning progress (Oudeyer and Kaplan 2007; Schmidhuber 2010) |
+| `boredom` | `1 - N` (nothing new) | continuously, `c = N` | boredom signals a lack of engagement and is relieved by novelty (Eastwood et al. 2012; Westgate and Wilson 2018) |
 | `social_drive` | `1` once an operator interaction has occurred, else `0` | a new interaction, `c = 1` | social homeostasis (Matthews and Tye 2019); isolation since spawn is an open welfare question in `thymos-active-inference-affect` |
 | `restlessness` | `1 - intent_rate` (no actions) | each Volition intent other than REST, `c = 1` | a design choice; there is no established model |
 
-`LP = max(0, g)` is the perceptual learning progress defined above. Only Hypnos's affective reset clears all drives at once.
+`LP = max(0, g - learning_progress_floor) / (1 - learning_progress_floor)` is the perceptual learning progress above a noise floor; rectified noise in `g` would otherwise relieve curiosity on a scene where nothing is being learned. `N = clip(r_fast / max(r_slow, 0.05) - 1 - alert_excess_margin, 0, 1)` is the novelty of the alert stream, with `r_fast` and `r_slow` the perceptual alert rates per second averaged over the fast and slow time constants. The alert criterion is self-calibrating, so even a still scene alerts at a steady base rate; boredom is relieved only by alerts in excess of that habituated rate. Only Hypnos's affective reset clears all drives at once.
 
 ### Affect coupling
 
@@ -174,7 +179,7 @@ On each cognitive tick, `_score_snapshot` folds the decayed perceived signal int
 - `novelty += weight * decay * intensity * k` (small fixed `k`)
 - All dimensions are clamped to `[-1, 1]`.
 
-The entity's own appraisal then determines the classified emotion, and the normal appraisal→state nudge produces the response. There is no second state write and no path that moves the state toward a mirror target.
+The entity's own appraisal then determines the classified emotion, and its pleasantness check sets the valence target, so valence responds through the appraisal. There is no direct state write and no path that moves the state toward a mirror target.
 
 ```mermaid
 flowchart TD
@@ -183,12 +188,12 @@ flowchart TD
     FC -->|lookup| R
     R -->|transient, decaying| PS[Perceived-emotion signal]
     PS -->|decayed fold| AP[_score_snapshot → Scherer appraisal]
-    AP -->|classify + 0.05× nudge| N[state.nudged]
-    N --> S[DimensionalState]
-    S -->|drift_toward baseline| S
+    AP -->|classify| EMO[thymos.emotion]
+    AP -->|pleasantness + wellness| VT[valence target]
+    VT -->|exponential relaxation| S[DimensionalState]
 ```
 
-Boundedness comes from the weight ceiling, the `[-1, 1]` dimension clamp, and the decay window. Once a speaker stops talking, the signal decays to zero over `decay_s` and baseline drift recovers the state.
+Boundedness comes from the weight ceiling, the `[-1, 1]` dimension clamp, and the decay window. Once a speaker stops talking, the signal decays to zero over `decay_s` and valence relaxes back toward its target without it.
 
 ### Goal ledger
 
@@ -208,7 +213,7 @@ Boundedness comes from the weight ceiling, the `[-1, 1]` dimension clamp, and th
 
 - Coupling cannot pin the affective state at a boundary. The perceived emotion enters appraisal as a small, ceiling-clamped, decaying contribution.
 - `affective_reset()` is called by [Hypnos](hypnos.md) at the end of sleep, producing a clean affect state after maintenance. A `thymos.state` event published immediately after a reset carries `reset: true`.
-- Sustained input cannot dominate the state, because it flows through the bounded appraisal path and baseline drift recovers the state once input stops.
+- Sustained input cannot dominate the state, because it flows through the bounded appraisal path and valence relaxes back toward its own target once input stops.
 
 ## Key files
 

@@ -9,6 +9,7 @@ in the 2026-10-08 OpenSpec proposal.
 from __future__ import annotations
 
 import math
+import random
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,12 +94,18 @@ def test_drive_relieve_and_from_config_and_defaults():
 @pytest.mark.asyncio
 async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
     fake_now = [0.0]
-    thymos = Thymos(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
     await thymos.initialize()
     try:
         thymos.drives.curiosity.value = 0.6
-        for i in range(50):
-            r = 3.0 - (2.0 * i / 49)  # 3.0 down to 1.0
+        for i in range(200):
+            fake_now[0] = i * 0.1
+            r = 3.0 - (2.0 * i / 199)  # 3.0 down to 1.0 over 20 s
             await thymos._handle_peer_event(
                 "topos.out",
                 Event(
@@ -109,6 +116,10 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
                     timestamp=datetime.now(timezone.utc),
                 ),
             )
+            if (i + 1) % 3 == 0:
+                await thymos._tick()
+        fake_now[0] = 20.0
+        await thymos._tick()
         assert thymos.drives.curiosity.value < 0.6
     finally:
         await thymos.shutdown()
@@ -117,10 +128,16 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_boredom_relief_on_perceptual_alert(bus: AsyncBus):
     fake_now = [0.0]
-    thymos = Thymos(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
     await thymos.initialize()
     try:
         thymos.drives.boredom.value = 0.8
+        fake_now[0] = 0.1
         await thymos._handle_peer_event(
             "audition.out",
             Event(
@@ -131,6 +148,7 @@ async def test_boredom_relief_on_perceptual_alert(bus: AsyncBus):
                 timestamp=datetime.now(timezone.utc),
             ),
         )
+        await thymos._tick()
         assert thymos.drives.boredom.value < 0.8
     finally:
         await thymos.shutdown()
@@ -218,8 +236,13 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
     )
     await thymos.initialize()
     try:
+        step = 0.1
+
         # Falling errors -> positive learning progress -> positive valence.
-        for r in [3.0, 2.5, 2.0, 1.5, 1.0, 1.0, 1.0]:
+        for i in range(1201):
+            t = i * step
+            fake_now[0] = t
+            r = 3.0 - 2.0 * t / 120.0
             await thymos._handle_peer_event(
                 "topos.out",
                 Event(
@@ -230,14 +253,16 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
                     timestamp=datetime.now(timezone.utc),
                 ),
             )
-        fake_now[0] = 60.0
-        await thymos.on_workspace(_snapshot())
+            if i % 3 == 0:
+                await thymos._tick()
+        fake_now[0] = 120.0
+        await thymos._tick()
         assert thymos.state.valence > 0.0, thymos.state.valence
 
         # Rising errors -> negative learning progress -> negative valence.
-        # The slow error average has weight 0.02 (~50 reports), so send 60
-        # rising reports to flip the sign of learning progress.
-        for _ in range(60):
+        for i in range(1201, 2401):
+            t = i * step
+            fake_now[0] = t
             await thymos._handle_peer_event(
                 "topos.out",
                 Event(
@@ -248,8 +273,10 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
                     timestamp=datetime.now(timezone.utc),
                 ),
             )
-        fake_now[0] = 120.0
-        await thymos.on_workspace(_snapshot())
+            if i % 3 == 0:
+                await thymos._tick()
+        fake_now[0] = 240.0
+        await thymos._tick()
         assert thymos.state.valence < 0.0, thymos.state.valence
     finally:
         await thymos.shutdown()
@@ -313,40 +340,53 @@ async def test_learning_progress_averaged_over_sources(bus):
             payload={"prediction_error": prediction_error},
         )
 
+    fake_now = [0.0]
     thymos = Thymos(
         bus,
+        clock=lambda: fake_now[0],
         drift_rate_per_s=0.0,
         publish_interval_s=999.0,
     )
     await thymos.initialize()
     try:
         for i in range(40):
+            fake_now[0] = i * 0.1
             topos_err = 1.0 - 0.8 * i / 39
             await thymos._handle_peer_event(
-                "topos",
+                "topos.out",
                 _report("topos", "topos.report", topos_err),
             )
             await thymos._handle_peer_event(
-                "audition",
+                "audition.out",
                 _report("audition", "audition.perception", 0.5),
             )
+            if (i + 1) % 3 == 0:
+                await thymos._tick()
+        fake_now[0] = 4.0
+        await thymos._tick()
 
         mixed_signed = thymos._progress()[1]
         assert mixed_signed > 0.0
 
         topos_only = Thymos(
             bus,
+            clock=lambda: fake_now[0],
             drift_rate_per_s=0.0,
             publish_interval_s=999.0,
         )
         await topos_only.initialize()
         try:
             for i in range(40):
+                fake_now[0] = i * 0.1
                 topos_err = 1.0 - 0.8 * i / 39
                 await topos_only._handle_peer_event(
-                    "topos",
+                    "topos.out",
                     _report("topos", "topos.report", topos_err),
                 )
+                if (i + 1) % 3 == 0:
+                    await topos_only._tick()
+            fake_now[0] = 4.0
+            await topos_only._tick()
             topos_signed = topos_only._progress()[1]
             assert mixed_signed < topos_signed
         finally:
@@ -451,3 +491,278 @@ async def test_rest_intent_does_not_relieve_restlessness(bus: AsyncBus):
         assert thymos.drives.restlessness.value < 0.8
     finally:
         await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_zero_first_error_does_not_seed_progress(bus: AsyncBus):
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        await thymos._handle_peer_event(
+            "topos.out",
+            Event(
+                source="topos",
+                type="topos.report",
+                payload={"prediction_error": 0.0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        fake_now[0] = 0.1
+        await thymos._handle_peer_event(
+            "topos.out",
+            Event(
+                source="topos",
+                type="topos.report",
+                payload={"prediction_error": 1.0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        fake_now[0] = 0.2
+        await thymos._handle_peer_event(
+            "topos.out",
+            Event(
+                source="topos",
+                type="topos.report",
+                payload={"prediction_error": 1.0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        _, signed = thymos._progress()
+        assert signed == 0.0
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_drives_build_under_stationary_noise(bus: AsyncBus):
+    rng = random.Random(42)
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        step = 0.1
+        total = 600.0
+        max_curi = 0.0
+        max_bored = 0.0
+        for i in range(int(round(total / step)) + 1):
+            t = i * step
+            fake_now[0] = t
+            err = rng.lognormvariate(0.0, 0.3)
+            alert = rng.random() < 0.05
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={
+                        "prediction_error": err,
+                        "alert": alert,
+                        "normalised_error": 2.5 if alert else 1.0,
+                    },
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i % 3 == 0:
+                await thymos._tick()
+                max_curi = max(max_curi, thymos.drives.curiosity.value)
+                max_bored = max(max_bored, thymos.drives.boredom.value)
+        assert max_curi > 0.7
+        assert max_bored > 0.7
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_novelty_burst_relieves_boredom(bus: AsyncBus):
+    rng = random.Random(43)
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        step = 0.1
+        built = False
+
+        # 300 s of base-rate stationary noise: boredom should build.
+        for i in range(3001):
+            t = i * step
+            fake_now[0] = t
+            err = rng.lognormvariate(0.0, 0.3)
+            alert = rng.random() < 0.05
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={
+                        "prediction_error": err,
+                        "alert": alert,
+                        "normalised_error": 2.5 if alert else 1.0,
+                    },
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i % 3 == 0:
+                await thymos._tick()
+                if thymos.drives.boredom.value > 0.7:
+                    built = True
+        assert built, "boredom did not build above 0.7 during the base-rate stream"
+
+        # 30 s of alert burst: boredom should be relieved.
+        for i in range(3001, 3301):
+            t = i * step
+            fake_now[0] = t
+            err = rng.lognormvariate(0.0, 0.3)
+            alert = rng.random() < 0.4
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={
+                        "prediction_error": err,
+                        "alert": alert,
+                        "normalised_error": 2.5 if alert else 1.0,
+                    },
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i % 3 == 0:
+                await thymos._tick()
+        assert thymos.drives.boredom.value < 0.4
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
+    rng = random.Random(44)
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        step = 0.1
+
+        # 300 s of stationary noise to build curiosity above threshold.
+        for i in range(3001):
+            t = i * step
+            fake_now[0] = t
+            err = rng.lognormvariate(0.0, 0.3)
+            alert = rng.random() < 0.05
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={
+                        "prediction_error": err,
+                        "alert": alert,
+                        "normalised_error": 2.5 if alert else 1.0,
+                    },
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i % 3 == 0:
+                await thymos._tick()
+        assert thymos.drives.curiosity.value > 0.7
+
+        # 60 s in which the error scale falls linearly to 40 %.
+        for i in range(3001, 3601):
+            t = i * step
+            scale = 1.0 - 0.6 * (t - 300.0) / 60.0
+            fake_now[0] = t
+            err = rng.lognormvariate(0.0, 0.3) * scale
+            alert = rng.random() < 0.05
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={
+                        "prediction_error": err,
+                        "alert": alert,
+                        "normalised_error": 2.5 if alert else 1.0,
+                    },
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i % 3 == 0:
+                await thymos._tick()
+        assert thymos.drives.curiosity.value < 0.5
+        assert thymos.state.valence > 0.0
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_curiosity_relief_is_report_rate_invariant(bus: AsyncBus):
+    async def _run(report_interval: float) -> float:
+        fake_now = [0.0]
+        thymos = Thymos(
+            bus,
+            clock=lambda: fake_now[0],
+            drift_rate_per_s=0.0,
+            publish_interval_s=999.0,
+        )
+        await thymos.initialize()
+        try:
+            step = 0.1
+            total = 160.0
+            report_every = int(round(report_interval / step))
+            for i in range(int(round(total / step)) + 1):
+                t = i * step
+                fake_now[0] = t
+                if i % report_every == 0:
+                    if t < 100.0:
+                        err = 1.0
+                    else:
+                        err = 1.0 - 0.6 * (t - 100.0) / 60.0
+                    await thymos._handle_peer_event(
+                        "topos.out",
+                        Event(
+                            source="topos",
+                            type="topos.report",
+                            payload={"prediction_error": err},
+                            salience=0.5,
+                            timestamp=datetime.now(timezone.utc),
+                        ),
+                    )
+                if i % 3 == 0:
+                    if abs(t - 100.0) < 1e-9:
+                        thymos.drives.curiosity.value = 0.8
+                    await thymos._tick()
+            return thymos.drives.curiosity.value
+        finally:
+            await thymos.shutdown()
+
+    fast = await _run(0.1)
+    slow = await _run(0.2)
+    assert abs(fast - slow) < 0.05
