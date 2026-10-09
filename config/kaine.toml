@@ -663,12 +663,7 @@ baseline_arousal = 0.3
 baseline_dominance = 0.0
 drift_rate_per_s = 0.05
 publish_interval_s = 1.0
-# Reference interval for the per-broadcast appraisal nudges (subjective seconds).
-# Each broadcast's valence/arousal nudge is scaled by dt / this interval (capped at 4),
-# so the nudge per second does not depend on the broadcast rate. 0.3 s is the
-# resting broadcast period.
-appraisal_reference_interval_s = 0.3
-# Valence relaxes toward tanh(valence_progress_gain * learning_progress + wellness - 0.5)
+# Valence relaxes toward tanh(valence_progress_gain * learning_progress + wellness - 0.5 + coupling)
 # (Joffily and Coricelli 2013). The time constant is subjective seconds.
 volition_stream = "volition.out"
 learning_progress_fast_weight = 0.1

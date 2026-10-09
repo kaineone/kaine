@@ -5,10 +5,11 @@
 
 ## 2. Signals, valence, appraisal
 
-- [x] 2.1 Pooled perceptual learning progress (fast and slow averages of normalised error); alert rate; intent rate from `volition.out`.
+- [x] 2.1 Pooled perceptual learning progress (fast and slow averages of each perceptual module's raw prediction error); alert rate; intent rate from `volition.out`.
 - [x] 2.2 Drive signals and relief as in the proposal; the social overwrite from Chronos is replaced by relief on a new interaction.
-- [x] 2.3 Valence relaxes toward `tanh(gain * g + (W - 0.5))`; the pleasantness and wellness nudges are removed.
+- [x] 2.3 Valence relaxes toward `tanh(gain * g + (W - 0.5) + coupling)`; the pleasantness and wellness nudges are removed.
 - [x] 2.4 Novelty from coalition surprise ratios; pleasantness from progress; the appraisal arousal nudge removed.
+- [x] 2.5 With no per-broadcast nudges left, `appraisal_reference_interval_s` is removed from the constructor, factory, `config/kaine.toml` and docs.
 
 ## 3. Tests, docs
 

@@ -48,7 +48,6 @@ See the [Configuration reference](../appendix-a-configuration/modules.md) for th
 | `baseline_dominance` | `0.0` | VAD baseline dominance `[-1, 1]` |
 | `drift_rate_per_s` | `0.05` | Homeostatic drift rate toward baseline per second |
 | `publish_interval_s` | `1.0` | Period between `thymos.state` publications |
-| `appraisal_reference_interval_s` | `0.3` | Reference interval for the per-broadcast appraisal nudges: each nudge is scaled by the time since the previous appraisal over this interval (capped at 4), so the nudge per second does not depend on the broadcast rate. 0.3 s is the resting broadcast period |
 | `baseline_salience` | `0.1` | Salience for routine state events |
 | `alert_salience` | `0.7` | Salience for emotion changes and drive crossings |
 | `social_drive_time_scale_s` | `600.0` | Accepted for compatibility; no longer used (the social drive builds at its build rate once an interaction has occurred) |

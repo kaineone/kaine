@@ -12,7 +12,7 @@ Each Thymos drive SHALL evolve between events by the exact solution of linear bu
 - **THEN** its value stays at or below `beta / (beta + delta)`
 
 ### Requirement: Valence tracks the rate of change of prediction error
-Thymos SHALL move valence toward `tanh(valence_progress_gain * g + (W - 0.5))` with time constant `valence_time_constant_s`, where `g` is the signed perceptual learning progress and `W` Soma's last wellness.
+Thymos SHALL move valence toward `tanh(valence_progress_gain * g + (W - 0.5) + c)` with time constant `valence_time_constant_s`, where `g` is the signed perceptual learning progress, `W` Soma's last wellness, and `c` the perceived pleasantness from operator coupling.
 
 #### Scenario: Errors falling is pleasant
 - **WHEN** perceptual normalised errors fall steadily on a healthy host
@@ -24,3 +24,9 @@ Thymos SHALL compute the novelty appraisal check as `1 - prod (1 - s_m)` over co
 #### Scenario: Surprise is reachable
 - **WHEN** the coalition holds a perceptual report with normalised error ratio 3 and pleasantness and goal significance are near zero
 - **THEN** the categorical emotion is SURPRISE
+
+## REMOVED Requirements
+
+### Requirement: Appraisal nudges are per unit time
+**Reason**: Valence and arousal no longer take per-broadcast appraisal nudges; valence relaxes toward a target in continuous time and surprise reaches arousal through the perceptual-alert path.
+**Migration**: Delete `appraisal_reference_interval_s` from `[thymos]` in `config/kaine.toml`; the key is now rejected as unknown.

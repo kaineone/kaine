@@ -50,7 +50,6 @@ class Thymos(BaseModule):
         baseline: Optional[DimensionalState] = None,
         drift_rate_per_s: float = 0.05,
         publish_interval_s: float = 1.0,
-        appraisal_reference_interval_s: float = 0.3,
         regulation: Optional[RegulationPolicy] = None,
         drives: Optional[DriveSet] = None,
         goals: Optional[GoalLedger] = None,
@@ -87,8 +86,6 @@ class Thymos(BaseModule):
             raise ValueError("drift_rate_per_s must be >= 0")
         if publish_interval_s <= 0:
             raise ValueError("publish_interval_s must be positive")
-        if appraisal_reference_interval_s <= 0:
-            raise ValueError("appraisal_reference_interval_s must be positive")
         if social_drive_time_scale_s <= 0:
             raise ValueError("social_drive_time_scale_s must be positive")
         for name, w in (
@@ -110,7 +107,6 @@ class Thymos(BaseModule):
         )
         self._drift_rate = float(drift_rate_per_s)
         self._publish_interval = float(publish_interval_s)
-        self._appraisal_ref_dt = float(appraisal_reference_interval_s)
 
         self._regulation: RegulationPolicy = regulation or PassiveDecay()
         self._drives = drives or DriveSet()

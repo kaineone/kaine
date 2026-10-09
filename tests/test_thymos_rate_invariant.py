@@ -97,11 +97,3 @@ async def test_timer_publishes_state(bus: AsyncBus):
         assert len(state_events) >= 2
     finally:
         await thymos.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_invalid_appraisal_reference_interval(bus: AsyncBus):
-    with pytest.raises(ValueError):
-        Thymos(bus, appraisal_reference_interval_s=0.0)
-    with pytest.raises(ValueError):
-        Thymos(bus, appraisal_reference_interval_s=-0.1)
