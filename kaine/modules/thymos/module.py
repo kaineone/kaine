@@ -445,6 +445,7 @@ class Thymos(BaseModule):
                         self._stopped.wait(), timeout=wall_wait
                     )
                 except asyncio.TimeoutError:
+                    # The timeout is the normal tick; only a stop request ends the wait early.
                     pass
                 if self._stopped.is_set():
                     break
