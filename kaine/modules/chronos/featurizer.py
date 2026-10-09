@@ -81,6 +81,7 @@ class SnapshotFeaturizer:
         self._source_index = {name: i for i, name in enumerate(sources)}
         self._layout = self._validate_layout(layout)
         self._last_seen_ts: Optional[float] = None
+        self._last_dt: Optional[float] = None
         self._clock = clock or time.time
 
     @property
@@ -90,6 +91,11 @@ class SnapshotFeaturizer:
     @property
     def layout(self) -> int:
         return self._layout
+
+    @property
+    def last_dt_s(self) -> Optional[float]:
+        """Most recent inter-broadcast interval in seconds (None on first call)."""
+        return self._last_dt
 
     def set_layout(self, layout: int) -> None:
         self._layout = self._validate_layout(layout)
@@ -138,8 +144,11 @@ class SnapshotFeaturizer:
         now = float(self._clock())
         if self._last_seen_ts is None:
             vec[20] = 0.0
+            self._last_dt = None
         else:
-            vec[20] = math.log1p(max(now - self._last_seen_ts, 0.0))
+            dt = max(now - self._last_seen_ts, 0.0)
+            vec[20] = math.log1p(dt)
+            self._last_dt = dt
         self._last_seen_ts = now
 
         # [21] inhibited

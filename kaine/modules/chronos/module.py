@@ -104,6 +104,9 @@ class Chronos(BaseModule):
             stream: "$" for stream in self._user_input_streams
         }
 
+        # Timespan tracking relative to the featurizer's broadcast cadence.
+        self._dt_window: deque[float] = deque(maxlen=32)
+
         # Forward-prediction head (lazy — created alongside the network)
         self._forward_prediction: bool = bool(forward_prediction)
         self._prediction_error_window: int = int(prediction_error_window)
@@ -205,7 +208,21 @@ class Chronos(BaseModule):
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         feature_vec = self._featurizer.featurize(snapshot)
-        hidden = self._network.tick(feature_vec) if self._network else feature_vec
+        dt = self._featurizer.last_dt_s
+        if dt is None:
+            ts = 1.0
+        else:
+            self._dt_window.append(max(dt, 0.0))
+            mean_dt = sum(self._dt_window) / len(self._dt_window)
+            ts = 1.0 if mean_dt <= 0 else min(10.0, max(0.0, dt / mean_dt))
+
+        if self._network is None:
+            hidden = feature_vec
+        elif getattr(self._network, "accepts_timespan", False):
+            hidden = self._network.tick(feature_vec, timespan=ts)
+        else:
+            hidden = self._network.tick(feature_vec)
+
         anomaly_score = self._anomaly.observe(hidden)
         rumination = self._rumination.observe(hidden)
         tsli = self._time_since_last_interaction_s()

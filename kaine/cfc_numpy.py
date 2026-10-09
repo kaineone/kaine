@@ -236,11 +236,12 @@ def numpy_cfc_step(
     w: ReservoirWeights,
     x: list[float],
     h: list[float],
+    ts: float = 1.0,
 ) -> list[float]:
     """One unbatched CfC step in NumPy.
 
-    Matches ``ncps.torch.CfC(..., batch_first=True)`` with no timespans
-    (ts = 1.0) in default mode.
+    Matches ``ncps.torch.CfC(..., batch_first=True)`` in default mode with
+    the given timespan ``ts``.
     """
     x_arr = np.asarray(x, dtype=np.float32)
     h_arr = np.asarray(h, dtype=np.float32)
@@ -252,7 +253,7 @@ def numpy_cfc_step(
     f1 = np.tanh(z_bb @ w.ff1_w.T + w.ff1_b)
     f2 = np.tanh(z_bb @ w.ff2_w.T + w.ff2_b)
     t = _sigmoid(
-        (z_bb @ w.time_a_w.T + w.time_a_b)
+        (z_bb @ w.time_a_w.T + w.time_a_b) * np.float32(ts)
         + (z_bb @ w.time_b_w.T + w.time_b_b)
     )
     h_new = f1 * (1.0 - t) + t * f2
