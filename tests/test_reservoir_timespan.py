@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import importlib.util
+
 import numpy as np
 import pytest
 
@@ -16,14 +18,10 @@ from kaine.modules.chronos.module import Chronos
 from kaine.modules.soma import AlertResult, Soma
 from kaine.modules.soma.forward import SubstrateForwardModel, metrics_to_feature_vector
 
-_TORCH = False
-try:
-    import torch  # noqa: F401
-    from ncps.torch import CfC  # noqa: F401
-
-    _TORCH = True
-except Exception:
-    pass
+_TORCH = (
+    importlib.util.find_spec("torch") is not None
+    and importlib.util.find_spec("ncps") is not None
+)
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -100,6 +98,7 @@ def test_numpy_cfc_ts_varies_hidden_state():
 
 @pytest.mark.skipif(not _TORCH, reason="torch/ncps not installed")
 def test_soma_numpy_torch_parity_with_timespans():
+    torch = pytest.importorskip("torch")
     m_np = SubstrateForwardModel(
         backend="numpy", feature_dim=8, units=16, seed=123, lr=0.01
     )
@@ -165,7 +164,9 @@ async def test_soma_legacy_forward_model_called_without_timespan(bus: AsyncBus):
             super().__init__(backend="numpy", feature_dim=8, units=8, seed=1)
             self.calls: list[int] = []
 
-        def step(self, feature):
+        def step(self, feature, *args, **kwargs):
+            # A legacy plugin model takes no timespan: Soma must not pass one.
+            assert not args and not kwargs
             self.calls.append(len(feature))
             return super().step(feature)
 
