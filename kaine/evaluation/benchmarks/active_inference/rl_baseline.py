@@ -16,9 +16,11 @@ forward, so the baseline is *not* denied the cue information; what it lacks is
 the AIF agent's explicit generative model and information-value machinery.
 
 Deep RL is explicitly a non-goal — it would add dependencies and obscure the
-comparison. Hyperparameters (α, γ, ε schedule, memory) are tuned per task by a
+comparison. Hyperparameters (α, γ, ε schedule) are tuned per task by a
 small grid on held-out seeds (:func:`tune_hyperparameters`) and the chosen
 values are recorded in every result, so the baseline is not strawmanned.
+The memory is not tuned: it is fixed at the task horizon (the whole episode),
+so the baseline has the same information as a belief-keeping agent.
 """
 from __future__ import annotations
 
