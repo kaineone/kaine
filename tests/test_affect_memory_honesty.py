@@ -89,8 +89,20 @@ async def test_thymos_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
     try:
         # Add a goal so goal_significance can become non-zero → emotion change fires.
         thymos.goals.add("explore", priority=1.0)
+        # Falling perceptual errors yield positive learning progress / pleasantness.
+        for r in [3.0, 2.6, 2.2, 1.8, 1.4, 1.0, 1.0, 1.0, 1.0, 1.0]:
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={"normalised_error": r},
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
         await thymos.on_workspace(
-            _snapshot([_ev(salience=0.9, type_="explore_event")])
+            _snapshot([_ev(salience=0.9, type_="explore_event", normalised_error=3.0)])
         )
         entries = await bus.read("thymos.out", last_id="0", count=20)
         emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]
@@ -117,8 +129,20 @@ async def test_thymos_emotion_carries_goal_significance_method(bus: AsyncBus):
     await thymos.initialize()
     try:
         thymos.goals.add("navigate", priority=1.0)
+        # Falling perceptual errors yield positive learning progress / pleasantness.
+        for r in [3.0, 2.6, 2.2, 1.8, 1.4, 1.0, 1.0, 1.0, 1.0, 1.0]:
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={"normalised_error": r},
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
         await thymos.on_workspace(
-            _snapshot([_ev(salience=0.9, type_="navigate_event")])
+            _snapshot([_ev(salience=0.9, type_="navigate_event", normalised_error=3.0)])
         )
         entries = await bus.read("thymos.out", last_id="0", count=20)
         emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]

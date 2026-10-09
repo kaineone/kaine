@@ -19,8 +19,9 @@ Thymos is KAINE's affective appraisal layer. It:
 | Stream | Event type | When consumed |
 |---|---|---|
 | `workspace.broadcast` | workspace snapshot | Every cognitive cycle, via `on_workspace` |
-| `soma.out` | `soma.report` | Peer consumer loop; wellness nudges valence/arousal |
-| `chronos.out` | `chronos.report` | Peer consumer loop; isolation time drives `social_drive` |
+| `soma.out` | `soma.report` | Peer consumer loop; wellness sets part of the valence target; hard alerts nudge arousal |
+| `chronos.out` | `chronos.report` | Peer consumer loop; the first finite idle time starts `social_drive` building, and a drop in idle time (a new operator interaction) relieves it |
+| `volition.out` | `intent.*` | Peer consumer loop; each intent relieves `restlessness` and counts toward the intent rate |
 | `mnemos.out` | `mnemos.recall` | Peer consumer loop; recall intensity nudges arousal |
 | `audition.out` | `audition.emotion` | Peer consumer loop; records a transient perceived-emotion signal when coupling is enabled |
 | `audition.out` | `audition.perception` | Peer consumer loop; `alert` events nudge arousal |
@@ -50,7 +51,12 @@ See the [Configuration reference](../appendix-a-configuration/modules.md) for th
 | `appraisal_reference_interval_s` | `0.3` | Reference interval for the per-broadcast appraisal nudges: each nudge is scaled by the time since the previous appraisal over this interval (capped at 4), so the nudge per second does not depend on the broadcast rate. 0.3 s is the resting broadcast period |
 | `baseline_salience` | `0.1` | Salience for routine state events |
 | `alert_salience` | `0.7` | Salience for emotion changes and drive crossings |
-| `social_drive_time_scale_s` | `600.0` | Seconds of isolation that saturates `social_drive` |
+| `social_drive_time_scale_s` | `600.0` | Accepted for compatibility; no longer used (the social drive builds at its build rate once an interaction has occurred) |
+| `learning_progress_fast_weight`, `learning_progress_slow_weight` | `0.1`, `0.02` | Per-report weights of the fast and slow averages of each perceptual module's raw prediction error |
+| `alert_rate_weight`, `intent_rate_weight` | `0.05`, `0.05` | Weights of the perceptual alert-rate and Volition intent-rate averages |
+| `valence_time_constant_s` | `30.0` | Time constant of valence's relaxation toward its target |
+| `valence_progress_gain` | `2.0` | Gain on learning progress in the valence target and the pleasantness check |
+| `volition_stream` | `"volition.out"` | Stream Thymos reads Volition intents from |
 | `soma_stream` | from `config/kaine.toml` | Input stream name for Soma reports |
 | `chronos_stream` | from `config/kaine.toml` | Input stream name for Chronos reports |
 | `mnemos_stream` | from `config/kaine.toml` | Input stream name for Mnemos recalls |
@@ -62,6 +68,7 @@ Drive sub-tables (`[thymos.drives.<name>]` for `curiosity`, `boredom`, `social_d
 | `build_rate` | per drive | Build rate per second when signal = 1.0 |
 | `decay_rate` | per drive | Decay rate per second |
 | `threshold` | `0.7` | Threshold for crossing event |
+| `relief_gain` | per drive (0.5, 0.3, 0.8, 0.5) | Fraction of the drive a full consummatory event removes: `D <- D (1 - relief_gain * c)` |
 
 Coupling sub-table (`[thymos.coupling]`):
 
@@ -82,7 +89,7 @@ A legacy `coupling_max_rate_per_s` key is ignored if present, so older local con
 The dimensional state is a frozen `DimensionalState(valence, arousal, dominance)`. On every `on_workspace` call Thymos first ticks:
 
 1. Computes elapsed time `dt` since the last tick.
-2. Drifts the state toward its baseline with `state.drift_toward(baseline, drift_rate, dt)`, clamped to avoid overshoot.
+2. Drifts arousal and dominance toward their baselines with `drift_toward(baseline, drift_rate, dt)`, and relaxes valence toward its target (below).
 3. Advances the four drives via `DriveSet.tick(dt, signals)`.
 4. Calls `RegulationPolicy.suggest()` (currently `PassiveDecay`, returning zero).
 
@@ -94,8 +101,8 @@ Any drive that crosses its `threshold` and has not already fired emits a `thymos
 
 | Check | Proxy used |
 |---|---|
-| **Novelty** | Variance of salience scores across selected events |
-| **Intrinsic pleasantness** | Mean salience, scaled to `[-1,1]` |
+| **Novelty** | Suddenness from surprise: `1 - prod(1 - s_m)` over selected events carrying a `normalised_error` ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`; a ratio of 2.2 gives 0.72 |
+| **Intrinsic pleasantness** | `tanh(valence_progress_gain * g)`, with `g` the perceptual learning progress (errors falling is pleasant) |
 | **Goal significance** | Dominant homeostatic drive, signed by salience-weighted source match; active `GoalLedger` entries still contribute by token overlap when present |
 | **Coping potential** | `state.valence + (0.5 - state.arousal)` |
 | **Norm compatibility** | `0.0` (pending Eidolon integration) |
@@ -117,13 +124,17 @@ When the `GoalLedger` holds active goals, their token-overlap score (`relevance 
 | `token_overlap_v1` | No drive-to-source table was injected (e.g., unit-construction tests) but active ledger goals were scored |
 | `unavailable` | Neither source exists; the score is `0.0` |
 
-The five scores map to a categorical emotion (`joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, `neutral`) via a rule-based `classify()`. On category change, Thymos publishes a `thymos.emotion` event. The state is then nudged:
+The five scores map to a categorical emotion (`joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, `neutral`) via a rule-based `classify()`. On category change, Thymos publishes a `thymos.emotion` event. SURPRISE is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. DISGUST stays unreachable until a self-model supplies norms (`norm_compatibility_available: false`).
 
-- `scale = min(4, dt / appraisal_reference_interval_s)`, with `dt` the subjective time since the previous appraisal
-- `arousal += 0.05 * scale * max(0.0, novelty)`
-- `valence += 0.05 * scale * pleasantness`
+The appraisal no longer nudges the dimensional state. Surprise reaches arousal through the perceptual-alert path below; counting it again in the appraisal once fed a positive loop through the access rate. Valence follows learning progress:
 
-The scale makes the nudges a rate per unit time. Without it, a higher access rate meant more nudges per second, and because arousal raises the access rate this formed a positive-feedback loop: in the mean-field balance, any sustained novelty above 0.07 pinned arousal at its ceiling. With the scale the access rate no longer feeds back through the appraisal, and the ceiling condition is novelty above 0.21.
+```
+g        = mean over Topos, Audition of (E_slow - E_fast) / E_slow    # raw prediction error, clipped to [-1, 1]
+v_target = tanh(valence_progress_gain * g + (wellness - 0.5) + coupling_pleasantness)
+valence += (v_target - valence) * (1 - exp(-dt / valence_time_constant_s))
+```
+
+Errors falling (the world becoming more predictable) is positive, as in Joffily and Coricelli (2013), who identify valence with the negative rate of change of free energy. Wellness is Soma's last reading (0.5, neutral, before any).
 
 ### Perception alerts nudge arousal
 
@@ -133,18 +144,20 @@ The scale makes the nudges a rate per unit time. Without it, a higher access rat
 delta = 0.15 * min(4, normalised_error - 1)
 ```
 
-This is a separate, alert-driven path from the CPM novelty nudge.
+This is the path by which surprise raises arousal.
 
 ### Drive accumulators
 
-Each `Drive` has a value in `[0,1]`, a build rate, a decay rate, a threshold, and a hysteresis fraction. The four drives and their build signals:
+Each `Drive` is a deficit in `[0,1]` relative to a setpoint (Hull 1943; Keramati and Gutkin 2014). Between events it follows the exact solution of `dD/dt = build_rate * u * (1 - D) - decay_rate * D`, so it relaxes toward `build_rate * u / (build_rate * u + decay_rate)` at a rate independent of how often it is updated. A consummatory event of strength `c` relieves it: `D <- D (1 - relief_gain * c)`; the reduction is what Keramati and Gutkin call the homeostatic reward. The four drives:
 
-| Drive | Signal | Source |
-|---|---|---|
-| `curiosity` | `1 - recent_novelty_proxy` | Low novelty in the workspace |
-| `boredom` | `1 - recent_activity_proxy` | Low event count |
-| `social_drive` | `time_since_last_interaction_s / social_drive_time_scale_s` | From `chronos.report` |
-| `restlessness` | `action_signal` (currently 0) | Reserved for future action-rate signal |
+| Drive | Builds with `u` | Relieved by | Grounding |
+|---|---|---|---|
+| `curiosity` | `1 - LP` (perception not improving) | each perceptual report, `c = LP` | curiosity is satisfied by learning progress (Oudeyer and Kaplan 2007; Schmidhuber 2010) |
+| `boredom` | `1 - alert_rate` (nothing new) | each perceptual alert, `c = 1` | boredom signals a lack of engagement and is relieved by novelty (Eastwood et al. 2012; Westgate and Wilson 2018) |
+| `social_drive` | `1` once an operator interaction has occurred, else `0` | a new interaction, `c = 1` | social homeostasis (Matthews and Tye 2019); isolation since spawn is an open welfare question in `thymos-active-inference-affect` |
+| `restlessness` | `1 - intent_rate` (no actions) | each Volition intent, `c = 1` | a design choice; there is no established model |
+
+`LP = max(0, g)` is the perceptual learning progress defined above. Only Hypnos's affective reset clears all drives at once.
 
 ### Affect coupling
 

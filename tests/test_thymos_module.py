@@ -80,18 +80,23 @@ async def test_workspace_publishes_thymos_state_after_interval(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_workspace_publishes_emotion_when_changes(bus: AsyncBus):
+    # Rewritten for research affect: appraisal novelty now comes from normalised
+    # prediction-error ratios; a ratio of 3.0 yields maximal novelty and SURPRISE.
     fake_now = [0.0]
     thymos = Thymos(bus, publish_interval_s=5.0, clock=lambda: fake_now[0])
     await thymos.initialize()
     try:
-        # Construct a snapshot that scores high pleasantness + high goal.
-        thymos.goals.add("test goal", priority=1.0)
+        fake_now[0] = 1.0
         await thymos.on_workspace(
-            _snapshot([_event(salience=0.9, type_="test_goal_event")])
+            _snapshot([_event(salience=0.5, type_="topos.report", normalised_error=3.0)])
         )
         entries = await bus.read("thymos.out", last_id="0", count=20)
         emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]
         assert len(emotion_events) >= 1
+        assert any(
+            e.payload.get("emotion") == CategoricalEmotion.SURPRISE.value
+            for e in emotion_events
+        )
     finally:
         await thymos.shutdown()
 
@@ -147,9 +152,13 @@ async def test_complete_and_abandon_goal_publish_events(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_soma_report_nudges_state(bus: AsyncBus):
+    # Rewritten for research affect: wellness is stored as a valence target, and
+    # only soma *alerts* produce an immediate arousal nudge.
     thymos = Thymos(bus)
     await thymos.initialize()
     try:
+        prior_arousal = thymos.state.arousal
+        prior_valence = thymos.state.valence
         await bus.publish(
             Event(
                 source="soma",
@@ -160,20 +169,24 @@ async def test_soma_report_nudges_state(bus: AsyncBus):
             )
         )
         # Wait for the peer consumer to drain.
-        prior = thymos.state.valence
         for _ in range(50):
             await asyncio.sleep(0.02)
-            if thymos.state.valence != prior:
+            if thymos._wellness < 1.0:
                 break
-        # Low wellness should push valence down (or arousal up).
-        assert thymos.state.valence < prior + 0.001
+        assert thymos._wellness == pytest.approx(0.1)
+        # Alert produces the hard-wired arousal nudge; valence is not nudged.
+        assert thymos.state.arousal > prior_arousal
+        assert thymos.state.valence == pytest.approx(prior_valence)
     finally:
         await thymos.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_chronos_report_raises_social_drive(bus: AsyncBus):
-    thymos = Thymos(bus, social_drive_time_scale_s=10.0)
+async def test_chronos_report_arms_social_drive(bus: AsyncBus):
+    # Rewritten for research affect: the first chronos.report arms the social
+    # drive; subsequent ticks build it with u=1, and a newly-reset TSLI relieves it.
+    fake_now = [0.0]
+    thymos = Thymos(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
     await thymos.initialize()
     try:
         await bus.publish(
@@ -187,9 +200,12 @@ async def test_chronos_report_raises_social_drive(bus: AsyncBus):
         )
         for _ in range(50):
             await asyncio.sleep(0.02)
-            if thymos.drives.social_drive.value > 0:
+            if thymos._interaction_seen:
                 break
-        assert thymos.drives.social_drive.value >= 0.7
+        assert thymos._interaction_seen
+        fake_now[0] = 300.0
+        await thymos._tick()
+        assert thymos.drives.social_drive.value > 0.5
     finally:
         await thymos.shutdown()
 
@@ -230,9 +246,10 @@ async def test_audition_emotion_event_is_consumed_by_peer_loop(bus: AsyncBus):
     """audition.emotion events published on the bus are recorded by Thymos's peer
     consumer loop when coupling is enabled, then fed to the entity's appraisal.
 
-    The perceived signal is NOT written directly to the dimensional state: the
-    peer loop records it, and the entity's own appraisal (run on the next
-    workspace tick) produces the upward valence response.
+    Rewritten for research affect: the perceived signal is NOT written directly to
+    the dimensional state and the per-broadcast appraisal nudges are removed.
+    Instead it changes the appraisal scores (intrinsic_pleasantness / novelty),
+    and valence follows learning progress through its own relaxation.
     """
     cfg = CouplingConfig(
         enabled=True,
@@ -241,11 +258,15 @@ async def test_audition_emotion_event_is_consumed_by_peer_loop(bus: AsyncBus):
         coupling_ceiling=0.30,
         decay_s=10.0,
     )
-    thymos = Thymos(bus, coupling=cfg, publish_interval_s=999.0)
-    thymos._drift_rate = 0.0  # isolate the appraisal nudge from drift
+    fake_now = [0.0]
+    thymos = Thymos(bus, coupling=cfg, clock=lambda: fake_now[0], publish_interval_s=999.0)
+    thymos._drift_rate = 0.0
     thymos._state = DimensionalState(valence=-0.3, arousal=0.3, dominance=0.0)
     await thymos.initialize()
     try:
+        baseline_scores = thymos._score_snapshot(
+            WorkspaceSnapshot(tick_index=0, selected_events=[], inhibited=False)
+        )
         initial_valence = thymos.state.valence
 
         await bus.publish(
@@ -273,18 +294,15 @@ async def test_audition_emotion_event_is_consumed_by_peer_loop(bus: AsyncBus):
         assert thymos._perceived_emotion is not None, (
             "audition.emotion not consumed by the peer loop"
         )
-        # Recording alone must not move state — appraisal is the only route.
+        # Recording alone must not move state; valence relaxation only runs in _tick.
         assert thymos.state.valence == initial_valence
 
-        # The entity's own appraisal (next tick) produces the response.
-        await thymos.on_workspace(
+        # The entity's own appraisal reflects the perceived emotion.
+        coupled_scores = thymos._score_snapshot(
             WorkspaceSnapshot(tick_index=0, selected_events=[], inhibited=False)
         )
-
-        assert thymos.state.valence > initial_valence, (
-            f"appraisal of perceived joy did not raise valence: "
-            f"valence stuck at {thymos.state.valence:.4f}"
-        )
+        assert coupled_scores.intrinsic_pleasantness > baseline_scores.intrinsic_pleasantness
+        assert coupled_scores.novelty > baseline_scores.novelty
     finally:
         await thymos.shutdown()
 

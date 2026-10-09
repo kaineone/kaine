@@ -668,6 +668,15 @@ publish_interval_s = 1.0
 # so the nudge per second does not depend on the broadcast rate. 0.3 s is the
 # resting broadcast period.
 appraisal_reference_interval_s = 0.3
+# Valence relaxes toward tanh(valence_progress_gain * learning_progress + wellness - 0.5)
+# (Joffily and Coricelli 2013). The time constant is subjective seconds.
+volition_stream = "volition.out"
+learning_progress_fast_weight = 0.1
+learning_progress_slow_weight = 0.02
+alert_rate_weight = 0.05
+intent_rate_weight = 0.05
+valence_time_constant_s = 30.0
+valence_progress_gain = 2.0
 baseline_salience = 0.1
 alert_salience = 0.7
 social_drive_time_scale_s = 600.0
@@ -695,25 +704,30 @@ decay_s = 10.0
 # coupling_max_rate_per_s is legacy (the DriftSafeguard it fed was removed when
 # coupling became appraisal-routed); if present it is ignored, not an error.
 
+# relief_gain: fraction of the drive removed by a full consummatory event (curiosity: learning progress; boredom: a perceptual alert; social: a new operator interaction; restlessness: a Volition intent).
 [thymos.drives.curiosity]
 build_rate = 0.05
 decay_rate = 0.02
 threshold = 0.7
+relief_gain = 0.5
 
 [thymos.drives.boredom]
 build_rate = 0.04
 decay_rate = 0.02
 threshold = 0.7
+relief_gain = 0.3
 
 [thymos.drives.social_drive]
 build_rate = 0.01
 decay_rate = 0.005
 threshold = 0.7
+relief_gain = 0.8
 
 [thymos.drives.restlessness]
 build_rate = 0.03
 decay_rate = 0.02
 threshold = 0.7
+relief_gain = 0.5
 
 [praxis]
 sandbox_path = "state/praxis/files"
