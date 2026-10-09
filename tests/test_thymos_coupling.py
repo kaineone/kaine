@@ -125,6 +125,7 @@ async def test_positive_emotion_moves_valence_up_via_appraisal(bus: AsyncBus):
     before_v = thymos.state.valence
 
     thymos._record_perceived_emotion(_emotion_event("happy"))
+    fake_now[0] += 0.3  # one reference interval, so the per-time nudge applies
     await thymos.on_workspace(_empty_snapshot())
 
     assert thymos.state.valence > before_v, (

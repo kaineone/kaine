@@ -649,6 +649,11 @@ baseline_arousal = 0.3
 baseline_dominance = 0.0
 drift_rate_per_s = 0.05
 publish_interval_s = 1.0
+# Reference interval for the per-broadcast appraisal nudges (subjective seconds).
+# Each broadcast's valence/arousal nudge is scaled by dt / this interval (capped at 4),
+# so the nudge per second does not depend on the broadcast rate. 0.3 s is the
+# resting broadcast period.
+appraisal_reference_interval_s = 0.3
 baseline_salience = 0.1
 alert_salience = 0.7
 social_drive_time_scale_s = 600.0

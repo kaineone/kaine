@@ -41,6 +41,7 @@ class Thymos(BaseModule):
         baseline: Optional[DimensionalState] = None,
         drift_rate_per_s: float = 0.05,
         publish_interval_s: float = 1.0,
+        appraisal_reference_interval_s: float = 0.3,
         regulation: Optional[RegulationPolicy] = None,
         drives: Optional[DriveSet] = None,
         goals: Optional[GoalLedger] = None,
@@ -70,6 +71,8 @@ class Thymos(BaseModule):
             raise ValueError("drift_rate_per_s must be >= 0")
         if publish_interval_s <= 0:
             raise ValueError("publish_interval_s must be positive")
+        if appraisal_reference_interval_s <= 0:
+            raise ValueError("appraisal_reference_interval_s must be positive")
         if social_drive_time_scale_s <= 0:
             raise ValueError("social_drive_time_scale_s must be positive")
         self._baseline = (baseline or DimensionalState()).clamped()
@@ -80,6 +83,8 @@ class Thymos(BaseModule):
         )
         self._drift_rate = float(drift_rate_per_s)
         self._publish_interval = float(publish_interval_s)
+        self._appraisal_ref_dt = float(appraisal_reference_interval_s)
+
         self._regulation: RegulationPolicy = regulation or PassiveDecay()
         self._drives = drives or DriveSet()
         self._goals = goals or GoalLedger()
@@ -93,11 +98,13 @@ class Thymos(BaseModule):
         # subjective `entity_clock.now` > a real-time EntityClock. All of
         # Thymos's time constants read through `self._clock`, so injecting the
         # shared subjective clock dilates them coherently with the cycle.
+        self._entity_clock = entity_clock
         if clock is not None:
             self._clock = clock
         else:
             self._clock = (entity_clock or EntityClock()).now
         self._last_tick_at = self._clock()
+        self._last_appraisal_at = self._clock()
         self._last_publish_at = 0.0
         self._last_emotion: CategoricalEmotion = CategoricalEmotion.NEUTRAL
         self._cursors: dict[str, str] = {}
@@ -193,6 +200,11 @@ class Thymos(BaseModule):
                 self._peer_consumer_loop(), name=f"{self.name}-peer-consumer"
             )
         )
+        self._tasks.append(
+            asyncio.create_task(
+                self._state_timer_loop(), name=f"{self.name}-state-timer"
+            )
+        )
 
     async def shutdown(self) -> None:
         await super().shutdown()
@@ -206,6 +218,7 @@ class Thymos(BaseModule):
         now = self._clock()
         dt = max(0.0, now - self._last_tick_at)
         self._last_tick_at = now
+
         self._state = self._state.drift_toward(
             self._baseline, self._drift_rate, dt
         )
@@ -263,16 +276,25 @@ class Thymos(BaseModule):
             )
             self._last_emotion = emotion
         # Nudge dimensional state by the appraisal — pleasant raises
-        # valence, novelty raises arousal.
+        # valence, novelty raises arousal. The nudges are per unit time (scaled
+        # by the time since the previous update over the reference interval, the
+        # resting broadcast period), so a higher broadcast rate does not raise the
+        # arousal gained per second.
         # The novelty proxy is signed (var*4 - 0.2), so a low-variance / calm
         # perceptual stream yields novelty ~ -0.2 and would actively DECAY arousal
         # (~ -0.01/tick), pinning it near zero on a mostly-calm corpus and leaving
         # the entity under-aroused. Floor the arousal nudge at 0 so a quiet scene
         # relaxes toward the baseline drift target rather than being suppressed
         # below it, while genuine surprise (positive novelty) still raises arousal.
+        # The nudge is scaled by the time since the previous appraisal over the
+        # reference interval, capping the multiplier so very long gaps do not overshoot.
+        now = self._clock()
+        dt = max(0.0, now - self._last_appraisal_at)
+        self._last_appraisal_at = now
+        scale = min(4.0, dt / self._appraisal_ref_dt)
         self._state = self._state.nudged(
-            valence=0.05 * scores.intrinsic_pleasantness,
-            arousal=0.05 * max(0.0, scores.novelty),
+            valence=0.05 * scale * scores.intrinsic_pleasantness,
+            arousal=0.05 * scale * max(0.0, scores.novelty),
         )
 
     def _score_snapshot(self, snapshot: WorkspaceSnapshot) -> AppraisalScores:
@@ -403,6 +425,36 @@ class Thymos(BaseModule):
             },
             salience=self._baseline_salience,
         )
+
+    async def _state_timer_loop(self) -> None:
+        try:
+            while not self._stopped.is_set():
+                # The publish interval is a subjective cognitive time constant.
+                # When an EntityClock with a time scale is available, divide the
+                # wall wait by the scale so that faster subjective time still
+                # observes the same subjective interval; at time scale 1 wall and
+                # subjective seconds coincide.
+                interval = self._publish_interval
+                scale = getattr(self._entity_clock, "scale", None)
+                if scale is not None and scale > 0.0:
+                    wall_wait = interval / scale
+                else:
+                    wall_wait = interval
+                try:
+                    await asyncio.wait_for(
+                        self._stopped.wait(), timeout=wall_wait
+                    )
+                except asyncio.TimeoutError:
+                    pass
+                try:
+                    await self._tick()
+                    await self._maybe_publish_state()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("thymos state timer tick failed")
+        except asyncio.CancelledError:
+            raise
 
     async def _peer_consumer_loop(self) -> None:
         try:

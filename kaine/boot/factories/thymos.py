@@ -30,6 +30,7 @@ def make_thymos(
         "baseline_dominance",
         "drift_rate_per_s",
         "publish_interval_s",
+        "appraisal_reference_interval_s",
         "baseline_salience",
         "alert_salience",
         "soma_stream",
@@ -49,6 +50,7 @@ def make_thymos(
     for k in (
         "drift_rate_per_s",
         "publish_interval_s",
+        "appraisal_reference_interval_s",
         "baseline_salience",
         "alert_salience",
         "soma_stream",
