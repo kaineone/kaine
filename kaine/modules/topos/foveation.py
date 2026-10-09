@@ -5,8 +5,8 @@
 
 Given a native-resolution frame, compute a coarse spatial saliency map (per-tile
 precision-weighted change — the deviation of the current tile change from its running
-mean divided by its running standard deviation, floored at a fraction of the mean
-change), select a single fovea target by the precision-weighted combination of that
+mean divided by its running standard deviation, regularised by a floor term
+proportional to the mean change), select a single fovea target by the precision-weighted combination of that
 bottom-up saliency with an optional top-down bias, size the fovea from arousal
 (Easterbrook narrowing — higher arousal, tighter fovea), and derive a downsampled
 peripheral view plus a high-resolution foveal crop from the *same* in-memory frame.
@@ -81,9 +81,9 @@ class SpatialSaliency:
 
     The bottom-up map is the per-tile precision-weighted change: the deviation of
     the current tile change from its running mean change, divided by the running
-    standard deviation of tile change (floored at ``floor_fraction`` of the mean
-    tile change). Habitual flicker is therefore down-weighted and unusual change
-    up-weighted, as precision weighting in predictive coding (Feldman and Friston
+    standard deviation of tile change, regularised as ``sqrt(var + s0**2)`` with
+    ``s0 = floor_fraction`` times the mean tile change (a soft floor). Habitual
+    flicker is therefore down-weighted and unusual change up-weighted, as precision weighting in predictive coding (Feldman and Friston
     2010). The top-down channel stays unwired.
     """
 

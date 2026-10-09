@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Bottom-up fovea saliency is precision-weighted per tile
-Topos SHALL keep, for each tile of the spatial saliency grid, an exponential running mean and variance of that tile's change, and SHALL compute the bottom-up saliency of a tile as its change in excess of its running mean divided by the running standard deviation, floored, using the statistics from before the current observation. A tile with fewer than five observations SHALL use its raw change. When the combined map is flat, the fovea SHALL hold its previous location, or take the centre when there is none.
+Topos SHALL keep, for each tile of the spatial saliency grid, an exponential running mean and variance of that tile's change, and SHALL compute the bottom-up saliency of a tile as its change in excess of its running mean divided by the running standard deviation regularised by a floor term proportional to the mean change across tiles, using the statistics from before the current observation. A tile with fewer than five observations SHALL use its raw change. When the combined map is flat, the fovea SHALL hold its previous location, or take the centre when there is none.
 
 #### Scenario: A calm scene holds the fovea
 - **WHEN** no tile changes more than usual and the fovea was previously at the upper left
