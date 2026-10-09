@@ -34,6 +34,7 @@ async def _close_module(module: Audition) -> None:
             try:
                 await task
             except asyncio.CancelledError:
+                # Expected: the task was just cancelled during teardown.
                 pass
 
 
