@@ -99,12 +99,36 @@ def _power_spectrum(samples: np.ndarray, sample_rate: int) -> tuple[np.ndarray, 
 def _log_spaced_edges(n_bands: int, sample_rate: int, n_fft_bins: int) -> np.ndarray:
     """Band edges (indices into the rFFT bins) on a log-frequency scale, so low
     frequencies — where speech and most environmental structure live — get finer
-    resolution than the high end, mel-style without a full mel filterbank."""
+    resolution than the high end, mel-style without a full mel filterbank.
+
+    Edges are clamped to stay strictly increasing and never include the DC bin,
+    while the top edge stays inside the available FFT bins.  If ``n_bands + 1``
+    strictly-increasing edges cannot fit in ``[1, n_fft_bins - 1]``, a
+    ``ValueError`` is raised.
+    """
     lo, hi = 20.0, max(80.0, sample_rate / 2.0)
     freqs = np.logspace(math.log10(lo), math.log10(hi), n_bands + 1)
     bin_hz = (sample_rate / 2.0) / max(1, n_fft_bins - 1)
-    edges = np.clip((freqs / bin_hz).astype(int), 0, n_fft_bins - 1)
-    return edges
+    edges = (freqs / bin_hz).astype(int)
+    edges = np.clip(edges, 0, n_fft_bins - 1)
+
+    # Never include the DC bin and keep edges strictly increasing.
+    edges[0] = max(1, int(edges[0]))
+    for j in range(1, edges.size):
+        edges[j] = max(int(edges[j]), int(edges[j - 1]) + 1)
+    edges[-1] = min(int(edges[-1]), n_fft_bins - 1)
+
+    if not (
+        int(edges[0]) >= 1
+        and int(edges[-1]) <= n_fft_bins - 1
+        and np.all(np.diff(edges) >= 1)
+    ):
+        raise ValueError(
+            f"cannot fit {n_bands + 1} strictly increasing log-spaced band edges "
+            f"into [{1}, {n_fft_bins - 1}] FFT bins "
+            f"(sample_rate={sample_rate}, n_fft_bins={n_fft_bins})"
+        )
+    return edges.astype(int)
 
 
 class SpectralAcousticEncoder:
@@ -131,7 +155,7 @@ class SpectralAcousticEncoder:
 
     @property
     def model_id(self) -> str:
-        return f"spectral-logband-{self._n_bands}"
+        return f"spectral-logband-{self._n_bands}-v2"
 
     def embed(self, audio_bytes: bytes, sample_rate: int) -> list[float]:
         x = _decode_audio(audio_bytes)
@@ -236,6 +260,33 @@ def arousal_to_window(arousal: float, *, window_range: tuple[float, float] = (0.
     lo, hi = window_range
     a = float(np.clip(arousal, 0.0, 1.0))
     return hi - (hi - lo) * a
+
+
+def attend_recent(
+    audio_bytes: bytes,
+    fraction: float,
+    sample_rate: int,
+    *,
+    min_seconds: float = 0.025,
+) -> tuple[bytes, float]:
+    """Return the most recent tail of ``audio_bytes`` as raw int16 PCM bytes.
+
+    The temporal reading of Easterbrook narrowing; higher arousal attends to a
+    shorter, more recent span.
+    """
+    if not audio_bytes or sample_rate <= 0:
+        return audio_bytes, 0.0
+    x = _decode_audio(audio_bytes)
+    n = x.size
+    if n == 0:
+        return audio_bytes, 0.0
+    frac = float(np.clip(fraction, 0.0, 1.0))
+    n_keep = max(math.ceil(frac * n), math.ceil(min_seconds * sample_rate))
+    n_keep = min(n, n_keep)
+    tail = x[-n_keep:]
+    scaled = np.rint(tail * 32768.0)
+    clipped = np.clip(scaled, -32768.0, 32767.0).astype(np.int16)
+    return clipped.astype("<i2").tobytes(), float(n_keep / sample_rate)
 
 
 def energy_dbfs(audio_bytes: bytes) -> float:

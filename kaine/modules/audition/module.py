@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
@@ -16,7 +15,9 @@ if TYPE_CHECKING:
 from kaine.modules.audition.acoustic import (
     AcousticEncoder,
     SpectralAcousticEncoder,
+    _decode_audio,
     arousal_to_window,
+    attend_recent,
     cosine_change,
     detect_speech,
     energy_dbfs,
@@ -258,9 +259,16 @@ class Audition(BaseModule):
         reaches the workspace. Memory-only; never writes audio."""
         assert self._acoustic_encoder is not None
         assert self._acoustic_forward_model is not None
+        # Easterbrook narrowing: arousal selects how much of the recent acoustic
+        # window reaches the encoder and energy estimator.
+        window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
+        attended_bytes, attended_seconds = await asyncio.to_thread(
+            attend_recent, audio_bytes, window, sample_rate
+        )
+
         # Offload the spectral encoder to a thread so the audio loop does not
         # block the event loop (performance-test-coverage).
-        embedding = await asyncio.to_thread(self._acoustic_encoder.embed, audio_bytes, sample_rate)
+        embedding = await asyncio.to_thread(self._acoustic_encoder.embed, attended_bytes, sample_rate)
         change = cosine_change(embedding, self._prev_acoustic_embedding)
         self._prev_acoustic_embedding = embedding
         # Pause adaptation during Hypnos sleep, mirroring Topos.
@@ -295,10 +303,8 @@ class Audition(BaseModule):
         self._acoustic_report_count += 1
         if alert:
             self._acoustic_alert_count += 1
-        window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
-
         # Content-free energy estimate (dBFS), independent of the encoder.
-        energy_db = await asyncio.to_thread(energy_dbfs, audio_bytes)
+        energy_db = await asyncio.to_thread(energy_dbfs, attended_bytes)
 
         payload: dict[str, Any] = {
             "source_label": source_label,
@@ -311,6 +317,7 @@ class Audition(BaseModule):
             "normalised_error": normalised,
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,
+            "attended_seconds": attended_seconds,
             # Alert-level flag (perception-drives-salience task 4.2): lets the
             # Nexus perception panel count stimulus-driven acoustic events.
             "alert": alert,
@@ -488,8 +495,6 @@ class Audition(BaseModule):
             if not is_speech:
                 return None, None
 
-        start_time = time.monotonic()
-
         emo_task = asyncio.create_task(
             self._emotion_classifier.classify(audio_bytes, sample_rate=sample_rate)
         )
@@ -509,8 +514,6 @@ class Audition(BaseModule):
             stt_result_or_exc = None
             (emo_result_or_exc,) = await asyncio.gather(emo_task, return_exceptions=True)
 
-        duration_s = time.monotonic() - start_time
-
         # ------------------------------------------------------------------
         # Forward model step: build feature vector from emotion result.
         # ------------------------------------------------------------------
@@ -523,10 +526,16 @@ class Audition(BaseModule):
         # Compute a simple mean energy from the audio bytes (in-memory only).
         mean_energy = await asyncio.to_thread(_estimate_energy, audio_bytes)
 
+        # Utterance duration used as a forward-model feature (not latency).
+        utterance_s = await asyncio.to_thread(
+            lambda b, sr: len(_decode_audio(b)) / sr if sr > 0 else 0.0,
+            audio_bytes, sample_rate,
+        )
+
         feature_vec = build_feature_vector(
             emo_scores_for_fm,
             CATEGORIES,
-            duration_s=min(duration_s, 60.0) / 60.0,  # normalise to [0, 1] over 60 s
+            duration_s=min(utterance_s, 30.0) / 30.0,  # normalise over the 30 s maximum utterance length
             mean_energy=mean_energy,
         )
 
@@ -758,6 +767,7 @@ class Audition(BaseModule):
             "stt_model": self._stt_model,
             "emotion_model_id": self._emotion_classifier.model_id,
             "forward_model": self._forward_model.state_dict(),
+            "forward_model_features": "utterance_duration_v2",
             "auditory_buffer_summary": self._forward_model.buffer_summary(),
         }
         # Carry forward snapshots for any encoders that are not currently running.
@@ -777,14 +787,20 @@ class Audition(BaseModule):
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "forward_model" in state:
-            fm_state = state["forward_model"]
-            if self._forward_model.matches_state_shape(fm_state):
-                self._forward_model.load_state_dict(fm_state)
+            if state.get("forward_model_features") == "utterance_duration_v2":
+                fm_state = state["forward_model"]
+                if self._forward_model.matches_state_shape(fm_state):
+                    self._forward_model.load_state_dict(fm_state)
+                else:
+                    log.warning(
+                        "audition: discarding speech-path forward-model checkpoint — "
+                        "its tensor shapes do not match the running model; the online "
+                        "forward model will re-learn from scratch"
+                    )
             else:
                 log.warning(
-                    "audition: discarding speech-path forward-model checkpoint — "
-                    "its tensor shapes do not match the running model; the online "
-                    "forward model will re-learn from scratch"
+                    "audition: discarding speech-path forward-model checkpoint — it "
+                    "predates the utterance-duration feature; the model will re-learn"
                 )
 
         acoustic_models = state.get("acoustic_forward_models")

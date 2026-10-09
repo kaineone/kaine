@@ -55,7 +55,7 @@ On each utterance boundary (detected by the VAD in `LiveMicrophone`, or on a dir
 
 1. **General acoustic perception** — when `general_audition` is enabled, the window is first encoded to a general acoustic embedding and scored for salience (`audition.perception`), so a non-speech sound reaches the workspace. A voice-activity heuristic then gates the speech path below; non-speech windows return without transcription. When disabled, this step is skipped and every window is treated as speech.
 2. **Emotion classification always runs; STT runs only when `transcription_enabled = true`** — `Emotion2vecClassifier.classify()` runs `funasr` inference in a thread on every detected-speech window; the selected STT backend transcribes the in-memory WAV bytes only when the STT gate is on. When both emotion and STT run they start together via `asyncio.gather()`.
-3. **Auditory forward model steps** — `AuditoryForwardModel` receives a 9-dim feature vector built from the emotion-class distribution (7 dims), elapsed processing time of the emotion/STT gather (1 dim; `duration_s = time.monotonic() - start_time`, not utterance length), and mean RMS energy (1 dim). The L2 prediction error against the model's prior prediction weights the salience of the published events: an emotionally unexpected utterance is more salient than a predicted one.
+3. **Auditory forward model steps** — `AuditoryForwardModel` receives a 9-dim feature vector built from the emotion-class distribution (7 dims), the utterance's audio duration over the 30 s maximum utterance length (1 dim), and mean RMS energy (1 dim). Until 2026-10 this slot held the classifiers' wall-clock processing time; checkpoints saved before the change carry no `forward_model_features` tag and are discarded so the model re-learns. The L2 prediction error against the model's prior prediction weights the salience of the published events: an emotionally unexpected utterance is more salient than a predicted one.
 4. **Prosody extraction (optional)** — when `prosody_enabled = true`, a fire-and-forget task computes F0 statistics, RMS energy, and speaking rate from the in-memory float32 audio array, publishing them as `audition.prosody`. The NumPy array is released as soon as the function returns; nothing touches disk.
 5. **Self-hearing suppression** — a shared `SpeakingGate` (wired by `boot.build_registry`) prevents Audition from transcribing the entity's own voice during [Vox](vox.md) playback.
 
@@ -78,7 +78,7 @@ All events are published to the `audition.out` stream.
 
 | Event type | Payload fields | Salience |
 |---|---|---|
-| `audition.perception` (general audition only) | `source_label`, `change_score`, `normalised_error`, `prediction_error`, `alert`, `encoder_model_id`, `attended_window`, `energy_dbfs`; `item` and `item_order` for playlist feeds | `baseline_salience` normally; `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when `normalised_error ≥ 2.0` |
+| `audition.perception` (general audition only) | `source_label`, `change_score`, `normalised_error`, `prediction_error`, `alert`, `encoder_model_id`, `attended_window`, `attended_seconds`, `energy_dbfs`; `item` and `item_order` for playlist feeds | `baseline_salience` normally; `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when `normalised_error ≥ 2.0` |
 | `audition.transcription` | `text`, `backend`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error` | `baseline_salience` (0.4) normally; raised toward `alert_salience` (0.8) by high prediction error; `alert_salience` on STT failure |
 | `audition.emotion` | `category`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error`, `degraded`, `error` | `baseline_salience` for neutral; `alert_salience` for non-neutral; further raised by high prediction error |
 | `audition.prosody` | `source_label`, `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std`, `tempo_bpm` | `baseline_salience` (always) |
@@ -87,7 +87,7 @@ All events are published to the `audition.out` stream.
 
 Emotion `category` is one of: `neutral`, `happy`, `sad`, `angry`, `surprised`, `fearful`, `disgusted`. `scores` carries the full 7-class distribution.
 
-The `audition.perception` event is content-free: it carries only normalised numeric descriptors of what was heard (change, prediction error, the arousal-set attended-window breadth) and the encoder's identity string — never audio, never the embedding.
+The `audition.perception` event is content-free: it carries only normalised numeric descriptors of what was heard (change, prediction error, the arousal-set attended-window fraction and the seconds it covered) and the encoder's identity string — never audio, never the embedding.
 
 ## Configuration
 
@@ -123,8 +123,8 @@ Section `[audition]` in `config/kaine.toml`. For the full reference see [Module 
 | `auditory_buffer_size` | `16` | Recurrent buffer size (utterance feature vectors) |
 | `prosody_enabled` | `false` | Enable `audition.prosody` events via librosa |
 | `general_audition` | `false` | Enable general auditory perception: encode every window to a general acoustic embedding and score its salience; speech becomes a gated specialization. When enabled, boot internally switches the live mic to fixed-window continuous capture so non-speech is not gated out before it is heard. There is no user-facing `continuous_capture` key |
-| `arousal_window_min` | `0.15` | Tightest auditory attentional window (Easterbrook narrowing at high arousal). Pairs with `arousal_window_max`; flip the two to widen under arousal |
-| `arousal_window_max` | `1.0` | Widest auditory attentional window (at low arousal) |
+| `arousal_window_min` | `0.15` | Tightest auditory attentional window: at full arousal only the most recent 15 percent of each captured window is encoded (Easterbrook narrowing). Pairs with `arousal_window_max`; flip the two to widen under arousal |
+| `arousal_window_max` | `1.0` | Widest auditory attentional window (at zero arousal the whole captured window is encoded) |
 | `acoustic_change_alert_factor` | `2.0` | Ratio of current acoustic change to the rolling mean that, together with `acoustic_change_alert_threshold`, raises `audition.perception` to `alert_salience` |
 | `acoustic_change_alert_threshold` | `0.35` | Floor on raw cosine-change before `audition.perception` can be raised to `alert_salience` |
 | `acoustic_encoder` | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"` (default, numpy, no download), `"dasheng"` (Dasheng-base, Apache-2.0) or `"wavjepa"` (WavJEPA-base, MIT). The two self-supervised encoders need their weights fetched once (`python -m kaine.setup.audio_ssl dasheng --yes`, or `wavjepa`) and need `torch`, `torchaudio` and `einops` from the `[audio]` and `[internvideo]` extras; their weights load at the first `embed()`, so a missing fetch fails at runtime, not at boot. A plugin may also fill the `audition.acoustic_encoder` seam; setting a non-default value together with a filled seam is a configuration error. |
@@ -143,7 +143,7 @@ The zero-persistence invariant holds: raw PCM lives only in memory, never on dis
 
 ## How it works
 
-The diagram below shows the speech path. With `general_audition` enabled, `process_audio()` first runs the general acoustic path (encode → salience → arousal-set window → `audition.perception`) and a voice-activity gate; only detected-speech windows continue into the flow shown here.
+The diagram below shows the speech path. With `general_audition` enabled, `process_audio()` first runs the general acoustic path (arousal-set window → encode → salience → `audition.perception`) and a voice-activity gate; only detected-speech windows continue into the flow shown here.
 
 ```mermaid
 graph TD
@@ -161,7 +161,7 @@ graph TD
 
     Speaches --> FwdModel
     Sherpa --> FwdModel
-    Emo --> FwdModel["AuditoryForwardModel<br/>9-dim: emotion_dist + processing duration_s/60 + energy<br/>online SGD, CPU-only"]
+    Emo --> FwdModel["AuditoryForwardModel<br/>9-dim: emotion_dist + utterance duration/30 + energy<br/>online SGD, CPU-only"]
     FwdModel -->|L2 prediction error| SalBlend["error_weighted_salience()<br/>error can only raise salience"]
 
     Speaches -->|text| TranscriptionEvent["audition.transcription"]
@@ -178,7 +178,7 @@ graph TD
 
 When `general_audition` is enabled, `process_audio()` first calls `_perceive_acoustic()` (in `kaine/modules/audition/module.py`, backed by `kaine/modules/audition/acoustic.py`) before the speech path:
 
-1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim) and represents speech, music, and environmental sound in one space. Two frozen self-supervised encoders are selectable through the same protocol, both 768-d at 16 kHz: Dasheng-base (`dasheng`) and WavJEPA-base (`wavjepa`, student path only). They load offline from the vendored code under `external/` and the weights fetched at setup, and keep only a RAM rolling window (2 s by default) of recent audio for context. The encoder is frozen; only the forward model adapts. Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
+1. **Encode** — `AcousticEncoder.embed(bytes, sample_rate)` turns the window into a fixed general acoustic embedding. The default `SpectralAcousticEncoder` is download-free (log-energy in log-spaced frequency bands, mean/std-pooled and L2-normalized, `2·n_bands`-dim; band edges are forced to be distinct FFT bins above DC, so all 32 bands are informative at 16 kHz, and the encoder id is `spectral-logband-32-v2`) and represents speech, music, and environmental sound in one space. Two frozen self-supervised encoders are selectable through the same protocol, both 768-d at 16 kHz: Dasheng-base (`dasheng`) and WavJEPA-base (`wavjepa`, student path only). They load offline from the vendored code under `external/` and the weights fetched at setup, and keep only a RAM rolling window (2 s by default) of recent audio for context. The encoder is frozen; only the forward model adapts. Tests use `FakeAcousticEncoder` (a deterministic hash-based embedding), exactly as the vision path uses a fake image encoder.
 
 A plugin can replace the encoder through the `audition.acoustic_encoder` seam. The plugin returns an object satisfying the `AcousticEncoder` protocol (`embedding_dim`, `model_id`, and `embed(audio_bytes, sample_rate)`). When the seam is filled, `[audition].acoustic_encoder` must be unset or `spectral`; any other value together with a filled seam is a configuration error.
 
@@ -188,7 +188,7 @@ Every `audition.perception` event also carries `energy_dbfs`, the window's RMS l
 
 Both forward models suspend adaptation from `hypnos.sleep.started` to `hypnos.sleep.completed`. Perception and prediction-error inference continue; only online learning pauses.
 2. **Salience** — `cosine_change()` scores acoustic novelty against the previous embedding, and a dedicated `AuditoryForwardModel` over the embedding contributes a prediction error normalised against its rolling mean (Chronos/Topos convention). The window is `alert_salience` when `change / rolling_mean ≥ acoustic_change_alert_factor` and `change ≥ acoustic_change_alert_threshold`, or when the normalised acoustic prediction error is ≥ 2.0; otherwise `baseline_salience` — so a novel or sudden sound is salient whether or not it is a voice.
-3. **Arousal-set attentional window** — `arousal_to_window()` maps Thymos arousal in [0, 1] to the breadth of the auditory attentional window (Easterbrook narrowing: higher arousal → tighter window; sign tunable via `arousal_window_min`/`max`). Arousal reaches Audition through an injected provider seam (`set_arousal_provider()`, wired at boot like the topos-arousal / affect seams) — Audition never imports the workspace. `None` → widest window.
+3. **Arousal-set attentional window** — before encoding, `arousal_to_window()` maps Thymos arousal in [0, 1] to a fraction `w` of the captured window, and `attend_recent()` keeps only the most recent `w` of it (never less than one 25 ms frame), so the embedding and the energy channel describe that span. Higher arousal means a shorter, more recent integration window, the temporal reading of Easterbrook narrowing; the sign is tunable via `arousal_window_min`/`max`. Arousal reaches Audition through an injected provider seam (`set_arousal_provider()`, wired at boot like the topos-arousal / affect seams) — Audition never imports the workspace. `None` → widest window.
 4. **Publish** — a content-free `audition.perception` event (change, normalised error, prediction error, alert flag, encoder id, attended-window breadth, `energy_dbfs`; no audio) reaches the workspace.
 5. **Speech gate** — `detect_speech()` (a cheap energy + spectral-centroid voice-activity heuristic) routes detected-speech windows to the STT+emotion path; non-speech windows return and are perceived only through the general path.
 
@@ -210,7 +210,7 @@ In both cases, if transcription is enabled and the model is missing, transcripti
 
 ## Auditory forward model
 
-Architecture: `[feature ‖ buffer_mean] → Linear(18 → 32) → Tanh → Linear(32 → 9)`, CPU only, SGD online (lr=1e-3), with a non-finite guard. Feature vector layout: `[neutral, happy, sad, angry, surprised, fearful, disgusted, duration_s/60, mean_energy]`, where `duration_s` is the elapsed processing time of the emotion/STT gather (`time.monotonic() - start_time`), not utterance length. It serialises weight tensors and a statistical buffer summary only.
+Architecture: `[feature ‖ buffer_mean] → Linear(18 → 32) → Tanh → Linear(32 → 9)`, CPU only, SGD online (lr=1e-3), with a non-finite guard. Feature vector layout: `[neutral, happy, sad, angry, surprised, fearful, disgusted, utterance_s/30, mean_energy]`, where `utterance_s` is the utterance's audio duration (`n_samples / sample_rate`). It serialises weight tensors and a statistical buffer summary only.
 
 Salience blending: `error_weighted_salience()` maps the raw L2 error (normalised against the rolling mean) to the range `[baseline_salience, alert_salience]` and takes the maximum of the base salience and the error-derived salience — prediction error can only raise salience, never lower it.
 
