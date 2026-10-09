@@ -145,8 +145,11 @@ class Thymos(BaseModule):
         self._valence_progress_gain = float(valence_progress_gain)
 
         # Perceptual learning-progress state.
-        self._err_fast: dict[str, float] = {}
-        self._err_slow: dict[str, float] = {}
+        # Time-decayed mean trackers per source: sum and count for each tau.
+        self._err_fast_sum: dict[str, float] = {}
+        self._err_fast_count: dict[str, float] = {}
+        self._err_slow_sum: dict[str, float] = {}
+        self._err_slow_count: dict[str, float] = {}
         self._err_last_at: dict[str, float] = {}
         self._alert_fast = 0.0
         self._alert_slow = 0.0
@@ -229,10 +232,16 @@ class Thymos(BaseModule):
         2007; Schmidhuber 2010).
         """
         g_values: list[float] = []
-        for source, slow in self._err_slow.items():
+        for source, n_slow in self._err_slow_count.items():
+            if n_slow <= 0.0:
+                continue
+            slow = self._err_slow_sum[source] / n_slow
             if slow <= 1e-9:
                 continue
-            fast = self._err_fast.get(source, slow)
+            n_fast = self._err_fast_count.get(source, 0.0)
+            if n_fast <= 0.0:
+                continue
+            fast = self._err_fast_sum[source] / n_fast
             g_m = (slow - fast) / slow
             g_m = max(-1.0, min(1.0, g_m))
             g_values.append(g_m)
@@ -645,19 +654,29 @@ class Thymos(BaseModule):
             if e is not None:
                 source: str = getattr(event, "source", None) or event.type
                 now = self._clock()
-                if source not in self._err_slow:
+                if source not in self._err_slow_count:
                     if e > 0.0:
-                        self._err_fast[source] = e
-                        self._err_slow[source] = e
+                        self._err_fast_sum[source] = e
+                        self._err_fast_count[source] = 1.0
+                        self._err_slow_sum[source] = e
+                        self._err_slow_count[source] = 1.0
                         self._err_last_at[source] = now
                 else:
                     dt = max(0.0, now - self._err_last_at[source])
-                    self._err_fast[source] += (
-                        1.0 - math.exp(-dt / self._fast_time_constant_s)
-                    ) * (e - self._err_fast[source])
-                    self._err_slow[source] += (
-                        1.0 - math.exp(-dt / self._slow_time_constant_s)
-                    ) * (e - self._err_slow[source])
+                    d_fast = math.exp(-dt / self._fast_time_constant_s)
+                    d_slow = math.exp(-dt / self._slow_time_constant_s)
+                    self._err_fast_sum[source] = (
+                        d_fast * self._err_fast_sum[source] + e
+                    )
+                    self._err_fast_count[source] = (
+                        d_fast * self._err_fast_count[source] + 1.0
+                    )
+                    self._err_slow_sum[source] = (
+                        d_slow * self._err_slow_sum[source] + e
+                    )
+                    self._err_slow_count[source] = (
+                        d_slow * self._err_slow_count[source] + 1.0
+                    )
                     self._err_last_at[source] = now
             alert = bool(payload.get("alert"))
             if alert:

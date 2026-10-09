@@ -102,10 +102,13 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
     )
     await thymos.initialize()
     try:
-        thymos.drives.curiosity.value = 0.6
-        for i in range(200):
+        # 60 s of steady error gives the averages a history (a fresh tracker
+        # reports no progress), then the error falls from 3.0 to 1.0 over 20 s.
+        for i in range(800):
             fake_now[0] = i * 0.1
-            r = 3.0 - (2.0 * i / 199)  # 3.0 down to 1.0 over 20 s
+            if i == 600:
+                thymos.drives.curiosity.value = 0.6
+            r = 3.0 if i < 600 else 3.0 - (2.0 * (i - 600) / 199)
             await thymos._handle_peer_event(
                 "topos.out",
                 Event(
@@ -116,9 +119,9 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
                     timestamp=datetime.now(timezone.utc),
                 ),
             )
-            if (i + 1) % 3 == 0:
+            if i >= 600 and (i + 1) % 3 == 0:
                 await thymos._tick()
-        fake_now[0] = 20.0
+        fake_now[0] = 80.0
         await thymos._tick()
         assert thymos.drives.curiosity.value < 0.6
     finally:
@@ -766,3 +769,49 @@ async def test_curiosity_relief_is_report_rate_invariant(bus: AsyncBus):
     fast = await _run(0.1)
     slow = await _run(0.2)
     assert abs(fast - slow) < 0.05
+
+
+@pytest.mark.asyncio
+async def test_low_first_error_does_not_depress_valence(bus: AsyncBus):
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        rng = random.Random(7)
+        min_valence = thymos.state.valence
+        for i in range(1200):
+            fake_now[0] = i * 0.1
+            if i == 0:
+                e = 0.0  # the forward models report 0 on their first frame
+            elif i == 1:
+                e = 0.6  # a first positive error well below the steady level
+            else:
+                e = rng.lognormvariate(0.0, 0.3)
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={"prediction_error": e},
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i > 0 and i % 3 == 0:
+                await thymos._tick()
+                min_valence = min(min_valence, thymos.state.valence)
+        assert min_valence > -0.2, min_valence
+    finally:
+        await thymos.shutdown()
+
+
+def test_drive_rejects_nan_rates():
+    with pytest.raises(ValueError):
+        Drive(name="x", build_rate=float("nan"))
+    with pytest.raises(ValueError):
+        Drive(name="x", decay_rate=float("nan"))

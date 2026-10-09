@@ -68,14 +68,14 @@ class Drive:
     _has_fired: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if not (0.0 <= self.relief_gain <= 1.0):
-            raise ValueError("relief_gain must be in [0, 1]")
-        if self.build_rate < 0.0:
-            raise ValueError("build_rate must be >= 0")
-        if self.decay_rate < 0.0:
-            raise ValueError("decay_rate must be >= 0")
-        if not (0.0 < self.threshold <= 1.0):
-            raise ValueError("threshold must be in (0, 1]")
+        if not math.isfinite(self.relief_gain) or not (0.0 <= self.relief_gain <= 1.0):
+            raise ValueError("relief_gain must be finite and in [0, 1]")
+        if not math.isfinite(self.build_rate) or self.build_rate < 0.0:
+            raise ValueError("build_rate must be finite and >= 0")
+        if not math.isfinite(self.decay_rate) or self.decay_rate < 0.0:
+            raise ValueError("decay_rate must be finite and >= 0")
+        if not math.isfinite(self.threshold) or not (0.0 < self.threshold <= 1.0):
+            raise ValueError("threshold must be finite and in (0, 1]")
 
     def tick(self, dt: float, signal: float = 0.0) -> None:
         """Advance the drive by `dt` seconds with the given activity signal.

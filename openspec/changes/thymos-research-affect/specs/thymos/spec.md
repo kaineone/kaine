@@ -20,7 +20,7 @@ Each Thymos drive SHALL evolve between events by the exact solution of linear bu
 - **THEN** its value stays at or below `beta / (beta + delta)`
 
 ### Requirement: Valence tracks the rate of change of prediction error
-Thymos SHALL move valence toward `clip(P + (W - 0.5), -1, 1)` with time constant `valence_time_constant_s`, where `P` is the appraisal's intrinsic-pleasantness check, `clip(tanh(valence_progress_gain * g) + c, -1, 1)`, `g` the signed perceptual learning progress from averages of raw prediction error over subjective time, `c` the appraisal contribution of a perceived speaker emotion, and `W` Soma's last wellness. A module's averages SHALL be seeded at its first positive error.
+Thymos SHALL move valence toward `clip(P + (W - 0.5), -1, 1)` with time constant `valence_time_constant_s`, where `P` is the appraisal's intrinsic-pleasantness check, `clip(tanh(valence_progress_gain * g) + c, -1, 1)`, `g` the signed perceptual learning progress from time-decayed means of raw prediction error over subjective time, `c` the appraisal contribution of a perceived speaker emotion, and `W` Soma's last wellness. A module's means SHALL count only samples from its first positive error on, and SHALL be unbiased by any single sample: early on both equal the plain mean of the samples so far.
 
 #### Scenario: Errors falling is pleasant
 - **WHEN** the perceptual modules' raw prediction errors fall steadily on a healthy host
@@ -29,6 +29,10 @@ Thymos SHALL move valence toward `clip(P + (W - 0.5), -1, 1)` with time constant
 #### Scenario: A first-frame zero error does not depress valence
 - **WHEN** a perceptual module reports a prediction error of 0 on its first frame and positive errors afterwards
 - **THEN** the learning progress is computed from the first positive error, not from 0
+
+#### Scenario: A low first sample does not depress valence
+- **WHEN** a module's first positive error is well below its steady error
+- **THEN** valence stays above -0.2 while the averages fill
 
 ### Requirement: Appraisal novelty reflects surprise
 Thymos SHALL compute the novelty appraisal check as `1 - prod (1 - s_m)` over coalition members that carry a normalised error ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`.

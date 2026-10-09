@@ -130,9 +130,10 @@ The five scores map to a categorical emotion (`joy`, `sadness`, `anger`, `fear`,
 The appraisal does not nudge arousal. Surprise reaches arousal through the perceptual-alert path below; counting it again in the appraisal once fed a positive loop through the access rate. Valence relaxes toward the appraisal's pleasantness check, shifted by wellness:
 
 ```
-E_fast, E_slow per module: exponential averages of raw prediction error over subjective time,
-                           time constants fast_time_constant_s and slow_time_constant_s,
-                           seeded at the module's first positive error
+E_fast, E_slow per module: time-decayed means of the raw prediction errors since the module's
+                           first positive error, S <- d*S + e, N <- d*N + 1, E = S / N,
+                           d = exp(-dt / tau), tau = fast_time_constant_s or slow_time_constant_s
+                           (no seed bias: early on both equal the plain mean, so g starts near 0)
 g        = mean over Topos, Audition of clip((E_slow - E_fast) / E_slow, -1, 1)
 v_target = clip(pleasantness + (wellness - 0.5), -1, 1)
 valence += (v_target - valence) * (1 - exp(-dt / valence_time_constant_s))
