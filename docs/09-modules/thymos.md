@@ -31,7 +31,7 @@ Thymos is KAINE's affective appraisal layer. It:
 
 | Stream | Event type | Condition |
 |---|---|---|
-| `thymos.out` | `thymos.state` | Every `publish_interval_s`; carries full VAD, drives, current emotion label, and `reset: true` after `affective_reset()` |
+| `thymos.out` | `thymos.state` | Every `publish_interval_s` of subjective time, on a timer independent of broadcasts (and after a broadcast once the interval has passed); carries full VAD, drives, current emotion label, and `reset: true` after `affective_reset()` |
 | `thymos.out` | `thymos.emotion` | On categorical emotion change; carries appraisal scores, the new state, `norm_compatibility_available`, and `goal_significance_method` |
 | `thymos.out` | `thymos.drive` | On drive threshold crossing with hysteresis; carries drive name and value |
 | `thymos.out` | `thymos.goal` | On goal lifecycle events (`added`, `completed`, `abandoned`) |
@@ -47,6 +47,7 @@ See the [Configuration reference](../appendix-a-configuration/modules.md) for th
 | `baseline_dominance` | `0.0` | VAD baseline dominance `[-1, 1]` |
 | `drift_rate_per_s` | `0.05` | Homeostatic drift rate toward baseline per second |
 | `publish_interval_s` | `1.0` | Period between `thymos.state` publications |
+| `appraisal_reference_interval_s` | `0.3` | Reference interval for the per-broadcast appraisal nudges: each nudge is scaled by the time since the previous appraisal over this interval (capped at 4), so the nudge per second does not depend on the broadcast rate. 0.3 s is the resting broadcast period |
 | `baseline_salience` | `0.1` | Salience for routine state events |
 | `alert_salience` | `0.7` | Salience for emotion changes and drive crossings |
 | `social_drive_time_scale_s` | `600.0` | Seconds of isolation that saturates `social_drive` |
@@ -118,8 +119,11 @@ When the `GoalLedger` holds active goals, their token-overlap score (`relevance 
 
 The five scores map to a categorical emotion (`joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, `neutral`) via a rule-based `classify()`. On category change, Thymos publishes a `thymos.emotion` event. The state is then nudged:
 
-- `arousal += 0.05 * max(0.0, novelty)`
-- `valence += 0.05 * pleasantness`
+- `scale = min(4, dt / appraisal_reference_interval_s)`, with `dt` the subjective time since the previous appraisal
+- `arousal += 0.05 * scale * max(0.0, novelty)`
+- `valence += 0.05 * scale * pleasantness`
+
+The scale makes the nudges a rate per unit time. Without it, a higher access rate meant more nudges per second, and because arousal raises the access rate this formed a positive-feedback loop: in the mean-field balance, any sustained novelty above 0.07 pinned arousal at its ceiling. With the scale the access rate no longer feeds back through the appraisal, and the ceiling condition is novelty above 0.21.
 
 ### Perception alerts nudge arousal
 
