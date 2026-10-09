@@ -4,9 +4,13 @@
 """Precision-weighted selection helpers.
 
 Precision is the inverse variance of a channel's prediction error
-(Feldman and Friston, 2010). A source that publishes a habitually
-noisy or surprising signal receives a lower precision and therefore
-contributes less to salience competition.
+(Feldman and Friston, 2010). Modules publish salience derived from their
+own prediction error, so the variance of a source's published intensity
+stands in for it here. A source that publishes a habitually noisy signal
+receives a lower precision and therefore contributes less to salience
+competition. The variance is the exponentially weighted estimate of
+Finch (2009), which settles at 2(1 - w)/(2 - w) of the true variance
+(0.99 at w = 0.02).
 """
 
 from __future__ import annotations
