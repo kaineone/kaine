@@ -9,7 +9,7 @@ The top-down channel stays unwired, as the foveation design decided ("no pretend
 
 ## What Changes
 
-- **Per-tile precision.** `SpatialSaliency` keeps, for every tile, an exponential running mean `mu` and variance `v` of its change (weight 0.05 per clip tick, about six seconds at the resting rate). The bottom-up map is the precision-weighted error `max(0, d - mu) / sqrt(v + s0^2)`, computed against the statistics before this observation, where `s0` floors the standard deviation at a tenth of the mean change across tiles so no tile is treated as infinitely reliable. Until a tile has five observations the raw change is used. A tile that always flickers has a large `v` and is down-weighted; a stable tile that changes is up-weighted.
+- **Per-tile precision.** `SpatialSaliency` keeps, for every tile, an exponential running mean `mu` and variance `v` of its change (weight 0.05 per clip tick, about six seconds at the resting rate). The bottom-up map is the precision-weighted error `max(0, d - mu) / sqrt(v + s0^2)`, computed against the statistics before this observation, where `s0` floors the standard deviation at a tenth of the mean change across tiles so no tile is treated as infinitely reliable. Until a tile has five observations the raw change is used. A tile that always flickers has a large `v` and is down-weighted; a stable tile that changes is up-weighted. Because a calm scene now gives a flat map, a flat map holds the previous fovea instead of jumping to the centre.
 - **Real clips.** The peripheral and foveal views are derived from every frame in the clip buffer, using the fovea chosen on the latest frame, so the encoder receives the last 16 frames of motion for both views. A per-frame encoder (clip length 1) is unaffected.
 
 ## Capabilities
