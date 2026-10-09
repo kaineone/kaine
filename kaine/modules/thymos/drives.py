@@ -26,25 +26,25 @@ def _clamp01(x: float) -> float:
 _DRIVE_DEFAULTS: dict[str, dict[str, float]] = {
     "curiosity": {
         "build_rate": 0.05,
-        "decay_rate": 0.02,
+        "decay_rate": 0.0055,
         "threshold": 0.7,
         "relief_gain": 0.5,
     },
     "boredom": {
         "build_rate": 0.04,
-        "decay_rate": 0.02,
+        "decay_rate": 0.0045,
         "threshold": 0.7,
         "relief_gain": 0.3,
     },
     "social_drive": {
         "build_rate": 0.01,
-        "decay_rate": 0.005,
+        "decay_rate": 0.0011,
         "threshold": 0.7,
         "relief_gain": 0.8,
     },
     "restlessness": {
         "build_rate": 0.03,
-        "decay_rate": 0.02,
+        "decay_rate": 0.0033,
         "threshold": 0.7,
         "relief_gain": 0.5,
     },
@@ -56,7 +56,7 @@ class Drive:
     name: str
     value: float = 0.0
     build_rate: float = 0.05        # per second when signal = 1.0
-    decay_rate: float = 0.02        # per second
+    decay_rate: float = 0.0055      # per second
     threshold: float = 0.7
     relief_gain: float = 0.5
     hysteresis_fraction: float = 0.9  # must drop below threshold * this to re-fire
@@ -149,6 +149,9 @@ class DriveSet:
         if section is None:
             section = {}
         defaults: dict[str, dict[str, float]] = _DRIVE_DEFAULTS
+        for name in section.keys():
+            if name not in defaults:
+                raise ValueError(f"Unknown drive {name!r}")
         known = {"build_rate", "decay_rate", "threshold", "relief_gain"}
         drives: dict[str, Drive] = {}
         for name, params in defaults.items():

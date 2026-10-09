@@ -21,7 +21,7 @@ Thymos is KAINE's affective appraisal layer. It:
 | `workspace.broadcast` | workspace snapshot | Every cognitive cycle, via `on_workspace` |
 | `soma.out` | `soma.report` | Peer consumer loop; wellness sets part of the valence target; hard alerts nudge arousal |
 | `chronos.out` | `chronos.report` | Peer consumer loop; the first finite idle time starts `social_drive` building, and a drop in idle time (a new operator interaction) relieves it |
-| `volition.out` | `intent.*` | Peer consumer loop; each intent relieves `restlessness` and counts toward the intent rate |
+| `volition.out` | `intent.*` | Peer consumer loop; each intent other than `intent.rest` relieves `restlessness` and counts toward the intent rate |
 | `mnemos.out` | `mnemos.recall` | Peer consumer loop; recall intensity nudges arousal |
 | `audition.out` | `audition.emotion` | Peer consumer loop; records a transient perceived-emotion signal when coupling is enabled |
 | `audition.out` | `audition.perception` | Peer consumer loop; `alert` events nudge arousal |
@@ -147,14 +147,14 @@ This is the path by which surprise raises arousal.
 
 ### Drive accumulators
 
-Each `Drive` is a deficit in `[0,1]` relative to a setpoint (Hull 1943; Keramati and Gutkin 2014). Between events it follows the exact solution of `dD/dt = build_rate * u * (1 - D) - decay_rate * D`, so it relaxes toward `build_rate * u / (build_rate * u + decay_rate)` at a rate independent of how often it is updated. A consummatory event of strength `c` relieves it: `D <- D (1 - relief_gain * c)`; the reduction is what Keramati and Gutkin call the homeostatic reward. The four drives:
+Each `Drive` is a deficit in `[0,1]` relative to a setpoint (Hull 1943; Keramati and Gutkin 2014). Between events it follows the exact solution of `dD/dt = build_rate * u * (1 - D) - decay_rate * D`, so it relaxes toward `build_rate * u / (build_rate * u + decay_rate)` at a rate independent of how often it is updated. The default decay rates are a ninth of the build rates, so a fully deprived drive settles near 0.9, above its 0.7 threshold. A consummatory event of strength `c` relieves it: `D <- D (1 - relief_gain * c)`; the reduction is what Keramati and Gutkin call the homeostatic reward. The four drives:
 
 | Drive | Builds with `u` | Relieved by | Grounding |
 |---|---|---|---|
 | `curiosity` | `1 - LP` (perception not improving) | each perceptual report, `c = LP` | curiosity is satisfied by learning progress (Oudeyer and Kaplan 2007; Schmidhuber 2010) |
 | `boredom` | `1 - alert_rate` (nothing new) | each perceptual alert, `c = 1` | boredom signals a lack of engagement and is relieved by novelty (Eastwood et al. 2012; Westgate and Wilson 2018) |
 | `social_drive` | `1` once an operator interaction has occurred, else `0` | a new interaction, `c = 1` | social homeostasis (Matthews and Tye 2019); isolation since spawn is an open welfare question in `thymos-active-inference-affect` |
-| `restlessness` | `1 - intent_rate` (no actions) | each Volition intent, `c = 1` | a design choice; there is no established model |
+| `restlessness` | `1 - intent_rate` (no actions) | each Volition intent other than REST, `c = 1` | a design choice; there is no established model |
 
 `LP = max(0, g)` is the perceptual learning progress defined above. Only Hypnos's affective reset clears all drives at once.
 

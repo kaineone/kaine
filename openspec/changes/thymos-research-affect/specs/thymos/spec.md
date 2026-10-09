@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Drives are setpoint deficits with relief
-Each Thymos drive SHALL evolve between events by the exact solution of linear build and decay toward the equilibrium `beta u / (beta u + delta)`, with build signal `u` in `[0, 1]`, and SHALL be reduced by a consummatory event of strength `c` in `[0, 1]` to `D (1 - rho c)`, with `rho` the drive's relief gain. Curiosity SHALL be relieved by perceptual learning progress, boredom by perceptual alerts, the social drive by a new operator interaction, and restlessness by Volition intents.
+Each Thymos drive SHALL evolve between events by the exact solution of linear build and decay toward the equilibrium `beta u / (beta u + delta)`, with build signal `u` in `[0, 1]`, and SHALL be reduced by a consummatory event of strength `c` in `[0, 1]` to `D (1 - rho c)`, with `rho` the drive's relief gain. Curiosity SHALL be relieved by perceptual learning progress, boredom by perceptual alerts, the social drive by a new operator interaction, and restlessness by Volition intents other than REST. With the shipped rates, the full-deprivation equilibrium `beta / (beta + delta)` of every drive SHALL exceed its threshold.
 
 #### Scenario: Curiosity falls when perception is learning
 - **WHEN** perceptual normalised errors fall steadily over many reports

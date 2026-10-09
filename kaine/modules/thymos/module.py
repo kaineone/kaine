@@ -656,6 +656,7 @@ class Thymos(BaseModule):
         elif (
             stream == self._volition_stream
             and event.type.startswith("intent.")
+            and event.type != "intent.rest"
         ):
             self._intents_since_broadcast += 1
             self._drives.relieve("restlessness", 1.0)

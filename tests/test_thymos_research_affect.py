@@ -9,7 +9,9 @@ in the 2026-10-08 OpenSpec proposal.
 from __future__ import annotations
 
 import math
+import tomllib
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -383,5 +385,69 @@ async def test_soma_report_without_wellness_keeps_prior(bus: AsyncBus):
             ),
         )
         assert thymos._wellness == 0.8
+    finally:
+        await thymos.shutdown()
+
+
+def test_default_drives_can_cross_threshold():
+    s = DriveSet()
+    for d in s.all():
+        equilibrium = d.build_rate / (d.build_rate + d.decay_rate)
+        assert equilibrium > d.threshold / 0.85
+        d.reset()
+        fired = False
+        for _ in range(200):
+            d.tick(dt=1.0, signal=1.0)
+            if d.consume_crossing():
+                fired = True
+                break
+        assert fired, f"{d.name} did not cross threshold within 200s"
+
+
+def test_from_config_rejects_unknown_drive():
+    with pytest.raises(ValueError):
+        DriveSet.from_config({"hunger": {}})
+
+
+def test_shipped_config_drives_can_cross_threshold():
+    config_path = Path(__file__).resolve().parents[1] / "config" / "kaine.toml"
+    with open(config_path, "rb") as f:
+        cfg = tomllib.load(f)
+    s = DriveSet.from_config(cfg["thymos"]["drives"])
+    for d in s.all():
+        equilibrium = d.build_rate / (d.build_rate + d.decay_rate)
+        assert equilibrium > 0.85, f"{d.name} equilibrium {equilibrium:.3f} is not above 0.85"
+
+
+@pytest.mark.asyncio
+async def test_rest_intent_does_not_relieve_restlessness(bus: AsyncBus):
+    fake_now = [0.0]
+    thymos = Thymos(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
+    await thymos.initialize()
+    try:
+        thymos.drives.restlessness.value = 0.8
+        await thymos._handle_peer_event(
+            "volition.out",
+            Event(
+                source="volition",
+                type="intent.rest",
+                payload={},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        assert thymos.drives.restlessness.value == pytest.approx(0.8)
+        assert thymos._intents_since_broadcast == 0
+        await thymos._handle_peer_event(
+            "volition.out",
+            Event(
+                source="volition",
+                type="intent.act",
+                payload={},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        assert thymos.drives.restlessness.value < 0.8
     finally:
         await thymos.shutdown()

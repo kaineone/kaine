@@ -10,6 +10,8 @@
 - [x] 2.3 Valence relaxes toward `tanh(gain * g + (W - 0.5) + coupling)`; the pleasantness and wellness nudges are removed.
 - [x] 2.4 Novelty from coalition surprise ratios; pleasantness from progress; the appraisal arousal nudge removed.
 - [x] 2.5 With no per-broadcast nudges left, `appraisal_reference_interval_s` is removed from the constructor, factory, `config/kaine.toml` and docs.
+- [x] 2.6 Default decay rates are a ninth of the build rates, so each drive can cross its threshold; `DriveSet.from_config` rejects unknown drive names.
+- [x] 2.7 A REST intent neither counts toward the intent rate nor relieves restlessness; learning progress reads only raw `prediction_error`; a Soma report without a valid wellness keeps the prior value.
 
 ## 3. Tests, docs
 

@@ -699,28 +699,29 @@ decay_s = 10.0
 # coupling_max_rate_per_s is legacy (the DriftSafeguard it fed was removed when
 # coupling became appraisal-routed); if present it is ignored, not an error.
 
-# relief_gain: fraction of the drive removed by a full consummatory event (curiosity: learning progress; boredom: a perceptual alert; social: a new operator interaction; restlessness: a Volition intent).
+# relief_gain: fraction of the drive removed by a full consummatory event (curiosity: learning progress; boredom: a perceptual alert; social: a new operator interaction; restlessness: a non-rest Volition intent).
+# Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
 [thymos.drives.curiosity]
 build_rate = 0.05
-decay_rate = 0.02
+decay_rate = 0.0055
 threshold = 0.7
 relief_gain = 0.5
 
 [thymos.drives.boredom]
 build_rate = 0.04
-decay_rate = 0.02
+decay_rate = 0.0045
 threshold = 0.7
 relief_gain = 0.3
 
 [thymos.drives.social_drive]
 build_rate = 0.01
-decay_rate = 0.005
+decay_rate = 0.0011
 threshold = 0.7
 relief_gain = 0.8
 
 [thymos.drives.restlessness]
 build_rate = 0.03
-decay_rate = 0.02
+decay_rate = 0.0033
 threshold = 0.7
 relief_gain = 0.5
 
