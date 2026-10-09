@@ -129,6 +129,8 @@ class Soma(BaseModule):
         )
         self._read_interval_s = float(read_interval_s)
         self._clock = entity_clock or EntityClock()
+        self._feature_layout: int = 2
+        self._last_read_time: float | None = None
         self._weights = dict(weights) if weights is not None else dict(DEFAULT_WEIGHTS)
         self._cycle_latency_target_ms = float(cycle_latency_target_ms)
         self._baseline_salience = float(baseline_salience)
@@ -354,6 +356,7 @@ class Soma(BaseModule):
         feature_vec = metrics_to_feature_vector(
             metrics,
             feature_dim=DEFAULT_FEATURE_DIM,
+            layout=self._feature_layout,
             cycle_latency_target_ms=self._cycle_latency_target_ms,
         )
 
@@ -377,7 +380,18 @@ class Soma(BaseModule):
         # is computed against prior errors so a single spike still reads as a
         # spike (see _warming_baseline / the fatigue dampening below).
         prior_errors = list(self._prediction_error_window)
-        prediction_error = self._forward_model.step(feature_vec)
+
+        now_read = self._clock.now()
+        if self._last_read_time is None:
+            ts = 1.0
+        else:
+            ts = min(10.0, max(0.0, (now_read - self._last_read_time) / self._read_interval_s))
+        self._last_read_time = now_read
+
+        if getattr(self._forward_model, "accepts_timespan", False):
+            prediction_error = self._forward_model.step(feature_vec, timespan=ts)
+        else:
+            prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
         self._prediction_error_window.append(prediction_error)
 
@@ -724,6 +738,7 @@ class Soma(BaseModule):
         state: dict[str, Any] = {
             "cycle_cursor": self._cycle_cursor,
             "read_interval_s": self._read_interval_s,
+            "feature_layout": self._feature_layout,
             "forward_model": self._forward_model.state_dict(),
             "fatigue": self._fatigue.state_dict(),
         }
@@ -736,6 +751,7 @@ class Soma(BaseModule):
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
+        self._feature_layout = int(state.get("feature_layout", 1))
         if "cycle_cursor" in state:
             self._cycle_cursor = str(state["cycle_cursor"])
         if "read_interval_s" in state:

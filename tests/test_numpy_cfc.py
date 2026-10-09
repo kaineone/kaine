@@ -563,6 +563,7 @@ def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
     s._fatigue = MagicMock()
     s._expected_error = ExpectedErrorModel()
     s._self_rhythm = None
+    s._feature_layout = 2
 
     state = s.serialize()
     assert "reservoir_seed" not in state

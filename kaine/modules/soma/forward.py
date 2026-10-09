@@ -253,11 +253,19 @@ class SubstrateForwardModel:
         self._last_prediction = None
         self._last_residuals = None
 
+    accepts_timespan: bool = True
+
     # ------------------------------------------------------------------
     # Core per-step interface
     # ------------------------------------------------------------------
 
-    def _tick(self, feature: list[float], *, commit: bool) -> list[float]:
+    def _tick(
+        self,
+        feature: list[float],
+        *,
+        commit: bool,
+        timespan: float = 1.0,
+    ) -> list[float]:
         """Run one CfC step on *feature*.
 
         When ``commit`` is True, the resulting hidden state is persisted as
@@ -269,7 +277,7 @@ class SubstrateForwardModel:
             from kaine.cfc_numpy import numpy_cfc_step
 
             h = self._hx if self._hx is not None else [0.0] * self._units
-            hidden = numpy_cfc_step(self._reservoir, feature, h)
+            hidden = numpy_cfc_step(self._reservoir, feature, h, ts=timespan)
             if commit:
                 self._hx = hidden
             return hidden
@@ -278,7 +286,13 @@ class SubstrateForwardModel:
         with torch.no_grad():
             x = torch.tensor(feature, dtype=torch.float32, device=self._device)
             x = x.view(1, 1, -1)
-            out, hx = self._cfc(x, hx=self._hx)
+            out, hx = self._cfc(
+                x,
+                hx=self._hx,
+                timespans=torch.tensor(
+                    [[float(timespan)]], dtype=torch.float32, device=self._device
+                ),
+            )
             hidden = [float(v) for v in out.view(-1).tolist()]
         if commit:
             self._hx = hx
@@ -294,7 +308,11 @@ class SubstrateForwardModel:
             pred = self._readout(h)
         return [float(v) for v in pred.tolist()]
 
-    def predict(self, feature: list[float]) -> list[float]:
+    def predict(
+        self,
+        feature: list[float],
+        timespan: float = 1.0,
+    ) -> list[float]:
         """Predict the next feature vector given the current feature.
 
         Side-effect-free: ticks the CfC as a peek against the current hidden
@@ -305,10 +323,14 @@ class SubstrateForwardModel:
             raise ValueError(
                 f"expected {self._feature_dim}-dim input, got {len(feature)}"
             )
-        hidden = self._tick(feature, commit=False)
+        hidden = self._tick(feature, commit=False, timespan=timespan)
         return self._readout_predict(hidden)
 
-    def step(self, feature: list[float]) -> float:
+    def step(
+        self,
+        feature: list[float],
+        timespan: float = 1.0,
+    ) -> float:
         """Full online step for one tick.
 
         1. Computes the prediction error against the prior prediction.
@@ -353,7 +375,7 @@ class SubstrateForwardModel:
             self._adaptation_steps += 1
 
         # 3. Advance recurrent state by ticking on the observed feature.
-        hidden = self._tick(feature, commit=True)
+        hidden = self._tick(feature, commit=True, timespan=timespan)
 
         # 4. Predict the NEXT feature from the now-current hidden state.
         self._last_prediction = self._readout_predict(hidden)
@@ -469,17 +491,20 @@ def metrics_to_feature_vector(
     metrics: dict[str, float],
     feature_dim: int = DEFAULT_FEATURE_DIM,
     *,
+    layout: int = 2,
     cycle_latency_target_ms: float = 300.0,
     gpu_temp_max_c: float = 100.0,
 ) -> list[float]:
     """Convert a soma metrics dict to a fixed-size normalized feature vector.
 
-    Layout (first four slots are the primary substrate-wellness contributors):
+    Layout:
       [0] cpu_percent / 100.0                    (0 = 0%, 1 = 100%)
       [1] ram_percent / 100.0                     (0 = 0%, 1 = 100%)
       [2] cycle_latency_avg_ms / (2 * target)     (0 = no latency, 1 = 2x target)
       [3] max(gpu_*_temp_c) / gpu_temp_max_c      (0 = no GPU data, else hottest GPU)
-      [4..feature_dim-1] zero-padded
+      [4..6] self-rhythm slots filled by Soma when the self-rhythm runs
+      [7] VRAM (layout 2): max(gpu_*_vram_percent) / 100.0; 0.0 in layout 1
+      [8..feature_dim-1] zero-padded
 
     GPU temperature is read from any ``gpu_<index>_temp_c`` key (as produced
     by `SystemMetricsReader`'s per-GPU pynvml read); when multiple GPUs are
@@ -487,13 +512,17 @@ def metrics_to_feature_vector(
     `ThresholdAnomalyDetector`'s `gpu_*_temp_c` wildcard threshold. Hosts
     without GPU telemetry (no `pynvml`, or no GPU) leave this slot at 0.0.
 
+    VRAM is read from any ``gpu_<index>_vram_percent`` key; it is only placed
+    in slot 7 for ``layout >= 2`` and when ``feature_dim >= 8``. Layout 1
+    keeps slot 7 at 0.0 for backward compatibility.
+
     All values are clamped to [0, 1]. Unknown/missing metrics default to 0.0.
     The vector is then truncated or zero-padded to exactly feature_dim floats.
     """
     def _clamp01(x: float) -> float:
         return max(0.0, min(1.0, x))
 
-    vec = [0.0] * max(feature_dim, 4)
+    vec = [0.0] * max(feature_dim, 8 if layout >= 2 else 4)
     if "cpu_percent" in metrics:
         vec[0] = _clamp01(metrics["cpu_percent"] / 100.0)
     if "ram_percent" in metrics:
@@ -510,6 +539,15 @@ def metrics_to_feature_vector(
     if gpu_temps:
         denom = max(gpu_temp_max_c, 1.0)
         vec[3] = _clamp01(max(gpu_temps) / denom)
+
+    if layout >= 2 and len(vec) > 7:
+        vram_values = [
+            v
+            for k, v in metrics.items()
+            if k.startswith("gpu_") and k.endswith("_vram_percent")
+        ]
+        if vram_values:
+            vec[7] = _clamp01(max(vram_values) / 100.0)
 
     # Truncate or pad to feature_dim
     return vec[:feature_dim]

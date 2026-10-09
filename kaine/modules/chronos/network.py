@@ -322,7 +322,13 @@ class CfCNetwork:
                 p.requires_grad_(False)
         self._hx = None
 
-    def tick(self, feature_vec: list[float]) -> list[float]:
+    accepts_timespan: bool = True
+
+    def tick(
+        self,
+        feature_vec: list[float],
+        timespan: float = 1.0,
+    ) -> list[float]:
         if len(feature_vec) != self._input_size:
             raise ValueError(
                 f"expected {self._input_size}-dim input, got {len(feature_vec)}"
@@ -331,14 +337,20 @@ class CfCNetwork:
             from kaine.cfc_numpy import numpy_cfc_step
 
             h = self._hx if self._hx is not None else [0.0] * self._units
-            self._hx = numpy_cfc_step(self._reservoir, feature_vec, h)
+            self._hx = numpy_cfc_step(self._reservoir, feature_vec, h, ts=timespan)
             return self._hx
 
         torch = self._torch
         with torch.no_grad():
             x = torch.tensor(feature_vec, dtype=torch.float32, device=self._device)
             x = x.view(1, 1, -1)
-            out, hx = self._net(x, hx=self._hx)
+            out, hx = self._net(
+                x,
+                hx=self._hx,
+                timespans=torch.tensor(
+                    [[float(timespan)]], dtype=torch.float32, device=self._device
+                ),
+            )
             self._hx = hx
             hidden = out.view(-1).tolist()
         return [float(v) for v in hidden]
