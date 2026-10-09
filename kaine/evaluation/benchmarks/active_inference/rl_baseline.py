@@ -1,25 +1,28 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.2
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tabular Q-learning baseline — the honest model-free comparison.
+"""Tabular Q-learning baseline with history-keyed state.
 
-This is the conventional, transparent baseline for small discrete POMDPs
-(design.md): ε-greedy tabular Q-learning over the *observation*–action space.
-The baseline has **no belief state** — it indexes its Q-table by the env's raw
-observation key (:meth:`DiscretePOMDP.rl_obs_key`). That is the point of the
-comparison: it asks whether the AIF agent's explicit belief + information-value
-machinery beats a model-free learner that lacks it. On the epistemic T-maze the
-baseline can *see* the cue observation when it happens to stand on the cue, but
-it has no model carrying that information into a belief about the hidden reward
-condition, so it cannot deliberately value probing.
+This is the conventional, transparent model-free comparison for small discrete
+POMDPs. It is ε-greedy tabular Q-learning where the state key is a sliding
+window of the last ``memory + 1`` observation keys emitted by the environment.
+With the default ``memory=None`` the window spans the whole episode
+(``task.horizon``), giving the baseline the same observation history an explicit
+belief-keeping agent would use (up to the horizon). ``memory=0`` recovers the
+memoryless control that acts on the current observation only.
+
+On the epistemic T-maze a non-zero memory can carry the cue observation
+forward, so the baseline is *not* denied the cue information; what it lacks is
+the AIF agent's explicit generative model and information-value machinery.
 
 Deep RL is explicitly a non-goal — it would add dependencies and obscure the
-comparison. Hyperparameters (α, γ, ε schedule) are tuned per task by a small
-grid on held-out seeds (:func:`tune_hyperparameters`) and the chosen values are
-recorded in every result, so the baseline is not strawmanned.
+comparison. Hyperparameters (α, γ, ε schedule, memory) are tuned per task by a
+small grid on held-out seeds (:func:`tune_hyperparameters`) and the chosen
+values are recorded in every result, so the baseline is not strawmanned.
 """
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +37,10 @@ class QLearningConfig:
 
     ``epsilon_start`` decays geometrically by ``epsilon_decay`` per *training*
     episode down to ``epsilon_min``. Evaluation episodes use ε = 0 (greedy).
+
+    ``memory`` controls how many previous observation keys are included in the
+    state key in addition to the current observation. ``None`` means the whole
+    episode (``task.horizon``); ``0`` makes the agent memoryless.
     """
 
     alpha: float = 0.1  # learning rate
@@ -41,21 +48,25 @@ class QLearningConfig:
     epsilon_start: float = 1.0
     epsilon_min: float = 0.02
     epsilon_decay: float = 0.995
+    memory: int | None = None
 
-    def as_dict(self) -> dict[str, float]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "alpha": self.alpha,
             "gamma": self.gamma,
             "epsilon_start": self.epsilon_start,
             "epsilon_min": self.epsilon_min,
             "epsilon_decay": self.epsilon_decay,
+            "memory": self.memory,
         }
 
 
 class QLearningAgent:
-    """ε-greedy tabular Q-learning over (obs-key, action).
+    """ε-greedy tabular Q-learning over history-keyed states.
 
-    The Q-table is a dense ``(num_obs_keys, num_actions)`` array. Updates use the
+    The state key is a tuple of the last ``memory + 1`` observation keys (or
+    the whole episode when ``memory`` is ``None``). The Q-table is a sparse dict
+    mapping state keys to vectors of length ``num_actions``. Updates use the
     standard temporal-difference rule. Action selection is ε-greedy during
     training and greedy (ε = 0) during evaluation.
     """
@@ -70,27 +81,57 @@ class QLearningAgent:
         self._cfg = config
         self._rng = rng
         self._n_actions = task.num_actions()
-        self._n_obs = int(task.rl_num_obs())
-        self.q = np.zeros((self._n_obs, self._n_actions), dtype=float)
+        if config.memory is not None and int(config.memory) < 0:
+            raise ValueError("memory must be a non-negative int or None")
+        self._memory = task.horizon if config.memory is None else int(config.memory)
+        self.q: dict[tuple[int, ...], np.ndarray] = {}
+        self._history: deque[int] = deque(maxlen=self._memory + 1)
         self._epsilon = config.epsilon_start
 
     @property
-    def epsilon(self) -> float:
-        return self._epsilon
+    def memory(self) -> int:
+        """Effective memory: the number of earlier observations in the state key."""
+        return self._memory
 
-    def select(self, obs_key: int, *, greedy: bool) -> int:
+    def _row(self, key: tuple[int, ...]) -> np.ndarray:
+        """Return the Q-vector for ``key``, inserting zeros on first access."""
+        if key not in self.q:
+            self.q[key] = np.zeros(self._n_actions, dtype=float)
+        return self.q[key]
+
+    def reset_history(self, obs_key: int) -> tuple[int, ...]:
+        """Start a new episode history and return the initial state key."""
+        self._history.clear()
+        self._history.append(obs_key)
+        return tuple(self._history)
+
+    def push(self, obs_key: int) -> tuple[int, ...]:
+        """Append an observation key and return the new state key."""
+        self._history.append(obs_key)
+        return tuple(self._history)
+
+    def select(self, state_key: tuple[int, ...], *, greedy: bool) -> int:
         if not greedy and self._rng.random() < self._epsilon:
             return int(self._rng.integers(0, self._n_actions))
-        row = self.q[obs_key]
+        row = self._row(state_key)
         # Break ties randomly to avoid a fixed-action bias.
         best = np.flatnonzero(row == row.max())
         return int(self._rng.choice(best))
 
-    def update(self, obs_key: int, action: int, reward: float, next_key: int, done: bool) -> None:
+    def update(
+        self,
+        state_key: tuple[int, ...],
+        action: int,
+        reward: float,
+        next_state_key: tuple[int, ...],
+        done: bool,
+    ) -> None:
         target = reward
         if not done:
-            target += self._cfg.gamma * float(self.q[next_key].max())
-        self.q[obs_key, action] += self._cfg.alpha * (target - self.q[obs_key, action])
+            target += self._cfg.gamma * float(self._row(next_state_key).max())
+        self._row(state_key)[action] += self._cfg.alpha * (
+            target - self._row(state_key)[action]
+        )
 
     def decay_epsilon(self) -> None:
         self._epsilon = max(self._cfg.epsilon_min, self._epsilon * self._cfg.epsilon_decay)
@@ -105,23 +146,23 @@ def run_episode(
 ) -> tuple[float, dict[str, Any]]:
     """Run one episode; learn if ``train``. Returns (return, info-summary)."""
     obs = task.reset(rng)
-    obs_key = task.rl_obs_key(obs)
+    state = agent.reset_history(task.rl_obs_key(obs))
     total = 0.0
     probed = False
     probe_step: int | None = None
     step = 0
     done = False
     while not done:
-        action = agent.select(obs_key, greedy=not train)
+        action = agent.select(state, greedy=not train)
         next_obs, reward, done, info = task.step(action)
-        next_key = task.rl_obs_key(next_obs)
+        next_state = agent.push(task.rl_obs_key(next_obs))
         if train:
-            agent.update(obs_key, action, reward, next_key, done)
+            agent.update(state, action, reward, next_state, done)
         total += reward
         if info.get("is_probe") and not probed:
             probed = True
             probe_step = step
-        obs_key = next_key
+        state = next_state
         step += 1
     return total, {"probed": probed, "probe_step": probe_step, "steps": step}
 
@@ -137,8 +178,8 @@ def train_q_agent(
     """Train then greedily evaluate a Q-agent on a task.
 
     Returns a record with the learning curve (per-episode training returns), the
-    greedy evaluation returns, and probe statistics — enough for the metrics
-    layer to compute decision quality, sample efficiency, and probe behaviour.
+    greedy evaluation returns, probe statistics, hyperparameters, and the
+    effective memory length.
     """
     rng = np.random.default_rng(seed)
     agent = QLearningAgent(task, config, rng)
@@ -162,16 +203,17 @@ def train_q_agent(
         "probe_rate": float(np.mean(probe_flags)) if probe_flags else 0.0,
         "mean_probe_step": float(np.mean(probe_steps)) if probe_steps else None,
         "hyperparameters": config.as_dict(),
+        "memory": agent.memory,
     }
 
 
-def _default_grid() -> list[QLearningConfig]:
+def _default_grid(memory: int | None = None) -> list[QLearningConfig]:
     grid: list[QLearningConfig] = []
     for alpha in (0.05, 0.1, 0.3):
         for gamma in (0.9, 0.95, 0.99):
             for decay in (0.99, 0.995):
                 grid.append(
-                    QLearningConfig(alpha=alpha, gamma=gamma, epsilon_decay=decay)
+                    QLearningConfig(alpha=alpha, gamma=gamma, epsilon_decay=decay, memory=memory)
                 )
     return grid
 
@@ -183,6 +225,7 @@ def tune_hyperparameters(
     train_episodes: int = 400,
     eval_episodes: int = 50,
     grid: list[QLearningConfig] | None = None,
+    memory: int | None = None,
 ) -> tuple[QLearningConfig, list[dict[str, Any]]]:
     """Pick the Q-learning hyperparameters by a small grid on held-out seeds.
 
@@ -192,7 +235,7 @@ def tune_hyperparameters(
     benchmark's evaluation seeds so the baseline is tuned fairly, not on the
     seeds it is then scored on.
     """
-    grid = grid or _default_grid()
+    grid = grid or _default_grid(memory=memory)
     records: list[dict[str, Any]] = []
     best_cfg = grid[0]
     best_score = -np.inf
