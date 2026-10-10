@@ -222,7 +222,9 @@ class Empatheia(BaseModule):
         )
 
         await self._store.put(model)
-        await self._publish_agent_model(model)
+        await self._publish_agent_model(
+            model, source_label=event.payload.get("source_label")
+        )
 
         if deviation > self._deviation_threshold:
             await self._publish_social_error(model, deviation)
@@ -250,27 +252,38 @@ class Empatheia(BaseModule):
             deviation_threshold=self._deviation_threshold,
         )
         await self._store.put(model)
-        await self._publish_agent_model(model)
+        await self._publish_agent_model(
+            model, source_label=event.payload.get("source_label")
+        )
 
     # ------------------------------------------------------------------
     # Publications
     # ------------------------------------------------------------------
 
-    async def _publish_agent_model(self, model: AgentModel) -> None:
-        """Publish empatheia.agent_model with numeric metadata only."""
+    async def _publish_agent_model(
+        self, model: AgentModel, *, source_label: str | None = None
+    ) -> None:
+        """Publish empatheia.agent_model: numeric metadata and labels, no content.
+
+        If source_label is provided it is included so listeners can map the
+        model back to the originating audio channel.
+        """
         familiarity = model.familiarity()
         salience = self._baseline_salience + familiarity * (
             self._alert_salience - self._baseline_salience
         )
+        payload = {
+            "agent_id": model.id,
+            "agent_label": model.label,
+            "familiarity": familiarity,
+            "reliability": model.reliability,
+            "interaction_count": model.interaction_count,
+        }
+        if source_label is not None:
+            payload["source_label"] = str(source_label)
         await self.publish(
             "empatheia.agent_model",
-            {
-                "agent_id": model.id,
-                "agent_label": model.label,
-                "familiarity": familiarity,
-                "reliability": model.reliability,
-                "interaction_count": model.interaction_count,
-            },
+            payload,
             salience=salience,
         )
 

@@ -175,7 +175,7 @@ class Thymos(BaseModule):
         self.modulator = StateModulator(lambda: self._state)
         # Affect coupling (thymos-affect-coupling change).
         self._coupling = coupling or CouplingConfig()
-        self._familiarity_cache: dict[str, float] = {}  # agent_id → familiarity
+        self._familiarity_cache: dict[str, float] = {}  # agent_id and source_label -> familiarity
         # Transient perceived-emotion signal folded into appraisal (decays).
         # None until the first audition.emotion arrives while coupling enabled.
         self._perceived_emotion: Optional[dict[str, float]] = None
@@ -728,8 +728,15 @@ class Thymos(BaseModule):
         ):
             agent_id = event.payload.get("agent_id")
             familiarity = event.payload.get("familiarity")
+            source_label = event.payload.get("source_label")
             if agent_id and isinstance(familiarity, (int, float)):
                 self._familiarity_cache[str(agent_id)] = float(familiarity)
+            if (
+                isinstance(source_label, str)
+                and source_label
+                and isinstance(familiarity, (int, float))
+            ):
+                self._familiarity_cache[str(source_label)] = float(familiarity)
         elif (
             stream == self._volition_stream
             and event.type.startswith("intent.")

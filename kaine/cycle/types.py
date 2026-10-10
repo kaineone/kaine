@@ -17,6 +17,7 @@ class WorkspaceSnapshot:
     is_experiential: bool = False
     salience_scores: dict[str, float] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    published_at: float | None = None
 
 
 @dataclass(frozen=True)

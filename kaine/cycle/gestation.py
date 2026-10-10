@@ -759,6 +759,13 @@ class GestationOwner:
             verdict = data.get("viability_verdict")
             if verdict is None or isinstance(verdict, dict):
                 self._viability_verdict = verdict
+                # A restored verdict is rewritten so a reader that checks freshness sees it.
+                if verdict is not None:
+                    try:
+                        from kaine.state_io import write_json_atomic
+                        write_json_atomic(self._viability_path, verdict)
+                    except Exception:
+                        log.warning("gestation: could not rewrite the restored viability verdict", exc_info=True)
         except Exception:
             log.warning("gestation: could not load progress", exc_info=True)
 

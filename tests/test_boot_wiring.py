@@ -40,6 +40,7 @@ from kaine.boot import (
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.entity_clock import EntityClock
 from kaine.security.crypto import (
     CryptoConfig,
     CryptoConfigError,
@@ -833,6 +834,15 @@ def test_shipped_config_research_submission_disabled():
     )
 
 
+def test_make_lingua_accepts_outcome_reply_window(tmp_path):
+    # Lingua factory should accept cycle-specific config keys it does not consume.
+    lingua = make_lingua(
+        _bus(),
+        {"intent_log_path": str(tmp_path / "i.jsonl"), "outcome_reply_window_s": 45},
+    )
+    assert lingua is not None
+
+
 def test_make_lingua_api_key_from_env(monkeypatch, tmp_path):
     # The model-server key may come from the env (kept out of config files).
     monkeypatch.setenv("KAINE_MODEL_SERVER_API_KEY", "sk-env")
@@ -1045,3 +1055,9 @@ def test_build_registry_encryption_enabled_installs_encryptor(monkeypatch, tmp_p
         assert get_state_encryptor().enabled is True
     finally:
         set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+
+
+def test_make_audition_uses_the_entity_clock():
+    clk = EntityClock()
+    audition = make_audition(_bus(), {}, entity_clock=clk)
+    assert audition._clock is clk

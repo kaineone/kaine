@@ -121,10 +121,15 @@ class BroadcastContext:
         if not accessed:
             return False
 
-        # Adopt the new context (age is effectively zero at the moment of receipt).
+        # Adopt the new context (age is publication time; receipt time when the broadcast carries none).
         self._members = accessed
-        self._received_at = self._clock()
-        vec = featurize_events(self._members, 0.0)
+        self._received_at = (
+            snapshot.published_at
+            if snapshot.published_at is not None
+            else self._clock()
+        )
+        age = max(0.0, self._clock() - self._received_at)
+        vec = featurize_events(self._members, age)
 
         # Update running statistics over adopted contexts.
         self._n += 1
@@ -149,7 +154,8 @@ class BroadcastContext:
         """Current context vector, or None before first adoption."""
         if not self.has_context:
             return None
-        return featurize_events(self._members, self._clock() - self._received_at)
+        age = max(0.0, self._clock() - self._received_at)
+        return featurize_events(self._members, age)
 
     def null_vector(self, kept_sources: Collection[str]) -> Optional[list[float]]:
         """Null-context estimate keeping selected source shares."""
@@ -191,7 +197,8 @@ class BroadcastContext:
         return vec
 
     def age_s(self) -> Optional[float]:
-        """Seconds since the adopted broadcast was received."""
+        """Entity seconds since the adopted broadcast was published
+        (or received, when it carries no publication time)."""
         if not self.has_context:
             return None
-        return self._clock() - self._received_at
+        return max(0.0, self._clock() - self._received_at)
