@@ -748,3 +748,45 @@ async def test_evoked_response_without_frequency_pull_is_not_entrainment(owner_f
     assert owner._endogenous_self_sustain is True
     assert owner._frequency_pull is not None and owner._frequency_pull < 0.5
     assert owner._entrain_then_autonomy is False
+
+
+def test_progress_persists_across_restart(owner_factory, tmp_path):
+    path = tmp_path / "gestation_readout.json"
+    first = owner_factory(state_path=path)
+    first._active_lived_seconds = 7200.0
+    first._entrainment_consecutive_passes = 2
+    first._viability_history.append({"lived_hours": 2.0, "pull": 0.01})
+    first._ever_replicated = False
+    first._persist_progress()
+
+    second = owner_factory(state_path=path)
+    assert second._active_lived_seconds == pytest.approx(7200.0)
+    assert second._entrainment_consecutive_passes == 2
+    assert second._viability_history == [{"lived_hours": 2.0, "pull": 0.01}]
+
+
+def test_progress_of_another_being_is_ignored(owner_factory, tmp_path):
+    import json
+
+    path = tmp_path / "gestation_readout.json"
+    first = owner_factory(state_path=path)
+    first._active_lived_seconds = 7200.0
+    first._entrainment_consecutive_passes = 2
+    first._viability_history.append({"lived_hours": 2.0, "pull": 0.01})
+    first._ever_replicated = False
+    first._persist_progress()
+
+    progress_path = tmp_path / "gestation_progress.json"
+    data = json.loads(progress_path.read_text(encoding="utf-8"))
+    data["key"] = "other:none"
+    progress_path.write_text(json.dumps(data), encoding="utf-8")
+
+    second = owner_factory(state_path=path)
+    assert second._active_lived_seconds == 0.0
+    assert second._entrainment_consecutive_passes == 0
+
+
+def test_progress_saved_each_minute_of_awake_time(owner_factory, tmp_path):
+    owner = owner_factory(state_path=tmp_path / "gestation_readout.json")
+    owner._advance_lived(owner._last_step_at + 61.0, False)
+    assert (tmp_path / "gestation_progress.json").exists()
