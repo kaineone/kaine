@@ -77,7 +77,7 @@ async def test_salient_report_raises_access_then_decays(adaptive_cycle):
         Event(
             source="topos",
             type="report",
-            payload={},
+            payload={"alert": True},
             salience=1.0,
             timestamp=datetime.now(timezone.utc),
         )

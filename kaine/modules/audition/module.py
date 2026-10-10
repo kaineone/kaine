@@ -9,6 +9,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.modules.intensity import graded_intensity
 
 if TYPE_CHECKING:
     from kaine.modules.vox.coordination import SpeakingGate
@@ -299,7 +300,8 @@ class Audition(BaseModule):
             and change >= self._acoustic_change_alert_threshold
         )
         alert = normalised >= 2.0 or change_alert
-        salience = self._alert_salience if alert else self._baseline_salience
+        graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+        salience = self._alert_salience if alert else graded
         self._acoustic_report_count += 1
         if alert:
             self._acoustic_alert_count += 1
@@ -729,6 +731,7 @@ class Audition(BaseModule):
         )
         payload: dict = {
             "category": result.category,
+            "alert": result.category != "neutral",
             "confidence": result.confidence,
             "scores": result.scores,
             "model": result.model,

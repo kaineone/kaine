@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.intensity import graded_intensity
 from kaine.modules.topos.change import ChangeDetector, CosineChangeDetector
 from kaine.modules.topos.encoder import (
     DEFAULT_CLIP_LEN,
@@ -544,7 +545,8 @@ class Topos(BaseModule):
             # prediction-error threshold stays fixed at the proven 2.0; the tunable
             # change_alert_factor governs the change-detector path.
             alert = normalised >= 2.0 or change_alert
-            salience = self._alert_salience if alert else self._baseline_salience
+            graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+            salience = self._alert_salience if alert else graded
         else:
             alert = change_alert
             salience = self._alert_salience if alert else self._baseline_salience
