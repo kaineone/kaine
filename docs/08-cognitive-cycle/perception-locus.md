@@ -132,7 +132,7 @@ The entity cannot self-switch when:
 
 ## Locus and sleep maintenance
 
-External perception is suspended for the whole of every Hypnos sleep, whatever modules are active, while the processors also suspend forward-model adaptation. The suspension uses the same locus machinery:
+External perception is suspended for the whole of every Hypnos sleep, whatever modules are active, while the processors also suspend forward-model adaptation. During gestation the gestational stimulus is the exception: it keeps playing through sleep (see the gestation lock below). The suspension uses the same locus machinery:
 
 - `suspend_perception()` remembers the pre-sleep desired locus and, on playlist runs, pauses the shared playlist clock so the stimulus freezes at the same moment perception stops.
 - `restore_perception()` is called in a `finally` block when the sleep ends, so it also runs after a failure or cancellation; it restores the remembered pre-sleep locus and resumes the playlist clock at the exact pause point.
