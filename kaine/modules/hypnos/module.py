@@ -539,16 +539,18 @@ class Hypnos(BaseModule):
             self._requested_rest_accepted = False
 
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
-        """Run the five-phase sleep pipeline. Returns a summary dict."""
+        """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""
         if self._sleep_lock.locked():
             raise HypnosBusyError("Hypnos sleep is already in progress")
 
         async with self._sleep_lock:
+            self._suspend_perception()
             try:
                 if trigger is None:
                     return await self._run_pipeline()
                 return await self._run_pipeline(trigger=trigger)
             finally:
+                self._restore_perception()
                 self._last_sleep_ended_at = (
                     self._entity_clock.now()
                     if self._entity_clock is not None
@@ -556,7 +558,7 @@ class Hypnos(BaseModule):
                 )
 
     def _suspend_perception(self) -> None:
-        """Set locus to 'off' to suspend external perception during replay window.
+        """Set locus to 'off' to suspend external perception for the sleep.
 
         Reuses the perception_state.write_desired_locus machinery (the same
         path used by PerceptionLocus and the Nexus operator toggle).  Zero
@@ -590,7 +592,7 @@ class Hypnos(BaseModule):
             from kaine.perception_state import write_desired_locus
 
             write_desired_locus("off", path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> off (replay window)")
+            log.debug("hypnos: perception locus -> off (sleep)")
         except Exception:
             log.warning(
                 "hypnos: perception suspension (write_desired_locus) failed",
@@ -605,7 +607,7 @@ class Hypnos(BaseModule):
                 log.warning("hypnos: playlist clock pause failed", exc_info=True)
 
     def _restore_perception(self) -> None:
-        """Restore the remembered pre-sleep locus after the replay window ends
+        """Restore the remembered pre-sleep locus when sleep ends
         (falling back to 'physical' only when nothing was remembered, e.g.
         suspend never ran), and resume the shared playlist clock so playback
         continues from the pause point. Only the locus flag is written — never
@@ -616,7 +618,7 @@ class Hypnos(BaseModule):
             from kaine.perception_state import write_desired_locus
 
             write_desired_locus(locus, path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> %s (replay window closed)", locus)
+            log.debug("hypnos: perception locus -> %s (sleep ended)", locus)
         except Exception:
             log.warning(
                 "hypnos: perception restore (write_desired_locus) failed",
@@ -681,13 +683,11 @@ class Hypnos(BaseModule):
         )
 
         # --- Phase 2: Deep Consolidation + Downscaling ---
-        # Global activation downscaling; perception suspended during replay window.
+        # Global activation downscaling. Perception is already suspended for the whole sleep (enter_sleep).
         phase_results.append(
             await deep_consolidation(
                 self._mnemos,
                 downscale_factor=self._downscale_factor,
-                suspend_perception=self._suspend_perception,
-                restore_perception=self._restore_perception,
                 replay_window_s=self._replay_window_s,
             )
         )
