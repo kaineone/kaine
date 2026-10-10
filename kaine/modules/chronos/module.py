@@ -21,6 +21,7 @@ from kaine.modules.chronos.rumination import (
     RecurrenceRuminationDetector,
     RuminationDetector,
 )
+from kaine.modules.intensity import graded_intensity
 
 log = logging.getLogger(__name__)
 
@@ -212,9 +213,18 @@ class Chronos(BaseModule):
         if dt is None:
             ts = 1.0
         else:
-            self._dt_window.append(max(dt, 0.0))
+            raw = max(dt, 0.0)
+            prev_mean = (
+                sum(self._dt_window) / len(self._dt_window) if self._dt_window else 0.0
+            )
+            if prev_mean > 0:
+                self._dt_window.append(min(raw, 10.0 * prev_mean))
+            else:
+                self._dt_window.append(raw)
             mean_dt = sum(self._dt_window) / len(self._dt_window)
-            ts = 1.0 if mean_dt <= 0 else min(10.0, max(0.0, dt / mean_dt))
+            ts = 1.0 if mean_dt <= 0 else min(10.0, max(0.0, raw / mean_dt))
+            # Clipping before the interval enters the window keeps one long pause
+            # from dominating the mean for the next 31 steps.
 
         if self._network is None:
             hidden = feature_vec
@@ -243,6 +253,7 @@ class Chronos(BaseModule):
                 self._pred_head.adapt(self._last_hidden, feature_vec)
             self._last_hidden = list(hidden)
 
+        normalised: float | None = None
         # Anomaly salience: driven by prediction error when forward_prediction
         # is enabled, otherwise fall back to z-score threshold.
         if self._forward_prediction and self._pred_errors:
@@ -262,10 +273,17 @@ class Chronos(BaseModule):
                 or anomaly_score >= self._anomaly_alert_threshold
             )
 
-        salience = self._alert_salience if alert else self._baseline_salience
+        if alert:
+            salience = self._alert_salience
+        elif normalised is not None:
+            graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+            salience = graded
+        else:
+            salience = self._baseline_salience
         await self.publish(
             "chronos.report",
             {
+                "alert": alert,
                 "temporal_context": hidden,
                 "anomaly_score": anomaly_score,
                 "habituation_score": rumination.habituation,
@@ -353,6 +371,11 @@ class Chronos(BaseModule):
             "user_input_cursors": dict(self._user_input_cursors),
             "featurizer_layout": self._featurizer.layout,
         }
+        state["time_since_last_interaction_s"] = (
+            None
+            if self._last_interaction_at is None
+            else self._time_since_last_interaction_s()
+        )
         if self._network is not None and hasattr(self._network, "reservoir_seed"):
             state["reservoir_seed"] = self._network.reservoir_seed
         if self._pred_head is not None:
@@ -372,10 +395,17 @@ class Chronos(BaseModule):
                 "chronos: being keeps featurizer layout 1 "
                 "(Audition shares the overflow bin)"
             )
-        if "last_interaction_at" in state:
+        # Time the entity was not running is not time alone; restore the lived
+        # interval relative to the new boot clock.
+        if "time_since_last_interaction_s" in state:
+            value = state["time_since_last_interaction_s"]
+            self._last_interaction_at = (
+                None if value is None else float(self._clock()) - float(value)
+            )
+        elif "last_interaction_at" in state:
             value = state["last_interaction_at"]
             self._last_interaction_at = (
-                None if value is None else float(value)
+                None if value is None else min(float(value), float(self._clock()))
             )
         if "user_input_cursors" in state:
             self._user_input_cursors.update(

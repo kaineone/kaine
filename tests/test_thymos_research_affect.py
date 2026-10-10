@@ -8,6 +8,7 @@ in the 2026-10-08 OpenSpec proposal.
 """
 from __future__ import annotations
 
+import asyncio
 import math
 import random
 import tomllib
@@ -815,3 +816,84 @@ def test_drive_rejects_nan_rates():
         Drive(name="x", build_rate=float("nan"))
     with pytest.raises(ValueError):
         Drive(name="x", decay_rate=float("nan"))
+
+
+@pytest.mark.asyncio
+async def test_affective_reset_clears_progress_trackers(bus: AsyncBus):
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        for i in range(1201):
+            t = i * 0.1
+            fake_now[0] = t
+            r = 3.0 - 2.0 * t / 120.0
+            await thymos._handle_peer_event(
+                "topos.out",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={"prediction_error": r},
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+            if i % 3 == 0:
+                await thymos._tick()
+        await thymos.affective_reset()
+        base = thymos.state.valence
+        for j in range(1, 101):
+            fake_now[0] = 120.0 + 0.3 * j
+            await thymos._tick()
+        assert abs(thymos.state.valence - base) < 0.1
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_peer_consumer_survives_a_bad_event(bus: AsyncBus):
+    handled: list[int] = []
+    thymos = Thymos(bus)
+    original = thymos._handle_peer_event
+
+    async def flaky(stream, event):
+        if event.payload.get("bad"):
+            raise RuntimeError("bad")
+        n = event.payload.get("n")
+        if n is not None:
+            handled.append(n)
+        await original(stream, event)
+
+    thymos._handle_peer_event = flaky
+    await thymos.initialize()
+    try:
+        await bus.publish(
+            Event(
+                source="topos",
+                type="topos.report",
+                payload={"bad": True, "prediction_error": 1.0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        await bus.publish(
+            Event(
+                source="topos",
+                type="topos.report",
+                payload={"n": 2, "prediction_error": 1.0},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        for _ in range(50):
+            await asyncio.sleep(0.02)
+            if handled:
+                break
+        assert handled == [2]
+    finally:
+        await thymos.shutdown()

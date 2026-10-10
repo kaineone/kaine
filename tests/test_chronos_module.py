@@ -152,7 +152,7 @@ async def test_serialize_roundtrips(bus: AsyncBus):
     state = chronos.serialize()
     fresh = Chronos(bus, network=FakeNetwork())
     fresh.deserialize(state)
-    assert fresh._last_interaction_at == 12345.0
+    assert fresh._last_interaction_at == pytest.approx(12345.0, abs=1.0)
     assert fresh._user_input_cursors["a.out"] == "1-0"
 
 
@@ -414,3 +414,20 @@ async def test_anomaly_salience_tracks_prediction_error(bus: AsyncBus):
     assert len(entries) == 2
     _, event2 = entries[1]
     assert event2.salience == pytest.approx(chronos._alert_salience)
+
+
+@pytest.mark.asyncio
+async def test_restore_keeps_time_alone_across_a_restart(bus: AsyncBus):
+    now = [1000.0]
+    chronos = Chronos(bus, network=FakeNetwork(), clock=lambda: now[0])
+    chronos._last_interaction_at = 500.0
+    state = chronos.serialize()
+    # A new run's entity clock starts at 0.
+    later = [0.0]
+    fresh = Chronos(bus, network=FakeNetwork(), clock=lambda: later[0])
+    fresh.deserialize(state)
+    assert fresh._time_since_last_interaction_s() == pytest.approx(500.0)
+    # A legacy snapshot's absolute timestamp can never lie in the future.
+    legacy = Chronos(bus, network=FakeNetwork(), clock=lambda: later[0])
+    legacy.deserialize({"last_interaction_at": 900.0})
+    assert legacy._last_interaction_at <= 1e-9

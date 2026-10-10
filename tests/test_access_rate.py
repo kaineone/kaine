@@ -16,13 +16,13 @@ from kaine.cycle.access_rate import (
 )
 
 
-def _event(source: str, salience: float) -> tuple[str, Event]:
+def _event(source: str, salience: float, alert: bool = True) -> tuple[str, Event]:
     return (
         "0-0",
         Event(
             source=source,
             type="report",
-            payload={},
+            payload={"alert": alert},
             salience=salience,
             timestamp=datetime.now(timezone.utc),
         ),
@@ -289,3 +289,24 @@ def test_log_schema_bounds_the_access_drive():
     assert bound is not None
     assert _out_of_range(1.5, bound)
     assert not _out_of_range(0.4, bound)
+
+
+def test_max_report_salience_ignores_non_alerts():
+    events = [_event("topos", 0.9, alert=False), _event("audition", 0.6)]
+    result = max_report_salience(events)
+    assert result == pytest.approx(0.6)
+
+
+def test_graded_report_leaves_rate_at_rest():
+    ctrl = AccessRateController(
+        AccessRateConfig(enabled=True, baseline_arousal=0.3)
+    )
+    drive, effective = ctrl.step(
+        events=[_event("audition", 0.6, alert=False)],
+        arousal=0.3,
+        dt_s=0.1,
+        resting_hz=3.333,
+        ceiling_hz=10.0,
+    )
+    assert drive == pytest.approx(0.0)
+    assert effective == pytest.approx(3.333)
