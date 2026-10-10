@@ -248,7 +248,11 @@ async def test_roundtrip_chronos(bus: AsyncBus, tmp_path: Path) -> None:
         rumination=RecurrenceRuminationDetector(window=4, threshold=4),
     )
     m2.deserialize(state)
-    assert _json_roundtrip(m2.serialize()) == state
+    got = _json_roundtrip(m2.serialize())
+    want = dict(state)
+    for key in ("last_interaction_at", "time_since_last_interaction_s"):
+        assert got.pop(key) == pytest.approx(want.pop(key), abs=1.0)
+    assert got == want
 
 
 @pytest.mark.asyncio
@@ -974,6 +978,12 @@ async def test_study_order_revive_chain(
                 if n == "hypnos":
                     assert got["last_sleep_at"] == pytest.approx(want["last_sleep_at"])
                     assert got["schedule"] == pytest.approx(want["schedule"], abs=1.0)
+                elif n == "chronos":
+                    for key in ("last_interaction_at", "time_since_last_interaction_s"):
+                        g = got.pop(key, None)
+                        w = want.pop(key, None)
+                        assert (g is None and w is None) or g == pytest.approx(w, abs=1.0)
+                    assert got == want, f"step {i} module {n} mismatch"
                 else:
                     assert got == want, f"step {i} module {n} mismatch"
 
