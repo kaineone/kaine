@@ -508,6 +508,7 @@ class Soma(BaseModule):
             "metrics": metrics,
             "wellness": wellness,
             "alerts": list(alert.keys),
+            "alert": bool(alert.is_alert),
             "prediction_error": prediction_error,
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,

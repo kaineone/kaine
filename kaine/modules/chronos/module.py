@@ -21,6 +21,7 @@ from kaine.modules.chronos.rumination import (
     RecurrenceRuminationDetector,
     RuminationDetector,
 )
+from kaine.modules.intensity import graded_intensity
 
 log = logging.getLogger(__name__)
 
@@ -243,6 +244,7 @@ class Chronos(BaseModule):
                 self._pred_head.adapt(self._last_hidden, feature_vec)
             self._last_hidden = list(hidden)
 
+        normalised: float | None = None
         # Anomaly salience: driven by prediction error when forward_prediction
         # is enabled, otherwise fall back to z-score threshold.
         if self._forward_prediction and self._pred_errors:
@@ -262,10 +264,17 @@ class Chronos(BaseModule):
                 or anomaly_score >= self._anomaly_alert_threshold
             )
 
-        salience = self._alert_salience if alert else self._baseline_salience
+        if alert:
+            salience = self._alert_salience
+        elif normalised is not None:
+            graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+            salience = graded
+        else:
+            salience = self._baseline_salience
         await self.publish(
             "chronos.report",
             {
+                "alert": alert,
                 "temporal_context": hidden,
                 "anomaly_score": anomaly_score,
                 "habituation_score": rumination.habituation,

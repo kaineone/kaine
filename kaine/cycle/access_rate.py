@@ -4,8 +4,8 @@
 """Adaptive conscious-access rate for the cognitive cycle.
 
 The experiential (conscious-access) rate is not fixed. It rests at the P3b
-rate (~3.33 Hz) and rises toward the 10 Hz processing rate when predictions
-fail or modules report something salient. This mirrors the locus
+rate (~3.33 Hz) and rises toward the 10 Hz processing rate when modules
+report categorical alerts (payload ``alert`` true). This mirrors the locus
 coeruleus–noradrenaline (LC-NE) account of the P3b: LC-NE has a tonic mode
 that tracks arousal and a phasic mode triggered by salient or unexpected
 events, and phasic LC-NE bursts reset and re-engage cortical networks.
@@ -132,15 +132,20 @@ def phasic_input(max_salience: float | None, floor: float) -> float:
 
 
 def max_report_salience(events: Iterable[tuple[str, Event]]) -> float | None:
-    """Highest salience among module reports in ``events``.
+    """Highest intensity among module reports in ``events``.
 
-    Events whose source is ``cycle`` or ``syneidesis`` are ignored (the
-    cycle's own telemetry and the workspace's own broadcasts are not module
-    reports). Returns ``None`` when there are no qualifying reports.
+    Only events whose payload marks a categorical alert (``payload["alert"]``
+    is ``True``) are considered. Events whose source is ``cycle`` or
+    ``syneidesis`` are ignored (the cycle's own telemetry and the workspace's
+    own broadcasts are not module reports). Returns ``None`` when there are no
+    qualifying reports.
     """
     max_s: float | None = None
     for _entry_id, event in events:
         if event.source in EXCLUDED_SOURCES:
+            continue
+        payload = getattr(event, "payload", None) or {}
+        if not (isinstance(payload, dict) and payload.get("alert") is True):
             continue
         salience = getattr(event, "salience", None)
         if salience is None or not math.isfinite(salience):
