@@ -351,6 +351,16 @@ class ReviveSession:
 
                 target = _stage_module.STAGE_PATH
 
+            # Gestation progress travels with the being (awake time persists across boots). The bundle is authoritative: gestation files already here are moved aside first.
+            gestation_dir = resolve(target).parent
+            try:
+                _preservation.set_aside_gestation_files(gestation_dir)
+                _preservation.extract_bundle_gestation(self._plan.bundle, gestation_dir)
+            except Exception as exc:
+                raise ReviveRefused(
+                    f"could not restore gestation progress: {type(exc).__name__}: {exc}"
+                ) from exc
+
             try:
                 write_stage(StageState.from_dict(self._plan.stage), target)
             except Exception as exc:

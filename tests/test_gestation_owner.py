@@ -785,6 +785,18 @@ def test_progress_of_another_being_is_ignored(owner_factory, tmp_path):
     assert second._entrainment_consecutive_passes == 0
 
 
+def test_restored_verdict_is_rewritten(owner_factory, tmp_path):
+    first = owner_factory(state_path=tmp_path / "gestation_readout.json")
+    first._viability_verdict = {"verdict": "unviable", "rule": "R1"}
+    first._persist_progress()
+    viability_path = tmp_path / "gestation_viability.json"
+    if viability_path.exists():
+        viability_path.unlink()
+    second = owner_factory(state_path=tmp_path / "gestation_readout.json")
+    assert second._viability_verdict == {"verdict": "unviable", "rule": "R1"}
+    assert json.loads(viability_path.read_text()) == {"verdict": "unviable", "rule": "R1"}
+
+
 def test_progress_saved_each_minute_of_awake_time(owner_factory, tmp_path):
     owner = owner_factory(state_path=tmp_path / "gestation_readout.json")
     owner._advance_lived(owner._last_step_at + 61.0, False)

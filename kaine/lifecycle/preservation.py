@@ -124,6 +124,12 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
     return state
 
 
+# Gestation files that travel with the being. The viability verdict is not one:
+# it already rides inside the progress file.
+BUNDLED_GESTATION_FILES = ("gestation_progress.json", "gestation_readout.json")
+GESTATION_STATE_FILES = BUNDLED_GESTATION_FILES + ("gestation_viability.json",)
+
+
 async def preserve_live(
     registry: Any,
     *,
@@ -342,6 +348,22 @@ async def preserve_live(
             _chmod_quietly(bundle_dir / "stage.json", 0o600)
             inventory.append("stage.json (developmental stage)")
 
+        # Gestation progress and readout: awake time persists with the being.
+        if stage_source_path is not None:
+            gestation_copied = False
+            for name in BUNDLED_GESTATION_FILES:
+                src = stage_source_path.parent / name
+                if src.is_file():
+                    if not gestation_copied:
+                        (bundle_dir / "gestation").mkdir(
+                            mode=0o700, parents=True, exist_ok=True
+                        )
+                        gestation_copied = True
+                    dest = bundle_dir / "gestation" / name
+                    shutil.copy2(src, dest)
+                    _chmod_quietly(dest, 0o600)
+            if gestation_copied:
+                inventory.append("gestation/ (gestation progress and readout)")
         # Individuation evidence: encrypted birth reference, ledger, reports,
         # and the stored birth adapter. This evidence travels with the being.
         if individuation_root.is_dir():
@@ -375,6 +397,8 @@ async def preserve_live(
             tar_member_names.append("phantasia")
         if (bundle_dir / "stage.json").is_file():
             tar_member_names.append("stage.json")
+        if (bundle_dir / "gestation").is_dir():
+            tar_member_names.append("gestation")
         if (bundle_dir / "individuation").is_dir():
             tar_member_names.append("individuation")
         tar_bytes_path = bundle_dir / "_bundle.tar"
@@ -730,6 +754,84 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
     if loose_stage.is_file():
         return encryptor.maybe_decrypt(loose_stage.read_bytes())
     return None
+
+
+def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
+    """Move any gestation state files in ``dest_dir`` aside (renamed, never deleted) so a revived being never inherits another being's progress, readout baselines or verdict; return the new paths."""
+    import uuid
+
+    moved: list[Path] = []
+    if not dest_dir.exists():
+        return moved
+    for name in GESTATION_STATE_FILES:
+        src = dest_dir / name
+        if src.is_file():
+            dst = dest_dir / f"{name}.replaced-{uuid.uuid4().hex[:8]}"
+            os.replace(src, dst)
+            moved.append(dst)
+    return moved
+
+
+def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
+    """Restore the bundled gestation files into ``dest_dir``; return the names restored.
+
+    Opens the bundle tar as :func:`_extract_stage_from_bundle` does. A legacy
+    loose layout or a bundle without a ``gestation/`` member restores nothing.
+    """
+    import io
+    import tarfile
+
+    from kaine.security.crypto import get_state_encryptor
+
+    encryptor = get_state_encryptor()
+
+    enc_tar = bundle / "bundle.tar.enc"
+    plain_tar = bundle / "bundle.tar"
+    data: bytes | None = None
+    if enc_tar.is_file():
+        try:
+            data = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
+        except Exception as exc:
+            raise ReviveError(
+                f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+            ) from exc
+    elif plain_tar.is_file():
+        data = plain_tar.read_bytes()
+
+    if data is None:
+        return []
+
+    restored: dict[str, bytes] = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r") as tar:
+            targets = {f"gestation/{name}" for name in BUNDLED_GESTATION_FILES}
+            for member in tar.getmembers():
+                if not member.isfile():
+                    continue
+                if member.name in targets:
+                    basename = member.name[len("gestation/") :]
+                    restored[basename] = tar.extractfile(member).read()
+    except ReviveError:
+        raise
+    except Exception as exc:
+        raise ReviveError(
+            f"revive: could not read gestation files from bundle {bundle} ({type(exc).__name__}: {exc})"
+        ) from exc
+
+    if not restored:
+        return []
+
+    dest = Path(dest_dir)
+    dest.mkdir(mode=0o700, parents=True, exist_ok=True)
+    written: list[str] = []
+    for name in sorted(restored):
+        tmp = dest / (name + ".incoming")
+        tmp.write_bytes(restored[name])
+        _chmod_quietly(tmp, 0o600)
+        os.replace(tmp, dest / name)
+        written.append(name)
+    return written
 
 
 def read_bundle_stage(bundle: Path) -> dict | None:
