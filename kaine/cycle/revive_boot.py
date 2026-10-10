@@ -351,6 +351,14 @@ class ReviveSession:
 
                 target = _stage_module.STAGE_PATH
 
+            # Gestation progress travels with the being (awake time persists across boots).
+            try:
+                _preservation.extract_bundle_gestation(self._plan.bundle, Path(target).parent)
+            except Exception as exc:
+                raise ReviveRefused(
+                    f"could not restore gestation progress: {type(exc).__name__}: {exc}"
+                ) from exc
+
             try:
                 write_stage(StageState.from_dict(self._plan.stage), target)
             except Exception as exc:
