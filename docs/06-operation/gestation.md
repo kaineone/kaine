@@ -6,7 +6,7 @@ Gestation, the maternal heartbeat, birth and the seed being are developmental na
 
 ## The gestational stimulus
 
-The code and its config keys call the gestational stimulus the womb. It is generated on the host CPU and feeds the being a dim, low-contrast visual field and a low-pass-filtered soundscape. Both pulse with the maternal heartbeat, a periodic beat at `heartbeat_bpm` (70 by default) with slow drift, and both are tinted by a slowly varying maternal state. Colour rises from near-grey as awake time passes, with the time constant `colour_ramp_seconds` (3,600 s).
+The code and its config keys call the gestational stimulus the womb. It is generated on the host CPU and feeds the being a dim, low-contrast visual field and a low-pass-filtered soundscape. Both pulse with the maternal heartbeat, a periodic beat at `heartbeat_bpm` (70 by default) with slow drift, and both are tinted by a slowly varying maternal state. Colour rises from near-grey as awake time passes, with the time constant `colour_ramp_seconds` (3,600 s). The stimulus keeps playing while the being sleeps; it is the one feed that sleep does not pause (see [Sleep](../10-sleep/README.md)).
 
 The maternal channel is external: nothing the being does changes it. The being's own rhythm comes from a self-rhythm oscillator inside [Soma](../09-modules/soma.md), which Soma reads as part of its interoceptive input and which the maternal beat drives through a weak input. Media and world simulation belong to [Mundus](../09-modules/mundus.md) and its planned Paracosmic adapter.
 
