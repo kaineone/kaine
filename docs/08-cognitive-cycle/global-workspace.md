@@ -101,7 +101,7 @@ metadata["access_threshold"] = θ
 
 where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, Syneidesis returns an empty snapshot marked inhibited, with no metadata.
 
-Every broadcast carries the threshold in its metadata so that each module can tell accessed members from the rest of the coalition. When the coherence layer is on, the threshold applies to the coherence-adjusted scores.
+Every broadcast with candidates carries the threshold in its metadata so that each module can tell accessed members from the rest of the coalition. When the coherence layer is on, the threshold applies to the coherence-adjusted scores.
 
 `syneidesis.set_publication_threshold(t)` changes the threshold at runtime; tests use it.
 
@@ -116,7 +116,7 @@ On a broadcast tick the cycle publishes the snapshot to `workspace.broadcast` wh
 | `is_experiential` | True on a broadcast tick |
 | `time_scale` | The entity clock's current multiple of wall-clock time |
 | `salience_scores` | The score of every candidate of the tick, keyed by entry id |
-| `metadata` | `access_threshold`, and `coherence` when the coherence layer is on |
+| `metadata` | `access_threshold` (absent from an empty snapshot), and `coherence` when the coherence layer is on |
 | `selected` | The coalition members in rank order, each with `entry_id`, `source`, `type`, `salience` (the reported intensity), `payload`, `timestamp` and `causal_parent` |
 
 Only `source="syneidesis"` may publish to `workspace.broadcast`; any other source raises `ReservedStreamError`. Modules read the stream with `AsyncBus.subscribe_workspace_block`, advancing their own cursor.
