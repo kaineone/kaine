@@ -13,7 +13,7 @@ The runner follows a seed-and-branch plan:
 - For k = 1..K, `branch k` starts from the seed with the base modules plus the first k modules of the order.
 - `accumulate k` starts from `branch 0` (k = 1) or `accumulate k−1` (k > 1), with the same modules as `branch k`.
 
-The runner's default base set is Soma, Chronos, Topos, Audition, Lingua, Thymos and Hypnos. The default order is Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox, Praxis, Perception and Mundus. `K` is the length of that order.
+The runner's default base set is Soma, Chronos, Topos, Audition, Lingua, Thymos and Hypnos. The default order is Mnemos, Phantasia, Nous, Eidolon, Empatheia and Vox. Praxis, Perception and Mundus join through an explicit `--order` once an effector, a body or an alternative sensor feed is attached, since on the reference host they would be expected nulls. `K` is the length of that order.
 
 Every viewing opens with the same womb-to-world transition; the crossfade from the being's last womb field is identical across viewings, and film minute 0 is its end. See [Gestation on one host](../06-operation/gestation.md) for the transition details.
 
